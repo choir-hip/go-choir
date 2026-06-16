@@ -152,8 +152,8 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 				continue
 			}
 			researchUpdateCount++
-			if update.TargetAgentID != "vtext:"+doc.DocID || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
-				return report, fmt.Errorf("research coagent update %s is not routed to vtext document %s", update.UpdateID, doc.DocID)
+			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
+				return report, fmt.Errorf("research coagent update %s is not routed to Texture document %s", update.UpdateID, doc.DocID)
 			}
 			if len(update.Findings) == 0 && len(update.EvidenceIDs) == 0 && len(update.Notes) == 0 && len(update.Questions) == 0 && len(update.CapabilityRequests) == 0 {
 				return report, fmt.Errorf("research coagent update %s has no structured result fields", update.UpdateID)
@@ -169,8 +169,8 @@ func (rt *Runtime) VerifyVTextWorkflow(ctx context.Context, opts VTextWorkflowVe
 			return report, fmt.Errorf("missing structured worker updates")
 		}
 		for _, update := range updates {
-			if update.TargetAgentID != "vtext:"+doc.DocID || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
-				return report, fmt.Errorf("worker update %s is not routed to vtext document %s", update.UpdateID, doc.DocID)
+			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
+				return report, fmt.Errorf("worker update %s is not routed to Texture document %s", update.UpdateID, doc.DocID)
 			}
 			if len(update.Artifacts) == 0 && len(update.Tests) == 0 && len(update.Refs) == 0 && len(update.Proposals) == 0 && len(update.Findings) == 0 {
 				return report, fmt.Errorf("worker update %s has no structured result fields", update.UpdateID)

@@ -26,25 +26,25 @@ const (
 
 	// Keep generated foreground defaults on broadly available gateway providers.
 	// Per-computer policy files may still override these roles through product state.
-	defaultDeepSeekProvider         = "deepseek"
-	defaultFireworksProvider        = "fireworks"
-	defaultXiaomiProvider           = "xiaomi"
-	defaultMimoTextModel            = "mimo-v2.5"
-	defaultMimoProModel             = "mimo-v2.5-pro"
-	defaultConductorModel           = "deepseek-v4-flash"
-	defaultSuperModel               = "deepseek-v4-pro"
-	defaultResearcherVTextModel     = "deepseek-v4-flash"
-	defaultFlashForegroundReasoning = "medium"
-	defaultVerifierModel            = "deepseek-v4-pro"
-	defaultMultimodalVerifierModel  = "mimo-v2.5"
-	defaultChatGPTProvider          = "chatgpt"
-	defaultTerminalFallbackModel    = "gpt-5.4-mini"
+	defaultDeepSeekProvider          = "deepseek"
+	defaultFireworksProvider         = "fireworks"
+	defaultXiaomiProvider            = "xiaomi"
+	defaultMimoTextModel             = "mimo-v2.5"
+	defaultMimoProModel              = "mimo-v2.5-pro"
+	defaultConductorModel            = "deepseek-v4-flash"
+	defaultSuperModel                = "deepseek-v4-pro"
+	defaultResearcherVTextModel      = "deepseek-v4-flash"
+	defaultFlashForegroundReasoning  = "medium"
+	defaultVerifierModel             = "deepseek-v4-pro"
+	defaultMultimodalVerifierModel   = "mimo-v2.5"
+	defaultChatGPTProvider           = "chatgpt"
+	defaultTerminalFallbackModel     = "gpt-5.4-mini"
 	defaultTerminalFallbackReasoning = "low"
-	legacyFireworksFlashModel       = "accounts/fireworks/models/deepseek-v4-flash"
-	legacyFireworksProModel         = "accounts/fireworks/models/deepseek-v4-pro"
-	legacyFireworksKimiModel        = "accounts/fireworks/models/kimi-k2p6"
-	modelPolicyRoleVerifier         = "verifier"
-	modelPolicyRoleVerifierMulti    = "verifier_multimodal"
+	legacyFireworksFlashModel        = "accounts/fireworks/models/deepseek-v4-flash"
+	legacyFireworksProModel          = "accounts/fireworks/models/deepseek-v4-pro"
+	legacyFireworksKimiModel         = "accounts/fireworks/models/kimi-k2p6"
+	modelPolicyRoleVerifier          = "verifier"
+	modelPolicyRoleVerifierMulti     = "verifier_multimodal"
 )
 
 // LLMSelection is the effective provider/model/reasoning tuple used for a run.
@@ -810,6 +810,8 @@ func normalizeModelPolicyRole(role string) string {
 	switch strings.TrimSpace(strings.ToLower(role)) {
 	case "cosuper", "co_super", "co-super", "cosuper_coding", "co-super-coding":
 		return AgentProfileCoSuper
+	case "texture", "texture-agent":
+		return AgentProfileVText
 	case "verifier", "verifier-text", "verifier_text":
 		return modelPolicyRoleVerifier
 	case "verifier-multimodal", "verifier_multimodal":

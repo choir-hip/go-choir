@@ -167,9 +167,12 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 		if ownerID != "" {
 			return persistentSuperAgentID(ownerID)
 		}
-	case AgentProfileVText:
+	case AgentProfileTexture, AgentProfileVText:
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
-			return "vtext:" + docID
+			if profile == AgentProfileTexture {
+				return currentTextureAgentID(docID)
+			}
+			return legacyVTextAgentID(docID)
 		}
 	case AgentProfileProcessor:
 		if key := metadataStringValue(metadata, runMetadataProcessorKey); key != "" {
@@ -201,7 +204,7 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 	if parent != nil && strings.TrimSpace(parent.ChannelID) != "" {
 		return strings.TrimSpace(parent.ChannelID)
 	}
-	if profile == AgentProfileVText {
+	if profile == AgentProfileTexture || profile == AgentProfileVText {
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return docID
 		}
@@ -240,7 +243,8 @@ func (rt *Runtime) EnsurePersistentSuperAgent(ctx context.Context, ownerID strin
 
 func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, parent *types.RunRecord) (types.AgentRecord, map[string]any) {
 	metadata = cloneMetadata(metadata)
-	profile := metadataStringValue(metadata, runMetadataAgentProfile)
+	rawProfile := metadataStringValue(metadata, runMetadataAgentProfile)
+	profile := rawProfile
 	if profile == "" {
 		if parent != nil && strings.TrimSpace(parent.AgentProfile) != "" && metadataStringValue(metadata, "type") != "vtext_agent_revision" {
 			profile = parent.AgentProfile
@@ -249,11 +253,18 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 		}
 	}
 	profile = canonicalAgentProfile(profile)
-	role := metadataStringValue(metadata, runMetadataAgentRole)
+	if strings.EqualFold(strings.TrimSpace(rawProfile), AgentProfileTexture) {
+		profile = AgentProfileTexture
+	}
+	rawRole := metadataStringValue(metadata, runMetadataAgentRole)
+	role := rawRole
 	if role == "" {
 		role = profile
 	} else {
 		role = canonicalAgentProfile(role)
+	}
+	if strings.EqualFold(strings.TrimSpace(rawRole), AgentProfileTexture) {
+		role = AgentProfileTexture
 	}
 	agentID := defaultAgentID(profile, ownerID, metadata)
 	channelID := defaultChannelID(profile, metadata, parent, agentID)
@@ -2083,11 +2094,11 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 
 	doc.CurrentRevisionID = userRev.RevisionID
 	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   "vtext:" + doc.DocID,
+		AgentID:   currentTextureAgentID(doc.DocID),
 		OwnerID:   rec.OwnerID,
 		SandboxID: rt.cfg.SandboxID,
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: doc.DocID,
 		CreatedAt: now,
 		UpdatedAt: time.Now().UTC(),
@@ -2215,7 +2226,7 @@ func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Contex
 		CreatedAt:    time.Now().UTC(),
 	}
 	if decision.ActorID == "" {
-		decision.ActorID = "vtext:" + docID
+		decision.ActorID = currentTextureAgentID(docID)
 	}
 	if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
 		return fmt.Errorf("record initial vtext decision: %w", err)
@@ -2305,7 +2316,7 @@ func (rt *Runtime) recordExplicitInitialVTextSuperRequestIfNeeded(ctx context.Co
 		CreatedAt:    time.Now().UTC(),
 	}
 	if decision.ActorID == "" {
-		decision.ActorID = "vtext:" + docID
+		decision.ActorID = currentTextureAgentID(docID)
 	}
 	existing, err := rt.store.ListVTextDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
 	if err != nil {
@@ -2678,8 +2689,8 @@ func (rt *Runtime) reconcileCompletedVTextRun(rec *types.RunRecord) {
 	docID, _ := rec.Metadata["doc_id"].(string)
 	if strings.TrimSpace(docID) == "" {
 		agentID := agentIDForRun(rec)
-		if strings.HasPrefix(agentID, "vtext:") {
-			docID = strings.TrimPrefix(agentID, "vtext:")
+		if isTextureAgentID(agentID) {
+			docID = docIDFromTextureAgentID(agentID)
 		}
 	}
 	if strings.TrimSpace(docID) == "" && agentProfileForRun(rec) == AgentProfileVText {
@@ -2759,8 +2770,7 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 		}
 	}
 
-	agentID := "vtext:" + doc.DocID
-	if targetAgentID != agentID {
+	if !textureAgentIDMatchesDoc(targetAgentID, doc.DocID) {
 		return
 	}
 	rt.scheduleVTextWorkerWake(ownerID, doc.DocID, fromRunID)
@@ -2927,13 +2937,12 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 		return out
 	}
 
-	targetAgentID := "vtext:" + strings.TrimSpace(docID)
 	cache := make(map[string]bool)
 	consumed := []vtextWorkerUpdateMetadata{}
 	skipped := []vtextWorkerUpdateMetadata{}
 	pending := []vtextWorkerUpdateMetadata{}
 	for _, message := range messages {
-		if strings.TrimSpace(message.ToAgentID) != targetAgentID {
+		if !textureAgentIDMatchesDoc(message.ToAgentID, docID) {
 			continue
 		}
 		eligible, err := rt.isEligibleWorkerMessage(ctx, docID, message, cache)
@@ -2983,21 +2992,43 @@ func (rt *Runtime) markVTextWorkerUpdatesDelivered(ctx context.Context, rec *typ
 	if ownerID == "" || docID == "" {
 		return nil
 	}
-	targetAgentID := "vtext:" + docID
-	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 500)
-	if err != nil {
-		return err
-	}
-	updateIDs := make([]string, 0, len(updates))
-	for _, update := range updates {
-		if strings.TrimSpace(update.ChannelID) == docID && update.MessageSeq > 0 && update.MessageSeq <= maxSeq {
-			updateIDs = append(updateIDs, update.UpdateID)
+	targetAgentIDs := []string{currentTextureAgentID(docID), legacyVTextAgentID(docID)}
+	updates := make([]types.WorkerUpdateRecord, 0)
+	seenUpdates := make(map[string]bool)
+	targetByUpdateID := make(map[string]string)
+	for _, targetAgentID := range targetAgentIDs {
+		if targetAgentID == "" {
+			continue
+		}
+		targetUpdates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 500)
+		if err != nil {
+			return err
+		}
+		for _, update := range targetUpdates {
+			if seenUpdates[update.UpdateID] {
+				continue
+			}
+			seenUpdates[update.UpdateID] = true
+			targetByUpdateID[update.UpdateID] = targetAgentID
+			updates = append(updates, update)
 		}
 	}
-	if len(updateIDs) == 0 {
-		return nil
+	updateIDsByTarget := make(map[string][]string)
+	for _, update := range updates {
+		if strings.TrimSpace(update.ChannelID) == docID && update.MessageSeq > 0 && update.MessageSeq <= maxSeq {
+			targetAgentID := targetByUpdateID[update.UpdateID]
+			updateIDsByTarget[targetAgentID] = append(updateIDsByTarget[targetAgentID], update.UpdateID)
+		}
 	}
-	return rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, updateIDs, rec.RunID)
+	for targetAgentID, updateIDs := range updateIDsByTarget {
+		if len(updateIDs) == 0 {
+			continue
+		}
+		if err := rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, updateIDs, rec.RunID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // handleExecutionError transitions a run to failed/blocked and emits the

@@ -2066,10 +2066,14 @@ func (h *APIHandler) HandleTestVTextWorkerUpdate(w http.ResponseWriter, r *http.
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	targetAgentID := "vtext:" + req.DocID
+	targetAgentID := currentTextureAgentID(req.DocID)
 	if _, err := h.rt.Store().GetAgent(r.Context(), targetAgentID); err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "vtext agent is not initialized for this document"})
-		return
+		legacyAgentID := legacyVTextAgentID(req.DocID)
+		if _, legacyErr := h.rt.Store().GetAgent(r.Context(), legacyAgentID); legacyErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "Texture agent is not initialized for this document"})
+			return
+		}
+		targetAgentID = legacyAgentID
 	}
 
 	runs, err := h.rt.Store().ListRunsByChannel(r.Context(), ownerID, req.DocID, 50)

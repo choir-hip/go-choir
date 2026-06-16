@@ -18,6 +18,7 @@ const (
 	AgentProfileCoSuper    = "co-super"
 	AgentProfileVSuper     = "vsuper"
 	AgentProfileResearcher = "researcher"
+	AgentProfileTexture    = "texture"
 	AgentProfileVText      = "vtext"
 	AgentProfileProcessor  = "processor"
 	AgentProfileReconciler = "reconciler"
@@ -99,11 +100,11 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		return ""
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		return strings.TrimSpace(rec.AgentProfile)
+		return canonicalAgentProfile(rec.AgentProfile)
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			return strings.TrimSpace(profile)
+			return canonicalAgentProfile(profile)
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); taskType == "vtext_agent_revision" {
@@ -117,11 +118,11 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		return AgentProfileSuper
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		return strings.TrimSpace(rec.AgentProfile)
+		return canonicalAgentProfile(rec.AgentProfile)
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			return strings.TrimSpace(profile)
+			return canonicalAgentProfile(profile)
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); taskType == "vtext_agent_revision" {
@@ -135,11 +136,11 @@ func agentRoleForRun(rec *types.RunRecord) string {
 		return AgentProfileSuper
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
-		return strings.TrimSpace(rec.AgentRole)
+		return canonicalAgentProfile(rec.AgentRole)
 	}
 	if rec.Metadata != nil {
 		if role, _ := rec.Metadata[runMetadataAgentRole].(string); strings.TrimSpace(role) != "" {
-			return strings.TrimSpace(role)
+			return canonicalAgentProfile(role)
 		}
 	}
 	return agentProfileForRun(rec)
@@ -295,7 +296,7 @@ func canonicalAgentProfile(profile string) string {
 		return AgentProfileCoSuper
 	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
 		return AgentProfileVSuper
-	case "vtext", "vtext-agent", "document-agent":
+	case "texture", "texture-agent", "vtext", "vtext-agent", "document-agent":
 		return AgentProfileVText
 	case "processor", "news-processor", "source-processor", "universal-wire-processor":
 		return AgentProfileProcessor
@@ -310,6 +311,50 @@ func canonicalAgentProfile(profile string) string {
 	default:
 		return normalized
 	}
+}
+
+func isTextureProfileValue(profile string) bool {
+	return canonicalAgentProfile(profile) == AgentProfileVText
+}
+
+func currentTextureAgentID(docID string) string {
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		return ""
+	}
+	return AgentProfileTexture + ":" + docID
+}
+
+func legacyVTextAgentID(docID string) string {
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		return ""
+	}
+	return AgentProfileVText + ":" + docID
+}
+
+func textureAgentIDMatchesDoc(agentID, docID string) bool {
+	agentID = strings.TrimSpace(agentID)
+	docID = strings.TrimSpace(docID)
+	if agentID == "" || docID == "" {
+		return false
+	}
+	return agentID == currentTextureAgentID(docID) || agentID == legacyVTextAgentID(docID)
+}
+
+func isTextureAgentID(agentID string) bool {
+	agentID = strings.TrimSpace(agentID)
+	return strings.HasPrefix(agentID, AgentProfileTexture+":") || strings.HasPrefix(agentID, AgentProfileVText+":")
+}
+
+func docIDFromTextureAgentID(agentID string) string {
+	agentID = strings.TrimSpace(agentID)
+	for _, prefix := range []string{AgentProfileTexture + ":", AgentProfileVText + ":"} {
+		if strings.HasPrefix(agentID, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(agentID, prefix))
+		}
+	}
+	return ""
 }
 
 func canDelegateTo(callerProfile, targetProfile string) bool {

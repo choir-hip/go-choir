@@ -34,15 +34,15 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 		return agentIDForRun(&parent), channelIDForRun(&parent), nil
 	}
 
-	if runRec != nil && metadataStringValue(runRec.Metadata, "requested_by_profile") == AgentProfileVText {
+	if runRec != nil && isTextureProfileValue(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
 		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")
 		if requesterAgentID != "" {
 			target, err := rt.store.GetAgent(ctx, requesterAgentID)
 			if err != nil {
-				if errors.Is(err, store.ErrNotFound) && strings.HasPrefix(requesterAgentID, "vtext:") {
+				if errors.Is(err, store.ErrNotFound) && isTextureAgentID(requesterAgentID) {
 					channelID := metadataStringValue(runRec.Metadata, runMetadataChannelID)
 					if channelID == "" {
-						channelID = strings.TrimPrefix(requesterAgentID, "vtext:")
+						channelID = docIDFromTextureAgentID(requesterAgentID)
 					}
 					if channelID != "" {
 						return requesterAgentID, channelID, nil
@@ -78,8 +78,8 @@ func vtextDeliveryFallbackFromContext(runRec *types.RunRecord, explicitAgentID s
 		channelID = strings.TrimSpace(runRec.ChannelID)
 	}
 	explicitAgentID = strings.TrimSpace(explicitAgentID)
-	if strings.HasPrefix(explicitAgentID, "vtext:") {
-		explicitDocID := strings.TrimSpace(strings.TrimPrefix(explicitAgentID, "vtext:"))
+	if isTextureAgentID(explicitAgentID) {
+		explicitDocID := docIDFromTextureAgentID(explicitAgentID)
 		if explicitDocID != "" {
 			if channelID == "" {
 				channelID = explicitDocID
@@ -92,7 +92,7 @@ func vtextDeliveryFallbackFromContext(runRec *types.RunRecord, explicitAgentID s
 	if channelID == "" {
 		return "", ""
 	}
-	return "vtext:" + channelID, channelID
+	return currentTextureAgentID(channelID), channelID
 }
 
 func authoritativeDeliveryChannelID(targetChannelID, explicitChannelID, contextChannelID string) string {

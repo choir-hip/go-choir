@@ -312,9 +312,9 @@ func (rt *Runtime) submitVTextAgentRevisionRun(ctx context.Context, doc types.Do
 	// so they survive into appagent revision metadata.
 	runMetadata := map[string]any{
 		"type":                "vtext_agent_revision",
-		"agent_profile":       AgentProfileVText,
-		"agent_role":          AgentProfileVText,
-		"agent_id":            "vtext:" + doc.DocID,
+		"agent_profile":       AgentProfileTexture,
+		"agent_role":          AgentProfileTexture,
+		"agent_id":            currentTextureAgentID(doc.DocID),
 		"channel_id":          doc.DocID,
 		"doc_id":              doc.DocID,
 		"current_revision_id": doc.CurrentRevisionID,
@@ -731,9 +731,8 @@ func (rt *Runtime) recentWorkerMessages(ctx context.Context, ownerID, channelID 
 		runProfiles[run.RunID] = agentProfileForRun(&run)
 	}
 	filtered := make([]ChannelMessage, 0, len(messages))
-	targetAgentID := "vtext:" + strings.TrimSpace(channelID)
 	for _, message := range messages {
-		if strings.TrimSpace(message.ToAgentID) != targetAgentID {
+		if !textureAgentIDMatchesDoc(message.ToAgentID, channelID) {
 			continue
 		}
 		switch runProfiles[strings.TrimSpace(message.FromRunID)] {

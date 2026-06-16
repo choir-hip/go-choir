@@ -103,12 +103,13 @@ func (rt *Runtime) reconcileVTextWorkerState(ctx context.Context, ownerID, docID
 	if !found {
 		return nil
 	}
-	vtextAgentID := "vtext:" + doc.DocID
-	if _, found, err := rt.residentRunByAgent(ctx, ownerID, vtextAgentID); err != nil {
-		return fmt.Errorf("check resident vtext loop: %w", err)
-	} else if found {
-		rt.scheduleVTextWorkerWake(ownerID, doc.DocID, latestMessage.FromRunID)
-		return nil
+	for _, agentID := range []string{currentTextureAgentID(doc.DocID), legacyVTextAgentID(doc.DocID)} {
+		if _, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+			return fmt.Errorf("check resident Texture loop: %w", err)
+		} else if found {
+			rt.scheduleVTextWorkerWake(ownerID, doc.DocID, latestMessage.FromRunID)
+			return nil
+		}
 	}
 	if mutation, err := rt.store.GetPendingAgentMutationByDoc(ctx, doc.DocID, ownerID); err == nil && mutation != nil {
 		rt.scheduleVTextWorkerWake(ownerID, doc.DocID, latestMessage.FromRunID)

@@ -81,8 +81,8 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithVText(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if initialRun.ChannelID != decision.DocID {
 		t.Fatalf("initial vtext channel = %q, want vtext doc %q", initialRun.ChannelID, decision.DocID)
@@ -147,8 +147,8 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
@@ -226,8 +226,8 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_super_request_required") {
 		t.Fatalf("initial run missing VText super request metadata: %+v", initialRun.Metadata)
@@ -255,8 +255,8 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t
 	if superRun == nil {
 		t.Fatalf("no downstream super run appeared after VText request")
 	}
-	if got := metadataStringValue(superRun.Metadata, "requested_by_profile"); got != AgentProfileVText {
-		t.Fatalf("super requested_by_profile = %q, want %q; metadata=%+v", got, AgentProfileVText, superRun.Metadata)
+	if got := metadataStringValue(superRun.Metadata, "requested_by_profile"); got != AgentProfileTexture {
+		t.Fatalf("super requested_by_profile = %q, want %q; metadata=%+v", got, AgentProfileTexture, superRun.Metadata)
 	}
 	if got := metadataStringValue(superRun.Metadata, "requested_by_agent_id"); got != initialRun.AgentID {
 		t.Fatalf("super requested_by_agent_id = %q, want %q", got, initialRun.AgentID)
@@ -304,8 +304,8 @@ func TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("initial loop profile = %q/%q, want vtext", initialRun.AgentProfile, initialRun.AgentRole)
+	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
@@ -384,8 +384,8 @@ func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	if metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearcher) {
 		t.Fatalf("initial run metadata must not set %s from prompt text: %+v", runMetadataExplicitResearcher, initialRun.Metadata)
 	}
-	if initialRun.AgentProfile != AgentProfileVText || initialRun.AgentRole != AgentProfileVText {
-		t.Fatalf("initial loop profile = %q/%q, want ordinary vtext route", initialRun.AgentProfile, initialRun.AgentRole)
+	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+		t.Fatalf("initial loop profile = %q/%q, want ordinary texture route", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no researcher-driven route override", got)

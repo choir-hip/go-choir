@@ -3917,3 +3917,61 @@ deliveries readable, and make one current write path emit `texture` identity
 with focused old-read/new-write proof. Do not fold `vtext_agent_revision` task
 type or model-policy key migration into that slice unless tests prove they must
 move together.
+
+## 2026-06-16 - Local Repair: C35 Texture Actor/Profile Identity
+
+Claim: the first actor/profile identity slice is locally supported for new
+Texture writes and legacy delivery reads. It is not deployed-supported yet.
+
+Move: construct centralized Texture actor/profile compatibility helpers, update
+new/current Texture appagent write paths to emit `texture` identity, and adjust
+old-read delivery/verifier/model-policy boundaries. Expected ΔV: repair the
+first C35 behavior slice locally; coarse V remains 2 until CI/deploy/staging
+proof.
+
+Actual ΔV: first C35 actor/profile write slice repaired locally. Coarse V
+remains 2 pending commit/push, CI/deploy, and staging proof.
+
+Receipts:
+
+- Added `AgentProfileTexture`, current `texture:<doc_id>` helpers, legacy
+  `vtext:<doc_id>` helpers, dual-match parsing, and `texture` -> internal
+  VText/model-policy compatibility.
+- Updated conductor -> Texture initial appagent rows, explicit decision actor
+  ids, submitted Texture agent revision run metadata, processor/reconciler
+  handoff appagent rows/results, and `request_super_execution` requester roles
+  to use current Texture identity.
+- Kept old-read compatibility in researcher delivery fallbacks, worker-update
+  wake/checkpoint/mark-delivered paths, test worker-update API targeting,
+  resident-loop reconciliation, and workflow verifier update routing.
+- Focused test command
+  `nix develop -c go test ./internal/runtime -run 'TestTextureActorIdentityCompatibility|TestTextureModelPolicyRoleUsesLegacySelectionKey|TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|TestPromptBar|TestProcessor.*VText|TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists|TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes' -count=1`
+  passed.
+- Wider focused command
+  `nix develop -c go test ./internal/runtime -run 'TestConductorSpawnAgentCreatesVTextDocumentAndRevisionRun|TestProcessorAndReconcilerProfilesDelegateToVTextOnly|TestResearcherUpdateCoagent|Test.*UpdateCoagent.*VText|Test.*WorkerUpdate|Test.*VTextWorkflow|Test.*VText.*Worker|Test.*VText.*Coagent|Test.*VText.*Revision' -count=1`
+  passed.
+- Initial `nix develop -c scripts/go-test-runtime-shards` passed shards 0/4
+  and 1/4, then shard 2/4 exposed one stale raw-profile expectation. After
+  changing `request_super_execution` requester role to `texture`, the exact
+  reproducer
+  `nix develop -c go test ./internal/runtime -run '^TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper$' -count=1 -v`
+  passed.
+- Post-fix shard commands
+  `nix develop -c env SHARD_INDEX=2 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  and
+  `nix develop -c env SHARD_INDEX=3 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- The clean post-fix `nix develop -c scripts/go-test-runtime-shards` run
+  passed all four runtime shards.
+- `scripts/doccheck --report /tmp/choir-doccheck-c35-actor-profile-final.md
+  --json /tmp/choir-doccheck-c35-actor-profile-final.json` passed
+  report-only after the final evidence update with 212 docs and 1,118
+  warnings.
+- Scoped production search
+  `rg -n "\"vtext:\" \+|strings\.HasPrefix\([^\n]*\"vtext:\"|AgentID:\s+\"vtext:\"|agent_id\":\s*\"vtext:\"" internal/runtime -g '!**/*_test.go'`
+  returned no hits.
+
+Open edge: commit/push/CI/deploy/staging proof. This slice intentionally leaves
+`vtext_agent_revision`, prompt/tool `role=vtext` affordances, frontend Trace
+assertions, model-policy key naming, database/table symbols, and stored legacy
+route rows for separate documented repair slices.

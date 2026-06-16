@@ -2259,6 +2259,78 @@ runtime cutover edge. No runtime repair is claimed. Repair target is current
 Texture actor/profile write identity with explicit legacy-read compatibility
 and no new semantic decision tree.
 
+## Local Repair: C35 Texture Actor/Profile Identity
+
+Mutation class: `red`, because this changes canonical Texture appagent
+identity in run metadata, agent records, coagent delivery targets, workflow
+verifier predicates, model-policy role resolution, prompt-bar route tests, and
+worker-update wake/consumption behavior.
+
+Conjecture delta: explicit new Texture appagent runs can persist
+`agent_profile="texture"`, `agent_role="texture"`, and
+`agent_id="texture:<doc_id>"` while internal registries, model-policy lookup,
+legacy run records, and pending worker deliveries still resolve through the old
+V-name compatibility boundary until the separate task-type/policy-key migration
+lands.
+
+Protected surfaces touched: run identity resolution, Texture appagent
+upserts, conductor -> Texture initial route, processor/reconciler handoff,
+`request_super_execution` update metadata, researcher/super/coagent delivery
+fallbacks, worker wake/checkpoint delivery, model policy role normalization,
+workflow verifier update-target matching, and prompt-bar runtime tests.
+
+Local repair on 2026-06-16:
+
+- Added `AgentProfileTexture = "texture"` plus centralized helpers for current
+  `texture:<doc_id>` ids, legacy `vtext:<doc_id>` ids, and dual-match parsing.
+- Kept internal `agentProfileForRun`, `agentRoleForRun`, tool registries, and
+  `[roles.vtext]` model-policy resolution compatible with both `texture` and
+  `vtext` inputs.
+- Changed new conductor/Texture initial runs, appagent rows, coagent handoff
+  rows, explicit decision actor ids, and `request_super_execution` requester
+  roles to emit current Texture identity.
+- Kept old-read compatibility for legacy `vtext:<doc_id>` channel messages,
+  researcher delivery fallbacks, worker update wake checks, delivery marking,
+  test worker-update API targeting, resident-loop reconciliation, and workflow
+  verifier update routing.
+- Left `vtext_agent_revision`, prompt/tool `role=vtext` affordance wording,
+  durable table names, and model-policy `[roles.vtext]` key migration out of
+  this slice by design.
+
+Local evidence:
+
+- `nix develop -c go test ./internal/runtime -run 'TestTextureActorIdentityCompatibility|TestTextureModelPolicyRoleUsesLegacySelectionKey|TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt|TestPromptBar|TestProcessor.*VText|TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists|TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolutionCompletes' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestConductorSpawnAgentCreatesVTextDocumentAndRevisionRun|TestProcessorAndReconcilerProfilesDelegateToVTextOnly|TestResearcherUpdateCoagent|Test.*UpdateCoagent.*VText|Test.*WorkerUpdate|Test.*VTextWorkflow|Test.*VText.*Worker|Test.*VText.*Coagent|Test.*VText.*Revision' -count=1`
+  passed.
+- The first full `nix develop -c scripts/go-test-runtime-shards` run passed
+  shards 0/4 and 1/4, then exposed one raw-profile assertion in shard 2/4.
+  After changing `request_super_execution` to emit requester role `texture`,
+  `nix develop -c go test ./internal/runtime -run '^TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper$' -count=1 -v`
+  passed.
+- `nix develop -c env SHARD_INDEX=2 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- `nix develop -c env SHARD_INDEX=3 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- The clean post-fix `nix develop -c scripts/go-test-runtime-shards` run
+  passed all four runtime shards.
+- `scripts/doccheck --report /tmp/choir-doccheck-c35-actor-profile-final.md
+  --json /tmp/choir-doccheck-c35-actor-profile-final.json` passed
+  report-only after the final evidence update with 212 docs and 1,118
+  warnings.
+- `rg -n "\"vtext:\" \+|strings\.HasPrefix\([^\n]*\"vtext:\"|AgentID:\s+\"vtext:\"|agent_id\":\s*\"vtext:\"" internal/runtime -g '!**/*_test.go'`
+  returned no hits.
+
+Rollback path: revert the C35 behavior commit. No existing run, agent, worker
+update, model-policy, or table rows are rewritten in this slice.
+
+Heresy delta: repaired locally for new current Texture actor/profile writes and
+old-read worker-delivery compatibility. Durable task type
+`vtext_agent_revision`, prompt/tool schema wording, Trace/frontend acceptance
+assertions, model-policy key naming, database/table symbols, and stored legacy
+route rows remain explicit C35/C34 residue until separate documented slices
+repair or classify them.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2295,11 +2367,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C35 documented durable
-actor/profile identity residue as the next typed problem; no repair decrease
-yet. Database/table names, durable actor ids, stored legacy routes, Universal
-Wire edition refs, deployed Universal Wire story-field proof, and protocol v0
-remain.
+variant (ranking function) V: current V=2; last ΔV: C35 locally repaired the
+first actor/profile identity slice: new/current Texture appagent writes now use
+`texture` profile/role and `texture:<doc_id>` ids while legacy `vtext` reads
+remain compatible. Coarse V remains 2 until CI/deploy/staging proof lands.
+Database/table names, `vtext_agent_revision` task type, prompt/tool schema
+wording, stored legacy routes, Universal Wire edition refs, deployed Universal
+Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2416,20 +2490,24 @@ recent Texture open acceptance against `https://choir.news`. This does not
 claim `database=vtext`, `vtext_*` table/index, durable `vtext:<doc_id>` actor,
 `AgentProfileVText`, `vtext_agent_revision`, stored `/pub/vtext/...` route row,
 or `universal-wire/Wire.vtext` repair.
-C35 is problem-documented only: durable actor/profile identity remains old-name
-state across `AgentProfileVText`, `role=vtext`, prompt/tool affordances,
-`agent_profile` / `agent_role`, `agent_id=vtext:<doc_id>`, workflow verifier
-checks, model-policy role keys, and Trace/front-end acceptance assertions. The
-current invariant doc is `docs/texture-agentic-invariants-2026-06-13.md`, which
-forbids turning Texture identity repair into a forced workflow or role sequence.
-No C35 runtime repair is claimed yet.
+C35 is locally repaired for the first actor/profile slice: centralized Texture
+actor/profile helpers exist; explicit new Texture revision/coagent/super-request
+paths persist `texture` profile/role and `texture:<doc_id>` agent ids; internal
+registries and `[roles.vtext]` model-policy lookup remain compatible; and
+legacy `vtext:<doc_id>` worker deliveries still match, wake, and mark delivered.
+Focused tests, clean full runtime shards, doccheck, and scoped production
+search pass locally. The current invariant doc is
+`docs/texture-agentic-invariants-2026-06-13.md`, which forbids turning Texture
+identity repair into a forced workflow or role sequence. This slice leaves
+`vtext_agent_revision`, prompt/tool `role=vtext` affordance wording,
+Trace/front-end acceptance assertions, table/database symbols, and model-policy
+key naming for separate documented cuts.
 
-next move: implement the first C35 behavior slice only after preserving old
-lookups: introduce centralized Texture actor/profile compatibility helpers,
-accept legacy `vtext` reads, and make a focused new-write path emit current
-`texture` profile/role/agent identity with old-read/new-write tests. Keep
-`vtext_agent_revision` task type and model-policy key migration separate unless
-the tests prove they must move together.
+next move: commit and push C35, then monitor CI, deploy identity, and staging
+product proof. The deployed proof should show prompt-bar -> conductor ->
+Texture first revision creates a current `texture:<doc_id>` run/agent identity
+while legacy `vtext:<doc_id>` delivery compatibility remains accepted by
+focused/local evidence.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

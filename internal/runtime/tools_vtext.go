@@ -458,7 +458,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
-		Role:          AgentProfileVText,
+		Role:          AgentProfileTexture,
 		Kind:          "assignment",
 		Summary:       objective,
 		CreatedAt:     now,
@@ -471,7 +471,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		FromRunID:    requesterRunID,
 		ToAgentID:    superAgent.AgentID,
 		TrajectoryID: trajectoryID,
-		Role:         AgentProfileVText,
+		Role:         AgentProfileTexture,
 		Content:      update.Content,
 		Timestamp:    now,
 	}
@@ -522,7 +522,7 @@ func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerI
 		if msg.ToAgentID == superAgentID &&
 			msg.FromRunID == requesterRunID &&
 			msg.FromAgentID == requesterAgentID &&
-			msg.Role == AgentProfileVText {
+			isTextureProfileValue(msg.Role) {
 			return msg, true, nil
 		}
 	}
