@@ -2551,3 +2551,49 @@ Receipts:
 Open edge: push C24, monitor CI/deploy, verify staging identity, and determine
 whether a deployed publication source-open browser proof is needed for this
 contract slice.
+
+## 2026-06-16 - Deployed Evidence: Source Contract Texture Open Surface
+
+Claim: C24 is supported for deployed product API scope, not only local
+contract/test scope.
+
+Move: push the C24 source-contract behavior commit, monitor CI/deploy, verify
+staging identity, then run a temporary deployed Playwright proof that creates a
+child Texture publication, creates a parent Texture publication whose source
+entity targets the child publication version with raw
+`open_surface: "publication-version"`, and asserts the deployed resolver/export
+metadata normalize that source entity to `open_surface: "texture"`.
+
+Expected ΔV: support C24 for deployed product scope; no coarse V decrease
+because storage/file suffixes, durable actor ids, `/pub/vtext` compatibility,
+generic `publication_version` platform identity, and protocol v0 remain open.
+
+Actual ΔV: C24 is supported for deployed source-contract publication
+open-surface scope. V remains 2.
+
+Receipts:
+- Docs checkpoint commit:
+  `f635add1 docs: checkpoint source contract texture open surface`.
+- Behavior commit:
+  `e15a1f5f2c9a7b60689f61bb2349f1139045d724 runtime: rename source contract texture open surface`.
+- CI run `27594327821` passed.
+- Deploy job `81581543204` passed.
+- Docs Truth Check run `27594327818` passed.
+- FlakeHub publish run `27594327814` passed.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `e15a1f5f2c9a7b60689f61bb2349f1139045d724`, deployed at
+  `2026-06-16T04:34:34Z`.
+- Temporary deployed proof passed:
+  `GO_CHOIR_RUN_TEXTURE_SOURCE_CONTRACT_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-source-contract-staging.tmp.spec.js`.
+  The proof published a child Texture under `/pub/texture/...`, published a
+  parent Texture with a `published_texture` source entity targeting the child
+  `publication_version_id` and raw `open_surface: "publication-version"`, then
+  verified `/api/platform/publications/resolve` and
+  `/api/platform/publications/export?format=md` returned
+  `open_surface: "texture"` with the expected transclusion snapshot.
+
+Open edge: choose the next residue class. The strongest candidates are durable
+metadata keys such as `canonical_vtext_source_path`, storage/file suffixes,
+durable `vtext:` actor ids, `/pub/vtext` public-route compatibility, and the
+deployed Universal Wire story-field proof once staging can provide an edition
+story payload through product paths.
