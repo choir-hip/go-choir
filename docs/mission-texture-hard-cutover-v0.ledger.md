@@ -798,3 +798,46 @@ Receipts:
 Open edge: app ids, filenames, storage symbols, metadata keys,
 platform/internal publication names, `edit_texture` compatibility alias, and
 final Texture Protocol v0 remain open.
+
+## 2026-06-16 - Platform Publication Route Residue Checkpoint
+
+Claim: after the main Texture API route cutover, platform publication control
+routes remain a distinct old-name route family that can be cut over without
+renaming live public article URLs.
+
+Move: read-only route inventory and Problem Documentation First checkpoint
+before touching proxy, platformd, Wire autonomous publication, or frontend
+publish behavior.
+
+Expected ΔV: 0 against V=2, but it selects the next bounded descent on the
+platform/internal publication-symbol sub-surface.
+
+Actual ΔV: 0. The problem is documented and the next slice is scoped: hard-cut
+control routes to `/texture` naming, keep `/pub/vtext/...` as live route
+identity until a redirect/rollback policy exists.
+
+Conjecture delta: publication control routes can stop teaching the retired
+artifact name while preserving existing public route identity.
+
+Protected surfaces: public proxy API routing, platformd internal routing, Wire
+autonomous publication, publication read/sync paths, and deployment routing.
+
+Admissible evidence class: focused proxy/platform/runtime route tests,
+frontend build or focused caller tests if touched, CI, Node B deploy identity,
+and staging route probes for old/new control routes.
+
+Rollback path: revert the future behavior commit to restore the old platform
+publication control routes.
+
+Heresy delta: discovered old-name publication control route residue; no repair
+claimed yet.
+
+Receipts:
+- Read-only search:
+  `rg -n 'api/platform/vtext|internal/platform/(publications/vtext|vtext)|internal/wire/platform/publications/vtext|/pub/vtext|HandleVTextPublication|HandlePlatformVTextRead|isPlatformVTextReadRequest|PublishVText|SyncVText|PlatformVText' internal/proxy internal/platform internal/wirepublish internal/runtime frontend/src/lib/vtext.js frontend/src/App.svelte frontend/src/lib/Desktop.svelte`
+  showed the old-name platform publish route, internal wire publish route,
+  platformd publish/sync/read routes, and `/pub/vtext/...` public reader URL
+  shape.
+
+Open edge: implement and land the platform publication control-route cutover,
+then continue storage/app-id/file/metadata naming and protocol v0.

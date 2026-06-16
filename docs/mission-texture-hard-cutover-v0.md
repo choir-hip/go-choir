@@ -83,6 +83,46 @@ Checker warning design:
   final settlement still requires the retired-name search to show only allowed
   historical/background occurrences.
 
+## Problem Checkpoint: Platform Publication Route Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, API, prompt default, UI, or test surface changed in this checkpoint.
+
+Read-only search on 2026-06-16 confirms a specific remaining route split after
+the main Texture API cutover: publication and platform-document routing still
+teach the old artifact name even though `/api/texture` is the active canonical
+document API.
+
+Receipts:
+
+- `frontend/src/lib/vtext.js` still documents and calls
+  `/api/platform/vtext/publications` for publishing a Texture revision.
+- `internal/proxy/handlers.go` still dispatches the public platform publish
+  route at `/api/platform/vtext/publications` and the internal wire publish
+  route at `/internal/wire/platform/publications/vtext`.
+- `internal/proxy/platform_publish.go`,
+  `internal/proxy/wire_platform_publish.go`, `internal/wirepublish/client.go`,
+  and `internal/runtime/wire_platform_publish.go` still call platformd or proxy
+  publication endpoints ending in `/vtext`.
+- `internal/platform/handlers.go` still registers platformd internal publish,
+  sync, document-read, and revision-read routes under
+  `/internal/platform/publications/vtext` and `/internal/platform/vtext/...`.
+- `/pub/vtext/...` public publication routes remain the live published URL
+  shape and require a separate route migration/redirect policy; do not silently
+  rename existing public article URLs in the same slice.
+
+Next behavior slice design:
+
+- hard-cut the platform/proxy/internal publication control routes to
+  `/texture` naming without preserving a browser-public or platform-internal
+  `/vtext` compatibility route;
+- preserve `/pub/vtext/...` published reader URLs until a route identity
+  migration plan exists, because existing public links are route state rather
+  than merely handler names;
+- prove the cutover with focused proxy/platform/runtime tests, CI, staging
+  deploy identity, and a deployed route probe that shows the old control route
+  absent while the new Texture route reaches its expected auth/method gate.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -287,9 +327,17 @@ position / live conjectures / open edges:
   `/api/texture`, and `/api/vtext` remains only in explicit legacy-route
   refusal tests for this runtime slice. CI run `27587124142` passed and Node B
   staging health reported commit `247e28415bb7b5a656b9d83072288403666c9c8a`.
+- C14 active: platform publication control routes still expose old-name
+  endpoints (`/api/platform/vtext/publications`,
+  `/internal/wire/platform/publications/vtext`,
+  `/internal/platform/publications/vtext`, and
+  `/internal/platform/vtext/...`). `/pub/vtext/...` is separately classified as
+  live route identity and should not be renamed without redirect/rollback
+  policy.
 
-next move: cut over app ids, storage, file names, metadata names, and
-platform/internal publication symbols toward Texture before protocol v0.
+next move: cut over platform/proxy/internal publication control routes from
+`vtext` to `texture`, while preserving `/pub/vtext/...` public route identity
+for a later explicit migration plan.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
