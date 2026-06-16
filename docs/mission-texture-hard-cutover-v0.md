@@ -2827,12 +2827,11 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C38 local repair moved
-task/profile/model-policy payload residue from documented problem to
-local-supported behavior, pending commit/CI/deploy/staging proof. Coarse V
-remains 2 because landing/deployed proof for C38, database/table names, stored
-legacy routes, Universal Wire edition refs, deployed Universal Wire story-field
-proof, and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C38 deployed support moved
+task/profile/model-policy payload residue out of current behavior. Coarse V
+remains 2 because database/table names, stored legacy routes, Trace event-kind
+residue, Universal Wire edition refs, deployed Universal Wire story-field proof,
+and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2988,21 +2987,24 @@ The task/profile/model-policy checkpoint is now documented: scoped inventory
 found 57 `vtext_agent_revision` hits and 325 scoped profile/role/requested-app
 hits, plus current prompt-default and `[roles.vtext]` model-policy residue. No
 runtime repair is claimed by that checkpoint.
-C38 is local-supported for the first task/profile/model-policy behavior slice:
-new/current Texture revision runs emit `texture_agent_revision`; current
+C38 is deployed-supported for the first task/profile/model-policy behavior
+slice: new/current Texture revision runs emit `texture_agent_revision`; current
 conductor/processor/reconciler visible spawn affordances and prompt defaults
 use `role=texture` / Texture wording; generated model-policy defaults emit
 `[roles.texture]`; wire publication eligibility accepts the current task type;
 and legacy `vtext_agent_revision`, `role=vtext`, and `[roles.vtext]` remain
-readable/fallback inputs. Focused runtime/wirepublish packets, full
-wirepublish, sequential runtime shards, `git diff --check`, and scoped
-current-emission search pass locally. This is not yet deployed-supported.
+readable/fallback inputs. Focused runtime/wirepublish packets, full wirepublish,
+sequential runtime shards, `git diff --check`, scoped current-emission search,
+CI/deploy, staging identity, deployed browser/API proof, and a synthesized run
+acceptance record passed at the evidence levels recorded in the ledger. The
+proof also exposed remaining Trace event-kind residue such as `vtext.*`, which
+stays outside C38.
 
-next move: land C38 by committing and pushing the behavior/docs repair, monitor
-CI/deploy, verify staging commit identity, then run deployed prompt-bar ->
-conductor -> Texture product proof using public product/Trace evidence only.
-Keep table/database, durable stored actor-id, stored route-row, Universal Wire
-edition, and protocol work out of this slice.
+next move: choose the next bounded hard-cutover slice by expected ΔV: likely
+Trace event-kind/source-surface naming or storage/stored-route residue, with a
+Problem Documentation First checkpoint before behavior changes. Keep Universal
+Wire deployed story-field proof and protocol work out until their product
+surface is available.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -3038,12 +3040,17 @@ deployed-supported: new/current Texture file manifestation defaults moved from
 `.vtext` to `.texture` while legacy `.vtext` shortcuts remain readable; CI,
 deploy identity, and staging product proof are recorded. C33 repairs the
 reusable staging acceptance harness so it follows current Desk/Texture identity
-while preserving legacy selector compatibility. Next move is the remaining
-storage/durable actor/stored-route residue, now documented by C34 as requiring
-a typed migration/alias plan before behavior edits. Universal Wire story-field
-staging proof and protocol v0 remain open. Keep storage schema, durable
-`vtext:` actor ids, backend stored-route migration, Universal Wire story-field
-proof, and protocol v0 out of C32.
+while preserving legacy selector compatibility. C34-C37 are deployed-supported
+for filesystem workspace identity, first actor/profile identity, prompt-bar
+decision app payloads, and content app hints. C38 is deployed-supported for
+current `texture_agent_revision`, visible `role=texture` prompt/tool
+affordances, generated `[roles.texture]` defaults, and current wire eligibility,
+with legacy `vtext_agent_revision`, `role=vtext`, and `[roles.vtext]` still
+readable/fallback inputs. Next move is the next bounded hard-cutover slice,
+likely Trace event-kind/source-surface naming or storage/stored-route residue,
+with a Problem Documentation First checkpoint before behavior changes.
+Universal Wire story-field staging proof and protocol v0 remain open. Keep
+protocol v0 out until the working surface is proven.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

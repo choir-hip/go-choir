@@ -4357,3 +4357,65 @@ deployed prompt-bar -> conductor -> Texture product proof using public
 product/Trace evidence only. Table/database symbols, durable stored actor ids,
 stored route rows, Universal Wire edition refs, deployed Universal Wire
 story-field proof, and protocol v0 remain outside C38.
+
+## 2026-06-16 - Deployed Repair: C38 Task/Profile/Model-Policy Payloads
+
+Claim: C38 is deployed-supported for current task/profile/model-policy payload
+identity.
+
+Move: push the C38 behavior/docs repair, monitor CI/deploy, verify staging
+commit identity, run deployed prompt-bar -> conductor -> Texture product proof,
+and synthesize a durable run acceptance record from the prompt trajectory.
+Expected ΔV: deploy-support this payload slice without changing coarse V=2.
+
+Actual ΔV: C38 deployed-supported; coarse V remains 2 because table/database
+symbols, stored legacy routes, Trace event-kind residue, Universal Wire edition
+refs, deployed Universal Wire story-field proof, and protocol v0 remain.
+
+Receipts:
+
+- Commit `1a75be52d3f143b26b4cabec215f3a195d51d0dc`
+  (`runtime: emit texture task profile payloads`) pushed to `origin/main`.
+- CI run `27609193827` passed, including Go vet/build, non-runtime tests,
+  integration-tagged smoke, TLA+ model check, Docs Truth Check, all four
+  internal/runtime shards, and deploy-impact detection.
+- Deploy job `81629249726` passed.
+- Separate Docs Truth Check run `27609193826` passed.
+- FlakeHub publish run `27609193838` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `1a75be52d3f143b26b4cabec215f3a195d51d0dc`, deployed at
+  `2026-06-16T09:53:00Z`.
+- Deployed browser/API proof recorded
+  `/tmp/choir-c38-task-profile-proof-1781603776347.json` and screenshot
+  `/tmp/choir-c38-task-profile-proof-1781603776347.png`.
+- The proof registered
+  `playwright-state-1781603776987-d8ddg7@example.com`, submitted prompt-bar
+  submission `cdab307f-5edb-4d9f-b8ee-85bb6ee551c6`, and created Texture doc
+  `30ad9f55-8f35-4168-bb46-882d6c370028`.
+- The prompt-bar submission completed with `decision.action:"open_app"`,
+  `decision.app:"texture"`, `decision.doc_id:"30ad9f55-8f35-4168-bb46-882d6c370028"`,
+  and initial loop `215bbf71-4627-4d99-98bc-eb08fc921d49`.
+- Browser DOM proof observed one `data-window-app-id="texture"` window, zero
+  legacy `vtext` windows, and a visible Texture editor.
+- Public Trace trajectory
+  `cdab307f-5edb-4d9f-b8ee-85bb6ee551c6` showed a conductor agent followed by
+  `texture:30ad9f55-8f35-4168-bb46-882d6c370028` with
+  `profile:"texture"` and `role:"texture"`, edge
+  `conductor:* -> texture:*`, `agent_count:2`, `delegation_count:1`, and no
+  super-before-Texture route (`firstSuper=-1`, `firstTexture=717` in the saved
+  proof text scan).
+- The proof observed zero forbidden requests to `/internal/*`, `/api/agent/*`,
+  `/api/test/*`, `/api/prompts`, or `/api/events`.
+- Run acceptance synthesis via public
+  `/api/run-acceptances/synthesize` created
+  `runacc-35ec0ac8e8596bbc8416` for trajectory
+  `cdab307f-5edb-4d9f-b8ee-85bb6ee551c6`, with
+  `acceptance_level:"staging-smoke-level"`, `state:"blocked"`, and passed
+  checkpoints `submitted` and `vtext_opened`. The blocked state is expected for
+  this slice because the evidence does not claim worker/package/promotion
+  acceptance.
+
+Open edge: Trace event kinds still include historical `vtext.*` names, and
+table/database symbols, durable stored actor ids, stored route rows, Universal
+Wire edition refs, deployed Universal Wire story-field proof, and protocol v0
+remain outside C38.
