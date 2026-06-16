@@ -919,3 +919,65 @@ or protocol repair claimed.
 Open edge: continue storage/app-id/file/metadata naming, `/pub/vtext/...` route
 identity migration policy, `edit_texture` compatibility alias deletion, and
 protocol v0.
+
+## 2026-06-16 - App Identity And Storage Symbol Residue Checkpoint
+
+Claim: after public route, visible label, selector, and platform publication
+cutovers, app identity is the next bounded residue target, while storage tables,
+workspace/file suffixes, and metadata symbols are too broad to rename in the
+same move without a separate migration plan.
+
+Move: read-only inventory and Problem Documentation First checkpoint before
+touching frontend app registry, persisted desktop app ids, source-open plans,
+auth intents, storage schema, or metadata keys.
+
+Expected ΔV: 0 against V=2, but it selects the next bounded descent on the
+app-identity sub-surface.
+
+Actual ΔV: 0. The problem is documented and the next slice is scoped: canonical
+new app launches should use `texture`, legacy persisted/URL `vtext` app ids
+should normalize to Texture, and deeper storage/table/file/metadata names stay
+out of the slice.
+
+Conjecture delta: canonical app identity can move to Texture without stranding
+existing persisted desktop windows, if legacy app ids are normalized at the
+desktop-state and app-launch boundaries.
+
+Protected surfaces: app registry, desktop window persistence/restore,
+source-open app selection, auth intent replay, public preview windows, frontend
+routing, and deployment routing.
+
+Admissible evidence class: focused frontend build/tests and Go desktop-state
+tests if backend normalization is touched; CI; Node B deploy identity; staging
+browser/DOM proof that new Texture app surfaces use `data-app-id="texture"` and
+legacy `app=vtext` or saved state still opens Texture.
+
+Rollback path: revert the future behavior commit to restore canonical `vtext`
+app ids and remove any normalization shim.
+
+Heresy delta: discovered app identity and storage symbol residue; no repair
+claimed yet.
+
+Receipts:
+- Path inventory excluding `frontend/dist`:
+  `rg --files | rg '(^|/)[^/]*(vtext|VText|VTEXT)[^/]*$|\\.vtext' | rg -v '^frontend/dist/' | wc -l`
+  returned 103.
+- App id search:
+  `rg -n "appId: 'vtext'|app_id.*\\\"vtext\\\"|AppID: +\\\"vtext\\\"|id: 'vtext'|appId === 'vtext'|app_id=\\\"vtext\\\"" frontend/src frontend/tests internal -g '*.go' -g '*.ts' -g '*.js' -g '*.svelte' | rg -v '^frontend/dist/' | wc -l`
+  returned 38.
+- Storage symbol search:
+  `rg -n 'vtext_documents|vtext_revisions|vtext_document_aliases|vtext_agent_mutations|vtext_controller_checkpoints|vtext_decisions|CREATE DATABASE IF NOT EXISTS vtext|database=vtext|\\.vtext|go-choir-vtext' internal cmd frontend/src frontend/tests specs docs -g '!docs/why-texture-background-2026-06-15.md' -g '!docs/mission-texture-hard-cutover-v0.ledger.md' | rg -v '^frontend/dist/' | wc -l`
+  returned 1,009.
+- Metadata/tool search:
+  `rg -n -e 'edit_vtext' -e 'vtext_ref' -e 'vtext_doc' -e 'vtext_revision' -e 'source_vtext' -e 'platformd_route_path' -e 'related_vtext' -e 'transcluded_vtext' -e 'vtext_' internal frontend/src frontend/tests cmd specs docs -g '!docs/why-texture-background-2026-06-15.md' -g '!docs/mission-texture-hard-cutover-v0.ledger.md' | rg -v '^frontend/dist/' | wc -l`
+  returned 791.
+- Selected app-id files:
+  `frontend/src/lib/apps/registry.ts`, `frontend/src/App.svelte`,
+  `frontend/src/lib/Desktop.svelte`, `frontend/src/lib/UniversalWireApp.svelte`,
+  `frontend/src/lib/source-contract.ts`, `frontend/src/lib/VTextEditor.svelte`,
+  `internal/store/desktop_test.go`, `internal/runtime/desktop_test.go`, and
+  `internal/store/store_test.go`.
+
+Open edge: implement and land the app-id cutover, then return to storage
+schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
+`edit_texture` compatibility alias deletion, and protocol v0.

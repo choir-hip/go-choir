@@ -123,6 +123,54 @@ Next behavior slice design:
   deploy identity, and a deployed route probe that shows the old control route
   absent while the new Texture route reaches its expected auth/method gate.
 
+## Problem Checkpoint: App Identity And Storage Symbol Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, API, prompt default, UI, test, or persistent state changed in this
+checkpoint.
+
+Read-only search on 2026-06-16 confirms that, after public route and visible UI
+label cutovers, the retired name still carries several different kinds of state
+with different migration risk. They must not be collapsed into one rename.
+
+Receipts:
+
+- Path inventory excluding `frontend/dist` found 103 current source/doc/test
+  paths whose filenames still contain the retired name or `.vtext`.
+- App identity search found 38 current frontend/runtime/store/test hits for
+  `appId: 'vtext'`, `id: 'vtext'`, `AppID: "vtext"`, URL `app=vtext`, or
+  preview/Trace agent ids. The canonical app registry still uses `id: 'vtext'`
+  while the visible app name is already `Texture`.
+- Storage symbol search found 1,009 hits for `vtext_documents`,
+  `vtext_revisions`, `vtext_document_aliases`, `vtext_agent_mutations`,
+  `vtext_controller_checkpoints`, `vtext_decisions`, `platform_vtext_*`,
+  `database=vtext`, `.vtext`, and `go-choir-vtext`.
+- Metadata/tool search found 791 hits for symbols such as `edit_vtext`,
+  `vtext_ref`, `vtext_doc`, `vtext_revision`, `source_vtext`,
+  `platformd_route_path`, `related_vtext`, `transcluded_vtext`, and `vtext_`.
+- `frontend/src/lib/apps/registry.ts` exposes the current visible Texture app
+  under the old app id; `frontend/src/App.svelte`,
+  `frontend/src/lib/Desktop.svelte`, `frontend/src/lib/UniversalWireApp.svelte`,
+  `frontend/src/lib/source-contract.ts`, and `frontend/src/lib/VTextEditor.svelte`
+  still launch or auth-gate that app with `appId: 'vtext'`.
+- `internal/store/desktop_test.go`, `internal/runtime/desktop_test.go`, and
+  `internal/store/store_test.go` show persisted desktop/app state can contain
+  `app_id='vtext'`.
+
+Next behavior slice design:
+
+- cut the canonical frontend app id from `vtext` to `texture` so new launches,
+  desktop icons, app switchers, auth intents, source-open plans, and public
+  preview windows teach Texture at the app identity layer;
+- normalize the legacy `vtext` app id at the desktop-state boundary so existing
+  persisted windows reopen as Texture instead of disappearing after deploy;
+- keep auth intent kinds such as `save_vtext` and deeper storage/table/file
+  symbols out of this slice unless tests prove they must move together;
+- prove the slice with focused frontend build/tests, Go desktop-state tests if
+  backend normalization is touched, CI, staging deploy identity, and a staging
+  browser/DOM proof that the Texture app renders under `data-app-id="texture"`
+  while legacy `app=vtext` URL or saved state still opens the same app.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -339,10 +387,14 @@ position / live conjectures / open edges:
   `81562610983` deployed commit `019e7a9d78f94e78da91ae2ddc6200dd7dee0184`,
   and staging route probes showed the new Texture control route reaches
   method/auth gates while the old control route returns 404.
+- C15 active: app identity and storage symbols are distinct residue classes.
+  The canonical app registry still uses `id: 'vtext'`, while persisted desktop
+  state may contain `app_id='vtext'`. Storage table/workspace/file and metadata
+  symbols are much broader and require separate migration design.
 
-next move: choose the next highest-ΔV residue target among storage tables,
-file/app-id/metadata symbols, `/pub/vtext/...` route identity migration policy,
-the `edit_texture` compatibility alias, or final Texture Protocol v0.
+next move: cut the canonical app id to `texture` with a legacy `vtext` desktop
+state normalization path, leaving storage/table/file/metadata symbols for a
+separate migration slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
