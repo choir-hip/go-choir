@@ -158,10 +158,12 @@ variant, with frontend selector/probe residue burned down:
    been reconciled to Texture or line-labeled as historical/deletion residue;
    `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
    /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
-4. current V includes: internal runtime, storage, file, app-id, metadata,
-   platform/internal publication, and compatibility-shim symbols still use the
-   old ontology; frontend `data-vtext-*` attributes and frontend
-   `/api/vtext` compatibility-route deletion target test probes are discharged;
+4. current V includes: internal runtime normalization, storage, file, app-id,
+   metadata, and platform/internal publication symbols still use the old
+   ontology; frontend `data-vtext-*` attributes, frontend `/api/vtext`
+   compatibility-route deletion target test probes, the browser-public
+   `/api/vtext` route registration, and the product API tool allowlist shim are
+   discharged;
 5. discharged: visible UI labels and import affordances are cut over to
    Texture and proven on staging through browser product evidence;
 6. discharged: the edit affordance surface has a common `patch_texture` tool
@@ -235,7 +237,12 @@ position / live conjectures / open edges:
   surface.
 - C6 supported for deployed product-route scope: `/api/texture` is registered
   and exercised by focused tests, frontend API callers, and staging
-  Playwright product proof. `/api/vtext` remains a temporary compatibility shim and deletion target; this does not authorize shim deletion.
+  Playwright product proof. The browser-public `/api/vtext` route and
+  `product_api_request` allowlist shim are deleted and deployed; staging route
+  proof shows `/api/texture/documents` reaches the auth gate while
+  `/api/vtext/documents` and `/api/vtext/diff` return plain 404. Remaining
+  route residue is internal normalization and old internal symbols, not a
+  browser-public compatibility path.
 - C7 repaired and CI-green: CI exposed a Universal Wire publication compatibility
   regression. The route/tool slice made new Texture revisions write
   `source=edit_texture`, but the `internal/wirepublish` autonomous publication
@@ -271,9 +278,10 @@ position / live conjectures / open edges:
   frontend H5 warnings are app/file names, metadata keys, platform/internal
   publication terms, and historical test names.
 
-next move: cut over backend/runtime API compatibility shims, app ids, storage,
-file names, and metadata names toward Texture, then write protocol v0 only
-after the remaining working surface is settled.
+next move: cut over internal runtime normalization, app ids, storage, file
+names, metadata names, and platform/internal publication symbols toward
+Texture, then write protocol v0 only after the remaining working surface is
+settled.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -305,8 +313,9 @@ reconciliation, and a deployed product-facing route/tool/prompt slice plus
 deployed transclusion pinned-ref/newer-version proof, visible UI label proof,
 and deployed `patch_texture` common-path proof are landed. Continue renaming docs/code/
 prompts/UI/tests/tool affordances toward Texture; frontend `data-texture-*`
-selectors and frontend `/api/texture` probes are landed while backend/internal
-old-name residue remains. Preserve one Texture writer among agents, keep human
+selectors, frontend `/api/texture` probes, and browser-public Texture route
+registration are landed while backend/internal old-name residue remains.
+Preserve one Texture writer among agents, keep human
 direct edits canonical, keep super downstream of Texture for privileged
 execution, and avoid runtime semantic decision trees. Do
 not canonize a Texture Protocol upfront; make protocol v0 the last deliverable

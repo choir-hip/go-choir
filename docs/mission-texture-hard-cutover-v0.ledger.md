@@ -645,3 +645,88 @@ Receipts:
 Open edge: backend/runtime route shims, app ids, filenames, storage symbols,
 metadata keys, platform/internal publication names, and final protocol v0
 remain open.
+
+## 2026-06-16 - Browser-Public Route Shim Deletion
+
+Claim: Choir can delete the browser-public `/api/vtext` compatibility route and
+the matching `product_api_request` allowlist entry while preserving the current
+Texture API route behavior under `/api/texture`.
+
+Move: remove public `/api/vtext/documents`, `/api/vtext/*`, and
+`product_api_request` allowlist registration for `/api/vtext/`; keep
+`/api/texture/documents` and `/api/texture/*` registered; add registered-mux
+tests proving Texture create/read behavior and 404s for the retired public
+route; add tool tests proving `product_api_request` refuses the retired route;
+repair one Universal Wire registered-server test to use `/api/texture`.
+
+Expected ΔV: 0 against the coarse mission variant, with a bounded descent on
+the route-shim sub-surface. The browser-public route compatibility path should
+be gone, but internal normalization, storage, app ids, file names, metadata,
+platform/internal publication symbols, and Texture Protocol v0 remain open.
+
+Actual ΔV: 0 against V=2. The public route shim and product API tool allowlist
+shim are discharged. CI exposed one stale registered-server test path, which
+was repaired before forced staging deploy. Authenticated staging storage CRUD
+was not reproven because available Playwright auth states had expired; deployed
+proof covers route topology and auth-gate behavior, with authenticated behavior
+covered by local/CI registered-mux tests.
+
+Receipts:
+- pushed behavior commit:
+  `fddc1be439837006a7b6abb7c71829a58ad48d36`
+  (`runtime: remove legacy vtext public route`).
+- pushed test-repair commit:
+  `f704403dbffcbe8f7d488905e4cea0d14e121315`
+  (`test: use texture route for wire read proof`).
+- Focused local runtime tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleVTextDocumentsRootUsesTextureRoutes|TestRegisteredTextureRoutesExcludeLegacyVTextPrefix|TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs|TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute|TestProductAPIRequestToolRefusesInternalAndNonSuperCalls|TestProductAPIRequestToolRefusesLegacyVTextRoute'`.
+- Focused post-repair local runtime tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc|TestRegisteredTextureRoutesExcludeLegacyVTextPrefix|TestProductAPIRequestToolRefusesLegacyVTextRoute'`.
+- Local runtime shard 2 passed:
+  `nix develop -c env SHARD_INDEX=2 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,128 warnings;
+  warning counts remained `H1=718`, `H3=15`, `H4=3`, `H5=335`, `R3=57`.
+- Post-evidence docs check for this ledger update:
+  `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json` completed report-only with 212 docs and 1,129
+  warnings: `H1=718`, `H3=15`, `H4=3`, `H5=336`, `R3=57`. The one additional
+  H5 warning is this historical route-deletion evidence.
+- `git diff --check`: pass.
+- Residue search:
+  `rg -n 's\\.HandleFunc\\("/api/vtext|Temporary compatibility shim during the Texture route cutover|"/api/vtext/"' internal/runtime/api.go internal/runtime/tools_product_api.go internal/runtime/*test.go`
+  returned only internal `normalizeTextureAPIPath` mapping from
+  `/api/texture/` to `/api/vtext/`.
+- Residue search:
+  `rg -n 'registeredRuntimeRequest\\([^\\n]+/api/vtext' internal/runtime -g '*_test.go'`
+  returned no matches after the test repair.
+- CI run `27585762825` for `fddc1be4` failed runtime shard 2 because
+  `TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc`
+  still called the retired registered `/api/vtext` route.
+- CI run `27585924913` for `f704403d` succeeded across Go vet/build,
+  non-runtime tests, runtime shards 0-3, integration smoke, TLA+, Docs Truth,
+  and aggregate gate. Build Frontend and Deploy were skipped because the
+  second push was test-only relative to the failed behavior commit.
+- Forced staging deploy CI run `27586013632` with `force_staging_deploy=true`
+  succeeded, including frontend build, aggregate gate, and Deploy to Staging
+  job `81556557472`.
+- Deploy job `81556557472` checked out
+  `f704403dbffcbe8f7d488905e4cea0d14e121315`, completed the NixOS switch,
+  refreshed active computers `vm-universal-wire-platform` and
+  `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`, and reported staging health OK.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `f704403dbffcbe8f7d488905e4cea0d14e121315`, deployed at
+  `2026-06-16T00:40:30Z`.
+- Deployed same-origin Playwright route probe with the existing expired
+  `choir-news` auth state returned:
+  `/api/session` -> 401 JSON `{"error":"authentication required"}`;
+  `/api/texture/documents` -> 401 JSON `{"error":"authentication required"}`;
+  `/api/vtext/documents` -> 404 plain text `404 page not found`;
+  `/api/vtext/diff` -> 404 plain text `404 page not found`.
+- Rollback ref: revert commits `f704403d` and `fddc1be4` to restore the
+  registered browser-public `/api/vtext` route and product API tool allowlist
+  compatibility path.
+
+Open edge: internal `normalizeTextureAPIPath`, app ids, filenames, storage
+symbols, metadata keys, platform/internal publication names, `edit_texture`
+compatibility alias, and final Texture Protocol v0 remain open.
