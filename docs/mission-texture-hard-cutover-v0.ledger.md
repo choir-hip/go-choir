@@ -4419,3 +4419,69 @@ Open edge: Trace event kinds still include historical `vtext.*` names, and
 table/database symbols, durable stored actor ids, stored route rows, Universal
 Wire edition refs, deployed Universal Wire story-field proof, and protocol v0
 remain outside C38.
+
+## 2026-06-16 - Problem Checkpoint: Trace Evidence Naming Residue
+
+Claim: after C38, Trace and run-acceptance evidence naming is the next bounded
+Texture cutover target. No runtime repair is claimed in this move.
+
+Move: read-only inventory and Problem Documentation First checkpoint. Expected
+ΔV: no repair decrease; convert the next evidence-surface residue into a typed
+problem with compatibility, rollback, and proof requirements.
+
+Actual ΔV: coarse V remains 2. The next behavior slice is scoped to current
+Trace event kinds/summaries and run-acceptance checkpoint/evidence wording,
+excluding storage/table symbols, durable stored actor ids, stored route rows,
+Universal Wire edition refs, deployed Universal Wire story-field proof, and
+protocol v0.
+
+Receipts:
+
+- `rg -n "EventVText|vtext\\.agent_revision|vtext\\.document_revision|vtext\\.decision|vtext_opened|conductor decision opened vtext|vtext document revision exists|prompt/VText|VText/super|VText opened" internal/types internal/runtime -g '!**/*_test.go' | wc -l`
+  found 40 current non-test hits.
+- `rg -n "EventVText|vtext\\.agent_revision|vtext\\.document_revision|vtext\\.decision|vtext_opened|conductor decision opened vtext|vtext document revision exists|prompt/VText|VText/super|VText opened" internal/types/*_test.go internal/runtime/*_test.go frontend/tests -g '!frontend/dist/**' | wc -l`
+  found 29 test/frontend-test hits.
+- Current event constants in `internal/types/task.go` still emit
+  `vtext.agent_revision.started`, `vtext.agent_revision.progress`,
+  `vtext.agent_revision.completed`, `vtext.agent_revision.failed`,
+  `vtext.document_revision.created`, and `vtext.decision.recorded`.
+- Current event emission in `internal/runtime/vtext_agent_revision.go`,
+  `internal/runtime/runtime.go`, and `internal/runtime/tools_vtext.go` still
+  routes through `EventVText*` constants; helper/function names may remain
+  internal compatibility residue, but emitted values should move to Texture.
+- Trace summaries/tone in `internal/runtime/api_trace.go` still render
+  "vtext revision started", `vtext <phase>`, "vtext revision completed",
+  "vtext revision failed", and "vtext decision ..." for current evidence.
+- Run acceptance synthesis in `internal/runtime/run_acceptance.go` still writes
+  checkpoint kind `vtext_opened`, evidence labels "conductor decision opened
+  vtext document" / "vtext document revision exists for trajectory", and
+  invariant/verifier text framed as prompt/VText/super.
+
+Compatibility and proof requirements:
+
+- New/current event rows should use Texture event-kind strings and Texture
+  trace summaries.
+- Existing stored `vtext.*` event rows must remain readable in Trace and must
+  still satisfy run-acceptance synthesis.
+- New/current run-acceptance records should use a Texture-opened checkpoint or
+  equivalent current label while legacy `vtext_opened` records remain readable
+  for level/state/invariant derivation.
+- Deployed proof should use public product routes only and show a prompt-bar
+  trajectory with conductor -> Texture Trace evidence and a run acceptance
+  record whose current checkpoint label no longer introduces new V-name
+  evidence.
+
+Protected surfaces and rollback:
+
+- Mutation class for the future repair is red because Trace/evidence and
+  run-acceptance records are protected surfaces.
+- Admissible evidence: focused Trace/run-acceptance tests, runtime shards,
+  docs check, CI/deploy identity, staging health, deployed prompt-bar/Trace
+  proof, run-acceptance synthesis, and scoped retired-name search.
+- Rollback path: revert the single future behavior commit; do not rewrite
+  existing event rows or acceptance records.
+- Heresy delta: discovered current evidence-surface V-name residue; repair is
+  not yet claimed.
+
+Open edge: implement C39 with current Texture event/checkpoint emission plus
+legacy read compatibility.

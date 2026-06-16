@@ -2827,11 +2827,11 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C38 deployed support moved
-task/profile/model-policy payload residue out of current behavior. Coarse V
-remains 2 because database/table names, stored legacy routes, Trace event-kind
-residue, Universal Wire edition refs, deployed Universal Wire story-field proof,
-and protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: read-only C39 checkpoint
+typed Trace/run-acceptance evidence naming residue after C38. Coarse V remains
+2 because Trace event-kind/checkpoint repair is not yet implemented, and
+database/table names, stored legacy routes, Universal Wire edition refs,
+deployed Universal Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -2999,12 +2999,24 @@ CI/deploy, staging identity, deployed browser/API proof, and a synthesized run
 acceptance record passed at the evidence levels recorded in the ledger. The
 proof also exposed remaining Trace event-kind residue such as `vtext.*`, which
 stays outside C38.
+The C39 Trace/run-acceptance evidence naming problem is now documented:
+read-only inventory found 40 current non-test hits and 29 test/frontend-test
+hits around `EventVText*`, `vtext.agent_revision.*`,
+`vtext.document_revision.created`, `vtext.decision.recorded`, `vtext_opened`,
+and prompt/VText acceptance wording. The future behavior slice is red because
+Trace event kinds, Trace summaries, and run-acceptance checkpoints are protected
+evidence surfaces. Conjecture delta: new/current evidence should emit and derive
+Texture names while legacy stored `vtext.*` events and `vtext_opened`
+acceptance records remain readable. Rollback path: revert the single future
+behavior commit; do not rewrite stored event rows or acceptance records.
 
-next move: choose the next bounded hard-cutover slice by expected ΔV: likely
-Trace event-kind/source-surface naming or storage/stored-route residue, with a
-Problem Documentation First checkpoint before behavior changes. Keep Universal
-Wire deployed story-field proof and protocol work out until their product
-surface is available.
+next move: implement C39 current Trace/run-acceptance evidence naming repair:
+introduce current Texture event kinds/checkpoint labels and legacy recognition
+helpers, update Trace summaries/tone and run-acceptance synthesis to use Texture
+wording, keep old stored `vtext.*` events readable, then prove locally and via
+staging prompt-bar -> conductor -> Texture Trace/run-acceptance evidence. Keep
+storage/stored-route, Universal Wire story-field proof, and protocol work out of
+this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
