@@ -549,3 +549,39 @@ Receipts:
 Open edge: continue high-read documentation reconciliation, internal
 symbol/storage/data-attribute cleanup, compatibility-shim deletion with
 receipts, final retired-name search, and Texture Protocol v0.
+
+## 2026-06-16 - High-Read Texture Docs Reconciliation
+
+Claim: the current high-read docs can teach Texture as the artifact
+control-plane ontology while preserving old-name occurrences only as explicitly
+classified historical mission paths, internal detector symbols, or compatibility
+route deletion targets.
+
+Move: rewrite README, docs index, current architecture, runtime invariants, and
+mission portfolio prose from the retired ontology to Texture; label unavoidable
+old mission graph ids/paths, doctrine detector paths/symbols, docs-index
+historical paths, and public `/pub/vtext` route references with line-local
+deletion receipts; update this paradoc state.
+
+Expected ΔV: -1 by discharging the high-read doctrine/index docs obligation.
+
+Actual ΔV: -1. V moves from 3 to 2. This does not discharge internal
+runtime/storage/file/UI data-attribute symbols, compatibility-shim deletion,
+final retired-name receipts, or Texture Protocol v0.
+
+Receipts:
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,132 warnings;
+  warning counts `H1=718`, `H3=15`, `H4=3`, `H5=339`, `R3=57`.
+- High-read H5 subset query over `README.md`, `docs/README.md`,
+  `docs/choir-doctrine.md`, `docs/current-architecture.md`,
+  `docs/runtime-invariants.md`, `docs/mission-portfolio-2026-06-11.md`,
+  `docs/mission-graph.yaml`, and this paradoc returned no rows.
+- `rg -n -i "vtext|/api/vtext|\\.vtext|edit_vtext|data-vtext|vtext_"`
+  over the same high-read set now shows only line-labeled historical
+  docs/mission paths, internal detector symbols, or compatibility route
+  deletion targets.
+
+Open edge: cut over internal runtime/storage/file/UI data-attribute names and
+compatibility shims toward Texture; protocol v0 remains intentionally unwritten
+until the working surface is settled.

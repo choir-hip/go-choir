@@ -58,7 +58,7 @@ only when it changes shared assertions, architecture, specs/tests, skills, or
 successor missions.
 
 **variant (ranking function) V:** count unsettled architecture spine and
-substrate gates: M3.2 VText prompt register and decision notes; M3 lifecycle
+substrate gates: M3.2 Texture prompt register and decision notes; M3 lifecycle
 cutover; M4 continuation deletion; M5 durable-actor Wire falsifier; M6
 route-profile consumer; M8 Dolt rollback window; M7 review UI on real
 promotion substrate. Current V=7. M3.1 is settled as the emergency repair;
@@ -66,10 +66,10 @@ M3.2 is the durable prompt/decision-observability gate that keeps M3 from
 reopening the same failure mode. Side missions do not decrease this V unless
 they remove a heresy that blocks the spine.
 
-**next move:** M3.2 VText prompt register and decision notes
-(`docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`), then M3 proper. Do
+**next move:** M3.2 Texture prompt register and decision notes
+(`docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`; old v-name mission path), then M3 proper. Do
 not spend owner attention on Universal Wire completeness or review UI polish
-until M3.2 and M3 protect VText delegation semantics and remove the old
+until M3.2 and M3 protect Texture delegation semantics and remove the old
 lifecycle/continuation mechanisms.
 
 **ledger file:** `docs/mission-portfolio-2026-06-11.ledger.md`.
@@ -91,7 +91,7 @@ labels or successor-scope handles, not target product ontology.
 
 **source-intake product wedge:** `docs/mission-conductor-url-source-routing-h029-v0.md`
 now carries the H029 Conductor URL repair plus the broader owner workflow:
-URLs/files become durable source artifacts transcluded into VText, with
+URLs/files become durable source artifacts transcluded into Texture, with
 YouTube transcript import as the first personal-use slice and podcasts/PDFs/
 EPUBs/uploads staged after that. This is a side product wedge and future
 product falsifier, not architecture-spine descent, unless it removes a concrete
@@ -100,7 +100,7 @@ Browser-as-source blocker for M3-M5.
 ## Dependency graph
 
 ```
-M1 trajectory model ──► M2 messaging cutover ──► M3.1 lifecycle recovery ──► M3.2 VText prompt/decision notes ──► M3 lifecycle cutover ──► M4 continuation deletion ──► M5 wire on settlement
+M1 trajectory model ──► M2 messaging cutover ──► M3.1 lifecycle recovery ──► M3.2 Texture prompt/decision notes ──► M3 lifecycle cutover ──► M4 continuation deletion ──► M5 wire on settlement
                                                                                          (M5 = route-switch evidence gate)
 
 M4 continuation deletion ──► M6 route-flip consumer ──► M8 dolt branching + rollback window ──► M7 changes-app review loop
@@ -186,7 +186,7 @@ inventory that trajectories cannot express. *Edge (frame_lock):* settlement
 rules per trajectory kind may be wrong in ways the current vocabulary cannot
 state; define each rule as data and review after first real cycle.
 
-**Settlement:** records exist, are minted at conductor/processor/VText spawn
+**Settlement:** records exist, are minted at conductor/processor/Texture spawn
 points, and are queryable ("what is this trajectory waiting on?"); zero
 behavior change proven by the existing suite staying green.
 
@@ -226,7 +226,7 @@ that stops progressing while showing zero open obligations kills the design.
 
 **Settlement:** grep-level zero callers of the deleted mechanisms; a vsuper
 coordinating two co-supers sees every result exactly once across a process
-restart; prompts updated (co-super.md, vsuper.md, vtext.md). Settled by
+restart; prompts updated (co-super.md, vsuper.md, vtext.md; old v-name prompt path). Settled by
 `docs/mission-messaging-cutover-v0.md` after post-review repairs and staging
 landing at `794d28dd76ff00a2ae27c98a14dbce9e34834695`.
 
@@ -260,8 +260,8 @@ for a shim layer rather than distorting the actor semantics.
 test sites migrated with their features; acceptance evidence re-pointed.
 
 **Dependencies / blocked by:** M2; M3.1 has settled the immediate
-VText/prompt forcing regressions H009-H012/H024/H026; M3.2 must now land the
-off-document VText decision channel and reason-bearing prompt register so
+Texture/prompt forcing regressions H009-H012/H024/H026; M3.2 must now land the
+off-document Texture decision channel and reason-bearing prompt register so
 lifecycle proof is not defined by role choreography or polluted canonical
 documents. **Size:** 2 overnight missions; the big one.
 
@@ -463,7 +463,7 @@ class; tooling like `knip` or per-export grep), a Go API-route sweep
 (endpoints with no remaining frontend or agent callers — candidate: parts of
 `/api/trace/*` after the Trace app was unshipped in 95196069), and a verdict
 on the 16 remaining pre-rewrite `.js` files (~2,670 lines: js→ts stragglers
-from the TS migration unit — `stores/desktop.js` 688, `vtext.js` 555,
+from the TS migration unit — `stores/desktop.js` 688, `vtext.js` 555 (old v-name file path),
 `auth.js` 384, …). File-level reachability already verified clean 2026-06-12
 (zero orphaned files/components after `trace.js` deletion); this mission is
 the export/endpoint level that scan cannot see.

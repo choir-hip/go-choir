@@ -83,17 +83,17 @@ entitlement policy change is required before they can lose 24/7 service.
 ## Agent Roles
 
 `conductor` routes top-level user and connector input. It does not mutate
-workspace state and does not orchestrate document workers. In the current VText
-path, its only agent delegation target is `vtext`.
+workspace state and does not orchestrate document workers. In the current Texture
+path, its only agent delegation target is `texture`.
 
 `app` is a user-facing desktop surface. It does not have to be an appagent.
 
 `appagent` owns one user-facing app domain and mutates only typed app state
 through product APIs.
 
-`vtext` is the primary appagent and single writer for canonical document
-versions. Workers do not write canonical `vtext` text and do not send patches to
-`vtext`. They emit updates: findings, evidence, source refs, artifacts,
+`texture` is the primary appagent and single writer for canonical document
+versions. Workers do not write canonical `texture` text and do not send patches to
+`texture`. They emit updates: findings, evidence, source refs, artifacts,
 branches/commits, previews, tests, questions, constraints, or proposals.
 
 `researcher` reads local context and the web, writes findings/evidence to Dolt,
@@ -143,7 +143,7 @@ optimization, but the immediate model is active computer plus capacity-gated
 background computer forks, including for free users while capacity allows.
 
 `platform_vm_pool` is a platform-level pool for public/unauthenticated and shared
-serving work. It is needed during the publication pass so published `vtext`
+serving work. It is needed during the publication pass so published `texture`
 artifacts can be served without hydrating private user computers.
 
 ## Super-Tier Execution Policy
@@ -165,12 +165,12 @@ into SQLite by default. The decision record is
 [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
 
 Per-user embedded Dolt holds private product state: app graph, appagent state,
-`vtext` document/version content, prompts, local trajectories, findings, evidence
+`texture` document/version content, prompts, local trajectories, findings, evidence
 metadata, and publication staging metadata.
 
 The per-user snapshot filesystem holds files, working trees, uploads, large
 media, build artifacts, generated outputs, and filesystem aliases or materialized
-shortcuts for Dolt-backed `vtext` documents.
+shortcuts for Dolt-backed `texture` documents.
 
 Platform Dolt holds platform-visible facts: accounts, VM lifecycle/capacity,
 routing records, publication records, public artifact metadata, citation graph,

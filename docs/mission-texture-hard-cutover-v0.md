@@ -146,16 +146,17 @@ invariants / qualities / domain ramp (I/Q/D):
 - D ramp: docs and detector warnings -> focused local tests -> staging deploy
   identity -> browser product proof -> protocol canonization.
 
-variant (ranking function) V: current V=3; last ΔV=-1:
+variant (ranking function) V: current V=2; last ΔV=-1:
 1. discharged: old-name inventory across code, docs, prompts, API routes,
    database tables, frontend labels, tests, scripts, and checker manifests is
    documented in the Problem Checkpoint above;
 2. discharged: docs checker retired-name warning rule is implemented in
    report-only mode as H5 with the documented allowlist;
-3. current V includes: high-read doctrine and index docs still require Texture
-   reconciliation; the operating contract and Texture invariant doc have been
-   renamed/reworded, but doctrine/README/mission graph still carry H5 warnings
-   for live old filenames and detector symbols;
+3. discharged: high-read doctrine, README/index, current architecture,
+   runtime-invariants, mission portfolio, mission graph, and this paradoc have
+   been reconciled to Texture or line-labeled as historical/deletion residue;
+   `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+   /tmp/choir-doccheck.json` now reports no H5 warnings for that high-read set;
 4. current V includes: internal runtime, storage, file, UI data-attribute, and
    compatibility-shim symbols still use the old ontology; product-facing API
    routes and tool affordance names now expose Texture locally;
@@ -221,8 +222,8 @@ position / live conjectures / open edges:
 - C3 supported for report-only scope: the docs checker now carries H5
   retired-name warnings without failing docs-only CI. Current baseline:
   `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
-  /tmp/choir-doccheck.json` reports 1,155 total warnings, including 352 H5
-  file-level warnings across AGENTS.md, README.md, cmd, docs, frontend,
+  /tmp/choir-doccheck.json` reports 1,132 total warnings, including 339 H5
+  file-level warnings across AGENTS.md, cmd, docs, frontend,
   internal, and specs. Promotion to fail-closed remains future work after the
   baseline burns down.
 - C4 active: some old mission docs may be cheaper and clearer to delete or
@@ -232,8 +233,7 @@ position / live conjectures / open edges:
   surface.
 - C6 supported for deployed product-route scope: `/api/texture` is registered
   and exercised by focused tests, frontend API callers, and staging
-  Playwright product proof. `/api/vtext` remains an explicitly temporary
-  compatibility shim; this does not authorize shim deletion.
+  Playwright product proof. `/api/vtext` remains a temporary compatibility shim and deletion target; this does not authorize shim deletion.
 - C7 repaired and CI-green: CI exposed a Universal Wire publication compatibility
   regression. The route/tool slice made new Texture revisions write
   `source=edit_texture`, but the `internal/wirepublish` autonomous publication
@@ -256,10 +256,16 @@ position / live conjectures / open edges:
   `edit_texture` result for the proof trajectory. `edit_texture` remains only
   as a short-lived compatibility alias; settlement still requires a later alias
   deletion receipt.
+- C11 supported for high-read docs scope: README, docs index, doctrine,
+  current architecture, runtime invariants, mission portfolio, mission graph,
+  and this paradoc now teach Texture as the current artifact control-plane
+  ontology. Remaining old-name hits in that set are line-labeled historical
+  mission paths, internal detector symbols, or compatibility route deletion
+  targets; the high-read H5 subset is empty.
 
-next move: continue internal symbol/compatibility-shim cutover and high-read
-doc reconciliation, then write protocol v0 only after the remaining working
-surface is settled.
+next move: cut over internal runtime/storage/file/UI data-attribute names and
+compatibility shims toward Texture, then write protocol v0 only after the
+remaining working surface is settled.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -284,12 +290,12 @@ Use Parallax on docs/mission-texture-hard-cutover-v0.md. Treat it as the source
 program for the Texture hard cutover before M3 resumes. Texture is the promoted
 ontology for Choir's versioned, transclusive artifact control plane; the old
 V-name is migration residue allowed only in the historical background doc and
-explicit historical mission evidence. Current status is open_handoff with V=3.
+explicit historical mission evidence. Current status is open_handoff with V=2.
 The read-only retired-name inventory, Problem Documentation First checkpoint,
-report-only H5 docs checker, operating-contract Texture reconciliation, and a
-deployed product-facing route/tool/prompt slice plus deployed transclusion
-pinned-ref/newer-version proof, visible UI label proof, and deployed
-`patch_texture` common-path proof are landed. Continue renaming docs/code/
+report-only H5 docs checker, operating-contract/high-read-doc Texture
+reconciliation, and a deployed product-facing route/tool/prompt slice plus
+deployed transclusion pinned-ref/newer-version proof, visible UI label proof,
+and deployed `patch_texture` common-path proof are landed. Continue renaming docs/code/
 prompts/UI/tests/tool affordances toward Texture, preserve one Texture writer
 among agents, keep human direct edits canonical, keep super downstream of
 Texture for privileged execution, and avoid runtime semantic decision trees. Do

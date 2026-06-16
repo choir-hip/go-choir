@@ -62,9 +62,9 @@ delivers, actors passivate and rewarm, and old parent/child run control,
 continuation synthesis, latest-active-run fallbacks, and semantic tool forcing
 are removed rather than worked around.
 
-VText is the canonical document/versioning core. It is an agentic appagent in a
+Texture is the canonical document/versioning core. It is an agentic appagent in a
 multi-agent system, not a workflow runner. Runtime may expose affordances and
-durable obligations, but it must not force VText to call researcher, super,
+durable obligations, but it must not force Texture to call researcher, super,
 verifier, or another semantic appagent merely because text, metadata, or an
 acceptance probe mentions that role.
 
@@ -94,7 +94,7 @@ gets sharper, tests are corrected or added, docs stop lying to future agents,
 and the next run starts from a better state.
 
 Choir-in-Choir is Choir's implementation of Level 5: Choir uses its own
-persistent computers, VText narratives, Trace evidence, candidate worlds,
+persistent computers, Texture narratives, Trace evidence, candidate worlds,
 AppChangePackages, verifier contracts, and promotion path to improve Choir
 itself. Choir leaves alpha when this self-development loop is reliable enough
 that failed runs improve the system instead of merely consuming attention.
@@ -112,7 +112,7 @@ Choir currently presents as a web desktop backed by Go services and a Svelte
 frontend. That desktop is a control surface for the mainframe. It includes apps
 such as:
 
-- VText for durable writing and artifact editing
+- Texture for durable writing and artifact editing
 - Source windows for transcluded expansion and long-form source rendering
 - Web Lens for explicit live/original web-source inspection
 - Files for workspace state
@@ -124,7 +124,7 @@ Trace is not a normal user-facing app. It is the causal/evidence substrate for
 agentic tracing, run bundles, acceptance records, and diagnosis artifacts. Raw
 Terminal is not a user app either; shell-like repair access is mediated through
 Super Console. Web Lens is not the primary source-gathering workflow; source
-reading should move from VText transclusion to a Source window and only then to
+reading should move from Texture transclusion to a Source window and only then to
 Web Lens when the original web page itself needs inspection.
 
 The system is designed around a basic rule:
@@ -186,7 +186,7 @@ Canonical state changes only by promotion.
 The current self-development path is roughly:
 
 ```text
-prompt bar -> conductor -> appagent/VText -> super
+prompt bar -> conductor -> appagent/Texture -> super
 -> vmctl worker or candidate computer
 -> AppChangePackage
 -> recipient adoption and rebuild
@@ -208,7 +208,7 @@ The stack has five Go services:
 | `proxy` | 8082 | Auth-gated HTTP/WebSocket proxy, user-context injection, VM routing |
 | `vmctl` | 8083 | Desktop and worker VM ownership/lifecycle, with host-process fallback where Firecracker is unavailable |
 | `gateway` | 8084 | Provider-neutral LLM/search gateway reachable by host/guest callers, not the public browser edge |
-| `sandbox` | 8085 | Runtime service for desktop APIs, VText, files, source/Web Lens sessions, Super Console, trace evidence APIs, and the agent/tool loop |
+| `sandbox` | 8085 | Runtime service for desktop APIs, Texture, files, source/Web Lens sessions, Super Console, trace evidence APIs, and the agent/tool loop |
 
 Every service exposes `/health`.
 
@@ -319,7 +319,7 @@ Read [AGENTS.md](AGENTS.md) before using an agent to modify this repo.
 The short version:
 
 - `conductor` routes exogenous user/app input and does not own semantic outcomes.
-- Appagents own durable app artifacts; `vtext` is the current canonical semantic surface.
+- Appagents own durable app artifacts; `texture` is the current canonical semantic surface.
 - `super` is the foreground orchestration root and mints bounded execution authority.
 - Worker/candidate mutation belongs in background/candidate computers or isolated worker worlds.
 - Canonical state changes only through explicit promotion after verification and owner acceptance.
@@ -381,8 +381,8 @@ internal/auth/       passkey/JWT auth
 internal/proxy/      auth-gated proxy and VM routing
 internal/vmctl/      VM ownership/lifecycle API
 internal/gateway/    LLM/search gateway
-internal/runtime/    agent runtime, product APIs, VText/source/Web Lens/trace-evidence/control surfaces
-internal/store/      runtime persistence plus embedded VText/Dolt workspace
+internal/runtime/    agent runtime, product APIs, Texture/source/Web Lens/trace-evidence/control surfaces
+internal/store/      runtime persistence plus embedded Texture/Dolt workspace
 frontend/            Svelte desktop and Playwright tests
 nix/                 deployment and NixOS configuration
 docs/                architecture, missions, proofs, and historical notes

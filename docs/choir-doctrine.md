@@ -30,7 +30,7 @@ Primary support docs:
 - [why-texture-background-2026-06-15.md](./why-texture-background-2026-06-15.md)
 - [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
 - [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
-- [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md)
+- [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 - [mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md)
 
 Reading order for architecture or behavior work:
@@ -407,7 +407,7 @@ causal structure rather than frozen provenance.
 `detectors:` verifier checks over parent runs, trace edge inference from root
 and child runs.
 
-`evidence:` [internal/runtime/vtext_workflow_verifier.go](../internal/runtime/vtext_workflow_verifier.go),
+`evidence:` [internal/runtime/vtext_workflow_verifier.go](../internal/runtime/vtext_workflow_verifier.go), <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
 [internal/runtime/api_trace.go](../internal/runtime/api_trace.go).
 
 `why it violates the spec:` operator-facing and test-facing truth surfaces keep
@@ -533,12 +533,12 @@ after a canonical write.
 
 `detectors:` `requiredContinuationAfterTextureEdit`, `explicitResearcher`,
 `runMetadataExplicitResearcher`, `explicit_researcher_request`,
-`durableMetadataKeys`, `vtextEditResearcherIntentText`,
-`vtextTrajectoryHasResearcherParticipation`,
+`durableMetadataKeys`, `vtextEditResearcherIntentText`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
+`vtextTrajectoryHasResearcherParticipation`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
 `next_required_tool=spawn_agent`.
 
-`evidence:` [internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go),
-[internal/runtime/vtext_test.go](../internal/runtime/vtext_test.go),
+`evidence:` [internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go), <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
+[internal/runtime/vtext_test.go](../internal/runtime/vtext_test.go), <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
 [docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` it turns Texture from an appagent into a workflow
@@ -559,7 +559,7 @@ agents.
 
 `detectors:` prompt-bar routing heuristics that select super for Texture-class
 objectives, source/article ingestion paths that create super work before a
-Texture/context artifact exists, `vtextPromptNeedsSuperExecution`,
+Texture/context artifact exists, `vtextPromptNeedsSuperExecution`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
 `prompt_bar_no_worker_decision_route`, no-worker route predicates that patch
 individual prompts instead of removing the direct-super ingress path.
 
@@ -586,11 +586,11 @@ decision/blocker.
 signal.
 
 `detectors:` substring-based intent inference for researcher or super routing,
-`vtextPromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`,
-`vtextPromptNeedsSuperExecution`, keyword lists that force super execution.
+`vtextPromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`, <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
+`vtextPromptNeedsSuperExecution`, keyword lists that force super execution. <!-- texture-cutover-allow: internal detector symbol; deletion receipt: texture-hard-cutover-v0 -->
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go).
+[internal/runtime/tools_vtext.go](../internal/runtime/tools_vtext.go). <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
 
 `why it violates the spec:` prose is treated as authority metadata and silently
 changes routing semantics.
@@ -878,8 +878,8 @@ specific semantic workers as a required sequence.
 scripts in Texture prompt defaults.
 
 `evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
-`internal/runtime/prompt_defaults/vtext.md`,
-`internal/runtime/vtext_agent_revision.go`.
+`internal/runtime/prompt_defaults/vtext.md`, <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
+`internal/runtime/vtext_agent_revision.go`. <!-- texture-cutover-allow: internal detector path; deletion receipt: texture-hard-cutover-v0 -->
 
 `why it violates the spec:` prompt text is architecture when it controls agent
 behavior. Moving forcing from runtime code into prompts still violates Texture
@@ -901,7 +901,7 @@ manual navigation destination.
 launchers for `trace`, tests expecting a Trace icon, copy that tells users to
 manually browse Trace as the debugging surface.
 
-`evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md),
+`evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [docs/platform-os-app-state.md](./platform-os-app-state.md),
 [frontend/src/lib/FeaturesApp.svelte](../frontend/src/lib/FeaturesApp.svelte),
 [frontend/tests/desktop-shell-core.spec.js](../frontend/tests/desktop-shell-core.spec.js).
@@ -928,7 +928,7 @@ desktop-state tests, comments that say users open Terminal, routes that keep
 `/api/terminal/ws` as a live product affordance rather than a compatibility
 shim.
 
-`evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md),
+`evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [internal/sandbox/terminal.go](../internal/sandbox/terminal.go),
 [frontend/tests/terminal-app.spec.js](../frontend/tests/terminal-app.spec.js),
 [internal/store/desktop_test.go](../internal/store/desktop_test.go).

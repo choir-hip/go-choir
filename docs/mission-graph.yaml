@@ -46,9 +46,9 @@ nodes:
   - m1-trajectory-model
   - m2-messaging-cutover
   - m3.1-lifecycle-recovery
-  - m3.2-vtext-prompt-decision-notes
+  - m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   - m3.3-vm-bootstrap-recovery-race
-  - m3.4-vtext-first-draft-regression
+  - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   - texture-hard-cutover-v0
   - m3-lifecycle-cutover
   - m4-continuation-deletion
@@ -92,16 +92,16 @@ nodes:
   depends_on:
   - m2-messaging-cutover
   enables:
-  - m3.2-vtext-prompt-decision-notes
+  - m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
-- id: m3.2-vtext-prompt-decision-notes
+- id: m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.2 Texture Prompt Register And Decision Notes
-  path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md
-  ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md
+  path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   status: settled
   kind: spine
   depends_on:
@@ -120,19 +120,19 @@ nodes:
   status: settled
   kind: spine
   depends_on:
-  - m3.2-vtext-prompt-decision-notes
+  - m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   enables:
-  - m3.4-vtext-first-draft-regression
+  - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
   - docs/mission-lifecycle-cutover-v0.md
   - docs/incident-vm-bootstrap-stale-route-2026-06-09.md
   - docs/mission-computer-recovery-system-monitor-v0.md
   - AGENTS.md
-- id: m3.4-vtext-first-draft-regression
+- id: m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.4 Prompt-Bar Texture First-Draft Regression
-  path: docs/mission-vtext-first-draft-regression-m3.4-v0.md
-  ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md
+  path: docs/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   status: working
   kind: spine
   depends_on:
@@ -151,7 +151,7 @@ nodes:
   status: open_handoff
   kind: spine
   depends_on:
-  - m3.4-vtext-first-draft-regression
+  - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   enables:
   - m3-lifecycle-cutover
   sources:
@@ -286,9 +286,9 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
   - docs/conjecture-assertion-ledger-2026-06.md
   - docs/heresy-detectors.md
-- id: agentic-debugging-vtext-stability-v0
+- id: agentic-debugging-vtext-stability-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient: Agentic Debugging And Texture Stability v0'
-  path: docs/mission-agentic-debugging-vtext-stability-v0.md
+  path: docs/mission-agentic-debugging-vtext-stability-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -438,9 +438,9 @@ nodes:
   enables: []
   sources:
   - docs/choir-doctrine.md
-- id: global-wire-broad-source-vtext-newsroom-v0
+- id: global-wire-broad-source-vtext-newsroom-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire Broad-Source Texture Newsroom'
-  path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md
+  path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -458,9 +458,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: global-wire-living-vtext-newsroom-v1
+- id: global-wire-living-vtext-newsroom-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire Living Texture Newsroom'
-  path: docs/mission-global-wire-living-vtext-newsroom-v1.md
+  path: docs/mission-global-wire-living-vtext-newsroom-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: open_handoff
   kind: side
@@ -478,9 +478,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: global-wire-style-vtext-collaborative-storygraph-v0
-  title: 'Mission: Global Wire / Style.vtext Collaborative StoryGraph'
-  path: docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md
+- id: global-wire-style-vtext-collaborative-storygraph-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  title: 'Mission: Global Wire / Style.vtext Collaborative StoryGraph' # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -548,9 +548,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: platform-source-service-vtext-publication-campaign-v1
+- id: platform-source-service-vtext-publication-campaign-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient Campaign v1: Platform Source Service, Texture Sources, And Publication'
-  path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md
+  path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: open_handoff
   kind: side
@@ -739,9 +739,9 @@ nodes:
   sources:
   - docs/choir-doctrine.md
   - docs/heresy-detectors.md
-- id: vtext-client-ready-source-transclusion-pretext-v0
+- id: vtext-client-ready-source-transclusion-pretext-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Client-Ready Texture Source Transclusion And Proposal Cleanup'
-  path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md
+  path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: open_handoff
   kind: side
@@ -749,9 +749,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: vtext-fluid-editing-doc-roundtrip-transclusion-v0
+- id: vtext-fluid-editing-doc-roundtrip-transclusion-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Texture Fluid Editing, Document Roundtrip, And Source Transclusion'
-  path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md
+  path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: docs_truth
@@ -760,9 +760,9 @@ nodes:
   sources:
   - docs/choir-doctrine.md
   - docs/heresy-detectors.md
-- id: vtext-live-cadence-repair-v3
+- id: vtext-live-cadence-repair-v3 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient: Texture Live Cadence Repair v3'
-  path: docs/mission-vtext-live-cadence-repair-v3.md
+  path: docs/mission-vtext-live-cadence-repair-v3.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: open_handoff
   kind: side
@@ -770,9 +770,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: vtext-source-entities-multimedia-transclusion-v0
+- id: vtext-source-entities-multimedia-transclusion-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission Campaign: Texture Source Entities, Multimedia Review, And Transclusion v0'
-  path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md
+  path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: open_handoff
   kind: side
@@ -780,9 +780,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: vtext-source-viewer-reader-mode-hardening-v0
+- id: vtext-source-viewer-reader-mode-hardening-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Source Viewer Reader-Mode Hardening And Source UX Simplification'
-  path: docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md
+  path: docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -790,9 +790,9 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
-- id: vtext-version-compare-merge-debuggability-v1
+- id: vtext-version-compare-merge-debuggability-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v1: Texture Version Compare, Concept Merge, And Debuggability'
-  path: docs/mission-vtext-version-compare-merge-debuggability-v1.md
+  path: docs/mission-vtext-version-compare-merge-debuggability-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side

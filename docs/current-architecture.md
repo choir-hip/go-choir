@@ -4,7 +4,7 @@
 conjecture vocabulary; see the new Ontology section)
 
 This is the current architecture memo for Choir. It is meant to be the first
-document read before changing `vtext`, conductor routing, workers, Trace, Dolt,
+document read before changing `texture`, conductor routing, workers, Trace, Dolt,
 `vmctl`, publication, or appagent behavior. For current vocabulary, read
 [glossary.md](glossary.md). For project direction, read
 [project-goals.md](project-goals.md). For the current common platform/default
@@ -63,7 +63,7 @@ retired ontology.
 | **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. Replaces RunContinuation. |
 | **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
-| **authority envelope** | what a bounded profile (super/vsuper/co-super/researcher/vtext/...) may do — code-enforced capability boundary. Profiles are envelopes, not personas. |
+| **authority envelope** | what a bounded profile (super/vsuper/co-super/researcher/texture/...) may do — code-enforced capability boundary. Profiles are envelopes, not personas. |
 | **capsule** | (designed, not built) an ephemeral effect-fenced execution chamber inside a computer; never a seat of agency, never promotion authority. |
 | **MutationTransaction / promotion** | state change via a single commit point: per-ledger prepare → verify → owner approval → atomic flip → reconcile; freshness CAS against the foreground; rollback window explicit. |
 | **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
@@ -79,7 +79,7 @@ The self-improvement frame (one promotion discipline at every grain):
 
 | Level | Scope | Candidate | Verifier | Promotion |
 |---|---|---|---|---|
-| 1. Improvement in the small | VText media content | draft revision | citation checks, review, rubrics | revision becomes current |
+| 1. Improvement in the small | Texture media content | draft revision | citation checks, review, rubrics | revision becomes current |
 | 2. Self-development | Choir's own code and architecture | candidate computer | verifier fleet, RunAcceptance | MutationTransaction route switch |
 | 3. Meta-learning | the conjecture discipline itself | docs branch / one-mission trial | did action/evidence/scope/stopping change | skill/doc/invariant updates |
 
@@ -145,7 +145,7 @@ The current cloud vocabulary matters for source/news work:
 - a **Private Choir Cloud** is a customer-controlled NixOS host or host cluster
   with platform computer(s), many user computers, candidate computers, private
   source systems, and optional publication/subscription links;
-- **Wire** is the reusable source-to-VText substrate;
+- **Wire** is the reusable source-to-Texture substrate;
 - **Universal Wire** is platform-level work in the Community Cloud, not a
   user-computer feature;
 - personalization is user-computer work over accessible public/private corpora.
@@ -171,7 +171,7 @@ host services
   -> sourcecycled owns the current experimental source-service daemon
 
 platform computer runtime
-  -> cloud-level processors/reconcilers/researchers/VText agents where present
+  -> cloud-level processors/reconcilers/researchers/Texture agents where present
   -> cloud-owned Wire artifacts, editions, indexes, and agent notebooks
   -> cloud-owned source/publication state that is semantic product state
 
@@ -194,10 +194,10 @@ Important boundary rules:
   are host/platform or sidecar services in the current codebase. They should
   stay narrow and should not become private document, appagent, or user-computer
   semantic owners.
-- The per-user computer runtime is where private conductor, VText, appagent,
+- The per-user computer runtime is where private conductor, Texture, appagent,
   Trace, run memory, app state, source metadata, and candidate-control product
   state live.
-- Platform-level semantic work, such as Universal Wire article/edition VTexts
+- Platform-level semantic work, such as Universal Wire article/edition Textures
   and public source synthesis, should be scoped to platform computer authority
   even when host daemons perform serving, lifecycle, or adapter work.
 - Provider secrets stay in the gateway/platform boundary. Per-computer model
@@ -221,7 +221,7 @@ deployed build identity. It replaces ad hoc claims like "the Trace looked good."
 
 The embedded Dolt runtime migration is complete on staging. As of commit
 `c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
-tables and VText tables open in the same embedded Dolt workspace inside the
+tables and Texture tables open in the same embedded Dolt workspace inside the
 user computer. The old `/state` path remains a marker and legacy-import source;
 fresh accepted staging computers showed no runtime SQLite WAL/SHM pair. Host
 auth/session state remains host-owned.
@@ -231,7 +231,7 @@ model catalog are platform-owned, but the effective model policy for a user
 computer is computer-owned durable state. The platform may ship default role
 mappings, such as ChatGPT for a foreground role or Fireworks-hosted DeepSeek/Kimi
 for another, but those mappings are not architectural boundaries. Any configured
-model may serve conductor, VText, researcher, super, vsuper, co-super, verifier,
+model may serve conductor, Texture, researcher, super, vsuper, co-super, verifier,
 or future roles when its declared capabilities match the current turn. Text-only
 models can run orchestration, research, coding, writing, and text/code/evidence
 verification. Multimodal models are required only for turns that actually need
@@ -246,17 +246,17 @@ service writes to a separate localhost-only `dolt sql-server` primary and owns
 platform-visible publication, route, artifact manifest/blob, retrieval source/
 span, citation edge, provenance, consent/review, verifier, and rollback rows.
 The browser never talks to Dolt. A signed-in user calls the proxy product API to
-publish a selected private VText revision; the proxy reads that revision from
+publish a selected private Texture revision; the proxy reads that revision from
 the user's resolved computer and submits only the public projection to
 `platformd`. Public published snapshots now resolve through the Svelte Choir
-shell and VText app at `/pub/vtext/...`: signed-out visitors get a guest
-read-only VText surface, signed-in users can create private derivatives and
-proposals, and proxy read APIs fetch sanitized publication bundles from
-internal-only `platformd` endpoints. Platform services still never gain write
-access to the live private document.
+shell and Texture app at the current `/pub/vtext/...` compatibility route (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
+surface, signed-in users can create private derivatives and proposals, and proxy
+read APIs fetch sanitized publication bundles from internal-only `platformd`
+endpoints. Platform services still never gain write access to the live private
+document.
 
 For the current contract covering external source ingestion, source cleaning,
-VText source metadata, transclusion, publication policy, and export, read
+Texture source metadata, transclusion, publication policy, and export, read
 [source-external-data-publication.md](source-external-data-publication.md).
 
 ## Implemented Foundations And Active Hardening
@@ -269,11 +269,11 @@ Code-present/current foundations:
 1. Public and signed-out desktop surfaces exist, and mutable paths are expected
    to cross an auth boundary before continuing through an owned computer. Treat
    individual public/auth-on-mutation journeys as staging-proof-sensitive.
-2. Prompt bar, conductor routing, VText documents/revisions/history/export,
+2. Prompt bar, conductor routing, Texture documents/revisions/history/export,
    worker updates, Trace projections, run acceptances, AppChangePackages,
    adoptions, continuations, and computer source-lineage APIs exist in the
    runtime product surface.
-3. VText already has deterministic backend coverage for document creation,
+3. Texture already has deterministic backend coverage for document creation,
    revisions, user edits, worker update integration, stale-result protection,
    source entities, source repairs, attachments, diagnosis, import, export,
    blame, diff, and history.
@@ -283,32 +283,33 @@ Code-present/current foundations:
    app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
 5. Platform publication has `platformd`, proxy publish/read APIs, public
-   `/pub/vtext/...` routes, sanitized publication bundles, export, retrieval
-   search, proposal delivery state, and private-derivative/proposal flows.
+   `/pub/vtext/...` compatibility routes (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized publication
+   bundles, export, retrieval search, proposal delivery state, and
+   private-derivative/proposal flows.
 6. The source/Wire substrate has current code in `cmd/sourcecycled`,
    `internal/cycle`, `internal/sourcefetch`, `internal/sourcecontract`,
    `internal/sources`, runtime content/source entity handling, and frontend
    source panels/viewers. `source_search` can query Source Service for
-   researcher turns when configured, and VText can preserve
+   researcher turns when configured, and Texture can preserve
    `source_service_item:<id>` refs, but there is not yet a user-facing
-   Wire app over an edition VText, subscription/event stream, newsletter
+   Wire app over an edition Texture, subscription/event stream, newsletter
    pipeline, or durable per-source scheduling proof.
 
 Active hardening:
 
 1. Keep public desktop and auth-on-mutation verified on staging as the source
    system changes land.
-2. Make VText/researcher/super/user edit flows smoother, more observable, and
+2. Make Texture/researcher/super/user edit flows smoother, more observable, and
    less dependent on timing luck, while preserving the existing single-writer
    and machine-verifiable revision contract.
 3. Turn source/Wire from substrate into a prominent Wire product surface with
-   real edition VTexts, userland personalization, and later newsletter and
+   real edition Textures, userland personalization, and later newsletter and
    radio-queue projections.
 4. Harden publication UX and review: retraction, supersession, route
    management, richer review evidence, export polish, and proposal
    inbox/acceptance flows.
 5. Deepen Pretext-based responsive rendering and transclusion for published
-   `vtext`, computational essays, evidence reports, and web content.
+   `texture`, computational essays, evidence reports, and web content.
 6. Add richer citation mechanics.
 
 Target-only direction:
@@ -319,14 +320,14 @@ Target-only direction:
    radio/control apps.
 
 Later layers should shape today's data model, but they should not be built in a
-way that weakens the existing VText/source/publication contract.
+way that weakens the existing Texture/source/publication contract.
 
 ## Product Loop
 
 The current intended core loop is:
 
 ```text
-prompt -> conductor -> vtext -> researcher/persistent super -> cosuper -> vtext versions
+prompt -> conductor -> texture -> researcher/persistent super -> cosuper -> texture versions
 ```
 
 Then:
@@ -341,106 +342,106 @@ Then:
 citations + compute accounting -> CHIPS economics
 ```
 
-## VText Contract
+## Texture Contract
 
-`vtext` is the first appagent and the version-native control plane. It replaces
+`texture` is the first appagent and the version-native control plane. It replaces
 chat as the main surface for multiagent work.
 
-The target shape of `vtext` is hypermedia, not flat text. A `vtext` should be
+The target shape of `texture` is hypermedia, not flat text. A `texture` should be
 able to become a computational essay or owner-readable campaign/report packet:
 prose plus typed snippets for images, audio, podcasts, video, web captures,
 PDF/EPUB excerpts, code diffs, interactive graphics, animations, Trace excerpts,
 run-acceptance records, app-change packages, candidate demo videos, sources,
-and nested VTexts. Those snippets are durable artifact references with layout
+and nested Textures. Those snippets are durable artifact references with layout
 intent, provenance, and expansion targets, not pasted browser-local state.
 
 Pretext is the preferred layout primitive for this direction: use it for
 accurate multiline text measurement, responsive text flow, rich inline
 measurement, magazine-style columns, and text wrapping around embedded objects.
-Pretext should not become the VText data model or a replacement for app
+Pretext should not become the Texture data model or a replacement for app
 ownership. Choir owns the semantic block/snippet model; Pretext helps render
 that model with stable responsive geometry.
 
 Every embedded snippet should have two forms:
 
-- an inline or embedded form that reads naturally in the VText flow;
+- an inline or embedded form that reads naturally in the Texture flow;
 - an expanded form that opens the owning desktop app/window without losing the
-  reader's place in the VText.
+  reader's place in the Texture.
 
 For example, an embedded video expands into the Video app, a podcast excerpt
 expands into Podcast, a PDF source excerpt expands into PDF, an image expands
 into Image, trace evidence expands into an evidence artifact or Super Console
-diagnosis path, and an embedded VText expands into another VText window. This
-preserves app boundaries while making VText the composition and reentry surface.
+diagnosis path, and an embedded Texture expands into another Texture window. This
+preserves app boundaries while making Texture the composition and reentry surface.
 
 The multi-window desktop is part of the reading model. Sources, demos, and
 media should be worth opening because opening them does not destroy the current
 reading context. A user reading a computational essay can click through a
 source, inspect an animation or candidate demo, play a clip, or compare another
-VText in a new window, then return to the same place in the essay.
+Texture in a new window, then return to the same place in the essay.
 
 The canonical example is an article that is also a computational essay. The
 user should be able to ask Choir to make an article that combines argument,
 sources, interactive graphics, animations, multimedia clips, generated or
-uploaded media, and reviewable evidence. The generated VText should not flatten
+uploaded media, and reviewable evidence. The generated Texture should not flatten
 those materials into links at the bottom. It should arrange them as readable
 snippets in the essay, with sources and media tempting enough to open because
 the desktop preserves context. Clicking a source opens Source Viewer by default;
 explicit live/original inspection opens Web Lens; clicking a graphic opens the
 owning interactive app or viewer; clicking a nested argument opens another
-VText; clicking a candidate demo opens the review/approval context. This is one
-reason VText must stay a composition surface over typed artifacts instead of
+Texture; clicking a candidate demo opens the review/approval context. This is one
+reason Texture must stay a composition surface over typed artifacts instead of
 becoming a monolithic media app.
 
 Not every app is an appagent. Apps can be simple desktop surfaces. An app becomes
 an appagent when it needs durable domain ownership, prompts, or dynamic agentic
-UI. Likely sequence: `vtext` first, then source/Web Lens ownership if it needs
+UI. Likely sequence: `texture` first, then source/Web Lens ownership if it needs
 durable domain agency, then mail, then calendar.
 Trace is no longer a product app direction. Trace remains evidence: structured
 events, unified logs, run bundles, acceptance records, and diagnosis artifacts.
 Humans should not be expected to browse a Trace app to debug Choir.
 
-A `vtext` version is a canonical document state:
+A `texture` version is a canonical document state:
 
 - `v0` is the initial user input or prompt seed.
-- `v1` is the first canonical VText-authored document version, created through
-  the VText edit path.
-- `v2+` are user edits and later VText-authored revisions.
+- `v1` is the first canonical Texture-authored document version, created through
+  the Texture edit path.
+- `v2+` are user edits and later Texture-authored revisions.
 
 The conductor must not write the first appagent document version. It routes the
-prompt, creates or opens the VText document shell, preserves the user's seed,
-and starts VText. VText writes the first canonical artifact version. The prior
+prompt, creates or opens the Texture document shell, preserves the user's seed,
+and starts Texture. Texture writes the first canonical artifact version. The prior
 "conductor creates an initial seed" policy is superseded because it blurred the
-single-writer boundary and created a fake version advance before VText had done
+single-writer boundary and created a fake version advance before Texture had done
 the work.
 
-The target VText loop is deliberately small:
+The target Texture loop is deliberately small:
 
 ```text
-prompt -> conductor route -> VText writes v1
-  -> VText sends durable co-agent messages when needed
+prompt -> conductor route -> Texture writes v1
+  -> Texture sends durable co-agent messages when needed
   -> workers reply with durable updates/evidence
-  -> VText wakes and writes the next version
+  -> Texture wakes and writes the next version
 ```
 
 The complexity should live in durable agent-to-agent communication and evidence,
 not in prompt taxonomies, conductor-authored drafts, tool-choice classifiers, or
 hidden workflow state machines.
 
-Workers do not send patches to `vtext`. That mixes concerns. Workers emit
+Workers do not send patches to `texture`. That mixes concerns. Workers emit
 updates: findings, evidence, source references, artifact refs, branch/commit
 refs, preview refs, test results, questions, constraints, or proposal summaries.
-The `vtext` appagent/writer decides whether and how those updates become a new
+The `texture` appagent/writer decides whether and how those updates become a new
 document version.
 
 For candidate coding work and human approval, the default owner-review artifact
 should be video-first when the behavior is visual or temporal. A candidate
-approval VText should embed a short demo video when available, then provide the
+approval Texture should embed a short demo video when available, then provide the
 summary, package/diff refs, verifier status, rollback path, risks, and links to
 evidence bundles or run acceptance. Diffs and logs are still important, but
 they should not be the only human proof for interactive product behavior.
 
-The first implementation can create a new `vtext` revision after each meaningful
+The first implementation can create a new `texture` revision after each meaningful
 worker update. That policy should be isolated so it can later debounce, batch, or
 delay revisions when the user is not attending the latest version. Correctness
 must not depend on the debounce policy.
@@ -449,24 +450,24 @@ The UI should show current document state for each version, not a temporal feed
 of agent status updates. A single user prompt may produce many versions: tens
 now, hundreds soon, eventually thousands.
 
-## Machine-Verifiable VText
+## Machine-Verifiable Texture
 
 The hardest near-term problem is verification. The core behavior should be
 testable without real providers, browsers, or timing luck.
 
 Required deterministic tests:
 
-- Prompt creation produces one document with `v0` user input and a started VText
+- Prompt creation produces one document with `v0` user input and a started Texture
   writer run.
-- VText creates `v1` through the same VText edit path used for later appagent
+- Texture creates `v1` through the same Texture edit path used for later appagent
   revisions; conductor cannot create appagent-authored document text.
 - User edits always create user-authored versions.
 - Worker updates are durably attached to the document trajectory.
-- A `vtext` revision records which worker updates it consumed, skipped, or left
+- A `texture` revision records which worker updates it consumed, skipped, or left
   pending.
 - A stale worker result cannot overwrite or erase a later user-authored version.
 - User edits redirect future synthesis.
-- Unified logs/evidence can explain prompt -> conductor -> vtext -> worker
+- Unified logs/evidence can explain prompt -> conductor -> texture -> worker
   update -> version during development/debugging.
 
 Browser/e2e tests should verify integration, but the product contract should be
@@ -477,9 +478,9 @@ a fake clock.
 
 `conductor` receives top-level user and connector input. It decides whether to
 open an app, show a toast, or route to another flow. It does not mutate workspace
-state. In the current VText path, its only agent delegation target is `vtext`;
+state. In the current Texture path, its only agent delegation target is `texture`;
 it does not spawn `researcher`, `super`, or `cosuper`. Those document-work
-requests begin after `vtext` owns the document.
+requests begin after `texture` owns the document.
 
 `app` means a user-facing desktop surface. An app does not have to be an
 appagent.
@@ -499,7 +500,7 @@ view state must not live only in browser component variables. Per-app code can
 define the shape of its typed context, but persistence and reload semantics must
 use the universal shell/API path.
 
-`vtext` is the single writer for canonical document versions. It synthesizes user
+`texture` is the single writer for canonical document versions. It synthesizes user
 edits and worker updates into durable document state.
 
 `researcher` reads local files and the web, then writes findings/evidence to
@@ -588,7 +589,7 @@ decision, not a reason to preserve shared workers now.
 `platform_vm_pool`:
 
 - A platform-level pool for public/unauthenticated and shared serving work.
-- Needed during the publication pass so published `vtext` artifacts can be
+- Needed during the publication pass so published `texture` artifacts can be
   served without hydrating a user's private active computer.
 - Can host publication readers, public previews, cached renderers, and other
   platform-visible app surfaces.
@@ -690,7 +691,7 @@ Per-user embedded Dolt holds private product state:
 
 - desktop/app graph
 - appagent state
-- `vtext` document/version content
+- `texture` document/version content
 - prompts and policies
 - local trajectories
 - researcher findings and evidence metadata
@@ -703,9 +704,9 @@ Per-user snapshot filesystem holds workspace and file state:
 - large media
 - build artifacts
 - generated outputs
-- filesystem aliases or materialized shortcuts for Dolt-backed `vtext` documents
+- filesystem aliases or materialized shortcuts for Dolt-backed `texture` documents
 
-`vtext` spans both: canonical content lives in embedded Dolt, while the
+`texture` spans both: canonical content lives in embedded Dolt, while the
 filesystem should expose natural aliases/shortcuts so documents are discoverable
 from the desktop and file browser.
 
@@ -785,7 +786,7 @@ media input.
 Publication should be forward-compatible without deciding the whole economic
 model now.
 
-Start with private `vtext` version history. A publication is an immutable event
+Start with private `texture` version history. A publication is an immutable event
 over selected private version/artifact refs. The local VM can continue to
 accumulate unpublished versions after publication.
 
@@ -814,7 +815,7 @@ LLM-backed actions, candidate creation, publication, and promotion should trigge
 auth when needed while preserving the user's current intent.
 
 The prompt bar should react optimistically to user input. Simple version: show a
-loading toast. Better version: animate or expand the prompt into the new `vtext`
+loading toast. Better version: animate or expand the prompt into the new `texture`
 window when the conductor opens it.
 
 All apps should eventually support true fullscreen, not only maximized windows.
@@ -827,9 +828,9 @@ browsing work can support Web Lens, source acquisition, and candidate-computer
 inspection, but it should not reintroduce a manual general browser as the
 primary source-gathering workflow.
 
-Trace should stay out of the default `vtext` writing UI and should not remain a
+Trace should stay out of the default `texture` writing UI and should not remain a
 human-facing product app. Relevant evidence should be available as unified logs,
-run bundles, acceptance records, and diagnosis artifacts that VText or Super
+run bundles, acceptance records, and diagnosis artifacts that Texture or Super
 Console can open or summarize. The document surface should remain conservative
 and clean for writing, research, publishing, and reading.
 
@@ -840,12 +841,12 @@ auth-profile testing until a replacement is clearly better.
 
 Backend-browser candidates such as Kuri, Lightpanda, or Obscura may be useful
 later for content ingestion, backend browsing, and agent loops. That exploration
-is deferred until the vtext verification loop is stable.
+is deferred until the texture verification loop is stable.
 
 ## Pretext
 
 Pretext is relevant later as a text rendering/transclusion layer for live
-documents, published `vtext`, and embedded web/media content. It should not become
+documents, published `texture`, and embedded web/media content. It should not become
 a blocker for the current verification work.
 
 ## What Not To Collapse
@@ -855,7 +856,7 @@ Future coding agents should not simplify Choir into:
 - chat plus a task runner
 - one global agent with tools
 - one active computer that mutable workers freely edit
-- workers patching `vtext` text directly
+- workers patching `texture` text directly
 - platform Dolt as a global polling bus
 - provider-specific product behavior
 - publication as a flat export with no version/provenance model

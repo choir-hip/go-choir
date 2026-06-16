@@ -156,8 +156,7 @@ explicitly promotes one as source form.
   source/news code-state and code-review note. Use it for sourcecycled,
   source_search, Texture source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
-- `docs/choir-wire-source-to-vtext-spec-2026-06-09.md` - current Wire
-  requirements contract: Universal Wire, Private Wire reuse, platform/user
+- `docs/choir-wire-source-to-vtext-spec-2026-06-09.md` - current Wire requirements contract (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`): Universal Wire, Private Wire reuse, platform/user
   computer authority, Texture ownership, source artifacts, and deletion of legacy
   graph/source-maxxing behavior.
 - `docs/mission-*-v*.md` - mission paradocs. Use the portfolio's Parallax
@@ -166,15 +165,14 @@ explicitly promotes one as source form.
 - `docs/mission-wire-community-news-v0.md` - older Universal Wire product
   mission. Do not resume it as the architecture spine; current Wire proof is
   downstream of M2-M4 in the portfolio.
-- `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` -
+- `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` - (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   historical product/architecture spec for the superseded Universal Wire +
   StoryGraph/Texture framing. Do not use it as current ontology.
-- `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis
-  for Texture-native `Style.vtext` support, client corpus ingestion, learned style
+- `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
+  for Texture-native style support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
-- `docs/vtext-styleguide-sources-review-2026-06-06.md` - full source-by-source
-  review of the styleguide/voice corpus with concise signal summaries for each URL.
-- `docs/vtext-styleguide-source-theme-synthesis-2026-06-06.md` - theme synthesis
+- `docs/vtext-styleguide-sources-review-2026-06-06.md` - full source-by-source review (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`) of the styleguide/voice corpus with concise signal summaries for each URL.
+- `docs/vtext-styleguide-source-theme-synthesis-2026-06-06.md` - theme synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   across all styleguide and anti-slop sources with consensus, controversy, and
   outlier breakdown.
 - `docs/implementation-scope.md` - near-term implementation scope.
@@ -200,7 +198,7 @@ explicitly promotes one as source form.
   `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md`, the narrow
   bootstrap/recovery race paramission that must settle before lifecycle cutover
   uses vmctl refresh/restart as proof substrate.
-- `docs/mission-platform-source-service-vtext-publication-campaign-v1.md` -
+- `docs/mission-platform-source-service-vtext-publication-campaign-v1.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
   active Source Service / Texture source metadata / publication campaign. Its
   requirements contract is `docs/source-external-data-publication.md`.
 - `docs/mission-campaign-compiler-selfdev-v0.md` is the primary current
@@ -208,8 +206,8 @@ explicitly promotes one as source form.
 - `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
 - `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
 - `docs/mission-web-surface-rationalization-v0.md` - Obscura/Web Lens surface rationalization mission.
-- `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` -
-  historical draft mission for the superseded Universal Wire / Style.vtext
+- `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
+  historical draft mission for the superseded Universal Wire / Style artifact
   collaborative StoryGraph trajectory. Do not use it as current ontology.
 
 Read the mission portfolio and the current paradoc first. Older
