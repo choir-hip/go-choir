@@ -2231,3 +2231,37 @@ Receipts:
 Open edge: repair the staging acceptance spec to prove Texture source labels
 and empty-state app behavior without claiming story payload fields when staging
 has no Universal Wire edition stories; rerun deployed proof.
+
+## 2026-06-16 - Deployed Evidence: Universal Wire Texture Source Labels
+
+Claim: deployed Choir proves Universal Wire's current source-label and
+app-empty-state surface under Texture naming, while deployed story-field proof
+is unavailable because staging has an empty Universal Wire edition.
+
+Move: update the staging acceptance spec so empty editions prove source labels
+and app empty state without claiming story payload fields; refresh staging auth
+state; rerun deployed Playwright proof against commit
+`9f332529d209e82df86056176ffac2d31d2c5df1`.
+
+Expected ΔV: support C22 for deployed source-label/app-empty-state scope; leave
+deployed story-field proof as a named open edge.
+
+Actual ΔV: C22 is supported for deployed source-label/app-empty-state scope.
+V remains 2 because deployed story payload fields, broader metadata/storage
+residue, and protocol v0 remain open.
+
+Receipts:
+- Refreshed auth state from `frontend/` with
+  `node scripts/setup-auth-state.mjs --baseUrl https://choir.news`, yielding
+  user `qa-1781583037734-7tuzeq@example.com`.
+- Deployed proof passed:
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`.
+- Product observations: stories API source label was not
+  `universal-wire-vtext-index` or `universal-wire-edition-vtext`; edition
+  metadata existed at `universal-wire/Wire.vtext`; signed-in Universal Wire app
+  rendered without SourceMaxx or Global Wire preview copy; empty edition state
+  rendered no story cards and showed the empty state.
+
+Open edge: prove deployed `story_texture_doc_id`,
+`projection_texture_docs`, and `texture_content` when staging has a Universal
+Wire story payload reachable through product paths.

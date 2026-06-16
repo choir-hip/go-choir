@@ -1282,6 +1282,47 @@ checkpoint. Repaired target: update the acceptance spec to pass on empty
 edition state while still asserting Texture labels and app surface, and leave
 deployed story-field proof open until an actual story payload is reachable.
 
+## Deployed Evidence: Universal Wire Texture Source Labels
+
+Mutation class: `yellow` for the acceptance-spec repair and `green` for this
+evidence update. The deployed runtime/frontend behavior under proof remains
+commit `9f332529d209e82df86056176ffac2d31d2c5df1`.
+
+Conjecture delta: after the acceptance oracle distinguishes empty edition state
+from story payload availability, staging can prove the Universal Wire source
+label and app-surface parts of C22 without overstating deployed story-field
+coverage.
+
+Deployed evidence on 2026-06-16:
+
+- Refreshed staging Playwright auth state with
+  `node scripts/setup-auth-state.mjs --baseUrl https://choir.news` from
+  `frontend/`; generated user
+  `qa-1781583037734-7tuzeq@example.com`.
+- Deployed Playwright proof
+  `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`
+  passed after the spec was corrected to accept empty editions.
+- Product observations: `/api/universal-wire/stories` returned a
+  `universal-wire-*` source label that was not
+  `universal-wire-vtext-index` or `universal-wire-edition-vtext`; the response
+  included the Universal Wire edition at `universal-wire/Wire.vtext`; the
+  signed-in Universal Wire app rendered without SourceMaxx or Global Wire
+  preview copy; because `stories.length === 0`, the app rendered the
+  Universal Wire empty state and no story cards.
+- Deployed story payload fields remain unproven on staging because no
+  Universal Wire edition story payload was available. Local focused tests and
+  runtime shards prove the emitted JSON shape for current story payloads.
+
+Rollback path: if a future staging edition story exposes old story payload
+fields or the app cannot open a story through `story_texture_doc_id`, restore
+the previous Universal Wire story consumer/producer while investigating the
+projection contract.
+
+Heresy delta: repaired for deployed Universal Wire source-label and empty-state
+app proof. Discovered but unrepaired for deployed scope: staging currently lacks
+a Universal Wire story payload to prove `story_texture_doc_id`,
+`projection_texture_docs`, and `texture_content` end to end.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1563,8 +1604,8 @@ position / live conjectures / open edges:
   AppChangePackage review-evidence proof all pass. Universal Wire story
   projection fields, general Texture metadata keys, durable actor ids, storage
   tables, and file suffixes are adjacent residue outside this slice.
-- C22 supported for local Universal Wire projection scope and partially
-  supported for deployed source-label/app-surface scope: current story
+- C22 supported for local Universal Wire projection scope and deployed
+  source-label/app-empty-state scope: current story
   payloads now emit Texture-named projection/document/content fields and
   Texture source labels, frontend Universal Wire opens stories through
   `story_texture_doc_id` first and emits `texture_document` related launch
@@ -1574,12 +1615,16 @@ position / live conjectures / open edges:
   `27593330137`, deploy job `81578635355`, and staging identity for commit
   `9f332529d209e82df86056176ffac2d31d2c5df1` pass. The first deployed
   Universal Wire proof reached the new `universal-wire-edition-texture` source
-  label but found an empty edition, so deployed story-field proof remains open.
+  label but found an empty edition. The repaired deployed proof passes for the
+  source-label and empty-state app surface; deployed story-field proof remains
+  open until staging has an edition story payload or a product path creates one
+  without manually seeding success records.
 
-next move: update the Universal Wire staging acceptance spec so empty deployed
-editions prove source-label/app-empty-state behavior without claiming story
-payload fields, rerun the deployed proof, then record the result. Keep protocol
-v0 unwritten until the remaining working-surface proofs are complete.
+next move: select the next bounded residue class among general Texture metadata
+keys, durable actor ids, storage/file suffixes, stale frontend app-launcher test
+labels, deployed story-field proof when a Universal Wire story payload is
+reachable, and protocol v0. Keep protocol v0 unwritten until the remaining
+working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
