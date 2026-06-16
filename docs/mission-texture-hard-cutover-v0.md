@@ -2909,6 +2909,62 @@ Deployed evidence on 2026-06-16:
   passed, exercising a real Texture creation/write/read/publication/export path
   through staging after the database identity cut.
 
+## Problem Checkpoint: Platform Texture Table Identity Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, API, prompt default, UI, test, platform store row, or deployment surface
+changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows that the remaining platform document
+storage residue is narrower than the user-store `vtext_*` table family. The
+platform publication store already exposes current Texture sync/read methods
+and current `/internal/platform/texture/*` routes, but the persistence substrate
+still creates, writes, and reads `platform_vtext_documents` and
+`platform_vtext_revisions`.
+
+Receipts:
+
+- `internal/platform/store.go` creates only `platform_vtext_documents` and
+  `platform_vtext_revisions` for platform Texture document storage.
+- `UpsertTextureDocument`, `UpsertTextureRevision`, `GetTextureDocument`,
+  `ListTextureRevisions`, and `GetTextureRevision` still target those legacy
+  table names directly.
+- Scoped search
+  `rg -n "platform_vtext|platform_texture" internal/platform internal/proxy internal/runtime internal/wirepublish -g '!**/*_test.go'`
+  found current platform-table residue only in `internal/platform/store.go`.
+- This table residue is distinct from user-store `vtext_*` tables, durable
+  `vtext:<doc_id>` actor compatibility, stored `/pub/vtext/...` public route
+  rows, and Universal Wire `vtext:` transclusion refs. Those remain separate
+  migration surfaces.
+
+Next behavior slice design:
+
+- create current `platform_texture_documents` and
+  `platform_texture_revisions` tables at platform store bootstrap;
+- idempotently copy legacy `platform_vtext_*` rows into the current tables
+  before current reads/writes use the current table names;
+- keep legacy `platform_vtext_*` tables in the schema for rollback and older
+  deployed binaries during the cutover, but stop current code from writing new
+  rows there;
+- prove with focused platform store/service tests that current writes land in
+  `platform_texture_*`, legacy-only rows are readable after bootstrap
+  migration, and no non-test platform code still queries `platform_vtext_*`
+  directly.
+
+Protected surfaces and rollback:
+
+- Future behavior mutation class: `red`, because this touches platform Dolt/app
+  state for publication document sync/read behavior.
+- Protected surfaces: platform Texture document sync, revision sync/read,
+  platform store bootstrap, existing platform Dolt rows, and rollback to older
+  binaries that still expect `platform_vtext_*`.
+- Rollback path: source revert restores reads/writes to `platform_vtext_*`.
+  Because the planned migration copies rows without dropping or renaming legacy
+  tables, rollback can continue reading legacy tables. The repair must not
+  delete legacy rows.
+- Heresy delta: discovered and bounded platform table-name residue; no repair
+  claimed yet.
+
 ## Parallax State
 
 status: open_handoff
@@ -3198,11 +3254,17 @@ runtime shards, doccheck, `git diff --check`, scoped `database=vtext` non-test
 store search, CI run `27614905254`, deploy job `81648551589`, staging health
 for commit `fc166e4fbe1a93122cd6fb57e5c408d3cc864ff3`, and deployed Texture
 publication proof passed.
+C42 platform table identity residue is now documented: platform Texture
+sync/read routes and store methods are current-named, but platform document
+storage still creates and uses `platform_vtext_documents` and
+`platform_vtext_revisions`. The next bounded repair is platform table identity
+only: create `platform_texture_*` tables, idempotently copy legacy rows forward
+at bootstrap, move current reads/writes to current tables, and retain legacy
+tables for rollback/read compatibility.
 
-next move: choose the next bounded remaining slice: table-name migration design,
-platform `platform_vtext_*` table residue, durable actor/profile compatibility,
-or deployed Universal Wire story-field proof. Keep protocol work out until the
-working surface is fully proven.
+next move: implement C42 platform table identity. Keep user-store `vtext_*`
+tables, durable actor/profile compatibility, stored route-row compatibility,
+Universal Wire story-field proof, and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

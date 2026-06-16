@@ -5068,3 +5068,54 @@ Open edge: choose the next bounded remaining slice: table-name migration design,
 platform `platform_vtext_*` table residue, durable actor/profile compatibility,
 or deployed Universal Wire story-field proof. Do not start protocol v0 until the
 working surface is fully proven.
+
+## 2026-06-16 - C42 Problem Checkpoint: Platform Table Identity Residue
+
+Claim: the next storage repair should be the platform Texture table identity
+boundary, not a broad user-store table rename. The narrower conjecture is that
+current platform Texture document sync/read can use `platform_texture_*` tables
+while legacy `platform_vtext_*` rows are copied forward idempotently and left in
+place for rollback/read compatibility.
+
+Move: probe/read-only inventory and design. Expected ΔV: buy observer evidence
+and select a bounded red-surface slice; no runtime repair claimed.
+
+Actual ΔV: selected C42 as the next bounded repair candidate. Coarse V remains
+2 until behavior, CI/deploy, and staging proof land.
+
+Receipts:
+
+- `internal/platform/store.go` creates only `platform_vtext_documents` and
+  `platform_vtext_revisions` for platform Texture document storage.
+- `UpsertTextureDocument`, `UpsertTextureRevision`, `GetTextureDocument`,
+  `ListTextureRevisions`, and `GetTextureRevision` directly target those legacy
+  table names.
+- `rg -n "platform_vtext|platform_texture" internal/platform internal/proxy internal/runtime internal/wirepublish -g '!**/*_test.go'`
+  found platform table residue only in `internal/platform/store.go`.
+- `docs/computer-ontology.md` keeps Dolt/app state separate from route identity
+  and artifact/provenance graph state; this slice is table identity only, not
+  route-row, actor-id, or transclusion migration.
+
+Next behavior slice:
+
+- create `platform_texture_documents` and `platform_texture_revisions` at
+  bootstrap;
+- copy legacy `platform_vtext_*` rows into current tables idempotently before
+  current reads/writes use current table names;
+- keep legacy tables in place and stop current code from writing new platform
+  document rows to them;
+- prove current writes, legacy-read migration, and non-test current-code
+  residue search.
+
+Protected surfaces and rollback:
+
+- Future behavior mutation class: red, because this touches platform Dolt/app
+  state for document sync/read behavior.
+- Protected surfaces: platform Texture document sync, revision sync/read,
+  platform store bootstrap, existing platform Dolt rows, and rollback to older
+  binaries that still expect `platform_vtext_*`.
+- Rollback path: source revert restores current reads/writes to
+  `platform_vtext_*`. The planned migration must not drop or rename legacy
+  tables, so rollback can continue reading legacy rows.
+- Heresy delta: discovered and bounded platform table-name residue; no repair
+  claimed yet.
