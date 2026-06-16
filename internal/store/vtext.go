@@ -174,6 +174,13 @@ CREATE TABLE IF NOT EXISTS podcast_subscriptions (
 CREATE INDEX IF NOT EXISTS idx_podcast_subscriptions_owner_updated ON podcast_subscriptions(owner_id, updated_at DESC);
 `
 
+const (
+	textureWorkspaceSuffix     = ".texture"
+	legacyVTextWorkspaceSuffix = ".vtext"
+	defaultTextureWorkspaceDir = "go-choir-texture"
+	legacyVTextWorkspaceDir    = "go-choir-vtext"
+)
+
 // OpenVTextWorkspace opens (or creates) an embedded Dolt workspace for vtext
 // document storage only. It is mainly used by store-level tests and local
 // workflows that need the document store without the rest of the runtime tables.
@@ -191,18 +198,50 @@ func OpenVTextWorkspace(path string) (*Store, error) {
 }
 
 func deriveVTextWorkspacePath(path string) string {
+	return deriveTextureWorkspacePath(path)
+}
+
+func deriveTextureWorkspacePath(path string) string {
 	if path == "" {
-		return filepath.Join(os.TempDir(), "go-choir-vtext")
+		return filepath.Join(os.TempDir(), defaultTextureWorkspaceDir)
 	}
+	return deriveSuffixedWorkspacePath(path, textureWorkspaceSuffix)
+}
+
+func deriveLegacyVTextWorkspacePath(path string) string {
+	if path == "" {
+		return filepath.Join(os.TempDir(), legacyVTextWorkspaceDir)
+	}
+	return deriveSuffixedWorkspacePath(path, legacyVTextWorkspaceSuffix)
+}
+
+func deriveSuffixedWorkspacePath(path, suffix string) string {
 	trimmed := strings.TrimSuffix(path, filepath.Ext(path))
 	if trimmed == "" {
 		trimmed = path
 	}
-	return trimmed + ".vtext"
+	return trimmed + suffix
+}
+
+func resolveVTextWorkspacePath(path string) string {
+	current := deriveTextureWorkspacePath(path)
+	legacy := deriveLegacyVTextWorkspacePath(path)
+	if current == legacy {
+		return current
+	}
+	if _, err := os.Stat(current); err == nil {
+		return current
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return current
+	}
+	if info, err := os.Stat(legacy); err == nil && info.IsDir() {
+		return legacy
+	}
+	return current
 }
 
 func openVTextWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
-	workspacePath := deriveVTextWorkspacePath(path)
+	workspacePath := resolveVTextWorkspacePath(path)
 	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
 		return nil, "", nil, fmt.Errorf("vtext workspace: create directory: %w", err)
 	}

@@ -3811,3 +3811,39 @@ Open edge: no behavior change yet. The next admissible move is a typed C34
 behavior design or first narrow migration/compatibility slice. It must preserve
 existing computers, old actor/update lookups, and any stored public routes while
 making the current write identity Texture.
+
+## 2026-06-16 - Local Repair: C34a Texture Workspace Identity
+
+Claim: the filesystem workspace identity subobligation can move to Texture
+without table/database migration by using `.texture` for new/current stores and
+falling back to `.vtext` only when an existing legacy workspace is present.
+
+Move: construct the bounded storage-open slice. Expected ΔV: repair one C34
+subobligation while keeping coarse V=2 because durable actor ids, table names,
+stored legacy route rows, Universal Wire edition refs, deployed story-field
+proof, and protocol v0 remain.
+
+Actual ΔV: filesystem workspace identity repaired locally; coarse V remains 2.
+
+Receipts:
+
+- `internal/store/vtext.go` now derives current workspaces as `.texture` /
+  `go-choir-texture`, records explicit legacy `.vtext` /
+  `go-choir-vtext` derivation, and resolves legacy only when no current
+  workspace exists.
+- `internal/store/dolt_maintenance.go` now uses the same resolver for Dolt GC.
+- `internal/runtime/store_open_test.go` now clones `.texture` test workspaces.
+- `nix develop -c go test ./internal/store -run 'TestOpen(UsesTextureWorkspacePathForNewStores|FallsBackToLegacyVTextWorkspace|CreatesDatabase)|TestVTextInitWorkspace' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'Test.*Store|TestDesktopState' -count=1`
+  passed.
+- `nix develop -c go test ./internal/store -count=1` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c34a-workspace.md --json /tmp/choir-doccheck-c34a-workspace.json`
+  passed report-only with 212 docs and 1117 warnings.
+
+Open edge: C34a still needs commit/push, CI/deploy identity, and deployed
+acceptance proof. It intentionally leaves `database=vtext`, `vtext_*` tables,
+durable `vtext:<doc_id>` actor ids, `AgentProfileVText`, stored
+`/pub/vtext/...` rows, Universal Wire `Wire.vtext`, and protocol v0 for later
+typed slices.

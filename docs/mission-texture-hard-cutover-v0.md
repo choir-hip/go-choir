@@ -2080,6 +2080,56 @@ edge. No runtime repair is claimed. The repair target is a typed migration plan
 that preserves existing computers and public routes while making Texture the
 current write identity.
 
+## Local Repair: C34a Texture Workspace Identity
+
+Mutation class: `red`, because this changes persistent embedded-Dolt workspace
+path selection for runtime/document storage. It deliberately avoids table,
+database, actor-id, or public-route migration in this slice.
+
+Conjecture delta: new/current store workspaces can use the Texture filesystem
+identity (`.texture` and `go-choir-texture`) while existing `.vtext` /
+`go-choir-vtext` workspaces remain readable and writable without migration.
+
+Protected surfaces: embedded Dolt workspace path derivation, store open,
+document-only workspace open, runtime test-store template cloning, Dolt GC
+workspace discovery, repeated test cleanup, and existing computer data under
+legacy workspace directories.
+
+Local behavior:
+
+- `deriveVTextWorkspacePath` now resolves to the current Texture workspace
+  suffix for new/current stores, while `deriveLegacyVTextWorkspacePath` records
+  the deletion-receipted legacy path.
+- `openVTextWorkspaceDB` chooses `.texture` when no workspace exists or when a
+  current workspace already exists; if only the legacy `.vtext` workspace is
+  present, it opens that legacy workspace instead of creating a parallel empty
+  `.texture` workspace.
+- Dolt GC uses the same resolver so maintenance continues to see legacy
+  workspaces during the compatibility interval.
+- The runtime store test template mirror now clones `.texture` workspaces.
+
+Local evidence on 2026-06-16:
+
+- `nix develop -c go test ./internal/store -run 'TestOpen(UsesTextureWorkspacePathForNewStores|FallsBackToLegacyVTextWorkspace|CreatesDatabase)|TestVTextInitWorkspace' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'Test.*Store|TestDesktopState' -count=1`
+  passed.
+- `nix develop -c go test ./internal/store -count=1` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed.
+- `scripts/doccheck --report /tmp/choir-doccheck-c34a-workspace.md --json
+  /tmp/choir-doccheck-c34a-workspace.json` passed report-only with 212 docs and
+  1117 warnings.
+
+Rollback path: revert this behavior commit. No data migration is performed, so
+existing `.vtext` workspaces remain intact; new `.texture` workspaces created
+during the interval can be preserved as rollback inputs or explicitly copied
+before reverting if a local computer has advanced there.
+
+Heresy delta: repaired for filesystem workspace identity only. Still
+unrepaired: `database=vtext`, `vtext_*` tables/indexes, durable `vtext:<doc_id>`
+actor ids, `AgentProfileVText`, `vtext_agent_revision`, stored legacy
+`/pub/vtext/...` rows, `universal-wire/Wire.vtext`, and protocol v0.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2116,8 +2166,11 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C34 storage/durable
-identity problem documented, no repair decrease yet. Discharged:
+variant (ranking function) V: current V=2; last ΔV: C34a repaired the
+filesystem workspace identity subobligation without decreasing coarse V because
+database/table names, durable actor ids, stored legacy routes, Universal Wire
+edition refs, deployed Universal Wire story-field proof, and protocol v0 remain.
+Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
 `/api/texture` route and old `/api/vtext` refusal, registered-router
@@ -2220,21 +2273,22 @@ repair, not product runtime behavior. Commit
 `27601085720`, Docs Truth Check `27601085740`, and FlakeHub publish
 `27601085759` passed. Deploy to staging was skipped because no deployed
 artifact changed.
-C34 is problem-documented only: the remaining storage/durable identity edge is
-not a simple rename. `internal/store/vtext.go` owns `vtext_*` Dolt tables,
-`.vtext` workspace derivation, and `database=vtext`; runtime actor identity and
-update routing still use `AgentProfileVText`, `vtext_agent_revision`, and
-`vtext:<doc_id>`; platform publication reads keep stored `/pub/vtext/...` route
-rows readable while new publication writes mint `/pub/texture/...`; Universal
-Wire still has `Wire.vtext` / `vtext_edition` residue. A staging probe for one
-known legacy `/pub/vtext/private` route returned 404, so live-row existence is
-not proven. No runtime repair is claimed.
+C34a is locally supported for Texture filesystem workspace identity:
+new/current stores now derive `.texture` / `go-choir-texture`, existing
+`.vtext` / `go-choir-vtext` workspaces are reopened when no current workspace
+exists, Dolt GC uses the same resolver, and the runtime store test harness
+clones `.texture` workspaces. Focused store tests, focused runtime store tests,
+and the full store package passed. This does not claim `database=vtext`,
+`vtext_*` table/index, durable `vtext:<doc_id>` actor, `AgentProfileVText`,
+`vtext_agent_revision`, stored `/pub/vtext/...` route row, or
+`universal-wire/Wire.vtext` repair. C34a still needs push/CI/deploy identity
+and deployed acceptance evidence before it is deployed-supported.
 
-next move: design and document the smallest typed C34 behavior slice before
-editing runtime: likely a compatibility alias/view layer or migration harness
-for storage names and actor identity, with old-read/new-write proof and a
-rollback handle. Keep protocol v0 unwritten until remaining working-surface
-proofs are complete.
+next move: run the wider local verification for C34a, land and deploy the
+behavior slice, then use staging product proof to show existing Texture storage
+still works on the deployed commit. After C34a lands, attack the next largest
+storage/durable identity subobligation with a typed migration/alias plan and
+old-read/new-write proof.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

@@ -27,11 +27,11 @@ type doltGCDiskUsage = persistentdisk.Usage
 
 // doltGCPlan decides whether startup maintenance should run DOLT_GC().
 type doltGCPlan struct {
-	Run              bool
-	Warning          bool
-	TargetMilestone  uint64
+	Run               bool
+	Warning           bool
+	TargetMilestone   uint64
 	PreviousMilestone uint64
-	Reason           string
+	Reason            string
 }
 
 func doltGCMilestoneGiB() uint64 {
@@ -149,7 +149,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 	if persistentDir == "" {
 		return nil
 	}
-	workspacePath := deriveVTextWorkspacePath(storePath)
+	workspacePath := resolveVTextWorkspacePath(storePath)
 	if _, err := os.Stat(workspacePath); err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -252,4 +252,3 @@ func StartPeriodicDoltGC(ctx context.Context, persistentDir, storePath string, i
 		}
 	}()
 }
-

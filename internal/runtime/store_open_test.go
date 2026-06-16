@@ -69,11 +69,11 @@ func openTestStore(dbPath string) (*store.Store, error) {
 }
 
 // testStoreWorkspacePath mirrors the store package's private workspace path
-// derivation: the db path with its extension replaced by ".vtext".
+// derivation: the db path with its extension replaced by ".texture".
 func testStoreWorkspacePath(path string) string {
 	trimmed := strings.TrimSuffix(path, filepath.Ext(path))
 	if trimmed == "" {
 		trimmed = path
 	}
-	return trimmed + ".vtext"
+	return trimmed + ".texture"
 }

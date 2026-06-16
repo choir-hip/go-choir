@@ -45,6 +45,7 @@ func openTestStore(t *testing.T) *Store {
 func cleanupTestStorePath(path string) {
 	_ = os.Remove(path)
 	_ = os.RemoveAll(deriveVTextWorkspacePath(path))
+	_ = os.RemoveAll(deriveLegacyVTextWorkspacePath(path))
 }
 
 func TestOpenCreatesDatabase(t *testing.T) {
@@ -67,6 +68,76 @@ func TestOpenCreatesDatabase(t *testing.T) {
 		if !testDoltTableExists(t, s, table) {
 			t.Fatalf("expected unified Dolt workspace table %s to exist", table)
 		}
+	}
+}
+
+func TestOpenUsesTextureWorkspacePathForNewStores(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	if got, want := s.VTextPath(), deriveTextureWorkspacePath(path); got != want {
+		t.Fatalf("workspace path = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(deriveTextureWorkspacePath(path)); err != nil {
+		t.Fatalf("stat texture workspace: %v", err)
+	}
+	if _, err := os.Stat(deriveLegacyVTextWorkspacePath(path)); !os.IsNotExist(err) {
+		t.Fatalf("legacy workspace should not be created for new store: %v", err)
+	}
+}
+
+func TestOpenFallsBackToLegacyVTextWorkspace(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+
+	legacyPath := deriveLegacyVTextWorkspacePath(path)
+	if err := os.MkdirAll(legacyPath, 0o755); err != nil {
+		t.Fatalf("create legacy workspace path: %v", err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	if got := s.VTextPath(); got != legacyPath {
+		_ = s.Close()
+		t.Fatalf("workspace path = %q, want legacy %q", got, legacyPath)
+	}
+	ctx := context.Background()
+	doc := types.Document{
+		DocID:   "doc-legacy-workspace",
+		OwnerID: "user-legacy-workspace",
+		Title:   "Legacy workspace document",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		_ = s.Close()
+		t.Fatalf("create document in legacy workspace: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close legacy workspace store: %v", err)
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+	if got := reopened.VTextPath(); got != legacyPath {
+		t.Fatalf("reopened workspace path = %q, want legacy %q", got, legacyPath)
+	}
+	got, err := reopened.GetDocument(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("read document from legacy workspace: %v", err)
+	}
+	if got.Title != doc.Title {
+		t.Fatalf("document title = %q, want %q", got.Title, doc.Title)
 	}
 }
 
