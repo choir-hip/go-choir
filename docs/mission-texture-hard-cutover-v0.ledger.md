@@ -3659,3 +3659,59 @@ Receipts:
 
 Open edge: commit/push the review correction, monitor the superseding CI/deploy,
 verify staging identity, and run deployed product proof.
+
+## 2026-06-16 - Deployed Evidence: C32 Texture File Suffix Defaults
+
+Claim: C32 is deployed-supported at its bounded scope. New/current Texture file
+manifestations default to `.texture` for import titles, manifest allocation,
+manifest shortcut kind, canonical source-path metadata, alias priority, File
+Browser/Texture editor shortcut recognition, desktop-shell manifest
+expectations, and Universal Wire story-open source paths, while legacy `.vtext`
+shortcuts remain readable.
+
+Move: probe the pushed C32 behavior on staging after CI/deploy. Expected ΔV:
+close the deployed C32 sub-edge without decreasing the coarse mission V.
+
+Actual ΔV: deployed C32 sub-edge closed; mission V remains 2 because storage
+schema/workspace names, durable `vtext:` actor ids, stored `/pub/vtext/...`
+route rows, Universal Wire deployed story-field proof, and protocol v0 remain.
+
+Receipts:
+
+- Behavior commits:
+  `abc2f89c8f0cb7a37ea99cf50a84dc9386cc1ad4` (`runtime: default texture
+  manifests to texture suffix`) and
+  `ae2ada4a4b51f9c2671113e9c07dc7c3e5417050` (`frontend: recognize texture
+  shortcut manifests`).
+- CI run `27600056369` for `ae2ada4a4b51f9c2671113e9c07dc7c3e5417050`
+  passed. Deploy job `81598902993` (`Deploy to Staging (Node B)`) passed.
+- `curl -fsS https://choir.news/health` reported proxy and sandbox at commit
+  `ae2ada4a4b51f9c2671113e9c07dc7c3e5417050`, deployed at
+  `2026-06-16T07:00:48Z`.
+- Initial reusable staging command:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`.
+  Result: plain-text `.texture` proof passed; Markdown proof completed the API
+  assertions for `.texture` title, canonical source metadata, manifest path,
+  and `.md` export, then timed out on old desktop/window selectors
+  (`data-desktop-icon-id="vtext"` / `data-window-app-id="vtext"`). A fresh auth
+  rerun reproduced the selector drift. This is acceptance-harness debt, not a
+  C32 product failure.
+- Custom deployed browser/product proof used the current product path:
+  `PLAYWRIGHT_BASE_URL=https://choir.news CHOIR_AUTH_STATE=/tmp/choir-c32-acceptance-auth-desk.json node --input-type=module`
+  from `frontend/`, with the script opening Desk via the bottom bar, launching
+  `[data-desk-app-id="texture"]`, and opening the recent Texture. Result:
+  passed. Receipt values:
+  `doc_id=a70e9601-f49d-428f-aa6e-637d82b9d9e8`,
+  `v0_title=imported-md-vtext-1781593985312.texture`,
+  `v1_canonical_texture_source_path=imported-md-vtext-1781593985312-texture.texture`,
+  `manifest_source_path=imported-md-vtext-1781593985312-texture.texture`,
+  `markdown_export_filename=imported-md-vtext-1781593985312.md`,
+  `browser_opened_recent_texture_title=imported-md-vtext-1781593985312.texture`,
+  and `browser_rendered_version=v1`.
+
+Open edge: decide whether to repair the reusable Playwright helper/spec to use
+current Desk/Texture selectors as a yellow test-harness slice, or leave the
+custom proof receipt as sufficient for C32 and move next to the remaining
+storage/durable actor/stored-route residue. Universal Wire deployed story-field
+proof still needs a real staging story payload or product creation path; do not
+claim it from route-mocked frontend coverage.

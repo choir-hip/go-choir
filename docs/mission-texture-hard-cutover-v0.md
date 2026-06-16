@@ -2038,7 +2038,8 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2. Discharged: retired-name inventory,
+variant (ranking function) V: current V=2; last ΔV: C32 deployed sub-edge
+closed, no coarse V decrease. Discharged: retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
 `/api/texture` route and old `/api/vtext` refusal, registered-router
 normalization, platform publication control routes, app identity, visible UI
@@ -2048,9 +2049,10 @@ revision proof, pinned transclusions/newer-version proof, source metadata,
 package/provenance, Universal Wire local story projection plus deployed empty
 state/source-label proof, related Texture refs, source-contract open surface,
 canonical source-path metadata, public route minting, publication fallback
-labels, and C26 deployed evidence. Remaining coarse obligations: storage/file
-symbols plus durable actor/stored-route/export residue, deployed Universal Wire
-story-field proof, and protocol v0 after proof.
+labels, and C26 deployed evidence. Remaining coarse obligations: storage
+symbols plus durable actor/stored-route residue, deployed Universal Wire
+story-field proof, protocol v0 after proof, and staging acceptance harness
+selector drift if the reusable Playwright spec is repaired rather than replaced.
 
 budget: one broad red-surface cutover mission before M3 resumes; split only if
 a distinct product regression appears after documenting it here.
@@ -2113,21 +2115,29 @@ is deployed-supported: publication/export helper and API symbols now use
 Texture names while preserving JSON fields, current Texture routes, stored
 public route compatibility, storage tables, and durable actor ids. CI/deploy
 passed, staging reports the pushed SHA, and deployed publication proof passed.
-C32 is locally-supported: new/current import titles, manifest allocation,
-manifest shortcut kind, alias priority, File Browser shortcut recognition, and
+C32 is deployed-supported: new/current import titles, manifest allocation,
+manifest shortcut kind, alias priority, File Browser shortcut recognition,
+VText editor shortcut recognition, desktop-shell manifest expectations, and
 Universal Wire story-open source paths now default to `.texture`; legacy
 `.vtext` shortcuts remain readable. Focused runtime/store tests, full runtime
-shards, full store package, frontend build, and scoped residue search passed.
-C32 still needs commit, push, CI/deploy identity, and deployed product proof
-before it becomes deployed-supported. Storage workspace paths/tables, durable
-`vtext:` actor ids, stored `/pub/vtext/...` rows, Universal Wire edition
-`Wire.vtext`, Universal Wire deployed story-field proof, and protocol v0 remain
-outside this slice.
+shards, full store package, frontend build, CI run `27600056369`, deploy job
+`81598902993`, and staging health for commit
+`ae2ada4a4b51f9c2671113e9c07dc7c3e5417050` passed. Deployed proof against
+`https://choir.news` created a Markdown-backed Texture, observed `.texture`
+title/source metadata/manifest, verified Markdown export remains `.md`, and
+opened the recent Texture through Desk -> Texture at `v1`. The reusable
+Playwright spec `frontend/tests/vtext-markdown-lineage.spec.js` still carries
+old desktop/window selectors and timed out after proving the API assertions;
+that is recorded as staging acceptance harness drift, not a C32 product
+failure. Storage workspace paths/tables, durable `vtext:` actor ids, stored
+`/pub/vtext/...` rows, Universal Wire edition `Wire.vtext`, Universal Wire
+deployed story-field proof, and protocol v0 remain outside this slice.
 
-next move: commit and push the C32 behavior repair, monitor CI/deploy, verify
-staging identity, then run deployed product proof for imported Markdown/plain
-text and manifest `.texture` behavior. Keep protocol v0 unwritten until
-remaining working-surface proofs are complete.
+next move: choose the next largest remaining edge: either repair/retire the
+old-selector staging acceptance harness so reusable product proofs follow the
+current Desk/Texture app identity, or move to the remaining storage/durable
+actor/stored-route residue. Keep protocol v0 unwritten until remaining
+working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -2159,9 +2169,11 @@ publication fallback label repair, C27 deployed exported HTML class-name proof,
 C28 deployed live editor source class proof, and C29 deployed public route proof
 are landed. C30 is deployed-supported for Universal Wire style-source suffixes.
 C31 is deployed-supported for publication/export helper and API symbols. C32 is
-locally-supported: new/current Texture file manifestation defaults moved from
-`.vtext` to `.texture` while legacy `.vtext` shortcuts remain readable. Next
-move is commit/push plus CI/deploy/staging product proof. Keep storage schema,
+deployed-supported: new/current Texture file manifestation defaults moved from
+`.vtext` to `.texture` while legacy `.vtext` shortcuts remain readable; CI,
+deploy identity, and staging product proof are recorded. Next move is either
+repairing/retiring old-selector staging acceptance harness drift or attacking
+the remaining storage/durable actor/stored-route residue. Keep storage schema,
 durable `vtext:` actor ids, backend stored-route migration, Universal Wire
 story-field proof, and protocol v0 out of C32.
 Preserve one Texture writer among agents, keep human direct edits canonical,
