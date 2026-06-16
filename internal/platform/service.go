@@ -20,7 +20,7 @@ import (
 
 const (
 	publicTexturePrefix = "/pub/texture/"
-	// texture-cutover-allow: stored legacy public route rows stay readable until a public_routes migration rewrites or deletes them.
+	// texture-cutover-allow: stored legacy public route rows stay readable while Bootstrap mints current Texture aliases.
 	legacyPublicVTextPrefix = "/pub/vtext/"
 	textMediaType           = "text/plain; charset=utf-8"
 

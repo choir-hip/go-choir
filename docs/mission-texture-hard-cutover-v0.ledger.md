@@ -4760,3 +4760,61 @@ Protected surfaces and rollback:
 Open edge: next storage repair should choose either a typed table
 alias/migration layer for user/platform Texture rows or an idempotent
 public-route-row migration/alias proof.
+
+## 2026-06-16 - C40b Local Construct: Public Route Alias Migration
+
+Claim: the next bounded storage repair should eliminate the need for stored
+legacy `/pub/vtext/...` publication rows as the only route identity for those
+publications, without deleting the legacy rows or weakening legacy readability.
+
+Move: probe, then construct. Expected ΔV: repair stored-route-row residue by
+creating current Texture aliases with rollback refs; leave table/database and
+durable actor residue for later.
+
+Probe result: a direct Dolt SQL probe in `/tmp` showed simple
+`texture_documents` views over `vtext_documents` are not writable in the needed
+shape (`expected insert destination to be resolved or unresolved table`). That
+means the user/platform table alias layer needs dual-write/backfill design
+rather than a trivial writable-view shim, so this pass shifted to the
+route-row migration.
+
+Actual ΔV: C40b is locally supported, awaiting landing proof. Platform
+`Store.Bootstrap` now runs `MigrateLegacyPublicVTextRoutes`, which idempotently
+creates `/pub/texture/...` aliases for stored `/pub/vtext/...` publication
+routes when the current alias is missing, preserves the legacy route row, and
+records rollback refs for generated aliases. Coarse V remains 2 until
+CI/deploy/staging proof lands.
+
+Receipts:
+
+- Edited `internal/platform/store.go` and `internal/platform/service.go`.
+- Added `TestMigrateLegacyPublicVTextRoutesCreatesTextureAlias` in
+  `internal/platform/service_test.go`.
+- `nix develop -c go test ./internal/platform -run 'TestMigrateLegacyPublicVTextRoutesCreatesTextureAlias|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationPublicSurfacesEnforceVisibilityPolicy'`
+  passed.
+- `nix develop -c go test ./internal/platform` passed.
+- Scoped route search now shows the remaining `/pub/vtext` mentions in
+  `internal/platform` are the explicit migration, compatibility prefix, and
+  route normalization shim.
+- Scoped C40 non-test storage inventory recorded
+  `/tmp/choir-c40b-storage-nontest-inventory.txt` with 98 hits. The count rises
+  because this slice adds explicit migration SQL for `/pub/vtext/%`; this is
+  classified as migration residue, not current product naming.
+
+Protected surfaces and rollback:
+
+- Mutation class: red, because route identity and platform publication storage
+  are protected surfaces.
+- Protected surfaces touched: `public_routes`, `rollback_refs`, platform store
+  bootstrap, publication route normalization, and public publication
+  resolution/export behavior for migrated aliases.
+- Rollback path: source revert before deploy; after deploy, generated alias
+  rows have rollback refs of kind `disable_route` and legacy rows remain
+  readable. No destructive data rewrite was introduced.
+- Heresy delta: repaired current alias absence for legacy route rows; table
+  names, durable actor compatibility, Universal Wire edition refs, and protocol
+  v0 remain open.
+
+Open edge: land C40b through CI/deploy/staging identity and deployed public
+route proof. Then return to table/database alias design or durable actor/profile
+residue.

@@ -2827,13 +2827,13 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C40a repaired the current
-platform Texture sync/read boundary: internal Texture routes now land in
-Texture-named request/response, handler, service, store, proxy sync, metadata
-enrichment, log/error, and Dolt commit-message affordances. Coarse V remains 2
-because table/database names, stored legacy routes, durable actor compatibility,
-Universal Wire edition refs, deployed Universal Wire story-field proof, and
-protocol v0 remain.
+variant (ranking function) V: current V=2; last ΔV: C40b locally repairs stored
+legacy public-route-row residue by adding an idempotent platform bootstrap
+migration that mints `/pub/texture/...` aliases for existing `/pub/vtext/...`
+publication routes, preserves legacy rows, and writes rollback refs for the new
+aliases. Coarse V remains 2 until CI/deploy/staging proof lands, and because
+table/database names, durable actor compatibility, Universal Wire edition refs,
+deployed Universal Wire story-field proof, and protocol v0 remain.
 Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
@@ -3050,11 +3050,18 @@ stored data. Focused package proof, CI run `27612192131`, deploy job
 `81639495038`, staging health for commit
 `fd57e00c4a854008a8d5a681d80c9ec4b077b8e6`, and deployed public platform
 publication proof passed.
+C40b is locally supported and awaiting landing proof: platform bootstrap now
+runs an idempotent legacy public-route migration. Existing `/pub/vtext/...`
+publication route rows remain readable, current `/pub/texture/...` aliases are
+created when missing, and alias rollback refs disable only the generated current
+routes. Focused platform tests passed. This intentionally adds explicit
+migration-code mentions of `/pub/vtext/%`; it does not reintroduce a current
+product route or delete legacy rows.
 
-next move: choose the next storage repair: either a typed table alias/migration
-layer for user/platform Texture rows or an idempotent public-route-row
-migration/alias proof. Keep deployed Universal Wire story-field proof and
-protocol work out of this slice.
+next move: land C40b through CI/deploy/staging proof, then choose the next
+storage repair: a typed table alias/migration layer for user/platform Texture
+rows or a durable actor/profile residue slice. Keep deployed Universal Wire
+story-field proof and protocol work out of this slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

@@ -1400,6 +1400,76 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyPublicVTextRoutesCreatesTextureAlias(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"))
+	ctx := context.Background()
+
+	resp, err := svc.PublishTexture(ctx, PublishTextureRequest{
+		OwnerID:          "author-1",
+		SourceDocID:      "doc-route-migration",
+		SourceRevisionID: "rev-route-migration",
+		Title:            "Legacy route migration",
+		Content:          "Route migration content.",
+		RequestedBy:      "author-1",
+	})
+	if err != nil {
+		t.Fatalf("PublishTexture: %v", err)
+	}
+	legacyRoutePath := "/pub/vtext/imported-legacy-route-" + shortID(resp.PublicationID)
+	textureAliasPath := strings.Replace(legacyRoutePath, "/pub/vtext/", "/pub/texture/", 1)
+	now := time.Now().UTC()
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO public_routes (route_id, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at) VALUES (?, ?, 'publication', ?, ?, 'active', ?, ?)`,
+		"route-legacy-"+shortID(resp.PublicationVersionID), legacyRoutePath, resp.PublicationID, resp.PublicationVersionID, now, now); err != nil {
+		t.Fatalf("insert legacy public route: %v", err)
+	}
+
+	migrated, err := store.MigrateLegacyPublicVTextRoutes(ctx)
+	if err != nil {
+		t.Fatalf("MigrateLegacyPublicVTextRoutes: %v", err)
+	}
+	if migrated != 1 {
+		t.Fatalf("migrated routes = %d, want 1", migrated)
+	}
+	migratedAgain, err := store.MigrateLegacyPublicVTextRoutes(ctx)
+	if err != nil {
+		t.Fatalf("MigrateLegacyPublicVTextRoutes again: %v", err)
+	}
+	if migratedAgain != 0 {
+		t.Fatalf("second migrated routes = %d, want 0", migratedAgain)
+	}
+
+	legacyBundle, err := svc.GetPublicationBundleByRoute(ctx, legacyRoutePath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute legacy route: %v", err)
+	}
+	if legacyBundle.Route.Path != legacyRoutePath {
+		t.Fatalf("legacy route path = %q, want %q", legacyBundle.Route.Path, legacyRoutePath)
+	}
+	aliasBundle, err := svc.GetPublicationBundleByRoute(ctx, textureAliasPath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute texture alias: %v", err)
+	}
+	if aliasBundle.Route.Path != textureAliasPath {
+		t.Fatalf("texture alias path = %q, want %q", aliasBundle.Route.Path, textureAliasPath)
+	}
+	if aliasBundle.Publication.ID != resp.PublicationID || aliasBundle.Version.ID != resp.PublicationVersionID {
+		t.Fatalf("texture alias target = %s/%s, want %s/%s", aliasBundle.Publication.ID, aliasBundle.Version.ID, resp.PublicationID, resp.PublicationVersionID)
+	}
+
+	var aliasRouteID string
+	if err := store.db.QueryRowContext(ctx, `SELECT route_id FROM public_routes WHERE route_path = ?`, textureAliasPath).Scan(&aliasRouteID); err != nil {
+		t.Fatalf("query alias route id: %v", err)
+	}
+	var rollbackRef string
+	if err := store.db.QueryRowContext(ctx, `SELECT ref FROM rollback_refs WHERE target_kind = 'public_route' AND target_id = ?`, aliasRouteID).Scan(&rollbackRef); err != nil {
+		t.Fatalf("query alias rollback ref: %v", err)
+	}
+	if !strings.Contains(rollbackRef, aliasRouteID) || !strings.Contains(rollbackRef, "disabled") {
+		t.Fatalf("rollback ref = %q, want disable ref for %s", rollbackRef, aliasRouteID)
+	}
+}
+
 func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"))

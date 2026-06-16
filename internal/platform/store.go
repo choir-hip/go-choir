@@ -389,7 +389,96 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, schemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap schema: %w", err)
 	}
+	migratedRoutes, err := s.MigrateLegacyPublicVTextRoutes(ctx)
+	if err != nil {
+		return err
+	}
+	if migratedRoutes > 0 {
+		if err := s.commitDolt(ctx, "migrate legacy public vtext routes to texture aliases"); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (s *Store) MigrateLegacyPublicVTextRoutes(ctx context.Context) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("platform store: nil database")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("platform route migration: begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	aliasCountSQL := `
+SELECT COUNT(*)
+FROM public_routes current
+JOIN public_routes legacy
+  ON current.route_path = CONCAT('/pub/texture/', SUBSTRING(legacy.route_path, 12))
+WHERE legacy.route_path LIKE '/pub/vtext/%'
+  AND legacy.target_kind = 'publication'
+  AND current.route_path LIKE '/pub/texture/%'
+  AND current.route_id LIKE 'route-texture-alias-%'`
+	var aliasCountBefore int64
+	if err := tx.QueryRowContext(ctx, aliasCountSQL).Scan(&aliasCountBefore); err != nil {
+		return 0, fmt.Errorf("platform route migration: count existing texture aliases: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+INSERT IGNORE INTO public_routes (route_id, handle, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at)
+SELECT
+	CONCAT('route-texture-alias-', LEFT(REPLACE(SUBSTRING(legacy.route_path, 12), '/', '-'), 160), '-', LEFT(legacy.target_version_id, 48)),
+	legacy.handle,
+	CONCAT('/pub/texture/', SUBSTRING(legacy.route_path, 12)),
+	legacy.target_kind,
+	legacy.target_id,
+	legacy.target_version_id,
+	legacy.state,
+	legacy.created_at,
+	legacy.updated_at
+FROM public_routes legacy
+WHERE legacy.route_path LIKE '/pub/vtext/%'
+  AND legacy.target_kind = 'publication'
+  AND NOT EXISTS (
+	SELECT 1
+	FROM public_routes current
+	WHERE current.route_path = CONCAT('/pub/texture/', SUBSTRING(legacy.route_path, 12))
+  )`); err != nil {
+		return 0, fmt.Errorf("platform route migration: create texture aliases: %w", err)
+	}
+	var aliasCountAfter int64
+	if err := tx.QueryRowContext(ctx, aliasCountSQL).Scan(&aliasCountAfter); err != nil {
+		return 0, fmt.Errorf("platform route migration: count migrated texture aliases: %w", err)
+	}
+	migratedRoutes := aliasCountAfter - aliasCountBefore
+	if migratedRoutes == 0 {
+		if err := tx.Commit(); err != nil {
+			return 0, fmt.Errorf("platform route migration: commit no-op: %w", err)
+		}
+		return 0, nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT IGNORE INTO rollback_refs (rollback_id, target_kind, target_id, rollback_kind, ref, created_at)
+SELECT
+	CONCAT('rollback-', current.route_id),
+	'public_route',
+	current.route_id,
+	'disable_route',
+	CONCAT('UPDATE public_routes SET state=''disabled'' WHERE route_id=''', current.route_id, ''''),
+	current.created_at
+FROM public_routes current
+JOIN public_routes legacy
+  ON current.route_path = CONCAT('/pub/texture/', SUBSTRING(legacy.route_path, 12))
+WHERE legacy.route_path LIKE '/pub/vtext/%'
+  AND current.route_path LIKE '/pub/texture/%'
+  AND current.route_id LIKE 'route-texture-alias-%'`); err != nil {
+		return 0, fmt.Errorf("platform route migration: create rollback refs: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("platform route migration: commit transaction: %w", err)
+	}
+	return migratedRoutes, nil
 }
 
 func (s *Store) commitDolt(ctx context.Context, message string) error {
