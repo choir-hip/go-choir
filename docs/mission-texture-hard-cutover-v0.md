@@ -1816,6 +1816,26 @@ Local evidence on 2026-06-16:
   runtime and Universal Wire test surfaces found only legacy cleanup code and
   its negative fixture/assertion.
 
+Deployed evidence on 2026-06-16:
+
+- Behavior commit `9b77112902eaa3f7ab308e7ff976c5f3fcb5f13a` and follow-up
+  test/evidence commit `d05cbc5556227ec9c3b5826a101128725532e882` were pushed
+  to `origin/main`.
+- Push CI run `27597833570` for `d05cbc5556227ec9c3b5826a101128725532e882`
+  passed. The preceding behavior push CI run `27597769875` was cancelled by
+  the follow-up push before deploy, so a manual deploy run was required.
+- Manual CI run `27597934917` was dispatched with
+  `force_staging_deploy=true`; CI and deploy job `81592293236` passed.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `d05cbc5556227ec9c3b5826a101128725532e882`, deployed at
+  `2026-06-16T06:12:17Z`.
+- Deployed Universal Wire UI proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
+  source chronology and bespoke style controls'`. The proof guards that
+  retired `Style.vtext` and internal `Style.texture` labels are absent from the
+  visible Universal Wire app.
+
 Rollback path: revert the behavior commit to restore previous `Style.vtext`
 prompt labels, style source paths, and expectations.
 
@@ -1922,18 +1942,20 @@ health reports the pushed SHA; and deployed product proof created and published
 a Texture through `/pub/texture/...` while same-slug `/pub/vtext/...` was not
 treated as a public reader. The backend `/pub/vtext/...` stored-route row shim
 remains explicitly tagged as compatibility residue until storage migration. C30
-is local-supported for Universal Wire style-source suffixes: current
+is deployed-supported for Universal Wire style-source suffixes: current
 prompts/defaults now introduce `Style.texture` labels and `.style.texture`
 source paths; focused runtime tests, runtime shards, frontend build, focused
 local Playwright, and scoped residue search passed. Legacy `Style.vtext Source`
-cleanup recognition remains only as generated-content cleanup. CI/deploy and
-deployed acceptance are pending for this behavior commit, and canonical `.vtext`
-import/storage behavior stays out of scope.
+cleanup recognition remains only as generated-content cleanup. CI/deploy passed
+after a manual forced staging deploy, staging reports the pushed head SHA, and
+deployed Universal Wire UI proof shows both `Style.vtext` and `Style.texture`
+style labels absent from the visible app. Canonical `.vtext` import/storage
+behavior and Universal Wire deployed story-field proof stay out of scope.
 
-next move: commit and push the C30 behavior repair, monitor CI and staging
-deploy identity, then record deployed evidence or a precise product-proof
-blocker. Keep protocol v0 unwritten until remaining working-surface proofs are
-complete.
+next move: choose the next remaining residue class, likely storage/file symbols,
+durable `vtext:` actor ids, export residue, stored-route migration, or a product
+path for the Universal Wire deployed story-field proof. Keep protocol v0
+unwritten until remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1963,17 +1985,18 @@ first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair,
 publication fallback label repair, C27 deployed exported HTML class-name proof,
 C28 deployed live editor source class proof, and C29 deployed public route proof
-are landed. C30 is local-supported: the Problem Documentation First checkpoint
+are landed. C30 is deployed-supported: the Problem Documentation First checkpoint
 is landed, current Universal Wire style-source labels/paths and prompt contracts
 now use `Style.texture` / `.style.texture`, legacy `Style.vtext Source` cleanup
 is retained only as generated-content sanitization, and local focused/runtime
 shard/build/Playwright/residue checks passed, with the UI test guarding absence
-of both retired `Style.vtext` and current internal `Style.texture` labels. Next
-commit and push C30 behavior, monitor CI/deploy, and record deployed evidence or
-a precise product-proof blocker. Keep canonical `.vtext` file import/open
-behavior, storage schema, `.vtext` file shortcuts, durable `vtext:` actor ids,
-`PublishVText` Go symbols, backend stored-route migration, Universal Wire
-story-field proof, and protocol v0 out of C30.
+of both retired `Style.vtext` and current internal `Style.texture` labels. CI
+and a manual forced staging deploy passed; staging reports
+`d05cbc5556227ec9c3b5826a101128725532e882`; deployed Universal Wire UI proof
+passed. Next choose the next remaining residue class. Keep canonical `.vtext`
+file import/open behavior, storage schema, `.vtext` file shortcuts, durable
+`vtext:` actor ids, `PublishVText` Go symbols, backend stored-route migration,
+Universal Wire story-field proof, and protocol v0 out of C30.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

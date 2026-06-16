@@ -3381,3 +3381,57 @@ staging identity, and record deployed evidence or the precise product-proof
 blocker for this prompt/default slice. Do not claim canonical `.vtext`
 file/storage migration or Universal Wire deployed story-field proof from this
 local repair.
+
+## 2026-06-16 - Deployed Evidence: Universal Wire Style Texture Suffixes
+
+Claim: C30 is deployed-supported at its bounded scope: current Universal Wire
+style-source prompt/default surfaces now introduce `Style.texture` /
+`.style.texture`; deployed UI proof keeps style-source labels out of reader
+surfaces; legacy `Style.vtext Source` recognition remains only cleanup.
+
+Move: push C30 behavior, accept the read-only prover finding that the UI test
+needed to guard both old and current style labels, land the follow-up test guard,
+force a staging deploy after the follow-up docs/test commit skipped deploy
+impact, then verify staging identity and deployed UI behavior.
+
+Expected ΔV: no coarse V decrease until deployment identity and deployed proof
+are recorded; C30 should then be closed without claiming broader file/storage or
+story-field proof.
+
+Actual ΔV: C30 moved from local-supported to deployed-supported. Mission V
+remains 2 because storage/file/durable actor/export/stored-route residue,
+Universal Wire deployed story-field proof, and protocol v0 remain open.
+
+Receipts:
+
+- Behavior commit `9b77112902eaa3f7ab308e7ff976c5f3fcb5f13a` pushed C30
+  runtime prompt/default and cleanup changes.
+- Read-only prover `c30_diff_review` found one test gap: the Universal Wire UI
+  test should assert both retired `Style.vtext` and current internal
+  `Style.texture` labels absent. Follow-up commit
+  `d05cbc5556227ec9c3b5826a101128725532e882` added that guard and updated
+  mission evidence.
+- Local re-checks after the follow-up:
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e --
+  --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
+  source chronology and bespoke style controls'` passed, and
+  `scripts/doccheck --report /tmp/choir-doccheck-c30-review-fix.md --json
+  /tmp/choir-doccheck-c30-review-fix.json` passed in report-only mode.
+- Push CI run `27597833570` for
+  `d05cbc5556227ec9c3b5826a101128725532e882` passed. The preceding behavior
+  push CI run `27597769875` was cancelled by the follow-up push before deploy.
+- Manual CI run `27597934917` was dispatched with
+  `force_staging_deploy=true`; all gates passed and deploy job `81592293236`
+  succeeded.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `d05cbc5556227ec9c3b5826a101128725532e882`, deployed at
+  `2026-06-16T06:12:17Z`.
+- Deployed proof passed:
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e --
+  --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
+  source chronology and bespoke style controls'`.
+
+Open edge: choose the next residue class. C30 does not repair canonical
+`.vtext` file import/open behavior, storage schema, workspace paths, metadata
+compatibility keys, durable `vtext:` actor ids, stored document titles, backend
+stored-route rows, or Universal Wire story-field proof.
