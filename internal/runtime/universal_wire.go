@@ -376,7 +376,7 @@ func wireArticleContentLooksLikeSeed(content string) bool {
 }
 
 func wireArticleSelectedStyle(meta map[string]any, styles []types.WireStyleSource) (string, string) {
-	title := "Style.vtext: Universal Wire"
+	title := "Style.texture: Universal Wire"
 	if selected, ok := meta["selected_style_sources"].([]any); ok && len(selected) > 0 {
 		if first, ok := selected[0].(map[string]any); ok {
 			if raw := strings.TrimSpace(stringValue(first["title"])); raw != "" {
@@ -652,6 +652,7 @@ func wireArticleArticleLineIsScaffold(line string) bool {
 		strings.HasPrefix(lower, "status:") ||
 		strings.HasPrefix(lower, "by ") ||
 		strings.HasPrefix(lower, "source:") ||
+		strings.HasPrefix(lower, "style.texture source") ||
 		strings.HasPrefix(lower, "style.vtext source") ||
 		strings.HasPrefix(lower, "style source:") ||
 		strings.HasPrefix(lower, "selection rationale:") ||
@@ -661,6 +662,7 @@ func wireArticleArticleLineIsScaffold(line string) bool {
 	}
 	if lower == "source handles" ||
 		lower == "source manifest" ||
+		lower == "style.texture source" ||
 		lower == "style.vtext source" {
 		return true
 	}
@@ -680,12 +682,14 @@ func wireArticleArticleLineStartsInventorySection(line string) bool {
 	if lower == "source handles" ||
 		lower == "source manifest" ||
 		lower == "sources" ||
+		lower == "style.texture source" ||
 		lower == "style.vtext source" ||
 		lower == "style source" {
 		return true
 	}
 	if strings.HasPrefix(lower, "source handles:") ||
 		strings.HasPrefix(lower, "source manifest:") ||
+		strings.HasPrefix(lower, "style.texture source:") ||
 		strings.HasPrefix(lower, "style.vtext source:") ||
 		strings.HasPrefix(lower, "style source:") {
 		return true

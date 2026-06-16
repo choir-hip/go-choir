@@ -633,7 +633,7 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 			"doc_id":                  "doc-universal-wire",
 			"source_network_cycle_id": "cycle-test",
 			"request_intent":          "universal_wire_reconciler_article_revision",
-			"selected_style_sources":  []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+			"selected_style_sources":  []map[string]any{{"title": "Style.texture: Universal Wire"}},
 		},
 	}
 	prompt, err := rt.systemPromptForRun(universalWireRec)
@@ -648,8 +648,8 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 		"Use uncertainty and native source handles in reader-facing article prose",
 		"cite a bounded set of distinct listed handles with [label](source:ENTITY_ID)",
 		"source refs only in source inventories or metadata sections do not count",
-		"Use selected Style.vtext sources to shape voice, structure, and editorial judgment",
-		"do not name the selected Style.vtext, style rationale, source inventory, or handoff mechanics in reader-facing prose",
+		"Use selected Style.texture sources to shape voice, structure, and editorial judgment",
+		"do not name the selected Style.texture, style rationale, source inventory, or handoff mechanics in reader-facing prose",
 		"do not end the run with the document head still at a brief or status checkpoint",
 	} {
 		if !strings.Contains(prompt, want) {

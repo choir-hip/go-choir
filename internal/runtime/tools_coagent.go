@@ -427,7 +427,7 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 		b.WriteString("\n")
 	}
 	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
-	b.WriteString("\n## Style.vtext Source\n\n")
+	b.WriteString("\n## Style.texture Source\n\n")
 	for _, style := range selectedStyles {
 		b.WriteString("- ")
 		b.WriteString(style.Title)
@@ -468,7 +468,7 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 		b.WriteString("\n\nProcessor/reconciler brief to preserve as source context:\n")
 		b.WriteString(initial)
 	}
-	b.WriteString("\n\nSelected Style.vtext source context:\n")
+	b.WriteString("\n\nSelected Style.texture source context:\n")
 	for _, style := range selectedStyles {
 		b.WriteString("- ")
 		b.WriteString(style.Title)
@@ -519,10 +519,10 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
 	b.WriteString("\n- Preserve source handles and use native VText source refs like [label](source:entity_id) inside article prose; do not replace them with a plain source manifest or isolate them in an inventory section.")
-	b.WriteString("\n- Use the selected Style.vtext sources to shape voice, structure, and editorial judgment; do not name the selected Style.vtext or style rationale in reader-facing prose unless it is genuinely part of the story.")
+	b.WriteString("\n- Use the selected Style.texture sources to shape voice, structure, and editorial judgment; do not name the selected Style.texture or style rationale in reader-facing prose unless it is genuinely part of the story.")
 	b.WriteString("\n- Transclude related VTexts where editorially useful; do not render bare related-VText ID lists as article content.")
-	b.WriteString("\n- Keep Style.vtext selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body unless they are editorially necessary. They belong in revision metadata and native source/transclusion affordances, not as reader-facing sections.")
-	b.WriteString("\n- Do not include placeholder metadata or publication labels such as \"Published: [Date TBD]\", \"Breaking News |\", \"Date:\", \"By Choir News\", \"Source:\", \"Story id\", \"State\", \"Source Handles\", \"Source Manifest\", \"Style.vtext Source\", horizontal-rule separators, or tool/process notes in the article body.")
+	b.WriteString("\n- Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body unless they are editorially necessary. They belong in revision metadata and native source/transclusion affordances, not as reader-facing sections.")
+	b.WriteString("\n- Do not include placeholder metadata or publication labels such as \"Published: [Date TBD]\", \"Breaking News |\", \"Date:\", \"By Choir News\", \"Source:\", \"Story id\", \"State\", \"Source Handles\", \"Source Manifest\", \"Style.texture Source\", horizontal-rule separators, or tool/process notes in the article body.")
 	b.WriteString("\n- If evidence is insufficient, write the best honest publishable draft with uncertainty and request researcher follow-up rather than inventing facts.")
 	b.WriteString("\n\nDocument: ")
 	b.WriteString(doc.DocID)
@@ -703,9 +703,9 @@ func metadataStringSlice(value any) []string {
 
 func coagentDefaultStyleCatalog() []types.WireStyleSource {
 	return []types.WireStyleSource{
-		{ID: "wire-style", Title: "Style.vtext: Universal Wire", Label: "Wire", SourcePath: "styles/universal-wire.style.vtext"},
-		{ID: "claim-audit-style", Title: "Style.vtext: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.vtext"},
-		{ID: "market-brief-style", Title: "Style.vtext: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.vtext"},
+		{ID: "wire-style", Title: "Style.texture: Universal Wire", Label: "Wire", SourcePath: "styles/universal-wire.style.texture"},
+		{ID: "claim-audit-style", Title: "Style.texture: Claim Audit", Label: "Audit", SourcePath: "styles/claim-audit.style.texture"},
+		{ID: "market-brief-style", Title: "Style.texture: Market Brief", Label: "Market", SourcePath: "styles/market-brief.style.texture"},
 	}
 }
 
@@ -731,11 +731,11 @@ func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.WireStyle
 	case hasMarket && hasAudit:
 		return []types.WireStyleSource{market, audit}, "The brief mixes market/policy mechanics with contested or uncertain claims, so use Market Brief as primary style with Claim Audit as a secondary constraint."
 	case hasMarket:
-		return []types.WireStyleSource{market}, "The brief centers market, policy, inflation, rates, or financial transmission, so Market Brief is the fitting Style.vtext."
+		return []types.WireStyleSource{market}, "The brief centers market, policy, inflation, rates, or financial transmission, so Market Brief is the fitting Style.texture."
 	case hasAudit:
-		return []types.WireStyleSource{audit}, "The brief centers correction, contradiction, disputed claims, or verification risk, so Claim Audit is the fitting Style.vtext."
+		return []types.WireStyleSource{audit}, "The brief centers correction, contradiction, disputed claims, or verification risk, so Claim Audit is the fitting Style.texture."
 	default:
-		return []types.WireStyleSource{wire}, "The brief is a general news article request, so Universal Wire is the fitting Style.vtext."
+		return []types.WireStyleSource{wire}, "The brief is a general news article request, so Universal Wire is the fitting Style.texture."
 	}
 }
 

@@ -3323,3 +3323,59 @@ Open edge: commit and push the docs checkpoint, monitor Docs Truth Check, then
 implement C30 behavior changes: current style-source labels/paths and prompt
 contracts move to `Style.texture` / `.style.texture`; legacy `Style.vtext`
 cleanup recognition stays explicitly scoped.
+
+## 2026-06-16 - Local Repair: Universal Wire Style Texture Suffixes
+
+Claim: C30 can repair current Universal Wire style-source prompt/default
+surfaces by moving `Style.vtext` / `.style.vtext` to `Style.texture` /
+`.style.texture`, while preserving legacy generated-content cleanup for old
+`Style.vtext Source` headings and leaving canonical file/storage migration out
+of scope.
+
+Move: construct the bounded repair after the documentation-first checkpoint.
+Updated coagent seed/revision prompts, default Wire style-source titles and
+paths, runtime profile/default prompt text, focused runtime tests, Universal
+Wire story cleanup, and the Universal Wire UI test expectation.
+
+Expected ΔV: no coarse V decrease until CI/deploy/deployed proof lands; local
+evidence should support committing the behavior slice.
+
+Actual ΔV: C30 moved from active to local-supported. Mission V remains 2
+because CI/deploy and deployed acceptance are still pending, and the broader
+Universal Wire deployed story-field proof remains open.
+
+Receipts:
+
+- Problem checkpoint commit
+  `a59b86f2acffb669a851c44c75b03a5db7b6c514` landed first; Docs Truth Check
+  run `27597206898` passed.
+- `internal/runtime/tools_coagent.go` now emits `## Style.texture Source`,
+  `Selected Style.texture source context`, default titles such as
+  `Style.texture: Universal Wire`, and source paths such as
+  `styles/universal-wire.style.texture`.
+- `internal/runtime/tool_profiles.go` and
+  `internal/runtime/prompt_defaults/processor.md` now instruct agents to pass
+  relevant `Style.texture` needs.
+- `internal/runtime/universal_wire.go` now defaults selected style title to
+  `Style.texture: Universal Wire` and strips both current `Style.texture
+  Source` and legacy `Style.vtext Source` generated headings.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStories|TestWireArticle|TestCoagent|TestProcessor|Test.*Style|TestVTextPrompt|TestAgentTools|TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead'
+  -count=1` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed all runtime shards.
+- `npm --prefix frontend run build` passed with only pre-existing Universal
+  Wire warnings about the unused `currentUser` export and unused `.wire-state`
+  selectors.
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e --
+  --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
+  source chronology and bespoke style controls'` passed against local Vite.
+- Scoped search for `Style.vtext` / `style.vtext` in the touched runtime and
+  Universal Wire test surfaces found only `internal/runtime/universal_wire.go`
+  legacy cleanup filters and `internal/runtime/universal_wire_test.go` negative
+  fixture/assertion coverage.
+
+Open edge: commit and push the behavior repair, monitor CI/deploy, verify
+staging identity, and record deployed evidence or the precise product-proof
+blocker for this prompt/default slice. Do not claim canonical `.vtext`
+file/storage migration or Universal Wire deployed story-field proof from this
+local repair.

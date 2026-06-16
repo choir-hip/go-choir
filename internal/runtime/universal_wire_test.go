@@ -57,7 +57,7 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 		"ingestion_handoff_cycle_id":     "cycle-live",
 		"ingestion_handoff_request_id":   "reconciler-live",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":         []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"selected_style_sources":         []map[string]any{{"title": "Style.texture: Universal Wire"}},
 		"selected_style_rationale":       "Universal Wire style fits a fast sourced dispatch.",
 		"source_item_ids":                []string{"srcitem_live_1", "srcitem_live_2"},
 	}
@@ -214,7 +214,9 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 		t.Fatalf("indexed source-network story should expose bounded cycle provenance, got %+v", story.Manifest)
 	}
 	claimText := strings.Join(story.Claims, "\n")
-	if strings.Contains(claimText, "Style.vtext: Universal Wire") ||
+	if strings.Contains(claimText, "Style.texture: Universal Wire") ||
+		strings.Contains(claimText, "Style.texture Source") ||
+		strings.Contains(claimText, "Style.vtext Source") ||
 		!strings.Contains(claimText, "Source and style provenance are carried by the Texture revision metadata and citations") {
 		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
 	}
@@ -269,7 +271,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		"ingestion_handoff_cycle_id":     "cycle-scoped",
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
-		"selected_style_sources":         []map[string]any{{"title": "Style.vtext: Universal Wire"}},
+		"selected_style_sources":         []map[string]any{{"title": "Style.texture: Universal Wire"}},
 		"platformd_route_path":           "/pub/texture/scoped-sources",
 		"source_item_ids":                []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 		"source_entities": []map[string]any{
@@ -312,9 +314,13 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 			"",
 			"- [Uncited cycle context](source:src_uncited)",
 			"",
-			"## Style.vtext Source",
+			"## Style.texture Source",
 			"",
 			"Selection rationale: Universal Wire style.",
+			"",
+			"## Style.vtext Source",
+			"",
+			"Legacy selection rationale that should still be stripped.",
 		}, "\n"),
 		Citations: json.RawMessage("[]"),
 		Metadata:  meta,

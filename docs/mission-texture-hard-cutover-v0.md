@@ -1772,6 +1772,56 @@ Next behavior slice design:
   storage aliases, metadata compatibility keys, durable actor ids, and protocol
   v0 out of C30.
 
+## Repair: Universal Wire Style Texture Suffixes
+
+Mutation class: `orange`, because this changes runtime prompt/default text,
+Wire style-source metadata, Universal Wire article cleanup behavior, and tests
+that encode agent handoff contracts.
+
+Conjecture delta: current Universal Wire style-source prompt/default surfaces
+can speak `Style.texture` and use `.style.texture` source paths while preserving
+the same style selection semantics, article-head completion contract, and
+generated-content cleanup. Legacy `Style.vtext Source` cleanup remains a
+scoped generated-content sanitizer, not a current prompt/default source.
+
+Protected surfaces: coagent processor/reconciler prompts, default Wire style
+source metadata, Universal Wire story projection cleanup, processor prompt
+defaults, and focused tests that assert style-source handoff contracts.
+
+Local evidence on 2026-06-16:
+
+- Problem checkpoint commit
+  `a59b86f2acffb669a851c44c75b03a5db7b6c514` landed the documentation-first
+  record; Docs Truth Check run `27597206898` passed.
+- Current style-source labels and paths in
+  `internal/runtime/tools_coagent.go` now use `Style.texture` and
+  `styles/*.style.texture`.
+- Coagent revision prompts, runtime tool profiles, processor prompt defaults,
+  and focused tests now expect `Style.texture` handoff language.
+- Universal Wire article cleanup strips both current `Style.texture Source`
+  and legacy `Style.vtext Source` headings.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStories|TestWireArticle|TestCoagent|TestProcessor|Test.*Style|TestVTextPrompt|TestAgentTools|TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead'
+  -count=1` passed.
+- `nix develop -c scripts/go-test-runtime-shards` passed all runtime shards.
+- `npm --prefix frontend run build` passed; Vite reported pre-existing
+  Universal Wire warnings for the unused `currentUser` export and unused
+  `.wire-state` selectors.
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm --prefix frontend run e2e --
+  --project=chromium tests/universal-wire-app.spec.js -g 'deletes detritus
+  source chronology and bespoke style controls'` passed against local Vite.
+- Scoped residue search for `Style.vtext` / `style.vtext` in the touched
+  runtime and Universal Wire test surfaces found only legacy cleanup code and
+  its negative fixture/assertion.
+
+Rollback path: revert the behavior commit to restore previous `Style.vtext`
+prompt labels, style source paths, and expectations.
+
+Heresy delta: repaired for current Universal Wire style-source prompt/default
+surfaces. No canonical `.vtext` file import/open behavior, storage schema,
+workspace path, metadata compatibility key, durable `vtext:` actor id, stored
+document title, or protocol v0 repair is claimed.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1819,8 +1869,8 @@ package/provenance, Universal Wire local story projection plus deployed empty
 state/source-label proof, related Texture refs, source-contract open surface,
 canonical source-path metadata, public route minting, publication fallback
 labels, and C26 deployed evidence. Remaining coarse obligations: storage/file
-symbols plus durable actor/public-route/export residue, and protocol v0 after
-proof.
+symbols plus durable actor/stored-route/export residue, deployed Universal Wire
+story-field proof, and protocol v0 after proof.
 
 budget: one broad red-surface cutover mission before M3 resumes; split only if
 a distinct product regression appears after documenting it here.
@@ -1870,15 +1920,18 @@ health reports the pushed SHA; and deployed product proof created and published
 a Texture through `/pub/texture/...` while same-slug `/pub/vtext/...` was not
 treated as a public reader. The backend `/pub/vtext/...` stored-route row shim
 remains explicitly tagged as compatibility residue until storage migration. C30
-is active for Universal Wire style-source suffixes: current prompts/defaults
-still introduce `Style.vtext` labels and `.style.vtext` source paths, while
-canonical `.vtext` import/storage behavior stays out of scope.
+is local-supported for Universal Wire style-source suffixes: current
+prompts/defaults now introduce `Style.texture` labels and `.style.texture`
+source paths; focused runtime tests, runtime shards, frontend build, focused
+local Playwright, and scoped residue search passed. Legacy `Style.vtext Source`
+cleanup recognition remains only as generated-content cleanup. CI/deploy and
+deployed acceptance are pending for this behavior commit, and canonical `.vtext`
+import/storage behavior stays out of scope.
 
-next move: commit the C30 problem checkpoint, then rename Universal Wire
-style-source labels/paths and prompt contracts from `Style.vtext` /
-`.style.vtext` to `Style.texture` / `.style.texture`, while keeping legacy
-cleanup filters and leaving canonical file/storage migration for a later slice.
-Keep protocol v0 unwritten until remaining working-surface proofs are complete.
+next move: commit and push the C30 behavior repair, monitor CI and staging
+deploy identity, then record deployed evidence or a precise product-proof
+blocker. Keep protocol v0 unwritten until remaining working-surface proofs are
+complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -1908,13 +1961,16 @@ first-revision proof, deployed pinned-transclusion proof, visible UI proof,
 source-contract open-surface proof, canonical source-path metadata repair,
 publication fallback label repair, C27 deployed exported HTML class-name proof,
 C28 deployed live editor source class proof, and C29 deployed public route proof
-are landed. C30 is active: commit the Universal Wire Style.texture checkpoint,
-then rename current style-source labels/paths and prompt contracts from
-`Style.vtext` / `.style.vtext` to `Style.texture` / `.style.texture`. Keep
-canonical `.vtext` file import/open behavior, storage schema, `.vtext` file
-shortcuts, durable `vtext:` actor ids, `PublishVText` Go symbols, backend
-stored-route migration, Universal Wire story-field proof, and protocol v0 out
-of C30.
+are landed. C30 is local-supported: the Problem Documentation First checkpoint
+is landed, current Universal Wire style-source labels/paths and prompt contracts
+now use `Style.texture` / `.style.texture`, legacy `Style.vtext Source` cleanup
+is retained only as generated-content sanitization, and local focused/runtime
+shard/build/Playwright/residue checks passed. Next commit and push C30 behavior,
+monitor CI/deploy, and record deployed evidence or a precise product-proof
+blocker. Keep canonical `.vtext` file import/open behavior, storage schema,
+`.vtext` file shortcuts, durable `vtext:` actor ids, `PublishVText` Go symbols,
+backend stored-route migration, Universal Wire story-field proof, and protocol
+v0 out of C30.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

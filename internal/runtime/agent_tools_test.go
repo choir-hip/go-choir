@@ -2045,8 +2045,8 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "Source brief:") {
 		t.Fatalf("processor seed revision = author %q content %q", seedRev.AuthorKind, seedRev.Content)
 	}
-	if !strings.Contains(seedRev.Content, "Style.vtext: Market Brief") {
-		t.Fatalf("processor seed revision missing selected Style.vtext source: %q", seedRev.Content)
+	if !strings.Contains(seedRev.Content, "Style.texture: Market Brief") {
+		t.Fatalf("processor seed revision missing selected Style.texture source: %q", seedRev.Content)
 	}
 	seedMeta := decodeRevisionMetadata(seedRev.Metadata)
 	if metadataString(seedMeta, "artifact_kind") != "source_brief" || metadataString(seedMeta, "vtext_version") == "v0" {
@@ -2130,8 +2130,8 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if len(runSourceEntities) != 1 || runSourceEntities[0].Target.ContentID != sourceItem.ContentID {
 		t.Fatalf("processor vtext run source_entities = %#v", runSourceEntities)
 	}
-	if metadataString(vtextRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(vtextRun.Prompt, "Selected Style.vtext source context") || !strings.Contains(vtextRun.Prompt, "Style.vtext: Market Brief") {
-		t.Fatalf("processor vtext run missing Style.vtext context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
+	if metadataString(vtextRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(vtextRun.Prompt, "Selected Style.texture source context") || !strings.Contains(vtextRun.Prompt, "Style.texture: Market Brief") {
+		t.Fatalf("processor vtext run missing Style.texture context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
 	}
 	if !strings.Contains(vtextRun.Prompt, "must be a publishable article or correction/update draft") ||
 		!strings.Contains(vtextRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
@@ -2140,9 +2140,9 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		!strings.Contains(vtextRun.Prompt, "reader-facing article prose using [label](source:entity_id)") ||
 		!strings.Contains(vtextRun.Prompt, "Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement") ||
 		!strings.Contains(vtextRun.Prompt, "do not replace them with a plain source manifest") ||
-		!strings.Contains(vtextRun.Prompt, "Use the selected Style.vtext sources to shape voice, structure, and editorial judgment") ||
-		!strings.Contains(vtextRun.Prompt, "do not name the selected Style.vtext or style rationale in reader-facing prose") ||
-		!strings.Contains(vtextRun.Prompt, "Keep Style.vtext selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body") ||
+		!strings.Contains(vtextRun.Prompt, "Use the selected Style.texture sources to shape voice, structure, and editorial judgment") ||
+		!strings.Contains(vtextRun.Prompt, "do not name the selected Style.texture or style rationale in reader-facing prose") ||
+		!strings.Contains(vtextRun.Prompt, "Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body") ||
 		!strings.Contains(vtextRun.Prompt, "Do not include placeholder metadata or publication labels") ||
 		!strings.Contains(vtextRun.Prompt, "Breaking News |") ||
 		!strings.Contains(vtextRun.Prompt, "By Choir News") {
