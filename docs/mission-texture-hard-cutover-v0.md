@@ -440,6 +440,59 @@ Heresy delta: repaired for deployed new public route minting. Existing
 `/pub/vtext/...` public routes remain deliberate legacy compatibility state,
 not a current new-publication minting path.
 
+## Problem Checkpoint: Texture Auth Intent Label Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+frontend source, schema, API, prompt default, UI, test, or persistent state
+changed in this checkpoint.
+
+Read-only search on 2026-06-16 shows a narrow product-facing residue class:
+frontend auth-required intent kinds and replay labels still use old-name
+tokens even though the canonical app id and visible app label are now Texture.
+This is distinct from durable runtime actor ids such as `vtext:<doc_id>`,
+source metadata keys such as `vtext_source_artifact_attachment`, and storage
+symbols such as `vtext_documents`.
+
+Receipts:
+
+- `frontend/src/lib/apps/registry.ts` still declares Texture auth requirements
+  as `save_vtext`, `revise_vtext`, and `publish_vtext`.
+- `frontend/src/lib/VTextEditor.svelte` still dispatches auth intents
+  `save_vtext`, `publish_vtext`, `vtext_diagnosis`,
+  `vtext_source_repair`, `vtext_source_artifact`, and
+  `published_vtext_edit` while passing `appId: 'texture'` and
+  `appName: 'Texture'`.
+- `frontend/src/App.svelte` still renders/replays `save_vtext`,
+  `publish_vtext`, `published_vtext_edit`, and `private_vtext_document`
+  intent kinds.
+- Legacy route compatibility remains in `frontend/src/App.svelte` for
+  `?app=vtext&doc=...`, and tests intentionally cover that compatibility.
+  That is app-route compatibility, not a current app identity target.
+- Nearby hits such as `created_from: 'vtext_source_artifact_ui'`,
+  `source: vtext_source_artifact_attachment`, `publish_vtext_revision`,
+  `choir.platform.publish_vtext.v0`, and `vtext:<doc_id>` are metadata,
+  provenance, verifier, or runtime actor-route residue. They need separate
+  migration design and must not be renamed as part of this small frontend
+  auth-intent slice.
+
+Next behavior slice design:
+
+- introduce Texture-named frontend auth intent kinds:
+  `save_texture`, `revise_texture`, `publish_texture`,
+  `texture_diagnosis`, `texture_source_repair`,
+  `texture_source_artifact`, `published_texture_edit`, and
+  `private_texture_document`;
+- keep legacy intent-kind handling in the auth overlay/replay boundary during
+  the cutover so already-created in-memory or URL-derived intents do not drop;
+- update Texture app registry auth requirements and Texture editor dispatches
+  to emit only the new intent kinds;
+- keep `?app=vtext&doc=...` legacy URL compatibility and durable
+  `vtext:<doc_id>` actor ids out of this slice;
+- prove locally with frontend build and targeted frontend tests, then push,
+  monitor CI/deploy, verify staging identity, and run a deployed browser proof
+  that a signed-out Texture action opens an auth overlay whose pending intent
+  is Texture-named while legacy `app=vtext` still opens Texture.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -810,11 +863,19 @@ position / live conjectures / open edges:
   `27590698503`, deploy job `81570766605`, staging identity for commit
   `65502a706ef1adba7fc2d1ed5428e3f709f9d2d0`, and deployed Playwright
   publication/read/export proof all pass.
+- C19 active: frontend auth-required intent kinds still use old-name tokens
+  even though they now describe Texture actions. This is a small
+  product-facing label/replay surface, distinct from durable `vtext:<doc_id>`
+  actor ids, storage tables, and provenance metadata. The next behavior slice
+  should emit Texture-named auth intents while preserving legacy intent replay
+  and legacy `app=vtext` URL compatibility.
 
 next move: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, actor IDs/app route labels, and
-protocol v0. Keep protocol v0 unwritten until the remaining working-surface
-proofs are complete.
+protocol v0. The selected next slice is frontend auth intent labels: emit
+Texture-named auth intents, keep legacy replay compatibility, prove local
+frontend behavior, then deploy and prove staging auth overlay behavior. Keep
+protocol v0 unwritten until the remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

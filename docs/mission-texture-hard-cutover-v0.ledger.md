@@ -1533,3 +1533,63 @@ Receipts:
 Open edge: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, actor IDs/app route labels, and
 protocol v0.
+
+## 2026-06-16 - Problem Checkpoint: Texture Auth Intent Label Residue
+
+Claim: frontend auth-required intent kinds are a bounded product-facing
+old-name residue class, separate from durable runtime actor ids, provenance
+metadata, verifier predicates, and storage symbols.
+
+Move: read-only inventory of Texture auth intent dispatch/replay labels,
+registry auth requirements, legacy app URL compatibility, and adjacent
+metadata/runtime residues; document the next behavior slice before code
+changes.
+
+Expected ΔV: 0 global; C19 becomes active and the auth-intent label slice is
+scoped.
+
+Actual ΔV: 0. Problem Documentation First checkpoint landed in docs only.
+
+Conjecture delta: new Texture auth intents can teach the promoted ontology at
+the product overlay/replay layer without touching durable actor routes such as
+`vtext:<doc_id>` or storage tables such as `vtext_documents`.
+
+Protected surfaces for the later behavior slice: Texture app registry auth
+requirements, Texture editor auth-required dispatches, auth overlay copy,
+post-auth app replay, legacy intent replay, and legacy `?app=vtext&doc=...`
+URL compatibility.
+
+Admissible evidence class for the later behavior slice: frontend build,
+targeted frontend tests for signed-out auth overlay and legacy app URL
+compatibility, CI, staging deploy identity, and a deployed browser proof that a
+signed-out Texture action opens an auth overlay with a Texture-named intent
+while legacy `app=vtext` still opens Texture.
+
+Rollback path for the later behavior slice: restore old intent strings in the
+Texture editor dispatches, registry auth requirements, and App replay logic if
+auth overlay replay or legacy app URL compatibility regresses.
+
+Heresy delta: discovered auth-intent label residue; no behavior repair claimed
+yet.
+
+Receipts:
+- `frontend/src/lib/apps/registry.ts` still declares Texture auth requirements
+  as `save_vtext`, `revise_vtext`, and `publish_vtext`.
+- `frontend/src/lib/VTextEditor.svelte` still dispatches auth intents
+  `save_vtext`, `publish_vtext`, `vtext_diagnosis`,
+  `vtext_source_repair`, `vtext_source_artifact`, and
+  `published_vtext_edit` while using `appId: 'texture'`.
+- `frontend/src/App.svelte` still renders/replays `save_vtext`,
+  `publish_vtext`, `published_vtext_edit`, and `private_vtext_document`
+  intent kinds.
+- `frontend/src/App.svelte` still accepts `?app=vtext&doc=...`; this is
+  intentional legacy URL compatibility and not current app identity.
+- Adjacent hits such as `created_from: 'vtext_source_artifact_ui'`,
+  `source: vtext_source_artifact_attachment`, `publish_vtext_revision`,
+  `choir.platform.publish_vtext.v0`, and `vtext:<doc_id>` are metadata,
+  provenance, verifier, or runtime actor-route residues that require separate
+  migration design.
+
+Open edge: implement the behavior slice after this checkpoint: emit
+Texture-named frontend auth intents, preserve legacy replay and legacy app URL
+compatibility, then prove locally and on staging.
