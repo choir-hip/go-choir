@@ -530,6 +530,16 @@ Receipts:
   Trace roles included `conductor` and `vtext`; the successful
   `patch_texture` tool result stored the appagent revision; successful
   `edit_texture` result count was 0.
+- Run acceptance synthesis:
+  `POST /api/run-acceptances/synthesize` returned
+  `runacc-89335b43c1f6e244362f` for trajectory
+  `4c2d66f3-f090-4a6d-aa85-d90f92fd62da`, loop
+  `9ab5792e-430c-4685-914f-61482ad9a4b0`, at
+  `staging-smoke-level/blocked`. Product-path invariants
+  `product_path_observed`, `worker_mutation_bounded`,
+  `promotion_not_overclaimed`, and `checkpoint_causal_order` passed; the record
+  remained blocked on stronger export/continuation-level contracts that this
+  prompt/Texture proof did not attempt.
 - `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
   /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
 - `git diff --check`: pass.
