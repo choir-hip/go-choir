@@ -1408,3 +1408,56 @@ Receipts:
 Open edge: implement the behavior slice after this checkpoint: mint
 `/pub/texture/...` for new publications, preserve `/pub/vtext/...` reads, and
 prove both locally before CI/staging.
+
+## 2026-06-16 - Local Public Publication Route Identity Repair
+
+Claim: new public publication links can mint `/pub/texture/...` while existing
+`/pub/vtext/...` link state remains accepted as explicit legacy route state.
+
+Move: change platform publication route generation to the Texture prefix,
+preserve legacy route normalization for resolve/export, update proxy and
+frontend public-reader expectations, and move browser publication tests to the
+current Texture publish control endpoint.
+
+Expected ΔV: support C18 locally; no global V decrease until CI, deploy, and
+staging publication proof are recorded.
+
+Actual ΔV: C18 is locally supported pending CI/deploy.
+
+Conjecture delta: public route identity can teach Texture at the point of new
+publication without rewriting or redirecting old public route rows.
+
+Protected surfaces: platform route generation, public route lookup/export,
+frontend direct public reader entry, published Texture window deduplication,
+proxy publication public URL projection, and product publication tests.
+
+Admissible evidence class: focused platform/proxy tests, frontend build,
+route-residue search, CI, staging deploy identity, deployed proof that new
+publication routes are `/pub/texture/...`, and deployed proof that a legacy
+`/pub/vtext/...` route still resolves/exports/opens.
+
+Rollback path: restore `/pub/vtext/...` route minting, remove
+`/pub/texture/...` public-reader prefix recognition, and revert route
+expectations if staging publication/read/export proof fails.
+
+Heresy delta: repaired locally for new public route minting; legacy
+`/pub/vtext/...` public links remain discovered compatibility state pending
+deployed proof and any later redirect/migration policy.
+
+Receipts:
+- `nix develop -c go test ./internal/platform -run 'TestPublishVTextCreatesImmutablePublicRecords|TestInternalPublishRequiresInternalCallerAndBundleResolve'`
+  passed.
+- `nix develop -c go test ./internal/proxy -run 'TestPlatformPublicationResolveIsPublicAndInternalOnly|TestPlatformPublicationResolveAndExportPropagateNotFound|TestHandleVTextPublication'`
+  passed.
+- `nix develop -c go test ./internal/platform ./internal/proxy` passed.
+- `npm --prefix frontend run build` passed with pre-existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- Route residue search found only explicit legacy route support, route tests or
+  fixtures, and frontend dual-prefix acceptance.
+- Local Playwright proof was blocked by pre-existing local platformd Dolt state
+  under `/tmp/go-choir-m2/platform-dolt`; the foreground service session was
+  stopped and local service health checks returned down.
+
+Open edge: push the repair, monitor CI/deploy, then prove on staging that new
+publications mint `/pub/texture/...`, public reader and export APIs work, and
+legacy `/pub/vtext/...` public routes remain accepted.

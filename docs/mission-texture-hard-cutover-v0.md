@@ -346,6 +346,48 @@ Next behavior slice design:
   resolve/export tests, and frontend publication tests that new routes are
   Texture-named while legacy reader paths are still accepted.
 
+## Local Repair: Public Publication Route Identity
+
+Mutation class: `orange`, because this changes public publication route
+generation, frontend public-reader route recognition, proxy/platform route
+tests, and publication-product expectations.
+
+Conjecture delta: new public publication links can teach Texture by minting
+`/pub/texture/...` while existing `/pub/vtext/...` link state remains readable
+through explicit legacy route acceptance.
+
+Protected surfaces: platform publication route generation, public route
+lookup/export, frontend direct public reader entry, published Texture window
+deduplication, proxy publication public URL projection, and product
+publication tests.
+
+Local evidence on 2026-06-16:
+
+- `nix develop -c go test ./internal/platform -run 'TestPublishVTextCreatesImmutablePublicRecords|TestInternalPublishRequiresInternalCallerAndBundleResolve'`
+  passed.
+- `nix develop -c go test ./internal/proxy -run 'TestPlatformPublicationResolveIsPublicAndInternalOnly|TestPlatformPublicationResolveAndExportPropagateNotFound|TestHandleVTextPublication'`
+  passed.
+- `nix develop -c go test ./internal/platform ./internal/proxy` passed.
+- `npm --prefix frontend run build` passed. Vite reported pre-existing
+  Universal Wire warnings for unused `currentUser` and `.wire-state`
+  selectors.
+- Route residue search
+  `rg -n "publicVTextPrefix|/pub/vtext/|\^\\/pub\\/vtext|startsWith\('/pub/vtext/'\)|startsWith\(\"/pub/vtext/\"\)" internal/platform internal/proxy frontend/src frontend/tests --glob '!frontend/dist/**'`
+  now finds only the explicit legacy route prefix/helper, legacy route tests or
+  fixtures, and frontend dual-prefix acceptance.
+- Local Playwright was attempted, but the local service harness could not reach
+  platformd because the existing `/tmp/go-choir-m2/platform-dolt` state reported
+  missing `.dolt/repo_state.json`. The controlled foreground service session
+  was stopped and health checks for local service ports returned down.
+
+Rollback path: restore `/pub/vtext/...` route minting, remove
+`/pub/texture/...` public-reader prefix recognition, and revert route
+expectations if staging publication/read/export proof fails.
+
+Heresy delta: repaired locally for new public route minting; legacy
+`/pub/vtext/...` public links remain explicit compatibility state pending
+deployed proof and any later redirect/migration policy.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -607,12 +649,12 @@ position / live conjectures / open edges:
 - C2 supported for deployed common-path scope: a common `patch_texture` tool
   plus an exceptional `rewrite_texture` tool better orients the Texture writer
   than one overloaded edit tool. Staging prompt-bar proof created a Texture
-  first revision through `patch_texture` metadata and Trace. The compatibility
-  alias deletion receipt remains open.
+  first revision through `patch_texture` metadata and Trace; the compatibility
+  alias deletion receipt is landed under C17.
 - C3 supported for report-only scope: the docs checker now carries H5
   retired-name warnings without failing docs-only CI. Current baseline:
   `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
-  /tmp/choir-doccheck.json` reports 1,128 total warnings, including 335 H5
+  /tmp/choir-doccheck.json` reports 1,130 total warnings, including 335 H5
   file-level warnings across AGENTS.md, cmd, docs, frontend,
   internal, and specs. Promotion to fail-closed remains future work after the
   baseline burns down.
@@ -710,18 +752,21 @@ position / live conjectures / open edges:
   live-alias residue search, CI run `27589732107`, deploy job `81567905099`,
   staging identity for commit `c6db0df57bd06a22e392fd89eb0f4ee1f4c1bcc1`, and
   deployed prompt-bar/Trace proof all pass.
-- C18 active: new publication reader URLs still mint under `/pub/vtext/...`
-  even though publication control routes are Texture-named. The next bounded
-  slice should mint `/pub/texture/...` for new publications while preserving
-  existing `/pub/vtext/...` public link state for resolve/export and frontend
-  reader entry.
+- C18 locally supported pending CI/deploy: new publication reader URLs now mint
+  under `/pub/texture/...`; existing `/pub/vtext/...` public link state remains
+  accepted for resolve/export and frontend reader entry. Focused platform and
+  proxy tests plus frontend build pass locally. Local Playwright was blocked by
+  pre-existing platformd Dolt state and must be replaced by deployed staging
+  proof after CI/deploy.
 
 next move: select the next bounded residue class among storage
 schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
 and protocol v0. The selected next slice is public publication route identity:
-mint new `/pub/texture/...` reader routes while preserving existing
-`/pub/vtext/...` public links. Keep protocol v0 unwritten until the remaining
-working-surface proofs are complete.
+push the local repair, monitor CI/deploy, then prove on staging that a new
+publication mints `/pub/texture/...`, opens in the public reader, exports
+through the public publication API, and that a legacy `/pub/vtext/...` route is
+still accepted. Keep protocol v0 unwritten until the remaining working-surface
+proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

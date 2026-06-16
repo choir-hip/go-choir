@@ -56,7 +56,7 @@ test('vtext publish keeps policy behind the publish menu and forwards policy', a
   await expect(publishButton).toBeEnabled();
 
   let publishPayload = null;
-  await page.route('**/api/platform/vtext/publications', async (route) => {
+  await page.route('**/api/platform/texture/publications', async (route) => {
     publishPayload = route.request().postDataJSON();
     await route.fulfill({
       status: 201,
@@ -64,8 +64,8 @@ test('vtext publish keeps policy behind the publish menu and forwards policy', a
       body: JSON.stringify({
         publication_id: 'pub-policy-fixture',
         publication_version_id: 'pubver-policy-fixture',
-        route_path: '/pub/vtext/policy-fixture',
-        public_url: `${baseURL}/pub/vtext/policy-fixture`,
+        route_path: '/pub/texture/policy-fixture',
+        public_url: `${baseURL}/pub/texture/policy-fixture`,
       }),
     });
   });

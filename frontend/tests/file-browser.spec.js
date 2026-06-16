@@ -501,7 +501,7 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
   });
   expect(revision.revision_id).toBeTruthy();
 
-  const published = await fetchJSON(page, '/api/platform/vtext/publications', {
+  const published = await fetchJSON(page, '/api/platform/texture/publications', {
     method: 'POST',
     body: JSON.stringify({
       doc_id: opened.doc_id,
@@ -509,7 +509,7 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
       slug: `docx-roundtrip-proof-${stamp}`,
     }),
   });
-  expect(published.route_path).toMatch(/^\/pub\/vtext\//);
+  expect(published.route_path).toMatch(/^\/pub\/texture\//);
 
   const docxExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(published.route_path)}&format=docx`);
   expect(docxExport.format).toBe('docx');
@@ -571,7 +571,7 @@ test('PDF import can revise, publish, and export DOCX and PDF derivatives', asyn
   });
   expect(revision.revision_id).toBeTruthy();
 
-  const published = await fetchJSON(page, '/api/platform/vtext/publications', {
+  const published = await fetchJSON(page, '/api/platform/texture/publications', {
     method: 'POST',
     body: JSON.stringify({
       doc_id: opened.doc_id,
@@ -579,7 +579,7 @@ test('PDF import can revise, publish, and export DOCX and PDF derivatives', asyn
       slug: `pdf-roundtrip-proof-${stamp}`,
     }),
   });
-  expect(published.route_path).toMatch(/^\/pub\/vtext\//);
+  expect(published.route_path).toMatch(/^\/pub\/texture\//);
 
   const docxExport = await fetchJSON(page, `/api/platform/publications/export?route=${encodeURIComponent(published.route_path)}&format=docx`);
   expect(docxExport.format).toBe('docx');

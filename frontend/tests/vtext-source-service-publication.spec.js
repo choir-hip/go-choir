@@ -105,7 +105,7 @@ test('publishes source-service source entities as expandable transclusions and c
     }),
   });
 
-  const publish = await fetchJSON(page, '/api/platform/vtext/publications', {
+  const publish = await fetchJSON(page, '/api/platform/texture/publications', {
     method: 'POST',
     body: JSON.stringify({
       doc_id: doc.doc_id,
@@ -121,7 +121,7 @@ test('publishes source-service source entities as expandable transclusions and c
       },
     }),
   });
-  expect(publish.route_path).toMatch(/^\/pub\/vtext\//);
+  expect(publish.route_path).toMatch(/^\/pub\/texture\//);
   expect(publish.publication_id).toBeTruthy();
   expect(publish.publication_version_id).toBeTruthy();
 
@@ -336,7 +336,7 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
     }),
   });
 
-  const publish = await fetchJSON(page, '/api/platform/vtext/publications', {
+  const publish = await fetchJSON(page, '/api/platform/texture/publications', {
     method: 'POST',
     body: JSON.stringify({
       doc_id: doc.doc_id,
@@ -455,7 +455,7 @@ test('publishes public URL-backed sources with reader snapshots for guests', asy
     }),
   });
 
-  const publish = await fetchJSON(page, '/api/platform/vtext/publications', {
+  const publish = await fetchJSON(page, '/api/platform/texture/publications', {
     method: 'POST',
     body: JSON.stringify({
       doc_id: doc.doc_id,

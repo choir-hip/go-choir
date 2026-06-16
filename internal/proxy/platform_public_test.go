@@ -21,21 +21,21 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 		gotInternal = r.Header.Get("X-Internal-Caller")
 		switch r.URL.Path {
 		case "/internal/platform/publications/resolve":
-			if r.URL.Query().Get("route") != "/pub/vtext/test" {
+			if r.URL.Query().Get("route") != "/pub/texture/test" {
 				t.Fatalf("platform route query: %s", r.URL.RawQuery)
 			}
 			_ = json.NewEncoder(w).Encode(platform.PublicationBundle{
-				Route:       platform.PublicationRoute{Path: "/pub/vtext/test", State: "active"},
+				Route:       platform.PublicationRoute{Path: "/pub/texture/test", State: "active"},
 				Publication: platform.PublicationSummary{ID: "pub-1", Title: "Public"},
 				Version:     platform.PublicationVersionSummary{ID: "pubver-1", ContentHash: "hash", SourceRevisionHash: "source-hash"},
 				Artifact:    platform.PublicationArtifact{Content: "public content"},
 			})
 		case "/internal/platform/publications/export":
-			if r.URL.Query().Get("route") != "/pub/vtext/test" || r.URL.Query().Get("format") != "md" {
+			if r.URL.Query().Get("route") != "/pub/texture/test" || r.URL.Query().Get("format") != "md" {
 				t.Fatalf("platform export query: %s", r.URL.RawQuery)
 			}
 			_ = json.NewEncoder(w).Encode(platform.PublicationExport{
-				RoutePath:            "/pub/vtext/test",
+				RoutePath:            "/pub/texture/test",
 				PublicationID:        "pub-1",
 				PublicationVersionID: "pubver-1",
 				Format:               "md",
@@ -60,7 +60,7 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/platform/publications/resolve?route=/pub/vtext/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/platform/publications/resolve?route=/pub/texture/test", nil)
 	w := httptest.NewRecorder()
 	h.HandleAPI(w, req)
 	if w.Code != http.StatusOK {
@@ -69,7 +69,7 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	if gotInternal != "true" {
 		t.Fatalf("missing internal caller header")
 	}
-	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/vtext/test&format=md", nil)
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/texture/test&format=md", nil)
 	exportW := httptest.NewRecorder()
 	h.HandleAPI(exportW, exportReq)
 	if exportW.Code != http.StatusOK {

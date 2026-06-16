@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	publicVTextPrefix = "/pub/vtext/"
-	textMediaType     = "text/plain; charset=utf-8"
+	publicTexturePrefix     = "/pub/texture/"
+	legacyPublicVTextPrefix = "/pub/vtext/"
+	textMediaType           = "text/plain; charset=utf-8"
 )
 
 type Service struct {
@@ -194,7 +195,7 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 	contentHash := sha256Hex([]byte(req.Content))
 	projectionHash := contentHash
 	sourceRevisionHash := sha256Hex([]byte(req.SourceDocID + "\n" + req.SourceRevisionID + "\n" + req.Content + "\n" + string(req.Citations) + "\n" + string(req.Metadata)))
-	routePath := publicVTextPrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(publicationID)
+	routePath := publicTexturePrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(publicationID)
 	storageRef := filepath.Join("sha256", contentHash+".txt")
 	if err := s.writeBlob(storageRef, []byte(req.Content)); err != nil {
 		return nil, err
@@ -249,7 +250,7 @@ func (s *Service) PublishVText(ctx context.Context, req PublishVTextRequest) (*P
 	if err := execAll(ctx, tx, []statement{
 		{"INSERT INTO platform_subjects (subject_id, subject_kind, display_name, canonical_uri, created_at, updated_at) VALUES (?, 'user', ?, '', ?, ?) ON DUPLICATE KEY UPDATE updated_at=VALUES(updated_at)", []any{req.OwnerID, req.OwnerID, now, now}},
 		{"INSERT INTO publication_proposals (proposal_id, owner_id, source_doc_id, source_revision_id, source_revision_hash, projection_hash, title, state, created_by, created_trace_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)", []any{proposalID, req.OwnerID, req.SourceDocID, req.SourceRevisionID, sourceRevisionHash, projectionHash, req.Title, req.RequestedBy, req.SourceTraceID, now, now}},
-		{"INSERT INTO publications (publication_id, owner_id, slug, title, state, latest_version_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'published', ?, ?, ?)", []any{publicationID, req.OwnerID, strings.TrimPrefix(routePath, publicVTextPrefix), req.Title, versionID, now, now}},
+		{"INSERT INTO publications (publication_id, owner_id, slug, title, state, latest_version_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'published', ?, ?, ?)", []any{publicationID, req.OwnerID, strings.TrimPrefix(routePath, publicTexturePrefix), req.Title, versionID, now, now}},
 		{"INSERT INTO publication_versions (publication_version_id, publication_id, proposal_id, source_doc_id, source_revision_id, source_revision_hash, projection_hash, content_hash, artifact_manifest_id, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", []any{versionID, publicationID, proposalID, req.SourceDocID, req.SourceRevisionID, sourceRevisionHash, projectionHash, contentHash, manifestID, now}},
 		{"INSERT INTO public_routes (route_id, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at) VALUES (?, ?, 'publication', ?, ?, 'active', ?, ?)", []any{routeID, routePath, publicationID, versionID, now, now}},
 		{"INSERT INTO artifact_manifests (artifact_manifest_id, subject_kind, subject_id, media_type, manifest_hash, manifest_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?, ?)", []any{manifestID, versionID, textMediaType, manifestHash, string(manifestJSON), now}},
@@ -680,7 +681,7 @@ func firstNonEmpty(values ...string) string {
 
 func normalizePublicationRoutePath(routePath string) string {
 	normalized := "/" + strings.TrimLeft(strings.TrimSpace(routePath), "/")
-	if normalized != "/" && strings.HasPrefix(normalized, publicVTextPrefix) {
+	if normalized != "/" && (strings.HasPrefix(normalized, publicTexturePrefix) || strings.HasPrefix(normalized, legacyPublicVTextPrefix)) {
 		normalized = strings.TrimRight(normalized, "/")
 	}
 	return normalized
@@ -689,7 +690,7 @@ func normalizePublicationRoutePath(routePath string) string {
 func slugify(raw string) string {
 	raw = strings.TrimSpace(strings.ToLower(raw))
 	if raw == "" {
-		return "vtext"
+		return "texture"
 	}
 	var b strings.Builder
 	lastDash := false
@@ -707,7 +708,7 @@ func slugify(raw string) string {
 	}
 	slug := strings.Trim(b.String(), "-")
 	if slug == "" {
-		return "vtext"
+		return "texture"
 	}
 	if len(slug) > 96 {
 		slug = strings.Trim(slug[:96], "-")

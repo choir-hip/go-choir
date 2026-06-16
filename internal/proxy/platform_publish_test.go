@@ -34,7 +34,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
 			PublicationID:        "pub-1",
 			PublicationVersionID: "pubver-1",
-			RoutePath:            "/pub/vtext/my-note-pub1",
+			RoutePath:            "/pub/texture/my-note-pub1",
 			ContentHash:          "hash",
 			SourceRevisionHash:   "source-hash",
 			State:                "published",
@@ -135,7 +135,7 @@ func TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection(t *testing
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.PublicURL != "https://choir.news/pub/vtext/my-note-pub1" {
+	if resp.PublicURL != "https://choir.news/pub/texture/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
 	}
 
@@ -206,7 +206,7 @@ func TestHandleVTextPublicationPublishesPublicURLSourceSnapshots(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
 			PublicationID:        "pub-url",
 			PublicationVersionID: "pubver-url",
-			RoutePath:            "/pub/vtext/url-note-pub1",
+			RoutePath:            "/pub/texture/url-note-pub1",
 			ContentHash:          "hash",
 			SourceRevisionHash:   "source-hash",
 			State:                "published",
@@ -343,7 +343,7 @@ func TestHandleVTextPublicationRecordsURLSnapshotImportFailureState(t *testing.T
 		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
 			PublicationID:        "pub-failed-url",
 			PublicationVersionID: "pubver-failed-url",
-			RoutePath:            "/pub/vtext/failed-url",
+			RoutePath:            "/pub/texture/failed-url",
 			SourceRevisionHash:   "source-hash",
 			State:                "published",
 		})
@@ -427,7 +427,7 @@ func TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots(t *testing.T
 		_ = json.NewEncoder(w).Encode(platform.PublishVTextResponse{
 			PublicationID:        "pub-private",
 			PublicationVersionID: "pubver-private",
-			RoutePath:            "/pub/vtext/private-note-pub",
+			RoutePath:            "/pub/texture/private-note-pub",
 			State:                "published",
 		})
 	}))

@@ -1085,7 +1085,10 @@
 
   function normalizePublicRoutePath(routePath) {
     const normalized = `/${String(routePath || '').trim().replace(/^\/+/, '')}`;
-    return normalized.startsWith('/pub/vtext/') ? normalized.replace(/\/+$/, '') : normalized;
+    if (normalized.startsWith('/pub/texture/') || normalized.startsWith('/pub/vtext/')) {
+      return normalized.replace(/\/+$/, '');
+    }
+    return normalized;
   }
 
   function windowsSnapshot() {

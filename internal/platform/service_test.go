@@ -1028,7 +1028,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if resp.State != "published" {
 		t.Fatalf("state: got %q", resp.State)
 	}
-	if !strings.HasPrefix(resp.RoutePath, "/pub/vtext/mission-note-") {
+	if !strings.HasPrefix(resp.RoutePath, "/pub/texture/mission-note-") {
 		t.Fatalf("route path: got %q", resp.RoutePath)
 	}
 	if len(resp.RetrievalSpanIDs) != 1 {
@@ -1146,6 +1146,19 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if len(search.Results) != 1 || search.Results[0].SpanID == "" {
 		t.Fatalf("search results: %#v", search.Results)
+	}
+	legacyRoutePath := "/pub/vtext/legacy-mission-note-" + shortID(resp.PublicationID)
+	now := time.Now().UTC()
+	if _, err := store.db.ExecContext(context.Background(), `INSERT INTO public_routes (route_id, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at) VALUES (?, ?, 'publication', ?, ?, 'active', ?, ?)`,
+		"route-legacy-"+shortID(resp.PublicationVersionID), legacyRoutePath, resp.PublicationID, resp.PublicationVersionID, now, now); err != nil {
+		t.Fatalf("insert legacy public route: %v", err)
+	}
+	legacyBundle, err := svc.GetPublicationBundleByRoute(context.Background(), legacyRoutePath+"/")
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute legacy vtext route: %v", err)
+	}
+	if legacyBundle.Route.Path != legacyRoutePath {
+		t.Fatalf("legacy route normalized to %q, want %q", legacyBundle.Route.Path, legacyRoutePath)
 	}
 	proposal, err := svc.SubmitPublicationProposal(context.Background(), SubmitPublicationProposalRequest{
 		PublicationID:        resp.PublicationID,

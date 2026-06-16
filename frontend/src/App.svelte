@@ -367,8 +367,12 @@
   }
 
   import { onMount } from 'svelte';
+  function isPublicTextureRoutePath(pathname) {
+    return pathname.startsWith('/pub/texture/') || pathname.startsWith('/pub/vtext/');
+  }
+
   onMount(() => {
-    publicRoutePath = window.location.pathname.startsWith('/pub/vtext/') ? window.location.pathname : '';
+    publicRoutePath = isPublicTextureRoutePath(window.location.pathname) ? window.location.pathname : '';
     universalWirePublicToken = universalWirePublicTokenFromPath(window.location.pathname);
     applyTheme(loadThemeBootCache(), false);
     if (universalWirePublicToken) {
