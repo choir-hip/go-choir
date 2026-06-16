@@ -3774,3 +3774,40 @@ Receipts:
 
 Open edge: same as C33 harness evidence above; the next productive move is a
 product/protocol edge, not more harness repair unless another proof fails.
+
+## 2026-06-16 - Problem Checkpoint: C34 Storage And Durable Identity Residue
+
+Claim: the next Texture hard-cutover edge is persistent identity residue, not
+another surface label. No runtime repair is claimed in this move.
+
+Move: read-only inventory plus Problem Documentation First checkpoint. Expected
+ΔV: no repair decrease; convert the storage/durable actor/stored-route residue
+from a broad obligation into a typed problem record with admissible evidence and
+rollback requirements.
+
+Actual ΔV: coarse V remains 2. C34 is documented as the next red-surface
+candidate slice.
+
+Receipts:
+
+- Read `docs/computer-ontology.md` before inspecting persistent-state residue.
+- `rg "vtext_|vtext_documents|vtext_revisions|vtext_document_aliases|vtext_agent_mutations|vtext_controller_checkpoints|vtext_decisions|database=vtext|CREATE DATABASE IF NOT EXISTS vtext|\\.vtext|go-choir-vtext" internal/store internal/runtime -n`
+  found the storage cluster in `internal/store/vtext.go`,
+  `internal/store/dolt_maintenance.go`, runtime metadata, and focused tests.
+- `rg "vtext:|AgentProfileVText|role=vtext|spawn_agent.*vtext|ToAgentID.*vtext|AgentID.*vtext" internal/runtime internal/store internal/types -n`
+  found durable actor/profile/addressing residue around `AgentProfileVText`,
+  `vtext_agent_revision`, and `vtext:<doc_id>`.
+- `rg '"/pub/vtext|/pub/vtext|platformd_route_path|published_vtext|published_texture|/pub/texture|route_path' internal frontend/src frontend/tests -n --glob '!frontend/dist/**'`
+  showed new publication minting on `/pub/texture/...` and explicit stored
+  `/pub/vtext/...` row compatibility in platform tests.
+- `curl -fsS 'https://choir.news/api/platform/publications/resolve?route=%2Fpub%2Fvtext%2Fprivate'`
+  returned HTTP 404; therefore this pass discovered code/test support for
+  legacy route rows but did not prove an active staging legacy row.
+- Added `2026-06-16 - C34 Problem Checkpoint: Storage And Durable Identity
+  Residue` to the paradoc with conjecture delta, protected surfaces,
+  admissible evidence, rollback path, and heresy delta.
+
+Open edge: no behavior change yet. The next admissible move is a typed C34
+behavior design or first narrow migration/compatibility slice. It must preserve
+existing computers, old actor/update lookups, and any stored public routes while
+making the current write identity Texture.

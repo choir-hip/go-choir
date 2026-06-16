@@ -2002,6 +2002,84 @@ Texture file manifestations and user-facing shortcut recognition. C32 does not
 claim storage table, database, durable actor-id, stored public-route-row, or
 Universal Wire story-field repair.
 
+## 2026-06-16 - C34 Problem Checkpoint: Storage And Durable Identity Residue
+
+Problem: after C32/C33, the remaining Texture hard-cutover residue is no longer
+primarily user-facing file manifestation. It is persistent identity. The Dolt
+document store still uses `vtext_*` table/index names, a `.vtext` workspace
+directory suffix, and `database=vtext`; durable agent/channel identity still
+uses `AgentProfileVText`, `role=vtext`, `vtext_agent_revision`, and
+`vtext:<doc_id>` addressing; public publication storage still keeps legacy
+`/pub/vtext/...` route rows readable; and Universal Wire still has edition and
+wire-reference residue such as `universal-wire/Wire.vtext` and
+`vtext_edition:<doc>/<rev>`.
+
+Observer probe:
+
+- `internal/store/vtext.go` lines 41-122 define `vtext_documents`,
+  `vtext_revisions`, `vtext_document_aliases`, `vtext_agent_mutations`,
+  `vtext_controller_checkpoints`, and `vtext_decisions`.
+- `internal/store/vtext.go` lines 193-239 derive `.vtext` workspace paths,
+  create `database=vtext`, and open Dolt with `database=vtext`; maintenance
+  also opens `database=vtext` in `internal/store/dolt_maintenance.go`.
+- `internal/runtime/tool_profiles.go` lines 15-25 define
+  `AgentProfileVText = "vtext"` and lines 288-300 canonicalize `vtext` /
+  `vtext-agent` / `document-agent` to that profile. Runtime code, tests, and
+  run metadata still address durable document actors as `vtext:<doc_id>`.
+- `internal/platform/service.go` lines 21-24 define current
+  `/pub/texture/` minting plus `legacyPublicVTextPrefix = "/pub/vtext/"`;
+  lines 204 and 259-261 mint only `/pub/texture/...` for new publications.
+- `internal/platform/service_publication_read.go` lines 13-41 resolves whatever
+  active row is present in `public_routes`, and
+  `internal/platform/service_test.go` lines 1298-1309 explicitly inserts an
+  active `/pub/vtext/...` row and proves it remains readable.
+- Staging probe
+  `curl -fsS 'https://choir.news/api/platform/publications/resolve?route=%2Fpub%2Fvtext%2Fprivate'`
+  returned HTTP 404, so this pass discovered code/test support for stored
+  legacy routes but did not prove a live staging row.
+
+Conjecture delta: C34 asks whether the next repair should be a storage/identity
+migration rather than another surface rename. The safe answer is not yet a
+blind rename: storage tables, Dolt database names, run actor ids, update_coagent
+targets, and public route rows are durable ledger keys. A correct repair must
+introduce typed aliases, migration/backfill, verifier queries, and rollback
+refs before deleting legacy reads.
+
+Protected surfaces: Dolt workspace path and database name, document table/index
+names, appagent mutation/checkpoint/decision tables, run `agent_id` /
+`agent_profile` / `agent_role` metadata, update_coagent addressing, conductor
+spawn contracts, workflow verifier expectations, public_routes rows, publication
+resolution/export, Universal Wire edition refs, and run-acceptance evidence
+labels. Mutation class for this checkpoint is `green/yellow` documentation and
+inventory only; any behavior commit that changes these surfaces is `red`.
+
+Admissible evidence class for a future behavior slice:
+
+- Problem Documentation First checkpoint (this section) before any migration.
+- Local migration tests proving old `vtext_*` storage remains readable and new
+  writes use `texture_*` or a declared compatibility view/alias.
+- Store-level round trip: create a document, revision, alias, agent mutation,
+  checkpoint, decision, and source/publication metadata before migration; open
+  all of them after migration.
+- Runtime actor round trip: old `vtext:<doc_id>` addressed worker updates still
+  wake the same Texture document, while new/current calls emit the chosen
+  Texture identity.
+- Public route proof: existing `/pub/vtext/...` rows either redirect/resolve
+  through an explicit compatibility contract or are migrated to `/pub/texture`
+  with rollback refs; new publications keep minting only `/pub/texture/...`.
+- CI, staging identity, and deployed product proof after any behavior change.
+
+Rollback path: for documentation-only C34, revert this checkpoint. For a future
+storage/identity migration, rollback must be typed before implementation:
+snapshot or Dolt commit before migration, reversible table/view/alias changes,
+public route rollback refs, and a verifier that old actor/update/public-route
+lookups still resolve after rollback.
+
+Heresy delta: discovered persistent identity residue as the next hard cutover
+edge. No runtime repair is claimed. The repair target is a typed migration plan
+that preserves existing computers and public routes while making Texture the
+current write identity.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2038,8 +2116,8 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: reusable staging
-acceptance harness drift sub-edge closed, no coarse V decrease. Discharged:
+variant (ranking function) V: current V=2; last ΔV: C34 storage/durable
+identity problem documented, no repair decrease yet. Discharged:
 retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
 `/api/texture` route and old `/api/vtext` refusal, registered-router
@@ -2126,12 +2204,10 @@ shards, full store package, frontend build, CI run `27600056369`, deploy job
 `https://choir.news` created a Markdown-backed Texture, observed `.texture`
 title/source metadata/manifest, verified Markdown export remains `.md`, and
 opened the recent Texture through Desk -> Texture at `v1`. The reusable
-Playwright spec `frontend/tests/vtext-markdown-lineage.spec.js` still carries
-old desktop/window selectors and timed out after proving the API assertions;
-that is recorded as staging acceptance harness drift, not a C32 product
-failure. Storage workspace paths/tables, durable `vtext:` actor ids, stored
+Playwright selector drift discovered during this proof is now repaired by C33.
+Storage workspace paths/tables, durable `vtext:` actor ids, stored
 `/pub/vtext/...` rows, Universal Wire edition `Wire.vtext`, Universal Wire
-deployed story-field proof, and protocol v0 remain outside this slice.
+deployed story-field proof, and protocol v0 remain outside C32.
 C33 is supported for the reusable staging acceptance harness repair:
 `frontend/tests/vtext-markdown-lineage.spec.js` now launches Texture through
 floating icon, rail, or Desk surfaces and recognizes canonical `texture` plus
@@ -2144,10 +2220,21 @@ repair, not product runtime behavior. Commit
 `27601085720`, Docs Truth Check `27601085740`, and FlakeHub publish
 `27601085759` passed. Deploy to staging was skipped because no deployed
 artifact changed.
+C34 is problem-documented only: the remaining storage/durable identity edge is
+not a simple rename. `internal/store/vtext.go` owns `vtext_*` Dolt tables,
+`.vtext` workspace derivation, and `database=vtext`; runtime actor identity and
+update routing still use `AgentProfileVText`, `vtext_agent_revision`, and
+`vtext:<doc_id>`; platform publication reads keep stored `/pub/vtext/...` route
+rows readable while new publication writes mint `/pub/texture/...`; Universal
+Wire still has `Wire.vtext` / `vtext_edition` residue. A staging probe for one
+known legacy `/pub/vtext/private` route returned 404, so live-row existence is
+not proven. No runtime repair is claimed.
 
-next move: move to the remaining storage/durable actor/stored-route residue or
-find/create a product-valid Universal Wire story-field staging proof. Keep
-protocol v0 unwritten until remaining working-surface proofs are complete.
+next move: design and document the smallest typed C34 behavior slice before
+editing runtime: likely a compatibility alias/view layer or migration harness
+for storage names and actor identity, with old-read/new-write proof and a
+rollback handle. Keep protocol v0 unwritten until remaining working-surface
+proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -2184,10 +2271,11 @@ deployed-supported: new/current Texture file manifestation defaults moved from
 deploy identity, and staging product proof are recorded. C33 repairs the
 reusable staging acceptance harness so it follows current Desk/Texture identity
 while preserving legacy selector compatibility. Next move is the remaining
-storage/durable actor/stored-route residue or a product-valid Universal Wire
-story-field staging proof. Keep storage schema, durable `vtext:` actor ids,
-backend stored-route migration, Universal Wire story-field proof, and protocol
-v0 out of C32.
+storage/durable actor/stored-route residue, now documented by C34 as requiring
+a typed migration/alias plan before behavior edits. Universal Wire story-field
+staging proof and protocol v0 remain open. Keep storage schema, durable
+`vtext:` actor ids, backend stored-route migration, Universal Wire story-field
+proof, and protocol v0 out of C32.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to
