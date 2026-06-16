@@ -390,7 +390,7 @@ func TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc(t
 		t.Fatalf("owner = %q, want universal-wire-platform", owner)
 	}
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/vtext/documents/"+doc.DocID, "", "user-universal-wire")
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/texture/documents/"+doc.DocID, "", "user-universal-wire")
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET platform wire document status = %d body=%s", w.Code, w.Body.String())
 	}
