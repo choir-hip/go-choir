@@ -2032,3 +2032,81 @@ Receipts:
 Open edge: push, monitor CI/deploy, verify staging identity, and run deployed
 product/API proof for AppChangePackage review evidence or platform publication
 provenance without manually seeding success records.
+
+## 2026-06-16 - Deployed Repair: App Package And Platform Provenance Labels
+
+Claim: deployed Choir can create AppChangePackages with Texture-named
+human-proof refs and return human-reviewable package review evidence without
+emitting retired package evidence field names.
+
+Move: push commit `24bff527b56e8f76e1ba3066dd5c71d52543120e`, monitor CI and
+deploy, verify staging build identity, and run a deployed Playwright product
+proof that creates an AppChangePackage with `texture_doc_id` /
+`texture_revision_id`, reads package detail and review evidence, and checks
+browser-public route hygiene.
+
+Expected ΔV: support C21 for deployed scope; no coarse V decrease because
+Universal Wire story projection fields, general Texture metadata keys, durable
+actor ids, storage/file suffixes, stale frontend app-launcher test labels, and
+protocol v0 remain.
+
+Actual ΔV: C21 is supported for deployed package/provenance scope. V remains 2.
+
+Conjecture delta: package review evidence and platform publication provenance
+can teach Texture at the evidence contract boundary while legacy package
+provenance refs and legacy platform rows remain explicit read compatibility.
+
+Protected surfaces: deployed AppChangePackage create/detail/review-evidence
+APIs, package provenance refs, review-evidence human-proof classification,
+platform publication provenance/citation/verifier rows, public bundle citation
+redaction, staging deploy identity, and browser-public route hygiene.
+
+Admissible evidence class: CI, deploy job, staging health identity, deployed
+browser/product proof, local focused tests, residue searches, and doccheck.
+
+Rollback path: restore old package provenance field names and platform
+publication provenance predicates if review evidence, publication, bundle reads,
+or downstream adoption proof regresses.
+
+Heresy delta: repaired for deployed new AppChangePackage and platform
+publication provenance labels. Legacy package provenance refs and legacy
+platform rows remain deletion-receipted read compatibility; Universal Wire
+story projection fields, general Texture metadata keys, durable actor ids,
+storage symbols, file suffixes, and stale app-launcher test labels remain
+discovered residue.
+
+Receipts:
+- CI run `27592592351` passed for commit
+  `24bff527b56e8f76e1ba3066dd5c71d52543120e`; deploy job `81576474144`
+  succeeded.
+- Docs Truth Check run `27592592337` passed; FlakeHub publish run
+  `27592592343` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `24bff527b56e8f76e1ba3066dd5c71d52543120e`, deployed at
+  `2026-06-16T03:44:38Z`.
+- `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-package-provenance-deployed.tmp.spec.js`
+  passed before the temporary spec was deleted.
+- The proof used public authenticated product APIs
+  `POST /api/app-change-packages`,
+  `GET /api/app-change-packages/{id}`, and
+  `GET /api/app-change-packages/{id}/review-evidence`; no browser-public
+  internal or test-only routes were used.
+- Evidence artifact:
+  `/tmp/choir-texture-package-provenance-1781581617265.json`; screenshot:
+  `/tmp/choir-texture-package-provenance-1781581617265.png`.
+- Product evidence ids: staging user
+  `playwright-state-1781581607161-v10dlq@example.com`; package
+  `pkg-texture-provenance-1781581617265`; Texture proof document ref
+  `doc-texture-package-proof-1781581617265`; Texture proof revision ref
+  `rev-texture-package-proof-1781581617265`.
+- Product observations: created package and package detail emitted
+  `texture_doc_id` and `texture_revision_id`, not `vtext_doc_id` or
+  `vtext_revision_id`; review evidence returned
+  `human_proof.state="human_reviewable"` with Texture doc/revision narrative
+  refs; review evidence contained no `VText` copy; forbidden browser-public
+  request count was zero for `/internal/*`, `/api/agent/*`, `/api/test/*`,
+  `/api/prompts`, and `/api/events`.
+
+Open edge: select the next bounded residue class among Universal Wire story
+projection metadata, general Texture metadata keys, durable actor ids,
+storage/file suffixes, stale frontend app-launcher test labels, and protocol v0.

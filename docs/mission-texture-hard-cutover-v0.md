@@ -888,6 +888,76 @@ Open edge: push the repair, monitor CI/deploy, verify staging identity, then
 run deployed product/API proof for AppChangePackage review evidence or platform
 publication provenance without manually seeding success records.
 
+## Deployed Repair: App Package And Platform Provenance Labels
+
+Mutation class: `red`, because this changed protected AppChangePackage
+human-proof evidence fields, vsuper package-publishing prompt defaults,
+platform publication provenance entities/activities/verifier predicates, and
+public bundle private-revision redaction behavior.
+
+Conjecture delta: deployed package review evidence can teach Texture at the
+evidence contract boundary while existing legacy package provenance and legacy
+platform rows remain readable only behind deletion-receipted compatibility.
+
+Protected surfaces: deployed AppChangePackage create/detail/review-evidence
+APIs, package provenance refs, review-evidence human-proof classification,
+platform publication provenance/citation/verifier rows, public bundle citation
+redaction, staging deploy identity, and browser-public route hygiene.
+
+Deployed evidence on 2026-06-16:
+
+- Pushed behavior commit:
+  `24bff527b56e8f76e1ba3066dd5c71d52543120e`
+  (`runtime: rename texture package provenance labels`), after docs
+  checkpoint `5a7e8a40`.
+- CI run `27592592351` passed. Runtime shards 0-3, non-runtime tests,
+  integration-tagged smoke, Go vet/build, Docs Truth Check job, TLA+ model
+  check, final Go gate, and Node B staging deploy job all passed. The frontend
+  build job was skipped by deploy-impact classification because this slice did
+  not change deployed frontend source.
+- Deploy job `81576474144` succeeded.
+- Docs Truth Check run `27592592337` passed; FlakeHub publish run
+  `27592592343` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `24bff527b56e8f76e1ba3066dd5c71d52543120e`, deployed at
+  `2026-06-16T03:44:38Z`.
+- Deployed Playwright proof
+  `PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/texture-package-provenance-deployed.tmp.spec.js`
+  passed before the temporary spec was deleted.
+- The proof used public authenticated product APIs
+  `POST /api/app-change-packages`,
+  `GET /api/app-change-packages/{id}`, and
+  `GET /api/app-change-packages/{id}/review-evidence`; it did not call
+  browser-public internal or test-only routes.
+- Evidence artifact:
+  `/tmp/choir-texture-package-provenance-1781581617265.json`; screenshot:
+  `/tmp/choir-texture-package-provenance-1781581617265.png`.
+- Product evidence ids: staging user
+  `playwright-state-1781581607161-v10dlq@example.com`; package
+  `pkg-texture-provenance-1781581617265`; Texture proof document ref
+  `doc-texture-package-proof-1781581617265`; Texture proof revision ref
+  `rev-texture-package-proof-1781581617265`.
+- Product observations: the created package and package detail carried
+  `provenance_refs_json.texture_doc_id` and
+  `provenance_refs_json.texture_revision_id` with no emitted
+  `vtext_doc_id` or `vtext_revision_id`; review evidence returned
+  `human_proof.state="human_reviewable"` with narrative refs containing the
+  Texture doc and revision ids; review evidence contained no `VText` copy;
+  forbidden browser-public request count was zero for `/internal/*`,
+  `/api/agent/*`, `/api/test/*`, `/api/prompts`, and `/api/events`.
+
+Rollback path: restore the old emitted package provenance field names and
+platform publication provenance predicates if AppChangePackage review evidence,
+platform publication, public bundle reads, or downstream adoption proof
+regresses.
+
+Heresy delta: repaired for deployed new AppChangePackage and platform
+publication provenance labels. Legacy package provenance refs and legacy
+platform rows remain deletion-receipted read compatibility until a migration
+or deletion receipt removes them. Universal Wire story projection fields,
+general Texture metadata keys, durable actor ids, storage symbols, and file
+suffixes remain separate discovered residue.
+
 ## Problem Checkpoint: `edit_texture` Compatibility Alias
 
 Mutation class: `green` documentation and evidence only. No runtime behavior,
@@ -1278,7 +1348,7 @@ position / live conjectures / open edges:
   `canonical_vtext_source_path`, `related_vtexts`, platform publication
   predicates, app-package `vtext_doc_id`, durable actor ids, and storage
   symbols remain broader migration surfaces.
-- C21 supported for local package/provenance scope: new AppChangePackage
+- C21 supported for deployed package/provenance scope: new AppChangePackage
   human-proof refs now emit `texture_doc_id` and `texture_revision_id`, vsuper
   package prompt defaults ask for Texture narratives, review evidence recognizes
   Texture narrative refs and keeps explicit legacy package-provenance read
@@ -1287,15 +1357,17 @@ position / live conjectures / open edges:
   `publish_texture_revision`, and `choir.platform.publish_texture.v0`.
   Focused comprehensive runtime tests, focused platform tests with direct row
   assertions, frontend build, doccheck, and residue searches pass locally.
-  Staging CI/deploy/product proof is still open. Universal Wire story
+  CI run `27592592351`, deploy job `81576474144`, staging identity for commit
+  `24bff527b56e8f76e1ba3066dd5c71d52543120e`, and deployed
+  AppChangePackage review-evidence proof all pass. Universal Wire story
   projection fields, general Texture metadata keys, durable actor ids, storage
   tables, and file suffixes are adjacent residue outside this slice.
 
-next move: push the C21 package/provenance repair, monitor CI/deploy, verify
-staging identity, and run deployed product/API proof for AppChangePackage review
-evidence or platform publication provenance without manually seeding success
-records. Keep protocol v0 unwritten until the remaining working-surface proofs
-are complete.
+next move: select the next bounded residue class among Universal Wire story
+projection metadata, general Texture metadata keys, durable actor ids,
+storage/file suffixes, stale frontend app-launcher test labels, and protocol v0.
+Keep protocol v0 unwritten until the remaining working-surface proofs are
+complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
