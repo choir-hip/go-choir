@@ -266,10 +266,10 @@ position / live conjectures / open edges:
   targets; the high-read H5 subset is empty.
 - C12 supported for frontend selector/probe scope: frontend source and tests
   no longer contain `data-vtext` selectors or `/api/vtext` product API probes.
-  Local build and a static-preview DOM probe show `data-texture-*` selectors
-  render and the old editor/toolbar selectors do not. Remaining frontend H5
-  warnings are app/file names, metadata keys, platform/internal publication
-  terms, and historical test names.
+  CI, staging deploy identity, and deployed DOM proof show `data-texture-*`
+  selectors render and the old editor/toolbar selectors do not. Remaining
+  frontend H5 warnings are app/file names, metadata keys, platform/internal
+  publication terms, and historical test names.
 
 next move: cut over backend/runtime API compatibility shims, app ids, storage,
 file names, and metadata names toward Texture, then write protocol v0 only

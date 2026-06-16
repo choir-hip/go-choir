@@ -606,6 +606,9 @@ falls from 339 to 335, and the remaining internal-symbol obligation is narrower
 but still open.
 
 Receipts:
+- pushed commit:
+  `ef0d33d039a0e1ac0216a4a0bacd41bcae61664b`
+  (`frontend: cut texture selectors to current naming`).
 - `rg -n "data-vtext|/api/vtext" frontend/src frontend/tests`: no matches.
 - `npm --prefix frontend run build`: pass, with the pre-existing
   `UniversalWireApp.svelte` unused export/CSS warnings.
@@ -623,6 +626,21 @@ Receipts:
   /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,128 warnings;
   warning counts `H1=718`, `H3=15`, `H4=3`, `H5=335`, `R3=57`.
 - `git diff --check`: pass.
+- CI run `27585451872`: success. Go vet/build, runtime shards 0-3,
+  non-runtime tests, integration-tagged smoke, TLA+ model check, Docs Truth
+  job, frontend build, final Go gate, and Node B staging deploy job passed.
+- Separate Docs Truth Check run `27585451874`: success.
+- FlakeHub publish run `27585451873`: success.
+- Staging health: `https://choir.news/health` reported proxy and sandbox
+  commit `ef0d33d039a0e1ac0216a4a0bacd41bcae61664b`, deployed at
+  `2026-06-16T00:25:41Z`.
+- Deployed DOM probe against `https://choir.news`: rendered
+  `data-texture-editor`, `data-texture-toolbar`, and
+  `data-texture-editor-area`; rendered zero `data-vtext-editor`,
+  `data-vtext-toolbar`, or `data-vtext-editor-area`; page HTML contained no
+  `/api/vtext` string.
+- Rollback ref: revert commit `ef0d33d0` to restore frontend `data-vtext-*`
+  selectors and `/api/vtext` frontend test probes.
 
 Open edge: backend/runtime route shims, app ids, filenames, storage symbols,
 metadata keys, platform/internal publication names, and final protocol v0
