@@ -1128,3 +1128,54 @@ Receipts:
 
 Open edge: push the fixture-deletion commit, monitor CI/deploy if triggered,
 record evidence, then select the next storage/API/protocol residue class.
+
+## 2026-06-16 - Deployed Public Preview Trace Fixture Deletion
+
+Claim: the unused public-preview Trace fixture deletion is now supported at the
+deployed slice, not merely local build/search scope.
+
+Move: monitor CI/deploy for commit
+`3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, verify staging build identity,
+and run a staging Playwright DOM proof of the signed-out Texture preview.
+
+Expected ΔV: support C16 at deployed evidence class; no global V decrease
+because the coarse remaining obligations are storage/file/metadata residue,
+`/pub/vtext/...` route identity, `edit_texture` alias deletion, and protocol
+v0.
+
+Actual ΔV: C16 moved from locally supported to deployed supported. Global V
+remains 2.
+
+Conjecture delta: deleting the dead fixture preserves the doctrine boundary
+that Trace is evidence/topology, not a public preview product surface, while
+leaving the live signed-out Texture preview intact.
+
+Protected surfaces: signed-out preview data module, frontend build, staging
+deployment identity, and public desktop preview.
+
+Admissible evidence class: CI, deploy identity, health build identity, and
+staging browser DOM proof.
+
+Rollback path: revert commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6` to
+restore the fixture exports if a real consumer is found.
+
+Heresy delta: repaired for deployed unused public-preview Trace fixture
+residue; no durable runtime agent-id or storage-symbol repair claimed.
+
+Receipts:
+- CI run `27589138319` passed for
+  `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`; deploy job `81566163866`
+  succeeded.
+- Separate `Docs Truth Check` run `27589138321` and FlakeHub publish run
+  `27589138328` completed successfully for the same commit.
+- `https://choir.news/health` reported proxy and sandbox commit
+  `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, deployed at
+  `2026-06-16T02:06:07Z`.
+- Staging Playwright DOM proof for `https://choir.news/` returned:
+  `textureWindows=1`, `legacyWindows=0`, `textureIcons=1`,
+  `legacyIcons=0`, `bodyMentionsTraceLayout=false`,
+  `bodyMentionsPreviewTrace=false`, and `bodyMentionsVTextActor=false`.
+
+Open edge: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
+and `edit_texture` compatibility alias deletion. Protocol v0 remains last.

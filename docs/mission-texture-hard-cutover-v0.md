@@ -225,7 +225,7 @@ symbol repair claimed.
 
 Remaining scope: storage schema/workspace/file suffixes, metadata keys,
 `/pub/vtext/...` route identity, `edit_texture` compatibility alias deletion,
-public preview Trace fixture agent ids, and protocol v0.
+and protocol v0.
 
 ## Problem Checkpoint: Public Preview Trace Fixture Residue
 
@@ -262,7 +262,7 @@ Next behavior/source slice design:
 - prove with frontend build and residue searches that no public-preview Trace
   fixture actor id remains.
 
-## Local Repair: Public Preview Trace Fixture Deletion
+## Repair: Public Preview Trace Fixture Deletion
 
 Mutation class: `yellow`, because this deletes unused frontend fixture exports
 and changes future optimization/documentation pressure without changing a live
@@ -281,9 +281,24 @@ Local evidence on 2026-06-16:
 - `rg -n "previewTraceSnapshot|previewTraceTrajectories|preview-trace|Trace layout|agent_id: 'vtext'|to_agent_id: 'vtext'|from_agent_id: 'vtext'" frontend/src/lib/public-preview-data.ts frontend/src -g '!frontend/dist'`
   returned no hits.
 
+Deployed evidence on 2026-06-16:
+
+- Commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6` passed CI run
+  `27589138319`; deploy job `81566163866` succeeded.
+- Separate `Docs Truth Check` run `27589138321` and FlakeHub publish run
+  `27589138328` completed successfully for the same commit.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, deployed at
+  `2026-06-16T02:06:07Z`.
+- Staging Playwright DOM proof on `https://choir.news/` found one
+  `data-app-id="texture"` window, zero `data-app-id="vtext"` windows, one
+  `data-desktop-icon-id="texture"` icon, zero legacy `vtext` desktop icons,
+  and no visible "Trace layout", `preview-trace`, or public-preview `vtext`
+  actor text.
+
 Rollback path: restore the deleted fixture exports if a real consumer is found.
 
-Heresy delta: repaired locally for unused public-preview Trace fixture residue;
+Heresy delta: repaired for deployed unused public-preview Trace fixture residue;
 no durable runtime agent-id or storage-symbol repair claimed.
 
 ## Non-Goals
@@ -510,16 +525,19 @@ position / live conjectures / open edges:
   `data-app-id="texture"` and legacy `app=vtext` compatibility. Storage
   table/workspace/file and metadata symbols are much broader and require
   separate migration design.
-- C16 locally supported pending CI/deploy: the unused public-preview Trace
-  fixture exports were deleted instead of renamed. Frontend build passes and
-  residue search no longer finds `previewTraceSnapshot`,
+- C16 supported for deployed public-preview fixture scope: the unused
+  public-preview Trace fixture exports were deleted instead of renamed. Frontend
+  build passes, residue search no longer finds `previewTraceSnapshot`,
   `previewTraceTrajectories`, `preview-trace`, "Trace layout", or
-  public-preview `vtext` actor ids in `frontend/src`.
+  public-preview `vtext` actor ids in `frontend/src`, CI/deploy passed for
+  commit `3037e1f92971e7324a8bb8c3e356474e4eee2cc6`, and staging DOM proof
+  shows the signed-out Texture preview still renders without the deleted Trace
+  fixture language.
 
-next move: push the fixture-deletion commit, monitor CI/deploy if triggered,
-record evidence, then return to storage schema/workspace/file suffixes,
-metadata keys, `/pub/vtext/...` route identity, `edit_texture` compatibility
-alias deletion, and protocol v0.
+next move: select the next bounded residue class among storage
+schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
+and `edit_texture` compatibility alias deletion. Keep protocol v0 unwritten
+until those remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
