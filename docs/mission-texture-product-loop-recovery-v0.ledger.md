@@ -428,3 +428,151 @@ mission. Do not claim promotion-level or export-level acceptance from these
 records. The next mission should either teach run acceptance about
 Texture-created researcher evidence or repair the live worker delegation
 completion path.
+
+## 2026-06-16 - Settlement Revoked After Prompt-As-V0 And Parent/Child Review (V 0 -> 8)
+
+Move: reopen the mission after owner manual QA falsified the claimed settlement
+and a read-only inventory identified the concrete prompt/tool/control surfaces
+that preserve the wrong behavior.
+
+Owner-observed failure:
+
+- prompt-bar text appears as separate `PROMPT` chrome in Texture instead of as
+  the canonical `V0` body;
+- `V0` body can be blank while the prompt exists only as metadata/UI chrome;
+- `V1` can be a generic one-shot answer or working note;
+- Texture can stop at `V1` with no later researcher/super evidence and no
+  `V2+` revision;
+- Chyron can say a run completed while the artifact loop remains owner-visibly
+  incomplete;
+- parent/child terminology and control assumptions remain in live code/tests.
+
+Read-only inventory evidence:
+
+- `internal/runtime/runtime.go` creates blank prompt-bar revisions by setting
+  `userRevisionContent = ""` when `input_source == "prompt_bar"` and marks
+  `prompt_bar_instruction_revision=true`;
+- `internal/runtime/texture_agent_revision.go` tells Texture to treat
+  prompt-bar intake as "intentionally blank canonical document state" and to
+  use the owner prompt as instruction/context, not canonical prose;
+- `internal/runtime/texture.go` exposes `intake_prompt` from revision metadata;
+- `frontend/src/lib/TextureEditor.svelte` renders
+  `[data-texture-intake]` / `PROMPT` above the document body;
+- `internal/runtime/runtime_test.go` and
+  `internal/runtime/texture_prompt_unit_test.go` assert blank `V0` /
+  prompt-band semantics, so tests protect the wrong behavior;
+- `internal/runtime/runtime.go` passes `patch_texture` and `rewrite_texture` to
+  `WithTerminalToolSuccesses`, so a successful Texture write can end the run
+  before Texture opens researcher/super, records a decision, or explicitly
+  settles no-worker;
+- `internal/runtime/tools_evidence.go` registers `save_evidence`,
+  `read_evidence`, `list_evidence`, `get_run_memory_entry`, and
+  `verify_model_capability` as one bundle, and
+  `internal/runtime/tool_profiles.go` gives that bundle to Texture through
+  `AllowEvidenceTools=true`;
+- `get_run_memory_entry` is exact run-memory retrieval after compaction, not
+  ordinary evidence gathering;
+- `verify_model_capability` is a provider/model diagnostic verifier tool and
+  does not belong in Texture's default authoring affordance;
+- parent/child live control surfaces remain: `StartChildRun`, `ParentRunID`,
+  `parent_loop_id`, `parent_id`, `CountActiveChildRuns`,
+  `ListActiveChildRuns`, `ListChildRuns`, `ensureParentChildChannels`,
+  `PostChildResult`, `WaitForChildResult`, researcher target fallback through
+  `ParentRunID`, Trace/verifier inference from run ancestry, and cancellation /
+  status / prompt language that treats spawned work as children.
+
+Expected ΔV: 0 -> 8 by revoking the false settlement and turning owner QA plus
+read-only code inventory into the next source program. This is an increase in
+variant because the prior settlement was wrong.
+
+Actual ΔV: V is now 8, status `open_handoff`. No behavior changed. This is a
+docs-only problem checkpoint under Problem Documentation First.
+
+Observer shift: the prior repair optimized for "owner-legible intake" and
+accepted a separate prompt surface. The correct invariant is stricter: the
+owner prompt is canonical Texture `V0`; prompt chrome is a rejected compromise.
+
+Heresy delta:
+
+- discovered: blank prompt-bar `V0`, prompt-band product split, terminal
+  Texture write tools, broad Texture evidence/model-diagnostic tool exposure,
+  and parent/child control residue;
+- introduced/preserved by prior repair: prompt-band UI/API/tests and tests that
+  assert blank `V0`;
+- repaired: none in this docs-only checkpoint.
+
+Next implementation agent guidance:
+
+- delete `prompt_bar_instruction_revision`, `intake_prompt`, and prompt-band
+  UI/tests;
+- make prompt-bar-created `V0` content exactly equal the owner prompt;
+- keep `seed_prompt` only as provenance if useful;
+- remove `patch_texture` and `rewrite_texture` from terminal Texture tool
+  successes while preserving one canonical write per run;
+- split Texture's tool inventory so researcher-owned evidence and
+  `verify_model_capability` are not exposed to Texture by default;
+- replace parent/child live control semantics with trajectory/channel/work-item
+  and requester/provenance semantics. Do not rename parent/child to new words
+  while preserving cascading ownership/cancellation;
+- update tests before claiming repair, including patch-then-delegate and
+  same-turn write-plus-delegate paths, Texture-created researcher/super
+  evidence, and `V2+` from that evidence;
+- prove on staging with browser/product-path evidence before settlement.
+
+## 2026-06-16 - Reopened Mission Repairs Landed Locally (V 8 -> 5)
+
+Move: continue the Claude Code session after rate limit and finish the reopened
+mission repairs without compatibility. Completed prompt-as-V0 deletion, Texture
+write-loop semantics, tool-inventory trim, parent/child coagent cutover, and
+test/runtime shard verification.
+
+What changed:
+
+- deleted `prompt_bar_instruction_revision`, `intake_prompt`, and the Texture
+  prompt-band UI; prompt-bar-created `V0` content is now the exact owner prompt;
+- removed `patch_texture` / `rewrite_texture` from Texture terminal-tool
+  successes; delegation/handoff tools remain terminal;
+- split evidence / run-memory / model-diagnostic registries; Texture keeps only
+  `get_run_memory_entry`, not researcher evidence tools or
+  `verify_model_capability`;
+- replaced parent/child control with coagent/requester provenance:
+  `StartCoagentRun`, `RequestedByRunID`, `requested_by` metadata/API fields,
+  deleted dead child-channel helpers and `parent_child_channel_test.go`, updated
+  all runtime tests accordingly;
+- removed `WaitForChildResult` assertions from failure-isolation tests because
+  parent/child result-channel waiting is no longer part of the runtime contract.
+
+Expected ΔV: 8 -> 5 by satisfying local variant steps 2-5 and 8-9 while leaving
+deployed browser/product-path proof open.
+
+Actual ΔV: 8 -> 5. Focused receipts:
+
+- `nix develop -c go test ./internal/runtime -run 'TestInitialTextureToolChoice|TestPromptBarTexture|TestTexture|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture|TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn'`
+  passed;
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn|TestStartCoagentRunCompletesSpawnedWorkItem|TestSpawnCreatesChildTask|TestFailureIsolation_ParentCanSpawnReplacementWorker'`
+  passed;
+- `nix develop -c scripts/go-test-runtime-shards` passed;
+- `nix develop -c go test ./internal/platform ./internal/store ./cmd/doccheck`
+  passed;
+- `npm run build` from `frontend/` passed with pre-existing chunk-size and
+  `UniversalWireApp.svelte` warnings;
+- `git diff --check` passed;
+- `git grep -n -i vtext -- ':!docs/**'` returned no non-doc hits;
+- live non-test `StartChildRun` / `ParentRunID` / `parent_loop_id` residue grep
+  returned no hits.
+
+Observer shift: the Claude session had already completed Phases 1-3 and most of
+Phase 4 live-code work before rate limit; the remaining blocker was test cutover
+and shard verification, not new product semantics.
+
+Open edge: no commit, CI, Node B deploy identity, or deployed browser/product-
+path proof yet. Staging must show exact prompt-as-V0 (no prompt band), Texture-
+created worker evidence, and V2+ from that evidence before settlement.
+
+Residual note for follow-up: Texture may later need read-only access to
+researcher-persisted evidence handles, but that is explicitly deferred; current
+trim keeps only run-memory retrieval.
+
+Next move: commit when owner requests, push, monitor CI/deploy, run deployed
+acceptance on `https://choir.news`, then reevaluate whether Texture should gain
+narrow evidence-read affordances for already-persisted researcher findings.

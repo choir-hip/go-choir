@@ -210,7 +210,7 @@ func TestChildRunUsesRunMemory(t *testing.T) {
 	}
 	waitForRunTerminalState(t, rt, parent.RunID, "user-alice", 5*time.Second)
 
-	child, err := rt.StartChildRun(context.Background(), parent.RunID, "child objective", "user-alice", map[string]any{
+	child, err := rt.StartCoagentRun(context.Background(), parent.RunID, "child objective", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileCoSuper,
 	})
 	if err != nil {

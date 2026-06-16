@@ -47,6 +47,13 @@ ordinary ingress target for user or source prompts.
    updates, trace moments, search results, and worker evidence are inputs to
    Texture, not canonical text until Texture incorporates them into a revision.
 
+   Prompt-bar creation is not an exception. The owner's submitted prompt is the
+   canonical `V0` Texture revision. It must not be moved into hidden metadata,
+   a separate prompt band, or any other product chrome while `V0` remains blank.
+   Metadata such as `seed_prompt` may preserve provenance, but it must not be
+   the product display mechanism or the agent's substitute for the canonical
+   starting version.
+
 2. **Texture is the control plane for document and artifact work.** Conductor may
    classify exogenous input and create or open the target Texture/context, but it
    must not send ordinary prompt-bar, sourcecycled/news, article, mission, or
@@ -65,6 +72,12 @@ ordinary ingress target for user or source prompts.
    verifier, or other semantic appagent call. Deterministic app protocol
    handoffs, such as persisting an email draft for owner approval, must be
    explicit, narrow, and documented separately.
+
+   Texture write tools must also not become premature run terminators. A
+   successful Texture write stores one canonical revision; it should not prevent
+   the same Texture run from making the next legitimate coagent decision, such
+   as opening researcher work, requesting super execution, recording an
+   off-document decision, requesting an email handoff, or ending intentionally.
 
 5. **Required tool choice is not policy.** Exact next-tool enforcement is
    allowed only for mechanical tool protocols whose second call is part of the
@@ -134,10 +147,18 @@ Runtime may not:
   directly to super before Texture has created or opened the controlling
   artifact context;
 - require Texture to ask researcher/super/verifier after storing a revision;
+- terminate Texture merely because a `patch_texture`/`rewrite_texture` call
+  succeeded when unresolved coagent, decision, or handoff obligations remain;
 - silently satisfy Texture obligations through another agent's route;
 - mark exact internal role sequence as acceptance unless that sequence is the
   product requirement;
 - hide role-specific control policy in generic tool-loop continuation code.
+
+Texture tool inventory should match Texture authority. Researcher-owned
+evidence gathering and provider/model diagnostics should not be bundled into
+Texture simply because they share an implementation registry. Split memory,
+evidence, and diagnostic affordances when needed instead of giving Texture a
+large generic tool bag.
 
 ## Regression From M3
 

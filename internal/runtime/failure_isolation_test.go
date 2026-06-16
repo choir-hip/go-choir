@@ -115,7 +115,7 @@ func TestFailureIsolation_FailedWorkerSendsErrorToParent(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn a child that will fail.
-	child, err := rt.StartChildRun(ctx, parentID, "execute invalid command", "user-alice", nil)
+	child, err := rt.StartCoagentRun(ctx, parentID, "execute invalid command", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestFailureIsolation_ParentContinuesRunning(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn a child that will fail.
-	child, err := rt.StartChildRun(ctx, parentID, "failing objective", "user-alice", nil)
+	child, err := rt.StartCoagentRun(ctx, parentID, "failing objective", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestFailureIsolation_ParentContinuesRunning(t *testing.T) {
 	waitForTaskState(t, rt, child.RunID, 10*time.Second)
 
 	// Verify the parent is still functional by spawning another child.
-	child2, err := rt.StartChildRun(ctx, parentID, "second objective after failure", "user-alice", nil)
+	child2, err := rt.StartCoagentRun(ctx, parentID, "second objective after failure", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn second child after first failure: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestFailureIsolation_ErrorIncludesRunIDAndMessage(t *testing.T) {
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
-	child, err := rt.StartChildRun(ctx, parentID, "task with specific error", "user-alice", nil)
+	child, err := rt.StartCoagentRun(ctx, parentID, "task with specific error", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child: %v", err)
 	}
@@ -223,8 +223,8 @@ func TestFailureIsolation_ErrorIncludesRunIDAndMessage(t *testing.T) {
 		t.Errorf("error field: got %q, want to contain 'connection refused'", task.Error)
 	}
 
-	if task.Metadata["parent_id"] != parentID {
-		t.Errorf("parent_id metadata: got %v, want %q", task.Metadata["parent_id"], parentID)
+	if task.Metadata["requested_by"] != parentID {
+		t.Errorf("requested_by metadata: got %v, want %q", task.Metadata["requested_by"], parentID)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestFailureIsolation_ParentCanSpawnReplacementWorker(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn a child that will fail.
-	child1, err := rt.StartChildRun(ctx, parentID, "fail: first attempt", "user-alice", nil)
+	child1, err := rt.StartCoagentRun(ctx, parentID, "fail: first attempt", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn first child: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestFailureIsolation_ParentCanSpawnReplacementWorker(t *testing.T) {
 	}
 
 	// Spawn a replacement worker that will succeed.
-	child2, err := rt.StartChildRun(ctx, parentID, "replacement attempt", "user-alice", nil)
+	child2, err := rt.StartCoagentRun(ctx, parentID, "replacement attempt", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn replacement child: %v", err)
 	}
@@ -269,28 +269,14 @@ func TestFailureIsolation_ParentCanSpawnReplacementWorker(t *testing.T) {
 
 	// Verify replacement produced a result.
 	if task2.Result == "" {
-		t.Error("replacement child should have a result")
+		t.Error("replacement coagent should have a result")
 	}
 
-	// Wait for the replacement result notification instead of assuming it is
-	// already visible the moment the child state flips to completed.
-	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	resultMsgs, _, err := rt.WaitForChildResult(waitCtx, parentID, child2.RunID, "result")
-	if err != nil {
-		t.Fatalf("wait for replacement result: %v", err)
-	}
-	if len(resultMsgs) == 0 {
-		t.Fatal("parent should have received result from replacement child")
-	}
-
-	// The failure notification should also be present for the first child.
-	errorMsgs, _, err := rt.WaitForChildResult(ctx, parentID, child1.RunID, "error")
-	if err != nil {
-		t.Fatalf("wait for first child error: %v", err)
-	}
-	if len(errorMsgs) == 0 {
-		t.Fatal("parent should have received error from first child")
+	// Coagent runs no longer use parent/child result-channel waiting. The
+	// requester can spawn a replacement after a failed coagent and inspect the
+	// durable run record directly.
+	if task1.Error == "" {
+		t.Error("failed coagent should record an error")
 	}
 }
 
@@ -308,9 +294,9 @@ func TestFailureIsolation_SiblingWorkersUnaffected(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn 3 children: 2 succeed, 1 fails.
-	succeed1, _ := rt.StartChildRun(ctx, parentID, "analyze data", "user-alice", nil)
-	fail, _ := rt.StartChildRun(ctx, parentID, "fail this task on purpose", "user-alice", nil)
-	succeed2, _ := rt.StartChildRun(ctx, parentID, "summarize results", "user-alice", nil)
+	succeed1, _ := rt.StartCoagentRun(ctx, parentID, "analyze data", "user-alice", nil)
+	fail, _ := rt.StartCoagentRun(ctx, parentID, "fail this task on purpose", "user-alice", nil)
+	succeed2, _ := rt.StartCoagentRun(ctx, parentID, "summarize results", "user-alice", nil)
 
 	// Wait for all to reach terminal state.
 	taskS1 := waitForTaskState(t, rt, succeed1.RunID, 10*time.Second)
@@ -357,7 +343,7 @@ func TestFailureIsolation_RuntimeHealthRemainsReady(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn a failing child.
-	child, _ := rt.StartChildRun(ctx, parentID, "fail task", "user-alice", nil)
+	child, _ := rt.StartCoagentRun(ctx, parentID, "fail task", "user-alice", nil)
 	waitForTaskState(t, rt, child.RunID, 10*time.Second)
 
 	// Check runtime health.
@@ -367,7 +353,7 @@ func TestFailureIsolation_RuntimeHealthRemainsReady(t *testing.T) {
 	}
 
 	// The runtime should still be able to accept new runs.
-	child2, err := rt.StartChildRun(ctx, parentID, "post-failure task", "user-alice", nil)
+	child2, err := rt.StartCoagentRun(ctx, parentID, "post-failure task", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("runtime should accept new runs after worker failure: %v", err)
 	}
@@ -391,7 +377,7 @@ func TestFailureIsolation_TaskFailedEventEmitted(t *testing.T) {
 	defer bus.Unsubscribe(ch)
 
 	// Spawn a failing child.
-	child, _ := rt.StartChildRun(ctx, parentID, "fail for event test", "user-alice", nil)
+	child, _ := rt.StartCoagentRun(ctx, parentID, "fail for event test", "user-alice", nil)
 	waitForTaskState(t, rt, child.RunID, 10*time.Second)
 
 	// Check for loop.failed event.
@@ -434,7 +420,7 @@ func TestFailureIsolation_ChildRunUpdatedOnFailure(t *testing.T) {
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
-	child, _ := rt.StartChildRun(ctx, parentID, "child fail task", "user-alice", nil)
+	child, _ := rt.StartCoagentRun(ctx, parentID, "child fail task", "user-alice", nil)
 	waitForTaskState(t, rt, child.RunID, 10*time.Second)
 
 	task, err := rt.Store().GetRun(ctx, child.RunID)
@@ -448,8 +434,8 @@ func TestFailureIsolation_ChildRunUpdatedOnFailure(t *testing.T) {
 	if task.Error == "" {
 		t.Error("error should not be empty")
 	}
-	if task.Metadata["parent_id"] != parentID {
-		t.Errorf("parent_id metadata: got %v, want %q", task.Metadata["parent_id"], parentID)
+	if task.Metadata["requested_by"] != parentID {
+		t.Errorf("requested_by metadata: got %v, want %q", task.Metadata["requested_by"], parentID)
 	}
 }
 
@@ -465,7 +451,7 @@ func TestFailureIsolation_APIStatusReturnsFailedState(t *testing.T) {
 	rt, handler, parentID := failureIsolationSetup(t, provider)
 
 	// Spawn a child that will fail.
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"execute invalid command"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"execute invalid command"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleSpawn(w, req)
@@ -514,7 +500,7 @@ func TestFailureIsolation_HealthEndpointRemainsHealthy(t *testing.T) {
 	_, handler, parentID := failureIsolationSetup(t, provider)
 
 	// Spawn a failing child via API.
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"fail for health"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"fail for health"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleSpawn(w, req)
@@ -556,7 +542,7 @@ func TestFailureIsolation_MultipleFailuresDontCrashRuntime(t *testing.T) {
 
 	// Spawn 5 failing children in sequence.
 	for i := 0; i < 5; i++ {
-		child, err := rt.StartChildRun(ctx, parentID, fmt.Sprintf("failure %d", i), "user-alice", nil)
+		child, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("failure %d", i), "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -601,7 +587,7 @@ func TestFailureIsolation_ConcurrentFailuresAndSuccesses(t *testing.T) {
 	}
 
 	for i, obj := range objectives {
-		rec, err := rt.StartChildRun(ctx, parentID, obj, "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, obj, "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -697,7 +683,7 @@ func TestFailureIsolation_ParentResponsiveAfterFailure(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn and wait for a failing child.
-	child1, _ := rt.StartChildRun(ctx, parentID, "fail task", "user-alice", nil)
+	child1, _ := rt.StartCoagentRun(ctx, parentID, "fail task", "user-alice", nil)
 	waitForTaskState(t, rt, child1.RunID, 10*time.Second)
 
 	// Parent should still be responsive: check channel read works and the
@@ -720,7 +706,7 @@ func TestFailureIsolation_ParentResponsiveAfterFailure(t *testing.T) {
 	}
 
 	// Parent should be able to spawn a new child.
-	child2, err := rt.StartChildRun(ctx, parentID, "post-failure task", "user-alice", nil)
+	child2, err := rt.StartCoagentRun(ctx, parentID, "post-failure task", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn after failure: %v", err)
 	}
@@ -755,7 +741,7 @@ func TestCancellation_CancelRunningTask(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn a child with a long-running task.
-	child, err := rt.StartChildRun(ctx, parentID, "long running analysis", "user-alice", nil)
+	child, err := rt.StartCoagentRun(ctx, parentID, "long running analysis", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child: %v", err)
 	}
@@ -796,7 +782,7 @@ func TestCancellation_CancelledEventEmitted(t *testing.T) {
 	ch := bus.SubscribeWithBuffer(128)
 	defer bus.Unsubscribe(ch)
 
-	child, _ := rt.StartChildRun(ctx, parentID, "cancellable task", "user-alice", nil)
+	child, _ := rt.StartCoagentRun(ctx, parentID, "cancellable task", "user-alice", nil)
 	time.Sleep(100 * time.Millisecond)
 
 	// Cancel the task.
@@ -830,7 +816,7 @@ func TestCancellation_CancelledTaskNoResult(t *testing.T) {
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
-	child, _ := rt.StartChildRun(ctx, parentID, "task to cancel", "user-alice", nil)
+	child, _ := rt.StartCoagentRun(ctx, parentID, "task to cancel", "user-alice", nil)
 	time.Sleep(100 * time.Millisecond)
 
 	err := rt.CancelRun(ctx, child.RunID, "user-alice")
@@ -872,7 +858,7 @@ func TestCancellation_CancelOtherUsersTask(t *testing.T) {
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
-	child, _ := rt.StartChildRun(ctx, parentID, "task owned by alice", "user-alice", nil)
+	child, _ := rt.StartCoagentRun(ctx, parentID, "task owned by alice", "user-alice", nil)
 	time.Sleep(100 * time.Millisecond)
 
 	// Try to cancel as a different user.
@@ -890,9 +876,9 @@ func TestCancellation_SiblingUnaffectedByCancel(t *testing.T) {
 	ctx := context.Background()
 
 	// Spawn 3 children.
-	child1, _ := rt.StartChildRun(ctx, parentID, "task 1", "user-alice", nil)
-	child2, _ := rt.StartChildRun(ctx, parentID, "task 2", "user-alice", nil)
-	child3, _ := rt.StartChildRun(ctx, parentID, "task 3", "user-alice", nil)
+	child1, _ := rt.StartCoagentRun(ctx, parentID, "task 1", "user-alice", nil)
+	child2, _ := rt.StartCoagentRun(ctx, parentID, "task 2", "user-alice", nil)
+	child3, _ := rt.StartCoagentRun(ctx, parentID, "task 3", "user-alice", nil)
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -936,7 +922,7 @@ func TestCancellation_CancelViaAPI(t *testing.T) {
 	_, handler, parentID := failureIsolationSetup(t, provider)
 
 	// Spawn a child via API.
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"cancellable via api"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"cancellable via api"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleSpawn(w, req)
@@ -1017,7 +1003,7 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 		Prompt:    "task that will be interrupted",
 		CreatedAt: now,
 		UpdatedAt: now,
-		Metadata:  map[string]any{"parent_id": "parent-recovery-test"},
+		Metadata:  map[string]any{"requested_by": "parent-recovery-test"},
 	}
 	if err := s1.CreateRun(context.Background(), child); err != nil {
 		t.Fatalf("create child: %v", err)

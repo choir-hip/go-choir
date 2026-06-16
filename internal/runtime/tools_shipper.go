@@ -106,12 +106,12 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			}
 			runID := stringFromToolContext(ctx, toolCtxRunID)
 			if profile == AgentProfileVSuper && rt != nil && runID != "" {
-				if childPackage, found, err := rt.latestTrajectoryCoSuperAppChangePackage(ctx, ctxRunRecord(ctx)); err != nil {
+				if reusedPackage, found, err := rt.latestTrajectoryCoSuperAppChangePackage(ctx, ctxRunRecord(ctx)); err != nil {
 					return "", err
 				} else if found {
-					childPackage["parent_loop_id"] = runID
-					childPackage["reused_child_package"] = true
-					return toolResultJSON(childPackage)
+					reusedPackage["requested_by_run_id"] = runID
+					reusedPackage["reused_coagent_package"] = true
+					return toolResultJSON(reusedPackage)
 				}
 			}
 			baseCWD := effectiveToolCWD(ctx, cwd)

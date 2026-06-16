@@ -52,9 +52,9 @@ func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
 
 	// A spawned run joins the same trajectory: same ID, no second record,
 	// and the original kind survives even though the spawned profile
-	// differs. (StartChildRun is the pre-M3 spawn API; the provenance edge
+	// differs. (StartCoagentRun is the pre-M3 spawn API; the provenance edge
 	// it records is spawned_by, not a control relationship.)
-	spawned, err := rt.StartChildRun(ctx, root.RunID, "research the topic", "user-alice", map[string]any{
+	spawned, err := rt.StartCoagentRun(ctx, root.RunID, "research the topic", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 	})

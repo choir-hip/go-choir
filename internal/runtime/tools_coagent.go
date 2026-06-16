@@ -184,7 +184,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 					"handoff_kind":         string(kind),
 				})
 			}
-			child, err := rt.StartChildRun(ctx, parentID, in.Objective, ownerID, constraints)
+			child, err := rt.StartCoagentRun(ctx, parentID, in.Objective, ownerID, constraints)
 			if err != nil {
 				return "", err
 			}
@@ -339,9 +339,9 @@ func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *
 		"input_origin":                   textureInputOriginForCaller(req.CallerProfile),
 		"texture_version_stage":          "pre_article_brief",
 		"created_from":                   canonicalAgentProfile(req.CallerProfile),
-		"parent_loop_id":                 parentRec.RunID,
-		"parent_agent_id":                strings.TrimSpace(parentRec.AgentID),
-		"parent_channel_id":              strings.TrimSpace(parentRec.ChannelID),
+		"requested_by_run_id":            parentRec.RunID,
+		"requested_by_agent_id":          strings.TrimSpace(parentRec.AgentID),
+		"requested_by_channel_id":        strings.TrimSpace(parentRec.ChannelID),
 		"requested_channel_id":           strings.TrimSpace(req.ChannelID),
 		"seed_prompt":                    strings.TrimSpace(req.Objective),
 		"source_network_cycle_id":        firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id")),

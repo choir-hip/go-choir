@@ -60,7 +60,7 @@ func (rt *Runtime) stampAndMintTrajectory(ctx context.Context, rec *types.RunRec
 	if channelID := strings.TrimSpace(rec.ChannelID); channelID != "" {
 		subjectRefs["channel_id"] = channelID
 	}
-	if rec.RunID == trajectoryID || strings.TrimSpace(rec.ParentRunID) == "" {
+	if rec.RunID == trajectoryID || strings.TrimSpace(rec.RequestedByRunID) == "" {
 		subjectRefs["root_loop_id"] = rec.RunID
 	}
 	if processorKey := metadataStringValue(rec.Metadata, runMetadataProcessorKey); processorKey != "" {

@@ -54,7 +54,7 @@ type Runtime struct {
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
 	superRequestMu        sync.Mutex
-	childSpawnMu          sync.Mutex
+	coagentSpawnMu          sync.Mutex
 	workerRequestMu       sync.Mutex
 	workerRequests        map[string]string
 	conductorRouteMu      sync.Mutex
@@ -335,7 +335,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // assigned open trajectory work are swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
-	rt.sweepPassivatedSpawnedChildWork(ctx)
+	rt.sweepPassivatedSpawnedCoagentWork(ctx)
 	rt.sweepPendingUpdateActors(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
 	rt.reconcileAllTextureDocuments(ctx)
@@ -388,7 +388,7 @@ func wireLifecycleSummary(rec *types.RunRecord) string {
 	if rec == nil {
 		return ""
 	}
-	return fmt.Sprintf("run=%s profile=%s parent=%s channel=%s processor_key=%s state=%s", rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), strings.TrimSpace(rec.ParentRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
+	return fmt.Sprintf("run=%s profile=%s requested_by=%s channel=%s processor_key=%s state=%s", rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), strings.TrimSpace(rec.RequestedByRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
 }
 
 func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
@@ -532,54 +532,57 @@ func (rt *Runtime) GetRun(ctx context.Context, runID, ownerID string) (*types.Ru
 	return &rec, nil
 }
 
-// StartChildRun creates a child run linked to a parent run. It validates that
-// the parent exists, creates a runtime record, and begins execution in a
-// goroutine.
+// StartCoagentRun creates a coagent run and records the requesting run as
+// provenance. It validates that the requesting run exists, creates a runtime
+// record, and begins execution in a goroutine. This is not parent/child run
+// control: the new run is not owned, awaited, or cancelled by the requester;
+// lifecycle stays trajectory/work-item scoped and coordination is via addressed
+// channel updates and requester provenance.
 //
-// The child run inherits the owner from the ownerID parameter (derived from
+// The coagent run inherits the owner from the ownerID parameter (derived from
 // auth context). Constraints are stored in the run metadata for use during
 // execution.
-func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, ownerID string, constraints map[string]any) (*types.RunRecord, error) {
-	// Validate that the parent run exists.
-	parentRec, err := rt.store.GetRun(ctx, parentID)
+func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objective, ownerID string, constraints map[string]any) (*types.RunRecord, error) {
+	// Validate that the requesting run exists.
+	requesterRec, err := rt.store.GetRun(ctx, requesterRunID)
 	if err != nil {
 		if err == store.ErrNotFound {
-			return nil, fmt.Errorf("parent run not found: %s", parentID)
+			return nil, fmt.Errorf("requester run not found: %s", requesterRunID)
 		}
-		return nil, fmt.Errorf("lookup parent run: %w", err)
+		return nil, fmt.Errorf("lookup requester run: %w", err)
 	}
 
 	runID := uuid.New().String()
 
-	// Build metadata from constraints and parent reference.
+	// Build metadata from constraints and requester provenance.
 	metadata := map[string]any{
-		"spawned_by": ownerID,
-		"parent_id":  parentID,
+		"spawned_by":   ownerID,
+		"requested_by": requesterRunID,
 	}
 	for k, v := range constraints {
 		metadata[k] = v
 	}
-	inheritWorkerRepoMetadata(metadata, &parentRec)
+	inheritWorkerRepoMetadata(metadata, &requesterRec)
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
 	}
-	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
+	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 
-	if rt.childSpawnBudgetApplies(&parentRec) {
-		childProfile := canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile))
-		if childProfile == "" {
-			childProfile = canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentRole))
+	if rt.coagentSpawnBudgetApplies(&requesterRec) {
+		coagentProfile := canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile))
+		if coagentProfile == "" {
+			coagentProfile = canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentRole))
 		}
 		slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
-		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && childProfile == AgentProfileCoSuper {
-			return nil, fmt.Errorf("vsuper co-super child requires co_super_slot to be implementation or verifier")
+		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == AgentProfileCoSuper {
+			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot to be implementation or verifier")
 		}
-		if childProfile == AgentProfileCoSuper && slot == "" {
-			return nil, fmt.Errorf("vsuper co-super child requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
+		if coagentProfile == AgentProfileCoSuper && slot == "" {
+			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
 		}
-		rt.childSpawnMu.Lock()
-		defer rt.childSpawnMu.Unlock()
-		if slot != "" && childProfile == AgentProfileCoSuper {
+		rt.coagentSpawnMu.Lock()
+		defer rt.coagentSpawnMu.Unlock()
+		if slot != "" && coagentProfile == AgentProfileCoSuper {
 			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
 				return nil, err
@@ -590,24 +593,24 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 				return &existing, nil
 			}
 		}
-		if err := rt.enforceCoSuperSlotBudget(ctx, &parentRec); err != nil {
+		if err := rt.enforceCoSuperSlotBudget(ctx, &requesterRec); err != nil {
 			return nil, err
 		}
-		if slot == "verifier" && childProfile == AgentProfileCoSuper {
-			if err := rt.enforceVSuperVerifierSequencing(ctx, &parentRec); err != nil {
+		if slot == "verifier" && coagentProfile == AgentProfileCoSuper {
+			if err := rt.enforceVSuperVerifierSequencing(ctx, &requesterRec); err != nil {
 				return nil, err
 			}
 		}
 	}
 
 	now := time.Now().UTC()
-	if err := rt.channelMgr.ensureParentChildChannels(parentID, runID); err != nil {
+	if err := rt.channelMgr.ensureCoagentChannels(requesterRunID, runID); err != nil {
 		return nil, err
 	}
-	metadata = ensureDesktopID(metadata, &parentRec, metadataStringValue(metadata, runMetadataDesktopID))
-	metadata = inheritTextureRequesterMetadata(metadata, &parentRec)
-	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &parentRec)
-	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
+	metadata = ensureDesktopID(metadata, &requesterRec, metadataStringValue(metadata, runMetadataDesktopID))
+	metadata = inheritTextureRequesterMetadata(metadata, &requesterRec)
+	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &requesterRec)
+	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
@@ -616,9 +619,9 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	claimedCoSuperSlotName := ""
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
 		canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper &&
-		rt.childSpawnBudgetApplies(&parentRec) {
+		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
-		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, parentID)
+		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
 		if err != nil {
 			return nil, err
 		}
@@ -644,7 +647,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
-		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist child agent: %w", err))
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist coagent agent: %w", err))
 	}
 
 	// Create the runtime run record.
@@ -652,7 +655,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		RunID:        runID,
 		AgentID:      agentRec.AgentID,
 		ChannelID:    agentRec.ChannelID,
-		ParentRunID:  parentID,
+		RequestedByRunID:  requesterRunID,
 		AgentProfile: agentRec.Profile,
 		AgentRole:    agentRec.Role,
 		OwnerID:      ownerID,
@@ -664,26 +667,26 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		Metadata:     metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
-	if item, err := rt.ensureSpawnedChildWorkItem(ctx, rec, &parentRec, "spawned_work_item_id"); err != nil {
-		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned child work item: %w", err))
-	} else if item.WorkItemID == "" && spawnedChildWorkItemProfile(agentProfileForRun(rec)) {
-		log.Printf("runtime: spawned child work item not created for run=%s profile=%s trajectory=%s agent=%s parent=%s",
-			rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.ParentRunID)
+	if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id"); err != nil {
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
+	} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+		log.Printf("runtime: spawned coagent work item not created for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
+			rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 	}
 
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
-		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist child run: %w", err))
+		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist coagent run: %w", err))
 	}
 	rt.createAgentMutationForRun(ctx, rec)
 
 	// Emit submitted event.
 	objectiveLenPayload, _ := json.Marshal(map[string]any{
 		"prompt_length": len(objective),
-		"parent_id":     parentID,
+		"requested_by":     requesterRunID,
 	})
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, objectiveLenPayload)
-	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&parentRec) {
-		log.Printf("runtime: started child %s from parent=%s parent_profile=%s", wireLifecycleSummary(rec), parentRec.RunID, canonicalAgentProfile(agentProfileForRun(&parentRec)))
+	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&requesterRec) {
+		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, canonicalAgentProfile(agentProfileForRun(&requesterRec)))
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -704,26 +707,26 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	rt.wg.Add(1)
 	go rt.executeActivation(runCtx, &runRec)
 
-	log.Printf("runtime: started child run %s for parent %s (owner=%s)", rec.RunID, parentID, ownerID)
+	log.Printf("runtime: started coagent run %s requested by %s (owner=%s)", rec.RunID, requesterRunID, ownerID)
 
-	if _, err := rt.channelMgr.Channel(parentRec.ChannelID); err != nil {
-		log.Printf("runtime: ensure parent channel %s: %v", parentRec.ChannelID, err)
+	if _, err := rt.channelMgr.Channel(requesterRec.ChannelID); err != nil {
+		log.Printf("runtime: ensure requester channel %s: %v", requesterRec.ChannelID, err)
 	}
-	if rec.ChannelID != "" && rec.ChannelID != parentRec.ChannelID {
+	if rec.ChannelID != "" && rec.ChannelID != requesterRec.ChannelID {
 		if _, err := rt.channelMgr.Channel(rec.ChannelID); err != nil {
-			log.Printf("runtime: ensure child channel %s: %v", rec.ChannelID, err)
+			log.Printf("runtime: ensure coagent channel %s: %v", rec.ChannelID, err)
 		}
 	}
 
 	return rec, nil
 }
 
-func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord) (types.WorkItemRecord, error) {
+func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.RunRecord, requester *types.RunRecord) (types.WorkItemRecord, error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return types.WorkItemRecord{}, nil
 	}
 	profile := canonicalAgentProfile(agentProfileForRun(rec))
-	if !spawnedChildWorkItemProfile(profile) {
+	if !spawnedCoagentWorkItemProfile(profile) {
 		return types.WorkItemRecord{}, nil
 	}
 	ownerID := strings.TrimSpace(rec.OwnerID)
@@ -733,32 +736,32 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 	if ownerID == "" || trajectoryID == "" || agentID == "" || objective == "" {
 		return types.WorkItemRecord{}, nil
 	}
-	parentID := strings.TrimSpace(rec.ParentRunID)
-	if parentID == "" {
-		parentID = metadataStringValue(rec.Metadata, "parent_id")
+	requesterRunID := strings.TrimSpace(rec.RequestedByRunID)
+	if requesterRunID == "" {
+		requesterRunID = metadataStringValue(rec.Metadata, "requested_by")
 	}
-	if parentID == "" {
+	if requesterRunID == "" {
 		return types.WorkItemRecord{}, nil
 	}
-	if parent == nil {
-		if loaded, err := rt.store.GetRun(ctx, parentID); err == nil && loaded.OwnerID == ownerID {
-			parent = &loaded
-			rec.Metadata = inheritTextureRequesterMetadata(rec.Metadata, parent)
+	if requester == nil {
+		if loaded, err := rt.store.GetRun(ctx, requesterRunID); err == nil && loaded.OwnerID == ownerID {
+			requester = &loaded
+			rec.Metadata = inheritTextureRequesterMetadata(rec.Metadata, requester)
 		}
 	}
 	details := map[string]any{
-		"kind":           "spawned_child_run",
-		"spawned_run_id": rec.RunID,
-		"parent_run_id":  parentID,
-		"agent_profile":  profile,
-		"agent_role":     agentRoleForRun(rec),
+		"kind":                "spawned_coagent_run",
+		"spawned_run_id":      rec.RunID,
+		"requested_by_run_id": requesterRunID,
+		"agent_profile":       profile,
+		"agent_role":          agentRoleForRun(rec),
 	}
 	if channelID := strings.TrimSpace(rec.ChannelID); channelID != "" {
 		details["channel_id"] = channelID
 	}
-	if parent != nil {
-		if parentProfile := canonicalAgentProfile(agentProfileForRun(parent)); parentProfile != "" {
-			details["parent_agent_profile"] = parentProfile
+	if requester != nil {
+		if requesterProfile := canonicalAgentProfile(agentProfileForRun(requester)); requesterProfile != "" {
+			details["requested_by_agent_profile"] = requesterProfile
 		}
 	}
 	copyMetadataStringToDetails(rec.Metadata, details, "requested_by_profile")
@@ -768,11 +771,11 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 		OwnerID:              ownerID,
 		TrajectoryID:         trajectoryID,
 		Objective:            objective,
-		Reason:               "spawn_agent child objective",
+		Reason:               "spawn_agent coagent objective",
 		AuthorityProfile:     profile,
 		AssignedAgentID:      agentID,
-		CreatedByRunID:       parentID,
-		ObjectiveFingerprint: "spawned_child:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
+		CreatedByRunID:       requesterRunID,
+		ObjectiveFingerprint: "spawned_coagent:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
 	})
 }
@@ -816,19 +819,19 @@ func inheritRequesterMetadataFromWorkItem(ctx context.Context, s *store.Store, o
 	if metadataStringValue(metadata, "requested_by_profile") != "" && metadataStringValue(metadata, "requested_by_agent_id") != "" {
 		return metadata
 	}
-	parentID := strings.TrimSpace(firstNonEmpty(item.CreatedByRunID, metadataStringValue(item.Details, "parent_run_id")))
-	if s == nil || parentID == "" {
+	requesterRunID := strings.TrimSpace(firstNonEmpty(item.CreatedByRunID, metadataStringValue(item.Details, "requested_by_run_id")))
+	if s == nil || requesterRunID == "" {
 		return metadata
 	}
-	parent, err := s.GetRun(ctx, parentID)
+	parent, err := s.GetRun(ctx, requesterRunID)
 	if err != nil || parent.OwnerID != ownerID {
 		return metadata
 	}
 	return inheritTextureRequesterMetadata(metadata, &parent)
 }
 
-func (rt *Runtime) ensureSpawnedChildWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord, metadataKey string) (types.WorkItemRecord, error) {
-	item, err := rt.createSpawnedChildWorkItem(ctx, rec, parent)
+func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord, metadataKey string) (types.WorkItemRecord, error) {
+	item, err := rt.createSpawnedCoagentWorkItem(ctx, rec, parent)
 	if err != nil || item.WorkItemID == "" || rec == nil {
 		return item, err
 	}
@@ -840,7 +843,7 @@ func (rt *Runtime) ensureSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 	return item, nil
 }
 
-func spawnedChildWorkItemProfile(profile string) bool {
+func spawnedCoagentWorkItemProfile(profile string) bool {
 	switch canonicalAgentProfile(profile) {
 	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
 		return true
@@ -873,19 +876,19 @@ func appendUniqueString(existing []string, values ...string) []string {
 
 const maxVSuperActiveCoSuperSlots = 2
 
-func (rt *Runtime) childSpawnBudgetApplies(parentRec *types.RunRecord) bool {
-	if parentRec == nil {
+func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool {
+	if requesterRec == nil {
 		return false
 	}
-	return canonicalAgentProfile(agentProfileForRun(parentRec)) == AgentProfileVSuper
+	return canonicalAgentProfile(agentProfileForRun(requesterRec)) == AgentProfileVSuper
 }
 
-func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, parentRec *types.RunRecord) error {
-	if rt == nil || rt.store == nil || parentRec == nil {
+func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || requesterRec == nil {
 		return nil
 	}
-	trajectoryID := trajectoryIDForRun(parentRec)
-	active, err := rt.store.CountActiveCoSuperSlots(ctx, parentRec.OwnerID, trajectoryID)
+	trajectoryID := trajectoryIDForRun(requesterRec)
+	active, err := rt.store.CountActiveCoSuperSlots(ctx, requesterRec.OwnerID, trajectoryID)
 	if err != nil {
 		return fmt.Errorf("check active co-super slots for vsuper trajectory budget: %w", err)
 	}
@@ -907,12 +910,12 @@ func (rt *Runtime) activeCoSuperSlotRun(ctx context.Context, ownerID, trajectory
 	return rt.store.ActiveCoSuperSlotRun(ctx, ownerID, trajectoryID, slot)
 }
 
-func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, parentRec *types.RunRecord) error {
-	if rt == nil || rt.store == nil || parentRec == nil {
+func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, requesterRec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || requesterRec == nil {
 		return nil
 	}
-	trajectoryID := trajectoryIDForRun(parentRec)
-	impl, found, err := rt.store.CoSuperSlotRun(ctx, parentRec.OwnerID, trajectoryID, "implementation")
+	trajectoryID := trajectoryIDForRun(requesterRec)
+	impl, found, err := rt.store.CoSuperSlotRun(ctx, requesterRec.OwnerID, trajectoryID, "implementation")
 	if err != nil {
 		return fmt.Errorf("lookup implementation co-super slot for verifier sequencing: %w", err)
 	}
@@ -925,18 +928,18 @@ func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, parentRe
 	return fmt.Errorf("vsuper verifier spawn requires prior implementation co-super evidence; spawn slot=\"implementation\" first, wait for commit/package/blocker evidence, then spawn slot=\"verifier\" with the exact evidence to inspect")
 }
 
-func (rt *Runtime) latestTrajectoryCoSuperAppChangePackage(ctx context.Context, parentRec *types.RunRecord) (map[string]any, bool, error) {
+func (rt *Runtime) latestTrajectoryCoSuperAppChangePackage(ctx context.Context, requesterRec *types.RunRecord) (map[string]any, bool, error) {
 	if rt == nil || rt.store == nil {
 		return nil, false, nil
 	}
-	if parentRec == nil {
+	if requesterRec == nil {
 		return nil, false, nil
 	}
-	trajectoryID := trajectoryIDForRun(parentRec)
-	if trajectoryID == "" || strings.TrimSpace(parentRec.OwnerID) == "" {
+	trajectoryID := trajectoryIDForRun(requesterRec)
+	if trajectoryID == "" || strings.TrimSpace(requesterRec.OwnerID) == "" {
 		return nil, false, nil
 	}
-	child, found, err := rt.store.CoSuperSlotRun(ctx, parentRec.OwnerID, trajectoryID, "implementation")
+	child, found, err := rt.store.CoSuperSlotRun(ctx, requesterRec.OwnerID, trajectoryID, "implementation")
 	if err != nil {
 		return nil, false, fmt.Errorf("lookup implementation co-super slot for app package reuse: %w", err)
 	}
@@ -1272,11 +1275,11 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 				rec.FinishedAt = nil
 				rec.Metadata = cloneMetadata(rec.Metadata)
 				rec.Metadata["passivated_reason"] = "runtime_restarted"
-				if item, err := rt.ensureSpawnedChildWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
+				if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
 					log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
-				} else if item.WorkItemID == "" && spawnedChildWorkItemProfile(agentProfileForRun(rec)) {
-					log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s parent=%s",
-						rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.ParentRunID)
+				} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+					log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
+						rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 				}
 
 				if err := rt.store.UpdateRun(ctx, *rec); err != nil {
@@ -1354,7 +1357,7 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 	}
 }
 
-func (rt *Runtime) sweepPassivatedSpawnedChildWork(ctx context.Context) {
+func (rt *Runtime) sweepPassivatedSpawnedCoagentWork(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
@@ -1365,7 +1368,7 @@ func (rt *Runtime) sweepPassivatedSpawnedChildWork(ctx context.Context) {
 	}
 	for i := range runs {
 		rec := &runs[i]
-		item, err := rt.ensureSpawnedChildWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id")
+		item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id")
 		if err != nil {
 			log.Printf("runtime: boot passivated spawned-work sweep run=%s: %v", rec.RunID, err)
 			continue
@@ -1601,9 +1604,14 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
+		// A canonical write (patch_texture/rewrite_texture) must NOT terminate the
+		// Texture run: the run has to remain able to spawn a researcher, request
+		// super execution, record a Texture decision, request an email handoff, or
+		// intentionally end after the write. Exactly one canonical write per run is
+		// preserved mechanically by the per-run agent mutation (commitTextureToolEdit
+		// requires a pending mutation and completes it). Only genuine delegation /
+		// handoff successes are terminal; a write leaves the loop running.
 		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
-			"patch_texture",
-			"rewrite_texture",
 			"spawn_agent",
 			"request_super_execution",
 			"request_email_draft",
@@ -2081,10 +2089,14 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		"input_origin":        textureInputOriginUserPrompt,
 		"texture_version":     "v0",
 	}
+	// The owner prompt is the canonical Texture V0. For prompt-bar-created
+	// Texture, V0 content is exactly the owner's prompt text, not blank metadata
+	// or a separate intake surface. seed_prompt is retained only as provenance.
 	userRevisionContent := routeSeedPrompt
 	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
-		userRevisionContent = ""
-		userRevisionMetadata["prompt_bar_instruction_revision"] = true
+		if promptText := strings.TrimSpace(metadataStringValue(rec.Metadata, "seed_prompt")); promptText != "" {
+			userRevisionContent = promptText
+		}
 	}
 	userRevMeta, _ := json.Marshal(userRevisionMetadata)
 	userRev := types.Revision{

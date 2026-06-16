@@ -223,10 +223,10 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		runByID[run.RunID] = run
 	}
 	for _, run := range runs {
-		if strings.TrimSpace(run.ParentRunID) == "" {
+		if strings.TrimSpace(run.RequestedByRunID) == "" {
 			continue
 		}
-		parent, ok := runByID[run.ParentRunID]
+		parent, ok := runByID[run.RequestedByRunID]
 		if !ok {
 			continue
 		}
@@ -271,7 +271,7 @@ func verifyCoSuperParents(runs []types.RunRecord) error {
 			continue
 		}
 		coSuperCount++
-		parent, ok := runByID[run.ParentRunID]
+		parent, ok := runByID[run.RequestedByRunID]
 		parentProfile := agentProfileForRun(&parent)
 		if !ok || (parentProfile != AgentProfileSuper && parentProfile != AgentProfileVSuper) {
 			return fmt.Errorf("co-super run %s parent profile = %q, want super or vsuper", run.RunID, parentProfile)
@@ -289,10 +289,10 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		runByID[run.RunID] = run
 	}
 	for _, run := range runs {
-		if strings.TrimSpace(run.ParentRunID) == "" {
+		if strings.TrimSpace(run.RequestedByRunID) == "" {
 			continue
 		}
-		parent, ok := runByID[run.ParentRunID]
+		parent, ok := runByID[run.RequestedByRunID]
 		if !ok {
 			continue
 		}

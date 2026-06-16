@@ -28,6 +28,26 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
+// listCoagentRunsByRequester returns the runs owned by ownerID whose
+// RequestedByRunID provenance points at requesterRunID. It replaces the
+// deleted store helper ListChildRuns: callers used that to count/inspect the
+// runs spawned on behalf of a requesting run, which is now expressed through
+// requester provenance rather than parent/child control links.
+func listCoagentRunsByRequester(t *testing.T, s *store.Store, ownerID, requesterRunID string, limit int) []types.RunRecord {
+	t.Helper()
+	runs, err := s.ListRunsByOwner(context.Background(), ownerID, limit)
+	if err != nil {
+		t.Fatalf("list runs by owner: %v", err)
+	}
+	var matched []types.RunRecord
+	for _, run := range runs {
+		if strings.TrimSpace(run.RequestedByRunID) == requesterRunID {
+			matched = append(matched, run)
+		}
+	}
+	return matched
+}
+
 func runGit(t *testing.T, repo string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)

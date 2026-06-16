@@ -319,7 +319,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		RunID:        childID,
 		AgentID:      agentID,
 		ChannelID:    channelID,
-		ParentRunID:  parentID,
+		RequestedByRunID:  parentID,
 		AgentProfile: AgentProfileResearcher,
 		AgentRole:    AgentProfileResearcher,
 		OwnerID:      ownerID,
@@ -334,7 +334,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
-			"parent_id":             parentID,
+			"requested_by":             parentID,
 			"spawned_by":            ownerID,
 		},
 	}
@@ -500,7 +500,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		RunID:        childID,
 		AgentID:      agentID,
 		ChannelID:    channelID,
-		ParentRunID:  parentID,
+		RequestedByRunID:  parentID,
 		AgentProfile: AgentProfileResearcher,
 		AgentRole:    AgentProfileResearcher,
 		OwnerID:      ownerID,
@@ -515,7 +515,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
-			"parent_id":             parentID,
+			"requested_by":             parentID,
 			"passivated_reason":     "runtime_restarted",
 			"spawned_by":            ownerID,
 		},
@@ -912,7 +912,7 @@ func TestProcessRestartRewarmsCoagentAfterOSKill(t *testing.T) {
 	}
 }
 
-func TestStartChildRunCompletesSpawnedWorkItem(t *testing.T) {
+func TestStartCoagentRunCompletesSpawnedWorkItem(t *testing.T) {
 	rt, s := testRuntimeWithProviderAndRegistry(t, NewStubProvider(200*time.Millisecond), nil)
 	ctx := context.Background()
 	ownerID := "user-alice"
@@ -921,7 +921,7 @@ func TestStartChildRunCompletesSpawnedWorkItem(t *testing.T) {
 	channelID := "doc-spawn-success"
 	seedSpawnedChildParent(t, ctx, s, ownerID, trajectoryID, parentID, channelID)
 
-	child, err := rt.StartChildRun(ctx, parentID, "research successful spawn work", ownerID, map[string]any{
+	child, err := rt.StartCoagentRun(ctx, parentID, "research successful spawn work", ownerID, map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    channelID,
@@ -1141,7 +1141,7 @@ func runM3SpawnRestartStartProcess(t *testing.T) {
 	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
 
 	seedSpawnedChildParent(t, ctx, s, m3SpawnRestartOwnerID, m3SpawnRestartTrajectory, m3SpawnRestartParentID, m3SpawnRestartChannelID)
-	child, err := rt.StartChildRun(ctx, m3SpawnRestartParentID, "research restart-resilient spawned work", m3SpawnRestartOwnerID, map[string]any{
+	child, err := rt.StartCoagentRun(ctx, m3SpawnRestartParentID, "research restart-resilient spawned work", m3SpawnRestartOwnerID, map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    m3SpawnRestartChannelID,
@@ -2069,7 +2069,7 @@ func TestVSuperCoSuperSlotReusedByTrajectorySlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start parent: %v", err)
 	}
-	first, err := rt.StartChildRun(ctx, parent.RunID, "implement once", "user-alice", map[string]any{
+	first, err := rt.StartCoagentRun(ctx, parent.RunID, "implement once", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileCoSuper,
 		runMetadataAgentRole:    AgentProfileCoSuper,
 		runMetadataCoSuperSlot:  "implementation",
@@ -2077,7 +2077,7 @@ func TestVSuperCoSuperSlotReusedByTrajectorySlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start first co-super: %v", err)
 	}
-	second, err := rt.StartChildRun(ctx, parent.RunID, "implement duplicate", "user-alice", map[string]any{
+	second, err := rt.StartCoagentRun(ctx, parent.RunID, "implement duplicate", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileCoSuper,
 		runMetadataAgentRole:    AgentProfileCoSuper,
 		runMetadataCoSuperSlot:  "implementation",
@@ -2109,7 +2109,7 @@ func TestVSuperCoSuperSlotReusedByTrajectorySlot(t *testing.T) {
 		t.Fatalf("passivated slot owner still active: %+v", active)
 	}
 
-	third, err := rt.StartChildRun(ctx, parent.RunID, "implement after passivation", "user-alice", map[string]any{
+	third, err := rt.StartCoagentRun(ctx, parent.RunID, "implement after passivation", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileCoSuper,
 		runMetadataAgentRole:    AgentProfileCoSuper,
 		runMetadataCoSuperSlot:  "implementation",

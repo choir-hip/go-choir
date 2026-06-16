@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS runs (
 	loop_id     VARCHAR(255) PRIMARY KEY,
 	agent_id    VARCHAR(255) NOT NULL DEFAULT '',
 	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
-	parent_loop_id VARCHAR(255) NOT NULL DEFAULT '',
+	requested_by_run_id VARCHAR(255) NOT NULL DEFAULT '',
 	trajectory_id VARCHAR(255) NOT NULL DEFAULT '',
 	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
 	agent_role VARCHAR(255) NOT NULL DEFAULT '',
@@ -380,7 +380,7 @@ CREATE TABLE IF NOT EXISTS co_super_slots (
 	slot           VARCHAR(64) NOT NULL DEFAULT '',
 	run_id         VARCHAR(255) NOT NULL DEFAULT '',
 	agent_id       VARCHAR(255) NOT NULL DEFAULT '',
-	parent_loop_id VARCHAR(255) NOT NULL DEFAULT '',
+	requested_by_run_id VARCHAR(255) NOT NULL DEFAULT '',
 	claimed_at     DATETIME NOT NULL,
 	updated_at     DATETIME NOT NULL,
 	PRIMARY KEY (owner_id, trajectory_id, slot)
@@ -430,7 +430,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_sandbox_id ON runs(sandbox_id);
 CREATE INDEX IF NOT EXISTS idx_runs_agent_id ON runs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_runs_owner_agent_state_updated ON runs(owner_id, agent_id, state, updated_at);
 CREATE INDEX IF NOT EXISTS idx_runs_channel_id ON runs(channel_id);
-CREATE INDEX IF NOT EXISTS idx_runs_parent_loop_id ON runs(parent_loop_id);
+CREATE INDEX IF NOT EXISTS idx_runs_requested_by_run_id ON runs(requested_by_run_id);
 CREATE INDEX IF NOT EXISTS idx_trajectories_owner_status ON trajectories(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_work_items_trajectory_status ON work_items(trajectory_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_work_items_owner_status ON work_items(owner_id, status, updated_at);
@@ -611,7 +611,7 @@ func (s *Store) bootstrap() error {
 	}{
 		{"runs", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"runs", "parent_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"runs", "requested_by_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "agent_profile", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "agent_role", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
@@ -830,12 +830,12 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 	runErr := sanitizeStoreText(rec.Error)
 
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO runs (loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json)
+		`INSERT INTO runs (loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.RunID,
 		rec.AgentID,
 		rec.ChannelID,
-		rec.ParentRunID,
+		rec.RequestedByRunID,
 		rec.TrajectoryID,
 		rec.AgentProfile,
 		rec.AgentRole,
@@ -859,7 +859,7 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 // GetRun returns the run with the given run ID.
 func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, error) {
 	row := s.queryDB().QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
 		  WHERE loop_id = ?`,
 		runID,
@@ -881,7 +881,7 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 		`UPDATE runs
 		    SET agent_id = ?,
 		        channel_id = ?,
-		        parent_loop_id = ?,
+		        requested_by_run_id = ?,
 		        trajectory_id = ?,
 		        agent_profile = ?,
 		        agent_role = ?,
@@ -897,7 +897,7 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 		  WHERE loop_id = ?`,
 		rec.AgentID,
 		rec.ChannelID,
-		rec.ParentRunID,
+		rec.RequestedByRunID,
 		rec.TrajectoryID,
 		rec.AgentProfile,
 		rec.AgentRole,
@@ -964,7 +964,7 @@ func updateRunInTx(ctx context.Context, tx *sql.Tx, rec types.RunRecord) error {
 		`UPDATE runs
 		    SET agent_id = ?,
 		        channel_id = ?,
-		        parent_loop_id = ?,
+		        requested_by_run_id = ?,
 		        trajectory_id = ?,
 		        agent_profile = ?,
 		        agent_role = ?,
@@ -980,7 +980,7 @@ func updateRunInTx(ctx context.Context, tx *sql.Tx, rec types.RunRecord) error {
 		  WHERE loop_id = ?`,
 		rec.AgentID,
 		rec.ChannelID,
-		rec.ParentRunID,
+		rec.RequestedByRunID,
 		rec.TrajectoryID,
 		rec.AgentProfile,
 		rec.AgentRole,
@@ -1045,8 +1045,8 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 }
 
 // ListActiveRunsByTrajectory returns pending/running/blocked activations on a
-// trajectory. Trajectory cancellation uses this instead of parent_loop_id
-// recursion so spawned_by provenance does not decide lifecycle control.
+// trajectory. Trajectory cancellation uses this instead of requested_by_run_id
+// recursion so requester provenance does not decide lifecycle control.
 func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
 	return s.ListActiveRunsByTrajectoryExcluding(ctx, ownerID, trajectoryID, nil, limit)
 }
@@ -1081,49 +1081,10 @@ func (s *Store) ListActiveRunsByTrajectoryExcluding(ctx context.Context, ownerID
 	return s.listRunsWhere(ctx, where, args, limit)
 }
 
-// CountActiveChildRuns returns the number of non-terminal direct child runs
-// for the given parent. It is used by runtime authority budgets before
-// launching more child goroutines in constrained worker sandboxes.
-func (s *Store) CountActiveChildRuns(ctx context.Context, parentRunID string) (int, error) {
-	var count int
-	row := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*)
-		   FROM runs
-		  WHERE parent_loop_id = ?
-		    AND state IN ('pending', 'running', 'blocked')`,
-		parentRunID,
-	)
-	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("count active child runs: %w", err)
-	}
-	return count, nil
-}
-
-// ListActiveChildRuns returns non-terminal direct child runs for the given
-// parent. Runtime tool guards use it to make constrained delegation idempotent
-// before launching another child goroutine.
-func (s *Store) ListActiveChildRuns(ctx context.Context, parentRunID string) ([]types.RunRecord, error) {
-	return s.listRunsWhere(ctx,
-		"parent_loop_id = ? AND state IN ('pending', 'running', 'blocked')",
-		[]any{parentRunID},
-		100,
-	)
-}
-
-// ListChildRuns returns direct child runs for the given parent, including
-// terminal children. Evidence collection uses this to avoid redoing or
-// cancelling work after a child has already exported a candidate artifact.
-func (s *Store) ListChildRuns(ctx context.Context, parentRunID string, limit int) ([]types.RunRecord, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	return s.listRunsWhere(ctx, "parent_loop_id = ?", []any{parentRunID}, limit)
-}
-
 // ClaimCoSuperSlot atomically claims (owner, trajectory, slot) for a co-super
 // run. If a live run already owns the slot, that run is returned and claimed is
 // false. If the previous owner is terminal, the slot is advanced to runID.
-func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, parentRunID string) (types.RunRecord, bool, error) {
+func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	slot = strings.TrimSpace(slot)
@@ -1133,10 +1094,10 @@ func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slo
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO co_super_slots (owner_id, trajectory_id, slot, run_id, agent_id, parent_loop_id, claimed_at, updated_at)
+		`INSERT INTO co_super_slots (owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE run_id = run_id`,
-		ownerID, trajectoryID, slot, runID, agentID, parentRunID, now, now,
+		ownerID, trajectoryID, slot, runID, agentID, requesterRunID, now, now,
 	)
 	if err != nil {
 		return types.RunRecord{}, false, fmt.Errorf("insert co-super slot claim: %w", err)
@@ -1161,14 +1122,14 @@ func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slo
 		`UPDATE co_super_slots
 		    SET run_id = ?,
 		        agent_id = ?,
-		        parent_loop_id = ?,
+		        requested_by_run_id = ?,
 		        claimed_at = ?,
 		        updated_at = ?
 		  WHERE owner_id = ?
 		    AND trajectory_id = ?
 		    AND slot = ?
 		    AND run_id = ?`,
-		runID, agentID, parentRunID, now, now, ownerID, trajectoryID, slot, existingRunID,
+		runID, agentID, requesterRunID, now, now, ownerID, trajectoryID, slot, existingRunID,
 	)
 	if err != nil {
 		return types.RunRecord{}, false, fmt.Errorf("advance co-super slot claim: %w", err)
@@ -1214,17 +1175,17 @@ func (s *Store) ReleaseCoSuperSlotClaim(ctx context.Context, ownerID, trajectory
 }
 
 // CoSuperSlotRecord is the durable trajectory-slot ownership record for a
-// co-super activation. ParentRunID is retained as spawned-by provenance, not
-// as the authority relation.
+// co-super activation. RequestedByRunID is retained as requester provenance,
+// not as the authority relation.
 type CoSuperSlotRecord struct {
-	OwnerID      string
-	TrajectoryID string
-	Slot         string
-	RunID        string
-	AgentID      string
-	ParentRunID  string
-	ClaimedAt    time.Time
-	UpdatedAt    time.Time
+	OwnerID          string
+	TrajectoryID     string
+	Slot             string
+	RunID            string
+	AgentID          string
+	RequestedByRunID string
+	ClaimedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 func (s *Store) coSuperSlotRunID(ctx context.Context, ownerID, trajectoryID, slot string) (string, error) {
@@ -1258,7 +1219,7 @@ func (s *Store) CoSuperSlotByAgent(ctx context.Context, ownerID, agentID string)
 	}
 	var rec CoSuperSlotRecord
 	err := s.db.QueryRowContext(ctx,
-		`SELECT owner_id, trajectory_id, slot, run_id, agent_id, parent_loop_id, claimed_at, updated_at
+		`SELECT owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at
 		   FROM co_super_slots
 		  WHERE owner_id = ?
 		    AND agent_id = ?
@@ -1272,7 +1233,7 @@ func (s *Store) CoSuperSlotByAgent(ctx context.Context, ownerID, agentID string)
 		&rec.Slot,
 		&rec.RunID,
 		&rec.AgentID,
-		&rec.ParentRunID,
+		&rec.RequestedByRunID,
 		&rec.ClaimedAt,
 		&rec.UpdatedAt,
 	)
@@ -1296,7 +1257,7 @@ func (s *Store) CoSuperSlotByAgentAndTrajectory(ctx context.Context, ownerID, tr
 	}
 	var rec CoSuperSlotRecord
 	err := s.db.QueryRowContext(ctx,
-		`SELECT owner_id, trajectory_id, slot, run_id, agent_id, parent_loop_id, claimed_at, updated_at
+		`SELECT owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at
 		   FROM co_super_slots
 		  WHERE owner_id = ?
 		    AND trajectory_id = ?
@@ -1312,7 +1273,7 @@ func (s *Store) CoSuperSlotByAgentAndTrajectory(ctx context.Context, ownerID, tr
 		&rec.Slot,
 		&rec.RunID,
 		&rec.AgentID,
-		&rec.ParentRunID,
+		&rec.RequestedByRunID,
 		&rec.ClaimedAt,
 		&rec.UpdatedAt,
 	)
@@ -1391,7 +1352,7 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
 		  WHERE owner_id = ?
 		    AND agent_id = ?
@@ -1405,7 +1366,7 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 }
 
 func (s *Store) listRunsWhere(ctx context.Context, where string, args []any, limit int) ([]types.RunRecord, error) {
-	query := `SELECT loop_id, agent_id, channel_id, parent_loop_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+	query := `SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 	            FROM runs`
 	if where != "" {
 		query += " WHERE " + where
@@ -2309,7 +2270,7 @@ func scanRun(row interface{ Scan(...any) error }) (types.RunRecord, error) {
 		&rec.RunID,
 		&rec.AgentID,
 		&rec.ChannelID,
-		&rec.ParentRunID,
+		&rec.RequestedByRunID,
 		&rec.TrajectoryID,
 		&rec.AgentProfile,
 		&rec.AgentRole,

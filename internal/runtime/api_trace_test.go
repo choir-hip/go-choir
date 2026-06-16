@@ -27,7 +27,7 @@ func seedTraceTrajectory(t *testing.T, rt *Runtime) (*types.RunRecord, *types.Ru
 	if err != nil {
 		t.Fatalf("start parent run: %v", err)
 	}
-	child, err := rt.StartChildRun(context.Background(), parent.RunID, "Research the best conditions for moss", "user-alice", map[string]any{
+	child, err := rt.StartCoagentRun(context.Background(), parent.RunID, "Research the best conditions for moss", "user-alice", map[string]any{
 		runMetadataAgentProfile:       "researcher",
 		runMetadataAgentRole:          "researcher",
 		runMetadataLLMProvider:        "fireworks",
@@ -147,7 +147,7 @@ func TestTraceTrajectorySummaryUsesEntryRunTitle(t *testing.T) {
 	child := types.RunRecord{
 		RunID:        "texture-revision-child",
 		AgentID:      "texture:texture-revision-child",
-		ParentRunID:  parent.RunID,
+		RequestedByRunID:  parent.RunID,
 		AgentProfile: AgentProfileTexture,
 		AgentRole:    AgentProfileTexture,
 		OwnerID:      "user-alice",
@@ -396,7 +396,7 @@ func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
 		{
 			RunID:        "run-super-live-summary",
 			AgentID:      "agent-super-live-summary",
-			ParentRunID:  "run-conductor-live-summary",
+			RequestedByRunID:  "run-conductor-live-summary",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			State:        types.RunRunning,

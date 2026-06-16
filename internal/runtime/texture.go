@@ -169,7 +169,6 @@ type textureDocumentResponse struct {
 	RevisionCount        int    `json:"revision_count"`
 	LastEditor           string `json:"last_editor,omitempty"`
 	LastAuthorKind       string `json:"last_author_kind,omitempty"`
-	IntakePrompt         string `json:"intake_prompt,omitempty"`
 	AgentRevisionPending bool   `json:"agent_revision_pending,omitempty"`
 	AgentRevisionRunID   string `json:"agent_revision_run_id,omitempty"`
 }
@@ -1353,21 +1352,11 @@ func (h *APIHandler) textureDocumentResponse(ctx context.Context, doc types.Docu
 			resp.LastEditor = rev.AuthorLabel
 			resp.LastAuthorKind = string(rev.AuthorKind)
 			resp.CurrentVersionNumber = rev.VersionNumber
-			resp.IntakePrompt = textureIntakePromptFromRevision(rev)
 		} else {
 			log.Printf("texture api: get current revision for recent metadata: %v", err)
 		}
 	}
 	return resp
-}
-
-func textureIntakePromptFromRevision(rev types.Revision) string {
-	meta := decodeRevisionMetadata(rev.Metadata)
-	if metadataStringValue(meta, "input_origin") != textureInputOriginUserPrompt &&
-		!metadataBoolValue(meta, "prompt_bar_instruction_revision") {
-		return ""
-	}
-	return strings.TrimSpace(metadataStringValue(meta, "seed_prompt"))
 }
 
 func revisionResponseFromRecord(rev types.Revision) textureRevisionResponse {
@@ -1993,7 +1982,7 @@ func (h *APIHandler) HandleTestTextureResearchFindings(w http.ResponseWriter, r 
 		return
 	}
 
-	researcherRun, err := h.rt.StartChildRun(r.Context(), parent.RunID, "Browser test: submit research findings", ownerID, map[string]any{
+	researcherRun, err := h.rt.StartCoagentRun(r.Context(), parent.RunID, "Browser test: submit research findings", ownerID, map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    req.DocID,
@@ -2113,7 +2102,7 @@ func (h *APIHandler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *htt
 		return
 	}
 
-	workerRun, err := h.rt.StartChildRun(r.Context(), parent.RunID, "Browser test: submit structured worker update", ownerID, map[string]any{
+	workerRun, err := h.rt.StartCoagentRun(r.Context(), parent.RunID, "Browser test: submit structured worker update", ownerID, map[string]any{
 		runMetadataAgentProfile: role,
 		runMetadataAgentRole:    role,
 		runMetadataAgentID:      role + ":test:" + req.DocID,

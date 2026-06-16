@@ -4,7 +4,7 @@ import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers
 const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
-test.setTimeout(420_000);
+test.setTimeout(480_000);
 test.skip(
   process.env.GO_CHOIR_RUN_DEPLOYED_LIVE_SEARCH !== '1',
   'set GO_CHOIR_RUN_DEPLOYED_LIVE_SEARCH=1 to verify deployed prompt-bar -> Texture live search'
@@ -126,27 +126,41 @@ async function waitForSuccessfulWebSearch(page, trajectoryId, timeout = 240_000)
   throw new Error(`trajectory ${trajectoryId} never produced a successful 2026 web_search result; errors=${lastSearchErrors.join(' | ')}`);
 }
 
-async function waitForGroundedTextureRevision(page, docId, timeout = 240_000) {
+async function waitForGroundedTextureRevision(page, docId, prompt, samples = [], timeout = 300_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const state = await loadTextureState(page, docId);
-    const content = state.head?.content || '';
-    const consumed = state.revisions.flatMap((revision) =>
+    const revisions = state.revisions || [];
+    const v0 = revisions.find((revision) => revision.version_number === 0);
+    const appagentRevisions = revisions.filter((revision) => revision.author_kind === 'appagent');
+    const consumed = revisions.flatMap((revision) =>
       revision?.metadata?.worker_updates_consumed || []
     );
     const consumedResearch = consumed.some((item) => item.role === 'researcher');
+    const content = state.head?.content || '';
+    samples.push({
+      at: new Date().toISOString(),
+      revision_count: revisions.length,
+      appagent_revision_count: appagentRevisions.length,
+      current_revision_id: state.doc.current_revision_id,
+      v0_content_len: v0?.content?.length || 0,
+      consumed_researcher: consumedResearch,
+    });
     if (
+      v0 &&
+      v0.content === prompt &&
       consumedResearch &&
+      appagentRevisions.length >= 2 &&
       /2026/.test(content) &&
       /https?:\/\/|source|evidence|fetched|search/i.test(content) &&
       !/search (?:was )?unavailable|search unavailable|model knowledge through|mid-2024|broad trend extrapolation/i.test(content)
     ) {
-      return { ...state, consumed };
+      return { ...state, consumed, v0, appagentRevisions };
     }
     await page.waitForTimeout(2000);
   }
   const state = await loadTextureState(page, docId);
-  throw new Error(`document ${docId} never produced a grounded live-search revision; head=${JSON.stringify(state.head)}`);
+  throw new Error(`document ${docId} never produced grounded live-search revisions; samples=${JSON.stringify(samples.slice(-8))} head=${JSON.stringify(state.head)}`);
 }
 
 test('deployed prompt-bar Texture flow uses live search for current 2026 evidence', async ({ browser }) => {
@@ -169,10 +183,12 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
     await registerAndLoadDesktop(page, uniqueEmail());
 
     const prompt = [
-      'Create a texture briefing about what is new in AI this week ending May 4, 2026.',
+      'Create a texture briefing about what is new in AI infrastructure news today, June 16, 2026.',
       'Use live researcher web_search evidence before making the substantive revision.',
       'The final document should include source-grounded 2026 evidence and should not rely on model-prior knowledge.',
     ].join(' ');
+
+    const revisionSamples = [];
 
     const promptBarResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST'
@@ -193,7 +209,8 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
 
     const textureWindow = page.locator('[data-texture-app]').last();
     await expect(textureWindow).toBeVisible({ timeout: 30_000 });
-    await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(/live|search|evidence|source|2026/i, { timeout: 30_000 });
+    await expect(textureWindow.locator('[data-texture-intake]')).toHaveCount(0);
+    await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(prompt, { timeout: 30_000 });
 
     const search = await waitForSuccessfulWebSearch(page, body.submission_id);
     const searchProviders = Array.isArray(search.providers) && search.providers.length > 0
@@ -202,10 +219,12 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
     expect(searchProviders.some((provider) => ['tavily', 'brave', 'exa', 'serper'].includes(provider))).toBeTruthy();
     expect(search.results.length).toBeGreaterThan(0);
 
-    const finalState = await waitForGroundedTextureRevision(page, decision.doc_id);
-    expect(finalState.head.metadata.source).toBe('edit_texture');
+    const finalState = await waitForGroundedTextureRevision(page, decision.doc_id, prompt, revisionSamples);
+    expect(finalState.v0.content).toBe(prompt);
+    expect(finalState.appagentRevisions.length).toBeGreaterThanOrEqual(2);
     expect(finalState.head.content).toMatch(/2026/);
     expect(finalState.head.content).not.toMatch(/search (?:was )?unavailable|model knowledge through|mid-2024|stub provider/i);
+    console.log('Texture revision progression:', JSON.stringify(revisionSamples, null, 2));
     expect(forbiddenRuntimeRequests).toHaveLength(0);
 
     await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);

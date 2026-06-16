@@ -70,10 +70,10 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if decision.Action != "open_app" || decision.App != AgentProfileTexture || decision.DocID == "" {
 		t.Fatalf("prompt-bar decision = %+v, want immediate Texture route", decision)
 	}
-	// Materialized Texture routes no longer carry initial_content; prompt-bar
-	// text is preserved as instruction metadata until Texture writes prose.
+	// Materialized Texture routes no longer carry conductor initial_content; the
+	// prompt-bar text becomes the canonical V0 user revision instead.
 	if decision.InitialContent != "" {
-		t.Fatalf("initial_content = %q, want empty (prompt lives in metadata)", decision.InitialContent)
+		t.Fatalf("initial_content = %q, want empty (texture owns canonical content)", decision.InitialContent)
 	}
 	doc, err := rt.store.GetDocument(context.Background(), decision.DocID, "user-alice")
 	if err != nil {
@@ -86,15 +86,15 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get seed prompt revision: %v", err)
 	}
-	if rev.Content != "" {
-		t.Fatalf("seed revision content = %q, want empty prompt-bar instruction revision", rev.Content)
+	if rev.Content != "Draft a research plan" {
+		t.Fatalf("seed revision content = %q, want exact owner prompt as canonical V0", rev.Content)
 	}
 	revMeta := decodeRevisionMetadata(rev.Metadata)
 	if metadataString(revMeta, "seed_prompt") != "Draft a research plan" {
-		t.Fatalf("seed revision metadata = %#v, want seed prompt", revMeta)
+		t.Fatalf("seed revision provenance metadata = %#v, want seed prompt", revMeta)
 	}
-	if !metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
-		t.Fatalf("prompt_bar_instruction_revision = %v, want true", revMeta["prompt_bar_instruction_revision"])
+	if metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
+		t.Fatalf("seed revision must not carry prompt_bar_instruction_revision: %v", revMeta["prompt_bar_instruction_revision"])
 	}
 
 	statusReq := authenticatedRequest(http.MethodGet, "/api/prompt-bar/submissions/"+resp.SubmissionID, "", "user-alice")
@@ -1037,7 +1037,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-texture-source-package",
 			AgentID:      "agent-texture-source-package",
 			ChannelID:    "channel-source-package",
-			ParentRunID:  "run-conductor-source-package",
+			RequestedByRunID:  "run-conductor-source-package",
 			AgentProfile: AgentProfileTexture,
 			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
@@ -1058,7 +1058,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-source-package",
 			AgentID:      "agent-super-source-package",
 			ChannelID:    "channel-source-package",
-			ParentRunID:  "run-texture-source-package",
+			RequestedByRunID:  "run-texture-source-package",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1193,7 +1193,7 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-texture-runtime-supervision",
 			AgentID:      "agent-texture-runtime-supervision",
 			ChannelID:    "channel-runtime-supervision",
-			ParentRunID:  "run-conductor-runtime-supervision",
+			RequestedByRunID:  "run-conductor-runtime-supervision",
 			AgentProfile: AgentProfileTexture,
 			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
@@ -1214,7 +1214,7 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-runtime-supervision",
 			AgentID:      "agent-super-runtime-supervision",
 			ChannelID:    "channel-runtime-supervision",
-			ParentRunID:  "run-texture-runtime-supervision",
+			RequestedByRunID:  "run-texture-runtime-supervision",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1357,7 +1357,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			RunID:        "run-texture-acceptance",
 			AgentID:      "agent-texture-acceptance",
 			ChannelID:    "channel-acceptance",
-			ParentRunID:  "run-conductor-acceptance",
+			RequestedByRunID:  "run-conductor-acceptance",
 			AgentProfile: AgentProfileTexture,
 			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
@@ -1378,7 +1378,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			RunID:        "run-super-acceptance",
 			AgentID:      "agent-super-acceptance",
 			ChannelID:    "channel-acceptance",
-			ParentRunID:  "run-texture-acceptance",
+			RequestedByRunID:  "run-texture-acceptance",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1542,7 +1542,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-texture-acceptance",
 			AgentID:      "agent-texture-acceptance",
 			ChannelID:    "channel-acceptance",
-			ParentRunID:  "run-conductor-acceptance",
+			RequestedByRunID:  "run-conductor-acceptance",
 			AgentProfile: AgentProfileTexture,
 			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
@@ -1563,7 +1563,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-acceptance",
 			AgentID:      "agent-super-acceptance",
 			ChannelID:    "channel-acceptance",
-			ParentRunID:  "run-texture-acceptance",
+			RequestedByRunID:  "run-texture-acceptance",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1661,7 +1661,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-texture-pending-delegate",
 			AgentID:      "agent-texture-pending-delegate",
 			ChannelID:    "channel-pending-delegate",
-			ParentRunID:  "run-conductor-pending-delegate",
+			RequestedByRunID:  "run-conductor-pending-delegate",
 			AgentProfile: AgentProfileTexture,
 			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
@@ -1682,7 +1682,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-pending-delegate",
 			AgentID:      "agent-super-pending-delegate",
 			ChannelID:    "channel-pending-delegate",
-			ParentRunID:  "run-texture-pending-delegate",
+			RequestedByRunID:  "run-texture-pending-delegate",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -2594,7 +2594,7 @@ func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
 		body   string
 	}{
 		{http.MethodPost, "/api/agent/loop", `{"prompt":"old"}`},
-		{http.MethodPost, "/api/agent/spawn", `{"parent_id":"p","objective":"old"}`},
+		{http.MethodPost, "/api/agent/spawn", `{"requested_by":"p","objective":"old"}`},
 		{http.MethodGet, "/api/agent/status?loop_id=old", ""},
 		{http.MethodGet, "/api/agent/loops", ""},
 		{http.MethodGet, "/api/agent/events", ""},
@@ -3764,7 +3764,7 @@ func TestHandleRunStatusByIDMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestHandleRunStatusByIDSpawnedChildTask(t *testing.T) {
+func TestHandleRunStatusByIDSpawnedCoagentTask(t *testing.T) {
 	t.Parallel()
 	// VAL-CHOIR-002: status works for spawned child runs too.
 	rt, handler := testAPISetup(t)
@@ -3776,7 +3776,7 @@ func TestHandleRunStatusByIDSpawnedChildTask(t *testing.T) {
 	}
 
 	// Spawn a child task.
-	child, err := rt.StartChildRun(context.Background(), parent.RunID, "child objective", "user-alice", nil)
+	child, err := rt.StartCoagentRun(context.Background(), parent.RunID, "child objective", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child task: %v", err)
 	}
@@ -3805,11 +3805,14 @@ func TestHandleRunStatusByIDSpawnedChildTask(t *testing.T) {
 	if resp.State == "" {
 		t.Error("state should not be empty")
 	}
-	// Verify metadata includes parent_id.
+	if resp.RequestedByRunID != parent.RunID {
+		t.Errorf("requested_by_run_id: got %q, want %q", resp.RequestedByRunID, parent.RunID)
+	}
+	// Verify metadata includes requester provenance.
 	if resp.Metadata == nil {
 		t.Error("metadata should not be nil for spawned task")
-	} else if pid, _ := resp.Metadata["parent_id"].(string); pid != parent.RunID {
-		t.Errorf("metadata.parent_id: got %q, want %q", pid, parent.RunID)
+	} else if pid, _ := resp.Metadata["requested_by"].(string); pid != parent.RunID {
+		t.Errorf("metadata.requested_by: got %q, want %q", pid, parent.RunID)
 	}
 }
 

@@ -809,7 +809,7 @@ model = "mimo-v2.5-pro"
 	}
 }
 
-func TestStartChildRunResolvesModelPolicyIntoRunMetadata(t *testing.T) {
+func TestStartCoagentRunResolvesModelPolicyIntoRunMetadata(t *testing.T) {
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
@@ -837,7 +837,7 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 		t.Fatalf("create parent: %v", err)
 	}
 
-	child, err := rt.StartChildRun(ctx, parent.RunID, "revise texture", "user-alice", map[string]any{
+	child, err := rt.StartCoagentRun(ctx, parent.RunID, "revise texture", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileTexture,
 		runMetadataAgentRole:    AgentProfileTexture,
 	})
@@ -856,7 +856,7 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 }
 
-func TestStartChildRunResolvesModelPolicyOverlayIntoRunMetadata(t *testing.T) {
+func TestStartCoagentRunResolvesModelPolicyOverlayIntoRunMetadata(t *testing.T) {
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
@@ -897,7 +897,7 @@ reasoning = "low"
 		t.Fatalf("create parent: %v", err)
 	}
 
-	child, err := rt.StartChildRun(ctx, parent.RunID, "research under gpt mini", "user-alice", map[string]any{
+	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research under gpt mini", "user-alice", map[string]any{
 		runMetadataAgentProfile:       AgentProfileResearcher,
 		runMetadataAgentRole:          AgentProfileResearcher,
 		runMetadataLLMPolicyOverlayID: "gpt-mini-arm",

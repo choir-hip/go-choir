@@ -19,6 +19,13 @@ Texture intake, Texture-owned first revision, Texture-chosen researcher/super
 work when needed, worker evidence attached back to the same Texture context,
 and V2+ from that evidence.
 
+The 2026-06-16 deployed settlement claim is revoked. Manual owner QA after that
+claim showed the product still violates the intended Texture semantics: prompt
+bar input is rendered as separate prompt chrome instead of `V0`, `V1` can be a
+generic one-shot response with no later researcher/super evidence, and live
+runtime/tests still carry parent/child control vocabulary. The mission is
+reopened as a documentation-first handoff.
+
 ## Problem
 
 The previous hard-cutover mission went off the rails because it treated
@@ -109,15 +116,47 @@ The observed staging log shape from the owner's QA window matched this chain:
 the live gateway request carried `tools=1` and
 `tool_choice=function:patch_texture`, then the run completed.
 
+Read-only review after the claimed settlement found a sharper causal chain:
+
+- prompt-bar-created Texture `V0` is deliberately blank when
+  `input_source=prompt_bar`; the user prompt is stored as `seed_prompt` metadata
+  plus `prompt_bar_instruction_revision`;
+- the Texture API derives `intake_prompt` from that metadata and the frontend
+  renders a separate prompt band, so the prompt is product chrome rather than a
+  canonical Texture version;
+- `buildAgentRevisionRequest` tells Texture to treat prompt-bar `V0` as
+  intentionally blank canonical document state and to use the prompt as
+  instruction/context, not as canonical prose;
+- tests assert the blank `V0` and prompt-band behavior, so the test suite now
+  protects the wrong spec;
+- `patch_texture` and `rewrite_texture` are terminal tool successes for Texture
+  runs. A first working revision can end the run before Texture makes a later
+  coagent decision;
+- the same-response write-plus-researcher test is too weak. It proves only that
+  a model can call `patch_texture` and `spawn_agent` in one batch, not that a
+  normal `patch_texture` result leaves Texture able to continue to researcher,
+  super, `record_texture_decision`, or an honest blocker;
+- Texture currently receives the broad evidence tool bundle
+  (`save_evidence`, `read_evidence`, `list_evidence`,
+  `get_run_memory_entry`, and `verify_model_capability`) even though researcher
+  should own ordinary evidence gathering and model-capability diagnostics do not
+  belong in Texture's authoring affordance;
+- live runtime and tests still normalize parent/child control through
+  `StartChildRun`, `ParentRunID`, `parent_loop_id`, `parent_id`,
+  child-run list/count helpers, parent/child channel helpers, researcher
+  parent-target fallback, Trace/verifier inference, and cancellation/status
+  vocabulary.
+
 ## Required Product Behavior
 
 After the hard cutover, a current-events prompt such as
 `What's new in the world?` must show:
 
 1. Prompt bar submission creates or opens a Texture artifact.
-2. The Texture surface shows an owner-legible intake state. Either `V0` contains
-   the prompt or the UI shows the prompt as a first-class intake/instruction
-   surface; a blank body alone is not acceptable.
+2. `V0` contains the exact owner prompt as canonical Texture content. The prompt
+   is not hidden metadata, an intake band, or a separate prompt chrome surface.
+   `seed_prompt` may remain as provenance only; it must not be the product
+   display mechanism.
 3. The first Texture agent turn can choose among its real affordances, including
    `patch_texture`, `spawn_agent`, `record_texture_decision`, and
    `request_super_execution`.
@@ -130,6 +169,10 @@ After the hard cutover, a current-events prompt such as
    incorporates, cites, or honestly rejects the worker evidence.
 8. Chyron and Trace distinguish "Texture wrote a working revision" from "the
    whole artifact loop is complete."
+9. Parent/child runtime control is absent. Coagents communicate through
+   trajectory, channel, durable work item, requester/provenance metadata, and
+   addressed updates. No live API, schema, helper, prompt, or acceptance path
+   treats one run as a parent that owns or cancels child runs.
 
 ## Not This Mission
 
@@ -146,6 +189,10 @@ After the hard cutover, a current-events prompt such as
 - Do not make researcher/super mandatory for every prompt. The invariant is
   that Texture has the full affordance and chooses well, not that every prompt
   follows the same choreography.
+- Do not preserve a prompt-band compromise. The owner prompt is `V0`.
+- Do not retain parent/child compatibility language or control fields as a
+  convenience. If historical provenance is needed, use `requested_by_*` or a
+  clearly provenance-only successor, never control-facing parent/child terms.
 
 ## Acceptance
 
@@ -170,8 +217,8 @@ Minimum product-loop proof:
 - fresh prompt-bar submission for a current/research-requiring prompt;
 - conductor route evidence showing Texture before any super handoff;
 - Texture document id, visible UI screenshot or DOM proof, and revision list;
-- no blank-only owner intake unless the prompt is visible in a separate Texture
-  intake surface;
+- `V0` content exactly matches the owner prompt for prompt-bar-created Texture;
+- no blank-only owner intake;
 - first Texture run evidence showing the full Texture tool affordance was
   available, not exact-filtered to only `patch_texture`;
 - downstream researcher and/or super run evidence created by Texture choice,
@@ -181,6 +228,13 @@ Minimum product-loop proof:
 - pending mutation/run state cleared or honestly failed with an owner-visible
   blocker;
 - no direct prompt-bar-to-super route before Texture;
+- no prompt-band / `intake_prompt` product surface;
+- no `prompt_bar_instruction_revision` branch in Texture revision prompting;
+- `patch_texture` and `rewrite_texture` are not terminal Texture run tools;
+- Texture tool inventory excludes model-capability diagnostics and any
+  researcher-owned evidence tool not justified as a Texture affordance;
+- no live parent/child control API/schema/helper/prompt/test residue remains
+  outside explicitly archived historical docs;
 - `nix develop -c scripts/go-test-runtime-shards` or a documented narrower
   equivalent while shaping, full CI, Node B deploy, staging health identity,
   and deployed acceptance proof.
@@ -188,12 +242,12 @@ Minimum product-loop proof:
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-product-loop-recovery-v0.md. Continue the no-compatibility Texture hard cutover plus product-loop recovery mission from the audited Claude handoff. Current status is open_handoff with V=9. Local commits 05162395 and 02215cf7 performed a broad live-code rename/delete pass, but the handoff is not clean: internal/runtime focused tests fail because texture_prompt_unit_test.go still asserts exact first-turn tools after runtime.go changed initialTextureToolChoice to "required"; internal/platform tests fail because blind rename made duplicate platform_texture table definitions and tests now treat canonical Texture labels/classes as retired; the docs subagent changed current docs but those edits are uncommitted; no CI/deploy/staging proof exists. Owner override remains binding: no compatibility shims, no old route aliases, no dual-write tables, no app-id normalization, no legacy tool aliases, no actor/profile bridges, no rollback protection, and no preserving fake/test/demo old-ontology state. First repair the cutover fallout: make the tree compile and tests pass without reintroducing retired-name compatibility; delete duplicate schema blocks; repair corrupted tests so they assert canonical Texture, not its deletion; finish the first-turn tool-choice test update or revise the runtime change if evidence shows "required" is wrong; handle detector literals without allowing retired-name live surface. Then finish behavior repair: owner-legible Texture intake, full first-turn Texture affordance, Texture-created researcher/super work when needed, worker evidence back into the same Texture context, and V2+ from that evidence. Acceptance requires residue proof using git grep, focused tests, scripts/go-test-runtime-shards, frontend build where touched, full CI/deploy identity, and deployed browser/product-path proof on https://choir.news. Fix forward.
+/goal Use Parallax on docs/mission-texture-product-loop-recovery-v0.md. Reopen the Texture product-loop recovery mission from the 2026-06-16 manual QA falsification. Treat the prior V=0 settlement as revoked: the deployed product still renders the owner prompt as separate `PROMPT`/`intake_prompt` chrome, leaves prompt-bar-created `V0` blank, can stop at a generic `V1` without Texture-created researcher/super evidence, grants Texture an overbroad evidence/model-diagnostic tool bundle, and still carries parent/child run control surfaces. Owner override remains binding: hard cutover, no compatibility shims, no rollback protection, no old route/tool/app/schema aliases, no preserving fake/test/demo old-ontology state, and no parent/child control semantics. First document the problem, then delete/fix forward. Required repairs: prompt-bar user prompt is exact canonical Texture `V0`; delete `prompt_bar_instruction_revision`, `intake_prompt`, and prompt-band UI/tests; remove `patch_texture` and `rewrite_texture` from Texture terminal-tool successes while preserving one canonical write per run; split Texture's tool inventory so researcher-owned evidence and `verify_model_capability` are not exposed to Texture unless separately justified; replace parent/child live control APIs/schema/helpers/prompts/tests with trajectory/channel/work-item/requester-provenance coagent semantics; update tests to prove patch-then-delegate and same-turn write-plus-delegate paths, Texture-created researcher/super evidence returning to the same Texture, and V2+ from that evidence; verify with focused tests, `scripts/go-test-runtime-shards`, frontend build if touched, grep residue proof, CI/deploy identity, and deployed browser/product-path proof on https://choir.news. Fix forward and stop rather than adding compatibility.
 ```
 
 ## Parallax State
 
-status: settled
+status: open_handoff
 
 mission conjecture: if the live codebase first deletes the retired ontology
 without compatibility shims, and only then repairs/proves the deployed
@@ -235,55 +289,37 @@ invariants / qualities / domain ramp (I/Q/D):
   verification; then run staging browser proof against `https://choir.news`
   with a real prompt-bar submission and public product APIs.
 
-variant (ranking function) V: current V=0; last ΔV: 5 -> 0 after landing the
-repair, forcing staging deploy, and proving the deployed prompt-bar -> conductor
--> Texture -> researcher -> Texture loop on `https://choir.news`. The product
-trajectory completed with Texture-first routing, owner-legible intake, worker
-evidence back into the same Texture context, and V3 from that evidence. The
-only remaining axes are explicitly residual: run-acceptance synthesis does not
-yet elevate Texture-created researcher evidence to an accepted level, and an
-optional super/worker proof leased a worker but did not observe terminal worker
-delegation before trace completion.
+variant (ranking function) V: current V=5 after local repair of the reopened
+mission. The old V=0 claim proved some route/evidence behavior but accepted the
+wrong prompt-bar ontology: blank canonical `V0` plus separate prompt chrome. The
+active variant now descends only when the exact owner prompt is canonical `V0`,
+prompt-band/intake metadata is deleted, write tools no longer terminate Texture
+before delegation/decision, Texture's tool inventory is trimmed to its real
+authority, parent/child control semantics are removed from live runtime
+surfaces, and deployed browser/product-path proof succeeds.
 
 1. completed: document the no-compatibility owner override and
    cutover-before-repair order;
-2. mostly completed for non-doc live code/tests: delete/rename retired V-name
-   files, symbols, profiles, task types, metadata keys, event names, Trace
-   labels, tests, prompts, routes, app ids, and tools from live surfaces.
-   Current high-read docs still need final residue classification;
-3. locally supported for touched surfaces: delete old compatibility aliases,
-   normalization paths, dual writes, legacy table preservation, and rollback
-   bridges. The duplicate `platform_texture_*` DDL and corrupted platform tests
-   were repaired as deletion fallout, not preserved as compatibility;
-4. partially supported: `git grep -n -i vtext -- ':!docs/**'` is clean, including
-   `cmd/doccheck`; full docs residue proof/classification remains open;
-5. locally supported, not deployed: decide and encode owner-legible intake
-   behavior for prompt-bar `V0`. V0 remains intentionally blank canonical
-   document state, while `intake_prompt`/`data-texture-intake` expose the
-   original owner prompt as first-class Texture intake;
-6. locally supported, not deployed: remove the first-turn exact-tool-choice
-   imprisonment that limits Texture to only `patch_texture`. `required` is now
-   covered by focused tests that also assert the first Texture turn sees
-   `patch_texture`, `record_texture_decision`, `spawn_agent`, and
-   `request_super_execution`;
-7. locally supported, not deployed: prove a first Texture model response can
-   execute both a write and a worker request when the model chooses both.
-   `TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn` covers a
-   prompt-bar-created Texture first turn that calls `patch_texture` and
-   `spawn_agent`;
-8. locally supported, not deployed: product-path tests now prove
-   Texture-created researcher evidence and persistent-super evidence attach
-   back to the same Texture context, wake Texture, and produce V2+ appagent
-   revisions from that evidence. The repair also fixed revision metadata so a
-   scheduled worker wake records the consumed evidence window even when the
-   durable checkpoint has already caught up;
-9. completed: manual-seeding witnesses have product-path replacements for
-   researcher and super evidence, `scripts/go-test-runtime-shards` passed
-   locally, behavior commit `689267dff0cd561395dfb99a4285256716e35740` passed
-   CI/deploy, and staging health reported the deployed SHA;
-10. completed: deployed browser/product-path acceptance proved no old live
-   non-doc ontology, prompt-bar Texture intake, no direct prompt-bar-to-super
-   route before Texture, and V2+/V3 from downstream researcher evidence.
+2. completed locally: prompt-bar `V0` semantics. Owner prompt is exact canonical
+   `V0`; blank prompt-bar revisions, `prompt_bar_instruction_revision`,
+   `intake_prompt`, and prompt-band UI/tests are deleted;
+3. completed locally: Texture write-loop semantics. `patch_texture` and
+   `rewrite_texture` store one canonical revision without terminating the Texture
+   run before delegation/decision/handoff;
+4. completed locally: Texture tool inventory. Evidence/model-diagnostic tools
+   are split out; Texture keeps run-memory retrieval only;
+5. completed locally: parent/child hard cutover. `StartCoagentRun`,
+   `RequestedByRunID`, requester provenance metadata/API fields, and updated
+   tests replace parent/child control helpers and vocabulary;
+6. completed locally: non-doc retired V-name residue remains clean by `git grep`;
+7. invalidated: prior local/deployed proof that accepted a separate prompt
+   intake surface no longer satisfies this mission;
+8. completed locally: product-path tests cover same-turn write-plus-delegate,
+   patch-then-delegate/decision continuation, and Texture-created
+   researcher/super evidence returning to the same Texture with V2+ revisions;
+9. required: deployed browser/product-path acceptance on `https://choir.news`
+   must show `V0` prompt content, no prompt band, no direct prompt-bar-to-super
+   edge, worker evidence from Texture choice, and V2+ from that evidence.
 
 budget: one urgent red-surface fix-forward mission before M3 resumes. Broad
 rename/deletion is authorized because the owner explicitly values coherent
@@ -309,16 +345,18 @@ id, Texture doc id, Texture run id, tool definition/tool choice evidence,
 worker run id(s), worker evidence payload, revision list proving V2+ from that
 evidence, Trace/diagnosis proof of no super-before-Texture, CI run, deploy run,
 staging health commit, and residual risk note. No rollback compatibility proof
-is required or desired. Final deployed evidence is recorded in
+is required or desired. The previously claimed deployed evidence is recorded in
 `docs/mission-texture-product-loop-recovery-v0.ledger.md` under
-`2026-06-16 - Deployed Texture Product Loop Recovered (V 5 -> 0)`.
+`2026-06-16 - Deployed Texture Product Loop Recovered (V 5 -> 0)`, but that
+settlement is now revoked because it accepted prompt-band/blank-`V0` behavior.
 
 heresy delta: discovered: compatibility posture let a broken artifact loop hide
-behind rename progress. Repaired locally: first-turn exact tool imprisonment,
-blank-only prompt-bar intake, duplicate Texture schema/test corruption, corrupted
-model-policy/Universal Wire cutover assertions, and worker evidence metadata
-that could lose the consumed packet proof after checkpoint catch-up. Introduced:
-none accepted.
+behind rename progress; prompt-band/blank-`V0` behavior was accepted as repair
+but is now rejected; Texture has an overbroad tool bundle; live parent/child
+control semantics remain. Repaired locally in prior work: some first-turn exact
+tool imprisonment and duplicate Texture schema/test corruption. Introduced or
+preserved: prompt-band/blank-`V0` tests, terminal Texture write semantics, broad
+Texture evidence/model-diagnostic tools, and parent/child control residue.
 Candidate repair must avoid introducing semantic workflow gates, direct
 prompt-bar-to-super routing, or compatibility shims.
 
@@ -327,16 +365,17 @@ position / live conjectures / open edges:
 - C1 active: the retired ontology itself is now a causal contributor. Removing
   it first should reduce agent confusion and force tests/proofs to name the
   actual object.
-- C2 active: blank prompt-bar `V0` is not a storage bug but a product/spec
-  mismatch introduced by the current prompt-bar intake design. It must become
-  owner-legible either as canonical intake content or as a first-class Texture
-  intake surface.
+- C2 active: blank prompt-bar `V0` is a product/spec violation. The owner prompt
+  is canonical Texture `V0`. A separate first-class intake surface was tried and
+  rejected by manual QA because it splits the artifact between document state
+  and chrome.
 - C3 active: the decisive first-turn behavior failure is exact tool-choice
   filtering. A live Texture turn with only `patch_texture` cannot delegate,
   regardless of prompt doctrine.
-- C4 active: terminal write semantics may be correct only if the model can
-  make all needed calls in the same response. Prove multi-tool write plus
-  worker request before adding new tools or workflow gates.
+- C4 active: terminal write semantics are suspect. `patch_texture` and
+  `rewrite_texture` should not end a Texture run merely because a write
+  succeeded. The run must be able to continue to coagent delegation, super
+  request, decision note, email handoff, or intentional end after the write.
 - C5 active: current acceptance tests are false witnesses because they manually
   start researcher/super work. Replace them with product-path proof.
 - C6 active: Chyron "completed a run" may be technically true but product
@@ -356,19 +395,19 @@ position / live conjectures / open edges:
 - C10 settled for live surfaces: non-doc residue proof is clean. Historical
   docs that mention retired names remain classified as historical/background
   evidence, not live runtime surface.
-- C11 supported and deployed: owner-legible prompt-bar intake does not require
-  stuffing the raw prompt into canonical document prose. The API exposes
-  `intake_prompt`, the frontend renders it separately from the editor body, and
-  staging UI proof rendered `[data-texture-intake]`.
-- C12 supported and deployed locally-by-test/staging-by-effect: broad
+- C11 revoked: owner-legible prompt-bar intake via `intake_prompt` and
+  `[data-texture-intake]` is not acceptable. Delete the prompt-band design and
+  its tests. `seed_prompt` may remain only as provenance, not product display.
+- C12 partially supported: broad
   `required` first-turn tool choice allows the
   model to emit both a write and researcher spawn in the same first Texture
-  response, and both effects persist on the prompt-bar trajectory.
-- C13 supported and deployed: Texture-created researcher and persistent-super runs
+  response, and both effects persist on the prompt-bar trajectory. This is not
+  enough; patch-then-delegate continuation must also work.
+- C13 partially supported: Texture-created researcher and persistent-super runs
   can return `update_coagent` evidence to `texture:<docID>` on the same
   prompt-bar trajectory; Texture wakes and writes V2+ revisions from those
-  packets without manual seeding. Staging proof reached V3 from researcher
-  evidence.
+  packets without manual seeding in prior proof. This must be reproved after
+  deleting prompt-band and terminal-write semantics.
 - C14 supported locally: worker evidence revision metadata now summarizes the
   scheduled evidence window from the previous Texture head when the stored
   controller checkpoint has already reached the scheduled message. This repairs

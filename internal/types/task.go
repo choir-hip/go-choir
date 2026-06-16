@@ -100,8 +100,10 @@ type RunRecord struct {
 	// Related workers and appagents can share a channel without sharing a run.
 	ChannelID string `json:"channel_id,omitempty"`
 
-	// ParentRunID links this run to the run that spawned it, if any.
-	ParentRunID string `json:"parent_loop_id,omitempty"`
+	// RequestedByRunID records, as provenance, the run that requested this run's
+	// work. It is addressing/lineage metadata only: no runtime control, ownership,
+	// or cancellation cascades from it. Lifecycle is trajectory/work-item scoped.
+	RequestedByRunID string `json:"requested_by_run_id,omitempty"`
 
 	// TrajectoryID keys this run to its durable trajectory record. It is
 	// the same value the runtime threads through run metadata; the column

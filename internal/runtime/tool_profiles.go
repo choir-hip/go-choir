@@ -194,14 +194,16 @@ func desktopIDForRun(rec *types.RunRecord) string {
 }
 
 type AgentRoleSpec struct {
-	Profile                string
-	AllowReadOnlyFiles     bool
-	AllowWritableFiles     bool
-	AllowResearchTools     bool
-	AllowEvidenceTools     bool
-	AllowCodingTools       bool
-	AllowCoAgentTools      bool
-	AllowedDelegateTargets []string
+	Profile                   string
+	AllowReadOnlyFiles        bool
+	AllowWritableFiles        bool
+	AllowResearchTools        bool
+	AllowEvidenceTools        bool
+	AllowMemoryTools          bool
+	AllowModelDiagnosticTools bool
+	AllowCodingTools          bool
+	AllowCoAgentTools         bool
+	AllowedDelegateTargets    []string
 }
 
 func roleSpec(profile string) AgentRoleSpec {
@@ -214,37 +216,47 @@ func roleSpec(profile string) AgentRoleSpec {
 		}
 	case AgentProfileResearcher:
 		return AgentRoleSpec{
-			Profile:                AgentProfileResearcher,
-			AllowReadOnlyFiles:     true,
-			AllowResearchTools:     true,
-			AllowEvidenceTools:     true,
-			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: nil,
+			Profile:                   AgentProfileResearcher,
+			AllowReadOnlyFiles:        true,
+			AllowResearchTools:        true,
+			AllowEvidenceTools:        true,
+			AllowMemoryTools:          true,
+			AllowModelDiagnosticTools: true,
+			AllowCoAgentTools:         true,
+			AllowedDelegateTargets:    nil,
 		}
 	case AgentProfileTexture:
+		// Texture is the artifact control plane, not an evidence gatherer. It does
+		// not receive researcher-owned evidence tools (save/read/list_evidence) or
+		// the verify_model_capability diagnostic by default. It keeps run-memory
+		// retrieval so it can recover its own compacted context.
 		return AgentRoleSpec{
 			Profile:                AgentProfileTexture,
-			AllowEvidenceTools:     true,
+			AllowMemoryTools:       true,
 			AllowCoAgentTools:      true,
 			AllowedDelegateTargets: []string{AgentProfileResearcher},
 		}
 	case AgentProfileProcessor:
 		return AgentRoleSpec{
-			Profile:                AgentProfileProcessor,
-			AllowReadOnlyFiles:     true,
-			AllowResearchTools:     true,
-			AllowEvidenceTools:     true,
-			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileTexture},
+			Profile:                   AgentProfileProcessor,
+			AllowReadOnlyFiles:        true,
+			AllowResearchTools:        true,
+			AllowEvidenceTools:        true,
+			AllowMemoryTools:          true,
+			AllowModelDiagnosticTools: true,
+			AllowCoAgentTools:         true,
+			AllowedDelegateTargets:    []string{AgentProfileTexture},
 		}
 	case AgentProfileReconciler:
 		return AgentRoleSpec{
-			Profile:                AgentProfileReconciler,
-			AllowReadOnlyFiles:     true,
-			AllowResearchTools:     true,
-			AllowEvidenceTools:     true,
-			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileTexture},
+			Profile:                   AgentProfileReconciler,
+			AllowReadOnlyFiles:        true,
+			AllowResearchTools:        true,
+			AllowEvidenceTools:        true,
+			AllowMemoryTools:          true,
+			AllowModelDiagnosticTools: true,
+			AllowCoAgentTools:         true,
+			AllowedDelegateTargets:    []string{AgentProfileTexture},
 		}
 	case AgentProfileEmail:
 		return AgentRoleSpec{
@@ -252,33 +264,39 @@ func roleSpec(profile string) AgentRoleSpec {
 		}
 	case AgentProfileCoSuper:
 		return AgentRoleSpec{
-			Profile:                AgentProfileCoSuper,
-			AllowWritableFiles:     true,
-			AllowResearchTools:     true,
-			AllowEvidenceTools:     true,
-			AllowCodingTools:       true,
-			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileResearcher},
+			Profile:                   AgentProfileCoSuper,
+			AllowWritableFiles:        true,
+			AllowResearchTools:        true,
+			AllowEvidenceTools:        true,
+			AllowMemoryTools:          true,
+			AllowModelDiagnosticTools: true,
+			AllowCodingTools:          true,
+			AllowCoAgentTools:         true,
+			AllowedDelegateTargets:    []string{AgentProfileResearcher},
 		}
 	case AgentProfileVSuper:
 		return AgentRoleSpec{
-			Profile:                AgentProfileVSuper,
-			AllowWritableFiles:     true,
-			AllowResearchTools:     true,
-			AllowEvidenceTools:     true,
-			AllowCodingTools:       true,
-			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileResearcher, AgentProfileCoSuper},
+			Profile:                   AgentProfileVSuper,
+			AllowWritableFiles:        true,
+			AllowResearchTools:        true,
+			AllowEvidenceTools:        true,
+			AllowMemoryTools:          true,
+			AllowModelDiagnosticTools: true,
+			AllowCodingTools:          true,
+			AllowCoAgentTools:         true,
+			AllowedDelegateTargets:    []string{AgentProfileResearcher, AgentProfileCoSuper},
 		}
 	case AgentProfileSuper:
 		return AgentRoleSpec{
-			Profile:                AgentProfileSuper,
-			AllowWritableFiles:     true,
-			AllowResearchTools:     true,
-			AllowEvidenceTools:     true,
-			AllowCodingTools:       true,
-			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileResearcher, AgentProfileCoSuper},
+			Profile:                   AgentProfileSuper,
+			AllowWritableFiles:        true,
+			AllowResearchTools:        true,
+			AllowEvidenceTools:        true,
+			AllowMemoryTools:          true,
+			AllowModelDiagnosticTools: true,
+			AllowCodingTools:          true,
+			AllowCoAgentTools:         true,
+			AllowedDelegateTargets:    []string{AgentProfileResearcher, AgentProfileCoSuper},
 		}
 	default:
 		return AgentRoleSpec{Profile: strings.TrimSpace(profile)}
@@ -526,8 +544,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(agentID)
 		b.WriteString(".")
 	}
-	if rec != nil && strings.TrimSpace(rec.ParentRunID) != "" && rt != nil && rt.store != nil {
-		if parentRun, err := rt.store.GetRun(context.Background(), strings.TrimSpace(rec.ParentRunID)); err == nil {
+	if rec != nil && strings.TrimSpace(rec.RequestedByRunID) != "" && rt != nil && rt.store != nil {
+		if parentRun, err := rt.store.GetRun(context.Background(), strings.TrimSpace(rec.RequestedByRunID)); err == nil {
 			parentAgentID := agentIDForRun(&parentRun)
 			if parentAgentID != "" {
 				b.WriteString("\nParent agent id: ")
@@ -667,6 +685,16 @@ func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchCl
 	}
 	if spec.AllowEvidenceTools {
 		if err := RegisterEvidenceTools(registry, rt); err != nil {
+			return nil, err
+		}
+	}
+	if spec.AllowMemoryTools {
+		if err := RegisterRunMemoryTools(registry, rt); err != nil {
+			return nil, err
+		}
+	}
+	if spec.AllowModelDiagnosticTools {
+		if err := RegisterModelDiagnosticTools(registry, rt); err != nil {
 			return nil, err
 		}
 	}

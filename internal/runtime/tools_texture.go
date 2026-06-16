@@ -240,6 +240,23 @@ func newRecordTextureDecisionTool(rt *Runtime) Tool {
 			if _, err := rt.store.GetDocument(ctx, docID, rec.OwnerID); err != nil {
 				return "", fmt.Errorf("get texture document for decision: %w", err)
 			}
+			// One decision record per (run, kind, reason). The deterministic initial
+			// decision recorder may already have stored an equivalent note before the
+			// loop, and the model may also call this tool; recording the identical
+			// decision twice in one run is never useful, so dedupe idempotently.
+			if existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100); err == nil {
+				for _, prior := range existing {
+					if prior.RunID == rec.RunID && prior.DecisionKind == decisionKind && prior.Reason == reason {
+						return toolResultJSON(map[string]any{
+							"decision_id":   prior.DecisionID,
+							"doc_id":        prior.DocID,
+							"decision_kind": prior.DecisionKind,
+							"status":        "recorded",
+							"created_at":    prior.CreatedAt.Format(time.RFC3339Nano),
+						})
+					}
+				}
+			}
 			now := time.Now().UTC()
 			decision := types.TextureDecisionRecord{
 				DecisionID:   uuid.NewString(),
@@ -547,7 +564,12 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, fmt.Errorf("texture mutation not found for run %s", rec.RunID)
 	}
 	if mutation.State != "pending" {
-		return types.Revision{}, fmt.Errorf("texture mutation is %s, not pending", mutation.State)
+		// One canonical write per run is mechanically enforced here: once this run
+		// has stored its revision the mutation is no longer pending. A second write
+		// attempt is rejected so the run keeps exactly one canonical revision. The
+		// run is still live and should now delegate (spawn_agent), request super
+		// execution, record a Texture decision, request an email handoff, or end.
+		return types.Revision{}, fmt.Errorf("texture mutation is %s, not pending: this run already stored its one canonical revision; do not write again, instead delegate, request super, record a decision, request an email handoff, or end the run", mutation.State)
 	}
 	if docID == "" {
 		docID = strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))

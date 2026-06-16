@@ -165,24 +165,24 @@ type compactionRecallEvalAssessment struct {
 }
 
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
-// It creates a child run linked to a parent, with an objective and optional
-// constraints (VAL-CHOIR-001).
+// It starts a coagent run and records the requesting run as provenance, with an
+// objective and optional constraints (VAL-CHOIR-001).
 type spawnRequest struct {
-	ParentID    string         `json:"parent_id"`
-	Objective   string         `json:"objective"`
-	Constraints map[string]any `json:"constraints,omitempty"`
+	RequesterRunID string         `json:"requested_by"`
+	Objective      string         `json:"objective"`
+	Constraints    map[string]any `json:"constraints,omitempty"`
 }
 
 // spawnResponse is the JSON response for POST /api/agent/spawn.
-// It returns the child run handle with the parent linkage.
+// It returns the coagent run handle with the requester provenance.
 type spawnResponse struct {
-	AgentID   string         `json:"agent_id"`
-	RunID     string         `json:"loop_id"`
-	ChannelID string         `json:"channel_id,omitempty"`
-	ParentID  string         `json:"parent_id"`
-	State     types.RunState `json:"state"`
-	OwnerID   string         `json:"owner_id"`
-	CreatedAt string         `json:"created_at"`
+	AgentID        string         `json:"agent_id"`
+	RunID          string         `json:"loop_id"`
+	ChannelID      string         `json:"channel_id,omitempty"`
+	RequesterRunID string         `json:"requested_by"`
+	State          types.RunState `json:"state"`
+	OwnerID        string         `json:"owner_id"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 // cancelRequest is the JSON payload for POST /api/agent/cancel.
@@ -216,7 +216,7 @@ type runStatusResponse struct {
 	AgentID             string                                `json:"agent_id"`
 	RunID               string                                `json:"loop_id"`
 	ChannelID           string                                `json:"channel_id,omitempty"`
-	ParentRunID         string                                `json:"parent_loop_id,omitempty"`
+	RequestedByRunID    string                                `json:"requested_by_run_id,omitempty"`
 	AgentProfile        string                                `json:"agent_profile,omitempty"`
 	AgentRole           string                                `json:"agent_role,omitempty"`
 	OwnerID             string                                `json:"owner_id"`
@@ -378,11 +378,11 @@ func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
 		finishedAt = &s
 	}
 	return runStatusResponse{
-		AgentID:         rec.AgentID,
-		RunID:           rec.RunID,
-		ChannelID:       rec.ChannelID,
-		ParentRunID:     rec.ParentRunID,
-		AgentProfile:    rec.AgentProfile,
+		AgentID:          rec.AgentID,
+		RunID:            rec.RunID,
+		ChannelID:        rec.ChannelID,
+		RequestedByRunID: rec.RequestedByRunID,
+		AgentProfile:     rec.AgentProfile,
 		AgentRole:       rec.AgentRole,
 		OwnerID:         rec.OwnerID,
 		SandboxID:       rec.SandboxID,
@@ -922,8 +922,8 @@ func (h *APIHandler) HandleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(req.ParentID) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "parent_id is required"})
+	if strings.TrimSpace(req.RequesterRunID) == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "requested_by is required"})
 		return
 	}
 
@@ -932,26 +932,26 @@ func (h *APIHandler) HandleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rec, err := h.rt.StartChildRun(r.Context(), req.ParentID, req.Objective, ownerID, req.Constraints)
+	rec, err := h.rt.StartCoagentRun(r.Context(), req.RequesterRunID, req.Objective, ownerID, req.Constraints)
 	if err != nil {
-		// Check if the parent run was not found.
-		if strings.Contains(err.Error(), "parent run not found") {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "parent run not found"})
+		// Check if the requesting run was not found.
+		if strings.Contains(err.Error(), "requester run not found") {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "requester run not found"})
 			return
 		}
-		log.Printf("runtime api: start child run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to start child run"})
+		log.Printf("runtime api: start coagent run: %v", err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to start coagent run"})
 		return
 	}
 
 	writeAPIJSON(w, http.StatusAccepted, spawnResponse{
-		AgentID:   rec.AgentID,
-		RunID:     rec.RunID,
-		ChannelID: rec.ChannelID,
-		ParentID:  req.ParentID,
-		State:     rec.State,
-		OwnerID:   rec.OwnerID,
-		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		AgentID:        rec.AgentID,
+		RunID:          rec.RunID,
+		ChannelID:      rec.ChannelID,
+		RequesterRunID: req.RequesterRunID,
+		State:          rec.State,
+		OwnerID:        rec.OwnerID,
+		CreatedAt:      rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 	})
 }
 
@@ -1379,11 +1379,11 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 			finishedAt = &s
 		}
 		resp.Runs = append(resp.Runs, runStatusResponse{
-			AgentID:      rec.AgentID,
-			RunID:        rec.RunID,
-			ChannelID:    rec.ChannelID,
-			ParentRunID:  rec.ParentRunID,
-			AgentProfile: rec.AgentProfile,
+			AgentID:          rec.AgentID,
+			RunID:            rec.RunID,
+			ChannelID:        rec.ChannelID,
+			RequestedByRunID: rec.RequestedByRunID,
+			AgentProfile:     rec.AgentProfile,
 			AgentRole:    rec.AgentRole,
 			OwnerID:      rec.OwnerID,
 			SandboxID:    rec.SandboxID,

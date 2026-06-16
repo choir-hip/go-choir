@@ -240,7 +240,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		runMetadataAgentID:       agentID,
 		runMetadataChannelID:     agentID,
 		runMetadataDesktopID:     desktopIDForRun(parent),
-		"parent_id":              parent.RunID,
+		"requested_by":              parent.RunID,
 		"source_agent_profile":   AgentProfileTexture,
 		"email_action":           "draft_request",
 		"email_draft_id":         draftID,
@@ -261,7 +261,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		RunID:        runID,
 		AgentID:      agentID,
 		ChannelID:    agentID,
-		ParentRunID:  parent.RunID,
+		RequestedByRunID:  parent.RunID,
 		AgentProfile: AgentProfileEmail,
 		AgentRole:    AgentProfileEmail,
 		OwnerID:      ownerID,
@@ -280,7 +280,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	}
 	rt.emitEvent(ctx, run, types.EventRunSubmitted, events.CauseTaskLifecycle, emailEventJSON(map[string]any{
 		"prompt_length": len(run.Prompt),
-		"parent_id":     parent.RunID,
+		"requested_by":     parent.RunID,
 	}))
 	rt.emitEvent(ctx, run, types.EventRunStarted, events.CauseTaskLifecycle, emailEventJSON(map[string]any{
 		"authority": "email_appagent",

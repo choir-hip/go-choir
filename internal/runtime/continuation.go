@@ -116,7 +116,7 @@ func (rt *Runtime) StartRunContinuation(ctx context.Context, ownerID, continuati
 	if overlayID := detailStringValue(rec.Details, runMetadataLLMPolicyOverlayID); overlayID != "" {
 		metadata[runMetadataLLMPolicyOverlayID] = overlayID
 	}
-	child, err := rt.StartChildRun(ctx, rec.SourceRunID, rec.Objective, ownerID, metadata)
+	child, err := rt.StartCoagentRun(ctx, rec.SourceRunID, rec.Objective, ownerID, metadata)
 	if err != nil {
 		rec.Status = types.RunContinuationBlocked
 		rec.Details = cloneDetailsMap(rec.Details)

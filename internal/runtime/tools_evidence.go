@@ -12,19 +12,35 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// RegisterEvidenceTools installs the researcher-owned evidence-gathering tools.
+// These belong to roles that do ordinary evidence collection (researcher and the
+// execution roles), not to Texture's authoring/control-plane affordance.
 func RegisterEvidenceTools(registry *ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newSaveEvidenceTool(rt),
 		newReadEvidenceTool(rt),
 		newListEvidenceTool(rt),
-		newGetRunMemoryEntryTool(rt),
-		newVerifyModelCapabilityTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// RegisterRunMemoryTools installs run-memory retrieval. get_run_memory_entry is
+// exact durable run-memory retrieval after compaction, not ordinary evidence
+// gathering, so any tool-looping role (including Texture) may keep it without
+// receiving researcher-owned evidence tools.
+func RegisterRunMemoryTools(registry *ToolRegistry, rt *Runtime) error {
+	return registry.Register(newGetRunMemoryEntryTool(rt))
+}
+
+// RegisterModelDiagnosticTools installs provider/model diagnostic verifiers.
+// verify_model_capability is a model diagnostic and does not belong in Texture's
+// default authoring affordance.
+func RegisterModelDiagnosticTools(registry *ToolRegistry, rt *Runtime) error {
+	return registry.Register(newVerifyModelCapabilityTool(rt))
 }
 
 func newGetRunMemoryEntryTool(rt *Runtime) Tool {

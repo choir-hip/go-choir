@@ -166,39 +166,41 @@ func TestTexturePromptUsesDiffFirstContextForDirectUserEdits(t *testing.T) {
 	}
 }
 
-func TestTexturePromptBarIntakeTreatsSeedAsInstructionsNotCanonicalProse(t *testing.T) {
+func TestTexturePromptBarOwnerPromptIsCanonicalV0(t *testing.T) {
 	reason := "M3.2 staging proof: user supplied the needed content and requested no research or execution worker."
+	promptText := "Create a short Texture document. Record an off-document Texture decision note with exact reason " + reason + "."
 	current := types.Revision{
 		DocID:      "doc-prompt-bar-intake",
 		RevisionID: "rev-prompt-bar-intake",
-		Content:    "",
+		Content:    promptText,
 		AuthorKind: types.AuthorUser,
 	}
 	metadata := map[string]any{
-		"seed_prompt":                     "Create a short Texture document. Record an off-document Texture decision note with exact reason " + reason + ".",
-		"prompt_bar_instruction_revision": true,
-		"input_origin":                    textureInputOriginUserPrompt,
+		"seed_prompt":  promptText,
+		"input_origin": textureInputOriginUserPrompt,
 	}
 	request := buildAgentRevisionRequest(current, nil, metadata, textureAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"Treat this prompt-bar intake revision as intentionally blank canonical document state.",
-		"Use the original user request as instruction/context for the first Texture-authored reader-facing revision, not as existing canonical prose to preserve or quote.",
+		"This canonical V0 content is the owner's original prompt/request for this Texture document.",
+		"Treat the owner prompt as the request to fulfill: author the first useful reader-facing revision that addresses it.",
 		"Keep private coordination rationale, explicit off-document decision reasons, and tool instructions out of the canonical document body",
-		"Current canonical document content:\n---\n(empty document)\n---",
+		"Current canonical document content:\n---\n" + promptText + "\n---",
 	} {
 		if !strings.Contains(request, want) {
-			t.Fatalf("prompt-bar intake prompt missing %q:\n%s", want, request)
+			t.Fatalf("prompt-bar owner-prompt V0 prompt missing %q:\n%s", want, request)
 		}
 	}
 	for _, forbidden := range []string{
 		"Treat this latest user-authored revision as the canonical input for the next version.",
 		"Interpret the user edit diff as the instruction-bearing control surface.",
+		"intentionally blank canonical document state",
+		"(empty document)",
 	} {
 		if strings.Contains(request, forbidden) {
-			t.Fatalf("prompt-bar intake prompt contains direct-edit instruction %q:\n%s", forbidden, request)
+			t.Fatalf("prompt-bar owner-prompt V0 prompt contains forbidden blank/edit wording %q:\n%s", forbidden, request)
 		}
 	}
 }

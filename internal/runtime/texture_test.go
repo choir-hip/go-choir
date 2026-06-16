@@ -258,13 +258,18 @@ func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req
 			Model: "test-model",
 		}, nil
 	case 2:
+		// Author a clean reader-facing revision that replaces the owner prompt V0,
+		// rather than appending to it. The off-document decision rationale lives in
+		// the prompt (now canonical V0) and must not be carried into the authored
+		// document body, so the model rewrites the whole document with clean prose.
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-reader-edit",
-				Name: "patch_texture",
+				Name: "rewrite_texture",
 				Arguments: json.RawMessage(`{
-					"edits":[{"op":"append","text":"M32_TEXTURE_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe."}]
+					"content":"M32_TEXTURE_DECISION_ROUTE_TEST\n\nThis marker is a deployed acceptance probe.",
+					"rationale":"Author the clean reader-facing Texture revision from the owner prompt."
 				}`),
 			}},
 			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
@@ -503,7 +508,7 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 	child := types.RunRecord{
 		RunID:        "run-cancel-child",
 		AgentID:      "agent-vsuper-cancel",
-		ParentRunID:  "spawned-by-other-run",
+		RequestedByRunID:  "spawned-by-other-run",
 		AgentProfile: AgentProfileVSuper,
 		AgentRole:    AgentProfileVSuper,
 		OwnerID:      "user-1",
@@ -522,7 +527,7 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 	graphChildDifferentTrajectory := types.RunRecord{
 		RunID:        "run-cancel-graph-child-other-trajectory",
 		AgentID:      "agent-other-trajectory",
-		ParentRunID:  parent.RunID,
+		RequestedByRunID:  parent.RunID,
 		AgentProfile: AgentProfileVSuper,
 		AgentRole:    AgentProfileVSuper,
 		OwnerID:      "user-1",
@@ -1890,6 +1895,11 @@ func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req Tool
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
 	}
+	// The canonical write is no longer terminal, so after writing once the model
+	// intentionally ends the run rather than writing again.
+	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+	}
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
@@ -2241,8 +2251,11 @@ func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *test
 		t.Fatalf("initial texture tool_choice = %#v, want first choice required", provider.choices)
 	}
 	assertFullInitialTextureAffordance(t, provider.firstTools)
-	if len(provider.choices) != 1 {
-		t.Fatalf("texture provider calls = %d choices=%#v, want one terminal Texture turn", len(provider.choices), provider.choices)
+	if len(provider.choices) != 2 {
+		t.Fatalf("texture provider calls = %d choices=%#v, want a write turn plus a non-terminal continuation turn", len(provider.choices), provider.choices)
+	}
+	if provider.choices[1] != "" {
+		t.Fatalf("continuation tool_choice = %q, want unconstrained after the non-terminal write", provider.choices[1])
 	}
 }
 
@@ -2375,7 +2388,7 @@ func TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn(t *testing.T
 	}
 	var researcher *types.RunRecord
 	for i := range runs {
-		if runs[i].ParentRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+		if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
 			researcher = &runs[i]
 			break
 		}
@@ -2431,7 +2444,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 			t.Fatalf("list runs: %v", err)
 		}
 		for i := range runs {
-			if runs[i].ParentRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+			if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
 				researcherRun = &runs[i]
 				break
 			}
@@ -2646,8 +2659,11 @@ func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T)
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if len(provider.choices) != 1 || provider.choices[0] != "required" {
-		t.Fatalf("texture provider choices = %#v, want one terminal required Texture turn", provider.choices)
+	if len(provider.choices) != 2 || provider.choices[0] != "required" {
+		t.Fatalf("texture provider choices = %#v, want a required write turn plus a non-terminal continuation turn", provider.choices)
+	}
+	if provider.choices[1] != "" {
+		t.Fatalf("continuation tool_choice = %q, want unconstrained after the non-terminal write", provider.choices[1])
 	}
 	assertFullInitialTextureAffordance(t, provider.firstTools)
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
@@ -3077,7 +3093,7 @@ func TestTextureSeededStochasticWorkflowContracts(t *testing.T) {
 	}
 	waitForRunRunning(t, rt, initialResp.RunID, ownerID, 5*time.Second)
 
-	researchRun, err := rt.StartChildRun(context.Background(), initialResp.RunID, "Research toy model evidence", ownerID, map[string]any{
+	researchRun, err := rt.StartCoagentRun(context.Background(), initialResp.RunID, "Research toy model evidence", ownerID, map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    decision.DocID,
@@ -3085,7 +3101,7 @@ func TestTextureSeededStochasticWorkflowContracts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start researcher worker: %v", err)
 	}
-	superRun, err := rt.StartChildRun(context.Background(), initialResp.RunID, "Verify generated toy model", ownerID, map[string]any{
+	superRun, err := rt.StartCoagentRun(context.Background(), initialResp.RunID, "Verify generated toy model", ownerID, map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataChannelID:    decision.DocID,
@@ -3221,8 +3237,8 @@ func TestTextureSeededStochasticWorkflowContracts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get initial texture run: %v", err)
 	}
-	if initialRun.ParentRunID != conductorRun.RunID {
-		t.Fatalf("initial texture run parent = %q, want conductor run %q", initialRun.ParentRunID, conductorRun.RunID)
+	if initialRun.RequestedByRunID != conductorRun.RunID {
+		t.Fatalf("initial texture run parent = %q, want conductor run %q", initialRun.RequestedByRunID, conductorRun.RunID)
 	}
 	trajectoryID := trajectoryIDForRun(&initialRun)
 	if trajectoryID != conductorRun.RunID {
@@ -3366,7 +3382,7 @@ func TestTextureWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 	}
 	var wakeRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].ParentRunID == researchRun.RunID {
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researchRun.RunID {
 			wakeRun = &runs[i]
 			break
 		}
@@ -3464,7 +3480,7 @@ func TestTextureWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 	}
 	var wakeRuns []types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].ParentRunID == researchRun.RunID {
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researchRun.RunID {
 			wakeRuns = append(wakeRuns, runs[i])
 		}
 	}
@@ -3511,7 +3527,7 @@ func TestTextureWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 		t.Fatalf("list channel runs before clock fires: %v", err)
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && run.ParentRunID == researchRun.RunID {
+		if agentProfileForRun(&run) == AgentProfileTexture && run.RequestedByRunID == researchRun.RunID {
 			t.Fatalf("wake run started before fake clock fired: %+v", run)
 		}
 	}
@@ -3581,7 +3597,7 @@ func TestTextureWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
 		t.Fatalf("list channel runs after blocked wake: %v", err)
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && run.ParentRunID == researchRun.RunID {
+		if agentProfileForRun(&run) == AgentProfileTexture && run.RequestedByRunID == researchRun.RunID {
 			t.Fatalf("wake run should wait for pending mutation to clear, got %+v", run)
 		}
 	}
@@ -3632,7 +3648,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("start texture run: %v", err)
 	}
 	waitForRunRunning(t, rt, textureRun.RunID, "user-1", 5*time.Second)
-	researcherRun, err := rt.StartChildRun(context.Background(), textureRun.RunID, "Research the update", "user-1", map[string]any{
+	researcherRun, err := rt.StartCoagentRun(context.Background(), textureRun.RunID, "Research the update", "user-1", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    docID,
@@ -3687,7 +3703,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 	var wakeRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].ParentRunID == researcherRun.RunID {
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researcherRun.RunID {
 			wakeRun = &runs[i]
 			break
 		}
@@ -3740,7 +3756,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("start texture run: %v", err)
 	}
 	waitForRunRunning(t, rt, textureRun.RunID, "user-1", 5*time.Second)
-	superRun, err := rt.StartChildRun(context.Background(), textureRun.RunID, "Build and verify a toy artifact", "user-1", map[string]any{
+	superRun, err := rt.StartCoagentRun(context.Background(), textureRun.RunID, "Build and verify a toy artifact", "user-1", map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataChannelID:    docID,
@@ -3806,7 +3822,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 	var wakeRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].ParentRunID == superRun.RunID {
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == superRun.RunID {
 			wakeRun = &runs[i]
 			break
 		}
@@ -3912,7 +3928,7 @@ func TestTextureWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testin
 			t.Fatalf("list channel runs: %v", err)
 		}
 		for i := range runs {
-			if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].ParentRunID == researchRun.RunID && runs[i].RunID != initialResp.RunID {
+			if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researchRun.RunID && runs[i].RunID != initialResp.RunID {
 				wakeRun = &runs[i]
 				break
 			}
@@ -4060,7 +4076,7 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 		ChannelID:   doc.DocID,
 		State:       types.RunRunning,
 		Prompt:      "Integrate the durable finding",
-		ParentRunID: researchRun.RunID,
+		RequestedByRunID: researchRun.RunID,
 		CreatedAt:   now.Add(4 * time.Second),
 		UpdatedAt:   now.Add(4 * time.Second),
 		Metadata: map[string]any{
@@ -4169,8 +4185,8 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 	if recoveredRun == nil {
 		t.Fatalf("expected a replacement texture run after restart, got %+v", runs)
 	}
-	if recoveredRun.ParentRunID != researchRun.RunID {
-		t.Fatalf("replacement run parent = %q, want %q", recoveredRun.ParentRunID, researchRun.RunID)
+	if recoveredRun.RequestedByRunID != researchRun.RunID {
+		t.Fatalf("replacement run parent = %q, want %q", recoveredRun.RequestedByRunID, researchRun.RunID)
 	}
 	if !strings.Contains(recoveredRun.Prompt, "Durable finding: the corrected fact landed while the sandbox was about to restart.") {
 		t.Fatalf("replacement run prompt missing durable finding: %q", recoveredRun.Prompt)
@@ -4299,8 +4315,8 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get worker loop: %v", err)
 	}
-	if workerRun.ParentRunID != revResp.RunID {
-		t.Fatalf("worker loop parent = %q, want texture run %q", workerRun.ParentRunID, revResp.RunID)
+	if workerRun.RequestedByRunID != revResp.RunID {
+		t.Fatalf("worker loop parent = %q, want texture run %q", workerRun.RequestedByRunID, revResp.RunID)
 	}
 	textureRun, err := s.GetRun(context.Background(), revResp.RunID)
 	if err != nil {
@@ -4398,8 +4414,8 @@ func TestTextureAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *
 	if err != nil {
 		t.Fatalf("get texture run: %v", err)
 	}
-	if textureRun.ParentRunID != conductorRun.RunID {
-		t.Fatalf("texture run parent = %q, want conductor %q", textureRun.ParentRunID, conductorRun.RunID)
+	if textureRun.RequestedByRunID != conductorRun.RunID {
+		t.Fatalf("texture run parent = %q, want conductor %q", textureRun.RequestedByRunID, conductorRun.RunID)
 	}
 	if trajectoryIDForRun(&textureRun) != trajectoryIDForRun(&conductorRun) {
 		t.Fatalf("texture trajectory = %q, want conductor trajectory %q", trajectoryIDForRun(&textureRun), trajectoryIDForRun(&conductorRun))
@@ -6672,7 +6688,7 @@ func TestTextureDocumentResponseReconcilesPendingMutationFromCurrentHead(t *test
 		t.Fatalf("create pending mutation: %v", err)
 	}
 	meta, _ := json.Marshal(map[string]any{
-		"source":  "edit_texture",
+		"source":  "patch_texture",
 		"loop_id": runID,
 	})
 	if err := s.CreateRevision(context.Background(), types.Revision{

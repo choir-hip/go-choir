@@ -41,7 +41,7 @@ func TestSpawnCreatesChildTask(t *testing.T) {
 	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"research the history of Go"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"research the history of Go"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -62,8 +62,8 @@ func TestSpawnCreatesChildTask(t *testing.T) {
 	if resp.State != types.RunPending {
 		t.Errorf("state: got %q, want %q", resp.State, types.RunPending)
 	}
-	if resp.ParentID != parentID {
-		t.Errorf("parent_id: got %q, want %q", resp.ParentID, parentID)
+	if resp.RequesterRunID != parentID {
+		t.Errorf("parent_id: got %q, want %q", resp.RequesterRunID, parentID)
 	}
 	if resp.OwnerID != "user-alice" {
 		t.Errorf("owner_id: got %q, want user-alice", resp.OwnerID)
@@ -79,7 +79,7 @@ func TestSpawnChildCarriesParentMetadata(t *testing.T) {
 	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"child task objective"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"child task objective"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -105,8 +105,8 @@ func TestSpawnChildCarriesParentMetadata(t *testing.T) {
 	if task.Prompt != "child task objective" {
 		t.Errorf("prompt: got %q, want %q", task.Prompt, "child task objective")
 	}
-	if got := task.Metadata["parent_id"]; got != parentID {
-		t.Errorf("parent_id metadata: got %v, want %q", got, parentID)
+	if got := task.Metadata["requested_by"]; got != parentID {
+		t.Errorf("requested_by metadata: got %v, want %q", got, parentID)
 	}
 }
 
@@ -117,7 +117,7 @@ func TestSpawnInheritsOwnerFromAuth(t *testing.T) {
 	_, handler, parentID := testSpawnSetup(t)
 
 	// Spawn as user-bob — child should be owned by bob.
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"bob's child"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"bob's child"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-bob")
 	w := httptest.NewRecorder()
 
@@ -139,8 +139,8 @@ func TestSpawnInheritsOwnerFromAuth(t *testing.T) {
 	}
 }
 
-// TestSpawnWithoutParentIDFails verifies that spawn requires a parent_id.
-func TestSpawnWithoutParentIDFails(t *testing.T) {
+// TestSpawnWithoutRequesterRunIDFails verifies that spawn requires a parent_id.
+func TestSpawnWithoutRequesterRunIDFails(t *testing.T) {
 	t.Parallel()
 	_, handler, _ := testSpawnSetup(t)
 
@@ -160,7 +160,7 @@ func TestSpawnWithoutObjectiveFails(t *testing.T) {
 	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -178,7 +178,7 @@ func TestSpawnWithConstraints(t *testing.T) {
 	_, handler, parentID := testSpawnSetup(t)
 
 	body := fmt.Sprintf(`{
-		"parent_id":"%s",
+		"requested_by":"%s",
 		"objective":"research topic X",
 		"constraints":{"max_tokens":500,"timeout_seconds":30}
 	}`, parentID)
@@ -209,7 +209,7 @@ func TestSpawnAuthGated(t *testing.T) {
 	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"test"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"test"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "")
 	w := httptest.NewRecorder()
 
@@ -250,13 +250,13 @@ func TestSpawnInvalidBody(t *testing.T) {
 	}
 }
 
-// TestSpawnNonexistentParent verifies that spawning with a nonexistent parent_id
+// TestSpawnNonexistentRequester verifies that spawning with a nonexistent parent_id
 // returns an appropriate error.
-func TestSpawnNonexistentParent(t *testing.T) {
+func TestSpawnNonexistentRequester(t *testing.T) {
 	t.Parallel()
 	_, handler, _ := testSpawnSetup(t)
 
-	body := `{"parent_id":"nonexistent-task-id","objective":"orphan child"}`
+	body := `{"requested_by":"nonexistent-task-id","objective":"orphan child"}`
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -276,7 +276,7 @@ func TestSpawnMultipleChildrenFromSameParent(t *testing.T) {
 	childIDs := make(map[string]bool)
 
 	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"child task %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"child task %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 
@@ -308,8 +308,8 @@ func TestSpawnMultipleChildrenFromSameParent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get child run %s: %v", taskID, err)
 		}
-		if child.Metadata["parent_id"] != parentID {
-			t.Errorf("child parent_id metadata: got %v, want %q", child.Metadata["parent_id"], parentID)
+		if child.Metadata["requested_by"] != parentID {
+			t.Errorf("child requested_by metadata: got %v, want %q", child.Metadata["requested_by"], parentID)
 		}
 	}
 }
@@ -322,7 +322,7 @@ func TestSpawnCreatesRuntimeTask(t *testing.T) {
 	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"child runtime task"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"child runtime task"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -355,9 +355,9 @@ func TestSpawnCreatesRuntimeTask(t *testing.T) {
 	if task.Metadata == nil {
 		t.Fatal("task metadata should not be nil")
 	}
-	parentIDInMeta, ok := task.Metadata["parent_id"].(string)
+	parentIDInMeta, ok := task.Metadata["requested_by"].(string)
 	if !ok || parentIDInMeta != parentID {
-		t.Errorf("task metadata parent_id: got %v, want %q", task.Metadata["parent_id"], parentID)
+		t.Errorf("task metadata parent_id: got %v, want %q", task.Metadata["requested_by"], parentID)
 	}
 }
 
@@ -367,7 +367,7 @@ func TestSpawnChildMetadataAndTaskConsistent(t *testing.T) {
 	t.Parallel()
 	rt, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"consistency check"}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"consistency check"}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -390,20 +390,20 @@ func TestSpawnChildMetadataAndTaskConsistent(t *testing.T) {
 	if task.OwnerID != "user-alice" {
 		t.Errorf("owner_id: got %q, want user-alice", task.OwnerID)
 	}
-	if task.Metadata["parent_id"] != parentID {
-		t.Errorf("parent_id metadata: got %v, want %q", task.Metadata["parent_id"], parentID)
+	if task.Metadata["requested_by"] != parentID {
+		t.Errorf("requested_by metadata: got %v, want %q", task.Metadata["requested_by"], parentID)
 	}
 }
 
-// TestSpawnListedByParent verifies that spawned children keep their parent_id
+// TestSpawnListedByRequester verifies that spawned children keep their parent_id
 // in runtime metadata (VAL-CHOIR-004).
-func TestSpawnListedByParent(t *testing.T) {
+func TestSpawnListedByRequester(t *testing.T) {
 	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
 	// Spawn two children.
 	for i := 0; i < 2; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"child %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"child %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 		handler.HandleSpawn(w, req)
@@ -423,7 +423,7 @@ func TestSpawnEmptyObjectiveRejected(t *testing.T) {
 	t.Parallel()
 	_, handler, parentID := testSpawnSetup(t)
 
-	body := fmt.Sprintf(`{"parent_id":"%s","objective":"   "}`, parentID)
+	body := fmt.Sprintf(`{"requested_by":"%s","objective":"   "}`, parentID)
 	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 	w := httptest.NewRecorder()
 

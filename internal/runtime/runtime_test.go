@@ -153,18 +153,21 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if v0.AuthorKind != types.AuthorUser {
 		t.Fatalf("v0 author_kind: got %q, want %q", v0.AuthorKind, types.AuthorUser)
 	}
-	if v0.Content != "" {
-		t.Fatalf("v0 content: got %q, want empty prompt-bar intake revision", v0.Content)
+	if v0.Content != "hi" {
+		t.Fatalf("v0 content: got %q, want exact owner prompt %q as canonical Texture V0", v0.Content, "hi")
 	}
 	meta := decodeRevisionMetadata(v0.Metadata)
 	if metadataString(meta, "conductor_loop_id") != rec.RunID {
 		t.Fatalf("v0 conductor_loop_id: got %q, want %q", metadataString(meta, "conductor_loop_id"), rec.RunID)
 	}
 	if metadataString(meta, "seed_prompt") != "hi" {
-		t.Fatalf("v0 seed_prompt metadata: got %q, want hi", metadataString(meta, "seed_prompt"))
+		t.Fatalf("v0 seed_prompt provenance metadata: got %q, want hi", metadataString(meta, "seed_prompt"))
 	}
-	if !metadataBoolValue(meta, "prompt_bar_instruction_revision") {
-		t.Fatalf("v0 prompt_bar_instruction_revision = %v, want true", meta["prompt_bar_instruction_revision"])
+	if metadataBoolValue(meta, "prompt_bar_instruction_revision") {
+		t.Fatalf("v0 must not carry prompt_bar_instruction_revision marker: %v", meta["prompt_bar_instruction_revision"])
+	}
+	if metadataString(meta, "input_origin") != textureInputOriginUserPrompt {
+		t.Fatalf("v0 input_origin provenance: got %q, want %q", metadataString(meta, "input_origin"), textureInputOriginUserPrompt)
 	}
 	if metadataString(meta, "texture_version") != "v0" {
 		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "texture_version"))
@@ -275,15 +278,15 @@ func TestConductorPromptBarStructuredDecisionMaterializesTextureRoute(t *testing
 	if err != nil {
 		t.Fatalf("get seed prompt revision: %v", err)
 	}
-	if rev.Content != "" {
-		t.Fatalf("seed revision content = %q, want empty prompt-bar instruction revision", rev.Content)
+	if rev.Content != "make a durable document" {
+		t.Fatalf("seed revision content = %q, want exact owner prompt as canonical V0", rev.Content)
 	}
 	revMeta := decodeRevisionMetadata(rev.Metadata)
 	if metadataString(revMeta, "seed_prompt") != "make a durable document" {
-		t.Fatalf("seed revision metadata = %#v, want seed prompt", revMeta)
+		t.Fatalf("seed revision provenance metadata = %#v, want seed prompt", revMeta)
 	}
-	if !metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
-		t.Fatalf("prompt_bar_instruction_revision = %v, want true", revMeta["prompt_bar_instruction_revision"])
+	if metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
+		t.Fatalf("seed revision must not carry prompt_bar_instruction_revision: %v", revMeta["prompt_bar_instruction_revision"])
 	}
 }
 
@@ -318,10 +321,10 @@ func TestConductorPromptBarTextureRouteFallsBackToSeedPromptContent(t *testing.T
 		t.Fatalf("conductor result = %+v, want materialized Texture route", result)
 	}
 	// initial_content is intentionally empty on materialized Texture routes;
-	// prompt-bar text is preserved as instruction metadata until Texture writes
-	// prose.
+	// the conductor never authors canonical content. The prompt-bar text becomes
+	// the canonical V0 user revision instead.
 	if result.InitialContent != "" {
-		t.Fatalf("initial_content = %q, want empty (seed prompt lives in metadata)", result.InitialContent)
+		t.Fatalf("initial_content = %q, want empty (texture owns canonical content)", result.InitialContent)
 	}
 	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
 	if err != nil {
@@ -331,15 +334,15 @@ func TestConductorPromptBarTextureRouteFallsBackToSeedPromptContent(t *testing.T
 	if err != nil {
 		t.Fatalf("get fallback revision: %v", err)
 	}
-	if rev.Content != "" {
-		t.Fatalf("fallback revision content = %q, want empty prompt-bar instruction revision", rev.Content)
+	if rev.Content != "Draft fallback content" {
+		t.Fatalf("fallback revision content = %q, want exact owner prompt as canonical V0", rev.Content)
 	}
 	revMeta := decodeRevisionMetadata(rev.Metadata)
 	if metadataString(revMeta, "seed_prompt") != "Draft fallback content" {
-		t.Fatalf("fallback revision metadata = %#v, want seed prompt", revMeta)
+		t.Fatalf("fallback revision provenance metadata = %#v, want seed prompt", revMeta)
 	}
-	if !metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
-		t.Fatalf("prompt_bar_instruction_revision = %v, want true", revMeta["prompt_bar_instruction_revision"])
+	if metadataBoolValue(revMeta, "prompt_bar_instruction_revision") {
+		t.Fatalf("fallback revision must not carry prompt_bar_instruction_revision: %v", revMeta["prompt_bar_instruction_revision"])
 	}
 }
 
@@ -489,7 +492,7 @@ func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
 	}
 }
 
-func TestStartChildRunInheritsWorkerRepoMetadata(t *testing.T) {
+func TestStartCoagentRunInheritsWorkerRepoMetadata(t *testing.T) {
 	t.Parallel()
 	rt, _ := testRuntime(t)
 	ctx := context.Background()
@@ -507,7 +510,7 @@ func TestStartChildRunInheritsWorkerRepoMetadata(t *testing.T) {
 		t.Fatalf("update parent metadata: %v", err)
 	}
 
-	child, err := rt.StartChildRun(ctx, parent.RunID, "implementation child", "user-alice", map[string]any{
+	child, err := rt.StartCoagentRun(ctx, parent.RunID, "implementation child", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileCoSuper,
 		runMetadataAgentRole:    AgentProfileCoSuper,
 	})

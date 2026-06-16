@@ -82,7 +82,7 @@ func TestConcurrentWorkers_Spawn3WithoutWaiting(t *testing.T) {
 	childIDs := make([]string, 3)
 
 	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"worker task %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"worker task %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 		handler.HandleSpawn(w, req)
@@ -119,7 +119,7 @@ func TestConcurrentWorkers_AllRunningSimultaneously(t *testing.T) {
 	// Spawn 3 workers rapidly.
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"concurrent task %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"concurrent task %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 		handler.HandleSpawn(w, req)
@@ -182,7 +182,7 @@ func TestConcurrentWorkers_EachCompletesIndependently(t *testing.T) {
 	// Spawn 3 children.
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		rec, err := rt.StartChildRun(ctx, parentID, fmt.Sprintf("independent task %d", i), "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("independent task %d", i), "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -246,7 +246,7 @@ func TestConcurrentWorkers_IndependentChannels(t *testing.T) {
 	// Spawn 3 children.
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		rec, err := rt.StartChildRun(ctx, parentID, fmt.Sprintf("channel task %d", i), "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("channel task %d", i), "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -306,7 +306,7 @@ func TestConcurrentWorkers_NoInterferenceBetweenSiblings(t *testing.T) {
 	objectives := make([]string, 5)
 	for i := 0; i < 5; i++ {
 		objectives[i] = fmt.Sprintf("unique objective %d: analyze feature %c", i, 'A'+i)
-		rec, err := rt.StartChildRun(ctx, parentID, objectives[i], "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, objectives[i], "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -363,7 +363,7 @@ func TestConcurrentWorkers_ResultsCollectedViaChannels(t *testing.T) {
 	// Spawn 3 children.
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		rec, err := rt.StartChildRun(ctx, parentID, fmt.Sprintf("result collection task %d", i), "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("result collection task %d", i), "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -458,7 +458,7 @@ func TestConcurrentWorkers_ChildRunsReachCompletedState(t *testing.T) {
 	// Spawn 3 children.
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		rec, err := rt.StartChildRun(ctx, parentID, fmt.Sprintf("child run %d", i), "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("child run %d", i), "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -501,8 +501,8 @@ func TestConcurrentWorkers_ChildRunsReachCompletedState(t *testing.T) {
 		if task.Result == "" {
 			t.Errorf("child %d result should not be empty", i)
 		}
-		if task.Metadata["parent_id"] != parentID {
-			t.Errorf("child %d parent_id metadata: got %v, want %q", i, task.Metadata["parent_id"], parentID)
+		if task.Metadata["requested_by"] != parentID {
+			t.Errorf("child %d requested_by metadata: got %v, want %q", i, task.Metadata["requested_by"], parentID)
 		}
 	}
 }
@@ -515,7 +515,7 @@ func TestConcurrentWorkers_HealthReportsRunningCount(t *testing.T) {
 
 	// Spawn 3 children.
 	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"health check task %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"health check task %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 		handler.HandleSpawn(w, req)
@@ -565,7 +565,7 @@ func TestConcurrentWorkers_5ConcurrentWorkers(t *testing.T) {
 
 	// Submit 5 runs rapidly.
 	for i := 0; i < 5; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"Analyze Go features - part %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"Analyze Go features - part %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 		handler.HandleSpawn(w, req)
@@ -650,7 +650,7 @@ func TestConcurrentWorkers_ConcurrentSpawnStress(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			rec, err := rt.StartChildRun(ctx, parentID, fmt.Sprintf("stress task %d", idx), "user-alice", nil)
+			rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("stress task %d", idx), "user-alice", nil)
 			if err != nil {
 				errors[idx] = err
 				return
@@ -742,7 +742,7 @@ func TestConcurrentWorkers_TasksActuallyRunConcurrently(t *testing.T) {
 	start := time.Now()
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		rec, err := rt.StartChildRun(ctx, parentRec.RunID, fmt.Sprintf("timing task %d", i), "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentRec.RunID, fmt.Sprintf("timing task %d", i), "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn child %d: %v", i, err)
 		}
@@ -791,7 +791,7 @@ func TestConcurrentWorkers_ResultsPostedToParentChannelOnCompletion(t *testing.T
 	ctx := context.Background()
 
 	// Spawn a child.
-	rec, err := rt.StartChildRun(ctx, parentID, "auto-post result task", "user-alice", nil)
+	rec, err := rt.StartCoagentRun(ctx, parentID, "auto-post result task", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child: %v", err)
 	}
@@ -888,7 +888,7 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Spawn a child that will fail.
-	rec, err := rt.StartChildRun(ctx, parentRec.RunID, "failing task", "user-alice", nil)
+	rec, err := rt.StartCoagentRun(ctx, parentRec.RunID, "failing task", "user-alice", nil)
 	if err != nil {
 		t.Fatalf("spawn child: %v", err)
 	}
@@ -946,7 +946,7 @@ func TestConcurrentWorkers_StatusAPIReturnsCorrectState(t *testing.T) {
 	// Spawn 3 workers.
 	childIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"parent_id":"%s","objective":"status check task %d"}`, parentID, i)
+		body := fmt.Sprintf(`{"requested_by":"%s","objective":"status check task %d"}`, parentID, i)
 		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
 		w := httptest.NewRecorder()
 		handler.HandleSpawn(w, req)
@@ -1004,7 +1004,7 @@ func TestConcurrentWorkers_Spawn5WorkersRapidlyThenVerifyAllComplete(t *testing.
 
 	childIDs := make([]string, len(objectives))
 	for i, obj := range objectives {
-		rec, err := rt.StartChildRun(ctx, parentID, obj, "user-alice", nil)
+		rec, err := rt.StartCoagentRun(ctx, parentID, obj, "user-alice", nil)
 		if err != nil {
 			t.Fatalf("spawn worker %d: %v", i, err)
 		}
@@ -1166,7 +1166,7 @@ func TestConcurrentWorkers_SpawnWithSlowProvider_HighConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			rec, err := rt.StartChildRun(ctx, parentRec.RunID, fmt.Sprintf("worker %d", idx), "user-alice", nil)
+			rec, err := rt.StartCoagentRun(ctx, parentRec.RunID, fmt.Sprintf("worker %d", idx), "user-alice", nil)
 			if err != nil {
 				t.Errorf("spawn worker %d: %v", idx, err)
 				return
@@ -1294,9 +1294,9 @@ func TestConcurrentWorkers_MixedPassFailWorkers(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Spawn workers: 2 succeed, 1 fails.
-	rec1, _ := rt.StartChildRun(ctx, parentRec.RunID, "analyze data", "user-alice", nil)
-	rec2, _ := rt.StartChildRun(ctx, parentRec.RunID, "fail this task", "user-alice", nil)
-	rec3, _ := rt.StartChildRun(ctx, parentRec.RunID, "summarize results", "user-alice", nil)
+	rec1, _ := rt.StartCoagentRun(ctx, parentRec.RunID, "analyze data", "user-alice", nil)
+	rec2, _ := rt.StartCoagentRun(ctx, parentRec.RunID, "fail this task", "user-alice", nil)
+	rec3, _ := rt.StartCoagentRun(ctx, parentRec.RunID, "summarize results", "user-alice", nil)
 
 	childIDs := []string{rec1.RunID, rec2.RunID, rec3.RunID}
 

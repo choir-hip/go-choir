@@ -132,7 +132,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 		t.Fatalf("initial texture state = %q error=%q", initialTextureRun.State, initialTextureRun.Error)
 	}
 
-	researchRun, err := rt.StartChildRun(context.Background(), initialTextureID,
+	researchRun, err := rt.StartCoagentRun(context.Background(), initialTextureID,
 		"Live verification: call web_search for cellular automata biological evolution toy model, then call update_coagent with update_id live-research-ca and one concise evidence-backed checkpoint for the parent texture agent.",
 		liveLLMOwnerID,
 		map[string]any{

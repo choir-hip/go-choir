@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -179,30 +178,21 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get seed revision: %v", err)
 	}
-	if strings.Contains(seedRev.Content, decisions[0].Reason) {
-		t.Fatalf("prompt-bar seed revision leaked decision reason into canonical text: %q", seedRev.Content)
+	// The prompt-bar V0 is the exact owner prompt as canonical Texture content,
+	// not a blank intake revision or a separate prompt band. The owner literally
+	// typed the decision rationale into the prompt, so V0 contains it verbatim.
+	if seedRev.Content != prompt {
+		t.Fatalf("prompt-bar V0 content = %q, want exact owner prompt as canonical V0", seedRev.Content)
 	}
-	intake := handler.textureDocumentResponse(context.Background(), types.Document{
-		DocID:             decision.DocID,
-		OwnerID:           "user-alice",
-		Title:             "Texture",
-		CurrentRevisionID: seedRev.RevisionID,
-		CreatedAt:         seedRev.CreatedAt,
-		UpdatedAt:         seedRev.CreatedAt,
-	})
-	if intake.IntakePrompt != prompt {
-		t.Fatalf("intake prompt = %q, want original prompt", intake.IntakePrompt)
+	if metadataBoolValue(decodeRevisionMetadata(seedRev.Metadata), "prompt_bar_instruction_revision") {
+		t.Fatalf("prompt-bar V0 must not carry the deleted prompt_bar_instruction_revision marker")
 	}
 	doc, err := rt.Store().GetDocument(context.Background(), decision.DocID, "user-alice")
 	if err != nil {
 		t.Fatalf("get document: %v", err)
 	}
-	head, err := rt.Store().GetRevision(context.Background(), doc.CurrentRevisionID, "user-alice")
-	if err != nil {
-		t.Fatalf("get head revision: %v", err)
-	}
-	if strings.Contains(head.Content, decisions[0].Reason) {
-		t.Fatalf("canonical head leaked decision reason: %q", head.Content)
+	if doc.CurrentRevisionID != seedRev.RevisionID {
+		t.Fatalf("document head = %q, want V0 user revision %q before any appagent write under the stub provider", doc.CurrentRevisionID, seedRev.RevisionID)
 	}
 }
 

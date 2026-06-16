@@ -734,7 +734,7 @@ func traceTrajectoryTitleRun(trajectoryID string, runs []types.RunRecord, fallba
 		if strings.TrimSpace(run.RunID) == strings.TrimSpace(trajectoryID) {
 			return run
 		}
-		if strings.TrimSpace(run.ParentRunID) != "" {
+		if strings.TrimSpace(run.RequestedByRunID) != "" {
 			continue
 		}
 		if strings.TrimSpace(earliestRoot.RunID) == "" || traceRunActivityTime(run).Before(traceRunActivityTime(earliestRoot)) {
@@ -919,7 +919,7 @@ func buildTraceAgentNodes(runs []types.RunRecord) ([]traceAgentNode, map[string]
 			entry.ModelPolicy = traceRunMetadataString(run, runMetadataLLMPolicySource)
 		}
 		entry.RunCount++
-		if strings.TrimSpace(run.ParentRunID) != "" {
+		if strings.TrimSpace(run.RequestedByRunID) != "" {
 			childAgents[agentID] = true
 		}
 	}
@@ -957,10 +957,10 @@ func buildTraceAgentEdges(runs []types.RunRecord) []traceAgentEdge {
 	}
 	agg := make(map[edgeKey]*edgeAgg)
 	for _, run := range runs {
-		if strings.TrimSpace(run.ParentRunID) == "" {
+		if strings.TrimSpace(run.RequestedByRunID) == "" {
 			continue
 		}
-		parent, ok := parentRuns[strings.TrimSpace(run.ParentRunID)]
+		parent, ok := parentRuns[strings.TrimSpace(run.RequestedByRunID)]
 		if !ok {
 			continue
 		}
@@ -1336,8 +1336,8 @@ func payloadInt64(payload map[string]any, key string) int64 {
 func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 	switch ev.Kind {
 	case types.EventRunSubmitted:
-		if parentID := payloadString(payload, "parent_id"); parentID != "" {
-			return fmt.Sprintf("spawned from %s", shortTraceID(parentID))
+		if requesterRunID := payloadString(payload, "requested_by"); requesterRunID != "" {
+			return fmt.Sprintf("requested by %s", shortTraceID(requesterRunID))
 		}
 		return "loop submitted"
 	case types.EventRunStarted:

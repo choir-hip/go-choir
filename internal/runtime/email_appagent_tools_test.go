@@ -135,22 +135,19 @@ func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) 
 	if agent.Profile != AgentProfileEmail || agent.ChannelID != agent.AgentID {
 		t.Fatalf("email agent identity: %+v", agent)
 	}
-	children, err := s.ListChildRuns(context.Background(), parent.RunID, 10)
-	if err != nil {
-		t.Fatalf("list child runs: %v", err)
+	coagents := listCoagentRunsByRequester(t, s, "user-alice", parent.RunID, 10)
+	if len(coagents) != 1 {
+		t.Fatalf("coagent runs: got %d, want 1", len(coagents))
 	}
-	if len(children) != 1 {
-		t.Fatalf("child runs: got %d, want 1", len(children))
+	coagent := coagents[0]
+	if coagent.AgentProfile != AgentProfileEmail || coagent.AgentID != agent.AgentID || coagent.State != types.RunCompleted {
+		t.Fatalf("email coagent run: %+v", coagent)
 	}
-	child := children[0]
-	if child.AgentProfile != AgentProfileEmail || child.AgentID != agent.AgentID || child.State != types.RunCompleted {
-		t.Fatalf("email child run: %+v", child)
+	if metadataStringValue(coagent.Metadata, "email_action") != "draft_request" {
+		t.Fatalf("email coagent metadata missing draft request: %+v", coagent.Metadata)
 	}
-	if metadataStringValue(child.Metadata, "email_action") != "draft_request" {
-		t.Fatalf("email child metadata missing draft request: %+v", child.Metadata)
-	}
-	if metadataStringValue(child.Metadata, "email_draft_id") != "email-draft-maild-1" {
-		t.Fatalf("email child metadata missing maild draft id: %+v", child.Metadata)
+	if metadataStringValue(coagent.Metadata, "email_draft_id") != "email-draft-maild-1" {
+		t.Fatalf("email coagent metadata missing maild draft id: %+v", coagent.Metadata)
 	}
 }
 
@@ -768,14 +765,11 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	if !riskAlertCalled || out["risk_alert_status"] != "sent" || out["risk_alert_provider_message_id"] != "risk-provider-1" {
 		t.Fatalf("risk alert was not provider-backed: %+v", out)
 	}
-	children, err := s.ListChildRuns(context.Background(), parent.RunID, 10)
-	if err != nil {
-		t.Fatalf("list child runs: %v", err)
+	coagents := listCoagentRunsByRequester(t, s, "user-alice", parent.RunID, 10)
+	if len(coagents) != 1 {
+		t.Fatalf("coagent runs: got %d, want 1", len(coagents))
 	}
-	if len(children) != 1 {
-		t.Fatalf("child runs: got %d, want 1", len(children))
-	}
-	events, err := s.ListEvents(context.Background(), children[0].RunID, 10)
+	events, err := s.ListEvents(context.Background(), coagents[0].RunID, 10)
 	if err != nil {
 		t.Fatalf("list email appagent events: %v", err)
 	}

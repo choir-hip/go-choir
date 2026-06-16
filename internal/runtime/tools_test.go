@@ -916,7 +916,7 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 		RunID:        "run-researcher-failed",
 		AgentID:      "researcher:fallback",
 		ChannelID:    docID,
-		ParentRunID:  parent.RunID,
+		RequestedByRunID:  parent.RunID,
 		OwnerID:      ownerID,
 		AgentProfile: AgentProfileResearcher,
 		AgentRole:    AgentProfileResearcher,

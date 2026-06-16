@@ -26,8 +26,8 @@ type researchFindingEvidenceInput struct {
 
 func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
 	runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
-	if runRec != nil && strings.TrimSpace(runRec.ParentRunID) != "" {
-		parent, err := rt.store.GetRun(ctx, strings.TrimSpace(runRec.ParentRunID))
+	if runRec != nil && strings.TrimSpace(runRec.RequestedByRunID) != "" {
+		parent, err := rt.store.GetRun(ctx, strings.TrimSpace(runRec.RequestedByRunID))
 		if err != nil {
 			return "", "", fmt.Errorf("resolve delivery target parent lookup: %w", err)
 		}

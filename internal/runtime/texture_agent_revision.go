@@ -357,7 +357,7 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		err error
 	)
 	if strings.TrimSpace(parentRunID) != "" {
-		rec, err = rt.StartChildRun(ctx, parentRunID, agentPrompt, ownerID, runMetadata)
+		rec, err = rt.StartCoagentRun(ctx, parentRunID, agentPrompt, ownerID, runMetadata)
 	} else {
 		rec, err = rt.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
 	}
@@ -451,7 +451,7 @@ func textureUseFocusedUserEditContext(current types.Revision, previous *types.Re
 // request sent as the user turn for the Texture appagent.
 func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req textureAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []ChannelMessage, _ []string) string {
 	var b strings.Builder
-	promptBarInstructionRevision := current.AuthorKind == types.AuthorUser && metadataBoolValue(metadata, "prompt_bar_instruction_revision")
+	ownerPromptRequestRevision := current.AuthorKind == types.AuthorUser && metadataStringValue(metadata, "input_origin") == textureInputOriginUserPrompt
 	b.WriteString("A revise event was triggered for the current Texture document.")
 
 	intent := strings.TrimSpace(req.Intent)
@@ -591,9 +591,9 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("Treat this checklist as acceptance criteria for any rewrite_texture call; preserve these prefixes, labels, values, and headings verbatim unless the user explicitly changed them.\n")
 	}
 	if current.AuthorKind == types.AuthorUser {
-		if promptBarInstructionRevision {
-			b.WriteString("\nTreat this prompt-bar intake revision as intentionally blank canonical document state.")
-			b.WriteString("\nUse the original user request as instruction/context for the first Texture-authored reader-facing revision, not as existing canonical prose to preserve or quote.")
+		if ownerPromptRequestRevision {
+			b.WriteString("\nThis canonical V0 content is the owner's original prompt/request for this Texture document.")
+			b.WriteString("\nTreat the owner prompt as the request to fulfill: author the first useful reader-facing revision that addresses it. The prompt may itself read like an instruction; produce the document the owner asked for rather than restating the prompt verbatim or preserving it as final prose.")
 			b.WriteString("\nKeep private coordination rationale, explicit off-document decision reasons, and tool instructions out of the canonical document body unless the owner explicitly asked for that rationale to be part of the reader-facing artifact.")
 		} else {
 			b.WriteString("\nTreat this latest user-authored revision as the canonical input for the next version.")
@@ -621,8 +621,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\nThis document does not yet have grounded workflow history.")
 		if current.AuthorKind == types.AuthorUser {
 			b.WriteString("\nYou may edit user-provided text for structure, clarity, or formatting.")
-			if promptBarInstructionRevision {
-				b.WriteString("\nFor this prompt-bar intake, write the first useful document from the original user request while excluding control-only rationale from the body.")
+			if ownerPromptRequestRevision {
+				b.WriteString("\nThe canonical content is the owner's original prompt; write the first useful document that fulfills it while excluding control-only rationale from the body.")
 			}
 			b.WriteString("\nDo not add factual claims, citations, or coding results from model priors.")
 			b.WriteString("\nIf the request needs facts, current events, citations, generated artifacts, execution, or verification, write a brief working revision with explicit uncertainty and record what evidence is needed; Texture may then choose researcher, super, both, neither, or a blocker.")
