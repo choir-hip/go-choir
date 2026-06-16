@@ -1961,3 +1961,74 @@ Receipts:
 Open edge: implement the behavior slice after this checkpoint: emit Texture
 package evidence fields and platform provenance labels, preserve only explicit
 legacy read compatibility where needed, and prove locally before CI/staging.
+
+## 2026-06-16 - Local Repair: App Package And Platform Provenance Labels
+
+Claim: new AppChangePackage human-proof refs and platform publication
+provenance can emit Texture-named evidence labels while preserving explicit
+legacy read compatibility for existing package provenance and platform rows.
+
+Move: rename new package proof refs to `texture_doc_id` and
+`texture_revision_id`; update vsuper prompt defaults and review-evidence copy
+to Texture; emit platform provenance as `private_texture_revision`,
+`choir-private:texture/...`, `publish_texture_revision`, and
+`choir.platform.publish_texture.v0`; update focused runtime/platform/frontend
+fixtures; keep deletion-receipted legacy readers.
+
+Expected ΔV: support C21 locally; no coarse V decrease until CI, deploy, and
+staging proof are recorded.
+
+Actual ΔV: C21 is supported for local package/provenance scope. V remains 2.
+
+Conjecture delta: package review evidence and platform publication provenance
+can teach Texture at the evidence contract boundary without touching Universal
+Wire story projection fields, general Texture metadata keys, durable actor ids,
+storage tables, or file suffixes.
+
+Protected surfaces: AppChangePackage tool schema and provenance refs,
+review-evidence human-proof classification, vsuper prompt defaults, platform
+publication provenance/citation/verifier rows, public bundle citation redaction,
+runtime/platform tests, and frontend review-evidence fixtures.
+
+Admissible evidence class: focused runtime/platform tests, frontend build,
+doccheck, diff check, residue search, CI, staging deploy identity, and deployed
+product/API proof.
+
+Rollback path: restore old package provenance field names and platform
+publication provenance predicates if review evidence, publication, bundle reads,
+or downstream adoption proof regresses.
+
+Heresy delta: repaired locally for new AppChangePackage and platform
+publication provenance labels. Legacy package provenance refs and legacy
+platform rows remain deletion-receipted read compatibility; Universal Wire
+story projection fields, general Texture metadata keys, durable actor ids,
+storage symbols, and file suffixes remain discovered residue.
+
+Receipts:
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestPublishAppChangePackageToolPublishesWithoutGitHubPush|TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview' -count=1`
+  passed.
+- `nix develop -c go test ./internal/platform -run 'TestPublishVTextCreatesImmutablePublicRecords|TestInternalPublishRequiresInternalCallerAndBundleResolve' -count=1`
+  passed, including direct row assertions for current Texture provenance
+  labels and public-bundle no-leak checks.
+- `npm --prefix frontend run build` passed with the existing Universal Wire
+  warnings for unused `currentUser` and `.wire-state` selectors.
+- `scripts/doccheck --report /tmp/choir-doccheck-report.md --json
+  /tmp/choir-doccheck.json` completed report-only with 212 docs and 1,129
+  warnings.
+- `git diff --check` passed.
+- Old-label residue search across the touched runtime/platform/frontend-test
+  files now finds only explicit legacy compatibility/read assertions:
+  `private_vtext_revision` redaction support, a no-leak assertion, and a
+  legacy package-provenance fixture.
+- Texture-label search finds the new emitted/proven values:
+  `texture_doc_id`, `texture_revision_id`, `private_texture_revision`,
+  `choir-private:texture/...`, `publish_texture_revision`, and
+  `choir.platform.publish_texture.v0`.
+- Focused frontend Playwright attempt against staging failed before exercising
+  package evidence behavior because the test still opens retired
+  `apps-changes` launcher selectors while the current app registry exposes the
+  surface as `features`.
+
+Open edge: push, monitor CI/deploy, verify staging identity, and run deployed
+product/API proof for AppChangePackage review evidence or platform publication
+provenance without manually seeding success records.

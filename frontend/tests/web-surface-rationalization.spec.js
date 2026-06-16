@@ -34,8 +34,8 @@ function packageRecord(overrides = {}) {
     provenance_refs_json: overrides.provenance_refs_json ?? {
       human_summary: 'Owner-readable narrative describing what changed and what was verified.',
       recommendation: 'Try in a candidate before install.',
-      vtext_doc_id: 'doc-chiron',
-      vtext_revision_id: 'rev-chiron',
+      texture_doc_id: 'doc-chiron',
+      texture_revision_id: 'rev-chiron',
       screenshot_refs: ['test-results/chiron-shelf.png'],
       video_refs: ['test-results/chiron-shelf.webm'],
       artifact_refs: ['runacc-chiron'],
@@ -49,19 +49,19 @@ function packageRecord(overrides = {}) {
 
 function humanProofBody(pkg) {
   const refs = pkg?.provenance_refs_json || {};
-  const hasNarrative = Boolean(refs.human_summary || refs.vtext_doc_id || refs.vtext_revision_id);
+  const hasNarrative = Boolean(refs.human_summary || refs.texture_doc_id || refs.texture_revision_id);
   const hasMedia = Boolean(refs.screenshot_refs?.length || refs.video_refs?.length || refs.benchmark_refs?.length);
   return {
     state: hasNarrative && hasMedia ? 'human_reviewable' : refs.artifact_refs?.length ? 'machine_receipt_only' : 'evidence_pending',
     summary: refs.human_summary || '',
     recommendation: refs.recommendation || '',
-    narrative_refs: refs.vtext_doc_id ? [refs.vtext_doc_id] : [],
+    narrative_refs: refs.texture_doc_id ? [refs.texture_doc_id] : [],
     screenshot_refs: refs.screenshot_refs || [],
     video_refs: refs.video_refs || [],
     benchmark_refs: refs.benchmark_refs || [],
     artifact_refs: refs.artifact_refs || [],
     missing: [
-      ...(hasNarrative ? [] : ['causal VText narrative']),
+      ...(hasNarrative ? [] : ['causal Texture narrative']),
       ...(hasMedia ? [] : ['screenshot, video, or benchmark evidence']),
     ],
   };
@@ -354,7 +354,7 @@ test('Apps & Changes marks package-scoped machine receipts as insufficient for h
         human_proof: {
           state: 'machine_receipt_only',
           artifact_refs: ['runacc-machine-receipt'],
-          missing: ['causal VText narrative', 'screenshot, video, or benchmark evidence'],
+          missing: ['causal Texture narrative', 'screenshot, video, or benchmark evidence'],
         },
         acceptances: [acceptance],
       },
@@ -365,7 +365,7 @@ test('Apps & Changes marks package-scoped machine receipts as insufficient for h
   const store = page.locator('[data-apps-changes-app]').last();
   await expect(store.locator('[data-change-card][data-change-id="pkg-machine-receipt"]')).toHaveAttribute('data-human-proof-state', 'machine_receipt_only');
   await expect(store.locator('[data-human-proof-panel]')).toHaveAttribute('data-human-proof-state', 'machine_receipt_only');
-  await expect(store.locator('[data-human-proof-missing]')).toContainText('causal VText narrative');
+  await expect(store.locator('[data-human-proof-missing]')).toContainText('causal Texture narrative');
   await expect(store.locator('[data-change-try]')).toBeDisabled();
   await expect(store.locator('[data-change-acceptance-summary]')).toContainText('Try this change before Trace');
 });

@@ -370,8 +370,8 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		"provenance_refs":{
 			"human_summary":"Owner-readable narrative for the whole candidate trajectory.",
 			"recommendation":"try before install",
-			"vtext_doc_id":"doc-human-proof",
-			"vtext_revision_id":"rev-human-proof",
+			"texture_doc_id":"doc-human-proof",
+			"texture_revision_id":"rev-human-proof",
 			"screenshot_refs":["test-results/human-proof.png"]
 		}
 	}`
@@ -398,6 +398,41 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		t.Fatalf("human proof refs = %+v", review.HumanProof)
 	}
 
+	legacyNarrative := `{
+		"app_id":"human-proof-legacy-texture-narrative",
+		"visibility":"unlisted",
+		"source_computer_id":"user-a-computer",
+		"source_candidate_id":"candidate-user-a-legacy-narrative",
+		"runtime_source_delta":"runtime delta",
+		"ui_source_delta":"ui delta",
+		"app_protocol_contract":"contract",
+		"provenance_refs":{
+			"human_summary":"Owner-readable narrative stored before the Texture package provenance cutover.",
+			"vtext_doc_id":"doc-legacy-proof",
+			"vtext_revision_id":"rev-legacy-proof",
+			"screenshot_refs":["test-results/legacy-proof.png"]
+		}
+	}` // texture-cutover-allow: legacy AppChangePackage provenance refs remain reviewable until package provenance migration.
+	legacyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", legacyNarrative, "user-alice")
+	if legacyW.Code != http.StatusCreated {
+		t.Fatalf("legacy narrative package status = %d body=%s", legacyW.Code, legacyW.Body.String())
+	}
+	var legacyPkg types.AppChangePackageRecord
+	if err := json.Unmarshal(legacyW.Body.Bytes(), &legacyPkg); err != nil {
+		t.Fatalf("decode legacy narrative package: %v", err)
+	}
+	legacyReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+legacyPkg.PackageID+"/review-evidence", "", "user-alice")
+	if legacyReviewW.Code != http.StatusOK {
+		t.Fatalf("legacy review evidence status = %d body=%s", legacyReviewW.Code, legacyReviewW.Body.String())
+	}
+	var legacyReview appChangePackageReviewEvidenceResponse
+	if err := json.Unmarshal(legacyReviewW.Body.Bytes(), &legacyReview); err != nil {
+		t.Fatalf("decode legacy review evidence: %v", err)
+	}
+	if legacyReview.HumanProof.State != "human_reviewable" {
+		t.Fatalf("legacy package provenance should remain reviewable during cutover: %+v", legacyReview.HumanProof)
+	}
+
 	summaryOnlyNarrative := `{
 		"app_id":"human-proof-summary-only",
 		"visibility":"unlisted",
@@ -407,7 +442,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		"ui_source_delta":"ui delta",
 		"app_protocol_contract":"contract",
 		"provenance_refs":{
-			"human_summary":"This prose summary is useful display copy, but it is not a durable VText narrative.",
+			"human_summary":"This prose summary is useful display copy, but it is not a durable Texture narrative.",
 			"screenshot_refs":["test-results/summary-only.png"]
 		}
 	}`
@@ -428,10 +463,10 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		t.Fatalf("decode summary-only review evidence: %v", err)
 	}
 	if summaryOnlyReview.HumanProof.State == "human_reviewable" {
-		t.Fatalf("human_summary plus screenshot must not count as a causal VText narrative: %+v", summaryOnlyReview.HumanProof)
+		t.Fatalf("human_summary plus screenshot must not count as a causal Texture narrative: %+v", summaryOnlyReview.HumanProof)
 	}
-	if !containsString(summaryOnlyReview.HumanProof.Missing, "narrative VText") {
-		t.Fatalf("summary-only missing evidence should name VText narrative: %+v", summaryOnlyReview.HumanProof)
+	if !containsString(summaryOnlyReview.HumanProof.Missing, "narrative Texture") {
+		t.Fatalf("summary-only missing evidence should name Texture narrative: %+v", summaryOnlyReview.HumanProof)
 	}
 
 	blockedBenchmarkOnly := `{
@@ -444,8 +479,8 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		"app_protocol_contract":"contract",
 		"provenance_refs":{
 			"human_summary":"Owner-readable narrative, but media capture is blocked.",
-			"vtext_doc_id":"doc-blocked-benchmark",
-			"vtext_revision_id":"rev-blocked-benchmark",
+			"texture_doc_id":"doc-blocked-benchmark",
+			"texture_revision_id":"rev-blocked-benchmark",
 			"benchmark_refs":[
 				"npm --prefix frontend run build: PASS",
 				"npm --prefix frontend exec playwright test shelf-live-observability.spec.js: BLOCKED by worker VM dynamic-loader incompatibility"
@@ -486,8 +521,8 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		"provenance_refs":{
 			"human_summary":"Owner-readable narrative, but no screenshots, video, or measured behavior benchmark exists.",
 			"recommendation":"reviewable_with_build_proof; media screenshot not available in this worker VM, but causal narrative and build benchmark are attached",
-			"vtext_doc_id":"doc-laundered-build",
-			"vtext_revision_id":"rev-laundered-build",
+			"texture_doc_id":"doc-laundered-build",
+			"texture_revision_id":"rev-laundered-build",
 			"benchmark_refs":[
 				"npm --prefix frontend ci && npm --prefix frontend run build (passed; standard chunk-size warnings; npm audit reported 8 moderate vulnerabilities)"
 			]

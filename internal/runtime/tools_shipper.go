@@ -8,16 +8,16 @@ import (
 )
 
 type publishPackageHumanProofInput struct {
-	Summary          string
-	HumanSummary     string
-	Recommendation   string
-	VTextDocID       string
-	VTextRevisionID  string
-	ScreenshotRefs   []string
-	VideoRefs        []string
-	BenchmarkRefs    []string
-	ArtifactRefs     []string
-	BehaviorContract string
+	Summary           string
+	HumanSummary      string
+	Recommendation    string
+	TextureDocID      string
+	TextureRevisionID string
+	ScreenshotRefs    []string
+	VideoRefs         []string
+	BenchmarkRefs     []string
+	ArtifactRefs      []string
+	BehaviorContract  string
 }
 
 func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
@@ -49,8 +49,10 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 		Summary                  string   `json:"summary,omitempty"`
 		HumanSummary             string   `json:"human_summary,omitempty"`
 		Recommendation           string   `json:"recommendation,omitempty"`
-		VTextDocID               string   `json:"vtext_doc_id,omitempty"`
-		VTextRevisionID          string   `json:"vtext_revision_id,omitempty"`
+		TextureDocID             string   `json:"texture_doc_id,omitempty"`
+		TextureRevisionID        string   `json:"texture_revision_id,omitempty"`
+		LegacyVTextDocID         string   `json:"vtext_doc_id,omitempty"`      // texture-cutover-allow: legacy AppChangePackage tool input during cutover; delete after provenance migration.
+		LegacyVTextRevisionID    string   `json:"vtext_revision_id,omitempty"` // texture-cutover-allow: legacy AppChangePackage tool input during cutover; delete after provenance migration.
 		ScreenshotRefs           []string `json:"screenshot_refs,omitempty"`
 		VideoRefs                []string `json:"video_refs,omitempty"`
 		BenchmarkRefs            []string `json:"benchmark_refs,omitempty"`
@@ -59,7 +61,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 	}
 	return Tool{
 		Name:        "publish_app_change_package",
-		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. Include human_summary plus VText/screenshot/video/benchmark refs when the change is intended to be owner-reviewable. Build receipts, npm/go build success, unavailable screenshots/videos, and recommendation prose are not human proof; if real screenshots/video or measured behavior benchmarks are missing, publish honestly as evidence_pending. This tool cannot push to GitHub or promote active state.",
+		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. Include human_summary plus Texture/screenshot/video/benchmark refs when the change is intended to be owner-reviewable. Build receipts, npm/go build success, unavailable screenshots/videos, and recommendation prose are not human proof; if real screenshots/video or measured behavior benchmarks are missing, publish honestly as evidence_pending. This tool cannot push to GitHub or promote active state.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"repo_path":                   map[string]any{"type": "string"},
 			"base_sha":                    map[string]any{"type": "string"},
@@ -77,8 +79,8 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			"summary":                     map[string]any{"type": "string"},
 			"human_summary":               map[string]any{"type": "string"},
 			"recommendation":              map[string]any{"type": "string"},
-			"vtext_doc_id":                map[string]any{"type": "string"},
-			"vtext_revision_id":           map[string]any{"type": "string"},
+			"texture_doc_id":              map[string]any{"type": "string"},
+			"texture_revision_id":         map[string]any{"type": "string"},
 			"screenshot_refs":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"video_refs":                  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"benchmark_refs":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
@@ -176,16 +178,16 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				contract = "recipient_build_required: " + firstNonEmpty(strings.TrimSpace(in.Summary), "candidate source change requires recipient Go/Svelte rebuild")
 			}
 			proofInput := publishPackageHumanProofInput{
-				Summary:          in.Summary,
-				HumanSummary:     in.HumanSummary,
-				Recommendation:   in.Recommendation,
-				VTextDocID:       in.VTextDocID,
-				VTextRevisionID:  in.VTextRevisionID,
-				ScreenshotRefs:   in.ScreenshotRefs,
-				VideoRefs:        in.VideoRefs,
-				BenchmarkRefs:    in.BenchmarkRefs,
-				ArtifactRefs:     in.ArtifactRefs,
-				BehaviorContract: in.BehaviorContract,
+				Summary:           in.Summary,
+				HumanSummary:      in.HumanSummary,
+				Recommendation:    in.Recommendation,
+				TextureDocID:      firstNonEmpty(in.TextureDocID, in.LegacyVTextDocID),
+				TextureRevisionID: firstNonEmpty(in.TextureRevisionID, in.LegacyVTextRevisionID),
+				ScreenshotRefs:    in.ScreenshotRefs,
+				VideoRefs:         in.VideoRefs,
+				BenchmarkRefs:     in.BenchmarkRefs,
+				ArtifactRefs:      in.ArtifactRefs,
+				BehaviorContract:  in.BehaviorContract,
 			}
 			provenanceRefs := humanProofProvenanceRefs(proofInput)
 			verifierContracts := humanProofVerifierContracts(proofInput)
@@ -293,8 +295,8 @@ func humanProofProvenanceRefs(in publishPackageHumanProofInput) json.RawMessage 
 	payload := map[string]any{
 		"summary":             strings.TrimSpace(firstNonEmpty(in.HumanSummary, in.Summary)),
 		"recommendation":      strings.TrimSpace(in.Recommendation),
-		"vtext_doc_id":        strings.TrimSpace(in.VTextDocID),
-		"vtext_revision_id":   strings.TrimSpace(in.VTextRevisionID),
+		"texture_doc_id":      strings.TrimSpace(in.TextureDocID),
+		"texture_revision_id": strings.TrimSpace(in.TextureRevisionID),
 		"screenshot_refs":     compactStringRefs(in.ScreenshotRefs),
 		"video_refs":          compactStringRefs(in.VideoRefs),
 		"benchmark_refs":      compactStringRefs(in.BenchmarkRefs),

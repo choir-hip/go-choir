@@ -689,7 +689,7 @@ func humanProofForAppChangePackage(pkg types.AppChangePackageRecord) appChangePa
 		return proof
 	}
 	if len(proof.NarrativeRefs) == 0 {
-		proof.Missing = append(proof.Missing, "narrative VText")
+		proof.Missing = append(proof.Missing, "narrative Texture")
 	}
 	if !hasHumanEvidence {
 		proof.Missing = append(proof.Missing, "successful screenshots, video, or benchmark evidence")
@@ -808,7 +808,8 @@ func collectHumanProofString(proof *appChangePackageHumanProof, key, raw string)
 	lowerKey := strings.ToLower(key)
 	lowerText := strings.ToLower(text)
 	switch {
-	case strings.Contains(lowerKey, "vtext") || strings.Contains(lowerKey, "narrative_ref") || strings.Contains(lowerText, "vtext:"):
+	case strings.Contains(lowerKey, "texture") || strings.Contains(lowerKey, "narrative_ref") || strings.Contains(lowerText, "texture:") ||
+		strings.Contains(lowerKey, "vtext") || strings.Contains(lowerText, "vtext:"): // texture-cutover-allow: legacy AppChangePackage provenance refs stay readable until package provenance migration.
 		proof.NarrativeRefs = append(proof.NarrativeRefs, text)
 	case strings.Contains(lowerKey, "screenshot") || strings.Contains(lowerKey, "image") || strings.HasSuffix(lowerText, ".png") || strings.HasSuffix(lowerText, ".jpg") || strings.HasSuffix(lowerText, ".jpeg"):
 		proof.ScreenshotRefs = append(proof.ScreenshotRefs, text)

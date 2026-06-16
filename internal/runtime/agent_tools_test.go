@@ -4344,8 +4344,8 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 			"summary": "worker package proof",
 			"human_summary": "Owner-readable narrative for the worker package proof.",
 			"recommendation": "review with the attached screenshot before install",
-			"vtext_doc_id": "doc-tool-proof",
-			"vtext_revision_id": "rev-tool-proof",
+			"texture_doc_id": "doc-tool-proof",
+			"texture_revision_id": "rev-tool-proof",
 			"screenshot_refs": ["test-results/tool-proof.png"],
 			"behavior_contract": "screenshot shows the changed README proof path",
 			"checks": ["grep -q worker README.md"]
@@ -4391,8 +4391,11 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	if err := json.Unmarshal(pkg.ProvenanceRefsJSON, &provenance); err != nil {
 		t.Fatalf("decode package provenance refs: %v", err)
 	}
-	if provenance["vtext_doc_id"] != "doc-tool-proof" {
-		t.Fatalf("vtext_doc_id = %q, want doc-tool-proof", provenance["vtext_doc_id"])
+	if provenance["texture_doc_id"] != "doc-tool-proof" {
+		t.Fatalf("texture_doc_id = %q, want doc-tool-proof", provenance["texture_doc_id"])
+	}
+	if _, ok := provenance["vtext_doc_id"]; ok {
+		t.Fatalf("new package provenance emitted legacy vtext_doc_id: %+v", provenance)
 	}
 	shots, _ := provenance["screenshot_refs"].([]any)
 	if len(shots) != 1 || shots[0] != "test-results/tool-proof.png" {

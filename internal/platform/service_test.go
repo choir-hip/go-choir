@@ -1037,6 +1037,31 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if len(resp.CitationIDs) < 2 {
 		t.Fatalf("citation ids: got %d, want at least 2", len(resp.CitationIDs))
 	}
+	var privateCitationKind, privateEntityKind, privateEntityURI, activityKind, predicateType string
+	if err := svc.store.db.QueryRowContext(context.Background(), `SELECT to_kind FROM citation_edges WHERE from_id = ? AND to_id = ?`, resp.PublicationVersionID, "rev-1").Scan(&privateCitationKind); err != nil {
+		t.Fatalf("query private citation kind: %v", err)
+	}
+	if privateCitationKind != "private_texture_revision" {
+		t.Fatalf("private citation kind = %q, want private_texture_revision", privateCitationKind)
+	}
+	if err := svc.store.db.QueryRowContext(context.Background(), `SELECT entity_kind, canonical_uri FROM provenance_entities WHERE content_hash = ?`, resp.SourceRevisionHash).Scan(&privateEntityKind, &privateEntityURI); err != nil {
+		t.Fatalf("query private provenance entity: %v", err)
+	}
+	if privateEntityKind != "private_texture_revision" || privateEntityURI != "choir-private:texture/doc-1/revisions/rev-1" {
+		t.Fatalf("private provenance entity = (%q, %q), want Texture revision ref", privateEntityKind, privateEntityURI)
+	}
+	if err := svc.store.db.QueryRowContext(context.Background(), `SELECT activity_kind FROM provenance_activities WHERE metadata_json LIKE ?`, "%"+resp.RoutePath+"%").Scan(&activityKind); err != nil {
+		t.Fatalf("query provenance activity: %v", err)
+	}
+	if activityKind != "publish_texture_revision" {
+		t.Fatalf("activity kind = %q, want publish_texture_revision", activityKind)
+	}
+	if err := svc.store.db.QueryRowContext(context.Background(), `SELECT predicate_type FROM verifier_attestations WHERE target_id = ?`, resp.PublicationVersionID).Scan(&predicateType); err != nil {
+		t.Fatalf("query verifier attestation: %v", err)
+	}
+	if predicateType != "choir.platform.publish_texture.v0" {
+		t.Fatalf("predicate type = %q, want choir.platform.publish_texture.v0", predicateType)
+	}
 
 	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
 	if err != nil {
@@ -1052,7 +1077,7 @@ func TestPublishVTextCreatesImmutablePublicRecords(t *testing.T) {
 	if bundle.Artifact.Content != "# Mission Note\n\nA public note.\n\nThis is the published projection with [Federal Reserve rate statement](source:src-entity-fed-rates)." {
 		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
 	}
-	if bundle.Citations[0].ToKind == "private_vtext_revision" || bundle.Citations[0].ToID == "rev-1" {
+	if bundle.Citations[0].ToKind == "private_texture_revision" || bundle.Citations[0].ToKind == "private_vtext_revision" || bundle.Citations[0].ToID == "rev-1" {
 		t.Fatalf("bundle leaked private revision citation: %#v", bundle.Citations[0])
 	}
 	if len(bundle.Artifact.RenderModel) == 0 || bundle.Artifact.RenderModel[0].SpanID == "" {
