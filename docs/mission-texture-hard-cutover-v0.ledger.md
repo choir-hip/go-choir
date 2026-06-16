@@ -3715,3 +3715,39 @@ custom proof receipt as sufficient for C32 and move next to the remaining
 storage/durable actor/stored-route residue. Universal Wire deployed story-field
 proof still needs a real staging story payload or product creation path; do not
 claim it from route-mocked frontend coverage.
+
+## 2026-06-16 - Harness Evidence: C33 Reusable Texture Acceptance Selectors
+
+Claim: C33 is supported as a yellow proof-surface repair. The reusable
+Markdown/plain-text Texture lineage staging proof no longer depends on retired
+`vtext` desktop/window selectors and can launch Texture through the current
+product shell.
+
+Move: construct the smallest test-harness repair after the C32 deployed proof
+identified selector drift. Expected ΔV: close the acceptance-harness drift
+sub-edge without decreasing the coarse mission V.
+
+Actual ΔV: acceptance-harness drift sub-edge closed; mission V remains 2.
+
+Receipts:
+
+- `frontend/tests/vtext-markdown-lineage.spec.js` now uses
+  `openRecentTextureDocument` and `launchTextureApp` helpers. The launcher
+  tries floating desktop icons, left rail buttons, and the compact Desk app
+  switcher; the window locator accepts canonical `texture` and legacy `vtext`
+  app ids during migration.
+- Previously failing deployed command now passed with a fresh auth state:
+  `CHOIR_AUTH_STATE=/tmp/choir-c32-harness-auth.json PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`.
+  Result: 2 passed in 15.7s. This re-proved the Markdown `.texture` title,
+  canonical source metadata, manifest path, `.md` export, recent Texture open,
+  and plain-text `.texture` migration through the reusable spec.
+- `npm --prefix frontend run build` passed with the pre-existing Universal Wire
+  Svelte warnings.
+- `scripts/doccheck --report /tmp/choir-doccheck-c33-harness-final.md --json
+  /tmp/choir-doccheck-c33-harness-final.json` passed report-only with 212 docs and
+  1118 warnings.
+
+Open edge: C33 does not repair product runtime behavior, storage schema names,
+durable `vtext:` actor ids, stored `/pub/vtext/...` rows, Universal Wire
+deployed story-field proof, or protocol v0. Next move should attack one of
+those remaining product/protocol edges.

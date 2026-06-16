@@ -2038,8 +2038,9 @@ compatibility shims need deletion receipts; proof moves from docs/checker ->
 focused local tests -> CI/deploy identity -> staging browser/product proof ->
 protocol v0.
 
-variant (ranking function) V: current V=2; last ΔV: C32 deployed sub-edge
-closed, no coarse V decrease. Discharged: retired-name inventory,
+variant (ranking function) V: current V=2; last ΔV: reusable staging
+acceptance harness drift sub-edge closed, no coarse V decrease. Discharged:
+retired-name inventory,
 report-only H5 docs checker, high-read docs reconciliation, browser-public
 `/api/texture` route and old `/api/vtext` refusal, registered-router
 normalization, platform publication control routes, app identity, visible UI
@@ -2051,8 +2052,7 @@ state/source-label proof, related Texture refs, source-contract open surface,
 canonical source-path metadata, public route minting, publication fallback
 labels, and C26 deployed evidence. Remaining coarse obligations: storage
 symbols plus durable actor/stored-route residue, deployed Universal Wire
-story-field proof, protocol v0 after proof, and staging acceptance harness
-selector drift if the reusable Playwright spec is repaired rather than replaced.
+story-field proof, and protocol v0 after proof.
 
 budget: one broad red-surface cutover mission before M3 resumes; split only if
 a distinct product regression appears after documenting it here.
@@ -2132,12 +2132,18 @@ that is recorded as staging acceptance harness drift, not a C32 product
 failure. Storage workspace paths/tables, durable `vtext:` actor ids, stored
 `/pub/vtext/...` rows, Universal Wire edition `Wire.vtext`, Universal Wire
 deployed story-field proof, and protocol v0 remain outside this slice.
+C33 is supported for the reusable staging acceptance harness repair:
+`frontend/tests/vtext-markdown-lineage.spec.js` now launches Texture through
+floating icon, rail, or Desk surfaces and recognizes canonical `texture` plus
+legacy `vtext` window ids. The previously failing deployed command
+`PLAYWRIGHT_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/vtext-markdown-lineage.spec.js -g 'Imported Markdown advances|Imported plain text advances'`
+passed with a fresh auth state, proving the reusable acceptance path no longer
+depends on retired desktop/window selectors. This is a yellow proof-surface
+repair, not product runtime behavior.
 
-next move: choose the next largest remaining edge: either repair/retire the
-old-selector staging acceptance harness so reusable product proofs follow the
-current Desk/Texture app identity, or move to the remaining storage/durable
-actor/stored-route residue. Keep protocol v0 unwritten until remaining
-working-surface proofs are complete.
+next move: move to the remaining storage/durable actor/stored-route residue or
+find/create a product-valid Universal Wire story-field staging proof. Keep
+protocol v0 unwritten until remaining working-surface proofs are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
@@ -2171,11 +2177,13 @@ are landed. C30 is deployed-supported for Universal Wire style-source suffixes.
 C31 is deployed-supported for publication/export helper and API symbols. C32 is
 deployed-supported: new/current Texture file manifestation defaults moved from
 `.vtext` to `.texture` while legacy `.vtext` shortcuts remain readable; CI,
-deploy identity, and staging product proof are recorded. Next move is either
-repairing/retiring old-selector staging acceptance harness drift or attacking
-the remaining storage/durable actor/stored-route residue. Keep storage schema,
-durable `vtext:` actor ids, backend stored-route migration, Universal Wire
-story-field proof, and protocol v0 out of C32.
+deploy identity, and staging product proof are recorded. C33 repairs the
+reusable staging acceptance harness so it follows current Desk/Texture identity
+while preserving legacy selector compatibility. Next move is the remaining
+storage/durable actor/stored-route residue or a product-valid Universal Wire
+story-field staging proof. Keep storage schema, durable `vtext:` actor ids,
+backend stored-route migration, Universal Wire story-field proof, and protocol
+v0 out of C32.
 Preserve one Texture writer among agents, keep human direct edits canonical,
 keep super downstream of Texture for privileged execution, and avoid runtime
 semantic decision trees. Append moves to

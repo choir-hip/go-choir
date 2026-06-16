@@ -21,7 +21,9 @@ async function fetchJSON(page, path, options = {}) {
   }, { requestPath: path, requestOptions: options });
 }
 
-async function closeDesktopWindows(page, appIds = ['content', 'vtext']) {
+const TEXTURE_WINDOW_SELECTOR = '[data-window-app-id="texture"], [data-window-app-id="vtext"]';
+
+async function closeDesktopWindows(page, appIds = ['content', 'texture', 'vtext']) {
   for (const appId of appIds) {
     const windows = page.locator(`[data-window-app-id="${appId}"]`);
     let count = await windows.count();
@@ -33,13 +35,32 @@ async function closeDesktopWindows(page, appIds = ['content', 'vtext']) {
   }
 }
 
-async function openRecentVTextDocument(page, recentLabel, openedTitle = recentLabel) {
+async function launchTextureApp(page) {
+  const floatingIcon = page.locator('[data-desktop-icon-id="texture"], [data-desktop-icon-id="vtext"]').first();
+  if ((await floatingIcon.count()) > 0 && await floatingIcon.isVisible()) {
+    await floatingIcon.dblclick();
+    return;
+  }
+
+  const railItem = page.locator('[data-rail-item][data-app-id="texture"], [data-rail-item][data-app-id="vtext"]').first();
+  if ((await railItem.count()) > 0 && await railItem.isVisible()) {
+    await railItem.click();
+    return;
+  }
+
+  await page.getByRole('button', { name: /Open app switcher|Desk/ }).click();
+  const deskApp = page.locator('[data-desk-app-id="texture"], [data-desk-app-id="vtext"]').first();
+  await expect(deskApp).toBeVisible({ timeout: 10000 });
+  await deskApp.click();
+}
+
+async function openRecentTextureDocument(page, recentLabel, openedTitle = recentLabel) {
   await closeDesktopWindows(page);
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const recentWindow = page.locator('[data-window-app-id="vtext"]').filter({ has: page.locator('[data-texture-recent]') }).last();
+  await launchTextureApp(page);
+  const recentWindow = page.locator(TEXTURE_WINDOW_SELECTOR).filter({ has: page.locator('[data-texture-recent]') }).last();
   await expect(recentWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await recentWindow.locator('[data-texture-recent-document]').filter({ hasText: recentLabel }).click();
-  const documentWindow = page.locator('[data-window-app-id="vtext"]').filter({ hasText: openedTitle }).last();
+  const documentWindow = page.locator(TEXTURE_WINDOW_SELECTOR).filter({ hasText: openedTitle }).last();
   await expect(documentWindow.locator('[data-texture-app]')).toBeVisible({ timeout: 10000 });
   return documentWindow.locator('[data-texture-app]');
 }
@@ -129,7 +150,7 @@ test('Markdown lineage import resolves known citation markers into expandable so
     { marker: '[1]', action: 'link_source', entity_id: sourceEntityID },
   ]);
 
-  const vtextWindow = await openRecentVTextDocument(page, `Legal Cloud Sourced Lineage ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Legal Cloud Sourced Lineage ${stamp}`);
 
   const rendered = vtextWindow.locator('[data-texture-rendered]');
   const citation = rendered.locator('[data-texture-source-ref]').first();
@@ -244,7 +265,7 @@ test('Imported Markdown advances from v0 source artifact to canonical .texture w
   expect(exported.content).toBe(v1Content);
   expect(exported.content_hash).toBeTruthy();
 
-  const vtextWindow = await openRecentVTextDocument(page, `imported-md-vtext-${stamp}.texture`);
+  const vtextWindow = await openRecentTextureDocument(page, `imported-md-vtext-${stamp}.texture`);
   await expect(vtextWindow.locator('[data-texture-version]')).toHaveText('v1');
   await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('Canonical editable document identity.');
 });
@@ -446,7 +467,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   expect(historical.metadata?.migration_manifest?.original_content_source).toBe('content_item');
   expect(historical.metadata?.migration_manifest?.original_content_path).toBe(oldItem.file_path);
 
-  const vtextWindow = await openRecentVTextDocument(page, `Content-backed Legal Cloud ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Content-backed Legal Cloud ${stamp}`);
 
   const rendered = vtextWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
@@ -458,7 +479,7 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   });
   expect(restored.revision_id).toBeTruthy();
   await page.reload();
-  const restoredWindow = await openRecentVTextDocument(page, `Content-backed Legal Cloud ${stamp}`);
+  const restoredWindow = await openRecentTextureDocument(page, `Content-backed Legal Cloud ${stamp}`);
   const restoredRendered = restoredWindow.locator('[data-texture-rendered]');
   const citation = restoredRendered.locator('[data-texture-source-ref]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
@@ -563,7 +584,7 @@ test('Migrated source gaps can be repaired as canonical VText revisions', async 
     },
   }]);
 
-  const vtextWindow = await openRecentVTextDocument(page, `Source Gap Repair ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Source Gap Repair ${stamp}`);
 
   const rendered = vtextWindow.locator('[data-texture-rendered]');
   const citation = rendered.locator('[data-texture-source-ref]').first();
@@ -601,7 +622,7 @@ test('VText Sources panel applies source-gap repair and opens repaired source wi
     }),
   });
 
-  const vtextWindow = await openRecentVTextDocument(page, `Panel Source Repair ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Panel Source Repair ${stamp}`);
 
   await vtextWindow.locator('[data-texture-source-panel]').click();
   const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
@@ -680,7 +701,7 @@ test('VText Sources panel can mark a citation gap as no source needed', async ({
     }),
   });
 
-  const vtextWindow = await openRecentVTextDocument(page, `Panel No Source Needed ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Panel No Source Needed ${stamp}`);
 
   await vtextWindow.locator('[data-texture-source-panel]').click();
   const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
@@ -775,7 +796,7 @@ test('VText Sources panel can cancel diagnosis without blocking source review', 
   });
 
   try {
-    const vtextWindow = await openRecentVTextDocument(page, `Cancel Source Diagnosis ${stamp}`);
+    const vtextWindow = await openRecentTextureDocument(page, `Cancel Source Diagnosis ${stamp}`);
     await vtextWindow.locator('[data-texture-source-panel]').click();
     const sourcePanel = vtextWindow.locator('[data-texture-source-diagnostics]');
     const diagnosisButton = sourcePanel.locator('[data-texture-load-diagnosis]');
@@ -831,7 +852,7 @@ test('VText Sources panel shows structured edit evidence without raw prompts', a
     }),
   });
 
-  const vtextWindow = await openRecentVTextDocument(page, `Edit Evidence Fixture ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Edit Evidence Fixture ${stamp}`);
 
   await vtextWindow.locator('[data-texture-source-panel]').click();
   const editEvidence = vtextWindow.locator('[data-texture-edit-evidence]');
@@ -921,7 +942,7 @@ test('VText Sources panel shows bounded revision structure without body text', a
     });
   });
 
-  const vtextWindow = await openRecentVTextDocument(page, `Structure Evidence Fixture ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Structure Evidence Fixture ${stamp}`);
   try {
     await vtextWindow.locator('[data-texture-source-panel]').click();
     await vtextWindow.locator('[data-texture-load-diagnosis]').click();
@@ -1005,7 +1026,7 @@ test('VText Sources panel shows off-document decision notes separately', async (
     });
   });
 
-  const vtextWindow = await openRecentVTextDocument(page, `Decision Evidence Fixture ${stamp}`);
+  const vtextWindow = await openRecentTextureDocument(page, `Decision Evidence Fixture ${stamp}`);
   try {
     await vtextWindow.locator('[data-texture-source-panel]').click();
     await vtextWindow.locator('[data-texture-load-diagnosis]').click();
