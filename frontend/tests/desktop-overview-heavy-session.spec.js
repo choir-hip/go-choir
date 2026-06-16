@@ -11,7 +11,7 @@ const HEAVY_APP_IDS = new Set([
   'browser',
   'apps-changes',
   'terminal',
-  'vtext',
+  'texture',
   'trace',
   'podcast',
   'image',
@@ -23,7 +23,7 @@ const HEAVY_APP_IDS = new Set([
 
 const HEAVY_SESSION_APPS = [
   'files',
-  'vtext',
+  'texture',
   'trace',
   'podcast',
   'image',
@@ -32,7 +32,7 @@ const HEAVY_SESSION_APPS = [
   'pdf',
   'epub',
   'podcast',
-  'vtext',
+  'texture',
   'image',
 ];
 

@@ -138,7 +138,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
 				targetProfile := canonicalAgentProfile(target.Profile)
 				if targetProfile == AgentProfileEmail {
-					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a VText-owned request_email_draft artifact handoff", canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)), target.AgentID)
+					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a Texture-owned request_email_draft artifact handoff", canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)), target.AgentID)
 				}
 				if err := enforceCoagentUpdateAuthority(ctx, rt, target, targetProfile); err != nil {
 					return "", err

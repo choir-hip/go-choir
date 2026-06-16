@@ -168,9 +168,9 @@ test('Universal Wire retries authenticated story loads after transient route fai
     await expect(app.locator('[data-universal-wire-story]').first()).toContainText('Live source-network article 1');
     await expect(app.locator('text=Port backlog recedes')).toHaveCount(0);
     await app.locator('[data-universal-wire-story]').first().locator('[data-universal-wire-open-texture]').click();
-    const vtextWindow = page.locator('[data-texture-app]').last();
-    await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-    await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('authenticated Universal Wire story API after retry');
+    const textureWindow = page.locator('[data-texture-app]').last();
+    await expect(textureWindow).toBeVisible({ timeout: 5000 });
+    await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText('authenticated Universal Wire story API after retry');
     expect(manifestEnsures).toBe(0);
     expect(storyFetches).toBeGreaterThanOrEqual(2);
   } finally {
@@ -192,7 +192,7 @@ test('Universal Wire deletes detritus source chronology and bespoke style contro
   await expect(app.locator('[data-universal-wire-replace-style]')).toHaveCount(0);
   await expect(app.locator('[data-universal-wire-ask-choir]')).toHaveCount(0);
   await expect(app.locator('text=Chronology')).toHaveCount(0);
-  await expect(app.locator('text=Style.vtext')).toHaveCount(0);
+  await expect(app.locator('text=Style.texture')).toHaveCount(0);
   await expect(app.locator('text=Style.texture')).toHaveCount(0);
 });
 

@@ -9,7 +9,7 @@
  * - VAL-FILES-006: Clicking breadcrumb segment navigates back
  * - VAL-FILES-009: Create folder via UI (inline input, no alert/prompt)
  * - VAL-FILES-011: Delete via UI (inline confirmation, no confirm())
- * - VAL-FILES-012: Clicking text file opens in VText
+ * - VAL-FILES-012: Clicking text file opens in Texture
  * - VAL-FILES-013: Empty directory shows empty state
  * - VAL-FILES-016: Back/forward navigation
  * - VAL-FILES-018: Responsive on mobile
@@ -101,7 +101,7 @@ test('file browser launches from left rail', async ({ desktopSession }) => {
   await expect(fileList).toBeVisible();
 
   // The window title should be "Files"
-  const title = page.locator('[data-window] [data-window-titlebar] .titlvtext');
+  const title = page.locator('[data-window] [data-window-titlebar] .titltexture');
   await expect(title).toContainText('Files');
 });
 
@@ -301,9 +301,9 @@ test('delete with inline confirmation', async ({ desktopSession }) => {
 });
 
 // ---------------------------------------------------------------
-// Test: clicking text file opens in VText (VAL-FILES-012)
+// Test: clicking text file opens in Texture (VAL-FILES-012)
 // ---------------------------------------------------------------
-test('clicking text file opens in VText', async ({ desktopSession }) => {
+test('clicking text file opens in Texture', async ({ desktopSession }) => {
   const { page } = desktopSession;
 
   const fileName = 'notes.txt';
@@ -330,8 +330,8 @@ test('clicking text file opens in VText', async ({ desktopSession }) => {
 
   await fileItem.click();
 
-  const vtextWindow = page.locator('[data-texture-app]');
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
+  const textureWindow = page.locator('[data-texture-app]');
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
 
   const editorArea = page.locator('[data-texture-app] [data-texture-editor-area]').last();
   await expect(editorArea).toContainText(fileContent);
@@ -402,32 +402,32 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
   expect(downloads).toEqual([]);
 });
 
-test('PDF files expose explicit VText import without replacing the PDF reader route', async ({ desktopSession }) => {
+test('PDF files expose explicit Texture import without replacing the PDF reader route', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  const fileName = `vtext-import-proof-${Date.now()}.pdf`;
-  await putBinaryFile(page, fileName, 'application/pdf', buildPdfBytes('VText imported PDF proof'));
+  const fileName = `texture-import-proof-${Date.now()}.pdf`;
+  await putBinaryFile(page, fileName, 'application/pdf', buildPdfBytes('Texture imported PDF proof'));
 
   await openFilesApp(page);
   const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
   await expect(fileItem).toBeVisible({ timeout: 5000 });
-  await expect(fileItem.locator('[data-import-vtext-btn]')).toBeVisible();
+  await expect(fileItem.locator('[data-import-texture-btn]')).toBeVisible();
 
   await fileItem.click();
   const pdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
   await expect(pdfViewer).toBeVisible({ timeout: 5000 });
   await page.locator('[data-window]').filter({ has: pdfViewer }).last().locator('[data-window-close]').click();
 
-  await fileItem.locator('[data-import-vtext-btn]').click();
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('VText imported PDF proof', { timeout: 10_000 });
+  await fileItem.locator('[data-import-texture-btn]').click();
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText('Texture imported PDF proof', { timeout: 10_000 });
 });
 
-test('DOCX files import to VText from original bytes with table projection', async ({ desktopSession }) => {
+test('DOCX files import to Texture from original bytes with table projection', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  const fileName = `vtext-import-proof-${Date.now()}.docx`;
+  const fileName = `texture-import-proof-${Date.now()}.docx`;
   await putBinaryFile(page, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', await buildDocxBytes({
-    paragraphs: ['VText imported DOCX proof', 'This sentence must be projected from DOCX bytes.'],
+    paragraphs: ['Texture imported DOCX proof', 'This sentence must be projected from DOCX bytes.'],
     table: [
       ['Term', 'Definition'],
       ['Work product', 'Durable professional output'],
@@ -437,13 +437,13 @@ test('DOCX files import to VText from original bytes with table projection', asy
   await openFilesApp(page);
   const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
   await expect(fileItem).toBeVisible({ timeout: 5000 });
-  await expect(fileItem.locator('[data-import-vtext-btn]')).toBeVisible();
+  await expect(fileItem.locator('[data-import-texture-btn]')).toBeVisible();
 
-  await fileItem.locator('[data-import-vtext-btn]').click();
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  const editor = vtextWindow.locator('[data-texture-editor-area]');
-  await expect(editor).toContainText('VText imported DOCX proof', { timeout: 10_000 });
+  await fileItem.locator('[data-import-texture-btn]').click();
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  const editor = textureWindow.locator('[data-texture-editor-area]');
+  await expect(editor).toContainText('Texture imported DOCX proof', { timeout: 10_000 });
   await expect(editor).toContainText('This sentence must be projected from DOCX bytes');
   await expect(editor).toContainText('Work product');
   await expect(editor).toContainText('Durable professional output');
@@ -452,9 +452,9 @@ test('DOCX files import to VText from original bytes with table projection', asy
 test('DOCX import can revise, publish, and export DOCX and PDF derivatives', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const fileName = `vtext-roundtrip-proof-${stamp}.docx`;
+  const fileName = `texture-roundtrip-proof-${stamp}.docx`;
   await putBinaryFile(page, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', await buildDocxBytes({
-    paragraphs: ['VText DOCX roundtrip proof', 'The imported projection should become a revisable VText.'],
+    paragraphs: ['Texture DOCX roundtrip proof', 'The imported projection should become a revisable Texture.'],
     table: [
       ['Capability', 'Proof'],
       ['Revision', 'Applied after import'],
@@ -468,18 +468,18 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
   const openResponse = page.waitForResponse((response) =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/texture/files/open'
   );
-  await fileItem.locator('[data-import-vtext-btn]').click();
+  await fileItem.locator('[data-import-texture-btn]').click();
   const opened = await (await openResponse).json();
 
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('VText DOCX roundtrip proof', { timeout: 10_000 });
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText('Texture DOCX roundtrip proof', { timeout: 10_000 });
 
   const doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   const revisedContent = [
-    'VText DOCX roundtrip proof',
+    'Texture DOCX roundtrip proof',
     '',
-    'The imported projection should become a revisable VText.',
+    'The imported projection should become a revisable Texture.',
     '',
     '| Capability | Proof |',
     '| --- | --- |',
@@ -528,8 +528,8 @@ test('DOCX import can revise, publish, and export DOCX and PDF derivatives', asy
 test('PDF import can revise, publish, and export DOCX and PDF derivatives', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const fileName = `vtext-pdf-roundtrip-proof-${stamp}.pdf`;
-  await putBinaryFile(page, fileName, 'application/pdf', buildPdfBytes('VText PDF roundtrip proof'));
+  const fileName = `texture-pdf-roundtrip-proof-${stamp}.pdf`;
+  await putBinaryFile(page, fileName, 'application/pdf', buildPdfBytes('Texture PDF roundtrip proof'));
 
   await openFilesApp(page);
   const fileItem = page.locator('[data-file-item]').filter({ hasText: fileName }).first();
@@ -538,23 +538,23 @@ test('PDF import can revise, publish, and export DOCX and PDF derivatives', asyn
   const openResponse = page.waitForResponse((response) =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/texture/files/open'
   );
-  await fileItem.locator('[data-import-vtext-btn]').click();
+  await fileItem.locator('[data-import-texture-btn]').click();
   const opened = await (await openResponse).json();
 
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText('VText PDF roundtrip proof', { timeout: 10_000 });
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText('Texture PDF roundtrip proof', { timeout: 10_000 });
 
   const doc = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}`);
   const revisedContent = [
-    'VText PDF roundtrip proof',
+    'Texture PDF roundtrip proof',
     '',
-    'The PDF projection became a revisable VText artifact.',
+    'The PDF projection became a revisable Texture artifact.',
     '',
     '| Capability | Proof |',
     '| --- | --- |',
     '| Import | PDF text projected from original bytes |',
-    '| Export | DOCX and PDF derivatives generated from revised VText |',
+    '| Export | DOCX and PDF derivatives generated from revised Texture |',
   ].join('\n');
   const revision = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(opened.doc_id)}/revisions`, {
     method: 'POST',
@@ -592,7 +592,7 @@ test('PDF import can revise, publish, and export DOCX and PDF derivatives', asyn
   expect(pdfExport.media_type).toBe('application/pdf');
   const pdfText = Buffer.from(pdfExport.content_base64, 'base64').toString('latin1');
   expect(pdfText).toContain('%PDF-1.4');
-  expect(pdfText).toContain('DOCX and PDF derivatives generated from revised VText');
+  expect(pdfText).toContain('DOCX and PDF derivatives generated from revised Texture');
 });
 
 // ---------------------------------------------------------------

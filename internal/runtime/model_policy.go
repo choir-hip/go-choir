@@ -33,7 +33,7 @@ const (
 	defaultMimoProModel              = "mimo-v2.5-pro"
 	defaultConductorModel            = "deepseek-v4-flash"
 	defaultSuperModel                = "deepseek-v4-pro"
-	defaultResearcherVTextModel      = "deepseek-v4-flash"
+	defaultResearcherTextureModel    = "deepseek-v4-flash"
 	defaultFlashForegroundReasoning  = "medium"
 	defaultVerifierModel             = "deepseek-v4-pro"
 	defaultMultimodalVerifierModel   = "mimo-v2.5"
@@ -206,7 +206,7 @@ model = "accounts/fireworks/models/deepseek-v4-pro"
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 
@@ -249,7 +249,7 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			AgentProfileResearcher:       flashDeepSeek,
-			AgentProfileVText:            flashXiaomi,
+			AgentProfileTexture:          flashXiaomi,
 			AgentProfileProcessor:        flashXiaomi,
 			AgentProfileReconciler:       flashDeepSeek,
 			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
@@ -589,8 +589,8 @@ func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
 	if !ok || !isModelPolicySelection(researcher, defaultFireworksProvider, legacyFireworksFlashModel, "") {
 		return false
 	}
-	vtext, ok := policy.Roles[AgentProfileVText]
-	if !ok || !isModelPolicySelection(vtext, defaultFireworksProvider, legacyFireworksFlashModel, "") {
+	texture, ok := policy.Roles[AgentProfileTexture]
+	if !ok || !isModelPolicySelection(texture, defaultFireworksProvider, legacyFireworksFlashModel, "") {
 		return false
 	}
 	return true
@@ -600,7 +600,7 @@ func hasGeneratedDeepSeekPolicy(policy ModelPolicy) bool {
 	if len(policy.Roles) != 8 {
 		return false
 	}
-	if !isModelPolicySelection(policy.Defaults, defaultDeepSeekProvider, defaultResearcherVTextModel, "medium") {
+	if !isModelPolicySelection(policy.Defaults, defaultDeepSeekProvider, defaultResearcherTextureModel, "medium") {
 		return false
 	}
 	expected := map[string]LLMSelection{
@@ -608,8 +608,8 @@ func hasGeneratedDeepSeekPolicy(policy ModelPolicy) bool {
 		AgentProfileSuper:            {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, ReasoningEffort: "medium"},
 		AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultSuperModel},
 		AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultSuperModel},
-		AgentProfileResearcher:       {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "medium"},
-		AgentProfileVText:            {Provider: defaultDeepSeekProvider, Model: defaultResearcherVTextModel, ReasoningEffort: "medium"},
+		AgentProfileResearcher:       {Provider: defaultDeepSeekProvider, Model: defaultResearcherTextureModel, ReasoningEffort: "medium"},
+		AgentProfileTexture:          {Provider: defaultDeepSeekProvider, Model: defaultResearcherTextureModel, ReasoningEffort: "medium"},
 		modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultVerifierModel},
 		modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel},
 	}
@@ -638,7 +638,7 @@ func hasGeneratedFlashNoneForegroundPolicy(policy ModelPolicy) bool {
 		AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
 		AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
 		AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
-		AgentProfileVText:            {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
+		AgentProfileTexture:          {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
 		modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
 		modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: legacyFireworksKimiModel},
 	}
@@ -811,7 +811,7 @@ func normalizeModelPolicyRole(role string) string {
 	case "cosuper", "co_super", "co-super", "cosuper_coding", "co-super-coding":
 		return AgentProfileCoSuper
 	case "texture", "texture-agent":
-		return AgentProfileVText
+		return AgentProfileTexture
 	case "verifier", "verifier-text", "verifier_text":
 		return modelPolicyRoleVerifier
 	case "verifier-multimodal", "verifier_multimodal":

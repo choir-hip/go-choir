@@ -178,7 +178,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 		provider,
 		registry,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"revise"}`)},
-		"You are VText.",
+		"You are Texture.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
 			if kind == types.EventRunProgress && phase == "terminal_tool_success" {
@@ -455,7 +455,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 	var edited, recorded int
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			edited++
@@ -466,7 +466,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 	}
 	if err := registry.Register(Tool{
 		Name:        "record_texture_decision",
-		Description: "Record a VText decision.",
+		Description: "Record a Texture decision.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			recorded++
@@ -556,7 +556,7 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 	var edited int
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			edited++
@@ -596,17 +596,17 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 	}
 
 	run := &types.RunRecord{
-		RunID:        "run-vtext",
+		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 	}
 	text, _, err := RunToolLoop(
 		WithToolExecutionContext(context.Background(), run),
 		provider,
 		registry,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
-		"You are a VText appagent.",
+		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
@@ -1425,7 +1425,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
@@ -1462,7 +1462,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 		provider,
 		registry,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
-		"You are a VText appagent.",
+		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
@@ -1526,7 +1526,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
@@ -1553,7 +1553,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 		provider,
 		registry,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write"}]}`)},
-		"You are a VText appagent.",
+		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
@@ -1576,7 +1576,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
@@ -1614,7 +1614,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 		provider,
 		registry,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
-		"You are a VText appagent.",
+		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
@@ -1671,7 +1671,7 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
@@ -1696,7 +1696,7 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 		provider,
 		registry,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
-		"You are a VText appagent.",
+		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
@@ -1760,7 +1760,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil
@@ -1853,7 +1853,7 @@ func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testin
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
-		Description: "Edit the VText document.",
+		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"ok","revision_id":"rev-1"}`, nil

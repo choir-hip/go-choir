@@ -98,7 +98,7 @@
     if (lowerKey.includes('video') || /\.(mp4|webm|mov)(\?|#|$)/.test(lowerRaw)) refs.video.push(raw);
     else if (lowerKey.includes('screenshot') || /\.(png|jpg|jpeg|webp)(\?|#|$)/.test(lowerRaw)) refs.screenshot.push(raw);
     else if (lowerKey.includes('benchmark') || lowerRaw.includes('benchmark')) refs.benchmark.push(raw);
-    else if (lowerKey.includes('narrative') || lowerKey.includes('vtext')) refs.narrative.push(raw);
+    else if (lowerKey.includes('narrative') || lowerKey.includes('texture')) refs.narrative.push(raw);
     else refs.artifact.push(raw);
     return refs;
   }

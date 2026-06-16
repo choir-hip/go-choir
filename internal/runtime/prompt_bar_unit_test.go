@@ -12,10 +12,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestHandlePromptBarVTextRouteCompletesConductorSynchronously(t *testing.T) {
+func TestHandlePromptBarTextureRouteCompletesConductorSynchronously(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"write one short sentence that says VText wrapper cleanup works"}`, "user-alice")
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"write one short sentence that says Texture wrapper cleanup works"}`, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandlePromptBar(w, req)
 	if w.Code != http.StatusAccepted {
@@ -48,14 +48,14 @@ func TestHandlePromptBarVTextRouteCompletesConductorSynchronously(t *testing.T) 
 		t.Fatalf("submission state = %q, want %q", status.State, types.RunCompleted)
 	}
 	if status.Decision == nil || status.Decision.DocID == "" || status.Decision.InitialLoopID == "" {
-		t.Fatalf("status decision missing materialized vtext route: %+v", status.Decision)
+		t.Fatalf("status decision missing materialized texture route: %+v", status.Decision)
 	}
 }
 
-func TestHandlePromptBarOperationalProofInitialRunStartsWithVText(t *testing.T) {
+func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Universal Wire staging proof request: using product paths only, run the existing Universal Wire source-refresh/research/projection/publication flow, create or approve an Article VText, update universal-wire/Wire.vtext, then leave evidence ids and verifier proof. Do not use test-only routes."}`, "user-alice")
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Universal Wire staging proof request: using product paths only, run the existing Universal Wire source-refresh/research/projection/publication flow, create or approve an Article Texture, update universal-wire/Wire.texture, then leave evidence ids and verifier proof. Do not use test-only routes."}`, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandlePromptBar(w, req)
 	if w.Code != http.StatusAccepted {
@@ -85,25 +85,25 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithVText(t *testing.T) 
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if initialRun.ChannelID != decision.DocID {
-		t.Fatalf("initial vtext channel = %q, want vtext doc %q", initialRun.ChannelID, decision.DocID)
+		t.Fatalf("initial texture channel = %q, want texture doc %q", initialRun.ChannelID, decision.DocID)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got != "" {
 		t.Fatalf("initial_handoff = %q, want no conductor-level super handoff", got)
 	}
 	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
 	if err != nil {
-		t.Fatalf("list runs before vtext super request: %v", err)
+		t.Fatalf("list runs before texture super request: %v", err)
 	}
 	for _, run := range runs {
 		if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == AgentProfileSuper {
-			t.Fatalf("super run appeared before VText request on prompt-bar trajectory: %+v", run)
+			t.Fatalf("super run appeared before Texture request on prompt-bar trajectory: %+v", run)
 		}
 	}
 
 	requestCtx := WithToolExecutionContext(context.Background(), initialRun)
-	superResult, err := rt.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Run the Universal Wire verification steps and report evidence back to VText.", "")
+	superResult, err := rt.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Run the Universal Wire verification steps and report evidence back to Texture.", "")
 	if err != nil {
-		t.Fatalf("vtext request super execution: %v", err)
+		t.Fatalf("texture request super execution: %v", err)
 	}
 	if got := superResult["profile"]; got != AgentProfileSuper {
 		t.Fatalf("super profile = %v, want %s: %+v", got, AgentProfileSuper, superResult)
@@ -113,10 +113,10 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithVText(t *testing.T) 
 	}
 }
 
-func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
+func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	prompt := "Create a short VText document titled M32_VTEXT_DECISION_ROUTE_TEST. The body should say this marker is a deployed acceptance probe. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_DECISION_ROUTE_TEST, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
+	prompt := "Create a short Texture document titled M32_TEXTURE_DECISION_ROUTE_TEST. The body should say this marker is a deployed acceptance probe. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document Texture decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_TEXTURE_DECISION_ROUTE_TEST, next action Write the concise reader-facing Texture revision. Then write the concise reader-facing Texture revision."
 	body, err := json.Marshal(map[string]string{"text": prompt})
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
@@ -153,17 +153,17 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
 	}
-	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
+	if !metadataBoolValue(initialRun.Metadata, "texture_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
-	if got := initialVTextToolChoice(initialRun); got != exactRequiredToolChoice("patch_texture") {
+	if got := initialTextureToolChoice(initialRun); got != exactRequiredToolChoice("patch_texture") {
 		t.Fatalf("initial tool choice = %q, want patch_texture after deterministic decision record", got)
 	}
 	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
 	if done.State != types.RunCompleted {
-		t.Fatalf("initial vtext state = %q, want completed", done.State)
+		t.Fatalf("initial texture state = %q, want completed", done.State)
 	}
-	decisions, err := rt.Store().ListVTextDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	decisions, err := rt.Store().ListTextureDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
 	if err != nil {
 		t.Fatalf("list decisions: %v", err)
 	}
@@ -195,10 +195,10 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithVText(t *testing.T) {
 	}
 }
 
-func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t *testing.T) {
+func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	prompt := "Create a VText document for M32_CONTROL_PLANE_EXEC_TEST. This is an execution-shaped request: the document should ask downstream super execution to create a tiny file artifacts/m32_control_plane_exec_test.txt containing the marker, then report the requested execution handle. Do not research; this only needs execution authority after VText owns the artifact context."
+	prompt := "Create a Texture document for M32_CONTROL_PLANE_EXEC_TEST. This is an execution-shaped request: the document should ask downstream super execution to create a tiny file artifacts/m32_control_plane_exec_test.txt containing the marker, then report the requested execution handle. Do not research; this only needs execution authority after Texture owns the artifact context."
 	body, err := json.Marshal(map[string]string{"text": prompt})
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
@@ -229,8 +229,8 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t
 	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
-	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_super_request_required") {
-		t.Fatalf("initial run missing VText super request metadata: %+v", initialRun.Metadata)
+	if !metadataBoolValue(initialRun.Metadata, "texture_initial_super_request_required") {
+		t.Fatalf("initial run missing Texture super request metadata: %+v", initialRun.Metadata)
 	}
 
 	var superRun *types.RunRecord
@@ -253,7 +253,7 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t
 		time.Sleep(25 * time.Millisecond)
 	}
 	if superRun == nil {
-		t.Fatalf("no downstream super run appeared after VText request")
+		t.Fatalf("no downstream super run appeared after Texture request")
 	}
 	if got := metadataStringValue(superRun.Metadata, "requested_by_profile"); got != AgentProfileTexture {
 		t.Fatalf("super requested_by_profile = %q, want %q; metadata=%+v", got, AgentProfileTexture, superRun.Metadata)
@@ -264,38 +264,38 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithVTextThenRequestsSuper(t
 	if got := metadataStringValue(superRun.Metadata, "requested_by_run_id"); got != initialRun.RunID {
 		t.Fatalf("super requested_by_run_id = %q, want %q", got, initialRun.RunID)
 	}
-	decisions, err := rt.Store().ListVTextDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	decisions, err := rt.Store().ListTextureDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
 	if err != nil {
 		t.Fatalf("list decisions: %v", err)
 	}
 	if len(decisions) != 1 || decisions[0].DecisionKind != "delegation_opened" || decisions[0].RunID != initialRun.RunID {
-		t.Fatalf("vtext super decision records = %+v, want one delegation_opened from initial run", decisions)
+		t.Fatalf("texture super decision records = %+v, want one delegation_opened from initial run", decisions)
 	}
 }
 
-func TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T) {
+func TestConductorTextureRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T) {
 	rt, _ := testAPISetup(t)
 
-	prompt := "Create a short VText document titled M32_VTEXT_ROUTE_DIAGNOSTIC. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document VText decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_VTEXT_ROUTE_DIAGNOSTIC, next action Write the concise reader-facing VText revision. Then write the concise reader-facing VText revision."
+	prompt := "Create a short Texture document titled M32_TEXTURE_ROUTE_DIAGNOSTIC. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document Texture decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_TEXTURE_ROUTE_DIAGNOSTIC, next action Write the concise reader-facing Texture revision. Then write the concise reader-facing Texture revision."
 	rec, err := rt.completePromptBarDecisionRun(context.Background(), prompt, "user-alice", map[string]any{
 		runMetadataAgentProfile:  AgentProfileConductor,
 		runMetadataAgentRole:     AgentProfileConductor,
 		"input_source":           "prompt_bar",
 		"requested_app":          AgentProfileTexture,
-		"initial_document_title": "M32_VTEXT_ROUTE_DIAGNOSTIC",
+		"initial_document_title": "M32_TEXTURE_ROUTE_DIAGNOSTIC",
 		"submission_surface":     "prompt_bar",
 	}, conductorDecision{
 		Action: "open_app",
 		App:    AgentProfileTexture,
-		Title:  "M32_VTEXT_ROUTE_DIAGNOSTIC",
+		Title:  "M32_TEXTURE_ROUTE_DIAGNOSTIC",
 	})
 	if err != nil {
 		t.Fatalf("complete conductor decision: %v", err)
 	}
 
-	decision, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", "")
+	decision, err := rt.ensureConductorTextureRoute(context.Background(), rec, "", "")
 	if err != nil {
-		t.Fatalf("ensure conductor vtext route: %v", err)
+		t.Fatalf("ensure conductor texture route: %v", err)
 	}
 	if got := metadataStringValue(rec.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no initial super handoff", got)
@@ -307,14 +307,14 @@ func TestConductorVTextRouteRecordsExplicitDecisionFromStoredPrompt(t *testing.T
 	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
-	if !metadataBoolValue(initialRun.Metadata, "vtext_initial_decision_required") {
+	if !metadataBoolValue(initialRun.Metadata, "texture_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
 	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
 	if done.State != types.RunCompleted {
-		t.Fatalf("initial vtext state = %q, want completed", done.State)
+		t.Fatalf("initial texture state = %q, want completed", done.State)
 	}
-	decisions, err := rt.Store().ListVTextDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
+	decisions, err := rt.Store().ListTextureDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
 	if err != nil {
 		t.Fatalf("list decisions: %v", err)
 	}
@@ -352,7 +352,7 @@ func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID s
 func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a vtext document for M3. Ask researcher for a concise finding. Ask super to create a tiny verification note."}`, "user-alice")
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a texture document for M3. Ask researcher for a concise finding. Ask super to create a tiny verification note."}`, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandlePromptBar(w, req)
 	if w.Code != http.StatusAccepted {

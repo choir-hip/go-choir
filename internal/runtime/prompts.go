@@ -89,10 +89,10 @@ func settingsPreviewRun(ownerID, role string) *types.RunRecord {
 	case AgentProfileConductor:
 		rec.Metadata["requested_app"] = "<requested_app>"
 		rec.Metadata["seed_prompt"] = "<seed_prompt>"
-	case AgentProfileVText:
-		rec.AgentID = "vtext:<doc_id>"
+	case AgentProfileTexture:
+		rec.AgentID = "texture:<doc_id>"
 		rec.ChannelID = "<doc_id>"
-		rec.Metadata[runMetadataAgentID] = "vtext:<doc_id>"
+		rec.Metadata[runMetadataAgentID] = "texture:<doc_id>"
 		rec.Metadata[runMetadataChannelID] = "<doc_id>"
 		rec.Metadata["doc_id"] = "<doc_id>"
 	}

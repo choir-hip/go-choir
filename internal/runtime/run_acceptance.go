@@ -25,8 +25,7 @@ type runAcceptanceSynthesizeInput struct {
 }
 
 const (
-	runAcceptanceCheckpointTextureOpened     = "texture_opened"
-	runAcceptanceCheckpointLegacyVTextOpened = "vtext_opened"
+	runAcceptanceCheckpointTextureOpened = "texture_opened"
 )
 
 type acceptanceBuilder struct {
@@ -438,9 +437,7 @@ func acceptanceDocumentEvidence(builder *acceptanceBuilder, root types.RunRecord
 	}
 	for _, ev := range events {
 		if ev.Kind != types.EventTextureDocumentRevisionCreated &&
-			ev.Kind != types.EventTextureAgentRevisionCompleted &&
-			ev.Kind != types.LegacyEventVTextDocumentRevisionCreated &&
-			ev.Kind != types.LegacyEventVTextAgentRevisionCompleted {
+			ev.Kind != types.EventTextureAgentRevisionCompleted {
 			continue
 		}
 		payload := parseTracePayload(ev.Payload)
@@ -1086,7 +1083,7 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	}
 	level := types.RunAcceptanceDocsLevel
 	state := types.RunAcceptanceBlocked
-	textureOpened := has[runAcceptanceCheckpointTextureOpened] || has[runAcceptanceCheckpointLegacyVTextOpened]
+	textureOpened := has[runAcceptanceCheckpointTextureOpened]
 	if has["submitted"] && textureOpened {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
@@ -1119,7 +1116,7 @@ func buildAcceptanceInvariantChecks(rec types.RunAcceptanceRecord) []types.RunAc
 			blockedKindSet[checkpoint.Kind] = true
 		}
 	}
-	textureOpened := kindSet[runAcceptanceCheckpointTextureOpened] || kindSet[runAcceptanceCheckpointLegacyVTextOpened]
+	textureOpened := kindSet[runAcceptanceCheckpointTextureOpened]
 	promptPathObserved := kindSet["submitted"] && textureOpened
 	adoptionPathObserved := kindSet["app_adoption_verified"] || kindSet["app_adoption_promoted"]
 	workerMutationBounded := kindSet["worker_leased"] && kindSet["worker_delegated"] && kindSet["app_package_published"]

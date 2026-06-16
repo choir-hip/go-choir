@@ -17,7 +17,7 @@ func TestNormalizeOpenSurface(t *testing.T) {
 		{raw: "browser", want: OpenSurfaceWebLens},
 		{raw: "live original", want: OpenSurfaceWebLens},
 		{raw: "publication-version", want: OpenSurfaceTexture},
-		{raw: "published-vtext-span", want: OpenSurfaceTexture},
+		{raw: "published-texture-span", want: OpenSurfaceTexture},
 		{raw: "published-texture-span", want: OpenSurfaceTexture},
 		{raw: "youtube_video", want: OpenSurfaceVideo},
 		{raw: "image", want: OpenSurfaceImage},

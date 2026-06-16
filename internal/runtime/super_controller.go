@@ -225,7 +225,7 @@ func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
 func buildPersistentSuperUpdatePrompt(updates []types.WorkerUpdateRecord) string {
 	var b strings.Builder
 	b.WriteString("Process the pending update_coagent records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Use privileged tools only for the requested execution work. When you have artifacts, test results, references, questions, or proposals, report them back with update_coagent to the addressed vtext document.\n")
+	b.WriteString("Use privileged tools only for the requested execution work. When you have artifacts, test results, references, questions, or proposals, report them back with update_coagent to the addressed texture document.\n")
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -275,7 +275,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	}
 	first := updates[0]
 	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.Role))
-	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileVText || profile == AgentProfileSuper {
+	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileTexture || profile == AgentProfileSuper {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -515,9 +515,9 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.WorkerUp
 		}
 		return
 	}
-	if docID, ok := strings.CutPrefix(target, "vtext:"); ok {
-		if err := rt.reconcileVTextWorkerState(context.Background(), update.OwnerID, docID); err != nil {
-			log.Printf("runtime: wake vtext for update %s: %v", update.UpdateID, err)
+	if docID, ok := strings.CutPrefix(target, "texture:"); ok {
+		if err := rt.reconcileTextureWorkerState(context.Background(), update.OwnerID, docID); err != nil {
+			log.Printf("runtime: wake texture for update %s: %v", update.UpdateID, err)
 		}
 		return
 	}

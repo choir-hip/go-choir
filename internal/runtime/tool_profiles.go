@@ -19,7 +19,6 @@ const (
 	AgentProfileVSuper     = "vsuper"
 	AgentProfileResearcher = "researcher"
 	AgentProfileTexture    = "texture"
-	AgentProfileVText      = "vtext"
 	AgentProfileProcessor  = "processor"
 	AgentProfileReconciler = "reconciler"
 	AgentProfileEmail      = "email"
@@ -108,7 +107,7 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
-		return AgentProfileVText
+		return AgentProfileTexture
 	}
 	return ""
 }
@@ -126,7 +125,7 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
-		return AgentProfileVText
+		return AgentProfileTexture
 	}
 	return AgentProfileSuper
 }
@@ -222,9 +221,9 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowCoAgentTools:      true,
 			AllowedDelegateTargets: nil,
 		}
-	case AgentProfileVText:
+	case AgentProfileTexture:
 		return AgentRoleSpec{
-			Profile:                AgentProfileVText,
+			Profile:                AgentProfileTexture,
 			AllowEvidenceTools:     true,
 			AllowCoAgentTools:      true,
 			AllowedDelegateTargets: []string{AgentProfileResearcher},
@@ -296,8 +295,8 @@ func canonicalAgentProfile(profile string) string {
 		return AgentProfileCoSuper
 	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
 		return AgentProfileVSuper
-	case "texture", "texture-agent", "vtext", "vtext-agent", "document-agent":
-		return AgentProfileVText
+	case "texture", "texture-agent", "document-agent":
+		return AgentProfileTexture
 	case "processor", "news-processor", "source-processor", "universal-wire-processor":
 		return AgentProfileProcessor
 	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler":
@@ -314,7 +313,7 @@ func canonicalAgentProfile(profile string) string {
 }
 
 func isTextureProfileValue(profile string) bool {
-	return canonicalAgentProfile(profile) == AgentProfileVText
+	return canonicalAgentProfile(profile) == AgentProfileTexture
 }
 
 func currentTextureAgentID(docID string) string {
@@ -325,31 +324,23 @@ func currentTextureAgentID(docID string) string {
 	return AgentProfileTexture + ":" + docID
 }
 
-func legacyVTextAgentID(docID string) string {
-	docID = strings.TrimSpace(docID)
-	if docID == "" {
-		return ""
-	}
-	return AgentProfileVText + ":" + docID
-}
-
 func textureAgentIDMatchesDoc(agentID, docID string) bool {
 	agentID = strings.TrimSpace(agentID)
 	docID = strings.TrimSpace(docID)
 	if agentID == "" || docID == "" {
 		return false
 	}
-	return agentID == currentTextureAgentID(docID) || agentID == legacyVTextAgentID(docID)
+	return agentID == currentTextureAgentID(docID)
 }
 
 func isTextureAgentID(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
-	return strings.HasPrefix(agentID, AgentProfileTexture+":") || strings.HasPrefix(agentID, AgentProfileVText+":")
+	return strings.HasPrefix(agentID, AgentProfileTexture+":") || strings.HasPrefix(agentID, AgentProfileTexture+":")
 }
 
 func docIDFromTextureAgentID(agentID string) string {
 	agentID = strings.TrimSpace(agentID)
-	for _, prefix := range []string{AgentProfileTexture + ":", AgentProfileVText + ":"} {
+	for _, prefix := range []string{AgentProfileTexture + ":", AgentProfileTexture + ":"} {
 		if strings.HasPrefix(agentID, prefix) {
 			return strings.TrimSpace(strings.TrimPrefix(agentID, prefix))
 		}
@@ -430,8 +421,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			b.WriteString(".")
 		}
 	}
-	if profile == AgentProfileVText {
-		isWireVText := metadataString(rec.Metadata, "source_network_cycle_id") != "" ||
+	if profile == AgentProfileTexture {
+		isWireTexture := metadataString(rec.Metadata, "source_network_cycle_id") != "" ||
 			metadataString(rec.Metadata, "ingestion_handoff_cycle_id") != "" ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "universal_wire_") ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "ingestion_handoff_")
@@ -441,7 +432,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nAfter a Texture write tool succeeds, do not call patch_texture or rewrite_texture again in the same revision run. If the request needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
 		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
 		b.WriteString("\nConductor may create only the user prompt seed. Texture owns the first useful document revision.")
-		if isWireVText {
+		if isWireTexture {
 			b.WriteString("\nFor Universal Wire article revision runs, the processor or reconciler handoff is newsroom source context. Your first patch_texture call must write a publishable article or explicit correction/update draft from that handoff and the current Texture, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 			b.WriteString("\nUse uncertainty and native source handles in reader-facing article prose. When source_entities are present, cite a bounded set of distinct listed handles with [label](source:ENTITY_ID); source refs only in source inventories or metadata sections do not count.")
 			b.WriteString("\nUse selected Style.texture sources to shape voice, structure, and editorial judgment, but do not name the selected Style.texture, style rationale, source inventory, or handoff mechanics in reader-facing prose unless that is genuinely part of the story.")
@@ -490,12 +481,12 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == AgentProfileSuper {
 		b.WriteString("\n\nSuper authority boundary: bounded local scratch work is allowed when it is read-only, ephemeral, or low-risk, including API calls, curl fetches, small data-processing scripts, and temporary inspection artifacts. For authenticated Choir product API orchestration on the active foreground computer, use product_api_request instead of asking a worker VM to impersonate a browser session or hand-setting trusted proxy headers. Delegate work that changes Choir/app/harness behavior or crosses a durable/risky boundary. For repo edits, package installs, builds meant as candidate changes, runtime/app state mutation outside the explicit active product API request, Choir-in-Choir development, candidate-world exploration, worker/verifier loops, AppChangePackage/adoption work, or dangerous/privileged actions, first call request_worker_vm, then call start_worker_delegation. Use machine_class=\"worker-medium\" for repo/app/harness implementation work that may run Go/Svelte builds; reserve worker-small for lightweight non-build probes. The start call returns immediately; keep supervising by using observe_worker_delegation for checkpoints, answering Texture clarifications, cancelling only when necessary, and finish_worker_delegation for terminal evidence. Do not answer that class of request only with update_coagent unless the worker lease or delegation cannot start, and then report the exact blocker.")
-		b.WriteString("\nFor bounded command work requested by VText, bash output is not enough by itself. Run each command at most once per model response; do not emit duplicate same-turn bash/tool calls in parallel. After the command succeeds or fails, call update_coagent before ending the run; include the command, result, stdout/stderr or error summary, and any blocker so VText can revise instead of repeatedly requesting the same execution.")
+		b.WriteString("\nFor bounded command work requested by Texture, bash output is not enough by itself. Run each command at most once per model response; do not emit duplicate same-turn bash/tool calls in parallel. After the command succeeds or fails, call update_coagent before ending the run; include the command, result, stdout/stderr or error summary, and any blocker so Texture can revise instead of repeatedly requesting the same execution.")
 		b.WriteString("\nFor feature experiments and UX candidates, package/build receipts are not human proof. A worker-local Git commit is not transferable to another worker by itself. If screenshots/video or browser behavior evidence is required and the implementation worker cannot produce it, first ensure the candidate source delta has been published as an AppChangePackage, even if its human_proof_state is only evidence_pending. Lease a separate worker-playwright evidence worker only after package evidence exists; pass that proof worker the exact package id plus source/recipient context or a package-derived candidate/adoption route to inspect, never only an unreachable worker-local commit. The worker runtime preloads visible AppChangePackages referenced in the objective into the proof worker's runtime store; instruct the proof worker to inspect the preloaded package record/source deltas instead of probing its local Git clone or assuming GitHub contains per-computer candidate refs. If no package exists, finish with a precise source-transfer blocker. Vsuper cannot lease that second VM from inside the worker.")
 		b.WriteString("\nIf observe_worker_delegation or finish_worker_delegation for package/candidate work has no app_change_packages, or returns status worker_run_incomplete, worker_run_active, completion_blocker, or terminal_error, treat it as unfinished or blocked. Do not summarize it as completed work and do not claim owner-reviewable package evidence.")
 	}
 	if profile == AgentProfileVSuper {
-		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use update_coagent and channel evidence to coordinate existing children; send substantive owner-readable checkpoints with update_coagent so VText and super can supervise while the worker run is still active. If the work cannot proceed, update_coagent with the precise blocker, evidence refs, rollback refs, and next safe probe.")
+		b.WriteString("\n\nVSuper owns one background candidate world. For Choir/app/harness/repo/candidate/promotion work, coordinate at most two active child agents at a time: one implementation co-super and one verifier co-super. Do not launch duplicate co-super or researcher swarms. Use update_coagent and channel evidence to coordinate existing children; send substantive owner-readable checkpoints with update_coagent so Texture and super can supervise while the worker run is still active. If the work cannot proceed, update_coagent with the precise blocker, evidence refs, rollback refs, and next safe probe.")
 		b.WriteString("\nSpawn the implementation co-super first with spawn_agent slot=\"implementation\" and put the implementation role plus terminal obligation directly in that objective. Do not spawn slot=\"verifier\" until the implementation child reports commit/package/blocker evidence. When you spawn the verifier, name the exact commit/package/evidence to inspect. If a verifier was accidentally started before implementation evidence, treat that result as stale and spawn at most one replacement verifier after implementation evidence exists.")
 		b.WriteString("\nAfter spawning a child or sending a corrective update_coagent, do not finalize until the child reports commit, package, verifier, or blocker evidence through update_coagent or channel evidence.")
 		b.WriteString("\nIf you spawn an implementation co-super, treat that child as the exclusive writer for the candidate checkout while it is active. Do not reset, clean, edit, or commit in the same checkout until the worker reports a commit/package/blocker. Do not cancel a child that has produced publish_app_change_package evidence; incorporate that child package instead.")
@@ -526,7 +517,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nFor live scores, schedules, rankings, weather, or other time-sensitive lookup work, anchor the target date/time explicitly, prefer official or established scoreboard/source pages, and say whether the result is final, only partial, or blocked.")
 		b.WriteString("\nFor sports/current-score work, do not treat blocked HTML scoreboard pages as the only possible source. If official pages block direct fetches, look for accessible structured league endpoints, boxscore APIs, static JSON, established scoreboard snippets, or reputable recaps; clearly distinguish verified final scores from live, pending, scheduled, or snippet-only states.")
 		b.WriteString("\nAfter update_coagent, either continue with one clearly named missing question if it can improve the document, or end the turn if the current packet is enough.")
-		b.WriteString("\nIf you continue after a checkpoint, send another update_coagent after each additional search/fetch batch that changes the answer or proves a blocker. Do not run open-ended search loops while VText waits for a next revision.")
+		b.WriteString("\nIf you continue after a checkpoint, send another update_coagent after each additional search/fetch batch that changes the answer or proves a blocker. Do not run open-ended search loops while Texture waits for a next revision.")
 		b.WriteString("\nYou are a persistent communicating coagent, not a one-shot subagent. Expect to support many Texture revisions over time.")
 	}
 	agentID := agentIDForRun(rec)
@@ -691,7 +682,7 @@ func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchCl
 // local MAS. Capabilities are enforced by role spec, not by prompt warnings.
 // Super is the privileged execution root, co-super is its supervised helper,
 // researcher gets read-only local files plus research/evidence tools, and
-// conductor/vtext get lighter coordination-oriented registries.
+// conductor/texture get lighter coordination-oriented registries.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()
@@ -769,11 +760,11 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	vtextRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVText), cwd, searchClient, sourceClient, httpClient)
+	textureRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileTexture), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	if err := RegisterVTextTools(vtextRegistry, rt); err != nil {
+	if err := RegisterTextureTools(textureRegistry, rt); err != nil {
 		return err
 	}
 	emailRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileEmail), cwd, searchClient, sourceClient, httpClient)
@@ -792,7 +783,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[AgentProfileResearcher] = researcherRegistry
 	rt.toolProfiles[AgentProfileProcessor] = processorRegistry
 	rt.toolProfiles[AgentProfileReconciler] = reconcilerRegistry
-	rt.toolProfiles[AgentProfileVText] = vtextRegistry
+	rt.toolProfiles[AgentProfileTexture] = textureRegistry
 	rt.toolProfiles[AgentProfileEmail] = emailRegistry
 	return nil
 }

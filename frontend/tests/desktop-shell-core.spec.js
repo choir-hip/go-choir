@@ -116,7 +116,7 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
   await expect(surface.locator('[data-desktop-icon-id="browser"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="super-console"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="settings"]')).toBeVisible();
-  await expect(surface.locator('[data-desktop-icon-id="vtext"]')).toBeVisible();
+  await expect(surface.locator('[data-desktop-icon-id="texture"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
   await expect(surface.locator('[data-desktop-icon-id="podcast"]')).toBeVisible();
 
@@ -135,17 +135,17 @@ test('Texture appears as a first-class desktop app', async ({ page, authenticato
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const vtextIcon = page.locator('[data-desktop-icon-id="vtext"]');
-  await expect(vtextIcon).toBeVisible();
-  await expect(vtextIcon).toContainText('Texture');
+  const textureIcon = page.locator('[data-desktop-icon-id="texture"]');
+  await expect(textureIcon).toBeVisible();
+  await expect(textureIcon).toContainText('Texture');
 
-  await vtextIcon.dblclick();
+  await textureIcon.dblclick();
 
-  const vtextWindow = page.locator('[data-texture-app]');
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible();
+  const textureWindow = page.locator('[data-texture-app]');
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible();
 
-  const titleText = page.locator('[data-window-titlebar] .titlvtext');
+  const titleText = page.locator('[data-window-titlebar] .titltexture');
   await expect(titleText.first()).toContainText('Texture');
 });
 
@@ -183,13 +183,13 @@ test('logged-out desktop can open read-only Podcast without the auth wall', asyn
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
 
-test('logged-out desktop starts with one explanatory VText window', async ({ page }) => {
+test('logged-out desktop starts with one explanatory Texture window', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
 
   await expect(page.locator('[data-window]')).toHaveCount(1);
-  await expect(page.locator('[data-window]').first()).toHaveAttribute('data-window-id', 'public-preview-vtext');
+  await expect(page.locator('[data-window]').first()).toHaveAttribute('data-window-id', 'public-preview-texture');
   await expect(page.locator('[data-texture-editor]').first()).toBeVisible();
   await expect(page.locator('[data-trace-app]')).toHaveCount(0);
   await expect(page.locator('[data-files-app]')).toHaveCount(0);
@@ -292,25 +292,25 @@ test('Texture recent landing can open a Markdown document without control overla
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
-  await vtextWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
+  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
-  const toolbar = vtextWindow.locator('[data-texture-toolbar]');
-  const body = vtextWindow.locator('[data-texture-document-body]');
+  const toolbar = textureWindow.locator('[data-texture-toolbar]');
+  const body = textureWindow.locator('[data-texture-document-body]');
   await expect(toolbar).toBeVisible();
   await expect(body).toBeVisible();
   const [toolbarBox, bodyBox] = await Promise.all([toolbar.boundingBox(), body.boundingBox()]);
   expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(bodyBox.y + 1);
 
-  const rendered = vtextWindow.locator('[data-texture-rendered]');
+  const rendered = textureWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('h1')).toContainText('Markdown UX Fixture');
   await expect(rendered.locator('strong')).toContainText('bold');
   await expect(rendered.locator('em')).toContainText('emphasis');
   await expect(rendered.locator('a')).toHaveAttribute('href', 'https://example.com');
   await expect(rendered.locator('li')).toHaveCount(2);
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(/Markdown UX Fixture/);
+  await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(/Markdown UX Fixture/);
 });
 
 test('Texture opens near full mobile workspace and clears the prompt bar', async ({ page, authenticator }) => {
@@ -318,7 +318,7 @@ test('Texture opens near full mobile workspace and clears the prompt bar', async
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  await page.locator('[data-desktop-icon-id="vtext"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
   const windowEl = page.locator('[data-window]').filter({ has: page.locator('[data-texture-app]') }).last();
   await expect(windowEl).toBeVisible({ timeout: 5000 });
 
@@ -372,7 +372,7 @@ test('double-click icon opens single-instance window', async ({ page, authentica
   await expect(page.locator('[data-window]')).toHaveCount(1);
 
   // The window title should match
-  const titleText = page.locator('[data-window-titlebar] .titlvtext');
+  const titleText = page.locator('[data-window-titlebar] .titltexture');
   await expect(titleText.first()).toContainText('Files');
 });
 
@@ -451,13 +451,13 @@ test('prompt surface prompt input with placeholder', async ({ page, authenticato
   await expect(promptInput).toHaveValue('');
 });
 
-test('prompt bar routes normal input through conductor and opens vtext', async ({ page, authenticator }) => {
+test('prompt bar routes normal input through conductor and opens texture', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
   const prompt = 'Draft a project outline';
   const promptInput = page.locator('[data-prompt-input]');
-  const initialVTextCount = await page.locator('[data-texture-app]').count();
+  const initialTextureCount = await page.locator('[data-texture-app]').count();
   const responsePromise = page.waitForResponse((response) =>
     response.url().includes('/api/prompt-bar') && response.request().method() === 'POST'
   );
@@ -476,15 +476,15 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   expect(decision.action).toBe('open_app');
   expect(decision.app).toBe('texture');
 
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('[data-texture-app]')).toHaveCount(initialVTextCount + 1);
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-texture-app]')).toHaveCount(initialTextureCount + 1);
 
   if (!decision.doc_id) {
     // The local stub provider can only prove the public prompt-bar route and
     // app launch path. Real/live conductor materialization includes the
     // durable doc/revision IDs asserted below.
-    await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(/Draft a project outline/);
+    await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(/Draft a project outline/);
     return;
   }
 
@@ -506,20 +506,20 @@ test('prompt bar routes normal input through conductor and opens vtext', async (
   expect(userRevision.author_kind).toBe('user');
   expect(userRevision.content).toBe(prompt);
   expect(userRevision.metadata.source).toBe('user_prompt');
-  expect(userRevision.metadata.vtext_version).toBe('v0');
-  await expect(vtextWindow.locator('[data-texture-editor]')).toHaveAttribute('data-texture-initial-loop-id', decision.initial_loop_id);
+  expect(userRevision.metadata.texture_version).toBe('v0');
+  await expect(textureWindow.locator('[data-texture-editor]')).toHaveAttribute('data-texture-initial-loop-id', decision.initial_loop_id);
 
   const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
-  expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);
+  expect((trace.agents || []).some((agent) => agent.profile === 'texture' && agent.agent_id === `texture:${decision.doc_id}`)).toBe(true);
 
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(/Draft a project outline/);
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
-  await expect(vtextWindow.locator('[data-texture-version]')).toHaveText(/^v[1-9][0-9]*$/);
-  await expect(vtextWindow.locator('[data-texture-prev]')).toBeEnabled();
-  await expect(vtextWindow.locator('[data-texture-next]')).toBeDisabled();
+  await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(/Draft a project outline/);
+  await expect(textureWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this texture|User request:|Current requirements:|Grounding status:/);
+  await expect(textureWindow.locator('[data-texture-version]')).toHaveText(/^v[1-9][0-9]*$/);
+  await expect(textureWindow.locator('[data-texture-prev]')).toBeEnabled();
+  await expect(textureWindow.locator('[data-texture-next]')).toBeDisabled();
 });
 
-test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in vtext', async ({ page, authenticator }) => {
+test('prompt-created texture gets a .texture shortcut and keeps state canonical in texture', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -527,13 +527,13 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
   await promptInput.fill('Ahaha');
   await promptInput.press('Enter');
 
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  const editor = vtextWindow.locator('[data-texture-editor-area]');
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  const editor = textureWindow.locator('[data-texture-editor-area]');
   await expect(editor).toContainText(/Ahaha/);
-  await expect(editor).not.toContainText(/Conductor framing|Use this vtext|User request:/);
+  await expect(editor).not.toContainText(/Conductor framing|Use this texture|User request:/);
 
-  const manifestDocId = await vtextWindow.locator('[data-texture-editor]').getAttribute('data-texture-doc-id');
+  const manifestDocId = await textureWindow.locator('[data-texture-editor]').getAttribute('data-texture-doc-id');
   expect(manifestDocId).toBeTruthy();
 
   const fileNameHandle = await page.waitForFunction(async (docId) => {
@@ -570,7 +570,7 @@ test('prompt-created vtext gets a .vtext shortcut and keeps state canonical in v
 
   const revisedContent = 'Ahaha with a real file alias';
   await editor.fill(revisedContent);
-  await vtextWindow.locator('[data-texture-prompt]').click();
+  await textureWindow.locator('[data-texture-prompt]').click();
 
   const shortcutAfter = await page.evaluate(async (path) => {
     const res = await fetch(path, { credentials: 'include' });
@@ -611,10 +611,10 @@ test('prompt bar sends greetings through conductor instead of frontend pattern m
   const payload = response.request().postDataJSON();
   expect(payload).toEqual({ text: 'hi' });
 
-  const vtextWindow = page.locator('[data-texture-app]').last();
-  await expect(vtextWindow).toBeVisible({ timeout: 5000 });
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(/hi/);
-  await expect(vtextWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:/);
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow).toBeVisible({ timeout: 5000 });
+  await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(/hi/);
+  await expect(textureWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this texture|User request:/);
 });
 
 // ---------------------------------------------------------------

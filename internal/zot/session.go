@@ -127,7 +127,7 @@ func writeDiagnosisReport(cfg SessionConfig, sessionDir, prompt string) string {
 	body.WriteString("- root: `" + cfg.RootDir + "`\n")
 	body.WriteString("- prompt: " + prompt + "\n\n")
 	body.WriteString("## Current theory\n\n")
-	body.WriteString("zot is running out-of-process from the runtime MAS. This report is an ordinary markdown artifact; VText may open it, but zot does not write canonical `.vtext` files.\n\n")
+	body.WriteString("zot is running out-of-process from the runtime MAS. This report is an ordinary markdown artifact; Texture may open it, but zot does not write canonical `.texture` files.\n\n")
 	body.WriteString("## Evidence handles\n\n")
 	body.WriteString("- session log: `session.jsonl`\n")
 	body.WriteString("- command actuator: `!` lines executed from the user computer root\n")

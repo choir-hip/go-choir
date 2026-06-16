@@ -215,7 +215,7 @@
     data-window-titlebar
     on:mousedown={handleDragStart}
   >
-    <span class="titlvtext">{title}</span>
+    <span class="titltexture">{title}</span>
     <div class="window-controls">
       <button
         class="ctrl-btn minimize-btn"
@@ -292,7 +292,7 @@
     flex-shrink: 0;
   }
 
-  .titlvtext {
+  .titltexture {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--choir-text-accent);

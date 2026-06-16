@@ -30,7 +30,7 @@
 (*     settlement rule replacing root-run-completion as liveness truth.    *)
 (*                                                                         *)
 (*  4. EveryItemSettles (liveness): every fetched item's story eventually  *)
-(*     settles, despite duplicate items, abandoned drafts (evicted VText   *)
+(*     settles, despite duplicate items, abandoned drafts (evicted Texture   *)
 (*     chains), and full interleaving of concurrent processors. This is    *)
 (*     the property maxProc=1 was protecting by serialization; here it     *)
 (*     holds under arbitrary concurrency because decisions are durable     *)
@@ -123,14 +123,14 @@ SuppressItem(i) ==
 --------------------------------------------------------------------------
 (* Drafting and publication *)
 
-\* VText work concludes; autonomous publish writes the corpus and records
+\* Texture work concludes; autonomous publish writes the corpus and records
 \* the publication ref on the trajectory — one durable transition here.
 Publish(s) ==
   /\ story[s] = "drafting"
   /\ story' = [story EXCEPT ![s] = "published"]
   /\ UNCHANGED <<item, edition, abandons>>
 
-\* A drafting chain dies (eviction, failed VText work). Durable trajectory
+\* A drafting chain dies (eviction, failed Texture work). Durable trajectory
 \* state returns to none; opened items make it re-openable (see Reopen).
 \* Bounded for the same reason evictions are bounded in actor_protocol.
 AbandonDraft(s) ==

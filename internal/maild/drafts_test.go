@@ -24,7 +24,7 @@ func TestDraftCreateRequiresOwnedAliasAndDoesNotSend(t *testing.T) {
 		"to_addresses":["friend@example.com"],
 		"subject":"Choir demo",
 		"text_body":"Draft first.",
-		"source_kind":"vtext_email_artifact",
+		"source_kind":"texture_email_artifact",
 		"source_ref":"doc-1:rev-1"
 	}`))
 	setInternalOwner(req, "user-root")
@@ -57,7 +57,7 @@ func TestDraftCreateDefaultsToOwnerNumericAlias(t *testing.T) {
 		"to_addresses":["friend@example.com"],
 		"subject":"Choir demo",
 		"text_body":"Draft first.",
-		"source_kind":"vtext_email_artifact",
+		"source_kind":"texture_email_artifact",
 		"source_ref":"doc-1:rev-1"
 	}`))
 	setInternalOwner(req, "user-root")
@@ -114,7 +114,7 @@ func TestDraftSendStoresSentAndPreventsSecondSend(t *testing.T) {
 		ToAddresses: []string{"friend@example.com"},
 		Subject:     "Approved",
 		TextBody:    "Approved body.\n\n## Workflow\n\n1. Internal artifact notes must not be sent.",
-		SourceKind:  "vtext_email_artifact",
+		SourceKind:  "texture_email_artifact",
 		SourceRef:   "doc-1:rev-1",
 	})
 	if err != nil {
@@ -270,7 +270,7 @@ func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
 		ToAddresses: []string{"friend@example.com"},
 		Subject:     "Trace send",
 		TextBody:    "Approved body.",
-		SourceKind:  "vtext_email_artifact",
+		SourceKind:  "texture_email_artifact",
 		SourceRef:   `{"email_appagent_run_id":"email-run-1","doc_id":"doc-1","revision_id":"rev-1","source_content_hash":"sha256:test"}`,
 	})
 	if err != nil {
@@ -389,7 +389,7 @@ func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
 		ToAddresses: []string{"friend@example.com"},
 		Subject:     "Vmctl trace send",
 		TextBody:    "Approved body.",
-		SourceKind:  "vtext_email_artifact",
+		SourceKind:  "texture_email_artifact",
 		SourceRef:   `{"email_appagent_run_id":"email-run-vmctl","doc_id":"doc-1","revision_id":"rev-1","source_content_hash":"sha256:test"}`,
 	})
 	if err != nil {

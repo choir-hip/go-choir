@@ -44,15 +44,15 @@ type Runtime struct {
 	toolProfiles map[string]*ToolRegistry
 	channelMgr   *ChannelManager
 
-	vtextWakeMu      sync.Mutex
-	vtextWakePending map[string]pendingVTextWake
-	vtextWakeAfter   func(time.Duration, func()) vtextWakeTimer
+	textureWakeMu      sync.Mutex
+	textureWakePending map[string]pendingTextureWake
+	textureWakeAfter   func(time.Duration, func()) textureWakeTimer
 
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
-	wirePublishTimer      vtextWakeTimer
+	wirePublishTimer      textureWakeTimer
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
-	vtextEditMu           sync.Mutex
+	textureEditMu         sync.Mutex
 	superRequestMu        sync.Mutex
 	childSpawnMu          sync.Mutex
 	workerRequestMu       sync.Mutex
@@ -66,7 +66,7 @@ type Runtime struct {
 	modelPolicies         map[string]ModelPolicy
 }
 
-type vtextWakeTimer interface {
+type textureWakeTimer interface {
 	Stop() bool
 }
 
@@ -77,21 +77,21 @@ type vtextWakeTimer interface {
 func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, opts ...RuntimeOption) *Runtime {
 	cfg = normalizeConfig(cfg)
 	rt := &Runtime{
-		cfg:              cfg,
-		store:            s,
-		bus:              bus,
-		provider:         provider,
-		health:           types.HealthReady,
-		running:          make(map[string]context.CancelFunc),
-		residentAgents:   make(map[string]string),
-		channelMgr:       NewChannelManager(),
-		promptStore:      NewPromptStore(cfg.PromptRoot),
-		vtextWakePending: make(map[string]pendingVTextWake),
-		vtextWakeAfter:   func(d time.Duration, fn func()) vtextWakeTimer { return time.AfterFunc(d, fn) },
-		workerRequests:   make(map[string]string),
-		browserOps:       make(map[string]*sync.Mutex),
-		browserCDP:       make(map[string]*browserCDPSession),
-		modelPolicies:    make(map[string]ModelPolicy),
+		cfg:                cfg,
+		store:              s,
+		bus:                bus,
+		provider:           provider,
+		health:             types.HealthReady,
+		running:            make(map[string]context.CancelFunc),
+		residentAgents:     make(map[string]string),
+		channelMgr:         NewChannelManager(),
+		promptStore:        NewPromptStore(cfg.PromptRoot),
+		textureWakePending: make(map[string]pendingTextureWake),
+		textureWakeAfter:   func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
+		workerRequests:     make(map[string]string),
+		browserOps:         make(map[string]*sync.Mutex),
+		browserCDP:         make(map[string]*browserCDPSession),
+		modelPolicies:      make(map[string]ModelPolicy),
 	}
 	for _, opt := range opts {
 		opt(rt)
@@ -167,12 +167,9 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 		if ownerID != "" {
 			return persistentSuperAgentID(ownerID)
 		}
-	case AgentProfileTexture, AgentProfileVText:
+	case AgentProfileTexture:
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
-			if profile == AgentProfileTexture {
-				return currentTextureAgentID(docID)
-			}
-			return legacyVTextAgentID(docID)
+			return currentTextureAgentID(docID)
 		}
 	case AgentProfileProcessor:
 		if key := metadataStringValue(metadata, runMetadataProcessorKey); key != "" {
@@ -204,7 +201,7 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 	if parent != nil && strings.TrimSpace(parent.ChannelID) != "" {
 		return strings.TrimSpace(parent.ChannelID)
 	}
-	if profile == AgentProfileTexture || profile == AgentProfileVText {
+	if profile == AgentProfileTexture {
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return docID
 		}
@@ -325,10 +322,10 @@ func WithChannelManager(mgr *ChannelManager) RuntimeOption {
 	}
 }
 
-func withVTextWakeAfterFuncForTest(after func(time.Duration, func()) vtextWakeTimer) RuntimeOption {
+func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
 	return func(rt *Runtime) {
 		if after != nil {
-			rt.vtextWakeAfter = after
+			rt.textureWakeAfter = after
 		}
 	}
 }
@@ -341,7 +338,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.sweepPassivatedSpawnedChildWork(ctx)
 	rt.sweepPendingUpdateActors(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
-	rt.reconcileAllVTextDocuments(ctx)
+	rt.reconcileAllTextureDocuments(ctx)
 	go func() {
 		<-ctx.Done()
 		rt.closeAllBrowserCDPSessions()
@@ -373,13 +370,13 @@ func (rt *Runtime) StartRun(ctx context.Context, prompt, ownerID string) (*types
 
 // StartRunWithMetadata creates a new run with the given metadata, persists it,
 // emits a submitted event, and begins execution in a goroutine. Metadata is
-// used to carry feature-specific context (e.g., vtext agent revision info).
+// used to carry feature-specific context (e.g., texture agent revision info).
 func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
 	profile := canonicalAgentProfile(agentProfileForRun(rec))
-	if profile == AgentProfileProcessor || profile == AgentProfileVText || profile == AgentProfileResearcher || profile == AgentProfileCoSuper {
+	if profile == AgentProfileProcessor || profile == AgentProfileTexture || profile == AgentProfileResearcher || profile == AgentProfileCoSuper {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
 		}
@@ -399,11 +396,11 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 	if err != nil {
 		return nil, err
 	}
-	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, err
 	}
-	if err := rt.recordExplicitInitialVTextSuperRequestIfNeeded(ctx, rec); err != nil {
+	if err := rt.recordExplicitInitialTextureSuperRequestIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, err
 	}
@@ -608,7 +605,7 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 		return nil, err
 	}
 	metadata = ensureDesktopID(metadata, &parentRec, metadataStringValue(metadata, runMetadataDesktopID))
-	metadata = inheritVTextRequesterMetadata(metadata, &parentRec)
+	metadata = inheritTextureRequesterMetadata(metadata, &parentRec)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &parentRec)
 	metadata = ensureTrajectoryID(metadata, &parentRec, runID)
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
@@ -688,11 +685,11 @@ func (rt *Runtime) StartChildRun(ctx context.Context, parentID, objective, owner
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&parentRec) {
 		log.Printf("runtime: started child %s from parent=%s parent_profile=%s", wireLifecycleSummary(rec), parentRec.RunID, canonicalAgentProfile(agentProfileForRun(&parentRec)))
 	}
-	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, releaseCoSuperSlotClaim(err)
 	}
-	if err := rt.recordExplicitInitialVTextSuperRequestIfNeeded(ctx, rec); err != nil {
+	if err := rt.recordExplicitInitialTextureSuperRequestIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, releaseCoSuperSlotClaim(err)
 	}
@@ -746,7 +743,7 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 	if parent == nil {
 		if loaded, err := rt.store.GetRun(ctx, parentID); err == nil && loaded.OwnerID == ownerID {
 			parent = &loaded
-			rec.Metadata = inheritVTextRequesterMetadata(rec.Metadata, parent)
+			rec.Metadata = inheritTextureRequesterMetadata(rec.Metadata, parent)
 		}
 	}
 	details := map[string]any{
@@ -780,13 +777,13 @@ func (rt *Runtime) createSpawnedChildWorkItem(ctx context.Context, rec *types.Ru
 	})
 }
 
-func inheritVTextRequesterMetadata(metadata map[string]any, parent *types.RunRecord) map[string]any {
-	if parent == nil || canonicalAgentProfile(agentProfileForRun(parent)) != AgentProfileVText {
+func inheritTextureRequesterMetadata(metadata map[string]any, parent *types.RunRecord) map[string]any {
+	if parent == nil || canonicalAgentProfile(agentProfileForRun(parent)) != AgentProfileTexture {
 		return metadata
 	}
 	metadata = cloneMetadata(metadata)
 	if metadataStringValue(metadata, "requested_by_profile") == "" {
-		metadata["requested_by_profile"] = AgentProfileVText
+		metadata["requested_by_profile"] = AgentProfileTexture
 	}
 	if metadataStringValue(metadata, "requested_by_agent_id") == "" {
 		metadata["requested_by_agent_id"] = agentIDForRun(parent)
@@ -827,7 +824,7 @@ func inheritRequesterMetadataFromWorkItem(ctx context.Context, s *store.Store, o
 	if err != nil || parent.OwnerID != ownerID {
 		return metadata
 	}
-	return inheritVTextRequesterMetadata(metadata, &parent)
+	return inheritTextureRequesterMetadata(metadata, &parent)
 }
 
 func (rt *Runtime) ensureSpawnedChildWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord, metadataKey string) (types.WorkItemRecord, error) {
@@ -972,11 +969,11 @@ func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.Run
 	}
 	mutation := agentMutationForRun(rec)
 	if mutation == nil {
-		log.Printf("runtime: vtext agent revision run %s: missing doc_id for mutation", rec.RunID)
+		log.Printf("runtime: texture agent revision run %s: missing doc_id for mutation", rec.RunID)
 		return
 	}
 	if err := rt.store.CreateAgentMutation(ctx, *mutation); err != nil {
-		log.Printf("runtime: vtext agent revision run %s: create mutation: %v", rec.RunID, err)
+		log.Printf("runtime: texture agent revision run %s: create mutation: %v", rec.RunID, err)
 	}
 }
 
@@ -1409,7 +1406,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
 	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.AuthorityProfile))
-	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileVText {
+	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileTexture {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -1510,7 +1507,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 		if kind == types.EventToolInvoked || kind == types.EventToolResult {
 			cause = events.CauseToolExecution
 		}
-		// Also emit vtext-specific progress events for agent revision runs.
+		// Also emit texture-specific progress events for agent revision runs.
 		if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
 			if docID, _ := rec.Metadata["doc_id"].(string); docID != "" {
 				if kind == types.EventRunProgress {
@@ -1519,7 +1516,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 						"loop_id": rec.RunID,
 						"phase":   phase,
 					})
-					rt.emitVTextAgentEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
+					rt.emitTextureAgentEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
 						events.CauseProviderProgress, progressPayload)
 				}
 			}
@@ -1561,11 +1558,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
-	if err := rt.recordExplicitInitialVTextDecisionIfNeeded(ctx, rec); err != nil {
+	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
-	if err := rt.recordExplicitInitialVTextSuperRequestIfNeeded(ctx, rec); err != nil {
+	if err := rt.recordExplicitInitialTextureSuperRequestIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
@@ -1603,7 +1600,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
-		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialVTextToolChoice(rec)))
+		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
 			"patch_texture",
 			"rewrite_texture",
@@ -1639,8 +1636,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	rec.Metadata["input_tokens"] = usage.InputTokens
 	rec.Metadata["output_tokens"] = usage.OutputTokens
 
-	// For vtext agent revision runs, create the canonical revision and emit the
-	// vtext completion event before the run is surfaced as completed. This keeps
+	// For texture agent revision runs, create the canonical revision and emit the
+	// texture completion event before the run is surfaced as completed. This keeps
 	// run completion aligned with document-version availability.
 	if err := rt.handleRunCompletion(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -1663,7 +1660,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
-	rt.reconcileCompletedVTextRun(rec)
+	rt.reconcileCompletedTextureRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]any{
 		"result_length": len(text),
 		"input_tokens":  usage.InputTokens,
@@ -1734,8 +1731,8 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 
 	rt.normalizeCompletedRunResult(rec)
 
-	// For vtext agent revision runs, create the canonical revision and emit the
-	// vtext completion event before the run is surfaced as completed. This keeps
+	// For texture agent revision runs, create the canonical revision and emit the
+	// texture completion event before the run is surfaced as completed. This keeps
 	// run completion aligned with document-version availability.
 	if err := rt.handleRunCompletion(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -1751,7 +1748,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
-	rt.reconcileCompletedVTextRun(rec)
+	rt.reconcileCompletedTextureRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
@@ -1817,7 +1814,7 @@ func conductorRequestedApp(rec *types.RunRecord) string {
 
 func isTextureDecisionApp(app string) bool {
 	switch strings.ToLower(strings.TrimSpace(app)) {
-	case AgentProfileTexture, AgentProfileVText:
+	case AgentProfileTexture:
 		return true
 	default:
 		return false
@@ -1829,14 +1826,14 @@ func conductorWindowTitle(rec *types.RunRecord, seedPrompt string) string {
 		if strings.TrimSpace(seedPrompt) != "" {
 			return strings.TrimSpace(seedPrompt)
 		}
-		return "VText"
+		return "Texture"
 	}
 	title, _ := rec.Metadata["initial_document_title"].(string)
 	if strings.TrimSpace(title) == "" {
 		title = strings.TrimSpace(seedPrompt)
 	}
 	if strings.TrimSpace(title) == "" {
-		title = "VText"
+		title = "Texture"
 	}
 	return strings.TrimSpace(title)
 }
@@ -1930,7 +1927,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 	if rec == nil {
 		out, err := json.Marshal(defaultDecision)
 		if err != nil {
-			return `{"action":"open_app","app":"texture","title":"VText","seed_prompt":"","create_initial_version":false}`
+			return `{"action":"open_app","app":"texture","title":"Texture","seed_prompt":"","create_initial_version":false}`
 		}
 		return string(out)
 	}
@@ -1962,7 +1959,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 
 	out, err := json.Marshal(defaultDecision)
 	if err != nil {
-		return `{"action":"open_app","app":"texture","title":"VText","seed_prompt":"","create_initial_version":false}`
+		return `{"action":"open_app","app":"texture","title":"Texture","seed_prompt":"","create_initial_version":false}`
 	}
 	return string(out)
 }
@@ -1971,7 +1968,7 @@ func ptrBool(v bool) *bool {
 	return &v
 }
 
-func buildInitialVTextTitle(seedPrompt, objective string) string {
+func buildInitialTextureTitle(seedPrompt, objective string) string {
 	source := strings.TrimSpace(seedPrompt)
 	if source == "" {
 		source = strings.TrimSpace(objective)
@@ -2011,7 +2008,7 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 		title = conductorWindowTitle(rec, seedPrompt)
 	}
 	if title == "" {
-		title = buildInitialVTextTitle(seedPrompt, "")
+		title = buildInitialTextureTitle(seedPrompt, "")
 	}
 	if title == "" || strings.EqualFold(title, seedPrompt) {
 		return seedPrompt
@@ -2019,7 +2016,7 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 	return "# " + title + "\n\n" + seedPrompt
 }
 
-func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.RunRecord, objective, initialContent string) (conductorDecision, error) {
+func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.RunRecord, objective, initialContent string) (conductorDecision, error) {
 	if rec == nil || agentProfileForRun(rec) != AgentProfileConductor {
 		return conductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
 	}
@@ -2061,10 +2058,10 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		UpdatedAt: now,
 	}
 	if strings.TrimSpace(doc.Title) == "" {
-		doc.Title = "VText"
+		doc.Title = "Texture"
 	}
 	if err := rt.store.CreateDocument(ctx, doc); err != nil {
-		return conductorDecision{}, fmt.Errorf("create vtext document: %w", err)
+		return conductorDecision{}, fmt.Errorf("create texture document: %w", err)
 	}
 
 	userRevisionID := uuid.New().String()
@@ -2080,9 +2077,9 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 		runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
 		"created_from":        "conductor",
 		"source":              "user_prompt",
-		"revision_role":       vtextRevisionRoleInput,
-		"input_origin":        vtextInputOriginUserPrompt,
-		"vtext_version":       "v0",
+		"revision_role":       textureRevisionRoleInput,
+		"input_origin":        textureInputOriginUserPrompt,
+		"texture_version":     "v0",
 	}
 	userRevisionContent := routeSeedPrompt
 	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
@@ -2104,7 +2101,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	if err := rt.store.CreateRevision(ctx, userRev); err != nil {
 		return conductorDecision{}, fmt.Errorf("create user prompt Texture revision: %w", err)
 	}
-	rt.emitVTextDocumentRevisionEventForRun(ctx, rec, userRev)
+	rt.emitTextureDocumentRevisionEventForRun(ctx, rec, userRev)
 
 	doc.CurrentRevisionID = userRev.RevisionID
 	if err := rt.store.UpsertAgent(ctx, types.AgentRecord{
@@ -2132,7 +2129,7 @@ func (rt *Runtime) ensureConductorVTextRoute(ctx context.Context, rec *types.Run
 	if initialPrompt == "" {
 		initialPrompt = "Create the first useful current-state version of this Texture document."
 	}
-	initialRun, err := rt.submitVTextAgentRevisionRun(ctx, doc, rec.OwnerID, vtextAgentRevisionRequest{
+	initialRun, err := rt.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: initialPrompt,
 	}, rec.RunID, 0)
@@ -2172,7 +2169,7 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 	if decision.Action == "toast" &&
 		isTextureDecisionApp(metadataStringValue(rec.Metadata, "requested_app")) &&
 		metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
-		if _, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
+		if _, err := rt.ensureConductorTextureRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
 			log.Printf("runtime: conductor run %s: materialize prompt-bar Texture route: %v", rec.RunID, err)
 		}
 		return
@@ -2181,52 +2178,52 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 		return
 	}
 
-	if _, err := rt.ensureConductorVTextRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
+	if _, err := rt.ensureConductorTextureRoute(context.Background(), rec, "", decision.InitialContent); err != nil {
 		log.Printf("runtime: conductor run %s: materialize decision: %v", rec.RunID, err)
 	}
 }
 
-func initialVTextToolChoice(rec *types.RunRecord) string {
+func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
 	}
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
-	if metadataBoolValue(rec.Metadata, "vtext_initial_decision_required") {
+	if metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
 		return exactRequiredToolChoice("patch_texture")
 	}
-	if vtextPromptExplicitlyRequestsDecisionNote(metadataString(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
+	if texturePromptExplicitlyRequestsDecisionNote(metadataString(rec.Metadata, "seed_prompt") + " " + metadataStringValue(rec.Metadata, "original_prompt")) {
 		return exactRequiredToolChoice("record_texture_decision")
 	}
 	return exactRequiredToolChoice("patch_texture")
 }
 
-func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
+func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
 	if !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) ||
-		!metadataBoolValue(rec.Metadata, "vtext_initial_decision_required") {
+		!metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
 		return nil
 	}
 	docID := metadataStringValue(rec.Metadata, "doc_id")
-	reason := metadataStringValue(rec.Metadata, "vtext_initial_decision_reason")
-	kind := metadataStringValue(rec.Metadata, "vtext_initial_decision_kind")
+	reason := metadataStringValue(rec.Metadata, "texture_initial_decision_reason")
+	kind := metadataStringValue(rec.Metadata, "texture_initial_decision_kind")
 	if docID == "" || reason == "" || kind != "no_worker_needed" {
 		return nil
 	}
-	existing, err := rt.store.ListVTextDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
+	existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
 	if err != nil {
 		return fmt.Errorf("list initial Texture decisions: %w", err)
 	}
 	for _, decision := range existing {
 		if decision.RunID == rec.RunID && decision.DecisionKind == kind && decision.Reason == reason {
-			rec.Metadata["vtext_initial_decision_recorded"] = true
+			rec.Metadata["texture_initial_decision_recorded"] = true
 			return nil
 		}
 	}
-	decision := types.VTextDecisionRecord{
+	decision := types.TextureDecisionRecord{
 		DecisionID:   uuid.New().String(),
 		OwnerID:      rec.OwnerID,
 		DocID:        docID,
@@ -2235,30 +2232,30 @@ func (rt *Runtime) recordExplicitInitialVTextDecisionIfNeeded(ctx context.Contex
 		ActorID:      strings.TrimSpace(rec.AgentID),
 		DecisionKind: kind,
 		Reason:       reason,
-		EvidenceRefs: metadataStringSliceValue(rec.Metadata, "vtext_initial_decision_evidence_refs"),
-		NextAction:   metadataStringValue(rec.Metadata, "vtext_initial_decision_next_action"),
+		EvidenceRefs: metadataStringSliceValue(rec.Metadata, "texture_initial_decision_evidence_refs"),
+		NextAction:   metadataStringValue(rec.Metadata, "texture_initial_decision_next_action"),
 		CreatedAt:    time.Now().UTC(),
 	}
 	if decision.ActorID == "" {
 		decision.ActorID = currentTextureAgentID(docID)
 	}
-	if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
+	if err := rt.store.CreateTextureDecision(ctx, decision); err != nil {
 		return fmt.Errorf("record initial Texture decision: %w", err)
 	}
-	rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
-	rec.Metadata["vtext_initial_decision_recorded"] = true
+	rt.emitTextureDecisionRecordedEvent(ctx, rec, decision)
+	rec.Metadata["texture_initial_decision_recorded"] = true
 	return nil
 }
 
-type explicitInitialVTextSuperRequest struct {
+type explicitInitialTextureSuperRequest struct {
 	Objective string
 	Reason    string
 }
 
-func explicitVTextSuperExecutionRequestFromPrompt(prompt string) (explicitInitialVTextSuperRequest, bool) {
+func explicitTextureSuperExecutionRequestFromPrompt(prompt string) (explicitInitialTextureSuperRequest, bool) {
 	text := strings.TrimSpace(prompt)
-	if text == "" || vtextPromptExplicitlyRequestsNoWorkerDecision(text) {
-		return explicitInitialVTextSuperRequest{}, false
+	if text == "" || texturePromptExplicitlyRequestsNoWorkerDecision(text) {
+		return explicitInitialTextureSuperRequest{}, false
 	}
 	lower := strings.ToLower(text)
 	markers := []string{
@@ -2286,37 +2283,37 @@ func explicitVTextSuperExecutionRequestFromPrompt(prompt string) (explicitInitia
 		if objective == "" {
 			objective = text
 		}
-		return explicitInitialVTextSuperRequest{
+		return explicitInitialTextureSuperRequest{
 			Objective: "Texture requests downstream super execution for this document: " + objective,
 			Reason:    "Owner explicitly requested downstream super execution after Texture materialization.",
 		}, true
 	}
-	return explicitInitialVTextSuperRequest{}, false
+	return explicitInitialTextureSuperRequest{}, false
 }
 
-func (rt *Runtime) recordExplicitInitialVTextSuperRequestIfNeeded(ctx context.Context, rec *types.RunRecord) error {
+func (rt *Runtime) recordExplicitInitialTextureSuperRequestIfNeeded(ctx context.Context, rec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
 	if !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) ||
-		!metadataBoolValue(rec.Metadata, "vtext_initial_super_request_required") ||
-		metadataBoolValue(rec.Metadata, "vtext_initial_super_request_recorded") {
+		!metadataBoolValue(rec.Metadata, "texture_initial_super_request_required") ||
+		metadataBoolValue(rec.Metadata, "texture_initial_super_request_recorded") {
 		return nil
 	}
 	docID := metadataStringValue(rec.Metadata, "doc_id")
-	objective := metadataStringValue(rec.Metadata, "vtext_initial_super_request_objective")
+	objective := metadataStringValue(rec.Metadata, "texture_initial_super_request_objective")
 	if docID == "" || objective == "" {
 		return nil
 	}
 	_, err := rt.requestPersistentSuperExecution(WithToolExecutionContext(ctx, rec), rec.OwnerID, docID, rec.RunID, rec.AgentID, objective, "")
 	if err != nil {
-		return fmt.Errorf("record initial vtext super request: %w", err)
+		return fmt.Errorf("record initial texture super request: %w", err)
 	}
-	reason := metadataStringValue(rec.Metadata, "vtext_initial_super_request_reason")
+	reason := metadataStringValue(rec.Metadata, "texture_initial_super_request_reason")
 	if reason == "" {
-		reason = "Owner explicitly requested downstream super execution after VText materialization."
+		reason = "Owner explicitly requested downstream super execution after Texture materialization."
 	}
-	decision := types.VTextDecisionRecord{
+	decision := types.TextureDecisionRecord{
 		DecisionID:   uuid.New().String(),
 		OwnerID:      rec.OwnerID,
 		DocID:        docID,
@@ -2326,27 +2323,27 @@ func (rt *Runtime) recordExplicitInitialVTextSuperRequestIfNeeded(ctx context.Co
 		DecisionKind: "delegation_opened",
 		Reason:       reason,
 		EvidenceRefs: []string{"prompt:explicit_downstream_super_execution"},
-		NextAction:   "Wait for super execution evidence and integrate it into the VText artifact.",
+		NextAction:   "Wait for super execution evidence and integrate it into the Texture artifact.",
 		CreatedAt:    time.Now().UTC(),
 	}
 	if decision.ActorID == "" {
 		decision.ActorID = currentTextureAgentID(docID)
 	}
-	existing, err := rt.store.ListVTextDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
+	existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
 	if err != nil {
-		return fmt.Errorf("list initial vtext super decisions: %w", err)
+		return fmt.Errorf("list initial texture super decisions: %w", err)
 	}
 	for _, item := range existing {
 		if item.RunID == rec.RunID && item.DecisionKind == decision.DecisionKind && item.Reason == decision.Reason {
-			rec.Metadata["vtext_initial_super_request_recorded"] = true
+			rec.Metadata["texture_initial_super_request_recorded"] = true
 			return nil
 		}
 	}
-	if err := rt.store.CreateVTextDecision(ctx, decision); err != nil {
-		return fmt.Errorf("record initial vtext super decision: %w", err)
+	if err := rt.store.CreateTextureDecision(ctx, decision); err != nil {
+		return fmt.Errorf("record initial texture super decision: %w", err)
 	}
-	rt.emitVTextDecisionRecordedEvent(ctx, rec, decision)
-	rec.Metadata["vtext_initial_super_request_recorded"] = true
+	rt.emitTextureDecisionRecordedEvent(ctx, rec, decision)
+	rec.Metadata["texture_initial_super_request_recorded"] = true
 	return nil
 }
 
@@ -2375,17 +2372,17 @@ func metadataStringSliceValue(metadata map[string]any, key string) []string {
 	}
 }
 
-type explicitInitialVTextDecision struct {
+type explicitInitialTextureDecision struct {
 	DecisionKind string
 	Reason       string
 	EvidenceRefs []string
 	NextAction   string
 }
 
-func explicitNoWorkerDecisionRequestFromPrompt(prompt string) (explicitInitialVTextDecision, bool) {
+func explicitNoWorkerDecisionRequestFromPrompt(prompt string) (explicitInitialTextureDecision, bool) {
 	text := strings.TrimSpace(prompt)
-	if !vtextPromptExplicitlyRequestsNoWorkerDecision(text) {
-		return explicitInitialVTextDecision{}, false
+	if !texturePromptExplicitlyRequestsNoWorkerDecision(text) {
+		return explicitInitialTextureDecision{}, false
 	}
 	lower := strings.ToLower(text)
 	reason := extractDelimitedPromptValue(text, lower, "exact reason ", []string{", evidence ref", ", evidence refs", ", next action", ". then "})
@@ -2393,14 +2390,14 @@ func explicitNoWorkerDecisionRequestFromPrompt(prompt string) (explicitInitialVT
 		reason = extractDelimitedPromptValue(text, lower, "reason ", []string{", evidence ref", ", evidence refs", ", next action", ". then "})
 	}
 	if reason == "" {
-		return explicitInitialVTextDecision{}, false
+		return explicitInitialTextureDecision{}, false
 	}
 	evidence := extractDelimitedPromptValue(text, lower, "evidence ref ", []string{", next action", ". then "})
 	if evidence == "" {
 		evidence = extractDelimitedPromptValue(text, lower, "evidence refs ", []string{", next action", ". then "})
 	}
 	nextAction := extractDelimitedPromptValue(text, lower, "next action ", []string{". then ", " then "})
-	return explicitInitialVTextDecision{
+	return explicitInitialTextureDecision{
 		DecisionKind: "no_worker_needed",
 		Reason:       strings.TrimSpace(reason),
 		EvidenceRefs: splitPromptRefs(evidence),
@@ -2441,7 +2438,7 @@ func splitPromptRefs(value string) []string {
 	return out
 }
 
-func vtextPromptExplicitlyRequestsDecisionNote(prompt string) bool {
+func texturePromptExplicitlyRequestsDecisionNote(prompt string) bool {
 	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
 		return false
@@ -2458,13 +2455,13 @@ func vtextPromptExplicitlyRequestsDecisionNote(prompt string) bool {
 	if strings.Contains(text, "record") && strings.Contains(text, "texture decision") {
 		return true
 	}
-	if strings.Contains(text, "record") && strings.Contains(text, "vtext decision") {
+	if strings.Contains(text, "record") && strings.Contains(text, "texture decision") {
 		return true
 	}
 	return false
 }
 
-func vtextPromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
+func texturePromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
 	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
 		return false
@@ -2478,13 +2475,13 @@ func vtextPromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
 	if strings.Contains(text, "no worker") && strings.Contains(text, "decision") {
 		return true
 	}
-	if strings.Contains(text, "no research or execution worker") && vtextPromptExplicitlyRequestsDecisionNote(text) {
+	if strings.Contains(text, "no research or execution worker") && texturePromptExplicitlyRequestsDecisionNote(text) {
 		return true
 	}
 	return false
 }
 
-func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {
+func texturePromptExplicitlyRequestsResearcher(prompt string) bool {
 	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
 		return false
@@ -2517,12 +2514,12 @@ func vtextPromptExplicitlyRequestsResearcher(prompt string) bool {
 	return false
 }
 
-func vtextPromptNeedsSuperExecution(prompt string) bool {
+func texturePromptNeedsSuperExecution(prompt string) bool {
 	text := strings.ToLower(strings.TrimSpace(prompt))
 	if text == "" {
 		return false
 	}
-	if vtextPromptExplicitlyRequestsNoWorkerDecision(text) {
+	if texturePromptExplicitlyRequestsNoWorkerDecision(text) {
 		return false
 	}
 	superMarkers := []string{
@@ -2584,7 +2581,7 @@ func vtextPromptNeedsSuperExecution(prompt string) bool {
 }
 
 // handleRunCompletion processes feature-specific side effects after a run
-// completes successfully. VText document writes are intentionally not handled
+// completes successfully. Texture document writes are intentionally not handled
 // here: canonical appagent revisions are created only by Texture write tools.
 func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord) error {
 	if agentProfileForRun(rec) == AgentProfileConductor {
@@ -2601,17 +2598,17 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 
 	docID, _ := rec.Metadata["doc_id"].(string)
 	if docID == "" {
-		log.Printf("runtime: vtext agent revision run %s: missing doc_id in metadata", rec.RunID)
+		log.Printf("runtime: texture agent revision run %s: missing doc_id in metadata", rec.RunID)
 		return nil
 	}
 
 	mutation, err := rt.store.GetAgentMutationByRun(persistCtx, rec.RunID)
 	if err != nil {
-		log.Printf("runtime: vtext agent revision run %s: get mutation: %v", rec.RunID, err)
+		log.Printf("runtime: texture agent revision run %s: get mutation: %v", rec.RunID, err)
 		return nil
 	}
 	if mutation == nil {
-		log.Printf("runtime: vtext agent revision run %s: no mutation record found", rec.RunID)
+		log.Printf("runtime: texture agent revision run %s: no mutation record found", rec.RunID)
 		return nil
 	}
 	if mutation.State == "completed" {
@@ -2621,9 +2618,9 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
-	if rt.vtextRunRequestedWorkers(persistCtx, rec) {
+	if rt.textureRunRequestedWorkers(persistCtx, rec) {
 		if err := rt.store.DeferAgentMutation(persistCtx, rec.RunID); err != nil {
-			log.Printf("runtime: vtext agent revision run %s: defer no-edit mutation: %v", rec.RunID, err)
+			log.Printf("runtime: texture agent revision run %s: defer no-edit mutation: %v", rec.RunID, err)
 			return nil
 		}
 		progressPayload, _ := json.Marshal(map[string]string{
@@ -2631,22 +2628,22 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			"loop_id": rec.RunID,
 			"status":  "waiting_for_worker_updates",
 		})
-		rt.emitVTextAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionProgress,
+		rt.emitTextureAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionProgress,
 			events.CauseToolExecution, progressPayload)
-		log.Printf("runtime: vtext agent revision run %s requested workers and completed without document edit; waiting for worker updates", rec.RunID)
+		log.Printf("runtime: texture agent revision run %s requested workers and completed without document edit; waiting for worker updates", rec.RunID)
 		return nil
 	}
 	_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
 	if mutation.ScheduledMessageSeq > 0 {
-		if err := rt.store.UpsertVTextControllerCheckpoint(persistCtx, store.VTextControllerCheckpoint{
+		if err := rt.store.UpsertTextureControllerCheckpoint(persistCtx, store.TextureControllerCheckpoint{
 			DocID:                docID,
 			OwnerID:              rec.OwnerID,
 			IntegratedMessageSeq: mutation.ScheduledMessageSeq,
 			UpdatedAt:            time.Now().UTC(),
 		}); err != nil {
-			log.Printf("runtime: vtext agent revision run %s: update no-edit checkpoint: %v", rec.RunID, err)
-		} else if err := rt.markVTextWorkerUpdatesDelivered(persistCtx, rec, docID, mutation.ScheduledMessageSeq); err != nil {
-			log.Printf("runtime: vtext agent revision run %s: mark worker updates delivered: %v", rec.RunID, err)
+			log.Printf("runtime: texture agent revision run %s: update no-edit checkpoint: %v", rec.RunID, err)
+		} else if err := rt.markTextureWorkerUpdatesDelivered(persistCtx, rec, docID, mutation.ScheduledMessageSeq); err != nil {
+			log.Printf("runtime: texture agent revision run %s: mark worker updates delivered: %v", rec.RunID, err)
 		}
 	}
 	failPayload, _ := json.Marshal(map[string]string{
@@ -2654,19 +2651,19 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		"loop_id": rec.RunID,
 		"error":   "Texture run completed without storing a Texture revision",
 	})
-	rt.emitVTextAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
+	rt.emitTextureAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
 		events.CauseTaskLifecycle, failPayload)
 	log.Printf("runtime: Texture agent revision run %s completed without a Texture write tool; no canonical revision created", rec.RunID)
 	return nil
 }
 
-func (rt *Runtime) vtextRunRequestedWorkers(ctx context.Context, rec *types.RunRecord) bool {
+func (rt *Runtime) textureRunRequestedWorkers(ctx context.Context, rec *types.RunRecord) bool {
 	if rt == nil || rt.store == nil || rec == nil {
 		return false
 	}
 	eventsForRun, err := rt.store.ListEvents(ctx, rec.RunID, 500)
 	if err != nil {
-		log.Printf("runtime: vtext run %s: list events for worker requests: %v", rec.RunID, err)
+		log.Printf("runtime: texture run %s: list events for worker requests: %v", rec.RunID, err)
 		return false
 	}
 	for _, ev := range eventsForRun {
@@ -2699,7 +2696,7 @@ func (rt *Runtime) vtextRunRequestedWorkers(ctx context.Context, rec *types.RunR
 	return false
 }
 
-func (rt *Runtime) reconcileCompletedVTextRun(rec *types.RunRecord) {
+func (rt *Runtime) reconcileCompletedTextureRun(rec *types.RunRecord) {
 	if rec == nil {
 		return
 	}
@@ -2710,14 +2707,14 @@ func (rt *Runtime) reconcileCompletedVTextRun(rec *types.RunRecord) {
 			docID = docIDFromTextureAgentID(agentID)
 		}
 	}
-	if strings.TrimSpace(docID) == "" && agentProfileForRun(rec) == AgentProfileVText {
+	if strings.TrimSpace(docID) == "" && agentProfileForRun(rec) == AgentProfileTexture {
 		docID = channelIDForRun(rec)
 	}
 	if strings.TrimSpace(docID) == "" || strings.TrimSpace(rec.OwnerID) == "" {
 		return
 	}
-	if err := rt.reconcileVTextWorkerState(context.Background(), rec.OwnerID, docID); err != nil {
-		log.Printf("runtime: vtext agent revision run %s: post-complete reconcile: %v", rec.RunID, err)
+	if err := rt.reconcileTextureWorkerState(context.Background(), rec.OwnerID, docID); err != nil {
+		log.Printf("runtime: texture agent revision run %s: post-complete reconcile: %v", rec.RunID, err)
 	}
 }
 
@@ -2758,7 +2755,7 @@ func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, chann
 	return false, nil
 }
 
-func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID string, message ChannelMessage) {
+func (rt *Runtime) maybeWakeTextureOnWorkerMessage(ctx context.Context, ownerID string, message ChannelMessage) {
 	channelID := strings.TrimSpace(message.ChannelID)
 	fromRunID := strings.TrimSpace(message.FromRunID)
 	targetAgentID := strings.TrimSpace(message.ToAgentID)
@@ -2769,7 +2766,7 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 	doc, err := rt.store.GetDocument(ctx, channelID, ownerID)
 	if err != nil {
 		if err != store.ErrNotFound {
-			log.Printf("runtime: wake vtext for channel %s: get document: %v", channelID, err)
+			log.Printf("runtime: wake texture for channel %s: get document: %v", channelID, err)
 		}
 		return
 	}
@@ -2777,7 +2774,7 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 	if fromRunID != "" {
 		sourceRun, err := rt.store.GetRun(ctx, fromRunID)
 		if err != nil {
-			log.Printf("runtime: wake vtext for doc %s: get source run %s: %v", doc.DocID, fromRunID, err)
+			log.Printf("runtime: wake texture for doc %s: get source run %s: %v", doc.DocID, fromRunID, err)
 			return
 		}
 		switch agentProfileForRun(&sourceRun) {
@@ -2790,12 +2787,11 @@ func (rt *Runtime) maybeWakeVTextOnWorkerMessage(ctx context.Context, ownerID st
 	if !textureAgentIDMatchesDoc(targetAgentID, doc.DocID) {
 		return
 	}
-	rt.scheduleVTextWorkerWake(ownerID, doc.DocID, fromRunID)
+	rt.scheduleTextureWorkerWake(ownerID, doc.DocID, fromRunID)
 }
 
 const (
 	canonicalTextureSourcePathMetadataKey = "canonical_texture_source_path"
-	legacyCanonicalVTextSourcePathKey     = "canonical_vtext_source_path"
 )
 
 // durableMetadataKeys lists the revision metadata keys that must survive
@@ -2815,7 +2811,7 @@ var durableMetadataKeys = []string{
 	"artifact_kind",
 	"revision_role",
 	"input_origin",
-	"vtext_version_stage",
+	"texture_version_stage",
 	"source_network_cycle_id",
 	"source_network_request_id",
 	"source_network_request_kind",
@@ -2844,7 +2840,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		if parentRev, err := rt.store.GetRevision(context.Background(), doc.CurrentRevisionID, ownerID); err == nil {
 			parentMeta := decodeRevisionMetadata(parentRev.Metadata)
 			for _, key := range durableMetadataKeys {
-				if val, ok := parentMeta[key]; ok && hasNonEmptyVTextMetadataValue(val) {
+				if val, ok := parentMeta[key]; ok && hasNonEmptyTextureMetadataValue(val) {
 					meta[key] = val
 				}
 			}
@@ -2856,7 +2852,7 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	// request sets these directly).
 	if rec.Metadata != nil {
 		for _, key := range durableMetadataKeys {
-			if val, ok := rec.Metadata[key]; ok && hasNonEmptyVTextMetadataValue(val) {
+			if val, ok := rec.Metadata[key]; ok && hasNonEmptyTextureMetadataValue(val) {
 				// Run metadata takes precedence over parent revision.
 				meta[key] = val
 			}
@@ -2867,12 +2863,12 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	}
 	if wirepublish.IsWireArticleRevisionRun(rec) {
 		meta["artifact_kind"] = "article_revision"
-		meta["revision_role"] = vtextRevisionRoleCanonical
-		meta["vtext_version_stage"] = "article_revision"
+		meta["revision_role"] = textureRevisionRoleCanonical
+		meta["texture_version_stage"] = "article_revision"
 	}
 	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation)
-	if vtextWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
-		markVTextMediaSourceRefsResearchState(meta, "represented")
+	if textureWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
+		markTextureMediaSourceRefsResearchState(meta, "represented")
 	}
 	for key, value := range workerUpdateMeta {
 		meta[key] = value
@@ -2885,13 +2881,13 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	return data
 }
 
-func vtextWorkerUpdateMetadataHasRole(value any, role string) bool {
+func textureWorkerUpdateMetadataHasRole(value any, role string) bool {
 	role = strings.TrimSpace(role)
 	if role == "" {
 		return false
 	}
 	switch updates := value.(type) {
-	case []vtextWorkerUpdateMetadata:
+	case []textureWorkerUpdateMetadata:
 		for _, update := range updates {
 			if strings.TrimSpace(update.Role) == role {
 				return true
@@ -2908,7 +2904,7 @@ func vtextWorkerUpdateMetadataHasRole(value any, role string) bool {
 	return false
 }
 
-type vtextWorkerUpdateMetadata struct {
+type textureWorkerUpdateMetadata struct {
 	ChannelID      string `json:"channel_id"`
 	Seq            int64  `json:"seq"`
 	FromAgentID    string `json:"from_agent_id,omitempty"`
@@ -2923,9 +2919,9 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 		"worker_updates_policy":         "eligible_addressed_channel_messages",
 		"worker_updates_checkpoint_seq": int64(0),
 		"worker_updates_scheduled_seq":  int64(0),
-		"worker_updates_consumed":       []vtextWorkerUpdateMetadata{},
-		"worker_updates_skipped":        []vtextWorkerUpdateMetadata{},
-		"worker_updates_pending":        []vtextWorkerUpdateMetadata{},
+		"worker_updates_consumed":       []textureWorkerUpdateMetadata{},
+		"worker_updates_skipped":        []textureWorkerUpdateMetadata{},
+		"worker_updates_pending":        []textureWorkerUpdateMetadata{},
 	}
 	if strings.TrimSpace(ownerID) == "" || strings.TrimSpace(docID) == "" {
 		return out
@@ -2938,9 +2934,9 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 	out["worker_updates_scheduled_seq"] = scheduledSeq
 
 	checkpointSeq := int64(0)
-	checkpoint, err := rt.store.GetVTextControllerCheckpoint(ctx, docID, ownerID)
+	checkpoint, err := rt.store.GetTextureControllerCheckpoint(ctx, docID, ownerID)
 	if err != nil {
-		log.Printf("runtime: load vtext worker update checkpoint for metadata: %v", err)
+		log.Printf("runtime: load texture worker update checkpoint for metadata: %v", err)
 		return out
 	}
 	if checkpoint != nil {
@@ -2950,21 +2946,21 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 
 	messages, err := rt.store.ListChannelMessages(ctx, ownerID, docID, checkpointSeq, 500)
 	if err != nil {
-		log.Printf("runtime: load vtext worker update messages for metadata: %v", err)
+		log.Printf("runtime: load texture worker update messages for metadata: %v", err)
 		return out
 	}
 
 	cache := make(map[string]bool)
-	consumed := []vtextWorkerUpdateMetadata{}
-	skipped := []vtextWorkerUpdateMetadata{}
-	pending := []vtextWorkerUpdateMetadata{}
+	consumed := []textureWorkerUpdateMetadata{}
+	skipped := []textureWorkerUpdateMetadata{}
+	pending := []textureWorkerUpdateMetadata{}
 	for _, message := range messages {
 		if !textureAgentIDMatchesDoc(message.ToAgentID, docID) {
 			continue
 		}
 		eligible, err := rt.isEligibleWorkerMessage(ctx, docID, message, cache)
 		if err != nil {
-			log.Printf("runtime: classify vtext worker update for metadata: %v", err)
+			log.Printf("runtime: classify texture worker update for metadata: %v", err)
 			continue
 		}
 		if scheduledSeq > 0 && message.Seq <= scheduledSeq {
@@ -2988,8 +2984,8 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 	return out
 }
 
-func summarizeWorkerUpdateForMetadata(message types.ChannelMessage, reason string) vtextWorkerUpdateMetadata {
-	return vtextWorkerUpdateMetadata{
+func summarizeWorkerUpdateForMetadata(message types.ChannelMessage, reason string) textureWorkerUpdateMetadata {
+	return textureWorkerUpdateMetadata{
 		ChannelID:      message.ChannelID,
 		Seq:            message.Seq,
 		FromAgentID:    strings.TrimSpace(message.FromAgentID),
@@ -3000,7 +2996,7 @@ func summarizeWorkerUpdateForMetadata(message types.ChannelMessage, reason strin
 	}
 }
 
-func (rt *Runtime) markVTextWorkerUpdatesDelivered(ctx context.Context, rec *types.RunRecord, docID string, maxSeq int64) error {
+func (rt *Runtime) markTextureWorkerUpdatesDelivered(ctx context.Context, rec *types.RunRecord, docID string, maxSeq int64) error {
 	if rt == nil || rt.store == nil || rec == nil || maxSeq <= 0 {
 		return nil
 	}
@@ -3009,7 +3005,7 @@ func (rt *Runtime) markVTextWorkerUpdatesDelivered(ctx context.Context, rec *typ
 	if ownerID == "" || docID == "" {
 		return nil
 	}
-	targetAgentIDs := []string{currentTextureAgentID(docID), legacyVTextAgentID(docID)}
+	targetAgentIDs := []string{currentTextureAgentID(docID)}
 	updates := make([]types.WorkerUpdateRecord, 0)
 	seenUpdates := make(map[string]bool)
 	targetByUpdateID := make(map[string]string)
@@ -3108,8 +3104,8 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		log.Printf("runtime: synthesize researcher update for run %s: %v", rec.RunID, synthErr)
 	}
 
-	// If this is an vtext agent revision task, mark the mutation as failed
-	// and emit the vtext-specific failure event.
+	// If this is an texture agent revision task, mark the mutation as failed
+	// and emit the texture-specific failure event.
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
 		_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
 		if docID, _ := rec.Metadata["doc_id"].(string); docID != "" {
@@ -3118,12 +3114,12 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 				"loop_id": rec.RunID,
 				"error":   err.Error(),
 			})
-			rt.emitVTextAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
+			rt.emitTextureAgentEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
 				events.CauseProviderFailure, failPayload)
 		}
 	}
 	if state.Terminal() {
-		rt.reconcileCompletedVTextRun(rec)
+		rt.reconcileCompletedTextureRun(rec)
 	}
 
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)
@@ -3132,7 +3128,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 // providerResult returns fallback result text when a completed provider
 // execution did not populate rec.Result directly. This text is run output only;
-// vtext document revisions are materialized exclusively by Texture write tools.
+// texture document revisions are materialized exclusively by Texture write tools.
 func (rt *Runtime) providerResult() string {
 	if sp, ok := rt.provider.(*StubProvider); ok {
 		return sp.Result
@@ -3144,7 +3140,7 @@ const runMetadataTrajectoryID = "trajectory_id"
 
 // ensureTrajectoryID guarantees that metadata carries a trajectory_id, falling
 // back to parent metadata (or parent RunID) when inherited. The trajectory_id
-// is the unit that spans prompt-bar → conductor → vtext → workers → further
+// is the unit that spans prompt-bar → conductor → texture → workers → further
 // revisions; Trace groups workflows by it so the whole chain renders as one
 // run.
 func ensureTrajectoryID(metadata map[string]any, parent *types.RunRecord, selfRunID string) map[string]any {

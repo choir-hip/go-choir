@@ -51,8 +51,6 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 		Recommendation           string   `json:"recommendation,omitempty"`
 		TextureDocID             string   `json:"texture_doc_id,omitempty"`
 		TextureRevisionID        string   `json:"texture_revision_id,omitempty"`
-		LegacyVTextDocID         string   `json:"vtext_doc_id,omitempty"`      // texture-cutover-allow: legacy AppChangePackage tool input during cutover; delete after provenance migration.
-		LegacyVTextRevisionID    string   `json:"vtext_revision_id,omitempty"` // texture-cutover-allow: legacy AppChangePackage tool input during cutover; delete after provenance migration.
 		ScreenshotRefs           []string `json:"screenshot_refs,omitempty"`
 		VideoRefs                []string `json:"video_refs,omitempty"`
 		BenchmarkRefs            []string `json:"benchmark_refs,omitempty"`
@@ -181,8 +179,8 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				Summary:           in.Summary,
 				HumanSummary:      in.HumanSummary,
 				Recommendation:    in.Recommendation,
-				TextureDocID:      firstNonEmpty(in.TextureDocID, in.LegacyVTextDocID),
-				TextureRevisionID: firstNonEmpty(in.TextureRevisionID, in.LegacyVTextRevisionID),
+				TextureDocID:      in.TextureDocID,
+				TextureRevisionID: in.TextureRevisionID,
 				ScreenshotRefs:    in.ScreenshotRefs,
 				VideoRefs:         in.VideoRefs,
 				BenchmarkRefs:     in.BenchmarkRefs,

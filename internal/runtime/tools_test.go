@@ -23,7 +23,7 @@ func TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget(t *testing.T
 	if got := normalizeDelegateTargetValue("researcher</parameter> </invoke>", allowed); got != AgentProfileResearcher {
 		t.Fatalf("noisy researcher target = %q, want %q", got, AgentProfileResearcher)
 	}
-	if got := normalizeDelegateTargetValue("researcher and vtext</invoke>", []string{AgentProfileResearcher, AgentProfileVText}); got == AgentProfileResearcher || got == AgentProfileVText {
+	if got := normalizeDelegateTargetValue("researcher and texture</invoke>", []string{AgentProfileResearcher, AgentProfileTexture}); got == AgentProfileResearcher || got == AgentProfileTexture {
 		t.Fatalf("ambiguous noisy target recovered as %q, want unrecovered value", got)
 	}
 	if got := normalizeDelegateTargetValue("researcher please", allowed); got == AgentProfileResearcher {
@@ -475,7 +475,7 @@ func TestExecuteTools(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
+func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	var executed int
 	if err := registry.Register(Tool{
@@ -489,10 +489,10 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 	}
 
 	run := &types.RunRecord{
-		RunID:        "run-vtext",
+		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 	}
 	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
 		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
@@ -513,7 +513,7 @@ func TestExecuteToolsSkipsDuplicateVTextEditsInSameTurn(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsSkipsDuplicateVTextResearcherSpawnInSameTurn(t *testing.T) {
+func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	var executed []string
 	if err := registry.Register(Tool{
@@ -534,10 +534,10 @@ func TestExecuteToolsSkipsDuplicateVTextResearcherSpawnInSameTurn(t *testing.T) 
 	}
 
 	run := &types.RunRecord{
-		RunID:        "run-vtext",
+		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 	}
 	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
 		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research current scores"}`)},
@@ -554,7 +554,7 @@ func TestExecuteToolsSkipsDuplicateVTextResearcherSpawnInSameTurn(t *testing.T) 
 	if results[0].IsError || results[0].Output != AgentProfileResearcher {
 		t.Fatalf("first spawn result = %#v, want success", results[0])
 	}
-	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate vtext researcher spawn") {
+	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate texture researcher spawn") {
 		t.Fatalf("second spawn result = %#v, want non-error duplicate notice", results[1])
 	}
 	if results[2].IsError || results[2].Output != AgentProfileResearcher {
@@ -742,9 +742,9 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	if _, ok := researcherRegistry.Lookup("source_search"); !ok {
 		t.Fatalf("researcher missing source_search")
 	}
-	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	if _, ok := vtextRegistry.Lookup("source_search"); ok {
-		t.Fatalf("vtext should not have source_search")
+	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	if _, ok := textureRegistry.Lookup("source_search"); ok {
+		t.Fatalf("texture should not have source_search")
 	}
 
 	rec := &types.RunRecord{
@@ -893,19 +893,19 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 	parent := types.RunRecord{
-		RunID:        "run-vtext-parent",
-		AgentID:      "vtext:" + docID,
+		RunID:        "run-texture-parent",
+		AgentID:      "texture:" + docID,
 		ChannelID:    docID,
 		OwnerID:      ownerID,
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		State:        types.RunCompleted,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVText,
-			runMetadataAgentRole:    AgentProfileVText,
-			runMetadataAgentID:      "vtext:" + docID,
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentID:      "texture:" + docID,
 			runMetadataChannelID:    docID,
 		},
 	}
@@ -957,7 +957,7 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 	if err := rt.synthesizeResearcherUpdateOnFailure(ctx, researcher, fmt.Errorf("required next tool timed out")); err != nil {
 		t.Fatalf("synthesize update: %v", err)
 	}
-	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "vtext:"+docID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
 	if err != nil {
 		t.Fatalf("list deliveries: %v", err)
 	}
@@ -1122,7 +1122,7 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsConductorVTextRouteSkipsOtherSpawn(t *testing.T) {
+func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 	registry := NewToolRegistry()
 	executed := []string{}
 	if err := registry.Register(Tool{
@@ -1148,19 +1148,19 @@ func TestExecuteToolsConductorVTextRouteSkipsOtherSpawn(t *testing.T) {
 	})
 	calls := []types.ToolCall{
 		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","objective":"research"}`)},
-		{ID: "vtext", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"vtext","objective":"open document","initial_content":"# Draft"}`)},
+		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"texture","objective":"open document","initial_content":"# Draft"}`)},
 	}
 
 	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
-	if len(executed) != 1 || executed[0] != AgentProfileVText {
-		t.Fatalf("executed = %#v, want only vtext", executed)
+	if len(executed) != 1 || executed[0] != AgentProfileTexture {
+		t.Fatalf("executed = %#v, want only texture", executed)
 	}
-	if results[0].IsError || !strings.Contains(results[0].Output, "vtext owns downstream") {
+	if results[0].IsError || !strings.Contains(results[0].Output, "texture owns downstream") {
 		t.Fatalf("research spawn result = %#v, want non-error skipped downstream worker notice", results[0])
 	}
-	if results[1].IsError || results[1].Output != AgentProfileVText {
-		t.Fatalf("vtext spawn result = %#v, want success", results[1])
+	if results[1].IsError || results[1].Output != AgentProfileTexture {
+		t.Fatalf("texture spawn result = %#v, want success", results[1])
 	}
 }
 

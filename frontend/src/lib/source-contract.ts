@@ -101,7 +101,7 @@ export function sourceOpenPlan(input: SourceOpenPlanInput = {}): SourceOpenPlan 
   const sourceKind = String(input.sourceKind || '').trim().toLowerCase();
   const durableReaderTarget = targetKind === 'content_item' || targetKind === 'source_service_item' || !!input.hasURL;
 
-  if (targetKind === 'published_texture_span' || targetKind === 'published_vtext_span' || targetKind === 'publication_version') {
+  if (targetKind === 'published_texture_span' || targetKind === 'published_texture_span' || targetKind === 'publication_version') {
     return {
       appId: 'texture',
       openSurface: requested || SOURCE_OPEN_SURFACES.texture,

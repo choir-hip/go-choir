@@ -117,7 +117,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			}
 			if (callerProfile == AgentProfileConductor ||
 				callerProfile == AgentProfileProcessor ||
-				callerProfile == AgentProfileReconciler) && profile == AgentProfileVText {
+				callerProfile == AgentProfileReconciler) && profile == AgentProfileTexture {
 				parentRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
 				if parentRec == nil {
 					parentRec = &types.RunRecord{
@@ -129,11 +129,11 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 						ChannelID:    stringFromToolContext(ctx, toolCtxChannelID),
 					}
 				}
-				// ensureCoagentVTextRevisionRoute owns source-item validation
+				// ensureCoagentTextureRevisionRoute owns source-item validation
 				// for processor callers; do not pre-resolve here.
 				sourceItemIDs := trimNonEmpty(in.SourceItemIDs)
-				kind := vtextHandoffKindForCaller(callerProfile)
-				decision, err := rt.ensureVTextHandoff(ctx, parentRec, vtextHandoffRequest{
+				kind := textureHandoffKindForCaller(callerProfile)
+				decision, err := rt.ensureTextureHandoff(ctx, parentRec, textureHandoffRequest{
 					Kind:           kind,
 					CallerProfile:  callerProfile,
 					Objective:      in.Objective,
@@ -145,7 +145,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 				if err != nil {
 					return "", err
 				}
-				if kind == vtextHandoffKindUserPrompt {
+				if kind == textureHandoffKindUserPrompt {
 					conductor := decision.Conductor
 					return toolResultJSON(map[string]any{
 						"action":                 conductor.Action,
@@ -207,7 +207,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 	}
 }
 
-type coagentVTextRouteRequest struct {
+type coagentTextureRouteRequest struct {
 	CallerProfile  string
 	Role           string
 	Profile        string
@@ -218,7 +218,7 @@ type coagentVTextRouteRequest struct {
 	SourceItemIDs  []string
 }
 
-type coagentVTextRouteDecision struct {
+type coagentTextureRouteDecision struct {
 	DocID           string
 	Title           string
 	SeedRevisionID  string
@@ -227,38 +227,38 @@ type coagentVTextRouteDecision struct {
 	CreatedDocument bool
 }
 
-func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest) (coagentVTextRouteDecision, error) {
+func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parentRec *types.RunRecord, req coagentTextureRouteRequest) (coagentTextureRouteDecision, error) {
 	if rt == nil || rt.store == nil {
-		return coagentVTextRouteDecision{}, fmt.Errorf("runtime store unavailable")
+		return coagentTextureRouteDecision{}, fmt.Errorf("runtime store unavailable")
 	}
 	if parentRec == nil {
-		return coagentVTextRouteDecision{}, fmt.Errorf("vtext route requires a parent run")
+		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires a parent run")
 	}
 	callerProfile := canonicalAgentProfile(req.CallerProfile)
 	if callerProfile != AgentProfileProcessor && callerProfile != AgentProfileReconciler {
-		return coagentVTextRouteDecision{}, fmt.Errorf("vtext route requires processor or reconciler caller")
+		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires processor or reconciler caller")
 	}
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	if ownerID == "" {
-		return coagentVTextRouteDecision{}, fmt.Errorf("owner_id is required")
+		return coagentTextureRouteDecision{}, fmt.Errorf("owner_id is required")
 	}
 
 	now := time.Now().UTC()
 	if callerProfile == AgentProfileProcessor {
 		resolvedSourceItemIDs, err := resolveWireProcessorSourceItemIDs(parentRec, req.SourceItemIDs, true)
 		if err != nil {
-			return coagentVTextRouteDecision{}, err
+			return coagentTextureRouteDecision{}, err
 		}
 		req.SourceItemIDs = resolvedSourceItemIDs
 	}
-	sourceEntities := rt.coagentVTextSourceEntities(ctx, parentRec, req)
-	doc, created, seedRevisionID, err := rt.coagentVTextTargetDocument(ctx, parentRec, req, now, sourceEntities)
+	sourceEntities := rt.coagentTextureSourceEntities(ctx, parentRec, req)
+	doc, created, seedRevisionID, err := rt.coagentTextureTargetDocument(ctx, parentRec, req, now, sourceEntities)
 	if err != nil {
-		return coagentVTextRouteDecision{}, err
+		return coagentTextureRouteDecision{}, err
 	}
 	if callerProfile == AgentProfileProcessor {
 		if _, err := rt.beginWireStoryResolutionWorkItem(ctx, parentRec, doc); err != nil {
-			return coagentVTextRouteDecision{}, fmt.Errorf("open wire story resolution work item: %w", err)
+			return coagentTextureRouteDecision{}, fmt.Errorf("open wire story resolution work item: %w", err)
 		}
 	}
 
@@ -272,31 +272,31 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 		CreatedAt: now,
 		UpdatedAt: time.Now().UTC(),
 	}); err != nil {
-		return coagentVTextRouteDecision{}, fmt.Errorf("persist vtext appagent: %w", err)
+		return coagentTextureRouteDecision{}, fmt.Errorf("persist texture appagent: %w", err)
 	}
 
-	prompt := buildCoagentVTextRevisionPrompt(parentRec, req, doc, created, sourceEntities)
-	rec, err := rt.submitVTextAgentRevisionRun(ctx, doc, ownerID, vtextAgentRevisionRequest{
+	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
+	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent: "universal_wire_" + callerProfile + "_article_revision",
 		Prompt: prompt,
 	}, parentRec.RunID, 0)
 	if err != nil {
-		return coagentVTextRouteDecision{}, fmt.Errorf("start vtext article revision: %w", err)
+		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
 	}
 	if callerProfile == AgentProfileProcessor {
 		if _, err := rt.recordWireProcessorDecision(ctx, parentRec, wireProcessorDecisionUpdate{
-			Verdict:       wireProcessorDecisionOpenedVText,
-			Summary:       "processor opened a VText story route for this request",
+			Verdict:       wireProcessorDecisionOpenedTexture,
+			Summary:       "processor opened a Texture story route for this request",
 			DocID:         doc.DocID,
 			RevisionRunID: rec.RunID,
 			SourceItemIDs: req.SourceItemIDs,
 			Complete:      true,
 		}); err != nil {
-			return coagentVTextRouteDecision{}, fmt.Errorf("record processor VText route decision: %w", err)
+			return coagentTextureRouteDecision{}, fmt.Errorf("record processor Texture route decision: %w", err)
 		}
 	}
 
-	return coagentVTextRouteDecision{
+	return coagentTextureRouteDecision{
 		DocID:           doc.DocID,
 		Title:           doc.Title,
 		SeedRevisionID:  seedRevisionID,
@@ -306,18 +306,18 @@ func (rt *Runtime) ensureCoagentVTextRevisionRoute(ctx context.Context, parentRe
 	}, nil
 }
 
-func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest, now time.Time, sourceEntities []vtextSourceEntity) (types.Document, bool, string, error) {
+func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *types.RunRecord, req coagentTextureRouteRequest, now time.Time, sourceEntities []textureSourceEntity) (types.Document, bool, string, error) {
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID != "" {
 		if doc, err := rt.store.GetDocument(ctx, channelID, ownerID); err == nil {
 			return doc, false, "", nil
 		} else if err != store.ErrNotFound {
-			return types.Document{}, false, "", fmt.Errorf("lookup vtext document %s: %w", channelID, err)
+			return types.Document{}, false, "", fmt.Errorf("lookup texture document %s: %w", channelID, err)
 		}
 	}
 
-	title := coagentVTextTitle(req)
+	title := coagentTextureTitle(req)
 	doc := types.Document{
 		DocID:     uuid.New().String(),
 		OwnerID:   ownerID,
@@ -326,18 +326,18 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 		UpdatedAt: now,
 	}
 	if err := rt.store.CreateDocument(ctx, doc); err != nil {
-		return types.Document{}, false, "", fmt.Errorf("create vtext document: %w", err)
+		return types.Document{}, false, "", fmt.Errorf("create texture document: %w", err)
 	}
 
-	seedContent := coagentVTextSeedContent(parentRec, req, sourceEntities)
+	seedContent := coagentTextureSeedContent(parentRec, req, sourceEntities)
 	seedRevisionID := uuid.New().String()
-	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
+	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
 	seedMetaMap := map[string]any{
-		"source":                         "coagent_vtext_seed",
+		"source":                         "coagent_texture_seed",
 		"artifact_kind":                  "source_brief",
-		"revision_role":                  vtextRevisionRoleInput,
-		"input_origin":                   vtextInputOriginForCaller(req.CallerProfile),
-		"vtext_version_stage":            "pre_article_brief",
+		"revision_role":                  textureRevisionRoleInput,
+		"input_origin":                   textureInputOriginForCaller(req.CallerProfile),
+		"texture_version_stage":          "pre_article_brief",
 		"created_from":                   canonicalAgentProfile(req.CallerProfile),
 		"parent_loop_id":                 parentRec.RunID,
 		"parent_agent_id":                strings.TrimSpace(parentRec.AgentID),
@@ -375,23 +375,23 @@ func (rt *Runtime) coagentVTextTargetDocument(ctx context.Context, parentRec *ty
 		CreatedAt: now,
 	}
 	if err := rt.store.CreateRevision(ctx, seedRev); err != nil {
-		return types.Document{}, false, "", fmt.Errorf("create vtext seed revision: %w", err)
+		return types.Document{}, false, "", fmt.Errorf("create texture seed revision: %w", err)
 	}
 	doc.CurrentRevisionID = seedRevisionID
-	rt.emitVTextDocumentRevisionEventForRun(ctx, parentRec, seedRev)
+	rt.emitTextureDocumentRevisionEventForRun(ctx, parentRec, seedRev)
 	return doc, true, seedRevisionID, nil
 }
 
-func coagentVTextTitle(req coagentVTextRouteRequest) string {
+func coagentTextureTitle(req coagentTextureRouteRequest) string {
 	if title := strings.TrimSpace(req.Title); title != "" {
 		return title
 	}
 	text := strings.TrimSpace(req.Objective)
 	for _, prefix := range []string{
-		"Write a VText article covering ",
-		"Write a VText article ",
-		"Create VText for ",
-		"draft a correction/update VText from ",
+		"Write a Texture article covering ",
+		"Write a Texture article ",
+		"Create Texture for ",
+		"draft a correction/update Texture from ",
 		"write a source-grounded article from ",
 	} {
 		if rest := strings.TrimSpace(strings.TrimPrefix(text, prefix)); rest != text && rest != "" {
@@ -406,16 +406,16 @@ func coagentVTextTitle(req coagentVTextRouteRequest) string {
 	if len(text) > 96 {
 		text = strings.TrimSpace(text[:96])
 	}
-	if !strings.HasSuffix(strings.ToLower(text), ".vtext") {
-		text += ".vtext"
+	if !strings.HasSuffix(strings.ToLower(text), ".texture") {
+		text += ".texture"
 	}
 	return text
 }
 
-func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRequest, sourceEntities []vtextSourceEntity) string {
+func coagentTextureSeedContent(parentRec *types.RunRecord, req coagentTextureRouteRequest, sourceEntities []textureSourceEntity) string {
 	var b strings.Builder
 	b.WriteString("# Source brief: ")
-	b.WriteString(strings.TrimSuffix(coagentVTextTitle(req), ".vtext"))
+	b.WriteString(strings.TrimSuffix(coagentTextureTitle(req), ".texture"))
 	b.WriteString("\n\n")
 	if initial := strings.TrimSpace(req.InitialContent); initial != "" {
 		b.WriteString(initial)
@@ -426,7 +426,7 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 	if seed[len(seed)-1] != '\n' {
 		b.WriteString("\n")
 	}
-	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
+	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
 	b.WriteString("\n## Style.texture Source\n\n")
 	for _, style := range selectedStyles {
 		b.WriteString("- ")
@@ -454,13 +454,13 @@ func coagentVTextSeedContent(parentRec *types.RunRecord, req coagentVTextRouteRe
 	return b.String()
 }
 
-func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTextRouteRequest, doc types.Document, created bool, sourceEntities []vtextSourceEntity) string {
+func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTextureRouteRequest, doc types.Document, created bool, sourceEntities []textureSourceEntity) string {
 	var b strings.Builder
-	selectedStyles, styleRationale := coagentVTextSelectedStyles(req)
+	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
 	if created {
-		b.WriteString("Write the first publication-quality article revision for this VText document.")
+		b.WriteString("Write the first publication-quality article revision for this Texture document.")
 	} else {
-		b.WriteString("Revise this existing VText document with the processor/reconciler update.")
+		b.WriteString("Revise this existing Texture document with the processor/reconciler update.")
 	}
 	b.WriteString("\n\nArticle request:\n")
 	b.WriteString(strings.TrimSpace(req.Objective))
@@ -518,9 +518,9 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	b.WriteString("\n- Use patch_texture to write the canonical Texture revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
-	b.WriteString("\n- Preserve source handles and use native VText source refs like [label](source:entity_id) inside article prose; do not replace them with a plain source manifest or isolate them in an inventory section.")
+	b.WriteString("\n- Preserve source handles and use native Texture source refs like [label](source:entity_id) inside article prose; do not replace them with a plain source manifest or isolate them in an inventory section.")
 	b.WriteString("\n- Use the selected Style.texture sources to shape voice, structure, and editorial judgment; do not name the selected Style.texture or style rationale in reader-facing prose unless it is genuinely part of the story.")
-	b.WriteString("\n- Transclude related VTexts where editorially useful; do not render bare related-VText ID lists as article content.")
+	b.WriteString("\n- Transclude related Textures where editorially useful; do not render bare related-Texture ID lists as article content.")
 	b.WriteString("\n- Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body unless they are editorially necessary. They belong in revision metadata and native source/transclusion affordances, not as reader-facing sections.")
 	b.WriteString("\n- Do not include placeholder metadata or publication labels such as \"Published: [Date TBD]\", \"Breaking News |\", \"Date:\", \"By Choir News\", \"Source:\", \"Story id\", \"State\", \"Source Handles\", \"Source Manifest\", \"Style.texture Source\", horizontal-rule separators, or tool/process notes in the article body.")
 	b.WriteString("\n- If evidence is insufficient, write the best honest publishable draft with uncertainty and request researcher follow-up rather than inventing facts.")
@@ -537,33 +537,33 @@ func buildCoagentVTextRevisionPrompt(parentRec *types.RunRecord, req coagentVTex
 	return b.String()
 }
 
-func (rt *Runtime) coagentVTextSourceEntities(ctx context.Context, parentRec *types.RunRecord, req coagentVTextRouteRequest) []vtextSourceEntity {
+func (rt *Runtime) coagentTextureSourceEntities(ctx context.Context, parentRec *types.RunRecord, req coagentTextureRouteRequest) []textureSourceEntity {
 	if parentRec == nil {
 		return nil
 	}
-	entities := decodeVTextSourceEntities(parentRec.Metadata["source_entities"])
+	entities := decodeTextureSourceEntities(parentRec.Metadata["source_entities"])
 	seenText := strings.Join([]string{strings.TrimSpace(req.Objective), strings.TrimSpace(req.InitialContent)}, "\n")
 	for _, itemID := range sourceServiceItemIDsFromText(seenText) {
-		entities, _ = mergeVTextSourceEntities(entities, []vtextSourceEntity{sourceServiceItemRefToSourceEntity(itemID, seenText)})
+		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{sourceServiceItemRefToSourceEntity(itemID, seenText)})
 	}
 
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	if rt == nil || rt.store == nil || ownerID == "" {
 		return entities
 	}
-	for _, contentID := range coagentVTextSourceContentIDs(parentRec, req, seenText) {
+	for _, contentID := range coagentTextureSourceContentIDs(parentRec, req, seenText) {
 		item, err := rt.Store().GetContentItem(ctx, ownerID, contentID)
 		if err != nil {
 			continue
 		}
 		entity := contentItemRefToSourceEntity(item, seenText)
 		entity.Provenance.CreatedBy = firstNonEmpty(canonicalAgentProfile(req.CallerProfile), entity.Provenance.CreatedBy)
-		entities, _ = mergeVTextSourceEntities(entities, []vtextSourceEntity{entity})
+		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{entity})
 	}
 	return entities
 }
 
-func coagentVTextSourceContentIDs(parentRec *types.RunRecord, req coagentVTextRouteRequest, text string) []string {
+func coagentTextureSourceContentIDs(parentRec *types.RunRecord, req coagentTextureRouteRequest, text string) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	add := func(raw string) {
@@ -709,7 +709,7 @@ func coagentDefaultStyleCatalog() []types.WireStyleSource {
 	}
 }
 
-func coagentVTextSelectedStyles(req coagentVTextRouteRequest) ([]types.WireStyleSource, string) {
+func coagentTextureSelectedStyles(req coagentTextureRouteRequest) ([]types.WireStyleSource, string) {
 	styles := coagentDefaultStyleCatalog()
 	byID := map[string]types.WireStyleSource{}
 	for _, style := range styles {

@@ -31,7 +31,7 @@ func NewPromptStore(root string) *PromptStore {
 func promptRoles() []string {
 	return []string{
 		AgentProfileConductor,
-		AgentProfileVText,
+		AgentProfileTexture,
 		AgentProfileResearcher,
 		AgentProfileProcessor,
 		AgentProfileReconciler,

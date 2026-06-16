@@ -48,13 +48,8 @@ const compactDefault = { minWidth: 280, minHeight: 420 };
 
 export const TEXTURE_APP_ID = 'texture';
 
-const LEGACY_APP_ID_ALIASES: Record<string, string> = {
-  vtext: TEXTURE_APP_ID,
-};
-
 export function normalizeAppId(appId: string): string {
-  const normalized = String(appId || '').trim();
-  return LEGACY_APP_ID_ALIASES[normalized] || normalized;
+  return String(appId || '').trim();
 }
 
 export const APP_REGISTRY = [
@@ -123,7 +118,7 @@ export const APP_REGISTRY = [
     name: 'Texture',
     icon: '📝',
     description: 'Versioned artifact editor',
-    component: () => import('../VTextEditor.svelte'),
+    component: () => import('../TextureEditor.svelte'),
     launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 50 },
     window: {
       singleton: false,
@@ -132,7 +127,7 @@ export const APP_REGISTRY = [
       compact: compactDefault,
     },
     auth: { preview: 'public-preview', requiresAuthFor: ['save_texture', 'revise_texture', 'publish_texture'] },
-    theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'vtext-content' },
+    theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'texture-content' },
   },
   {
     id: 'universal-wire',

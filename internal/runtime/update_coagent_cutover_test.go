@@ -250,7 +250,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-passivated-spawn"
-	parentID := "vtext-passivated-spawn-parent"
+	parentID := "texture-passivated-spawn-parent"
 	childID := "researcher-passivated-spawn-child"
 	agentID := "researcher:passivated-spawn"
 	channelID := "doc-passivated-spawn"
@@ -284,23 +284,23 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	}
 	if err := s1.CreateRun(ctx, types.RunRecord{
 		RunID:        parentID,
-		AgentID:      "vtext:" + channelID,
+		AgentID:      "texture:" + channelID,
 		ChannelID:    channelID,
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunCompleted,
-		Prompt:       "parent vtext revision",
+		Prompt:       "parent texture revision",
 		Result:       "parent complete",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		FinishedAt:   &now,
 		Metadata: map[string]any{
-			"type":                    "vtext_agent_revision",
-			runMetadataAgentProfile:   AgentProfileVText,
-			runMetadataAgentRole:      AgentProfileVText,
-			runMetadataAgentID:        "vtext:" + channelID,
+			"type":                    "texture_agent_revision",
+			runMetadataAgentProfile:   AgentProfileTexture,
+			runMetadataAgentRole:      AgentProfileTexture,
+			runMetadataAgentID:        "texture:" + channelID,
 			runMetadataChannelID:      channelID,
 			runMetadataTrajectoryID:   trajectoryID,
 			"doc_id":                  channelID,
@@ -308,8 +308,8 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 			"conductor_loop_id":       trajectoryID,
 			"scheduled_message_seq":   2,
 			"request_intent":          "integrate_worker_findings",
-			"vtext_context_mode":      "current_head_plus_user_edit_diff",
-			"vtext_prompt_chars":      9125,
+			"texture_context_mode":    "current_head_plus_user_edit_diff",
+			"texture_prompt_chars":    9125,
 			"worker_updates_consumed": []any{},
 		},
 	}); err != nil {
@@ -413,11 +413,11 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, workItemIDs[0]) {
 		t.Fatalf("replacement work_item_ids = %+v, want %s", ids, workItemIDs[0])
 	}
-	if got := metadataStringValue(active.Metadata, "requested_by_profile"); got != AgentProfileVText {
-		t.Fatalf("replacement requested_by_profile = %q, want %q", got, AgentProfileVText)
+	if got := metadataStringValue(active.Metadata, "requested_by_profile"); got != AgentProfileTexture {
+		t.Fatalf("replacement requested_by_profile = %q, want %q", got, AgentProfileTexture)
 	}
-	if got := metadataStringValue(active.Metadata, "requested_by_agent_id"); got != "vtext:"+channelID {
-		t.Fatalf("replacement requested_by_agent_id = %q, want vtext:%s", got, channelID)
+	if got := metadataStringValue(active.Metadata, "requested_by_agent_id"); got != "texture:"+channelID {
+		t.Fatalf("replacement requested_by_agent_id = %q, want texture:%s", got, channelID)
 	}
 	if got := metadataStringValue(active.Metadata, "requested_by_run_id"); got != parentID {
 		t.Fatalf("replacement requested_by_run_id = %q, want %s", got, parentID)
@@ -438,7 +438,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-passivated-spawn-sweep"
-	parentID := "vtext-passivated-spawn-sweep-parent"
+	parentID := "texture-passivated-spawn-sweep-parent"
 	childID := "researcher-passivated-spawn-sweep-child"
 	agentID := "researcher:passivated-spawn-sweep"
 	channelID := "doc-passivated-spawn-sweep"
@@ -472,23 +472,23 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 	}
 	if err := s1.CreateRun(ctx, types.RunRecord{
 		RunID:        parentID,
-		AgentID:      "vtext:" + channelID,
+		AgentID:      "texture:" + channelID,
 		ChannelID:    channelID,
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunCompleted,
-		Prompt:       "parent vtext revision",
+		Prompt:       "parent texture revision",
 		Result:       "parent complete",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		FinishedAt:   &now,
 		Metadata: map[string]any{
-			"type":                  "vtext_agent_revision",
-			runMetadataAgentProfile: AgentProfileVText,
-			runMetadataAgentRole:    AgentProfileVText,
-			runMetadataAgentID:      "vtext:" + channelID,
+			"type":                  "texture_agent_revision",
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentID:      "texture:" + channelID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
 			"doc_id":                channelID,
@@ -578,11 +578,11 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, workItemIDs[0]) {
 		t.Fatalf("replacement work_item_ids = %+v, want %s", ids, workItemIDs[0])
 	}
-	if got := metadataStringValue(active.Metadata, "requested_by_profile"); got != AgentProfileVText {
-		t.Fatalf("replacement requested_by_profile = %q, want %q", got, AgentProfileVText)
+	if got := metadataStringValue(active.Metadata, "requested_by_profile"); got != AgentProfileTexture {
+		t.Fatalf("replacement requested_by_profile = %q, want %q", got, AgentProfileTexture)
 	}
-	if got := metadataStringValue(active.Metadata, "requested_by_agent_id"); got != "vtext:"+channelID {
-		t.Fatalf("replacement requested_by_agent_id = %q, want vtext:%s", got, channelID)
+	if got := metadataStringValue(active.Metadata, "requested_by_agent_id"); got != "texture:"+channelID {
+		t.Fatalf("replacement requested_by_agent_id = %q, want texture:%s", got, channelID)
 	}
 	if got := metadataStringValue(active.Metadata, "requested_by_run_id"); got != parentID {
 		t.Fatalf("replacement requested_by_run_id = %q, want %s", got, parentID)
@@ -1241,23 +1241,23 @@ func seedSpawnedChildParent(t *testing.T, ctx context.Context, s spawnedChildPar
 	}
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID:        parentID,
-		AgentID:      "vtext:" + channelID,
+		AgentID:      "texture:" + channelID,
 		ChannelID:    channelID,
 		TrajectoryID: trajectoryID,
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunCompleted,
-		Prompt:       "parent vtext revision loop",
+		Prompt:       "parent texture revision loop",
 		Result:       "parent ready",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		FinishedAt:   &now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVText,
-			runMetadataAgentRole:    AgentProfileVText,
-			runMetadataAgentID:      "vtext:" + channelID,
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentID:      "texture:" + channelID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
 			"doc_id":                channelID,

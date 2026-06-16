@@ -55,24 +55,13 @@
   let universalWirePublicStatus = '';
   let universalWirePublicError = '';
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
-  const LEGACY_TEXTURE_AUTH_INTENTS: Record<string, string> = {
-    save_vtext: 'save_texture',
-    revise_vtext: 'revise_texture',
-    publish_vtext: 'publish_texture',
-    vtext_diagnosis: 'texture_diagnosis',
-    vtext_source_repair: 'texture_source_repair',
-    vtext_source_artifact: 'texture_source_artifact',
-    published_vtext_edit: 'published_texture_edit',
-    private_vtext_document: 'private_texture_document',
-  };
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
   $: isUniversalWirePublicReader = !!universalWirePublicToken;
 
   function normalizeTextureAuthIntentKind(kind) {
-    const normalized = String(kind || '');
-    return LEGACY_TEXTURE_AUTH_INTENTS[normalized] || normalized;
+    return String(kind || '');
   }
 
   function isTextureAuthIntent(intent, ...kinds) {
@@ -203,7 +192,7 @@
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search || '');
     const appId = (params.get('app') || '').trim().toLowerCase();
-    if (appId === 'vtext' || appId === 'texture') {
+    if (appId === 'texture' || appId === 'texture') {
       const docId = (params.get('doc') || params.get('doc_id') || '').trim();
       if (!docId) {
         clearConsumedAppIntentFromURL();

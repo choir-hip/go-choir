@@ -17,7 +17,7 @@ func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
 	switch canonicalAgentProfile(agentProfileForRun(rec)) {
 	case AgentProfileProcessor:
 		return types.TrajectoryKindPublication
-	case AgentProfileConductor, AgentProfileVText, AgentProfileEmail:
+	case AgentProfileConductor, AgentProfileTexture, AgentProfileEmail:
 		return types.TrajectoryKindDocument
 	default:
 		return types.TrajectoryKindTask

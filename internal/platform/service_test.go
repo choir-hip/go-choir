@@ -92,11 +92,11 @@ func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
 	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
 		t.Fatalf("platform_texture_revisions count = %d, want 1", got)
 	}
-	if got := platformTableCount(t, store, "platform_vtext_documents"); got != 0 {
-		t.Fatalf("platform_vtext_documents count = %d, want 0 for current writes", got)
+	if got := platformTableCount(t, store, "platform_texture_documents"); got != 0 {
+		t.Fatalf("platform_texture_documents count = %d, want 0 for current writes", got)
 	}
-	if got := platformTableCount(t, store, "platform_vtext_revisions"); got != 0 {
-		t.Fatalf("platform_vtext_revisions count = %d, want 0 for current writes", got)
+	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 0 {
+		t.Fatalf("platform_texture_revisions count = %d, want 0 for current writes", got)
 	}
 
 	doc, err := store.GetTextureDocument(ctx, "doc-current")
@@ -120,11 +120,11 @@ func TestPlatformTextureStoreMigratesLegacyTablesAtBootstrap(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_vtext_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
 		"doc-legacy", "owner-legacy", "Legacy Texture", now, now); err != nil {
 		t.Fatalf("insert legacy document: %v", err)
 	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_vtext_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)`,
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)`,
 		"rev-legacy", "doc-legacy", "owner-legacy", "agent", "legacy-texture", "legacy table content", "[]", `{"source":"legacy"}`, now); err != nil {
 		t.Fatalf("insert legacy revision: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestPublicationFallbackDefaultsUseTextureLabels(t *testing.T) {
 	if doc.Title != defaultPublishedTextureTitle {
 		t.Fatalf("publication document title = %q, want %q", doc.Title, defaultPublishedTextureTitle)
 	}
-	if strings.Contains(doc.Title, "VText") {
+	if strings.Contains(doc.Title, "Texture") {
 		t.Fatalf("publication document title retained retired name: %q", doc.Title)
 	}
 
@@ -209,7 +209,7 @@ func TestPublicationFallbackDefaultsUseTextureLabels(t *testing.T) {
 	if !strings.Contains(coreXML, "<dc:title>"+defaultPublishedTextureTitle+"</dc:title>") {
 		t.Fatalf("DOCX core title missing Texture fallback: %s", coreXML)
 	}
-	if strings.Contains(coreXML, "Published VText") {
+	if strings.Contains(coreXML, "Published Texture") {
 		t.Fatalf("DOCX core title retained retired name: %s", coreXML)
 	}
 
@@ -246,7 +246,7 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	if publicationTitle != defaultUntitledTextureTitle {
 		t.Fatalf("publication title = %q, want %q", publicationTitle, defaultUntitledTextureTitle)
 	}
-	if strings.Contains(publicationTitle, "VText") || strings.Contains(publicationSlug, "vtext") {
+	if strings.Contains(publicationTitle, "Texture") || strings.Contains(publicationSlug, "texture") {
 		t.Fatalf("publication default retained retired name: title=%q slug=%q", publicationTitle, publicationSlug)
 	}
 
@@ -257,7 +257,7 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	if !strings.HasPrefix(publishedExport.Filename, "untitled-texture-") {
 		t.Fatalf("default export filename = %q, want untitled-texture-*", publishedExport.Filename)
 	}
-	if strings.Contains(publishedExport.Filename, "vtext") {
+	if strings.Contains(publishedExport.Filename, "texture") {
 		t.Fatalf("default export filename retained retired name: %q", publishedExport.Filename)
 	}
 
@@ -280,7 +280,7 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	if proposalTitle != defaultTextureProposalTitle {
 		t.Fatalf("proposal title = %q, want %q", proposalTitle, defaultTextureProposalTitle)
 	}
-	if strings.Contains(proposalTitle, "VText") {
+	if strings.Contains(proposalTitle, "Texture") {
 		t.Fatalf("proposal default retained retired name: %q", proposalTitle)
 	}
 }
@@ -514,7 +514,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
 		Title:            "Export Proof",
-		Content:          "# Export Proof\n\n| Term | Definition |\n| --- | --- |\n| VText | Canonical **artifact**. |\n\nThis is the published projection with [Export source proof](source:src-export-proof).\n\nA **private legal cloud** survives rich export without Markdown syntax.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination.\n", 80) + "\nLast line must survive export.",
+		Content:          "# Export Proof\n\n| Term | Definition |\n| --- | --- |\n| Texture | Canonical **artifact**. |\n\nThis is the published projection with [Export source proof](source:src-export-proof).\n\nA **private legal cloud** survives rich export without Markdown syntax.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination.\n", 80) + "\nLast line must survive export.",
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
@@ -1203,7 +1203,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 				"research_state": "owner_supplied",
 			},
 			"provenance": map[string]any{
-				"created_by":            "vtext",
+				"created_by":            "texture",
 				"untrusted_source_text": true,
 			},
 		}},
@@ -1279,7 +1279,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	if bundle.Artifact.Content != "# Mission Note\n\nA public note.\n\nThis is the published projection with [Federal Reserve rate statement](source:src-entity-fed-rates)." {
 		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
 	}
-	if bundle.Citations[0].ToKind == "private_texture_revision" || bundle.Citations[0].ToKind == "private_vtext_revision" || bundle.Citations[0].ToID == "rev-1" {
+	if bundle.Citations[0].ToKind == "private_texture_revision" || bundle.Citations[0].ToID == "rev-1" {
 		t.Fatalf("bundle leaked private revision citation: %#v", bundle.Citations[0])
 	}
 	if len(bundle.Artifact.RenderModel) == 0 || bundle.Artifact.RenderModel[0].SpanID == "" {
@@ -1334,11 +1334,11 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("html export missing default professional profile: %s", exported.Content)
 	}
 	for _, retiredClass := range []string{
-		"vtext-publication",
-		"vtext-source-ref",
-		"vtext-table",
-		"vtext-sources",
-		"vtext-sources-heading",
+		"texture-publication",
+		"texture-source-ref",
+		"texture-table",
+		"texture-sources",
+		"texture-sources-heading",
 	} {
 		if strings.Contains(exported.Content, retiredClass) {
 			t.Fatalf("html export retained retired class/id %q: %s", retiredClass, exported.Content)
@@ -1399,7 +1399,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	if len(search.Results) != 1 || search.Results[0].SpanID == "" {
 		t.Fatalf("search results: %#v", search.Results)
 	}
-	legacyRoutePath := "/pub/vtext/legacy-mission-note-" + shortID(resp.PublicationID)
+	legacyRoutePath := "/pub/texture/legacy-mission-note-" + shortID(resp.PublicationID)
 	now := time.Now().UTC()
 	if _, err := store.db.ExecContext(context.Background(), `INSERT INTO public_routes (route_id, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at) VALUES (?, ?, 'publication', ?, ?, 'active', ?, ?)`,
 		"route-legacy-"+shortID(resp.PublicationVersionID), legacyRoutePath, resp.PublicationID, resp.PublicationVersionID, now, now); err != nil {
@@ -1407,7 +1407,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	legacyBundle, err := svc.GetPublicationBundleByRoute(context.Background(), legacyRoutePath+"/")
 	if err != nil {
-		t.Fatalf("GetPublicationBundleByRoute legacy vtext route: %v", err)
+		t.Fatalf("GetPublicationBundleByRoute legacy texture route: %v", err)
 	}
 	if legacyBundle.Route.Path != legacyRoutePath {
 		t.Fatalf("legacy route normalized to %q, want %q", legacyBundle.Route.Path, legacyRoutePath)
@@ -1501,76 +1501,6 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	if citationsCount < 2 {
 		t.Fatalf("citation edge count: got %d, want at least 2", citationsCount)
-	}
-}
-
-func TestMigrateLegacyPublicVTextRoutesCreatesTextureAlias(t *testing.T) {
-	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
-	ctx := context.Background()
-
-	resp, err := svc.PublishTexture(ctx, PublishTextureRequest{
-		OwnerID:          "author-1",
-		SourceDocID:      "doc-route-migration",
-		SourceRevisionID: "rev-route-migration",
-		Title:            "Legacy route migration",
-		Content:          "Route migration content.",
-		RequestedBy:      "author-1",
-	})
-	if err != nil {
-		t.Fatalf("PublishTexture: %v", err)
-	}
-	legacyRoutePath := "/pub/vtext/imported-legacy-route-" + shortID(resp.PublicationID)
-	textureAliasPath := strings.Replace(legacyRoutePath, "/pub/vtext/", "/pub/texture/", 1)
-	now := time.Now().UTC()
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO public_routes (route_id, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at) VALUES (?, ?, 'publication', ?, ?, 'active', ?, ?)`,
-		"route-legacy-"+shortID(resp.PublicationVersionID), legacyRoutePath, resp.PublicationID, resp.PublicationVersionID, now, now); err != nil {
-		t.Fatalf("insert legacy public route: %v", err)
-	}
-
-	migrated, err := store.MigrateLegacyPublicVTextRoutes(ctx)
-	if err != nil {
-		t.Fatalf("MigrateLegacyPublicVTextRoutes: %v", err)
-	}
-	if migrated != 1 {
-		t.Fatalf("migrated routes = %d, want 1", migrated)
-	}
-	migratedAgain, err := store.MigrateLegacyPublicVTextRoutes(ctx)
-	if err != nil {
-		t.Fatalf("MigrateLegacyPublicVTextRoutes again: %v", err)
-	}
-	if migratedAgain != 0 {
-		t.Fatalf("second migrated routes = %d, want 0", migratedAgain)
-	}
-
-	legacyBundle, err := svc.GetPublicationBundleByRoute(ctx, legacyRoutePath)
-	if err != nil {
-		t.Fatalf("GetPublicationBundleByRoute legacy route: %v", err)
-	}
-	if legacyBundle.Route.Path != legacyRoutePath {
-		t.Fatalf("legacy route path = %q, want %q", legacyBundle.Route.Path, legacyRoutePath)
-	}
-	aliasBundle, err := svc.GetPublicationBundleByRoute(ctx, textureAliasPath)
-	if err != nil {
-		t.Fatalf("GetPublicationBundleByRoute texture alias: %v", err)
-	}
-	if aliasBundle.Route.Path != textureAliasPath {
-		t.Fatalf("texture alias path = %q, want %q", aliasBundle.Route.Path, textureAliasPath)
-	}
-	if aliasBundle.Publication.ID != resp.PublicationID || aliasBundle.Version.ID != resp.PublicationVersionID {
-		t.Fatalf("texture alias target = %s/%s, want %s/%s", aliasBundle.Publication.ID, aliasBundle.Version.ID, resp.PublicationID, resp.PublicationVersionID)
-	}
-
-	var aliasRouteID string
-	if err := store.db.QueryRowContext(ctx, `SELECT route_id FROM public_routes WHERE route_path = ?`, textureAliasPath).Scan(&aliasRouteID); err != nil {
-		t.Fatalf("query alias route id: %v", err)
-	}
-	var rollbackRef string
-	if err := store.db.QueryRowContext(ctx, `SELECT ref FROM rollback_refs WHERE target_kind = 'public_route' AND target_id = ?`, aliasRouteID).Scan(&rollbackRef); err != nil {
-		t.Fatalf("query alias rollback ref: %v", err)
-	}
-	if !strings.Contains(rollbackRef, aliasRouteID) || !strings.Contains(rollbackRef, "disabled") {
-		t.Fatalf("rollback ref = %q, want disable ref for %s", rollbackRef, aliasRouteID)
 	}
 }
 

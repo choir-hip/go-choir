@@ -65,7 +65,7 @@ const (
 )
 
 // dataImageSizeMB is the minimum mutable data disk size for each VM (16 GB).
-// Worker self-development runs need room for VText/Dolt state, a candidate repo
+// Worker self-development runs need room for Texture/Dolt state, a candidate repo
 // checkout, Go module/build caches, verifier artifacts, and exported patches.
 const dataImageSizeMB = 16384
 
@@ -633,7 +633,7 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 				}
 			} else {
 				// Create a sparse ext4 data image for mutable state. This must
-				// be large enough for desktop files, VText artifacts, and generated
+				// be large enough for desktop files, Texture artifacts, and generated
 				// proof outputs; tiny images make "persistent" desktops unusable.
 				if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
 					return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
@@ -2181,7 +2181,7 @@ func tapReachableHostServicePorts() []string {
 		"8083", // vmctl
 		"8084", // gateway
 		"8085", // host sandbox runtime lifecycle evidence
-		"8086", // platformd durable VText verification
+		"8086", // platformd durable Texture verification
 		"8087", // maild draft persistence
 		"8787", // source service retrieval
 	}

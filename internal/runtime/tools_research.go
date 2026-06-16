@@ -315,7 +315,7 @@ func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "source_search",
-		Description: "Search the configured Choir Source Service ledger for durable source items. Researcher-only: use results as untrusted source evidence, then checkpoint source IDs, item IDs, hashes, caveats, and unresolved gaps for VText.",
+		Description: "Search the configured Choir Source Service ledger for durable source items. Researcher-only: use results as untrusted source evidence, then checkpoint source IDs, item IDs, hashes, caveats, and unresolved gaps for Texture.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
@@ -358,7 +358,7 @@ func newImportURLContentTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "import_url_content",
-		Description: "Fetch a URL into the shared content substrate, extracting readable text and provenance for later VText ingestion or display apps.",
+		Description: "Fetch a URL into the shared content substrate, extracting readable text and provenance for later Texture ingestion or display apps.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"url":   map[string]any{"type": "string"},
 			"query": map[string]any{"type": "string"},
@@ -1054,7 +1054,7 @@ func newSearchWireCorpusTool(rt *Runtime) Tool {
 	}
 	return Tool{
 		Name:        "search_wire_corpus",
-		Description: "Search the existing VText article corpus by topic, title, or keywords. Use before creating new articles to find existing coverage. Returns matching documents with titles, IDs, and snippets. Always search before spawning VText to avoid duplicate articles.",
+		Description: "Search the existing Texture article corpus by topic, title, or keywords. Use before creating new articles to find existing coverage. Returns matching documents with titles, IDs, and snippets. Always search before spawning Texture to avoid duplicate articles.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results (default 10)"},

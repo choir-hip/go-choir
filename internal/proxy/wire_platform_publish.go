@@ -73,7 +73,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		doc = sandboxTextureDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
 		rev = sandboxTextureRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, Citations: req.Citations, Metadata: req.Metadata}
 	} else {
-		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
+		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/texture/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
 			log.Printf("proxy: wire publish fetch document: %v", err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire document"})
 			return
@@ -82,7 +82,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "document does not belong to platform owner"})
 			return
 		}
-		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/vtext/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
+		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/texture/revisions/"+url.PathEscape(req.RevisionID), platformOwner, &rev); err != nil {
 			log.Printf("proxy: wire publish fetch revision: %v", err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load wire revision"})
 			return

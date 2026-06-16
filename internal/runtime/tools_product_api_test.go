@@ -80,22 +80,3 @@ func TestProductAPIRequestToolRefusesInternalAndNonSuperCalls(t *testing.T) {
 		t.Fatalf("non-super error = %v, want profile refusal", err)
 	}
 }
-
-func TestProductAPIRequestToolRefusesLegacyVTextRoute(t *testing.T) {
-	rt, _ := testAPISetup(t)
-	tool := newProductAPIRequestTool(rt)
-	run := &types.RunRecord{
-		RunID:        "run-product-api-vtext-refuse",
-		AgentID:      "agent-super-product-api-vtext-refuse",
-		OwnerID:      "user-product-api",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
-	}
-
-	if _, err := tool.Func(WithToolExecutionContext(context.Background(), run), json.RawMessage(`{
-		"method":"GET",
-		"path":"/api/vtext/documents"
-	}`)); err == nil || !strings.Contains(err.Error(), "not in the product-path allowlist") {
-		t.Fatalf("legacy vtext route error = %v, want allowlist refusal", err)
-	}
-}

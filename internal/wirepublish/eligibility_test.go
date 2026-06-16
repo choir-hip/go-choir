@@ -22,7 +22,7 @@ func TestEligibleForAutonomousPublishRequiresCanonicalArticleRevision(t *testing
 		Content:    "# Story\n\nMADRID -- Officials confirmed the route change.",
 		Metadata:   meta,
 	}
-	doc := types.Document{DocID: "doc-1", OwnerID: owner, Title: "Story.vtext"}
+	doc := types.Document{DocID: "doc-1", OwnerID: owner, Title: "Story.texture"}
 	rec := &types.RunRecord{
 		OwnerID: owner,
 		RunID:   "run-1",
@@ -46,10 +46,10 @@ func TestEligibleForAutonomousPublishRequiresCanonicalArticleRevision(t *testing
 	}
 }
 
-func TestEligibleForAutonomousPublishAcceptsLegacyEditVTextSource(t *testing.T) {
+func TestEligibleForAutonomousPublishAcceptsLegacyEditTextureSource(t *testing.T) {
 	owner := PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                     "edit_vtext", // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+		"source":                     "edit_texture", // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
 		"revision_role":              RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-legacy",
 	})
@@ -60,7 +60,7 @@ func TestEligibleForAutonomousPublishAcceptsLegacyEditVTextSource(t *testing.T) 
 		Content:    "# Story\n\nMADRID -- Officials confirmed the route change.",
 		Metadata:   meta,
 	}
-	doc := types.Document{DocID: "doc-legacy", OwnerID: owner, Title: "Story.vtext"}
+	doc := types.Document{DocID: "doc-legacy", OwnerID: owner, Title: "Story.texture"}
 	rec := &types.RunRecord{
 		OwnerID: owner,
 		RunID:   "run-legacy",
@@ -79,7 +79,7 @@ func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *test
 		"source":                     "edit_texture",
 		"revision_role":              RevisionRoleInput,
 		"artifact_kind":              "source_brief",
-		"vtext_edit_kind":            "vtext_edit",
+		"texture_edit_kind":          "texture_edit",
 		"ingestion_handoff_cycle_id": "cycle-worker-1",
 	})
 	rev := types.Revision{
@@ -89,8 +89,8 @@ func TestEligibleForAutonomousPublishAcceptsWorkerIntegrationArticleEdit(t *test
 		Content:    "# Story\n\nMADRID -- Officials confirmed the route change.",
 		Metadata:   meta,
 	}
-	doc := types.Document{DocID: "doc-worker", OwnerID: owner, Title: "Story.vtext"}
-	for _, taskType := range []string{textureAgentRevisionTaskType, legacyVTextAgentRevisionTaskType} {
+	doc := types.Document{DocID: "doc-worker", OwnerID: owner, Title: "Story.texture"}
+	for _, taskType := range []string{textureAgentRevisionTaskType} {
 		t.Run(taskType, func(t *testing.T) {
 			rec := &types.RunRecord{
 				OwnerID: owner,
@@ -114,7 +114,7 @@ func TestEligibleForAutonomousPublishStagingRevisionFixture(t *testing.T) {
 		"source":                     "edit_texture",
 		"revision_role":              RevisionRoleInput,
 		"artifact_kind":              "source_brief",
-		"vtext_edit_kind":            "vtext_edit",
+		"texture_edit_kind":          "texture_edit",
 		"ingestion_handoff_cycle_id": "cycle_b692f2803101f30af0a1bcbb",
 	})
 	rev := types.Revision{
@@ -124,7 +124,7 @@ func TestEligibleForAutonomousPublishStagingRevisionFixture(t *testing.T) {
 		Content:    "# Nuclear and Natural Gas Are Teaming Up to Power the AI Data Center Boom\n\nThe electricity demands",
 		Metadata:   meta,
 	}
-	doc := types.Document{DocID: rev.DocID, OwnerID: owner, Title: "Nuclear.vtext"}
+	doc := types.Document{DocID: rev.DocID, OwnerID: owner, Title: "Nuclear.texture"}
 	rec := &types.RunRecord{
 		OwnerID: owner,
 		Metadata: map[string]any{
@@ -171,7 +171,7 @@ func TestEligibleForAutonomousPublishAcceptsRevisionLineageWithoutRunMetadata(t 
 	meta, _ := json.Marshal(map[string]any{
 		"source":                      "edit_texture",
 		"revision_role":               RevisionRoleCanonical,
-		"vtext_edit_kind":             "vtext_edit",
+		"texture_edit_kind":           "texture_edit",
 		"source_network_cycle_id":     "cycle-live-1",
 		"source_network_request_kind": "processor",
 	})
@@ -182,7 +182,7 @@ func TestEligibleForAutonomousPublishAcceptsRevisionLineageWithoutRunMetadata(t 
 		Content:    "# Story\n\nReal publishable article body.",
 		Metadata:   meta,
 	}
-	doc := types.Document{DocID: rev.DocID, OwnerID: owner, Title: "Live.vtext"}
+	doc := types.Document{DocID: rev.DocID, OwnerID: owner, Title: "Live.texture"}
 	rec := &types.RunRecord{OwnerID: owner, Metadata: map[string]any{"request_intent": "integrate_worker_findings"}}
 	if !EligibleForAutonomousPublish(doc, rev, rec, owner) {
 		t.Fatal("revision lineage should make live worker-integration article publishable")

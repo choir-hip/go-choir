@@ -11,7 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestRuntimeSynthesizesVTextBlockerWhenSuperFailsBeforeDelegation(t *testing.T) {
+func TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	ownerID := "user-super-fallback"
@@ -36,8 +36,8 @@ func TestRuntimeSynthesizesVTextBlockerWhenSuperFailsBeforeDelegation(t *testing
 			runMetadataAgentID:      "super:" + ownerID,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-super-before-delegation",
-			"requested_by_agent_id": "vtext:" + docID,
-			"requested_by_profile":  AgentProfileVText,
+			"requested_by_agent_id": "texture:" + docID,
+			"requested_by_profile":  AgentProfileTexture,
 		},
 	}
 	if err := s.CreateRun(ctx, *superRun); err != nil {
@@ -86,7 +86,7 @@ func TestRuntimeSynthesizesVTextBlockerWhenSuperFailsBeforeDelegation(t *testing
 		t.Fatalf("worker updates = %d, want 1", len(updates))
 	}
 	update := updates[0]
-	if update.Kind != "blocker" || update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+	if update.Kind != "blocker" || update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
 		t.Fatalf("update kind/target/channel = %+v", update)
 	}
 	if !strings.Contains(strings.Join(update.Findings, "\n"), "No worker lease/delegation tool result was recorded") {
@@ -122,8 +122,8 @@ func TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation(t *t
 			runMetadataAgentID:      "super:" + ownerID,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-super-after-start-delegation",
-			"requested_by_agent_id": "vtext:" + docID,
-			"requested_by_profile":  AgentProfileVText,
+			"requested_by_agent_id": "texture:" + docID,
+			"requested_by_profile":  AgentProfileTexture,
 		},
 	}
 	if err := s.CreateRun(ctx, *superRun); err != nil {

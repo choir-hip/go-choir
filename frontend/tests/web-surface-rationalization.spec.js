@@ -155,7 +155,7 @@ test('Apps & Changes replaces manual candidate desktop entry points', async ({ d
   const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
   await expect(store.locator('[data-change-card]')).toHaveCount(2);
-  await expect(store.locator('[data-change-open-vtext-report]')).toBeVisible();
+  await expect(store.locator('[data-change-open-texture-report]')).toBeVisible();
   await expect(store.locator('[data-change-preview-empty]')).toBeVisible();
   await expect(store.locator('[data-candidate-desktop-input]')).toHaveCount(0);
   await expect(store.locator('[data-change-card][data-change-id="pkg-human-proof"]')).toHaveAttribute('data-human-proof-state', 'human_reviewable');
@@ -214,7 +214,7 @@ test('Apps & Changes exposes rollback-only removal honestly', async ({ desktopSe
     package_id: pkg.package_id,
     supports_human_review: true,
     evidence_refs: [
-      { ref_id: 'narrative-proof', kind: 'vtext', summary: 'owner-readable narrative' },
+      { ref_id: 'narrative-proof', kind: 'texture', summary: 'owner-readable narrative' },
       { ref_id: 'screenshot-proof', kind: 'screenshot', summary: 'candidate behavior screenshot.png' },
     ],
     rollback_refs: [
@@ -370,9 +370,9 @@ test('Apps & Changes marks package-scoped machine receipts as insufficient for h
   await expect(store.locator('[data-change-acceptance-summary]')).toContainText('Try this change before Trace');
 });
 
-test('Apps & Changes opens existing VText narratives instead of generating claim reports', async ({ desktopSession }) => {
+test('Apps & Changes opens existing Texture narratives instead of generating claim reports', async ({ desktopSession }) => {
   const { page } = desktopSession;
-  const pkg = packageRecord({ package_id: 'pkg-vtext-open' });
+  const pkg = packageRecord({ package_id: 'pkg-texture-open' });
   const now = '2026-05-21T00:00:00.000Z';
   let createdRevision = false;
   await routeAppsChanges(page, { packages: [pkg] });
@@ -450,17 +450,17 @@ test('Apps & Changes opens existing VText narratives instead of generating claim
       });
       return;
     }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected vtext route' }) });
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'unexpected texture route' }) });
   });
 
   await openStartApp(page, 'apps-changes');
   const store = page.locator('[data-apps-changes-app]').last();
   await expect(store).toBeVisible({ timeout: 10_000 });
-  await store.locator('[data-change-open-vtext-report]').click();
+  await store.locator('[data-change-open-texture-report]').click();
 
-  const vtext = page.locator('[data-texture-editor]').last();
-  await expect(vtext).toBeVisible({ timeout: 10_000 });
-  await expect(vtext.locator('[data-texture-editor-area]')).toContainText('Real narrative', { timeout: 20_000 });
+  const texture = page.locator('[data-texture-editor]').last();
+  await expect(texture).toBeVisible({ timeout: 10_000 });
+  await expect(texture.locator('[data-texture-editor-area]')).toContainText('Real narrative', { timeout: 20_000 });
   expect(createdRevision).toBe(false);
 });
 
@@ -559,7 +559,7 @@ test('Web Lens API calls preserve candidate desktop selector', async ({ desktopS
   expect(capabilityRequests[0].searchParams.get('desktop_id')).toBe('branch-preview');
 });
 
-test('Web Lens imports Obscura semantic snapshot into VText without iframe rendering', async ({ desktopSession }) => {
+test('Web Lens imports Obscura semantic snapshot into Texture without iframe rendering', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const browserRequests = [];
   const contentCreates = [];
@@ -683,18 +683,18 @@ test('Web Lens imports Obscura semantic snapshot into VText without iframe rende
     timeout: 10_000,
   });
   await expect(webLens.locator('[data-browser-iframe]')).toHaveCount(0);
-  await expect(webLens.locator('[data-browser-import-vtext]')).toBeVisible();
+  await expect(webLens.locator('[data-browser-import-texture]')).toBeVisible();
 
-  await webLens.locator('[data-browser-import-vtext]').click();
-  const vtext = page.locator('[data-texture-editor]').last();
-  await expect(vtext).toBeVisible({ timeout: 10_000 });
-  await expect(vtext.locator('[data-texture-editor-area]')).toContainText('Web Lens import', {
+  await webLens.locator('[data-browser-import-texture]').click();
+  const texture = page.locator('[data-texture-editor]').last();
+  await expect(texture).toBeVisible({ timeout: 10_000 });
+  await expect(texture.locator('[data-texture-editor-area]')).toContainText('Web Lens import', {
     timeout: 20_000,
   });
-  await expect(vtext.locator('[data-texture-editor-area]')).toContainText('Example Domain', {
+  await expect(texture.locator('[data-texture-editor-area]')).toContainText('Example Domain', {
     timeout: 20_000,
   });
-  await expect(vtext.locator('[data-texture-editor-area]')).toContainText(`Content item: ${contentID}`, {
+  await expect(texture.locator('[data-texture-editor-area]')).toContainText(`Content item: ${contentID}`, {
     timeout: 20_000,
   });
 

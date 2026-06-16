@@ -252,11 +252,11 @@ func TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen(t *testing.T) {
 	}
 }
 
-func TestProcessorVTextRouteRequiresExplicitSourceItemsForMultiItemRequest(t *testing.T) {
+func TestProcessorTextureRouteRequiresExplicitSourceItemsForMultiItemRequest(t *testing.T) {
 	ctx := context.Background()
 	rt, _ := testRuntime(t)
 
-	run, err := rt.StartRunWithMetadata(ctx, "route a story to vtext", "user-alice", map[string]any{
+	run, err := rt.StartRunWithMetadata(ctx, "route a story to texture", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileProcessor,
 		runMetadataAgentRole:    AgentProfileProcessor,
 		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
@@ -266,15 +266,15 @@ func TestProcessorVTextRouteRequiresExplicitSourceItemsForMultiItemRequest(t *te
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
 	}
-	_, err = rt.ensureCoagentVTextRevisionRoute(ctx, run, coagentVTextRouteRequest{
+	_, err = rt.ensureCoagentTextureRevisionRoute(ctx, run, coagentTextureRouteRequest{
 		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileVText,
-		Profile:       AgentProfileVText,
+		Role:          AgentProfileTexture,
+		Profile:       AgentProfileTexture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 	})
 	if err == nil || err.Error() != "source_item_ids required when processor request contains 2 source items" {
-		t.Fatalf("ensure processor vtext route error = %v, want explicit source_item_ids requirement", err)
+		t.Fatalf("ensure processor texture route error = %v, want explicit source_item_ids requirement", err)
 	}
 }
 
@@ -282,7 +282,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 
-	run, err := rt.StartRunWithMetadata(ctx, "route a story to vtext", "user-alice", map[string]any{
+	run, err := rt.StartRunWithMetadata(ctx, "route a story to texture", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileProcessor,
 		runMetadataAgentRole:    AgentProfileProcessor,
 		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
@@ -292,16 +292,16 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
 	}
-	route, err := rt.ensureCoagentVTextRevisionRoute(ctx, run, coagentVTextRouteRequest{
+	route, err := rt.ensureCoagentTextureRevisionRoute(ctx, run, coagentTextureRouteRequest{
 		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileVText,
-		Profile:       AgentProfileVText,
+		Role:          AgentProfileTexture,
+		Profile:       AgentProfileTexture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 		SourceItemIDs: []string{"source-item-1"},
 	})
 	if err != nil {
-		t.Fatalf("ensure processor vtext route: %v", err)
+		t.Fatalf("ensure processor texture route: %v", err)
 	}
 
 	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID))
@@ -345,7 +345,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 	if err != nil {
 		t.Fatalf("find source-item-1 work item: %v", err)
 	}
-	if !found || sourceItem1.Status != types.WorkItemCompleted || sourceItem1.Details["decision"] != "opened_vtext" || sourceItem1.Details["story_doc_id"] != route.DocID {
+	if !found || sourceItem1.Status != types.WorkItemCompleted || sourceItem1.Details["decision"] != "opened_texture" || sourceItem1.Details["story_doc_id"] != route.DocID {
 		t.Fatalf("source-item-1 decision item = %+v", sourceItem1)
 	}
 

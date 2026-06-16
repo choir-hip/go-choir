@@ -139,7 +139,7 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 		t.Fatalf("public url: got %q", resp.PublicURL)
 	}
 
-	legacyReq := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/vtext/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2"}`))
+	legacyReq := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2"}`))
 	legacyReq.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
 	legacyW := httptest.NewRecorder()
 	h.HandleAPI(legacyW, legacyReq)

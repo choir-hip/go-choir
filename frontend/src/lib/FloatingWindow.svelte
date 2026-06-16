@@ -356,7 +356,7 @@
     on:pointerdown={handleDragStart}
     on:dblclick={handleTitlebarDoubleClick}
   >
-    <span class="titlvtext">{title}</span>
+    <span class="titltexture">{title}</span>
     <div class="window-controls">
       <button
         class="ctrl-btn minimize-btn"
@@ -484,7 +484,7 @@
     touch-action: none;
   }
 
-  .titlvtext {
+  .titltexture {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--choir-text-accent);
@@ -539,7 +539,7 @@
   }
 
   .window[data-window-app-id='podcast'] .window-content,
-  .window[data-window-app-id='vtext'] .window-content,
+  .window[data-window-app-id='texture'] .window-content,
   .window[data-window-app-id='image'] .window-content,
   .window[data-window-app-id='audio'] .window-content,
   .window[data-window-app-id='video'] .window-content,

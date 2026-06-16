@@ -148,7 +148,7 @@ func sortedItemStrings(items []sources.Item, value func(sources.Item) string) []
 }
 
 func processorHandoffPrompt(key string, items []sources.Item) string {
-	return fmt.Sprintf("Processor %s: ingest %d SourceItems by handle, update live understanding, preserve unresolved questions/watch items, and spawn VText agents when a story should be opened or revised.", key, len(items))
+	return fmt.Sprintf("Processor %s: ingest %d SourceItems by handle, update live understanding, preserve unresolved questions/watch items, and spawn Texture agents when a story should be opened or revised.", key, len(items))
 }
 
 func safeKeyPart(value string) string {

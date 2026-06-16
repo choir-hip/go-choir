@@ -21,7 +21,7 @@ type recordWireProcessorDecisionArgs struct {
 func newRecordWireProcessorDecisionTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "record_wire_processor_decision",
-		Description: "Record a typed non-publication decision for the current Universal Wire processor request. Use this when no VText story should open, so the request does not disappear behind terminal run state or a prose-only checkpoint.",
+		Description: "Record a typed non-publication decision for the current Universal Wire processor request. Use this when no Texture story should open, so the request does not disappear behind terminal run state or a prose-only checkpoint.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"decision": map[string]any{
 				"type": "string",
@@ -43,7 +43,7 @@ func newRecordWireProcessorDecisionTool(rt *Runtime) Tool {
 			},
 			"covered_by_doc_id": map[string]any{
 				"type":        "string",
-				"description": "For decision=already_covered: the published VText document id that already covers these source items.",
+				"description": "For decision=already_covered: the published Texture document id that already covers these source items.",
 			},
 		}, []string{"decision", "summary"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {

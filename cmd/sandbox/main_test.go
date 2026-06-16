@@ -19,7 +19,7 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 		ProviderTimeout:     7 * time.Second,
 		SupervisionInterval: 3 * time.Second,
 		ResearcherCount:     2,
-		VTextWakeDebounce:   250 * time.Millisecond,
+		TextureWakeDebounce: 250 * time.Millisecond,
 		VmctlURL:            "http://10.200.60.1:8083",
 		MaildURL:            "http://10.200.60.1:8087",
 		LLMProvider:         "fireworks",

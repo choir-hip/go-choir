@@ -18,7 +18,7 @@ const (
 type TrajectoryKind string
 
 const (
-	// TrajectoryKindDocument covers prompt-bar/conductor → vtext → worker
+	// TrajectoryKindDocument covers prompt-bar/conductor → texture → worker
 	// chains and email appagent flows anchored on a document.
 	TrajectoryKindDocument TrajectoryKind = "document"
 	// TrajectoryKindPublication covers processor/wire publication cycles.
@@ -42,7 +42,7 @@ type SettlementRule struct {
 }
 
 // TrajectoryRecord is the durable causality object: the unit that spans
-// prompt-bar → conductor → vtext → workers → revisions (or a publication
+// prompt-bar → conductor → texture → workers → revisions (or a publication
 // cycle), replacing parent/child run trees as the control model. The ID is
 // the same trajectory_id the runtime already threads through run metadata,
 // events, channel messages, and worker updates, so existing surfaces join

@@ -624,23 +624,6 @@ func TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke(t *testing.T
 	}
 }
 
-func TestRunAcceptanceLegacyVTextOpenedCheckpointRemainsReadable(t *testing.T) {
-	checkpoints := []types.RunAcceptanceCheckpoint{
-		{Kind: "submitted", State: "passed"},
-		{Kind: "vtext_opened", State: "passed"},
-	}
-	level, state := acceptanceLevelAndState(checkpoints)
-	if level != types.RunAcceptanceStagingSmokeLevel || state != types.RunAcceptanceBlocked {
-		t.Fatalf("legacy vtext_opened acceptance = %s/%s, want staging-smoke-level/blocked", level, state)
-	}
-	checks := buildAcceptanceInvariantChecks(types.RunAcceptanceRecord{Checkpoints: checkpoints})
-	for _, check := range checks {
-		if check.Name == "product_path_observed" && check.State != "passed" {
-			t.Fatalf("legacy vtext_opened product_path_observed = %+v, want passed", check)
-		}
-	}
-}
-
 func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
@@ -1038,7 +1021,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
 			Prompt:       "Publish one reviewable AppChangePackage.",
-			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-source-package"}`,
+			Result:       `{"action":"open_app","app":"texture","doc_id":"doc-source-package"}`,
 			CreatedAt:    now,
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
@@ -1051,12 +1034,12 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-vtext-source-package",
-			AgentID:      "agent-vtext-source-package",
+			RunID:        "run-texture-source-package",
+			AgentID:      "agent-texture-source-package",
 			ChannelID:    "channel-source-package",
 			ParentRunID:  "run-conductor-source-package",
-			AgentProfile: AgentProfileVText,
-			AgentRole:    AgentProfileVText,
+			AgentProfile: AgentProfileTexture,
+			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1065,8 +1048,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    now.Add(4 * time.Second),
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileVText,
-				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataAgentProfile: AgentProfileTexture,
+				runMetadataAgentRole:    AgentProfileTexture,
 				runMetadataTrajectoryID: "traj-source-package",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1075,7 +1058,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-source-package",
 			AgentID:      "agent-super-source-package",
 			ChannelID:    "channel-source-package",
-			ParentRunID:  "run-vtext-source-package",
+			ParentRunID:  "run-texture-source-package",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1111,9 +1094,9 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
 	})
 	appendAcceptanceEvent(t, rt, types.EventRecord{
-		EventID:      "event-vtext-source-package",
-		RunID:        "run-vtext-source-package",
-		AgentID:      "agent-vtext-source-package",
+		EventID:      "event-texture-source-package",
+		RunID:        "run-texture-source-package",
+		AgentID:      "agent-texture-source-package",
 		ChannelID:    "channel-source-package",
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-source-package",
@@ -1121,7 +1104,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-source-package","revision_id":"rev-source-package"}`),
 	})
-	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-source-package", "run-vtext-source-package", "agent-vtext-source-package", "traj-source-package", "channel-source-package", now.Add(5*time.Second), "request_super_execution", map[string]any{
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-source-package", "run-texture-source-package", "agent-texture-source-package", "traj-source-package", "channel-source-package", now.Add(5*time.Second), "request_super_execution", map[string]any{
 		"agent_id": "agent-super-source-package",
 		"loop_id":  "run-super-source-package",
 		"state":    "running",
@@ -1194,7 +1177,7 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
 			Prompt:       "Prove async worker supervision without publishing a package.",
-			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-runtime-supervision"}`,
+			Result:       `{"action":"open_app","app":"texture","doc_id":"doc-runtime-supervision"}`,
 			CreatedAt:    now,
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
@@ -1207,12 +1190,12 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-vtext-runtime-supervision",
-			AgentID:      "agent-vtext-runtime-supervision",
+			RunID:        "run-texture-runtime-supervision",
+			AgentID:      "agent-texture-runtime-supervision",
 			ChannelID:    "channel-runtime-supervision",
 			ParentRunID:  "run-conductor-runtime-supervision",
-			AgentProfile: AgentProfileVText,
-			AgentRole:    AgentProfileVText,
+			AgentProfile: AgentProfileTexture,
+			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1221,8 +1204,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    now.Add(4 * time.Second),
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileVText,
-				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataAgentProfile: AgentProfileTexture,
+				runMetadataAgentRole:    AgentProfileTexture,
 				runMetadataTrajectoryID: "traj-runtime-supervision",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1231,13 +1214,13 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-runtime-supervision",
 			AgentID:      "agent-super-runtime-supervision",
 			ChannelID:    "channel-runtime-supervision",
-			ParentRunID:  "run-vtext-runtime-supervision",
+			ParentRunID:  "run-texture-runtime-supervision",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and collect a VText worker update. Do not publish an AppChangePackage.",
+			Prompt:       "Delegate a worker and collect a Texture worker update. Do not publish an AppChangePackage.",
 			CreatedAt:    now.Add(5 * time.Second),
 			UpdatedAt:    now.Add(12 * time.Second),
 			FinishedAt:   &finishedAt,
@@ -1267,9 +1250,9 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
 	})
 	appendAcceptanceEvent(t, rt, types.EventRecord{
-		EventID:      "event-vtext-runtime-supervision",
-		RunID:        "run-vtext-runtime-supervision",
-		AgentID:      "agent-vtext-runtime-supervision",
+		EventID:      "event-texture-runtime-supervision",
+		RunID:        "run-texture-runtime-supervision",
+		AgentID:      "agent-texture-runtime-supervision",
 		ChannelID:    "channel-runtime-supervision",
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-runtime-supervision",
@@ -1277,7 +1260,7 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-runtime-supervision","revision_id":"rev-runtime-supervision"}`),
 	})
-	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-runtime-supervision", "run-vtext-runtime-supervision", "agent-vtext-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(5*time.Second), "request_super_execution", map[string]any{
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-runtime-supervision", "run-texture-runtime-supervision", "agent-texture-runtime-supervision", "traj-runtime-supervision", "channel-runtime-supervision", now.Add(5*time.Second), "request_super_execution", map[string]any{
 		"agent_id": "agent-super-runtime-supervision",
 		"loop_id":  "run-super-runtime-supervision",
 		"state":    "running",
@@ -1358,7 +1341,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
 			Prompt:       "Build a tiny Choir-in-Choir verifier patch.",
-			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-acceptance"}`,
+			Result:       `{"action":"open_app","app":"texture","doc_id":"doc-acceptance"}`,
 			CreatedAt:    now,
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
@@ -1371,12 +1354,12 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			},
 		},
 		{
-			RunID:        "run-vtext-acceptance",
-			AgentID:      "agent-vtext-acceptance",
+			RunID:        "run-texture-acceptance",
+			AgentID:      "agent-texture-acceptance",
 			ChannelID:    "channel-acceptance",
 			ParentRunID:  "run-conductor-acceptance",
-			AgentProfile: AgentProfileVText,
-			AgentRole:    AgentProfileVText,
+			AgentProfile: AgentProfileTexture,
+			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1385,8 +1368,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			UpdatedAt:    now.Add(4 * time.Second),
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileVText,
-				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataAgentProfile: AgentProfileTexture,
+				runMetadataAgentRole:    AgentProfileTexture,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1395,7 +1378,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			RunID:        "run-super-acceptance",
 			AgentID:      "agent-super-acceptance",
 			ChannelID:    "channel-acceptance",
-			ParentRunID:  "run-vtext-acceptance",
+			ParentRunID:  "run-texture-acceptance",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1431,9 +1414,9 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
 	})
 	appendAcceptanceEvent(t, rt, types.EventRecord{
-		EventID:      "event-vtext-acceptance",
-		RunID:        "run-vtext-acceptance",
-		AgentID:      "agent-vtext-acceptance",
+		EventID:      "event-texture-acceptance",
+		RunID:        "run-texture-acceptance",
+		AgentID:      "agent-texture-acceptance",
 		ChannelID:    "channel-acceptance",
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-acceptance",
@@ -1441,7 +1424,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-acceptance","revision_id":"rev-1"}`),
 	})
-	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-vtext-acceptance", "agent-vtext-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
+	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-texture-acceptance", "agent-texture-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
 		"agent_id": "agent-super-acceptance",
 		"loop_id":  "run-super-acceptance",
 		"state":    "running",
@@ -1543,7 +1526,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
 			Prompt:       "Build a tiny Choir-in-Choir verifier patch.",
-			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-acceptance"}`,
+			Result:       `{"action":"open_app","app":"texture","doc_id":"doc-acceptance"}`,
 			CreatedAt:    now,
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
@@ -1556,12 +1539,12 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-vtext-acceptance",
-			AgentID:      "agent-vtext-acceptance",
+			RunID:        "run-texture-acceptance",
+			AgentID:      "agent-texture-acceptance",
 			ChannelID:    "channel-acceptance",
 			ParentRunID:  "run-conductor-acceptance",
-			AgentProfile: AgentProfileVText,
-			AgentRole:    AgentProfileVText,
+			AgentProfile: AgentProfileTexture,
+			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1570,8 +1553,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    now.Add(4 * time.Second),
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileVText,
-				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataAgentProfile: AgentProfileTexture,
+				runMetadataAgentRole:    AgentProfileTexture,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1580,7 +1563,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-acceptance",
 			AgentID:      "agent-super-acceptance",
 			ChannelID:    "channel-acceptance",
-			ParentRunID:  "run-vtext-acceptance",
+			ParentRunID:  "run-texture-acceptance",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1616,9 +1599,9 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
 	})
 	appendAcceptanceEvent(t, rt, types.EventRecord{
-		EventID:      "event-vtext-acceptance",
-		RunID:        "run-vtext-acceptance",
-		AgentID:      "agent-vtext-acceptance",
+		EventID:      "event-texture-acceptance",
+		RunID:        "run-texture-acceptance",
+		AgentID:      "agent-texture-acceptance",
 		ChannelID:    "channel-acceptance",
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-acceptance",
@@ -1626,7 +1609,7 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-acceptance","revision_id":"rev-1"}`),
 	})
-	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-vtext-acceptance", "agent-vtext-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
+	appendAcceptanceToolResult(t, rt, "event-super-acceptance", "run-texture-acceptance", "agent-texture-acceptance", now.Add(5*time.Second), "request_super_execution", map[string]any{
 		"agent_id": "agent-super-acceptance",
 		"loop_id":  "run-super-acceptance",
 		"state":    "running",
@@ -1662,7 +1645,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
 			Prompt:       "Build a tiny Choir-in-Choir verifier patch.",
-			Result:       `{"action":"open_app","app":"vtext","doc_id":"doc-pending-delegate"}`,
+			Result:       `{"action":"open_app","app":"texture","doc_id":"doc-pending-delegate"}`,
 			CreatedAt:    now,
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
@@ -1675,12 +1658,12 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-vtext-pending-delegate",
-			AgentID:      "agent-vtext-pending-delegate",
+			RunID:        "run-texture-pending-delegate",
+			AgentID:      "agent-texture-pending-delegate",
 			ChannelID:    "channel-pending-delegate",
 			ParentRunID:  "run-conductor-pending-delegate",
-			AgentProfile: AgentProfileVText,
-			AgentRole:    AgentProfileVText,
+			AgentProfile: AgentProfileTexture,
+			AgentRole:    AgentProfileTexture,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1689,8 +1672,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    now.Add(4 * time.Second),
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileVText,
-				runMetadataAgentRole:    AgentProfileVText,
+				runMetadataAgentProfile: AgentProfileTexture,
+				runMetadataAgentRole:    AgentProfileTexture,
 				runMetadataTrajectoryID: "traj-pending-delegate",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1699,7 +1682,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-super-pending-delegate",
 			AgentID:      "agent-super-pending-delegate",
 			ChannelID:    "channel-pending-delegate",
-			ParentRunID:  "run-vtext-pending-delegate",
+			ParentRunID:  "run-texture-pending-delegate",
 			AgentProfile: AgentProfileSuper,
 			AgentRole:    AgentProfileSuper,
 			OwnerID:      "user-alice",
@@ -1734,9 +1717,9 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 		Payload:      json.RawMessage(`{"input_source":"prompt_bar"}`),
 	})
 	appendAcceptanceEvent(t, rt, types.EventRecord{
-		EventID:      "event-vtext-pending-delegate",
-		RunID:        "run-vtext-pending-delegate",
-		AgentID:      "agent-vtext-pending-delegate",
+		EventID:      "event-texture-pending-delegate",
+		RunID:        "run-texture-pending-delegate",
+		AgentID:      "agent-texture-pending-delegate",
 		ChannelID:    "channel-pending-delegate",
 		OwnerID:      "user-alice",
 		TrajectoryID: "traj-pending-delegate",
@@ -1744,7 +1727,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      json.RawMessage(`{"doc_id":"doc-pending-delegate","revision_id":"rev-1"}`),
 	})
-	appendAcceptanceToolResult(t, rt, "event-super-pending-delegate", "run-vtext-pending-delegate", "agent-vtext-pending-delegate", now.Add(5*time.Second), "request_super_execution", map[string]any{
+	appendAcceptanceToolResult(t, rt, "event-super-pending-delegate", "run-texture-pending-delegate", "agent-texture-pending-delegate", now.Add(5*time.Second), "request_super_execution", map[string]any{
 		"agent_id": "agent-super-pending-delegate",
 		"loop_id":  "run-super-pending-delegate",
 		"state":    "running",
@@ -2619,8 +2602,8 @@ func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
 		{http.MethodGet, "/api/agent/topology", ""},
 		{http.MethodGet, "/api/events", ""},
 		{http.MethodGet, "/api/prompts", ""},
-		{http.MethodPost, "/api/test/vtext/research-findings", `{"doc_id":"doc","finding_id":"f"}`},
-		{http.MethodPost, "/api/vtext/documents/doc-1/agent-revision", `{"intent":"revise"}`},
+		{http.MethodPost, "/api/test/texture/research-findings", `{"doc_id":"doc","finding_id":"f"}`},
+		{http.MethodPost, "/api/texture/documents/doc-1/agent-revision", `{"intent":"revise"}`},
 	}
 
 	for _, tc := range cases {
@@ -2815,7 +2798,7 @@ func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolut
 	rt, handler := testAPISetup(t)
 	t.Setenv("RUNTIME_MAX_PROCESSOR_RUNS", "1")
 
-	rec, err := rt.createRunWithMetadata(context.Background(), "route a story to vtext", "user-alice", map[string]any{
+	rec, err := rt.createRunWithMetadata(context.Background(), "route a story to texture", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileProcessor,
 		runMetadataAgentRole:    AgentProfileProcessor,
 		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
@@ -2825,15 +2808,15 @@ func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolut
 	if err != nil {
 		t.Fatalf("create processor run: %v", err)
 	}
-	if _, err := rt.ensureCoagentVTextRevisionRoute(context.Background(), rec, coagentVTextRouteRequest{
+	if _, err := rt.ensureCoagentTextureRevisionRoute(context.Background(), rec, coagentTextureRouteRequest{
 		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileVText,
-		Profile:       AgentProfileVText,
+		Role:          AgentProfileTexture,
+		Profile:       AgentProfileTexture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 		SourceItemIDs: []string{"source-item-1"},
 	}); err != nil {
-		t.Fatalf("ensure processor vtext route: %v", err)
+		t.Fatalf("ensure processor texture route: %v", err)
 	}
 
 	requestItem, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", rec.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(rec.TrajectoryID))
@@ -3087,7 +3070,7 @@ func TestHandleRunSubmissionPreservesMetadata(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
 
-	body := `{"prompt":"route this into conductor","metadata":{"agent_profile":"conductor","agent_role":"conductor","input_source":"prompt_bar","requested_app":"vtext"}}`
+	body := `{"prompt":"route this into conductor","metadata":{"agent_profile":"conductor","agent_role":"conductor","input_source":"prompt_bar","requested_app":"texture"}}`
 	req := authenticatedRequest(http.MethodPost, "/api/agent/loop", body, "user-alice")
 	w := httptest.NewRecorder()
 
@@ -3116,8 +3099,8 @@ func TestHandleRunSubmissionPreservesMetadata(t *testing.T) {
 	if got, _ := rec.Metadata["input_source"].(string); got != "prompt_bar" {
 		t.Fatalf("input_source: got %q, want prompt_bar", got)
 	}
-	if got, _ := rec.Metadata["requested_app"].(string); got != AgentProfileVText {
-		t.Fatalf("requested_app: got %q, want legacy explicit %q", got, AgentProfileVText)
+	if got, _ := rec.Metadata["requested_app"].(string); got != AgentProfileTexture {
+		t.Fatalf("requested_app: got %q, want legacy explicit %q", got, AgentProfileTexture)
 	}
 }
 
@@ -3198,8 +3181,8 @@ func TestHandleEventListSupportsOwnerAndTaskHistory(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "trace selected task", "user-alice", map[string]any{
-		"agent_profile": "vtext",
-		"agent_role":    "vtext",
+		"agent_profile": "texture",
+		"agent_role":    "texture",
 	})
 	if err != nil {
 		t.Fatalf("submit task: %v", err)
@@ -4314,20 +4297,20 @@ func TestHandleTopologyReportsOrchestrationShape(t *testing.T) {
 	}
 }
 
-func TestHandleVTextDocumentsRootUsesTextureRoutes(t *testing.T) {
+func TestHandleTextureDocumentsRootUsesTextureRoutes(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 
 	createReqBody := `{"title":"texture route doc","content":"hello"}`
 	createReq := authenticatedRequest(http.MethodPost, "/api/texture/documents", createReqBody, "user-alice")
 	createW := httptest.NewRecorder()
-	handler.HandleVTextDocumentsRoot(createW, createReq)
+	handler.HandleTextureDocumentsRoot(createW, createReq)
 
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status: got %d, want %d", createW.Code, http.StatusCreated)
 	}
 
-	var createResp vtextCreateDocResponse
+	var createResp textureCreateDocResponse
 	if err := json.NewDecoder(createW.Body).Decode(&createResp); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
@@ -4337,13 +4320,13 @@ func TestHandleVTextDocumentsRootUsesTextureRoutes(t *testing.T) {
 
 	listReq := authenticatedRequest(http.MethodGet, "/api/texture/documents", "", "user-alice")
 	listW := httptest.NewRecorder()
-	handler.HandleVTextDocumentsRoot(listW, listReq)
+	handler.HandleTextureDocumentsRoot(listW, listReq)
 
 	if listW.Code != http.StatusOK {
 		t.Fatalf("list status: got %d, want %d", listW.Code, http.StatusOK)
 	}
 
-	var listResp vtextListDocsResponse
+	var listResp textureListDocsResponse
 	if err := json.NewDecoder(listW.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
@@ -4356,54 +4339,17 @@ func TestHandleVTextDocumentsRootUsesTextureRoutes(t *testing.T) {
 
 	getReq := authenticatedRequest(http.MethodGet, "/api/texture/documents/"+url.PathEscape(createResp.DocID), "", "user-alice")
 	getW := httptest.NewRecorder()
-	handler.HandleVTextRouter(getW, getReq)
+	handler.HandleTextureRouter(getW, getReq)
 
 	if getW.Code != http.StatusOK {
 		t.Fatalf("get status: got %d, want %d; body=%s", getW.Code, http.StatusOK, getW.Body.String())
 	}
-	var getResp vtextDocumentResponse
+	var getResp textureDocumentResponse
 	if err := json.NewDecoder(getW.Body).Decode(&getResp); err != nil {
 		t.Fatalf("decode get response: %v", err)
 	}
 	if getResp.DocID != createResp.DocID {
 		t.Errorf("get doc_id: got %q, want %q", getResp.DocID, createResp.DocID)
-	}
-}
-
-func TestRegisteredTextureRoutesExcludeLegacyVTextPrefix(t *testing.T) {
-	t.Parallel()
-	_, handler := testAPISetup(t)
-
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/texture/documents", `{"title":"registered texture route","content":"hello"}`, "user-alice")
-	if createW.Code != http.StatusCreated {
-		t.Fatalf("create status: got %d, want %d; body=%s", createW.Code, http.StatusCreated, createW.Body.String())
-	}
-	var createResp vtextCreateDocResponse
-	if err := json.NewDecoder(createW.Body).Decode(&createResp); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
-
-	getW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/texture/documents/"+url.PathEscape(createResp.DocID), "", "user-alice")
-	if getW.Code != http.StatusOK {
-		t.Fatalf("texture get status: got %d, want %d; body=%s", getW.Code, http.StatusOK, getW.Body.String())
-	}
-
-	legacyCases := []struct {
-		method string
-		path   string
-		body   string
-	}{
-		{http.MethodGet, "/api/vtext/documents", ""},
-		{http.MethodPost, "/api/vtext/documents", `{"title":"legacy"}`},
-		{http.MethodGet, "/api/vtext/documents/" + url.PathEscape(createResp.DocID), ""},
-		{http.MethodGet, "/api/vtext/diff", ""},
-		{http.MethodPost, "/api/vtext/files/open", `{"path":"notes.md"}`},
-	}
-	for _, tc := range legacyCases {
-		w := registeredRuntimeRequest(t, handler, tc.method, tc.path, tc.body, "user-alice")
-		if w.Code != http.StatusNotFound {
-			t.Fatalf("%s %s: got status %d, want 404; body=%s", tc.method, tc.path, w.Code, w.Body.String())
-		}
 	}
 }
 

@@ -110,7 +110,7 @@
       "aliases": ["weblens", "browser", "web", "live", "original", "live_original"]
     },
     "texture": {
-      "aliases": ["vtext", "published_texture", "published_texture_span", "published_vtext", "publication_version", "published_vtext_span"]
+      "aliases": ["texture", "published_texture", "published_texture_span", "published_texture", "publication_version", "published_texture_span"]
     },
     "video": {
       "aliases": ["youtube", "youtube_video"]

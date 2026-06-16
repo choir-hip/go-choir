@@ -20,9 +20,7 @@ import (
 
 const (
 	publicTexturePrefix = "/pub/texture/"
-	// texture-cutover-allow: stored legacy public route rows stay readable while Bootstrap mints current Texture aliases.
-	legacyPublicVTextPrefix = "/pub/vtext/"
-	textMediaType           = "text/plain; charset=utf-8"
+	textMediaType       = "text/plain; charset=utf-8"
 
 	defaultPublishedTextureTitle    = "Published Texture"
 	defaultUntitledTextureTitle     = "Untitled Texture"
@@ -687,7 +685,7 @@ func firstNonEmpty(values ...string) string {
 
 func normalizePublicationRoutePath(routePath string) string {
 	normalized := "/" + strings.TrimLeft(strings.TrimSpace(routePath), "/")
-	if normalized != "/" && (strings.HasPrefix(normalized, publicTexturePrefix) || strings.HasPrefix(normalized, legacyPublicVTextPrefix)) {
+	if normalized != "/" && strings.HasPrefix(normalized, publicTexturePrefix) {
 		normalized = strings.TrimRight(normalized, "/")
 	}
 	return normalized
@@ -720,7 +718,7 @@ func slugify(raw string) string {
 		slug = strings.Trim(slug[:96], "-")
 	}
 	if slug == "" {
-		return "vtext"
+		return "texture"
 	}
 	return slug
 }

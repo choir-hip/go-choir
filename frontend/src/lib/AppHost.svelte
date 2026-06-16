@@ -55,7 +55,7 @@
         on:authrequired={(event) => forward('authrequired', event)}
         on:opentextfile={(event) => forward('opentextfile', event)}
         on:openmediafile={(event) => forward('openmediafile', event)}
-        on:openvtext={(event) => forward('openvtext', event)}
+        on:opentexture={(event) => forward('opentexture', event)}
         on:launchapp={(event) => forward('launchapp', event)}
         on:opentrace={(event) => forward('opentrace', event)}
         on:clearsavedwindows={(event) => forward('clearsavedwindows', event)}

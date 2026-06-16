@@ -30,7 +30,7 @@ async function launchFromDesk(page, appId) {
 }
 
 async function openRealDesktopSet(page) {
-  for (const appId of ['files', 'vtext', 'trace', 'podcast']) {
+  for (const appId of ['files', 'texture', 'trace', 'podcast']) {
     await launchFromDesk(page, appId);
     await page.waitForTimeout(250);
   }

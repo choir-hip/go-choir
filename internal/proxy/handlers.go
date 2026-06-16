@@ -438,7 +438,7 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/terminal/ws":
 		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Super Console"})
 		return
-	case path == "/api/platform/vtext/publications":
+	case path == "/api/platform/texture/publications":
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	case path == "/api/platform/texture/publications":
@@ -465,8 +465,8 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/api/notifications/"):
 		h.HandleNotificationAPI(w, r)
 		return
-	case isPlatformVTextReadRequest(r):
-		h.HandlePlatformVTextRead(w, r)
+	case isPlatformTextureReadRequest(r):
+		h.HandlePlatformTextureRead(w, r)
 		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
@@ -981,10 +981,10 @@ func (h *Handler) HandleVMctlDeny(w http.ResponseWriter, r *http.Request) {
 // The proxy /health handler is registered via SetHealthHandler to
 // override the default server health handler with one that reports
 // upstream sandbox reachability.
-// HandlePlatformVTextRead serves published VText document and revision reads
+// HandlePlatformTextureRead serves published Texture document and revision reads
 // from platformd's DoltDB for Universal Wire articles. Published articles
 // carry their full revision history in platformd, not the platform sandbox.
-func (h *Handler) HandlePlatformVTextRead(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Request) {
 	authResult, err := h.validateAccessJWT(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
@@ -1036,7 +1036,7 @@ func (h *Handler) HandlePlatformVTextRead(w http.ResponseWriter, r *http.Request
 
 	resp, err := h.platformd.Do(httpReq)
 	if err != nil {
-		log.Printf("proxy: platformd vtext read: %v", err)
+		log.Printf("proxy: platformd texture read: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read from platformd"})
 		return
 	}
@@ -1045,13 +1045,13 @@ func (h *Handler) HandlePlatformVTextRead(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("proxy: platformd vtext read copy: %v", err)
+		log.Printf("proxy: platformd texture read copy: %v", err)
 	}
 }
 
-// isPlatformVTextReadRequest returns true for read-only VText requests that
+// isPlatformTextureReadRequest returns true for read-only Texture requests that
 // should be served from platformd's published store rather than the sandbox.
-func isPlatformVTextReadRequest(r *http.Request) bool {
+func isPlatformTextureReadRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
 	}

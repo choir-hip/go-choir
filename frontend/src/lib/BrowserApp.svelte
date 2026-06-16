@@ -30,8 +30,8 @@
     sourceEntitySnapshotWarnings,
     sourceEntitySnapshotText,
     sourceEntityTitle,
-  } from './vtext-source-renderer.ts';
-  import { createContentItem } from './vtext.js';
+  } from './texture-source-renderer.ts';
+  import { createContentItem } from './texture.js';
 
   export let appContext = {};
   export let authenticated = false;
@@ -375,7 +375,7 @@
     }
   }
 
-  async function importSnapshotToVText() {
+  async function importSnapshotToTexture() {
     if (!backendSnapshot) return;
     const sessionID = backendSession?.session_id || 'source-entity-snapshot';
     const sourceURL = currentUrl || backendSession?.current_url || initialTarget || '';
@@ -436,7 +436,7 @@
         lines.push(`- ${link.text || link.url}: ${link.url}`);
       }
     }
-    dispatch('openvtext', {
+    dispatch('opentexture', {
       title,
       initialContent: lines.join('\n'),
       seedPrompt: `Import Web Lens snapshot for ${sourceURL || 'web page'}`,
@@ -747,8 +747,8 @@
                 <span>{snapshotMode === 'source_entity' ? 'Source reader snapshot' : backendWarnings.length ? 'Semantic snapshot with warnings' : 'Semantic snapshot'}</span>
                 <button
                   class="import-btn"
-                  data-browser-import-vtext
-                  on:click={importSnapshotToVText}
+                  data-browser-import-texture
+                  on:click={importSnapshotToTexture}
                   disabled={!backendSnapshot}
                 >
                   Open in Texture

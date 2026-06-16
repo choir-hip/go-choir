@@ -3,7 +3,7 @@
   import { createEventDispatcher } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { browserOpenableSourceURL } from './source-url';
-  import { renderMarkdownBlocks } from './vtext-markdown-renderer';
+  import { renderMarkdownBlocks } from './texture-markdown-renderer';
   import {
     normalizeSourceEvidenceState,
     readerArtifactStateLabel,
@@ -13,7 +13,7 @@
     sourceEvidenceResearchLabel,
     sourceEvidenceState,
     sourceEvidenceStateLabel,
-  } from './vtext-source-renderer';
+  } from './texture-source-renderer';
 
   export let appContext = {};
 

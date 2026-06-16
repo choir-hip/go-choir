@@ -32,9 +32,9 @@ type universalWireEditionResponse struct {
 	UpdatedAt      string   `json:"updated_at,omitempty"`
 }
 
-const universalWireEditionSourcePath = "universal-wire/Wire.vtext"
+const universalWireEditionSourcePath = "universal-wire/Wire.texture"
 
-var vtextTransclusionRefRE = regexp.MustCompile(`vtext:([A-Za-z0-9_.:-]{1,160})`)
+var textureTransclusionRefRE = regexp.MustCompile(`texture:([A-Za-z0-9_.:-]{1,160})`)
 
 func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -235,7 +235,7 @@ func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {
 	seen := map[string]bool{}
 	editionDocID = strings.TrimSpace(editionDocID)
 	out := []string{}
-	for _, match := range vtextTransclusionRefRE.FindAllStringSubmatch(content, -1) {
+	for _, match := range textureTransclusionRefRE.FindAllStringSubmatch(content, -1) {
 		if len(match) < 2 {
 			continue
 		}
@@ -419,8 +419,8 @@ func wireArticleManifestFromRevision(ctx context.Context, meta map[string]any, c
 	return wireArticleManifestFromCycleProvenance(meta, headline)
 }
 
-func wireArticleVisibleSourceEntities(ctx context.Context, meta map[string]any, content string) []vtextSourceEntity {
-	entities := decodeVTextSourceEntities(meta["source_entities"])
+func wireArticleVisibleSourceEntities(ctx context.Context, meta map[string]any, content string) []textureSourceEntity {
+	entities := decodeTextureSourceEntities(meta["source_entities"])
 	if len(entities) == 0 {
 		return nil
 	}
@@ -428,7 +428,7 @@ func wireArticleVisibleSourceEntities(ctx context.Context, meta map[string]any, 
 	if len(refs) == 0 {
 		return nil
 	}
-	out := []vtextSourceEntity{}
+	out := []textureSourceEntity{}
 	seen := map[string]bool{}
 	for _, entity := range entities {
 		id := strings.TrimSpace(entity.EntityID)
@@ -494,7 +494,7 @@ func wireArticleInlineSourceRefs(content string) map[string]bool {
 	return out
 }
 
-func wireArticleManifestFromSourceEntities(entities []vtextSourceEntity) types.WireSourceManifest {
+func wireArticleManifestFromSourceEntities(entities []textureSourceEntity) types.WireSourceManifest {
 	manifest := types.WireSourceManifest{}
 	for i, entity := range entities {
 		id := wireArticleSourceEntityManifestID(entity)
@@ -520,21 +520,21 @@ func wireArticleManifestFromSourceEntities(entities []vtextSourceEntity) types.W
 	return manifest
 }
 
-func wireArticleSourceEntityManifestID(entity vtextSourceEntity) string {
+func wireArticleSourceEntityManifestID(entity textureSourceEntity) string {
 	return firstNonEmpty(entity.Target.ItemID, entity.Target.ContentID, entity.Target.DocID, entity.EntityID)
 }
 
-func wireArticleSourceEntityManifestTitle(entity vtextSourceEntity) string {
+func wireArticleSourceEntityManifestTitle(entity textureSourceEntity) string {
 	return firstNonEmpty(entity.Label, entity.Target.CanonicalURL, entity.Target.URL, wireArticleSourceEntityManifestID(entity))
 }
 
-func wireArticleSourceEntityManifestStanding(entity vtextSourceEntity) string {
+func wireArticleSourceEntityManifestStanding(entity textureSourceEntity) string {
 	switch strings.TrimSpace(entity.Kind) {
 	case "content_item":
 		return "embedded source"
 	case "source_service_item":
 		return "source-service handle"
-	case "vtext":
+	case "texture":
 		return "related Texture"
 	default:
 		return firstNonEmpty(entity.Kind, "source handle")
@@ -575,7 +575,7 @@ func wireArticleArticleHeadline(title, content string) string {
 			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
 		}
 	}
-	title = strings.TrimSpace(strings.TrimSuffix(title, ".vtext"))
+	title = strings.TrimSpace(strings.TrimSuffix(title, ".texture"))
 	if title != "" {
 		return title
 	}
@@ -653,7 +653,7 @@ func wireArticleArticleLineIsScaffold(line string) bool {
 		strings.HasPrefix(lower, "by ") ||
 		strings.HasPrefix(lower, "source:") ||
 		strings.HasPrefix(lower, "style.texture source") ||
-		strings.HasPrefix(lower, "style.vtext source") ||
+		strings.HasPrefix(lower, "style.texture source") ||
 		strings.HasPrefix(lower, "style source:") ||
 		strings.HasPrefix(lower, "selection rationale:") ||
 		strings.HasPrefix(lower, "story id:") ||
@@ -662,8 +662,7 @@ func wireArticleArticleLineIsScaffold(line string) bool {
 	}
 	if lower == "source handles" ||
 		lower == "source manifest" ||
-		lower == "style.texture source" ||
-		lower == "style.vtext source" {
+		lower == "style.texture source" {
 		return true
 	}
 	if strings.HasPrefix(normalized, "published:") ||
@@ -683,14 +682,13 @@ func wireArticleArticleLineStartsInventorySection(line string) bool {
 		lower == "source manifest" ||
 		lower == "sources" ||
 		lower == "style.texture source" ||
-		lower == "style.vtext source" ||
 		lower == "style source" {
 		return true
 	}
 	if strings.HasPrefix(lower, "source handles:") ||
 		strings.HasPrefix(lower, "source manifest:") ||
 		strings.HasPrefix(lower, "style.texture source:") ||
-		strings.HasPrefix(lower, "style.vtext source:") ||
+		strings.HasPrefix(lower, "style.texture source:") ||
 		strings.HasPrefix(lower, "style source:") {
 		return true
 	}
@@ -790,11 +788,7 @@ func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
 
 func wireRevisionSourceIsTextureEdit(meta map[string]any) bool {
 	switch metadataString(meta, "source") {
-	case "patch_texture", "rewrite_texture":
-		return true
-	case "edit_texture":
-		return true
-	case "edit_vtext": // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+	case "patch_texture", "rewrite_texture", "edit_texture":
 		return true
 	default:
 		return false

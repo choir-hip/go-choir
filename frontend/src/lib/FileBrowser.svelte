@@ -5,7 +5,7 @@
     - File/directory listing with folder/file icons
     - Breadcrumb navigation with clickable segments
     - Click directory to navigate into it
-    - Click text files to open them in VText
+    - Click text files to open them in Texture
     - Click PDF/EPUB/image/audio/video files to open dedicated media apps
     - Unknown binary files still download
     - New Folder button with inline input (no alert/prompt)
@@ -392,18 +392,18 @@
     }
   }
 
-  function handleImportIntoVText(entry) {
+  function handleImportIntoTexture(entry) {
     dispatch('opentextfile', {
       pathSegments: [...currentPath, entry.name],
       fileName: entry.name,
-      importToVText: true,
+      importToTexture: true,
     });
   }
 
-  function isVTextShortcutName(name) {
+  function isTextureShortcutName(name) {
     if (typeof name !== 'string') return false;
     const lower = name.toLowerCase();
-    return lower.endsWith('.texture') || lower.endsWith('.vtext');
+    return lower.endsWith('.texture') || lower.endsWith('.texture');
   }
 
   function isTextFileName(name) {
@@ -413,7 +413,7 @@
     const ext = parts.length > 1 ? parts.pop() : '';
     if (!ext) return true;
     return [
-      'txt', 'md', 'markdown', 'rst', 'org', 'texture', 'vtext',
+      'txt', 'md', 'markdown', 'rst', 'org', 'texture', 'texture',
       'json', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf',
       'csv', 'tsv', 'log',
       'js', 'jsx', 'ts', 'tsx', 'svelte',
@@ -423,14 +423,14 @@
     ].includes(ext);
   }
 
-  function isVTextImportableDocumentName(name) {
+  function isTextureImportableDocumentName(name) {
     const lower = String(name || '').toLowerCase();
     return lower.endsWith('.docx') || lower.endsWith('.pdf');
   }
 
   function fileIconFor(entry) {
     if (entry.type === 'directory') return '📁';
-    if (isVTextShortcutName(entry.name)) return '📝';
+    if (isTextureShortcutName(entry.name)) return '📝';
     const mediaRoute = mediaRouteForFileName(entry.name);
     if (mediaRoute?.appId === 'image') return '🖼️';
     if (mediaRoute?.appId === 'audio') return '🎧';
@@ -709,11 +709,11 @@
               <span class="file-name" data-file-name>{entry.name}</span>
               {#if entry.type === 'file'}
                 <span class="file-size" data-file-size>{formatFileSize(entry.size)}</span>
-                {#if isVTextImportableDocumentName(entry.name)}
+                {#if isTextureImportableDocumentName(entry.name)}
                   <button
-                    class="import-vtext-btn"
-                    data-import-vtext-btn
-                    on:click|stopPropagation={() => handleImportIntoVText(entry)}
+                    class="import-texture-btn"
+                    data-import-texture-btn
+                    on:click|stopPropagation={() => handleImportIntoTexture(entry)}
                     title="Open {entry.name} in Texture"
                     aria-label="Open {entry.name} in Texture"
                   >
@@ -1053,7 +1053,7 @@
     margin-right: 4px;
   }
 
-  .import-vtext-btn {
+  .import-texture-btn {
     flex-shrink: 0;
     min-height: 28px;
     padding: 0 10px;
@@ -1066,8 +1066,8 @@
     cursor: pointer;
   }
 
-  .import-vtext-btn:hover,
-  .import-vtext-btn:focus-visible {
+  .import-texture-btn:hover,
+  .import-texture-btn:focus-visible {
     background: var(--choir-state-hover);
   }
 

@@ -92,7 +92,7 @@ func TestTrajectorySubjectRefsMergePatch(t *testing.T) {
 	}
 	updated, err := s.UpdateTrajectorySubjectRefs(ctx, "user-alice", "traj-refs", map[string]string{
 		"publish_ref": "platformd_publication:pub-1/ver-1",
-		"edition_ref": "vtext_edition:wire/rev-1",
+		"edition_ref": "texture_edition:wire/rev-1",
 		"":            "ignored",
 	})
 	if err != nil {
@@ -104,7 +104,7 @@ func TestTrajectorySubjectRefsMergePatch(t *testing.T) {
 	if updated.SubjectRefs["publish_ref"] != "platformd_publication:pub-1/ver-1" {
 		t.Fatalf("publish_ref missing: %+v", updated.SubjectRefs)
 	}
-	if updated.SubjectRefs["edition_ref"] != "vtext_edition:wire/rev-1" {
+	if updated.SubjectRefs["edition_ref"] != "texture_edition:wire/rev-1" {
 		t.Fatalf("edition_ref missing: %+v", updated.SubjectRefs)
 	}
 }

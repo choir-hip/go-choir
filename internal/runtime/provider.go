@@ -112,7 +112,7 @@ done:
 		isTextureDecisionApp(metadataStringValue(task.Metadata, "requested_app")) &&
 		result == "Task completed successfully (stub provider)." {
 		seedPrompt := conductorSeedPrompt(task)
-		title := buildInitialVTextTitle(seedPrompt, "")
+		title := buildInitialTextureTitle(seedPrompt, "")
 		decision, _ := json.Marshal(map[string]any{
 			"action":                 "open_app",
 			"app":                    AgentProfileTexture,

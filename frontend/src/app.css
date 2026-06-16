@@ -52,8 +52,8 @@ body {
   border-color: transparent !important;
 }
 
-.window :is(.titlvtext, .title, [data-window-title]),
-.floating-window :is(.titlvtext, .title, [data-window-title]) {
+.window :is(.titltexture, .title, [data-window-title]),
+.floating-window :is(.titltexture, .title, [data-window-title]) {
   color: var(--choir-text-primary) !important;
 }
 
@@ -68,7 +68,7 @@ body {
 }
 
 .app-content :is(
-  .vtext-editor,
+  .texture-editor,
   .trace-frame,
   .trace-app,
   .settings-app,
@@ -247,8 +247,8 @@ body {
 
 [data-texture-app],
 [data-texture-editor],
-.vtext-editor,
-.vtext-editor :is(h1, h2, h3, p, blockquote, li, textarea, [contenteditable='true']) {
+.texture-editor,
+.texture-editor :is(h1, h2, h3, p, blockquote, li, textarea, [contenteditable='true']) {
   font-family: Georgia, 'Times New Roman', ui-serif, serif !important;
 }
 
@@ -257,7 +257,7 @@ body {
   .window,
   .floating-window,
   .titlebar,
-  .titlvtext,
+  .titltexture,
   .app-content,
   .desk-sheet,
   .prompt-surface,
@@ -277,7 +277,7 @@ body {
   .desktop-title,
   .app-label,
   .window-title,
-  .titlvtext,
+  .titltexture,
   .settings-app .section-title,
   .theme-preset,
   .desk-sheet-title,
@@ -291,7 +291,7 @@ body {
   color: var(--choir-text-primary) !important;
 }
 
-:root[data-theme-id='london-salmon'] :is(.vtext-editor, [data-texture-editor]) {
+:root[data-theme-id='london-salmon'] :is(.texture-editor, [data-texture-editor]) {
   background:
     linear-gradient(color-mix(in srgb, var(--choir-text-primary) 3%, transparent) 1px, transparent 1px),
     var(--choir-surface-document) !important;

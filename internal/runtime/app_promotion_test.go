@@ -408,8 +408,8 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 		"app_protocol_contract":"contract",
 		"provenance_refs":{
 			"human_summary":"Owner-readable narrative stored before the Texture package provenance cutover.",
-			"vtext_doc_id":"doc-legacy-proof",
-			"vtext_revision_id":"rev-legacy-proof",
+			"texture_doc_id":"doc-legacy-proof",
+			"texture_revision_id":"rev-legacy-proof",
 			"screenshot_refs":["test-results/legacy-proof.png"]
 		}
 	}` // texture-cutover-allow: legacy AppChangePackage provenance refs remain reviewable until package provenance migration.

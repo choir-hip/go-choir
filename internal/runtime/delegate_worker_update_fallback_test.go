@@ -63,7 +63,7 @@ func TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages(t *testin
 		}},
 	}
 
-	update := delegateWorkerCheckpointUpdate(rec, output, "vtext:doc-1", "doc-1", "terminal_result", time.Unix(0, 0).UTC())
+	update := delegateWorkerCheckpointUpdate(rec, output, "texture:doc-1", "doc-1", "terminal_result", time.Unix(0, 0).UTC())
 	joinedFindings := strings.Join(update.Findings, "\n")
 	if !strings.Contains(joinedFindings, `worker state "completed"`) {
 		t.Fatalf("checkpoint findings did not preserve typed worker state: %#v", update.Findings)

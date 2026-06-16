@@ -319,7 +319,7 @@
       <pre>$ choir status
 public-preview: ready
 $ open apps --preview
-files email vtext settings podcast media super-console</pre>
+files email texture settings podcast media super-console</pre>
     </div>
   {/if}
 

@@ -17,7 +17,7 @@ const syncedStateFiles = [
   'src/lib/PdfApp.svelte',
   'src/lib/PodcastApp.svelte',
   'src/lib/SettingsApp.svelte',
-  'src/lib/VTextEditor.svelte',
+  'src/lib/TextureEditor.svelte',
   'src/lib/VideoApp.svelte',
   'src/lib/media-utils.js',
   'src/lib/preferences.js',

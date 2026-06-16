@@ -112,14 +112,14 @@ func TestPlatformPublicationResolveAndExportPropagateNotFound(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	resolveReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/resolve?route=/pub/vtext/private", nil)
+	resolveReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/resolve?route=/pub/texture/private", nil)
 	resolveW := httptest.NewRecorder()
 	h.HandleAPI(resolveW, resolveReq)
 	if resolveW.Code != http.StatusNotFound {
 		t.Fatalf("resolve status: got %d body %s, want 404", resolveW.Code, resolveW.Body.String())
 	}
 
-	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/vtext/private&format=md", nil)
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/texture/private&format=md", nil)
 	exportW := httptest.NewRecorder()
 	h.HandleAPI(exportW, exportReq)
 	if exportW.Code != http.StatusNotFound {
@@ -195,7 +195,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				OwnerID:    "reader-1",
 				Content:    "reader proposal content",
 			})
-		case "/internal/vtext/proposals":
+		case "/internal/texture/proposals":
 			if r.Header.Get("X-Internal-Caller") != "true" {
 				t.Fatalf("author delivery missing internal caller")
 			}

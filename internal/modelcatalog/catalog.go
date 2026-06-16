@@ -89,7 +89,7 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 1_000_000,
 			Modalities:          []string{"text"},
 			AdapterModalities:   []string{"text"},
-			RecommendedFor:      []string{"conductor", "vtext", "researcher"},
+			RecommendedFor:      []string{"conductor", "texture", "researcher"},
 		},
 		{
 			ID:                  "mimo-v2.5-pro",
@@ -127,7 +127,7 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens:   131072,
 			Modalities:        []string{"text"},
 			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"conductor", "vtext", "researcher"},
+			RecommendedFor:    []string{"conductor", "texture", "researcher"},
 		},
 		{
 			ID:                "accounts/fireworks/models/kimi-k2p6",

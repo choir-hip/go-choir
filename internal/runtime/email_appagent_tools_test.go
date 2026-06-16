@@ -13,16 +13,16 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
+func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
-	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	if vtextRegistry == nil {
+	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	if textureRegistry == nil {
 		t.Fatal("missing Texture registry")
 	}
-	if _, ok := vtextRegistry.Lookup("request_email_draft"); !ok {
+	if _, ok := textureRegistry.Lookup("request_email_draft"); !ok {
 		t.Fatal("Texture registry missing request_email_draft")
 	}
 	if _, ok := rt.ToolRegistryForProfile(AgentProfileSuper).Lookup("request_email_draft"); ok {
@@ -60,7 +60,7 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode maild payload: %v", err)
 		}
-		if payload["source_kind"] != "vtext_email_artifact" || payload["subject"] != "Choir demo" || payload["text_body"] != "Here is the short demo note." {
+		if payload["source_kind"] != "texture_email_artifact" || payload["subject"] != "Choir demo" || payload["text_body"] != "Here is the short demo note." {
 			t.Fatalf("maild payload = %+v", payload)
 		}
 		if payload["from_address"] != "000@choir.news" {
@@ -81,19 +81,19 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	rt.cfg.MaildURL = maild.URL
 
 	parent, err := rt.createRunWithMetadata(context.Background(), "write the email artifact", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-email-1",
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-email-1",
 		runMetadataChannelID:    "doc-email-1",
 		runMetadataOwnerEmail:   "owner@example.com",
-		"type":                  "vtext_agent_revision",
+		"type":                  "texture_agent_revision",
 		"doc_id":                "doc-email-1",
 	})
 	if err != nil {
-		t.Fatalf("create vtext parent: %v", err)
+		t.Fatalf("create texture parent: %v", err)
 	}
 
-	raw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+	raw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":        "doc-email-1",
 		"revision_id":   "rev-email-1",
 		"from_alias":    "000@choir.news",
@@ -154,7 +154,7 @@ func TestVTextRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
 	}
 }
 
-func TestVTextRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T) {
+func TestTextureRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
@@ -183,17 +183,17 @@ func TestVTextRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing.T
 	rt.cfg.MaildURL = maild.URL
 
 	parent, err := rt.createRunWithMetadata(context.Background(), "write email with malformed alias", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-email-clean-alias",
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-email-clean-alias",
 		runMetadataChannelID:    "doc-email-clean-alias",
-		"type":                  "vtext_agent_revision",
+		"type":                  "texture_agent_revision",
 		"doc_id":                "doc-email-clean-alias",
 	})
 	if err != nil {
-		t.Fatalf("create vtext parent: %v", err)
+		t.Fatalf("create texture parent: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":              "doc-email-clean-alias",
 		"revision_id":         "rev-email-clean-alias",
 		"source_content_hash": "sha256:clean-alias",
@@ -295,11 +295,11 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 		t.Fatal("direct update_coagent to email appagent succeeded")
 	}
 	if !strings.Contains(err.Error(), "request_email_draft") {
-		t.Fatalf("error should direct callers to VText artifact handoff, got %v", err)
+		t.Fatalf("error should direct callers to Texture artifact handoff, got %v", err)
 	}
 }
 
-func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.T) {
+func TestEditTextureInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
@@ -329,8 +329,8 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		t.Fatalf("create user revision: %v", err)
 	}
 	run := types.RunRecord{
-		RunID:        "run-vtext-email-continuation",
-		AgentID:      "vtext:" + doc.DocID,
+		RunID:        "run-texture-email-continuation",
+		AgentID:      "texture:" + doc.DocID,
 		ChannelID:    doc.DocID,
 		OwnerID:      doc.OwnerID,
 		SandboxID:    "sandbox-test",
@@ -338,17 +338,17 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		Prompt:       "Revise the document",
 		CreatedAt:    now,
 		UpdatedAt:    now,
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		Metadata: map[string]any{
-			"type":                  "vtext_agent_revision",
+			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
 			"current_revision_id":   userRev.RevisionID,
-			"original_prompt":       "Create a VText-backed Email appagent draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof. Body: This is a deployed staging proof that VText requests an Email appagent draft. Do not send the email.",
-			runMetadataAgentID:      "vtext:" + doc.DocID,
+			"original_prompt":       "Create a Texture-backed Email appagent draft to yusefnathanson@me.com. Subject: Choir Email appagent bridge proof. Body: This is a deployed staging proof that Texture requests an Email appagent draft. Do not send the email.",
+			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
-			runMetadataAgentRole:    AgentProfileVText,
-			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: AgentProfileTexture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -364,11 +364,11 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-email-continuation",
 		"base_revision_id":"rev-user-email-continuation",
 		"rationale":"owner requested a full email draft artifact",
-		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email appagent bridge proof\n**Body:**\nThis is a deployed staging proof that VText requests an Email appagent draft.\n\n---\n\n**Source refs:** User request via conductor:test. No outbound email is authorized."
+		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email appagent bridge proof\n**Body:**\nThis is a deployed staging proof that Texture requests an Email appagent draft.\n\n---\n\n**Source refs:** User request via conductor:test. No outbound email is authorized."
 	}`))
 	if err != nil {
 		t.Fatalf("rewrite_texture: %v", err)
@@ -412,7 +412,7 @@ func TestEditVTextInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.
 	}
 }
 
-func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *testing.T) {
+func TestEditTextureGroundedEmailArtifactRequiresEmailAppagentContinuation(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
@@ -462,12 +462,12 @@ func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *test
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	if _, err := rt.ChannelCast(WithToolExecutionContext(ctx, researchRun), doc.DocID, "vtext:"+doc.DocID, "", "researcher-1", AgentProfileResearcher, "Evidence: the official page title is Example Domain."); err != nil {
+	if _, err := rt.ChannelCast(WithToolExecutionContext(ctx, researchRun), doc.DocID, "texture:"+doc.DocID, "", "researcher-1", AgentProfileResearcher, "Evidence: the official page title is Example Domain."); err != nil {
 		t.Fatalf("post grounded worker message: %v", err)
 	}
 	run := types.RunRecord{
-		RunID:        "run-grounded-vtext-email-continuation",
-		AgentID:      "vtext:" + doc.DocID,
+		RunID:        "run-grounded-texture-email-continuation",
+		AgentID:      "texture:" + doc.DocID,
 		ChannelID:    doc.DocID,
 		OwnerID:      doc.OwnerID,
 		SandboxID:    "sandbox-test",
@@ -475,18 +475,18 @@ func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *test
 		Prompt:       "Integrate worker findings",
 		CreatedAt:    now.Add(2 * time.Second),
 		UpdatedAt:    now.Add(2 * time.Second),
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		Metadata: map[string]any{
-			"type":                  "vtext_agent_revision",
+			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
 			"current_revision_id":   initialRev.RevisionID,
 			"request_intent":        "integrate_worker_findings",
 			"original_prompt":       "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send.",
-			runMetadataAgentID:      "vtext:" + doc.DocID,
+			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
-			runMetadataAgentRole:    AgentProfileVText,
-			runMetadataAgentProfile: AgentProfileVText,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: AgentProfileTexture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -502,7 +502,7 @@ func TestEditVTextGroundedEmailArtifactRequiresEmailAppagentContinuation(t *test
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	editRaw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-grounded-email-continuation",
 		"base_revision_id":"rev-grounded-initial-email-continuation",
 		"rationale":"owner requested a full email draft artifact",
@@ -536,7 +536,7 @@ func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
 		"**Recipient:** yusefnathanson@me.com\n" +
 		"**Subject:** Choir Email appagent bridge proof\n" +
 		"**Body:**\n" +
-		"This is a deployed staging proof that VText requests an Email appagent draft.\n\n" +
+		"This is a deployed staging proof that Texture requests an Email appagent draft.\n\n" +
 		"---\n\n" +
 		"**Source refs:** User request via conductor:test. No outbound email is authorized."
 	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
@@ -629,7 +629,7 @@ func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
 	if cleaned != "This is the email body." {
 		t.Fatalf("cleaned body with singular source ref = %q", cleaned)
 	}
-	body = "This is the email body.\n\n## Workflow\n\n1. VText wrote this canonical email artifact."
+	body = "This is the email body.\n\n## Workflow\n\n1. Texture wrote this canonical email artifact."
 	cleaned = cleanEmailDraftBodyText(body)
 	if cleaned != "This is the email body." {
 		t.Fatalf("cleaned body with workflow tail = %q", cleaned)
@@ -637,7 +637,7 @@ func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
 }
 
 func TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary(t *testing.T) {
-	prompt := "Create a VText-backed Email appagent draft to yusefnathanson@me.com. " +
+	prompt := "Create a Texture-backed Email appagent draft to yusefnathanson@me.com. " +
 		"Subject: Choir Email artifact-tail proof 552c443. " +
 		"Body exactly: This is a deployed proof that Choir trims artifact instructions before sending email. " +
 		"Create the draft only; do not send."
@@ -733,18 +733,18 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	defer maild.Close()
 	rt.cfg.MaildURL = maild.URL
 	parent, err := rt.createRunWithMetadata(context.Background(), "write risky email artifact", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-risk",
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-risk",
 		runMetadataChannelID:    "doc-risk",
 		runMetadataOwnerEmail:   "owner@example.com",
-		"type":                  "vtext_agent_revision",
+		"type":                  "texture_agent_revision",
 		"doc_id":                "doc-risk",
 	})
 	if err != nil {
-		t.Fatalf("create vtext parent: %v", err)
+		t.Fatalf("create texture parent: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":              "doc-risk",
 		"revision_id":         "rev-risk",
 		"source_content_hash": "sha256:risk",

@@ -162,7 +162,7 @@ func (rt *Runtime) scheduleWirePublishDebouncerTimer(now time.Time) {
 	if rt.wirePublishTimer != nil {
 		return
 	}
-	rt.wirePublishTimer = rt.vtextWakeAfter(delay, func() {
+	rt.wirePublishTimer = rt.textureWakeAfter(delay, func() {
 		rt.onWirePublishDebouncerTimer()
 	})
 }
@@ -200,7 +200,7 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	}
 	ownerID := universalWirePlatformOwnerID()
 	prompt := fmt.Sprintf(
-		"Reconciler story-corpus: review the wire corpus after %d eligible platform publish(es). Note consensus, contradictions, drift, and candidate VText updates on existing platform documents. Spawn VText on existing doc ids when an edition revision is warranted.",
+		"Reconciler story-corpus: review the wire corpus after %d eligible platform publish(es). Note consensus, contradictions, drift, and candidate Texture updates on existing platform documents. Spawn Texture on existing doc ids when an edition revision is warranted.",
 		len(batch.DocIDs),
 	)
 	prompt += "\n\nPublished document handles: " + strings.Join(batch.DocIDs, ", ")

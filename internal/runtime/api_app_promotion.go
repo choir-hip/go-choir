@@ -638,7 +638,7 @@ func runAcceptanceHumanProofState(rec types.RunAcceptanceRecord) (string, bool) 
 		kind := strings.ToLower(strings.TrimSpace(ref.Kind))
 		summary := ref.Summary + " " + ref.URL
 		lowerSummary := strings.ToLower(summary)
-		if strings.Contains(kind, "vtext") || strings.Contains(lowerSummary, "vtext") {
+		if strings.Contains(kind, "texture") || strings.Contains(lowerSummary, "texture") {
 			hasNarrative = true
 		}
 		if strings.Contains(kind, "screenshot") ||
@@ -654,7 +654,7 @@ func runAcceptanceHumanProofState(rec types.RunAcceptanceRecord) (string, bool) 
 		for _, value := range ref.Details {
 			text := fmt.Sprint(value)
 			lowerText := strings.ToLower(text)
-			if strings.Contains(lowerText, "vtext") {
+			if strings.Contains(lowerText, "texture") {
 				hasNarrative = true
 			}
 			if strings.Contains(lowerText, ".png") || strings.Contains(lowerText, ".jpg") || strings.Contains(lowerText, ".jpeg") || strings.Contains(lowerText, ".webm") || strings.Contains(lowerText, ".mp4") || (strings.Contains(lowerText, "benchmark") && credibleHumanBenchmarkRef(text)) {
@@ -808,8 +808,7 @@ func collectHumanProofString(proof *appChangePackageHumanProof, key, raw string)
 	lowerKey := strings.ToLower(key)
 	lowerText := strings.ToLower(text)
 	switch {
-	case strings.Contains(lowerKey, "texture") || strings.Contains(lowerKey, "narrative_ref") || strings.Contains(lowerText, "texture:") ||
-		strings.Contains(lowerKey, "vtext") || strings.Contains(lowerText, "vtext:"): // texture-cutover-allow: legacy AppChangePackage provenance refs stay readable until package provenance migration.
+	case strings.Contains(lowerKey, "texture") || strings.Contains(lowerKey, "narrative_ref") || strings.Contains(lowerText, "texture:"):
 		proof.NarrativeRefs = append(proof.NarrativeRefs, text)
 	case strings.Contains(lowerKey, "screenshot") || strings.Contains(lowerKey, "image") || strings.HasSuffix(lowerText, ".png") || strings.HasSuffix(lowerText, ".jpg") || strings.HasSuffix(lowerText, ".jpeg"):
 		proof.ScreenshotRefs = append(proof.ScreenshotRefs, text)

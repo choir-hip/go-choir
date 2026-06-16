@@ -78,8 +78,8 @@ export const previewComputeStatus = {
   ],
 };
 
-export const previewVTextDocument = {
-  doc_id: 'preview-vtext',
+export const previewTextureDocument = {
+  doc_id: 'preview-texture',
   title: 'What Choir Is',
   content: [
     '# What Choir Is',

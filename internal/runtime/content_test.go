@@ -888,7 +888,7 @@ func TestPromptBarBareURLDoesNotRequireProvider(t *testing.T) {
 	}
 }
 
-func TestPromptBarContextualURLRoutesToVText(t *testing.T) {
+func TestPromptBarContextualURLRoutesToTexture(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{"text":"Summarize https://example.com/report.pdf for a research note"}`
@@ -923,8 +923,8 @@ func TestPromptBarContextualURLRoutesToVText(t *testing.T) {
 	if status.Decision == nil {
 		t.Fatalf("timed out waiting for conductor decision: %#v", status)
 	}
-	if status.Decision.App != "vtext" {
-		t.Fatalf("decision app = %q, want vtext", status.Decision.App)
+	if status.Decision.App != "texture" {
+		t.Fatalf("decision app = %q, want texture", status.Decision.App)
 	}
 	if status.Decision.SourceURL != "" {
 		t.Fatalf("contextual URL should not be routed as bare source_url, got %q", status.Decision.SourceURL)

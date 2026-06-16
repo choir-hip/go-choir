@@ -19,7 +19,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	}
 	platformOwner := wirepublish.PlatformOwnerID()
 	meta, _ := json.Marshal(map[string]any{
-		"source":                     "edit_vtext",
+		"source":                     "edit_texture",
 		"revision_role":              wirepublish.RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-proxy",
 	})
@@ -30,13 +30,13 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/internal/vtext/documents/doc-wire-proxy", "/api/texture/documents/doc-wire-proxy":
+		case "/internal/texture/documents/doc-wire-proxy", "/api/texture/documents/doc-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
 				DocID:   "doc-wire-proxy",
 				OwnerID: platformOwner,
-				Title:   "Proxy story.vtext",
+				Title:   "Proxy story.texture",
 			})
-		case "/internal/vtext/revisions/rev-wire-proxy", "/api/texture/revisions/rev-wire-proxy":
+		case "/internal/texture/revisions/rev-wire-proxy", "/api/texture/revisions/rev-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-wire-proxy",
 				DocID:      "doc-wire-proxy",

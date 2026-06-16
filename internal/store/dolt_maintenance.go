@@ -168,7 +168,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 	if persistentDir == "" {
 		return nil
 	}
-	workspacePath := resolveVTextWorkspacePath(storePath)
+	workspacePath := resolveTextureWorkspacePath(storePath)
 	if _, err := os.Stat(workspacePath); err != nil {
 		if os.IsNotExist(err) {
 			return nil

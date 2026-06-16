@@ -448,7 +448,7 @@ func TestAppChangePackageReviewEvidenceSanitizesStaleSourceHumanProof(t *testing
 func TestNormalizeProxyHumanProofDoesNotTreatSummaryAsNarrative(t *testing.T) {
 	proof := normalizeProxyHumanProof(map[string]any{
 		"state":           "human_reviewable",
-		"summary":         "This display summary is useful prose, but it is not a causal VText narrative.",
+		"summary":         "This display summary is useful prose, but it is not a causal Texture narrative.",
 		"screenshot_refs": []any{"test-results/summary-only.png"},
 	})
 
@@ -460,8 +460,8 @@ func TestNormalizeProxyHumanProofDoesNotTreatSummaryAsNarrative(t *testing.T) {
 		t.Fatalf("summary-only proof gained narrative refs: %+v", narrativeRefs)
 	}
 	missing, ok := proof["missing"].([]string)
-	if !ok || !slices.Contains(missing, "narrative VText") {
-		t.Fatalf("summary-only proof missing refs = %+v, want narrative VText", proof["missing"])
+	if !ok || !slices.Contains(missing, "narrative Texture") {
+		t.Fatalf("summary-only proof missing refs = %+v, want narrative Texture", proof["missing"])
 	}
 }
 
@@ -2100,7 +2100,7 @@ func TestAuthenticatedFutureAPIRouteIsForwarded(t *testing.T) {
 	}
 }
 
-func TestAuthenticatedVTextRouteIsForwarded(t *testing.T) {
+func TestAuthenticatedTextureRouteIsForwarded(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ed25519 key: %v", err)
@@ -2207,7 +2207,7 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 	gotUser := ""
 	gotPath := ""
 	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/test/vtext/research-findings", func(w http.ResponseWriter, r *http.Request) {
+	sandboxMux.HandleFunc("/api/test/texture/research-findings", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
@@ -2230,7 +2230,7 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 
 	accessToken := issueTestAccessJWT(priv, "user-authenticated")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/test/vtext/research-findings", strings.NewReader(`{"doc_id":"doc-1","finding_id":"finding-1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/test/texture/research-findings", strings.NewReader(`{"doc_id":"doc-1","finding_id":"finding-1"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
 	w := httptest.NewRecorder()
@@ -2243,8 +2243,8 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 	if gotUser != "user-authenticated" {
 		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
 	}
-	if gotPath != "/api/test/vtext/research-findings" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/test/vtext/research-findings")
+	if gotPath != "/api/test/texture/research-findings" {
+		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/test/texture/research-findings")
 	}
 }
 
@@ -2984,9 +2984,9 @@ func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *te
 // TestVMctlRouting_ProtectedAPIThroughVM tests that runtime API routes also
 // resolve through vmctl ownership (VAL-VM-002).
 
-func TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox(t *testing.T) {
+func TestProtectedAPIResolveTarget_TextureReadsNotRoutedThroughSandbox(t *testing.T) {
 	// Texture reads with read_owner=universal-wire-platform are intercepted
-	// by isPlatformVTextReadRequest in HandleAPI and served from platformd.
+	// by isPlatformTextureReadRequest in HandleAPI and served from platformd.
 	// They should NOT route through protectedAPIResolveTarget to the sandbox.
 	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
 	ownerID, desktopID := protectedAPIResolveTarget(req, "user-alice", vmctl.PrimaryDesktopID)
@@ -3005,7 +3005,7 @@ func TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox(t *testing.
 	}
 }
 
-func TestIsPlatformVTextReadRequest(t *testing.T) {
+func TestIsPlatformTextureReadRequest(t *testing.T) {
 	// Positive cases — read-only Texture reads with read_owner param.
 	cases := []struct {
 		method string
@@ -3020,15 +3020,15 @@ func TestIsPlatformVTextReadRequest(t *testing.T) {
 		{http.MethodGet, "/api/texture/documents/doc-1", false},
 		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=other-user", false},
 		{http.MethodPost, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/vtext/documents/doc-1?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/vtext/revisions/rev-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", false},
+		{http.MethodGet, "/api/texture/revisions/rev-1?read_owner=universal-wire-platform", false},
 		{http.MethodGet, "/api/universal-wire/stories?read_owner=universal-wire-platform", false},
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
-		got := isPlatformVTextReadRequest(req)
+		got := isPlatformTextureReadRequest(req)
 		if got != tc.want {
-			t.Errorf("isPlatformVTextReadRequest(%s %s) = %v, want %v", tc.method, tc.path, got, tc.want)
+			t.Errorf("isPlatformTextureReadRequest(%s %s) = %v, want %v", tc.method, tc.path, got, tc.want)
 		}
 	}
 }

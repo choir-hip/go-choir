@@ -378,7 +378,7 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 
 func cleanApprovedDraftTextBody(body, sourceKind string) string {
 	body = strings.TrimSpace(body)
-	if body == "" || sourceKind != "vtext_email_artifact" {
+	if body == "" || sourceKind != "texture_email_artifact" {
 		return body
 	}
 	lower := strings.ToLower(body)

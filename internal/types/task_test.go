@@ -267,26 +267,6 @@ func TestTextureAgentRevisionEventKinds(t *testing.T) {
 	}
 }
 
-func TestLegacyVTextAgentRevisionEventKindsRemainReadable(t *testing.T) {
-	eventKinds := []EventKind{
-		LegacyEventVTextAgentRevisionStarted,
-		LegacyEventVTextAgentRevisionProgress,
-		LegacyEventVTextAgentRevisionCompleted,
-		LegacyEventVTextAgentRevisionFailed,
-	}
-	expected := []string{
-		"vtext.agent_revision.started",
-		"vtext.agent_revision.progress",
-		"vtext.agent_revision.completed",
-		"vtext.agent_revision.failed",
-	}
-	for i, kind := range eventKinds {
-		if string(kind) != expected[i] {
-			t.Errorf("legacy event kind %d: got %q, want %q", i, kind, expected[i])
-		}
-	}
-}
-
 func TestEmailDraftEventKinds(t *testing.T) {
 	eventKinds := []EventKind{
 		EventEmailDraftApprovalRecorded,

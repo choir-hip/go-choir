@@ -134,7 +134,7 @@ func TestUpdateFileWritesTextContent(t *testing.T) {
 		t.Fatalf("mkdir parent: %v", err)
 	}
 
-	req := authBodyRequest(http.MethodPut, "/api/files/documents/note.txt", strings.NewReader("hello vtext"))
+	req := authBodyRequest(http.MethodPut, "/api/files/documents/note.txt", strings.NewReader("hello texture"))
 	w := httptest.NewRecorder()
 	fh.HandleFileByPath(w, req)
 
@@ -146,8 +146,8 @@ func TestUpdateFileWritesTextContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read saved file: %v", err)
 	}
-	if string(got) != "hello vtext" {
-		t.Fatalf("saved content = %q, want %q", string(got), "hello vtext")
+	if string(got) != "hello texture" {
+		t.Fatalf("saved content = %q, want %q", string(got), "hello texture")
 	}
 }
 

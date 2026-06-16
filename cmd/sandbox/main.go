@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
@@ -149,11 +149,11 @@ func main() {
 		if registry := rt.ToolRegistryForProfile(runtime.AgentProfileSuper); registry != nil {
 			superTools = registry.Size()
 		}
-		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d vtext=%d)",
+		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileConductor)),
 			superTools,
 			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileResearcher)),
-			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileVText)),
+			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileTexture)),
 		)
 	} else {
 		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
@@ -194,7 +194,7 @@ func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRo
 		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
 		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
 		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,
-		VTextWakeDebounce:               rtRuntimeCfg.VTextWakeDebounce,
+		TextureWakeDebounce:             rtRuntimeCfg.TextureWakeDebounce,
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,
 		MaildURL:                        rtRuntimeCfg.MaildURL,
 		LLMProvider:                     rtRuntimeCfg.LLMProvider,

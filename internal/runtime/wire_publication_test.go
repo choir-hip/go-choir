@@ -38,7 +38,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 		TrajectoryID:         "traj-publish-slice",
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
 		Reason:               "processor opened a wire story Texture route",
-		AuthorityProfile:     AgentProfileVText,
+		AuthorityProfile:     AgentProfileTexture,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-slice", story.DocID),
 		CreatedByRunID:       "run-publish-slice",
 		Details: map[string]any{
@@ -54,7 +54,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 		OwnerID: universalWirePlatformOwnerID(),
 		RunID:   "run-publish-slice",
 		Metadata: map[string]any{
-			"type":           "vtext_agent_revision",
+			"type":           "texture_agent_revision",
 			"request_intent": "universal_wire_processor_article_revision",
 			"trajectory_id":  "traj-publish-slice",
 		},
@@ -81,7 +81,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load wire edition revision: %v", err)
 	}
-	if !strings.Contains(editionRev.Content, "vtext:"+story.DocID) {
+	if !strings.Contains(editionRev.Content, "texture:"+story.DocID) {
 		t.Fatalf("edition content missing transclusion for %s: %q", story.DocID, editionRev.Content)
 	}
 	if handler.rt.wirePublishDebouncer == nil {
@@ -112,7 +112,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	if trajectory.SubjectRefs["publish_ref"] != "platformd_publication:pub-wire-test/pubver-wire-test" {
 		t.Fatalf("publish_ref = %q, want platform publication ref; trajectory=%+v", trajectory.SubjectRefs["publish_ref"], trajectory)
 	}
-	if !strings.HasPrefix(trajectory.SubjectRefs["edition_ref"], "vtext_edition:") {
+	if !strings.HasPrefix(trajectory.SubjectRefs["edition_ref"], "texture_edition:") {
 		t.Fatalf("edition_ref = %q, want edition ref; trajectory=%+v", trajectory.SubjectRefs["edition_ref"], trajectory)
 	}
 	openItems, err := handler.rt.Store().ListWorkItemsByTrajectory(ctx, universalWirePlatformOwnerID(), "traj-publish-slice", true)
@@ -158,7 +158,7 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 		TrajectoryID:         "traj-publish-fail",
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
 		Reason:               "processor opened a wire story Texture route",
-		AuthorityProfile:     AgentProfileVText,
+		AuthorityProfile:     AgentProfileTexture,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-fail", story.DocID),
 		CreatedByRunID:       "run-publish-fail",
 		Details: map[string]any{
@@ -196,7 +196,7 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testi
 	if err != nil {
 		t.Fatalf("load wire edition revision: %v", err)
 	}
-	if strings.Contains(editionRev.Content, "vtext:"+story.DocID) {
+	if strings.Contains(editionRev.Content, "texture:"+story.DocID) {
 		t.Fatalf("edition should not transclude story when platform publish fails: %q", editionRev.Content)
 	}
 	if handler.rt.wirePublishDebouncer != nil {
@@ -239,7 +239,7 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 	doc := types.Document{
 		DocID:     docID,
 		OwnerID:   ownerID,
-		Title:     "Seed brief only.vtext",
+		Title:     "Seed brief only.texture",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -248,8 +248,8 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 	}
 	seedMeta, _ := json.Marshal(map[string]any{
 		"source":                         "edit_texture",
-		"revision_role":                  vtextRevisionRoleInput,
-		"input_origin":                   vtextInputOriginProcessorHandoff,
+		"revision_role":                  textureRevisionRoleInput,
+		"input_origin":                   textureInputOriginProcessorHandoff,
 		"artifact_kind":                  "source_brief",
 		"ingestion_handoff_cycle_id":     "cycle-input-only",
 		"ingestion_handoff_request_id":   "processor-input-only",
@@ -290,7 +290,7 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 	rec := &types.RunRecord{
 		OwnerID: ownerID,
 		Metadata: map[string]any{
-			"type":           "vtext_agent_revision",
+			"type":           "texture_agent_revision",
 			"request_intent": "universal_wire_processor_article_revision",
 		},
 	}

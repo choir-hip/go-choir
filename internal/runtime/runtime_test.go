@@ -135,7 +135,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		t.Fatalf("initial_revision_id: got %q, want user seed revision %q", result.InitialRevisionID, result.UserRevisionID)
 	}
 	if result.InitialRunID == "" {
-		t.Fatal("initial_loop_id should point to the product-path vtext run")
+		t.Fatal("initial_loop_id should point to the product-path texture run")
 	}
 
 	doc, err := s.GetDocument(ctx, result.DocID, "user-alice")
@@ -143,7 +143,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		t.Fatalf("get document: %v", err)
 	}
 	if doc.CurrentRevisionID != result.UserRevisionID {
-		t.Fatalf("document head: got %q, want user seed revision %q before VText writes", doc.CurrentRevisionID, result.UserRevisionID)
+		t.Fatalf("document head: got %q, want user seed revision %q before Texture writes", doc.CurrentRevisionID, result.UserRevisionID)
 	}
 
 	v0, err := s.GetRevision(ctx, result.UserRevisionID, "user-alice")
@@ -166,32 +166,32 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if !metadataBoolValue(meta, "prompt_bar_instruction_revision") {
 		t.Fatalf("v0 prompt_bar_instruction_revision = %v, want true", meta["prompt_bar_instruction_revision"])
 	}
-	if metadataString(meta, "vtext_version") != "v0" {
-		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "vtext_version"))
+	if metadataString(meta, "texture_version") != "v0" {
+		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "texture_version"))
 	}
 
 	runs, err := s.ListRunsByOwner(ctx, "user-alice", 20)
 	if err != nil {
 		t.Fatalf("list runs: %v", err)
 	}
-	foundInitialVTextRun := false
+	foundInitialTextureRun := false
 	for _, run := range runs {
 		if run.AgentProfile == AgentProfileTexture && run.RunID == result.InitialRunID {
-			foundInitialVTextRun = true
+			foundInitialTextureRun = true
 		}
 	}
-	if !foundInitialVTextRun {
-		t.Fatalf("prompt creation should start a product-path vtext run %q; runs=%+v", result.InitialRunID, runs)
+	if !foundInitialTextureRun {
+		t.Fatalf("prompt creation should start a product-path texture run %q; runs=%+v", result.InitialRunID, runs)
 	}
 	waitForRunTerminalState(t, rt, result.InitialRunID, "user-alice", 5*time.Second)
 	if mutation, err := s.GetPendingAgentMutationByDoc(ctx, result.DocID, "user-alice"); err != nil {
 		t.Fatalf("get pending mutation: %v", err)
 	} else if mutation != nil {
-		t.Fatalf("initial vtext run should not leave a dangling pending mutation after completion, got %+v", mutation)
+		t.Fatalf("initial texture run should not leave a dangling pending mutation after completion, got %+v", mutation)
 	}
 }
 
-func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.T) {
+func TestConductorDecisionNormalizesToastAfterMaterializedTextureRoute(t *testing.T) {
 	t.Parallel()
 	rec := &types.RunRecord{
 		RunID:   "run-conductor-toast-after-route",
@@ -200,10 +200,10 @@ func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.
 		Metadata: map[string]any{
 			runMetadataAgentProfile:  AgentProfileConductor,
 			runMetadataAgentRole:     AgentProfileConductor,
-			"requested_app":          AgentProfileVText,
-			"seed_prompt":            "create a vtext document",
-			"initial_document_title": "create a vtext document",
-			"doc_id":                 "doc-vtext-route",
+			"requested_app":          AgentProfileTexture,
+			"seed_prompt":            "create a texture document",
+			"initial_document_title": "create a texture document",
+			"doc_id":                 "doc-texture-route",
 			"user_revision_id":       "rev-user",
 			"framing_revision_id":    "rev-framing",
 			"initial_revision_id":    "rev-framing",
@@ -217,16 +217,16 @@ func TestConductorDecisionNormalizesToastAfterMaterializedVTextRoute(t *testing.
 	if result.Action != "open_app" || result.App != AgentProfileTexture {
 		t.Fatalf("normalized decision = action %q app %q, want open_app/%s", result.Action, result.App, AgentProfileTexture)
 	}
-	if result.DocID != "doc-vtext-route" || result.InitialRevisionID != "rev-framing" {
+	if result.DocID != "doc-texture-route" || result.InitialRevisionID != "rev-framing" {
 		t.Fatalf("normalized decision lost route metadata: %+v", result)
 	}
 }
 
-func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T) {
+func TestConductorPromptBarStructuredDecisionMaterializesTextureRoute(t *testing.T) {
 	t.Parallel()
 	rt, s := testRuntime(t)
 	provider := rt.provider.(*StubProvider)
-	provider.Result = `{"action":"open_app","app":"vtext","title":"Durable document","initial_content":"# Durable document\n\nInitial conductor-authored abstract."}`
+	provider.Result = `{"action":"open_app","app":"texture","title":"Durable document","initial_content":"# Durable document\n\nInitial conductor-authored abstract."}`
 	rt.Start(context.Background())
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "make a durable document", "user-alice", map[string]any{
@@ -253,16 +253,16 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 		t.Fatalf("conductor result = %+v, want materialized Texture route", result)
 	}
 	// Conductor decisions no longer ship canonical document content; the
-	// vtext agent owns authoring, so any provider-supplied initial_content
+	// texture agent owns authoring, so any provider-supplied initial_content
 	// must be stripped from the materialized route.
 	if result.InitialContent != "" {
-		t.Fatalf("initial_content = %q, want empty (vtext owns canonical content)", result.InitialContent)
+		t.Fatalf("initial_content = %q, want empty (texture owns canonical content)", result.InitialContent)
 	}
 	if result.CreateInitialVersion == nil || *result.CreateInitialVersion {
 		t.Fatalf("create_initial_version = %v, want explicit false", result.CreateInitialVersion)
 	}
 	if result.InitialLoopID == "" {
-		t.Fatalf("conductor result missing initial vtext revision loop id: %+v", result)
+		t.Fatalf("conductor result missing initial texture revision loop id: %+v", result)
 	}
 	doc, err := s.GetDocument(context.Background(), result.DocID, "user-alice")
 	if err != nil {
@@ -287,11 +287,11 @@ func TestConductorPromptBarStructuredDecisionMaterializesVTextRoute(t *testing.T
 	}
 }
 
-func TestConductorPromptBarVTextRouteFallsBackToSeedPromptContent(t *testing.T) {
+func TestConductorPromptBarTextureRouteFallsBackToSeedPromptContent(t *testing.T) {
 	t.Parallel()
 	rt, s := testRuntime(t)
 	provider := rt.provider.(*StubProvider)
-	provider.Result = `{"action":"open_app","app":"vtext","title":"Fallback document"}`
+	provider.Result = `{"action":"open_app","app":"texture","title":"Fallback document"}`
 	rt.Start(context.Background())
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "Draft fallback content", "user-alice", map[string]any{
@@ -368,16 +368,16 @@ func TestProviderPromptUsesPromptOverride(t *testing.T) {
 	}
 }
 
-func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
+func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
-		RunID:        "run-vtext-1",
-		AgentID:      "vtext:doc-1",
+		RunID:        "run-texture-1",
+		AgentID:      "texture:doc-1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
 		Prompt:       "what's the latest with ai",
 	}
 
@@ -386,20 +386,20 @@ func TestSystemPromptForVTextDefaultsToResearch(t *testing.T) {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
 	if !strings.Contains(prompt, "open worker work first") {
-		t.Fatalf("vtext system prompt should bias toward opening worker work first for factual requests, got %q", prompt)
+		t.Fatalf("texture system prompt should bias toward opening worker work first for factual requests, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "`spawn_agent` with `role=\"researcher\"`") {
-		t.Fatalf("vtext system prompt should route research through spawn_agent researcher, got %q", prompt)
+		t.Fatalf("texture system prompt should route research through spawn_agent researcher, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Choose researcher parallelism from the task shape") {
-		t.Fatalf("vtext system prompt should make researcher parallelism contextual, got %q", prompt)
+		t.Fatalf("texture system prompt should make researcher parallelism contextual, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
-		t.Fatalf("vtext system prompt should include coordination channel, got %q", prompt)
+		t.Fatalf("texture system prompt should include coordination channel, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "ask super to lease a worker VM and delegate a `vsuper`") ||
 		!strings.Contains(prompt, "For bounded local scratch work such as API calls") {
-		t.Fatalf("vtext system prompt should preserve sweep substrate topology in super requests, got %q", prompt)
+		t.Fatalf("texture system prompt should preserve sweep substrate topology in super requests, got %q", prompt)
 	}
 }
 
@@ -630,20 +630,20 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 	}
 }
 
-func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) {
+func TestSystemPromptForUniversalWireTextureRunsRequiresArticleHead(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	universalWireRec := &types.RunRecord{
-		RunID:        "run-universal-wire-vtext",
-		AgentID:      "vtext:doc-universal-wire",
+		RunID:        "run-universal-wire-texture",
+		AgentID:      "texture:doc-universal-wire",
 		ChannelID:    "doc-universal-wire",
 		OwnerID:      "universal-wire-platform",
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
-		Prompt:       "Write the first publication-quality article revision for this VText document.",
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		Prompt:       "Write the first publication-quality article revision for this Texture document.",
 		Metadata: map[string]any{
-			"type":                    "vtext_agent_revision",
+			"type":                    "texture_agent_revision",
 			"doc_id":                  "doc-universal-wire",
 			"source_network_cycle_id": "cycle-test",
 			"request_intent":          "universal_wire_reconciler_article_revision",
@@ -652,7 +652,7 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 	}
 	prompt, err := rt.systemPromptForRun(universalWireRec)
 	if err != nil {
-		t.Fatalf("systemPromptForRun Universal Wire VText: %v", err)
+		t.Fatalf("systemPromptForRun Universal Wire Texture: %v", err)
 	}
 	for _, want := range []string{
 		"For Universal Wire article revision runs",
@@ -667,35 +667,35 @@ func TestSystemPromptForUniversalWireVTextRunsRequiresArticleHead(t *testing.T) 
 		"do not end the run with the document head still at a brief or status checkpoint",
 	} {
 		if !strings.Contains(prompt, want) {
-			t.Fatalf("Universal Wire VText prompt missing %q in %q", want, prompt)
+			t.Fatalf("Universal Wire Texture prompt missing %q in %q", want, prompt)
 		}
 	}
 	if strings.Contains(prompt, "first call patch_texture with a short owner-readable working response") {
-		t.Fatalf("Universal Wire VText prompt should not use generic working-response rule: %q", prompt)
+		t.Fatalf("Universal Wire Texture prompt should not use generic working-response rule: %q", prompt)
 	}
 
 	ordinaryRec := &types.RunRecord{
-		RunID:        "run-ordinary-vtext",
-		AgentID:      "vtext:doc-ordinary",
+		RunID:        "run-ordinary-texture",
+		AgentID:      "texture:doc-ordinary",
 		ChannelID:    "doc-ordinary",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		Prompt:       "What is going on today?",
 		Metadata: map[string]any{
-			"type":   "vtext_agent_revision",
+			"type":   "texture_agent_revision",
 			"doc_id": "doc-ordinary",
 		},
 	}
 	ordinaryPrompt, err := rt.systemPromptForRun(ordinaryRec)
 	if err != nil {
-		t.Fatalf("systemPromptForRun ordinary VText: %v", err)
+		t.Fatalf("systemPromptForRun ordinary Texture: %v", err)
 	}
 	if !strings.Contains(ordinaryPrompt, "write the first useful owner-readable Texture revision") {
-		t.Fatalf("ordinary VText prompt should preserve generic working-response rule: %q", ordinaryPrompt)
+		t.Fatalf("ordinary Texture prompt should preserve generic working-response rule: %q", ordinaryPrompt)
 	}
 	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
-		t.Fatalf("ordinary VText prompt should not get Universal Wire article-head rule: %q", ordinaryPrompt)
+		t.Fatalf("ordinary Texture prompt should not get Universal Wire article-head rule: %q", ordinaryPrompt)
 	}
 }
 
@@ -1580,10 +1580,10 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 
 	parentMeta, _ := json.Marshal(map[string]any{
-		"seed_prompt":                     "write a haiku about cats",
-		"source_path":                     "/notes/cats.md",
-		legacyCanonicalVTextSourcePathKey: "/notes/cats.vtext",
-		"conductor_loop_id":               "task-original-conductor",
+		"seed_prompt":                         "write a haiku about cats",
+		"source_path":                         "/notes/cats.md",
+		canonicalTextureSourcePathMetadataKey: "/notes/cats.texture",
+		"conductor_loop_id":                   "task-original-conductor",
 	})
 	parentRev := types.Revision{
 		RevisionID: "rev-parent-meta",
@@ -1605,7 +1605,7 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	// Build appagent metadata with a task record that has no durable keys.
 	rec := &types.RunRecord{
 		RunID:    "task-agent-1",
-		Metadata: map[string]any{"type": "vtext_agent_revision"},
+		Metadata: map[string]any{"type": "texture_agent_revision"},
 	}
 
 	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil)
@@ -1621,11 +1621,8 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	if resultMap["source_path"] != "/notes/cats.md" {
 		t.Errorf("source_path: got %v, want '/notes/cats.md'", resultMap["source_path"])
 	}
-	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/cats.vtext" {
-		t.Errorf("%s: got %v, want '/notes/cats.vtext'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
-	}
-	if _, ok := resultMap[legacyCanonicalVTextSourcePathKey]; ok {
-		t.Errorf("%s carried forward unexpectedly: %v", legacyCanonicalVTextSourcePathKey, resultMap[legacyCanonicalVTextSourcePathKey])
+	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/cats.texture" {
+		t.Errorf("%s: got %v, want '/notes/cats.texture'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
 	}
 	if resultMap["conductor_loop_id"] != "task-original-conductor" {
 		t.Errorf("conductor_loop_id: got %v, want 'task-original-conductor'", resultMap["conductor_loop_id"])
@@ -1640,17 +1637,14 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 
 	rec.Metadata = map[string]any{
-		"type":                            "vtext_agent_revision",
-		legacyCanonicalVTextSourcePathKey: "/notes/run-metadata.vtext",
+		"type":                                "texture_agent_revision",
+		canonicalTextureSourcePathMetadataKey: "/notes/run-metadata.texture",
 	}
 	result = rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil)
 	if err := json.Unmarshal(result, &resultMap); err != nil {
 		t.Fatalf("unmarshal run metadata result: %v", err)
 	}
-	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/run-metadata.vtext" {
-		t.Errorf("%s from run metadata: got %v, want '/notes/run-metadata.vtext'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
-	}
-	if _, ok := resultMap[legacyCanonicalVTextSourcePathKey]; ok {
-		t.Errorf("%s from run metadata carried forward unexpectedly: %v", legacyCanonicalVTextSourcePathKey, resultMap[legacyCanonicalVTextSourcePathKey])
+	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/run-metadata.texture" {
+		t.Errorf("%s from run metadata: got %v, want '/notes/run-metadata.texture'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
 	}
 }

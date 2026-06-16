@@ -66,7 +66,7 @@ func TestDesktopStateSaveAndGet(t *testing.T) {
 		Windows: []types.WindowState{
 			{
 				WindowID: "win-1",
-				AppID:    "vtext",
+				AppID:    "texture",
 				Title:    "E-Text Editor",
 				Geometry: types.WindowGeometry{X: 100, Y: 100, Width: 600, Height: 400},
 				Mode:     types.WindowNormal,
@@ -119,31 +119,6 @@ func TestDesktopStateSaveAndGet(t *testing.T) {
 	}
 }
 
-func TestDesktopStateSanitizesLegacyTextureAppID(t *testing.T) {
-	t.Parallel()
-
-	state := sanitizeDesktopState(types.DesktopState{
-		Windows: []types.WindowState{
-			{
-				WindowID: "win-legacy",
-				AppID:    "vtext",
-				Title:    "Legacy Texture",
-				Geometry: types.WindowGeometry{Width: 600, Height: 400},
-				Mode:     types.WindowNormal,
-				ZIndex:   1,
-			},
-		},
-		ActiveWindowID: "win-legacy",
-	})
-
-	if len(state.Windows) != 1 {
-		t.Fatalf("Windows count = %d, want 1", len(state.Windows))
-	}
-	if state.Windows[0].AppID != "texture" {
-		t.Fatalf("Window[0].AppID = %q, want %q", state.Windows[0].AppID, "texture")
-	}
-}
-
 func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
 	t.Parallel()
 	_, h := testAPISetup(t)
@@ -152,7 +127,7 @@ func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
 		Windows: []types.WindowState{
 			{
 				WindowID: "",
-				AppID:    "vtext",
+				AppID:    "texture",
 				Title:    "Missing ID",
 				Geometry: types.WindowGeometry{Width: 0, Height: -1},
 				Mode:     types.WindowMode("floating"),
@@ -308,7 +283,7 @@ func TestDesktopStateUserIsolation(t *testing.T) {
 	// Save state for user-1.
 	saveReq1 := desktopStateSaveRequest{
 		Windows: []types.WindowState{
-			{WindowID: "win-a", AppID: "vtext", Title: "User 1 Doc", Geometry: types.WindowGeometry{X: 10, Y: 10, Width: 400, Height: 300}, Mode: types.WindowNormal, ZIndex: 1},
+			{WindowID: "win-a", AppID: "texture", Title: "User 1 Doc", Geometry: types.WindowGeometry{X: 10, Y: 10, Width: 400, Height: 300}, Mode: types.WindowNormal, ZIndex: 1},
 		},
 		ActiveWindowID: "win-a",
 	}
@@ -413,7 +388,7 @@ func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
 		Windows: []types.WindowState{
 			{
 				WindowID: "win-branch",
-				AppID:    "vtext",
+				AppID:    "texture",
 				Title:    "Branch desktop",
 				Geometry: types.WindowGeometry{X: 50, Y: 60, Width: 700, Height: 500},
 				Mode:     types.WindowNormal,
@@ -478,7 +453,7 @@ func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
 		Windows: []types.WindowState{
 			{
 				WindowID: "win-a",
-				AppID:    "vtext",
+				AppID:    "texture",
 				Title:    "Driver document",
 				Geometry: types.WindowGeometry{X: 10, Y: 20, Width: 600, Height: 400},
 				Mode:     types.WindowNormal,
@@ -553,7 +528,7 @@ func TestDesktopStateSessionsConvergeOnLatestDriverPlacement(t *testing.T) {
 			Windows: []types.WindowState{
 				{
 					WindowID: "win-shared",
-					AppID:    "vtext",
+					AppID:    "texture",
 					Title:    "Shared document",
 					Geometry: types.WindowGeometry{X: x, Y: 40, Width: 600, Height: 400},
 					Mode:     types.WindowNormal,

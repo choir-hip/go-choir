@@ -179,15 +179,15 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     await page.screenshot({ path: `${EVIDENCE_DIR}/09-playwright-shell.png` });
     testResults.evidence.screenshots.push('gateway-vm/gateway-e2e/09-playwright-shell.png');
 
-    // Step 6: Submit through the visible prompt bar and verify VText opens.
+    // Step 6: Submit through the visible prompt bar and verify Texture opens.
     testResults.steps.push({
       action: 'Submit prompt through visible prompt bar',
-      expected: 'Prompt bar posts /api/prompt-bar, conductor opens VText, and VText materializes v0/v1',
+      expected: 'Prompt bar posts /api/prompt-bar, conductor opens Texture, and Texture materializes v0/v1',
       observed: 'In progress...'
     });
 
     const marker = `deployed-prompt-bar-${Date.now()}`;
-    const prompt = `Draft a vtext abstract for ${marker}`;
+    const prompt = `Draft a texture abstract for ${marker}`;
     const promptInput = page.locator('[data-prompt-input]');
     await expect(promptInput).toBeVisible({ timeout: 10000 });
     await expect(promptInput).toBeEnabled();
@@ -209,8 +209,8 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     testResults.steps[5].observed = `Prompt bar returned submission ${responseBody.submission_id}`;
 
     testResults.steps.push({
-      action: 'Wait for conductor decision and VText window',
-      expected: 'Conductor decision opens VText with a durable document id',
+      action: 'Wait for conductor decision and Texture window',
+      expected: 'Conductor decision opens Texture with a durable document id',
       observed: 'In progress...'
     });
 
@@ -222,16 +222,16 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     expect(decision.framing_revision_id).toBeTruthy();
     expect(decision.initial_loop_id).toBeTruthy();
 
-    const vtextWindow = page.locator('[data-texture-app]').last();
-    await expect(vtextWindow).toBeVisible({ timeout: 30000 });
-    await expect(vtextWindow.locator('[data-texture-editor-area]')).toContainText(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
-    await expect(vtextWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+    const textureWindow = page.locator('[data-texture-app]').last();
+    await expect(textureWindow).toBeVisible({ timeout: 30000 });
+    await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30000 });
+    await expect(textureWindow.locator('[data-texture-editor-area]')).not.toContainText(/Conductor framing|Use this texture|User request:|Current requirements:|Grounding status:/);
 
     testResults.steps[6].observed = `Conductor decision: ${JSON.stringify(finalStatus.decision)?.substring(0, 300)}`;
 
     testResults.steps.push({
-      action: 'Verify durable VText revisions and trace projection',
-      expected: 'Document has user v0, conductor v1, and Trace sees the VText trajectory',
+      action: 'Verify durable Texture revisions and trace projection',
+      expected: 'Document has user v0, conductor v1, and Trace sees the Texture trajectory',
       observed: 'In progress...'
     });
 
@@ -244,12 +244,12 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     expect(framingRevision?.author_kind).toBe('appagent');
     expect(framingRevision?.author_label).toBe('conductor');
     expect(framingRevision?.content || '').toContain(marker);
-    expect(framingRevision?.content || '').not.toMatch(/Conductor framing|Use this vtext|User request:|Current requirements:|Grounding status:/);
+    expect(framingRevision?.content || '').not.toMatch(/Conductor framing|Use this texture|User request:|Current requirements:|Grounding status:/);
 
     const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(responseBody.submission_id)}`);
-    expect((trace.agents || []).some((agent) => agent.profile === 'vtext' && agent.agent_id === `vtext:${decision.doc_id}`)).toBe(true);
+    expect((trace.agents || []).some((agent) => agent.profile === 'texture' && agent.agent_id === `texture:${decision.doc_id}`)).toBe(true);
 
-    testResults.steps[7].observed = `VText revisions=${revisions.length}, trace agents=${(trace.agents || []).length}`;
+    testResults.steps[7].observed = `Texture revisions=${revisions.length}, trace agents=${(trace.agents || []).length}`;
     testResults.status = 'pass';
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/10-playwright-completed.png` });

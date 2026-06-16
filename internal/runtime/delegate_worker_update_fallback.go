@@ -205,9 +205,9 @@ func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord
 	workerSandboxURL := stringMapValue(output, "worker_sandbox_url")
 	var b strings.Builder
 	b.WriteString("Runtime supervision continuation required for an active worker delegation.\n")
-	b.WriteString("This is a control request for persistent super, copied from the VText-visible worker checkpoint. VText may narrate or ask for clarification, but only super may observe, cancel, or finish this worker.\n\n")
+	b.WriteString("This is a control request for persistent super, copied from the Texture-visible worker checkpoint. Texture may narrate or ask for clarification, but only super may observe, cancel, or finish this worker.\n\n")
 	b.WriteString("Continue the existing worker; do not start a duplicate worker run.\n")
-	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, keep the worker obligation open and report the precise pending evidence or blocker to VText with update_coagent. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate.\n\n")
+	b.WriteString("Use observe_worker_delegation or finish_worker_delegation against the existing worker_run_id. If the worker remains active without terminal evidence, keep the worker obligation open and report the precise pending evidence or blocker to Texture with update_coagent. Stop only when there is an AppChangePackage, a reviewable blocker, a cancellation certificate, or a bounded timeout certificate.\n\n")
 	b.WriteString("Worker refs:\n")
 	b.WriteString("- worker_run_id: ")
 	b.WriteString(workerRunID)
@@ -241,7 +241,7 @@ func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord
 		b.WriteString("\n")
 	}
 	if update.MessageSeq > 0 {
-		b.WriteString("- vtext_channel_seq: ")
+		b.WriteString("- texture_channel_seq: ")
 		b.WriteString(fmt.Sprintf("%d", update.MessageSeq))
 		b.WriteString("\n")
 	}
@@ -307,7 +307,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 	exportCount := len(mapSliceValue(output, "app_change_packages"))
 
 	findings := []string{
-		fmt.Sprintf("worker delegation returned status %q with worker state %q before super reported back to VText.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
+		fmt.Sprintf("worker delegation returned status %q with worker state %q before super reported back to Texture.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
 		fmt.Sprintf("super run ended with %s; preserving delegate evidence as a structured worker update.", firstNonEmpty(string(rec.State), "terminal state")),
 	}
 	if exportCount > 0 {
@@ -386,7 +386,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 
 	findings := []string{
 		fmt.Sprintf("worker delegation returned status %q with worker state %q.", firstNonEmpty(status, "unknown"), firstNonEmpty(state, "unknown")),
-		"super preserved this delegate result as a VText worker-update checkpoint before relying on another LLM turn.",
+		"super preserved this delegate result as a Texture worker-update checkpoint before relying on another LLM turn.",
 	}
 	if exportCount > 0 {
 		findings = append(findings, fmt.Sprintf("worker delegation returned %d AppChangePackage(s).", exportCount))
@@ -463,7 +463,7 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 	}
 
 	findings := []string{
-		"Persistent Super was requested by VText but failed before sending a structured coagent update.",
+		"Persistent Super was requested by Texture but failed before sending a structured coagent update.",
 		fmt.Sprintf("Super ended with error: %s", strings.TrimSpace(runErr.Error())),
 	}
 	if hasName(successfulTools, "request_worker_vm") && !hasName(successfulTools, "start_worker_delegation") {
@@ -471,9 +471,9 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 	} else if !hasName(successfulTools, "request_worker_vm") && !hasName(successfulTools, "start_worker_delegation") {
 		findings = append(findings, "No worker lease/delegation tool result was recorded; no worker run or AppChangePackage exists for this Super attempt.")
 	} else if hasName(successfulTools, "start_worker_delegation") {
-		findings = append(findings, "start_worker_delegation appeared in the run, but Super failed before reporting terminal worker evidence to VText.")
+		findings = append(findings, "start_worker_delegation appeared in the run, but Super failed before reporting terminal worker evidence to Texture.")
 	}
-	findings = append(findings, "The runtime synthesized this VText-visible blocker so the mission narrative can resume from evidence instead of only a failed Trace.")
+	findings = append(findings, "The runtime synthesized this Texture-visible blocker so the mission narrative can resume from evidence instead of only a failed Trace.")
 
 	refs := []string{
 		"run:" + rec.RunID,
@@ -497,7 +497,7 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
 		Role:          AgentProfileSuper,
 		Kind:          "blocker",
-		Summary:       "Runtime fallback: Super failed before worker delegation/package evidence reached VText.",
+		Summary:       "Runtime fallback: Super failed before worker delegation/package evidence reached Texture.",
 		Findings:      trimDedupeNonEmpty(findings),
 		EvidenceIDs:   []string{"run:" + rec.RunID},
 		Refs:          trimDedupeNonEmpty(refs),

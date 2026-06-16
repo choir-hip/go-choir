@@ -69,7 +69,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	vSuper := rt.ToolRegistryForProfile(AgentProfileVSuper)
 	conductor := rt.ToolRegistryForProfile(AgentProfileConductor)
 	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	vtext := rt.ToolRegistryForProfile(AgentProfileVText)
+	texture := rt.ToolRegistryForProfile(AgentProfileTexture)
 	processor := rt.ToolRegistryForProfile(AgentProfileProcessor)
 	reconciler := rt.ToolRegistryForProfile(AgentProfileReconciler)
 
@@ -199,21 +199,21 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"spawn_agent", "cancel_agent", "save_evidence", "read_evidence", "patch_texture", "rewrite_texture", "record_texture_decision", "request_super_execution"} {
-		if _, ok := vtext.Lookup(name); !ok {
-			t.Fatalf("vtext missing tool %q", name)
+		if _, ok := texture.Lookup(name); !ok {
+			t.Fatalf("texture missing tool %q", name)
 		}
 	}
-	if _, ok := vtext.Lookup("edit_texture"); ok {
-		t.Fatal("vtext should not expose retired edit_texture compatibility alias")
+	if _, ok := texture.Lookup("edit_texture"); ok {
+		t.Fatal("texture should not expose retired edit_texture compatibility alias")
 	}
-	if _, ok := vtext.Lookup("bash"); ok {
-		t.Fatalf("vtext should not have bash")
+	if _, ok := texture.Lookup("bash"); ok {
+		t.Fatalf("texture should not have bash")
 	}
-	if _, ok := vtext.Lookup("web_search"); ok {
-		t.Fatalf("vtext should not have web_search")
+	if _, ok := texture.Lookup("web_search"); ok {
+		t.Fatalf("texture should not have web_search")
 	}
-	if _, ok := vtext.Lookup("source_search"); ok {
-		t.Fatalf("vtext should not have source_search")
+	if _, ok := texture.Lookup("source_search"); ok {
+		t.Fatalf("texture should not have source_search")
 	}
 	retiredToolNames := []string{
 		"cast_" + "agent",
@@ -230,21 +230,21 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 			AgentProfileResearcher: researcher,
 			AgentProfileProcessor:  processor,
 			AgentProfileReconciler: reconciler,
-			AgentProfileVText:      vtext,
+			AgentProfileTexture:    texture,
 		} {
 			if _, ok := registry.Lookup(oldName); ok {
 				t.Fatalf("%s should not expose retired tool %s", profile, oldName)
 			}
 		}
 	}
-	if _, ok := vtext.Lookup("update_coagent"); ok {
-		t.Fatalf("vtext should not have update_coagent")
+	if _, ok := texture.Lookup("update_coagent"); ok {
+		t.Fatalf("texture should not have update_coagent")
 	}
-	if _, ok := vtext.Lookup("publish_app_change_package"); ok {
-		t.Fatalf("vtext should not have publish_app_change_package")
+	if _, ok := texture.Lookup("publish_app_change_package"); ok {
+		t.Fatalf("texture should not have publish_app_change_package")
 	}
-	if _, ok := vtext.Lookup("delegate_worker_vm"); ok {
-		t.Fatalf("vtext should not have delegate_worker_vm")
+	if _, ok := texture.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("texture should not have delegate_worker_vm")
 	}
 	for _, name := range []string{"patch_texture", "rewrite_texture", "edit_texture"} {
 		if _, ok := conductor.Lookup(name); ok {
@@ -325,7 +325,7 @@ func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
 	if _, ok := payload["next_required_tool"]; ok {
 		t.Fatalf("next_required_tool should be omitted from bash result; payload=%#v", payload)
 	}
-	if instruction := fmt.Sprint(payload["next_instruction"]); !strings.Contains(instruction, "Report this command result to the addressed VText document") {
+	if instruction := fmt.Sprint(payload["next_instruction"]); !strings.Contains(instruction, "Report this command result to the addressed Texture document") {
 		t.Fatalf("next_instruction = %q", instruction)
 	}
 }
@@ -556,9 +556,9 @@ func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	t.Parallel()
 	rt, s, _ := testRuntimeWithTempCWD(t)
 	parent, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-repeat",
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-repeat",
 		runMetadataTrajectoryID: "trajectory-repeat",
 	})
 	if err != nil {
@@ -567,7 +567,7 @@ func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	ctx := WithToolExecutionContext(context.Background(), parent)
 
 	for i := 0; i < 2; i++ {
-		if _, err := rt.ChannelCast(ctx, "doc-repeat-work", "agent-super-user-alice", "", "vtext", "user", "please run the same candidate-world probe"); err != nil {
+		if _, err := rt.ChannelCast(ctx, "doc-repeat-work", "agent-super-user-alice", "", "texture", "user", "please run the same candidate-world probe"); err != nil {
 			t.Fatalf("channel cast %d: %v", i, err)
 		}
 	}
@@ -600,29 +600,29 @@ func TestRedirectWorkerDelegationIsNotInstalled(t *testing.T) {
 	}
 }
 
-func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
+func TestRequestSuperExecutionDedupesSameTextureRun(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default tools: %v", err)
 	}
-	vtextRun, err := rt.StartRunWithMetadata(context.Background(), "request privileged work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-super-dedupe",
+	textureRun, err := rt.StartRunWithMetadata(context.Background(), "request privileged work", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-super-dedupe",
 		runMetadataChannelID:    "doc-super-dedupe",
 		runMetadataTrajectoryID: "trace-super-dedupe",
 	})
 	if err != nil {
-		t.Fatalf("start vtext run: %v", err)
+		t.Fatalf("start texture run: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileVText)
+	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
 	rawArgs := json.RawMessage(`{"objective":"Run exactly one bounded candidate-world probe.","channel_id":"doc-super-dedupe","model":"gpt-5-codex"}`)
-	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", rawArgs)
+	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", rawArgs)
 	if err != nil {
 		t.Fatalf("first request_super_execution: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", rawArgs)
+	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", rawArgs)
 	if err != nil {
 		t.Fatalf("second request_super_execution: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
 	}
 	superMessages := 0
 	for _, msg := range messages {
-		if msg.ToAgentID == first.AgentID && msg.FromRunID == vtextRun.RunID {
+		if msg.ToAgentID == first.AgentID && msg.FromRunID == textureRun.RunID {
 			superMessages++
 		}
 	}
@@ -665,31 +665,31 @@ func TestRequestSuperExecutionDedupesSameVTextRun(t *testing.T) {
 	}
 }
 
-func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testing.T) {
+func TestRequestSuperExecutionDedupesDifferentObjectivesInSameTextureRun(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default tools: %v", err)
 	}
-	vtextRun, err := rt.StartRunWithMetadata(context.Background(), "request one privileged turn", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-super-turn-dedupe",
+	textureRun, err := rt.StartRunWithMetadata(context.Background(), "request one privileged turn", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-super-turn-dedupe",
 		runMetadataChannelID:    "doc-super-turn-dedupe",
 		runMetadataTrajectoryID: "trace-super-turn-dedupe",
 	})
 	if err != nil {
-		t.Fatalf("start vtext run: %v", err)
+		t.Fatalf("start texture run: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
+	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", json.RawMessage(`{
 		"objective":"Run one bounded candidate-world probe for onboarding copy.",
 		"channel_id":"doc-super-turn-dedupe"
 	}`))
 	if err != nil {
 		t.Fatalf("first request_super_execution: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
+	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", json.RawMessage(`{
 		"objective":"Also run a second candidate-world probe for prompt bar layout.",
 		"channel_id":"doc-super-turn-dedupe"
 	}`))
@@ -711,8 +711,8 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameVTextRun(t *testin
 	if first.Deduped {
 		t.Fatalf("first request should not be deduped: %+v", first)
 	}
-	if !second.Deduped || second.DedupeReason != "vtext_run_already_requested_super" {
-		t.Fatalf("second request should be deduped by vtext turn: %+v", second)
+	if !second.Deduped || second.DedupeReason != "texture_run_already_requested_super" {
+		t.Fatalf("second request should be deduped by texture turn: %+v", second)
 	}
 	if second.Cursor != first.Cursor {
 		t.Fatalf("second cursor = %d, want first cursor %d", second.Cursor, first.Cursor)
@@ -765,18 +765,18 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		t.Fatalf("install default tools: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileVText)
-	firstVText, err := rt.StartRunWithMetadata(context.Background(), "request liquid lane", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-liquid",
+	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	firstTexture, err := rt.StartRunWithMetadata(context.Background(), "request liquid lane", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-liquid",
 		runMetadataChannelID:    "doc-liquid",
 		runMetadataTrajectoryID: "trace-liquid",
 	})
 	if err != nil {
-		t.Fatalf("start first vtext run: %v", err)
+		t.Fatalf("start first texture run: %v", err)
 	}
-	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), firstVText), "request_super_execution", json.RawMessage(`{
+	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), firstTexture), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the liquid package lane.",
 		"channel_id":"doc-liquid"
 	}`))
@@ -795,17 +795,17 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		t.Fatalf("initial super delivery should stay pending until first run completes, got %+v", pending)
 	}
 
-	secondVText, err := rt.StartRunWithMetadata(context.Background(), "request python lane", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-python",
+	secondTexture, err := rt.StartRunWithMetadata(context.Background(), "request python lane", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-python",
 		runMetadataChannelID:    "doc-python",
 		runMetadataTrajectoryID: "trace-python",
 	})
 	if err != nil {
-		t.Fatalf("start second vtext run: %v", err)
+		t.Fatalf("start second texture run: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), secondVText), "request_super_execution", json.RawMessage(`{
+	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), secondTexture), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the python package lane.",
 		"channel_id":"doc-python"
 	}`))
@@ -885,17 +885,17 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 		t.Fatalf("create blocked super run: %v", err)
 	}
 
-	vtextRun, err := rt.StartRunWithMetadata(context.Background(), "request fresh super work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:doc-fresh-super",
+	textureRun, err := rt.StartRunWithMetadata(context.Background(), "request fresh super work", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:doc-fresh-super",
 		runMetadataChannelID:    "doc-fresh-super",
 		runMetadataTrajectoryID: "trace-fresh-super",
 	})
 	if err != nil {
-		t.Fatalf("start vtext run: %v", err)
+		t.Fatalf("start texture run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileVText).Execute(WithToolExecutionContext(context.Background(), vtextRun), "request_super_execution", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the fresh Universal Wire product API handoff.",
 		"channel_id":"doc-fresh-super"
 	}`))
@@ -931,12 +931,12 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 		t.Fatalf("install default agent tools: %v", err)
 	}
 
-	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "revise document", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
+	textureTask, err := rt.StartRunWithMetadata(context.Background(), "revise document", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
 	})
 	if err != nil {
-		t.Fatalf("submit vtext task: %v", err)
+		t.Fatalf("submit texture task: %v", err)
 	}
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate execution", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
@@ -947,21 +947,21 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	if _, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
 		"objective":"handle execution-heavy follow-up",
 		"role":"super",
 		"channel_id":"doc-exec-work"
 	}`)); err == nil {
-		t.Fatalf("vtext should not be allowed to spawn super")
+		t.Fatalf("texture should not be allowed to spawn super")
 	}
 
-	superRequestRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "request_super_execution", json.RawMessage(`{
+	superRequestRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "request_super_execution", json.RawMessage(`{
 		"objective":"handle execution-heavy follow-up",
 		"channel_id":"doc-exec-work"
 	}`))
 	if err != nil {
-		t.Fatalf("vtext request super execution: %v", err)
+		t.Fatalf("texture request super execution: %v", err)
 	}
 	var superRequest struct {
 		AgentID   string `json:"agent_id"`
@@ -1077,8 +1077,8 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 		DesktopID: types.PrimaryDesktopID,
 		Windows: []types.WindowState{
 			{
-				WindowID: "win-vtext",
-				AppID:    "vtext",
+				WindowID: "win-texture",
+				AppID:    "texture",
 				Title:    "Draft",
 				Geometry: types.WindowGeometry{X: 20, Y: 30, Width: 900, Height: 700},
 				Mode:     types.WindowNormal,
@@ -1090,7 +1090,7 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 				UpdatedAt: now,
 			},
 		},
-		ActiveWindowID: "win-vtext",
+		ActiveWindowID: "win-texture",
 		UpdatedAt:      now,
 	}); err != nil {
 		t.Fatalf("save source desktop state: %v", err)
@@ -1168,11 +1168,11 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get branch desktop state: %v", err)
 	}
-	if len(branchState.Windows) != 1 || branchState.Windows[0].WindowID != "win-vtext" {
+	if len(branchState.Windows) != 1 || branchState.Windows[0].WindowID != "win-texture" {
 		t.Fatalf("branch windows = %+v", branchState.Windows)
 	}
-	if branchState.ActiveWindowID != "win-vtext" {
-		t.Fatalf("branch active_window_id = %q, want win-vtext", branchState.ActiveWindowID)
+	if branchState.ActiveWindowID != "win-texture" {
+		t.Fatalf("branch active_window_id = %q, want win-texture", branchState.ActiveWindowID)
 	}
 
 	publishRaw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "publish_desktop", json.RawMessage(`{
@@ -1749,7 +1749,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, AgentProfileTexture)
 	}
 	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
-		"objective":"research should be owned by vtext, not conductor",
+		"objective":"research should be owned by texture, not conductor",
 		"role":"researcher"
 	}`)); err == nil {
 		t.Fatal("conductor should not be allowed to spawn researcher")
@@ -1757,14 +1757,14 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	// Conductor spawn_agent role=texture without channel_id materializes a new
 	// document route (the conductor user-prompt handoff owns document
 	// creation; channel_id is only meaningful for revising existing docs).
-	vtextSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+	textureSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"texture"
 	}`))
 	if err != nil {
 		t.Fatalf("conductor spawn texture: %v", err)
 	}
-	var vtextSpawn struct {
+	var textureSpawn struct {
 		AgentID           string `json:"agent_id"`
 		RunID             string `json:"loop_id"`
 		Profile           string `json:"profile"`
@@ -1774,63 +1774,63 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		FramingRevisionID string `json:"framing_revision_id"`
 		InitialRevisionID string `json:"initial_revision_id"`
 	}
-	if err := json.Unmarshal([]byte(vtextSpawnRaw), &vtextSpawn); err != nil {
+	if err := json.Unmarshal([]byte(textureSpawnRaw), &textureSpawn); err != nil {
 		t.Fatalf("decode texture spawn: %v", err)
 	}
-	if vtextSpawn.AgentID != "texture:"+vtextSpawn.ChannelID {
-		t.Fatalf("texture spawn agent_id = %q, want texture:%s", vtextSpawn.AgentID, vtextSpawn.ChannelID)
+	if textureSpawn.AgentID != "texture:"+textureSpawn.ChannelID {
+		t.Fatalf("texture spawn agent_id = %q, want texture:%s", textureSpawn.AgentID, textureSpawn.ChannelID)
 	}
-	if vtextSpawn.Profile != AgentProfileTexture {
-		t.Fatalf("texture spawn profile = %q, want %q", vtextSpawn.Profile, AgentProfileTexture)
+	if textureSpawn.Profile != AgentProfileTexture {
+		t.Fatalf("texture spawn profile = %q, want %q", textureSpawn.Profile, AgentProfileTexture)
 	}
-	if vtextSpawn.ChannelID == "" {
+	if textureSpawn.ChannelID == "" {
 		t.Fatal("texture spawn channel_id should not be empty")
 	}
-	if vtextSpawn.RunID == "" {
+	if textureSpawn.RunID == "" {
 		t.Fatal("texture spawn loop_id should point to the initial product-path Texture run")
 	}
-	if vtextSpawn.State != "open" {
-		t.Fatalf("texture spawn state = %q, want open", vtextSpawn.State)
+	if textureSpawn.State != "open" {
+		t.Fatalf("texture spawn state = %q, want open", textureSpawn.State)
 	}
-	if vtextSpawn.UserRevisionID == "" || vtextSpawn.FramingRevisionID != "" || vtextSpawn.InitialRevisionID != vtextSpawn.UserRevisionID {
-		t.Fatalf("unexpected texture spawn revision ids: %+v", vtextSpawn)
+	if textureSpawn.UserRevisionID == "" || textureSpawn.FramingRevisionID != "" || textureSpawn.InitialRevisionID != textureSpawn.UserRevisionID {
+		t.Fatalf("unexpected texture spawn revision ids: %+v", textureSpawn)
 	}
-	// A repeat conductor legacy role=vtext spawn on the same conductor run must
+	// A repeat conductor legacy role=texture spawn on the same conductor run must
 	// dedupe to the already-materialized Texture document instead of opening a
 	// second route.
 	repeatSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
-		"role":"vtext",
+		"role":"texture",
 		"channel_id":"doc-work"
 	}`))
 	if err != nil {
-		t.Fatalf("conductor repeat legacy spawn vtext: %v", err)
+		t.Fatalf("conductor repeat legacy spawn texture: %v", err)
 	}
 	var repeatSpawn struct {
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal([]byte(repeatSpawnRaw), &repeatSpawn); err != nil {
-		t.Fatalf("decode repeat legacy vtext spawn: %v", err)
+		t.Fatalf("decode repeat legacy texture spawn: %v", err)
 	}
-	if repeatSpawn.ChannelID != vtextSpawn.ChannelID {
-		t.Fatalf("repeat legacy vtext spawn channel_id = %q, want deduped %q", repeatSpawn.ChannelID, vtextSpawn.ChannelID)
+	if repeatSpawn.ChannelID != textureSpawn.ChannelID {
+		t.Fatalf("repeat legacy texture spawn channel_id = %q, want deduped %q", repeatSpawn.ChannelID, textureSpawn.ChannelID)
 	}
-	vtextAgent, err := s.GetAgent(context.Background(), vtextSpawn.AgentID)
+	textureAgent, err := s.GetAgent(context.Background(), textureSpawn.AgentID)
 	if err != nil {
 		t.Fatalf("get texture agent: %v", err)
 	}
-	if vtextAgent.ChannelID != vtextSpawn.ChannelID {
-		t.Fatalf("texture agent channel_id = %q, want %q", vtextAgent.ChannelID, vtextSpawn.ChannelID)
+	if textureAgent.ChannelID != textureSpawn.ChannelID {
+		t.Fatalf("texture agent channel_id = %q, want %q", textureAgent.ChannelID, textureSpawn.ChannelID)
 	}
 	parentAfterSpawn, err := s.GetRun(context.Background(), conductorTask.RunID)
 	if err != nil {
 		t.Fatalf("get conductor task: %v", err)
 	}
-	if parentAfterSpawn.Metadata["doc_id"] != vtextSpawn.ChannelID {
-		t.Fatalf("conductor metadata doc_id = %v, want %q", parentAfterSpawn.Metadata["doc_id"], vtextSpawn.ChannelID)
+	if parentAfterSpawn.Metadata["doc_id"] != textureSpawn.ChannelID {
+		t.Fatalf("conductor metadata doc_id = %v, want %q", parentAfterSpawn.Metadata["doc_id"], textureSpawn.ChannelID)
 	}
 	if strings.TrimSpace(parentAfterSpawn.Result) == "" {
-		t.Fatal("conductor result should be populated as soon as vtext is opened")
+		t.Fatal("conductor result should be populated as soon as texture is opened")
 	}
 	var parentDecision struct {
 		Action            string `json:"action"`
@@ -1847,34 +1847,34 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if parentDecision.Action != "open_app" || parentDecision.App != AgentProfileTexture {
 		t.Fatalf("unexpected conductor decision: %+v", parentDecision)
 	}
-	if parentDecision.DocID != vtextSpawn.ChannelID {
-		t.Fatalf("conductor result doc_id = %q, want %q", parentDecision.DocID, vtextSpawn.ChannelID)
+	if parentDecision.DocID != textureSpawn.ChannelID {
+		t.Fatalf("conductor result doc_id = %q, want %q", parentDecision.DocID, textureSpawn.ChannelID)
 	}
-	if parentDecision.InitialRunID != vtextSpawn.RunID {
-		t.Fatalf("conductor result initial_loop_id = %q, want %q", parentDecision.InitialRunID, vtextSpawn.RunID)
+	if parentDecision.InitialRunID != textureSpawn.RunID {
+		t.Fatalf("conductor result initial_loop_id = %q, want %q", parentDecision.InitialRunID, textureSpawn.RunID)
 	}
-	if parentDecision.UserRevisionID != vtextSpawn.UserRevisionID || parentDecision.FramingRevisionID != "" || parentDecision.InitialRevisionID != vtextSpawn.UserRevisionID {
-		t.Fatalf("unexpected conductor result revision ids: %+v; spawn=%+v", parentDecision, vtextSpawn)
+	if parentDecision.UserRevisionID != textureSpawn.UserRevisionID || parentDecision.FramingRevisionID != "" || parentDecision.InitialRevisionID != textureSpawn.UserRevisionID {
+		t.Fatalf("unexpected conductor result revision ids: %+v; spawn=%+v", parentDecision, textureSpawn)
 	}
 
-	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own a later document step", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      vtextSpawn.AgentID,
-		runMetadataChannelID:    vtextSpawn.ChannelID,
-		"doc_id":                vtextSpawn.ChannelID,
+	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own a later document step", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      textureSpawn.AgentID,
+		runMetadataChannelID:    textureSpawn.ChannelID,
+		"doc_id":                textureSpawn.ChannelID,
 	})
 	if err != nil {
-		t.Fatalf("start vtext run for delegation: %v", err)
+		t.Fatalf("start texture run for delegation: %v", err)
 	}
-	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	researchSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	researchSpawnRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
 		"objective":"research background facts for the document",
 		"role":"researcher",
-		"channel_id":"`+vtextSpawn.ChannelID+`"
+		"channel_id":"`+textureSpawn.ChannelID+`"
 	}`))
 	if err != nil {
-		t.Fatalf("vtext spawn researcher: %v", err)
+		t.Fatalf("texture spawn researcher: %v", err)
 	}
 	var researchSpawn struct {
 		RunID     string `json:"loop_id"`
@@ -1887,8 +1887,8 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if researchSpawn.Profile != AgentProfileResearcher {
 		t.Fatalf("research spawn profile = %q, want %q", researchSpawn.Profile, AgentProfileResearcher)
 	}
-	if researchSpawn.ChannelID != vtextSpawn.ChannelID {
-		t.Fatalf("research spawn channel_id = %q, want %q", researchSpawn.ChannelID, vtextSpawn.ChannelID)
+	if researchSpawn.ChannelID != textureSpawn.ChannelID {
+		t.Fatalf("research spawn channel_id = %q, want %q", researchSpawn.ChannelID, textureSpawn.ChannelID)
 	}
 	researchRun, err := s.GetRun(context.Background(), researchSpawn.RunID)
 	if err != nil {
@@ -1906,13 +1906,13 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("research open work items = %+v, want %s", researchObligations.OpenWorkItems, researchWorkItemIDs[0])
 	}
 
-	researchAliasSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+	researchAliasSpawnRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
 		"objective":"research current facts for the document",
 		"role":"research",
-		"channel_id":"`+vtextSpawn.ChannelID+`"
+		"channel_id":"`+textureSpawn.ChannelID+`"
 	}`))
 	if err != nil {
-		t.Fatalf("vtext spawn research alias: %v", err)
+		t.Fatalf("texture spawn research alias: %v", err)
 	}
 	var researchAliasSpawn struct {
 		Role    string `json:"role"`
@@ -1925,13 +1925,13 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("research alias spawn = role %q profile %q, want researcher/researcher", researchAliasSpawn.Role, researchAliasSpawn.Profile)
 	}
 
-	noisyResearchSpawnRaw, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextTask), "spawn_agent", json.RawMessage(`{
+	noisyResearchSpawnRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
 		"objective":"research current facts despite provider wrapper noise",
 		"role":"researcher</parameter> </invoke>",
-		"channel_id":"`+vtextSpawn.ChannelID+`"
+		"channel_id":"`+textureSpawn.ChannelID+`"
 	}`))
 	if err != nil {
-		t.Fatalf("vtext spawn noisy researcher role: %v", err)
+		t.Fatalf("texture spawn noisy researcher role: %v", err)
 	}
 	var noisyResearchSpawn struct {
 		Role    string `json:"role"`
@@ -1945,7 +1945,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	}
 }
 
-func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
+func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
@@ -2001,7 +2001,7 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		t.Fatal("processor should not be allowed to spawn researcher")
 	}
 
-	spawnVTextRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+	spawnTextureRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"write a source-grounded article from this processor brief about Fed rates and inflation",
 		"role":"texture",
 		"channel_id":"universal-wire-story-candidate"
@@ -2009,7 +2009,7 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("processor spawn texture: %v", err)
 	}
-	var vtextSpawn struct {
+	var textureSpawn struct {
 		AgentID         string         `json:"agent_id"`
 		DocID           string         `json:"doc_id"`
 		SeedRevisionID  string         `json:"seed_revision_id"`
@@ -2020,26 +2020,26 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		State           types.RunState `json:"state"`
 		CreatedDocument bool           `json:"created_document"`
 	}
-	if err := json.Unmarshal([]byte(spawnVTextRaw), &vtextSpawn); err != nil {
-		t.Fatalf("decode processor vtext spawn: %v", err)
+	if err := json.Unmarshal([]byte(spawnTextureRaw), &textureSpawn); err != nil {
+		t.Fatalf("decode processor texture spawn: %v", err)
 	}
-	if vtextSpawn.Profile != AgentProfileTexture || vtextSpawn.Role != AgentProfileTexture {
-		t.Fatalf("processor texture spawn profile/role = %+v", vtextSpawn)
+	if textureSpawn.Profile != AgentProfileTexture || textureSpawn.Role != AgentProfileTexture {
+		t.Fatalf("processor texture spawn profile/role = %+v", textureSpawn)
 	}
-	if vtextSpawn.DocID == "" || vtextSpawn.AgentID != "texture:"+vtextSpawn.DocID || vtextSpawn.ChannelID != vtextSpawn.DocID {
-		t.Fatalf("processor texture spawn did not return normal Texture handle: %+v", vtextSpawn)
+	if textureSpawn.DocID == "" || textureSpawn.AgentID != "texture:"+textureSpawn.DocID || textureSpawn.ChannelID != textureSpawn.DocID {
+		t.Fatalf("processor texture spawn did not return normal Texture handle: %+v", textureSpawn)
 	}
-	if !vtextSpawn.CreatedDocument || vtextSpawn.SeedRevisionID == "" || vtextSpawn.LoopID == "" {
-		t.Fatalf("processor vtext spawn missing document/revision/run identity: %+v", vtextSpawn)
+	if !textureSpawn.CreatedDocument || textureSpawn.SeedRevisionID == "" || textureSpawn.LoopID == "" {
+		t.Fatalf("processor texture spawn missing document/revision/run identity: %+v", textureSpawn)
 	}
-	doc, err := rt.Store().GetDocument(context.Background(), vtextSpawn.DocID, "user-alice")
+	doc, err := rt.Store().GetDocument(context.Background(), textureSpawn.DocID, "user-alice")
 	if err != nil {
-		t.Fatalf("get processor-spawned vtext document: %v", err)
+		t.Fatalf("get processor-spawned texture document: %v", err)
 	}
-	if doc.CurrentRevisionID != vtextSpawn.SeedRevisionID {
-		t.Fatalf("processor-spawned doc head = %q, want seed %q", doc.CurrentRevisionID, vtextSpawn.SeedRevisionID)
+	if doc.CurrentRevisionID != textureSpawn.SeedRevisionID {
+		t.Fatalf("processor-spawned doc head = %q, want seed %q", doc.CurrentRevisionID, textureSpawn.SeedRevisionID)
 	}
-	seedRev, err := rt.Store().GetRevision(context.Background(), vtextSpawn.SeedRevisionID, "user-alice")
+	seedRev, err := rt.Store().GetRevision(context.Background(), textureSpawn.SeedRevisionID, "user-alice")
 	if err != nil {
 		t.Fatalf("get processor-spawned seed revision: %v", err)
 	}
@@ -2050,17 +2050,17 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		t.Fatalf("processor seed revision missing selected Style.texture source: %q", seedRev.Content)
 	}
 	seedMeta := decodeRevisionMetadata(seedRev.Metadata)
-	if metadataString(seedMeta, "artifact_kind") != "source_brief" || metadataString(seedMeta, "vtext_version") == "v0" {
+	if metadataString(seedMeta, "artifact_kind") != "source_brief" || metadataString(seedMeta, "texture_version") == "v0" {
 		t.Fatalf("processor seed should be a non-article source brief, metadata=%+v", seedMeta)
 	}
-	if metadataString(seedMeta, "revision_role") != vtextRevisionRoleInput ||
-		metadataString(seedMeta, "input_origin") != vtextInputOriginProcessorHandoff {
+	if metadataString(seedMeta, "revision_role") != textureRevisionRoleInput ||
+		metadataString(seedMeta, "input_origin") != textureInputOriginProcessorHandoff {
 		t.Fatalf("processor seed should be input/processor_handoff: %+v", seedMeta)
 	}
 	if _, ok := seedMeta["article_version"]; ok {
 		t.Fatalf("processor seed should not write article_version: %+v", seedMeta)
 	}
-	sourceEntities := decodeVTextSourceEntities(seedMeta["source_entities"])
+	sourceEntities := decodeTextureSourceEntities(seedMeta["source_entities"])
 	if len(sourceEntities) != 1 || sourceEntities[0].Target.ContentID != sourceItem.ContentID {
 		t.Fatalf("processor seed source_entities = %#v, want content item %q", sourceEntities, sourceItem.ContentID)
 	}
@@ -2070,20 +2070,20 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	if metadataString(seedMeta, "selected_style_rationale") == "" {
 		t.Fatalf("processor seed revision missing style rationale metadata: %+v", seedMeta)
 	}
-	vtextRun, err := rt.GetRun(context.Background(), vtextSpawn.LoopID, "user-alice")
+	textureRun, err := rt.GetRun(context.Background(), textureSpawn.LoopID, "user-alice")
 	if err != nil {
-		t.Fatalf("get processor-spawned vtext run: %v", err)
+		t.Fatalf("get processor-spawned texture run: %v", err)
 	}
-	if vtextRun.AgentID != "texture:"+vtextSpawn.DocID || vtextRun.ChannelID != vtextSpawn.DocID || metadataString(vtextRun.Metadata, "type") != textureAgentRevisionTaskType {
-		t.Fatalf("processor texture run is not a Texture revision run: %+v", vtextRun)
+	if textureRun.AgentID != "texture:"+textureSpawn.DocID || textureRun.ChannelID != textureSpawn.DocID || metadataString(textureRun.Metadata, "type") != textureAgentRevisionTaskType {
+		t.Fatalf("processor texture run is not a Texture revision run: %+v", textureRun)
 	}
 	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
 	if err != nil {
-		t.Fatalf("list runs after processor vtext handoff: %v", err)
+		t.Fatalf("list runs after processor texture handoff: %v", err)
 	}
 	for _, run := range runs {
 		if trajectoryIDForRun(&run) == processorRun.TrajectoryID && run.AgentProfile == AgentProfileSuper {
-			t.Fatalf("source/article route created super before VText requested execution: %+v", run)
+			t.Fatalf("source/article route created super before Texture requested execution: %+v", run)
 		}
 	}
 	workItems, err := rt.Store().ListWorkItemsByTrajectory(context.Background(), "user-alice", processorRun.TrajectoryID, true)
@@ -2091,14 +2091,14 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		t.Fatalf("list processor publication work items: %v", err)
 	}
 	if len(workItems) != 1 {
-		t.Fatalf("open processor publication work items = %+v, want only story-resolution after VText handoff", workItems)
+		t.Fatalf("open processor publication work items = %+v, want only story-resolution after Texture handoff", workItems)
 	}
 	var sawStoryResolution bool
 	for _, item := range workItems {
 		switch item.ObjectiveFingerprint {
-		case wireStoryResolutionWorkItemFingerprint(processorRun.TrajectoryID, vtextSpawn.DocID):
+		case wireStoryResolutionWorkItemFingerprint(processorRun.TrajectoryID, textureSpawn.DocID):
 			sawStoryResolution = true
-			if item.Details["kind"] != "wire_story_resolution" || item.Details["doc_id"] != vtextSpawn.DocID {
+			if item.Details["kind"] != "wire_story_resolution" || item.Details["doc_id"] != textureSpawn.DocID {
 				t.Fatalf("processor story-resolution work item details = %+v", item.Details)
 			}
 		default:
@@ -2113,46 +2113,46 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		t.Fatalf("find completed processor decision work item: %v", err)
 	}
 	if !found {
-		t.Fatal("processor decision work item missing after VText handoff")
+		t.Fatal("processor decision work item missing after Texture handoff")
 	}
 	if processorDecision.Status != types.WorkItemCompleted ||
-		processorDecision.Details["last_decision"] != "opened_vtext" ||
+		processorDecision.Details["last_decision"] != "opened_texture" ||
 		processorDecision.Details["resolution_state"] != "all_source_items_decided_with_story_route" ||
-		processorDecision.Details["story_doc_id"] != vtextSpawn.DocID {
+		processorDecision.Details["story_doc_id"] != textureSpawn.DocID {
 		t.Fatalf("processor decision work item = %+v", processorDecision)
 	}
-	if metadataString(vtextRun.Metadata, "source_network_cycle_id") != "cycle-test" || metadataString(vtextRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
-		t.Fatalf("processor vtext run did not preserve source-network metadata: %+v", vtextRun.Metadata)
+	if metadataString(textureRun.Metadata, "source_network_cycle_id") != "cycle-test" || metadataString(textureRun.Metadata, "processor_key") != "processor:global_firehose:global:gdelt" {
+		t.Fatalf("processor texture run did not preserve source-network metadata: %+v", textureRun.Metadata)
 	}
-	if metadataString(vtextRun.Metadata, "request_intent") != "universal_wire_processor_article_revision" {
-		t.Fatalf("processor vtext run request_intent = %q", metadataString(vtextRun.Metadata, "request_intent"))
+	if metadataString(textureRun.Metadata, "request_intent") != "universal_wire_processor_article_revision" {
+		t.Fatalf("processor texture run request_intent = %q", metadataString(textureRun.Metadata, "request_intent"))
 	}
-	runSourceEntities := decodeVTextSourceEntities(vtextRun.Metadata["source_entities"])
+	runSourceEntities := decodeTextureSourceEntities(textureRun.Metadata["source_entities"])
 	if len(runSourceEntities) != 1 || runSourceEntities[0].Target.ContentID != sourceItem.ContentID {
-		t.Fatalf("processor vtext run source_entities = %#v", runSourceEntities)
+		t.Fatalf("processor texture run source_entities = %#v", runSourceEntities)
 	}
-	if metadataString(vtextRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(vtextRun.Prompt, "Selected Style.texture source context") || !strings.Contains(vtextRun.Prompt, "Style.texture: Market Brief") {
-		t.Fatalf("processor vtext run missing Style.texture context: metadata=%+v prompt=%q", vtextRun.Metadata, vtextRun.Prompt)
+	if metadataString(textureRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(textureRun.Prompt, "Selected Style.texture source context") || !strings.Contains(textureRun.Prompt, "Style.texture: Market Brief") {
+		t.Fatalf("processor texture run missing Style.texture context: metadata=%+v prompt=%q", textureRun.Metadata, textureRun.Prompt)
 	}
-	if !strings.Contains(vtextRun.Prompt, "must be a publishable article or correction/update draft") ||
-		!strings.Contains(vtextRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
-		!strings.Contains(vtextRun.Prompt, "(source:"+sourceEntities[0].EntityID+")") ||
-		!strings.Contains(vtextRun.Prompt, "cite at least 1 distinct listed native source handle") ||
-		!strings.Contains(vtextRun.Prompt, "reader-facing article prose using [label](source:entity_id)") ||
-		!strings.Contains(vtextRun.Prompt, "Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement") ||
-		!strings.Contains(vtextRun.Prompt, "do not replace them with a plain source manifest") ||
-		!strings.Contains(vtextRun.Prompt, "Use the selected Style.texture sources to shape voice, structure, and editorial judgment") ||
-		!strings.Contains(vtextRun.Prompt, "do not name the selected Style.texture or style rationale in reader-facing prose") ||
-		!strings.Contains(vtextRun.Prompt, "Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body") ||
-		!strings.Contains(vtextRun.Prompt, "Do not include placeholder metadata or publication labels") ||
-		!strings.Contains(vtextRun.Prompt, "Breaking News |") ||
-		!strings.Contains(vtextRun.Prompt, "By Choir News") {
-		t.Fatalf("processor vtext run missing article-head completion contract: %q", vtextRun.Prompt)
+	if !strings.Contains(textureRun.Prompt, "must be a publishable article or correction/update draft") ||
+		!strings.Contains(textureRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
+		!strings.Contains(textureRun.Prompt, "(source:"+sourceEntities[0].EntityID+")") ||
+		!strings.Contains(textureRun.Prompt, "cite at least 1 distinct listed native source handle") ||
+		!strings.Contains(textureRun.Prompt, "reader-facing article prose using [label](source:entity_id)") ||
+		!strings.Contains(textureRun.Prompt, "Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement") ||
+		!strings.Contains(textureRun.Prompt, "do not replace them with a plain source manifest") ||
+		!strings.Contains(textureRun.Prompt, "Use the selected Style.texture sources to shape voice, structure, and editorial judgment") ||
+		!strings.Contains(textureRun.Prompt, "do not name the selected Style.texture or style rationale in reader-facing prose") ||
+		!strings.Contains(textureRun.Prompt, "Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body") ||
+		!strings.Contains(textureRun.Prompt, "Do not include placeholder metadata or publication labels") ||
+		!strings.Contains(textureRun.Prompt, "Breaking News |") ||
+		!strings.Contains(textureRun.Prompt, "By Choir News") {
+		t.Fatalf("processor texture run missing article-head completion contract: %q", textureRun.Prompt)
 	}
 	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [source:" + sourceEntities[0].EntityID + "].\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained.\n"
 	editArgs, err := json.Marshal(map[string]any{
-		"doc_id":           vtextSpawn.DocID,
-		"base_revision_id": vtextSpawn.SeedRevisionID,
+		"doc_id":           textureSpawn.DocID,
+		"base_revision_id": textureSpawn.SeedRevisionID,
 		"edits": []map[string]any{{
 			"op":   "append",
 			"text": articleContent,
@@ -2160,42 +2160,42 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		"rationale": "Create the first Universal Wire article revision from the processor brief.",
 	})
 	if err != nil {
-		t.Fatalf("marshal vtext edit args: %v", err)
+		t.Fatalf("marshal texture edit args: %v", err)
 	}
-	vtextRegistry := rt.ToolRegistryForProfile(AgentProfileVText)
-	if _, err := vtextRegistry.Execute(WithToolExecutionContext(context.Background(), vtextRun), "patch_texture", editArgs); err != nil {
-		t.Fatalf("vtext article patch: %v", err)
+	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	if _, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureRun), "patch_texture", editArgs); err != nil {
+		t.Fatalf("texture article patch: %v", err)
 	}
-	articleDoc, err := rt.Store().GetDocument(context.Background(), vtextSpawn.DocID, "user-alice")
+	articleDoc, err := rt.Store().GetDocument(context.Background(), textureSpawn.DocID, "user-alice")
 	if err != nil {
 		t.Fatalf("get article doc after edit: %v", err)
 	}
-	if articleDoc.CurrentRevisionID == vtextSpawn.SeedRevisionID {
+	if articleDoc.CurrentRevisionID == textureSpawn.SeedRevisionID {
 		t.Fatalf("article edit did not advance document head")
 	}
 	articleRev, err := rt.Store().GetRevision(context.Background(), articleDoc.CurrentRevisionID, "user-alice")
 	if err != nil {
 		t.Fatalf("get article revision: %v", err)
 	}
-	if articleRev.ParentRevisionID != vtextSpawn.SeedRevisionID ||
+	if articleRev.ParentRevisionID != textureSpawn.SeedRevisionID ||
 		!strings.Contains(articleRev.Content, "](source:"+sourceEntities[0].EntityID+")") ||
 		strings.Contains(articleRev.Content, "[source:"+sourceEntities[0].EntityID+"]") {
 		t.Fatalf("article revision content/lineage invalid: %+v", articleRev)
 	}
 	articleMeta := decodeRevisionMetadata(articleRev.Metadata)
 	if metadataString(articleMeta, "artifact_kind") != "article_revision" ||
-		metadataString(articleMeta, "revision_role") != vtextRevisionRoleCanonical ||
-		metadataString(articleMeta, "vtext_version_stage") != "article_revision" {
-		t.Fatalf("vtext-owned article revision metadata invalid: %#v", articleMeta)
+		metadataString(articleMeta, "revision_role") != textureRevisionRoleCanonical ||
+		metadataString(articleMeta, "texture_version_stage") != "article_revision" {
+		t.Fatalf("texture-owned article revision metadata invalid: %#v", articleMeta)
 	}
-	if len(decodeVTextSourceEntities(articleMeta["source_entities"])) != 1 ||
+	if len(decodeTextureSourceEntities(articleMeta["source_entities"])) != 1 ||
 		metadataString(articleMeta, "source_network_cycle_id") != "cycle-test" ||
 		metadataString(articleMeta, "processor_key") != "processor:global_firehose:global:gdelt" ||
 		metadataString(articleMeta, "selected_style_rationale") == "" {
-		t.Fatalf("vtext-owned article revision lost durable source/style metadata: %#v", articleMeta)
+		t.Fatalf("texture-owned article revision lost durable source/style metadata: %#v", articleMeta)
 	}
 	if normalization, ok := articleMeta["source_ref_normalization"].(map[string]any); !ok || metadataIntValue(normalization, "normalized_bare_source_refs") != 1 {
-		t.Fatalf("vtext-owned article revision did not record bare source ref normalization: %#v", articleMeta)
+		t.Fatalf("texture-owned article revision did not record bare source ref normalization: %#v", articleMeta)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",
@@ -2219,15 +2219,15 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		t.Fatalf("reconciler agent id = %q", reconcilerRun.AgentID)
 	}
 	reconcilerRegistry := rt.ToolRegistryForProfile(AgentProfileReconciler)
-	reconcilerVTextRaw, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
-		"objective":"draft a correction/update VText from this corpus reconciliation",
+	reconcilerTextureRaw, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+		"objective":"draft a correction/update Texture from this corpus reconciliation",
 		"role":"texture",
-		"channel_id":"`+vtextSpawn.DocID+`"
+		"channel_id":"`+textureSpawn.DocID+`"
 	}`))
 	if err != nil {
 		t.Fatalf("reconciler spawn texture: %v", err)
 	}
-	var reconcilerVTextSpawn struct {
+	var reconcilerTextureSpawn struct {
 		DocID              string `json:"doc_id"`
 		LoopID             string `json:"loop_id"`
 		ChannelID          string `json:"channel_id"`
@@ -2235,21 +2235,21 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 		RevisedExistingDoc bool   `json:"revised_existing_doc"`
 		SeedRevisionID     string `json:"seed_revision_id"`
 	}
-	if err := json.Unmarshal([]byte(reconcilerVTextRaw), &reconcilerVTextSpawn); err != nil {
-		t.Fatalf("decode reconciler vtext spawn: %v", err)
+	if err := json.Unmarshal([]byte(reconcilerTextureRaw), &reconcilerTextureSpawn); err != nil {
+		t.Fatalf("decode reconciler texture spawn: %v", err)
 	}
-	if reconcilerVTextSpawn.DocID != vtextSpawn.DocID || reconcilerVTextSpawn.ChannelID != vtextSpawn.DocID {
-		t.Fatalf("reconciler did not target existing vtext doc: %+v", reconcilerVTextSpawn)
+	if reconcilerTextureSpawn.DocID != textureSpawn.DocID || reconcilerTextureSpawn.ChannelID != textureSpawn.DocID {
+		t.Fatalf("reconciler did not target existing texture doc: %+v", reconcilerTextureSpawn)
 	}
-	if reconcilerVTextSpawn.CreatedDocument || !reconcilerVTextSpawn.RevisedExistingDoc || reconcilerVTextSpawn.SeedRevisionID != "" {
-		t.Fatalf("reconciler existing-doc revision flags wrong: %+v", reconcilerVTextSpawn)
+	if reconcilerTextureSpawn.CreatedDocument || !reconcilerTextureSpawn.RevisedExistingDoc || reconcilerTextureSpawn.SeedRevisionID != "" {
+		t.Fatalf("reconciler existing-doc revision flags wrong: %+v", reconcilerTextureSpawn)
 	}
-	reconcilerVTextRun, err := rt.GetRun(context.Background(), reconcilerVTextSpawn.LoopID, "user-alice")
+	reconcilerTextureRun, err := rt.GetRun(context.Background(), reconcilerTextureSpawn.LoopID, "user-alice")
 	if err != nil {
-		t.Fatalf("get reconciler-spawned vtext run: %v", err)
+		t.Fatalf("get reconciler-spawned texture run: %v", err)
 	}
-	if reconcilerVTextRun.AgentID != "texture:"+vtextSpawn.DocID || reconcilerVTextRun.ChannelID != vtextSpawn.DocID || metadataString(reconcilerVTextRun.Metadata, "type") != textureAgentRevisionTaskType {
-		t.Fatalf("reconciler texture run is not a Texture revision run: %+v", reconcilerVTextRun)
+	if reconcilerTextureRun.AgentID != "texture:"+textureSpawn.DocID || reconcilerTextureRun.ChannelID != textureSpawn.DocID || metadataString(reconcilerTextureRun.Metadata, "type") != textureAgentRevisionTaskType {
+		t.Fatalf("reconciler texture run is not a Texture revision run: %+v", reconcilerTextureRun)
 	}
 	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"verify claims independently",
@@ -2259,7 +2259,7 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	}
 	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
 		"objective":"draft a corpus-wide new article without a target doc",
-		"role":"vtext"
+		"role":"texture"
 	}`)); err == nil {
 		t.Fatal("reconciler corpus_wake should require existing channel_id")
 	}
@@ -2271,7 +2271,7 @@ func TestProcessorAndReconcilerProfilesDelegateToVTextOnly(t *testing.T) {
 	}
 }
 
-func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
+func TestConcurrentConductorTextureSpawnsShareRoute(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -2280,19 +2280,19 @@ func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
 
 	ctx := context.Background()
 	conductorTask := &types.RunRecord{
-		RunID:        "conductor-concurrent-vtext",
+		RunID:        "conductor-concurrent-texture",
 		OwnerID:      "user-alice",
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
-		Prompt:       "Create one durable vtext document.",
-		ChannelID:    "conductor-concurrent-vtext",
+		Prompt:       "Create one durable texture document.",
+		ChannelID:    "conductor-concurrent-texture",
 		AgentProfile: AgentProfileConductor,
 		AgentRole:    AgentProfileConductor,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileConductor,
 			runMetadataAgentRole:    AgentProfileConductor,
-			"requested_app":         AgentProfileVText,
-			"seed_prompt":           "Create one durable vtext document.",
+			"requested_app":         AgentProfileTexture,
+			"seed_prompt":           "Create one durable texture document.",
 		},
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -2302,7 +2302,7 @@ func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileConductor)
-	rawArgs := json.RawMessage(`{"objective":"Create one durable vtext document.","role":"vtext","initial_content":"# Durable vtext document\n\nInitial conductor-authored abstract."}`)
+	rawArgs := json.RawMessage(`{"objective":"Create one durable texture document.","role":"texture","initial_content":"# Durable texture document\n\nInitial conductor-authored abstract."}`)
 	results := make([]string, 2)
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
@@ -2347,20 +2347,20 @@ func TestConcurrentConductorVTextSpawnsShareRoute(t *testing.T) {
 		t.Fatalf("list documents: %v", err)
 	}
 	if len(docs) != 1 || docs[0].DocID != first.DocID {
-		t.Fatalf("documents = %+v, want exactly the shared vtext doc %q", docs, first.DocID)
+		t.Fatalf("documents = %+v, want exactly the shared texture doc %q", docs, first.DocID)
 	}
 	runs, err := s.ListRunsByChannel(ctx, "user-alice", first.DocID, 10)
 	if err != nil {
 		t.Fatalf("list runs by channel: %v", err)
 	}
-	vtextRuns := 0
+	textureRuns := 0
 	for _, run := range runs {
-		if run.AgentProfile == AgentProfileVText {
-			vtextRuns++
+		if run.AgentProfile == AgentProfileTexture {
+			textureRuns++
 		}
 	}
-	if vtextRuns != 1 {
-		t.Fatalf("vtext runs on shared route = %d, want 1; runs=%+v", vtextRuns, runs)
+	if textureRuns != 1 {
+		t.Fatalf("texture runs on shared route = %d, want 1; runs=%+v", textureRuns, runs)
 	}
 	parentAfter, err := s.GetRun(ctx, conductorTask.RunID)
 	if err != nil {
@@ -3129,16 +3129,16 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		t.Fatalf("install default agent tools: %v", err)
 	}
 
-	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
+	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
 		runMetadataChannelID:    "doc-1",
-		runMetadataAgentID:      "vtext:doc-1",
+		runMetadataAgentID:      "texture:doc-1",
 	})
 	if err != nil {
-		t.Fatalf("submit vtext task: %v", err)
+		t.Fatalf("submit texture task: %v", err)
 	}
-	researcherTask, err := rt.StartChildRun(context.Background(), vtextTask.RunID, "research the claim", "user-alice", map[string]any{
+	researcherTask, err := rt.StartChildRun(context.Background(), textureTask.RunID, "research the claim", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    "doc-1",
@@ -3180,8 +3180,8 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	if resp.Status != "submitted" {
 		t.Fatalf("status = %q, want submitted", resp.Status)
 	}
-	if resp.AgentID != "vtext:doc-1" {
-		t.Fatalf("agent_id = %q, want %q", resp.AgentID, "vtext:doc-1")
+	if resp.AgentID != "texture:doc-1" {
+		t.Fatalf("agent_id = %q, want %q", resp.AgentID, "texture:doc-1")
 	}
 
 	finding, err := s.GetWorkerUpdate(context.Background(), "user-alice", "finding-001")
@@ -3246,7 +3246,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 	var findingsMessage *types.ChannelMessage
 	for i := range messages {
-		if messages[i].ToAgentID == "vtext:doc-1" && strings.Contains(messages[i].Content, finding.EvidenceIDs[0]) {
+		if messages[i].ToAgentID == "texture:doc-1" && strings.Contains(messages[i].Content, finding.EvidenceIDs[0]) {
 			findingsMessage = &messages[i]
 			break
 		}
@@ -3283,16 +3283,16 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 		t.Fatalf("create content item: %v", err)
 	}
 
-	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
+	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
 		runMetadataChannelID:    "doc-1",
-		runMetadataAgentID:      "vtext:doc-1",
+		runMetadataAgentID:      "texture:doc-1",
 	})
 	if err != nil {
-		t.Fatalf("submit vtext task: %v", err)
+		t.Fatalf("submit texture task: %v", err)
 	}
-	researcherTask, err := rt.StartChildRun(context.Background(), vtextTask.RunID, "read source packet", "user-alice", map[string]any{
+	researcherTask, err := rt.StartChildRun(context.Background(), textureTask.RunID, "read source packet", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    "doc-1",
@@ -3357,16 +3357,16 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 		t.Fatalf("write pptx: %v", err)
 	}
 
-	vtextTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
+	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
 		runMetadataChannelID:    "doc-1",
-		runMetadataAgentID:      "vtext:doc-1",
+		runMetadataAgentID:      "texture:doc-1",
 	})
 	if err != nil {
-		t.Fatalf("submit vtext task: %v", err)
+		t.Fatalf("submit texture task: %v", err)
 	}
-	researcherTask, err := rt.StartChildRun(context.Background(), vtextTask.RunID, "read deck source", "user-alice", map[string]any{
+	researcherTask, err := rt.StartChildRun(context.Background(), textureTask.RunID, "read deck source", "user-alice", map[string]any{
 		runMetadataAgentProfile: AgentProfileResearcher,
 		runMetadataAgentRole:    AgentProfileResearcher,
 		runMetadataChannelID:    "doc-1",
@@ -3441,16 +3441,16 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   "vtext:" + docID,
+		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
-		t.Fatalf("upsert vtext agent: %v", err)
+		t.Fatalf("upsert texture agent: %v", err)
 	}
 
 	superRun, err := rt.StartRunWithMetadata(ctx, "Generate and verify the toy model artifact", ownerID, map[string]any{
@@ -3467,7 +3467,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	rawArgs := json.RawMessage(`{
 		"update_id":"super-update-1",
-		"agent_id":"vtext:doc-structured-worker-update",
+		"agent_id":"texture:doc-structured-worker-update",
 		"channel_id":"doc-structured-worker-update",
 		"findings":["A deterministic seed keeps the cellular automata visualization reproducible."],
 		"artifacts":["artifacts/evolution-ca.html"],
@@ -3482,7 +3482,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 			"why_needed":"Super should not invent source context while reporting execution evidence.",
 			"blocking":true,
 			"evidence_needed_for":"Source Ledger [S2]",
-			"suggested_next_owner":"vtext"
+			"suggested_next_owner":"texture"
 		}],
 		"notes":["This is a structured worker update, not a document patch."]
 	}`)
@@ -3501,7 +3501,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
 	}
-	if resp.UpdateID != "super-update-1" || resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
+	if resp.UpdateID != "super-update-1" || resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
 		t.Fatalf("unexpected update_coagent response: %+v", resp)
 	}
 	if resp.TrajectoryID != "traj-structured-worker-update" {
@@ -3512,7 +3512,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.AgentID != "super:primary" || update.TargetAgentID != "vtext:"+docID || update.Role != AgentProfileSuper {
+	if update.AgentID != "super:primary" || update.TargetAgentID != "texture:"+docID || update.Role != AgentProfileSuper {
 		t.Fatalf("unexpected worker update identity: %+v", update)
 	}
 	if len(update.Artifacts) != 1 || update.Artifacts[0] != "artifacts/evolution-ca.html" {
@@ -3535,14 +3535,14 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("messages len = %d, want 1: %+v", len(messages), messages)
 	}
-	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "vtext:"+docID || messages[0].Role != AgentProfileSuper {
+	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "texture:"+docID || messages[0].Role != AgentProfileSuper {
 		t.Fatalf("unexpected channel message: %+v", messages[0])
 	}
 	if !strings.Contains(messages[0].Content, "Coagent update ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
 		t.Fatalf("channel message should be a structured update, not a patch: %q", messages[0].Content)
 	}
 
-	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "vtext:"+docID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
 	if err != nil {
 		t.Fatalf("list inbox deliveries: %v", err)
 	}
@@ -3582,7 +3582,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 
 	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-update-1",
-		"agent_id":"vtext:doc-structured-worker-update",
+		"agent_id":"texture:doc-structured-worker-update",
 		"tests":["different test payload"]
 	}`))
 	if err == nil {
@@ -3600,7 +3600,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-alice"
 	docID := "doc-authoritative-channel"
-	wrongChannelID := "not-the-vtext-doc-channel"
+	wrongChannelID := "not-the-texture-doc-channel"
 	now := time.Now().UTC()
 	if err := s.CreateDocument(ctx, types.Document{
 		DocID:     docID,
@@ -3612,16 +3612,16 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   "vtext:" + docID,
+		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
-		t.Fatalf("upsert vtext agent: %v", err)
+		t.Fatalf("upsert texture agent: %v", err)
 	}
 
 	superRun, err := rt.StartRunWithMetadata(ctx, "Report an artifact", ownerID, map[string]any{
@@ -3638,8 +3638,8 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
 		"update_id":"super-authoritative-channel",
-		"agent_id":"vtext:doc-authoritative-channel",
-		"channel_id":"not-the-vtext-doc-channel",
+		"agent_id":"texture:doc-authoritative-channel",
+		"channel_id":"not-the-texture-doc-channel",
 		"artifacts":["artifacts/authoritative.txt"],
 		"tests":["verified authoritative channel routing"]
 	}`))
@@ -3661,7 +3661,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list target channel messages: %v", err)
 	}
-	if len(messages) != 1 || messages[0].ChannelID != docID || messages[0].ToAgentID != "vtext:"+docID {
+	if len(messages) != 1 || messages[0].ChannelID != docID || messages[0].ToAgentID != "texture:"+docID {
 		t.Fatalf("unexpected target channel messages: %+v", messages)
 	}
 	wrongMessages, err := s.ListChannelMessages(ctx, ownerID, wrongChannelID, 0, 10)
@@ -3694,16 +3694,16 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   "vtext:" + docID,
+		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
-		t.Fatalf("upsert vtext agent: %v", err)
+		t.Fatalf("upsert texture agent: %v", err)
 	}
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID:   "researcher:decoy",
@@ -3718,16 +3718,16 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		t.Fatalf("upsert decoy agent: %v", err)
 	}
 
-	vtextRun, err := rt.StartRunWithMetadata(ctx, "Own this document", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
-		runMetadataAgentID:      "vtext:" + docID,
+	textureRun, err := rt.StartRunWithMetadata(ctx, "Own this document", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:" + docID,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
-		t.Fatalf("start vtext run: %v", err)
+		t.Fatalf("start texture run: %v", err)
 	}
-	superRun, err := rt.StartChildRun(ctx, vtextRun.RunID, "Report a result", ownerID, map[string]any{
+	superRun, err := rt.StartChildRun(ctx, textureRun.RunID, "Report a result", ownerID, map[string]any{
 		runMetadataAgentProfile: AgentProfileSuper,
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataAgentID:      "super:authoritative-parent",
@@ -3754,16 +3754,16 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
 	}
-	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
-		t.Fatalf("response target = %q channel = %q, want parent vtext target/channel", resp.AgentID, resp.ChannelID)
+	if resp.AgentID != "texture:"+docID || resp.ChannelID != docID {
+		t.Fatalf("response target = %q channel = %q, want parent texture target/channel", resp.AgentID, resp.ChannelID)
 	}
 
 	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-authoritative-parent")
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
-		t.Fatalf("worker update target/channel = %q/%q, want parent vtext", update.TargetAgentID, update.ChannelID)
+	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
+		t.Fatalf("worker update target/channel = %q/%q, want parent texture", update.TargetAgentID, update.ChannelID)
 	}
 	messages, err := s.ListChannelMessages(ctx, ownerID, docID, 0, 10)
 	if err != nil {
@@ -3771,7 +3771,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 	found := false
 	for _, message := range messages {
-		if message.ToAgentID == "vtext:"+docID && message.FromRunID == superRun.RunID && message.Role == AgentProfileSuper {
+		if message.ToAgentID == "texture:"+docID && message.FromRunID == superRun.RunID && message.Role == AgentProfileSuper {
 			found = true
 			break
 		}
@@ -3781,7 +3781,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 }
 
-func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
+func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -3802,16 +3802,16 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   "vtext:" + docID,
+		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
-		t.Fatalf("upsert vtext agent: %v", err)
+		t.Fatalf("upsert texture agent: %v", err)
 	}
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID:   "researcher:decoy-requester",
@@ -3831,9 +3831,9 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataAgentID:      "super:requester-target",
 		runMetadataChannelID:    docID,
-		"requested_by_agent_id": "vtext:" + docID,
-		"requested_by_profile":  AgentProfileVText,
-		"request_source":        "vtext",
+		"requested_by_agent_id": "texture:" + docID,
+		"requested_by_profile":  AgentProfileTexture,
+		"request_source":        "texture",
 	})
 	if err != nil {
 		t.Fatalf("start requester super run: %v", err)
@@ -3856,20 +3856,20 @@ func TestSubmitWorkerUpdateUsesVTextRequesterOverExplicitAgent(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
 	}
-	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID {
-		t.Fatalf("response target = %q channel = %q, want vtext requester target/channel", resp.AgentID, resp.ChannelID)
+	if resp.AgentID != "texture:"+docID || resp.ChannelID != docID {
+		t.Fatalf("response target = %q channel = %q, want texture requester target/channel", resp.AgentID, resp.ChannelID)
 	}
 
 	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-requester-target")
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
-		t.Fatalf("worker update target/channel = %q/%q, want vtext requester", update.TargetAgentID, update.ChannelID)
+	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
+		t.Fatalf("worker update target/channel = %q/%q, want texture requester", update.TargetAgentID, update.ChannelID)
 	}
 }
 
-func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing.T) {
+func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -3885,8 +3885,8 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 		runMetadataAgentID:      "vsuper:remote-worker",
 		runMetadataChannelID:    docID,
 		runMetadataTrajectoryID: "traj-remote-worker-requester",
-		"requested_by_agent_id": "vtext:" + docID,
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_agent_id": "texture:" + docID,
+		"requested_by_profile":  AgentProfileTexture,
 		"request_source":        "worker_vm_delegation",
 	})
 	if err != nil {
@@ -3896,7 +3896,7 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
 	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "update_coagent", json.RawMessage(`{
 		"update_id":"remote-worker-update",
-		"findings":["Remote worker update should route through inherited VText metadata."],
+		"findings":["Remote worker update should route through inherited Texture metadata."],
 		"tests":["metadata-only requester routing passed"]
 	}`))
 	if err != nil {
@@ -3910,27 +3910,27 @@ func TestSubmitWorkerUpdateUsesVTextRequesterMetadataWhenAgentMissing(t *testing
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
 	}
-	if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
-		t.Fatalf("response target/channel/status = %+v, want inherited vtext target", resp)
+	if resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
+		t.Fatalf("response target/channel/status = %+v, want inherited texture target", resp)
 	}
 
 	update, err := s.GetWorkerUpdate(ctx, ownerID, "remote-worker-update")
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID || update.Role != AgentProfileVSuper {
+	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID || update.Role != AgentProfileVSuper {
 		t.Fatalf("worker update target/channel/role = %+v", update)
 	}
-	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "vtext:"+docID, 10)
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
 	if err != nil {
-		t.Fatalf("list vtext deliveries: %v", err)
+		t.Fatalf("list texture deliveries: %v", err)
 	}
 	if len(deliveries) != 1 || deliveries[0].ChannelID != docID {
-		t.Fatalf("expected metadata-routed vtext delivery, got %+v", deliveries)
+		t.Fatalf("expected metadata-routed texture delivery, got %+v", deliveries)
 	}
 }
 
-func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *testing.T) {
+func TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -3958,7 +3958,7 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 		updateID        string
 	}{
 		{name: "bare doc id", explicitAgentID: docID, updateID: "terminal-blocker-bare-doc"},
-		{name: "legacy vtext agent id", explicitAgentID: "vtext:" + docID, updateID: "terminal-blocker-vtext-agent"},
+		{name: "legacy texture agent id", explicitAgentID: "texture:" + docID, updateID: "terminal-blocker-texture-agent"},
 		{name: "stale owner id", explicitAgentID: ownerID, updateID: "terminal-blocker-owner-id"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3967,7 +3967,7 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 				"agent_id":%q,
 				"kind":"blocker",
 				"summary":"Worker canceled after terminal evidence failed to publish.",
-				"findings":["update_coagent should route to the VText channel when the explicit target is stale."]
+				"findings":["update_coagent should route to the Texture channel when the explicit target is stale."]
 			}`, tc.updateID, tc.explicitAgentID))
 			raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
 			if err != nil {
@@ -3981,15 +3981,15 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 			if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 				t.Fatalf("decode update_coagent response: %v", err)
 			}
-			if resp.AgentID != "vtext:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
-				t.Fatalf("response target/channel/status = %+v, want vtext fallback", resp)
+			if resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
+				t.Fatalf("response target/channel/status = %+v, want texture fallback", resp)
 			}
 			update, err := s.GetWorkerUpdate(ctx, ownerID, tc.updateID)
 			if err != nil {
 				t.Fatalf("get worker update: %v", err)
 			}
-			if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
-				t.Fatalf("worker update target/channel = %+v, want vtext fallback", update)
+			if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
+				t.Fatalf("worker update target/channel = %+v, want texture fallback", update)
 			}
 		})
 	}
@@ -4002,8 +4002,8 @@ func TestSubmitWorkerUpdateFallsBackToVTextChannelWhenExplicitTargetMissing(t *t
 		t.Fatalf("messages len = %d, want 3: %+v", len(messages), messages)
 	}
 	for _, message := range messages {
-		if message.ToAgentID != "vtext:"+docID || message.ChannelID != docID {
-			t.Fatalf("message did not route through vtext fallback: %+v", message)
+		if message.ToAgentID != "texture:"+docID || message.ChannelID != docID {
+			t.Fatalf("message did not route through texture fallback: %+v", message)
 		}
 	}
 }
@@ -4034,8 +4034,8 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 			runMetadataAgentID:      "super:" + ownerID,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-delegate-fallback",
-			"requested_by_agent_id": "vtext:" + docID,
-			"requested_by_profile":  AgentProfileVText,
+			"requested_by_agent_id": "texture:" + docID,
+			"requested_by_profile":  AgentProfileTexture,
 		},
 	}
 	if err := s.CreateRun(ctx, *superRun); err != nil {
@@ -4106,7 +4106,7 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	if update.UpdateID != "delegate-worker-vm-"+sanitizeExportPart(superRun.RunID) {
 		t.Fatalf("update id = %q", update.UpdateID)
 	}
-	if update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
 		t.Fatalf("update target/channel = %q/%q", update.TargetAgentID, update.ChannelID)
 	}
 	if !containsString(update.EvidenceIDs, "event:event-delegate-fallback") || !containsString(update.EvidenceIDs, "worker_loop:worker-run-timeout") {
@@ -4123,7 +4123,7 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list channel messages: %v", err)
 	}
-	if len(messages) != 1 || messages[0].ToAgentID != "vtext:"+docID {
+	if len(messages) != 1 || messages[0].ToAgentID != "texture:"+docID {
 		t.Fatalf("channel messages = %+v", messages)
 	}
 	if !strings.Contains(messages[0].Content, "worker delegation returned") {
@@ -4395,8 +4395,8 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	if provenance["texture_doc_id"] != "doc-tool-proof" {
 		t.Fatalf("texture_doc_id = %q, want doc-tool-proof", provenance["texture_doc_id"])
 	}
-	if _, ok := provenance["vtext_doc_id"]; ok {
-		t.Fatalf("new package provenance emitted legacy vtext_doc_id: %+v", provenance)
+	if _, ok := provenance["texture_doc_id"]; ok {
+		t.Fatalf("new package provenance emitted legacy texture_doc_id: %+v", provenance)
 	}
 	shots, _ := provenance["screenshot_refs"].([]any)
 	if len(shots) != 1 || shots[0] != "test-results/tool-proof.png" {
@@ -4495,8 +4495,8 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-worker-delegation",
 		runMetadataChannelID:    "doc-worker-delegation",
-		"requested_by_agent_id": "vtext:doc-worker-delegation",
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_agent_id": "texture:doc-worker-delegation",
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -4659,7 +4659,7 @@ func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
 	}
 }
 
-func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing.T) {
+func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testing.T) {
 	t.Parallel()
 	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
 	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
@@ -4676,19 +4676,19 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
-		t.Fatalf("create active vtext document: %v", err)
+		t.Fatalf("create active texture document: %v", err)
 	}
 	if err := activeStore.UpsertAgent(ctx, types.AgentRecord{
-		AgentID:   "vtext:" + docID,
+		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "active-sandbox",
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
-		t.Fatalf("upsert active vtext agent: %v", err)
+		t.Fatalf("upsert active texture agent: %v", err)
 	}
 
 	workerDir := t.TempDir()
@@ -4707,7 +4707,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 					"findings":["WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint."],
 					"artifacts":["artifacts/chiron-proof.png"],
 					"tests":["worker update routing verified"],
-					"proposals":["Continue supervision from the active VText dashboard."]
+					"proposals":["Continue supervision from the active Texture dashboard."]
 				}`),
 			}},
 		},
@@ -4745,8 +4745,8 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "traj-worker-submit-mirror",
 		runMetadataChannelID:    docID,
-		"requested_by_agent_id": "vtext:" + docID,
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_agent_id": "texture:" + docID,
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -4756,7 +4756,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-submit-mirror",
 		"vm_id": "vm-worker-submit-mirror",
-		"objective": "Submit one worker update for the VText dashboard. Do not publish an AppChangePackage.",
+		"objective": "Submit one worker update for the Texture dashboard. Do not publish an AppChangePackage.",
 		"profile": "vsuper",
 		"timeout_seconds": 10
 	}`, srv.URL)))
@@ -4787,7 +4787,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 		t.Fatalf("active worker updates = %d, want only mirrored direct update; updates=%+v raw=%s", len(updates), updates, raw)
 	}
 	update := updates[0]
-	if !strings.HasPrefix(update.UpdateID, "mirrored-worker-update-") || update.TargetAgentID != "vtext:"+docID || update.ChannelID != docID {
+	if !strings.HasPrefix(update.UpdateID, "mirrored-worker-update-") || update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
 		t.Fatalf("unexpected mirrored update routing: %+v", update)
 	}
 	if !strings.Contains(strings.Join(update.Findings, "\n"), "WORKER_DIRECT_UPDATE") ||
@@ -4799,9 +4799,9 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveVText(t *testing
 	if err != nil {
 		t.Fatalf("list active channel messages: %v", err)
 	}
-	if len(messages) != 1 || messages[0].FromRunID != superRun.RunID || messages[0].ToAgentID != "vtext:"+docID ||
+	if len(messages) != 1 || messages[0].FromRunID != superRun.RunID || messages[0].ToAgentID != "texture:"+docID ||
 		!strings.Contains(messages[0].Content, "WORKER_DIRECT_UPDATE") {
-		t.Fatalf("mirrored update did not create active VText channel message: %+v", messages)
+		t.Fatalf("mirrored update did not create active Texture channel message: %+v", messages)
 	}
 }
 
@@ -4914,7 +4914,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-child-follow",
 		runMetadataChannelID:    "doc-child-follow",
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -5038,7 +5038,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-child-incomplete",
 		runMetadataChannelID:    "doc-child-incomplete",
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -5136,7 +5136,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-package-required-no-package",
 		runMetadataChannelID:    "doc-package-required-no-package",
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -5800,7 +5800,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-worker-timeout",
 		runMetadataChannelID:    "doc-worker-timeout",
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -5975,7 +5975,7 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 		runMetadataAgentRole:    AgentProfileSuper,
 		runMetadataTrajectoryID: "trace-finish-active",
 		runMetadataChannelID:    "doc-finish-active",
-		"requested_by_profile":  AgentProfileVText,
+		"requested_by_profile":  AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
@@ -6026,7 +6026,7 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 		t.Fatalf("finish active result did not preserve child tool failure: %s", raw)
 	}
 	if result.WorkerUpdateCheckpoint != "submitted_or_existing" {
-		t.Fatalf("finish active result did not checkpoint VText update: %+v\nraw=%s", result, raw)
+		t.Fatalf("finish active result did not checkpoint Texture update: %+v\nraw=%s", result, raw)
 	}
 
 	updates, err := s.ListWorkerUpdatesByTrajectory(context.Background(), "user-alice", "trace-finish-active", 10)

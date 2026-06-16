@@ -114,7 +114,7 @@
     if (kind === 'channel.message') return `${agent}: ${String(payload.content || '').replace(/\s+/g, ' ').trim().slice(0, 120)}`;
     if (kind === 'loop.completed') return `${agent} completed a run`;
     if (kind === 'loop.failed') return `${agent} reported a blocker`;
-    if (kind === 'vtext.document_revision.created') return 'Texture created a new revision';
+    if (kind === 'texture.document_revision.created') return 'Texture created a new revision';
     return '';
   }
 
@@ -135,7 +135,7 @@
       'loop.started',
       'loop.completed',
       'loop.failed',
-      'vtext.document_revision.created',
+      'texture.document_revision.created',
     ].includes(kind)) return;
     const text = summarizeLiveEvent(message);
     if (text) pushTicker(text);

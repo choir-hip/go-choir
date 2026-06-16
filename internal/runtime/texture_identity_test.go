@@ -15,14 +15,14 @@ func TestTextureActorIdentityCompatibility(t *testing.T) {
 			runMetadataAgentRole:    AgentProfileTexture,
 		},
 	}
-	if got := configuredAgentProfileForRun(rec); got != AgentProfileVText {
-		t.Fatalf("configured profile = %q, want internal %q", got, AgentProfileVText)
+	if got := configuredAgentProfileForRun(rec); got != AgentProfileTexture {
+		t.Fatalf("configured profile = %q, want internal %q", got, AgentProfileTexture)
 	}
-	if got := agentProfileForRun(rec); got != AgentProfileVText {
-		t.Fatalf("agent profile = %q, want internal %q", got, AgentProfileVText)
+	if got := agentProfileForRun(rec); got != AgentProfileTexture {
+		t.Fatalf("agent profile = %q, want internal %q", got, AgentProfileTexture)
 	}
-	if got := agentRoleForRun(rec); got != AgentProfileVText {
-		t.Fatalf("agent role = %q, want internal %q", got, AgentProfileVText)
+	if got := agentRoleForRun(rec); got != AgentProfileTexture {
+		t.Fatalf("agent role = %q, want internal %q", got, AgentProfileTexture)
 	}
 
 	agent, metadata := resolveRunIdentity("owner-1", "sandbox-1", map[string]any{
@@ -38,22 +38,22 @@ func TestTextureActorIdentityCompatibility(t *testing.T) {
 	}
 
 	legacy, legacyMetadata := resolveRunIdentity("owner-1", "sandbox-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
 		"doc_id":                "doc-1",
 	}, nil)
-	if legacy.AgentID != "vtext:doc-1" || legacy.Profile != AgentProfileVText || legacy.Role != AgentProfileVText || legacy.ChannelID != "doc-1" {
+	if legacy.AgentID != "texture:doc-1" || legacy.Profile != AgentProfileTexture || legacy.Role != AgentProfileTexture || legacy.ChannelID != "doc-1" {
 		t.Fatalf("resolved legacy identity = %+v", legacy)
 	}
-	if metadataStringValue(legacyMetadata, runMetadataAgentProfile) != AgentProfileVText || metadataStringValue(legacyMetadata, runMetadataAgentRole) != AgentProfileVText {
-		t.Fatalf("legacy metadata = %+v, want vtext profile/role", legacyMetadata)
+	if metadataStringValue(legacyMetadata, runMetadataAgentProfile) != AgentProfileTexture || metadataStringValue(legacyMetadata, runMetadataAgentRole) != AgentProfileTexture {
+		t.Fatalf("legacy metadata = %+v, want texture profile/role", legacyMetadata)
 	}
 
 	if !textureAgentIDMatchesDoc("texture:doc-1", "doc-1") {
 		t.Fatal("texture agent id did not match doc")
 	}
-	if !textureAgentIDMatchesDoc("vtext:doc-1", "doc-1") {
-		t.Fatal("legacy vtext agent id did not match doc")
+	if !textureAgentIDMatchesDoc("texture:doc-1", "doc-1") {
+		t.Fatal("legacy texture agent id did not match doc")
 	}
 	if textureAgentIDMatchesDoc("texture:doc-2", "doc-1") {
 		t.Fatal("wrong doc id matched")
@@ -61,7 +61,7 @@ func TestTextureActorIdentityCompatibility(t *testing.T) {
 	if got := docIDFromTextureAgentID("texture:doc-1"); got != "doc-1" {
 		t.Fatalf("texture doc id = %q, want doc-1", got)
 	}
-	if got := docIDFromTextureAgentID("vtext:doc-1"); got != "doc-1" {
+	if got := docIDFromTextureAgentID("texture:doc-1"); got != "doc-1" {
 		t.Fatalf("legacy doc id = %q, want doc-1", got)
 	}
 }
@@ -69,9 +69,6 @@ func TestTextureActorIdentityCompatibility(t *testing.T) {
 func TestTextureAgentRevisionTaskTypeCompatibility(t *testing.T) {
 	if !isTextureAgentRevisionTaskType(textureAgentRevisionTaskType) {
 		t.Fatalf("%q should be recognized as current Texture revision task type", textureAgentRevisionTaskType)
-	}
-	if !isTextureAgentRevisionTaskType(legacyVTextAgentRevisionTaskType) {
-		t.Fatalf("%q should remain recognized as legacy Texture revision task type", legacyVTextAgentRevisionTaskType)
 	}
 	if isTextureAgentRevisionTaskType("researcher") {
 		t.Fatal("unrelated task type should not be recognized as Texture revision task type")
@@ -85,7 +82,7 @@ fallback_provider = "chatgpt"
 fallback_model = "gpt-5.5"
 reasoning = "low"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 `
@@ -95,9 +92,9 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 	texture := policy.Resolve(AgentProfileTexture)
 	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" {
-		t.Fatalf("texture selection = %+v, want legacy vtext role selection", texture)
+		t.Fatalf("texture selection = %+v, want legacy texture role selection", texture)
 	}
-	if got := normalizeModelPolicyRole("texture"); got != AgentProfileVText {
-		t.Fatalf("texture normalized to %q, want %q", got, AgentProfileVText)
+	if got := normalizeModelPolicyRole("texture"); got != AgentProfileTexture {
+		t.Fatalf("texture normalized to %q, want %q", got, AgentProfileTexture)
 	}
 }

@@ -96,7 +96,7 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 		"tool:" + strings.TrimSpace(toolName),
 	}
 	refs = append(refs, researcherFallbackRefs(output)...)
-	notes := []string{"This is a runtime-synthesized blocker/update so VText can wake and honestly revise from available evidence instead of waiting indefinitely."}
+	notes := []string{"This is a runtime-synthesized blocker/update so Texture can wake and honestly revise from available evidence instead of waiting indefinitely."}
 	if runErr != nil && strings.TrimSpace(runErr.Error()) != "" {
 		notes = append(notes, "Run error: "+strings.TrimSpace(runErr.Error()))
 	}

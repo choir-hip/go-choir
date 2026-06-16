@@ -28,7 +28,7 @@ func (s *Store) UpsertPodcastSubscription(ctx context.Context, rec types.Podcast
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
-	_, err := s.vtextHandle().ExecContext(ctx,
+	_, err := s.textureHandle().ExecContext(ctx,
 		`INSERT INTO podcast_subscriptions (
 			subscription_id, owner_id, feed_url, content_id, title, author,
 			artwork_url, last_fetched_at, created_at, updated_at
@@ -66,7 +66,7 @@ func (s *Store) ListPodcastSubscriptions(ctx context.Context, ownerID string, li
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.vtextHandle().QueryContext(ctx,
+	rows, err := s.textureHandle().QueryContext(ctx,
 		`SELECT subscription_id, owner_id, feed_url, content_id, title, author,
 		        artwork_url, last_fetched_at, created_at, updated_at
 		   FROM podcast_subscriptions

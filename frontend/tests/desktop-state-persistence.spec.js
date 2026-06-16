@@ -129,7 +129,7 @@ test('stale bare email URL intent does not override restored desktop state', asy
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  await openApp(page, 'vtext');
+  await openApp(page, 'texture');
   await page.locator('[data-texture-app]').last().waitFor({ state: 'visible', timeout: 10000 });
   await page.waitForTimeout(1000);
 
@@ -142,7 +142,7 @@ test('stale bare email URL intent does not override restored desktop state', asy
   await expect(page).not.toHaveURL(/app=email/);
 });
 
-test('private vtext URL intent opens the requested authenticated document', async ({
+test('private texture URL intent opens the requested authenticated document', async ({
   page,
   authenticator,
 }) => {
@@ -150,7 +150,7 @@ test('private vtext URL intent opens the requested authenticated document', asyn
   await registerAndLoadDesktop(page, authenticator, email);
 
   const stamp = Date.now();
-  const title = `Deep Linked VText ${stamp}`;
+  const title = `Deep Linked Texture ${stamp}`;
   const doc = await fetchJSON(page, '/api/texture/documents', {
     method: 'POST',
     body: JSON.stringify({ title }),
@@ -164,7 +164,7 @@ test('private vtext URL intent opens the requested authenticated document', asyn
     }),
   });
 
-  await page.goto(`${BASE_URL}?app=vtext&doc=${encodeURIComponent(doc.doc_id)}&title=${encodeURIComponent(title)}`);
+  await page.goto(`${BASE_URL}?app=texture&doc=${encodeURIComponent(doc.doc_id)}&title=${encodeURIComponent(title)}`);
   await page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]').waitFor({
     state: 'visible',
     timeout: 120000,
@@ -173,7 +173,7 @@ test('private vtext URL intent opens the requested authenticated document', asyn
   const editor = page.locator(`[data-texture-editor][data-texture-doc-id="${doc.doc_id}"]`).last();
   await expect(editor).toBeVisible({ timeout: 15000 });
   await expect(editor.locator('[data-texture-rendered]')).toContainText('Private deep link fixture');
-  await expect(page).not.toHaveURL(/app=vtext/);
+  await expect(page).not.toHaveURL(/app=texture/);
   await expect(page).not.toHaveURL(/doc=/);
 });
 
@@ -437,7 +437,7 @@ test('mobile restore recovery pauses too many heavyweight saved windows', async 
   await page.setViewportSize({ width: 390, height: 844 });
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'features', 'vtext', 'browser', 'super-console'];
+  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'features', 'texture', 'browser', 'super-console'];
   const windows = appIds.map((appId, index) => ({
     window_id: `recovery-window-${index + 1}`,
     app_id: appId,

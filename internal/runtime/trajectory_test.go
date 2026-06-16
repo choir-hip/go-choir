@@ -210,8 +210,8 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	run := types.RunRecord{
 		RunID:        "run-legacy-metadata-only",
 		AgentID:      "agent-legacy",
-		AgentProfile: AgentProfileVText,
-		AgentRole:    AgentProfileVText,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
 		OwnerID:      "user-alice",
 		SandboxID:    "sandbox-test",
 		State:        types.RunPending,
@@ -219,8 +219,8 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVText,
-			runMetadataAgentRole:    AgentProfileVText,
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}

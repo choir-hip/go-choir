@@ -85,7 +85,7 @@ async function mockTraceTrajectory(page, options = {}) {
     : [];
   const trajectory = {
     trajectory_id: trajectoryId,
-    title: 'A revise event was triggered for the current vtext document. Intent: inspect mobile Trace provenance readability.',
+    title: 'A revise event was triggered for the current texture document. Intent: inspect mobile Trace provenance readability.',
     subtitle: 'conductor · super',
     state: 'completed',
     live: false,

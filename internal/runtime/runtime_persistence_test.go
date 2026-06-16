@@ -41,11 +41,11 @@ func (s *fakeRunSubmissionStore) AppendEvent(_ context.Context, event *types.Eve
 func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 	createdAt := time.Date(2026, 5, 24, 1, 2, 3, 0, time.UTC)
 	agent := types.AgentRecord{
-		AgentID:   "vtext:doc-1",
+		AgentID:   "texture:doc-1",
 		OwnerID:   "user-alice",
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileVText,
-		Role:      AgentProfileVText,
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
 		ChannelID: "doc-1",
 		CreatedAt: createdAt,
 		UpdatedAt: createdAt,
@@ -63,7 +63,7 @@ func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 		CreatedAt:    createdAt,
 		UpdatedAt:    createdAt,
 		Metadata: map[string]any{
-			"type":                  "vtext_agent_revision",
+			"type":                  "texture_agent_revision",
 			"doc_id":                "doc-1",
 			"scheduled_message_seq": float64(7),
 		},

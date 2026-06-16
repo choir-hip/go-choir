@@ -1,27 +1,27 @@
 package runtime
 
 const (
-	vtextRevisionRoleInput     = "input"
-	vtextRevisionRoleCanonical = "canonical"
+	textureRevisionRoleInput     = "input"
+	textureRevisionRoleCanonical = "canonical"
 
-	vtextInputOriginUserPrompt       = "user_prompt"
-	vtextInputOriginProcessorHandoff = "processor_handoff"
-	vtextInputOriginReconcilerHandoff = "reconciler_handoff"
+	textureInputOriginUserPrompt        = "user_prompt"
+	textureInputOriginProcessorHandoff  = "processor_handoff"
+	textureInputOriginReconcilerHandoff = "reconciler_handoff"
 )
 
-func vtextInputOriginForCaller(profile string) string {
+func textureInputOriginForCaller(profile string) string {
 	switch canonicalAgentProfile(profile) {
 	case AgentProfileProcessor:
-		return vtextInputOriginProcessorHandoff
+		return textureInputOriginProcessorHandoff
 	case AgentProfileReconciler:
-		return vtextInputOriginReconcilerHandoff
+		return textureInputOriginReconcilerHandoff
 	default:
 		return ""
 	}
 }
 
 func wireRevisionIsCanonicalArticle(meta map[string]any) bool {
-	if metadataString(meta, "revision_role") == vtextRevisionRoleCanonical {
+	if metadataString(meta, "revision_role") == textureRevisionRoleCanonical {
 		return true
 	}
 	if v, ok := meta["article_version"].(bool); ok && v {
@@ -31,5 +31,5 @@ func wireRevisionIsCanonicalArticle(meta map[string]any) bool {
 }
 
 func wireRevisionIsInput(meta map[string]any) bool {
-	return metadataString(meta, "revision_role") == vtextRevisionRoleInput
+	return metadataString(meta, "revision_role") == textureRevisionRoleInput
 }

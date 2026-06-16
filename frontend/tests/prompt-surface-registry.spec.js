@@ -32,34 +32,34 @@ test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async
   expect(decodeURIComponent(favicon || '')).toContain('M 269.72 36.86');
   expect(decodeURIComponent(favicon || '')).toContain('M 476.43 455.41');
 
-  const vtextToolbar = page.locator('[data-texture-toolbar]');
-  const vtextEditor = page.locator('[data-texture-editor-area]');
-  await vtextEditor.evaluate((node) => {
+  const textureToolbar = page.locator('[data-texture-toolbar]');
+  const textureEditor = page.locator('[data-texture-editor-area]');
+  await textureEditor.evaluate((node) => {
     node.innerHTML = `<h1>Scroll proof</h1>${Array.from({ length: 40 }, (_, i) => `<p>Paragraph ${i + 1}: the toolbar should recede while reading.</p>`).join('')}`;
     node.scrollTop = 0;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
-  await expect(vtextToolbar).not.toHaveClass(/toolbar-hidden/);
-  const toolbarHeight = await vtextToolbar.evaluate((el) => el.getBoundingClientRect().height);
-  await vtextEditor.evaluate((node) => {
+  await expect(textureToolbar).not.toHaveClass(/toolbar-hidden/);
+  const toolbarHeight = await textureToolbar.evaluate((el) => el.getBoundingClientRect().height);
+  await textureEditor.evaluate((node) => {
     node.scrollTop = 320;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
-  await expect(vtextToolbar).toHaveClass(/toolbar-hidden/);
-  await vtextEditor.evaluate((node) => {
+  await expect(textureToolbar).toHaveClass(/toolbar-hidden/);
+  await textureEditor.evaluate((node) => {
     node.scrollTop = 300;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
-  await expect(vtextToolbar).toHaveClass(/toolbar-hidden/);
+  await expect(textureToolbar).toHaveClass(/toolbar-hidden/);
   await page.waitForTimeout(220);
-  const hiddenToolbarHeight = await vtextToolbar.evaluate((el) => el.getBoundingClientRect().height);
+  const hiddenToolbarHeight = await textureToolbar.evaluate((el) => el.getBoundingClientRect().height);
   expect(hiddenToolbarHeight).toBeLessThan(toolbarHeight / 3);
   await page.waitForTimeout(120);
-  await vtextEditor.evaluate((node) => {
+  await textureEditor.evaluate((node) => {
     node.scrollTop = 160;
     node.dispatchEvent(new Event('scroll', { bubbles: true }));
   });
-  await expect(vtextToolbar).not.toHaveClass(/toolbar-hidden/);
+  await expect(textureToolbar).not.toHaveClass(/toolbar-hidden/);
 
   const surfaceHeight = await page.locator('[data-prompt-surface]').evaluate((el) => el.getBoundingClientRect().height);
   expect(surfaceHeight).toBeLessThanOrEqual(78);
@@ -261,9 +261,9 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
           blur: root.getPropertyValue('--choir-blur').trim(),
           uiFont: root.getPropertyValue('--choir-font-ui').trim(),
         },
-        vtextFont: getComputedStyle(document.querySelector('[data-texture-editor]')).fontFamily,
+        textureFont: getComputedStyle(document.querySelector('[data-texture-editor]')).fontFamily,
         settingsFont: getComputedStyle(document.querySelector('[data-settings-window]')).fontFamily,
-        vtextToolbar: {
+        textureToolbar: {
           backgroundColor: getComputedStyle(document.querySelector('[data-texture-toolbar]')).backgroundColor,
           color: getComputedStyle(document.querySelector('[data-texture-toolbar]')).color,
         },
@@ -271,7 +271,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
           backgroundColor: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).backgroundColor,
           color: getComputedStyle(document.querySelector('[data-files-app] .toolbar')).color,
         },
-        vtextHeadingColor: getComputedStyle(document.querySelector('[data-texture-editor-area] h1')).color,
+        textureHeadingColor: getComputedStyle(document.querySelector('[data-texture-editor-area] h1')).color,
         shells: [...document.querySelectorAll('[data-app-host]')].map((element) => {
           const style = element ? getComputedStyle(element) : null;
           return {
@@ -296,16 +296,16 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
         expect(Math.max(...rgb), `${themeId} ${shell.appId} should not retain light salmon panel`).toBeLessThan(245);
       }
     }
-    expect(sample.vtextFont).toContain('Georgia');
+    expect(sample.textureFont).toContain('Georgia');
     if (themeId === 'london-salmon') {
       expect(sample.vars.blur).toBe('0px');
       expect(sample.vars.uiFont).toContain('Georgia');
       expect(sample.settingsFont).toContain('Georgia');
-      const toolbarBg = parseRgb(sample.vtextToolbar.backgroundColor);
-      const toolbarColor = parseRgb(sample.vtextToolbar.color);
+      const toolbarBg = parseRgb(sample.textureToolbar.backgroundColor);
+      const toolbarColor = parseRgb(sample.textureToolbar.color);
       const fileToolbarBg = parseRgb(sample.fileToolbar.backgroundColor);
       const fileToolbarColor = parseRgb(sample.fileToolbar.color);
-      const headingColor = parseRgb(sample.vtextHeadingColor);
+      const headingColor = parseRgb(sample.textureHeadingColor);
       expect(toolbarBg[0]).toBeGreaterThanOrEqual(248);
       expect(toolbarBg[1]).toBeGreaterThanOrEqual(228);
       expect(toolbarBg[2]).toBeGreaterThanOrEqual(222);
@@ -346,14 +346,14 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
       deskLabel: read('[data-desk-sheet-app] strong'),
       deskButton: read('[data-desk-sheet-app]'),
       desktopIconLabel: read('[data-desktop-icon-label]'),
-      vtextButton: read('[data-texture-toolbar] button'),
+      textureButton: read('[data-texture-toolbar] button'),
       settingsButton: read('[data-settings-window] button'),
     };
   });
   for (const [name, style] of Object.entries({
     deskLabel: salmonAffordance.deskLabel,
     desktopIconLabel: salmonAffordance.desktopIconLabel,
-    vtextButton: salmonAffordance.vtextButton,
+    textureButton: salmonAffordance.textureButton,
     settingsButton: salmonAffordance.settingsButton,
   })) {
     expect(style.fontFamily, name).toContain('Georgia');

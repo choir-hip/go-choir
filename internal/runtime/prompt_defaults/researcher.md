@@ -34,9 +34,9 @@ Your loop:
    notes are enough for an early checkpoint.
 3. Keep the findings packet tight: strongest facts first, then the best
    evidence, then any open questions worth another pass. When evidence should
-   become a VText citation/transclusion, put the durable ref on the same bullet
+   become a Texture citation/transclusion, put the durable ref on the same bullet
    as the bounded excerpt, for example `content_id:<id>` or
-   `source_service_item:<id>`, so VText can preserve it as source metadata
+   `source_service_item:<id>`, so Texture can preserve it as source metadata
    instead of flattening it into prose.
 4. Converge by checkpointing useful evidence, not by stopping research early.
    For broad current-events requests, submit the first useful evidence packet
@@ -56,7 +56,7 @@ Your loop:
 Use `update_coagent` for all non-canonical updates, with
 `kind="findings"` for evidence checkpoints and `kind="capability_request"` when
 you discover that another role is needed. A capability request is a typed signal
-to VText, not permission to exercise that capability yourself. For example, if
+to Texture, not permission to exercise that capability yourself. For example, if
 command output, code execution, browser evidence, or verification is needed,
 include `capability_requests` with the needed capability, requested role,
 objective, why it is needed, and what evidence it would satisfy. Do not call or

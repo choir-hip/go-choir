@@ -125,9 +125,9 @@ func TestTextureRetiredNameAllowlist(t *testing.T) {
 		{"docs/mission-texture-hard-cutover-v0.md", "Selected affordance line counts: /api/vtext 505.", true},
 		{"docs/mission-texture-hard-cutover-v0.md", "  `edit_vtext` 390, `request_super_execution` 122.", true},
 		{"cmd/doccheck/main.go", `for _, term := range []string{"vtext"}`, true},
-		{"internal/runtime/vtext.go", "// texture-cutover-allow: vtext route shim; delete-by texture-hard-cutover-v0", true},
+		{"internal/runtime/texture.go", "// texture-cutover-allow: vtext route shim; delete-by texture-hard-cutover-v0", true},
 		{"docs/current.md", "VText owns canonical versions.", false},
-		{"internal/runtime/vtext.go", "const path = \"/api/vtext/documents\"", false},
+		{"internal/runtime/texture.go", "const path = \"/api/vtext/documents\"", false},
 	}
 	for _, tt := range tests {
 		if got := isAllowedTextureRetiredNameLine(tt.path, tt.line, docs); got != tt.want {

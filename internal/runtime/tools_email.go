@@ -60,11 +60,11 @@ type maildRiskAlertResponse struct {
 func newRequestEmailDraftTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "request_email_draft",
-		Description: "VText-only handoff to the Email appagent. Creates a Trace-visible versioned email draft request; it never sends mail.",
+		Description: "Texture-only handoff to the Email appagent. Creates a Trace-visible versioned email draft request; it never sends mail.",
 		Parameters: jsonSchemaObject(map[string]any{
-			"doc_id":              map[string]any{"type": "string", "description": "Canonical VText document id that owns the email content."},
-			"revision_id":         map[string]any{"type": "string", "description": "Exact VText revision id containing the email artifact."},
-			"source_content_hash": map[string]any{"type": "string", "description": "Hash of the exact VText source artifact/version being handed to Email."},
+			"doc_id":              map[string]any{"type": "string", "description": "Canonical Texture document id that owns the email content."},
+			"revision_id":         map[string]any{"type": "string", "description": "Exact Texture revision id containing the email artifact."},
+			"source_content_hash": map[string]any{"type": "string", "description": "Hash of the exact Texture source artifact/version being handed to Email."},
 			"from_alias":          map[string]any{"type": "string", "description": "Owned numeric Choir email alias. Empty means Email appagent must choose the owner default."},
 			"to_addresses":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"cc_addresses":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
@@ -75,8 +75,8 @@ func newRequestEmailDraftTool(rt *Runtime) Tool {
 			"approval_mode":       map[string]any{"type": "string", "enum": []string{"owner_click", "owner_click_or_email_reply"}, "description": "How the owner may approve this exact draft version."},
 		}, []string{"doc_id", "revision_id", "to_addresses", "subject", "body_text"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) != AgentProfileVText {
-				return "", fmt.Errorf("request_email_draft is only available to vtext agents")
+			if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) != AgentProfileTexture {
+				return "", fmt.Errorf("request_email_draft is only available to texture agents")
 			}
 			rec := ctxRunRecord(ctx)
 			if rec == nil {
@@ -167,7 +167,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		"doc_id":                docID,
 		"revision_id":           revisionID,
 		"source_content_hash":   sourceHash,
-		"source_kind":           "vtext_email_artifact",
+		"source_kind":           "texture_email_artifact",
 		"approval_mode":         approvalMode,
 		"from_alias":            fromAlias,
 		"to_addresses":          toAddresses,
@@ -241,7 +241,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		runMetadataChannelID:     agentID,
 		runMetadataDesktopID:     desktopIDForRun(parent),
 		"parent_id":              parent.RunID,
-		"source_agent_profile":   AgentProfileVText,
+		"source_agent_profile":   AgentProfileTexture,
 		"email_action":           "draft_request",
 		"email_draft_id":         draftID,
 		"email_draft_version_id": versionID,
@@ -267,7 +267,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		OwnerID:      ownerID,
 		SandboxID:    rt.cfg.SandboxID,
 		State:        types.RunCompleted,
-		Prompt:       "Create an Email appagent draft request from VText artifact " + revisionID,
+		Prompt:       "Create an Email appagent draft request from Texture artifact " + revisionID,
 		Result:       string(resultBytes),
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -335,7 +335,7 @@ func (rt *Runtime) persistEmailDraftToMaild(ctx context.Context, ownerID, ownerE
 		"bcc_addresses": normalizeEmailAddressList(in.BCCAddresses),
 		"subject":       subject,
 		"text_body":     body,
-		"source_kind":   "vtext_email_artifact",
+		"source_kind":   "texture_email_artifact",
 		"source_ref":    string(sourceRef),
 	}
 	data, err := json.Marshal(payload)

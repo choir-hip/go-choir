@@ -130,7 +130,7 @@ page list).
 or **suppress** as already covered, *allowed only against the published
 corpus*; draft work publishes; the edition updates; settlement closes a
 trajectory only when it is published *and* listed; a draft chain may be
-abandoned (evicted VText work, bounded); an abandoned trajectory can be
+abandoned (evicted Texture work, bounded); an abandoned trajectory can be
 **reopened** from its durable items — this layer's sweep, possible only
 because the open-decision outlives the run that made it.
 

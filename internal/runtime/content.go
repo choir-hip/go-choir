@@ -440,14 +440,14 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 }
 
 func (rt *Runtime) ImportFileContent(ctx context.Context, ownerID, filePath string) (types.ContentItem, error) {
-	filePath = normalizeVTextSourcePath(filePath)
-	if filePath == "" || isVTextShortcutPath(filePath) {
+	filePath = normalizeTextureSourcePath(filePath)
+	if filePath == "" || isTextureShortcutPath(filePath) {
 		return types.ContentItem{}, fmt.Errorf("file_path is required")
 	}
 	if existing, ok := rt.findExistingFileContentItem(ctx, ownerID, filePath); ok {
 		return existing, nil
 	}
-	raw, ok := readVTextSourceFileBytes(filePath)
+	raw, ok := readTextureSourceFileBytes(filePath)
 	if !ok {
 		return types.ContentItem{}, fmt.Errorf("file content unavailable for %s", filePath)
 	}
@@ -502,7 +502,7 @@ func (rt *Runtime) findExistingFileContentItem(ctx context.Context, ownerID, fil
 		return types.ContentItem{}, false
 	}
 	for _, item := range items {
-		if item.SourceType == "file" && normalizeVTextSourcePath(item.FilePath) == filePath {
+		if item.SourceType == "file" && normalizeTextureSourcePath(item.FilePath) == filePath {
 			return item, true
 		}
 	}
@@ -1797,7 +1797,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 
 func normalizeAppHint(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "texture", "vtext", "browser", "content", "files", "pdf", "epub", "slides", "image", "video", "audio", "podcast":
+	case "texture", "browser", "content", "files", "pdf", "epub", "slides", "image", "video", "audio", "podcast":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "files"

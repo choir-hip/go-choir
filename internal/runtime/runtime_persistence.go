@@ -35,7 +35,7 @@ func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events
 	}
 	if mutation := agentMutationForRun(rec); mutation != nil {
 		if err := st.CreateAgentMutation(ctx, *mutation); err != nil {
-			log.Printf("runtime: vtext agent revision run %s: create mutation: %v", rec.RunID, err)
+			log.Printf("runtime: texture agent revision run %s: create mutation: %v", rec.RunID, err)
 		}
 	}
 

@@ -205,7 +205,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	var doc sandboxTextureDocument
 	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
 		log.Printf("proxy: platform proposal fetch document: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext document"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture document"})
 		return
 	}
 	if doc.OwnerID != authResult.UserID || doc.DocID != req.DocID {
@@ -222,7 +222,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	var rev sandboxTextureRevision
 	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), authResult.UserID, &rev); err != nil {
 		log.Printf("proxy: platform proposal fetch revision: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private vtext revision"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture revision"})
 		return
 	}
 	if rev.OwnerID != authResult.UserID || rev.DocID != req.DocID || rev.RevisionID != req.RevisionID {
@@ -323,7 +323,7 @@ func (h *Handler) deliverPublicationProposalToAuthor(r *http.Request, proposal p
 		log.Printf("proxy: platform proposal author sandbox resolve failed: %v", err)
 		return "recorded_for_author"
 	}
-	target, err := joinBasePath(sandboxURL, "/internal/vtext/proposals")
+	target, err := joinBasePath(sandboxURL, "/internal/texture/proposals")
 	if err != nil {
 		log.Printf("proxy: platform proposal author delivery target failed: %v", err)
 		return "recorded_for_author"

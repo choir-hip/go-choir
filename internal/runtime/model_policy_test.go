@@ -23,7 +23,7 @@ model = "gpt-5.5"
 reasoning = "medium"
 max_tokens = 24000
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 `
@@ -39,12 +39,12 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if super.MaxTokens != 24000 {
 		t.Fatalf("super max tokens = %d, want 24000", super.MaxTokens)
 	}
-	vtext := policy.Resolve(AgentProfileVText)
-	if vtext.Provider != "fireworks" || vtext.Model != "accounts/fireworks/models/deepseek-v4-flash" {
-		t.Fatalf("vtext selection = %+v", vtext)
+	texture := policy.Resolve(AgentProfileTexture)
+	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" {
+		t.Fatalf("texture selection = %+v", texture)
 	}
-	if vtext.MaxTokens != 12000 {
-		t.Fatalf("vtext inherited max tokens = %d, want 12000", vtext.MaxTokens)
+	if texture.MaxTokens != 12000 {
+		t.Fatalf("texture inherited max tokens = %d, want 12000", texture.MaxTokens)
 	}
 	researcher := policy.Resolve(AgentProfileResearcher)
 	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.5" || researcher.ReasoningEffort != "low" {
@@ -69,10 +69,10 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileConductor); got != 0 {
 		t.Fatalf("conductor interactive tokens = %d, want 0 to omit Fireworks max_tokens", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileVText); got != 0 {
-		t.Fatalf("vtext interactive tokens = %d, want 0 to omit Fireworks max_tokens", got)
+	if got := MaxInteractiveOutputTokensForSelection(sel, AgentProfileTexture); got != 0 {
+		t.Fatalf("texture interactive tokens = %d, want 0 to omit Fireworks max_tokens", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5"}, AgentProfileVText); got != 0 {
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5"}, AgentProfileTexture); got != 0 {
 		t.Fatalf("ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
 	}
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5", MaxTokens: 32768}, AgentProfileSuper); got != 0 {
@@ -99,9 +99,9 @@ func TestFallbackModelPolicyUsesGeneratedMimoDefaults(t *testing.T) {
 	if super.Provider != "deepseek" || super.Model != "deepseek-v4-flash" || super.ReasoningEffort != "medium" {
 		t.Fatalf("super selection = %+v", super)
 	}
-	vtext := policy.Resolve(AgentProfileVText)
-	if vtext.Provider != "xiaomi" || vtext.Model != "mimo-v2.5" || vtext.ReasoningEffort != "medium" {
-		t.Fatalf("vtext selection = %+v", vtext)
+	texture := policy.Resolve(AgentProfileTexture)
+	if texture.Provider != "xiaomi" || texture.Model != "mimo-v2.5" || texture.ReasoningEffort != "medium" {
+		t.Fatalf("texture selection = %+v", texture)
 	}
 	processor := policy.Resolve(AgentProfileProcessor)
 	if processor.Provider != "xiaomi" || processor.Model != "mimo-v2.5" || processor.ReasoningEffort != "medium" {
@@ -134,8 +134,8 @@ func TestGeneratedModelPolicyUsesTextureRoleKey(t *testing.T) {
 	if !strings.Contains(raw, "[roles.texture]") {
 		t.Fatalf("generated model policy missing [roles.texture]:\n%s", raw)
 	}
-	if strings.Contains(raw, "[roles.vtext]") {
-		t.Fatalf("generated model policy should not emit current [roles.vtext]:\n%s", raw)
+	if strings.Contains(raw, "[roles.texture]") {
+		t.Fatalf("generated model policy should not emit current [roles.texture]:\n%s", raw)
 	}
 	policy, err := parseModelPolicy(raw, "/System/model-policy.toml")
 	if err != nil {
@@ -240,7 +240,7 @@ provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 reasoning = "none"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 reasoning = "none"
@@ -275,9 +275,9 @@ requires = ["image", "tool_use"]
 			t.Fatalf("migrated %s selection = %+v", role, got)
 		}
 	}
-	got := policy.Resolve(AgentProfileVText)
+	got := policy.Resolve(AgentProfileTexture)
 	if got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
-		t.Fatalf("migrated vtext selection = %+v", got)
+		t.Fatalf("migrated texture selection = %+v", got)
 	}
 }
 
@@ -318,7 +318,7 @@ provider = "deepseek"
 model = "deepseek-v4-flash"
 reasoning = "medium"
 
-[roles.vtext]
+[roles.texture]
 provider = "deepseek"
 model = "deepseek-v4-flash"
 reasoning = "medium"
@@ -388,7 +388,7 @@ reasoning = "medium"
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 `
@@ -474,7 +474,7 @@ provider = "chatgpt"
 model = "gpt-5.5"
 reasoning = "medium"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 reasoning = "none"
@@ -515,7 +515,7 @@ fallback_provider = "chatgpt"
 fallback_model = "gpt-5.5"
 reasoning = "low"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 reasoning = "none"
@@ -824,7 +824,7 @@ func TestStartChildRunResolvesModelPolicyIntoRunMetadata(t *testing.T) {
 fallback_provider = "chatgpt"
 fallback_model = "gpt-5.5"
 
-[roles.vtext]
+[roles.texture]
 provider = "fireworks"
 model = "accounts/fireworks/models/deepseek-v4-flash"
 `), 0o644); err != nil {
@@ -840,9 +840,9 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 		t.Fatalf("create parent: %v", err)
 	}
 
-	child, err := rt.StartChildRun(ctx, parent.RunID, "revise vtext", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileVText,
-		runMetadataAgentRole:    AgentProfileVText,
+	child, err := rt.StartChildRun(ctx, parent.RunID, "revise texture", "user-alice", map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
 	})
 	if err != nil {
 		t.Fatalf("start child: %v", err)

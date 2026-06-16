@@ -323,24 +323,6 @@ const (
 	// document revisions.
 	EventTextureDecisionRecorded EventKind = "texture.decision.recorded"
 
-	// LegacyEventVText* constants keep old stored Trace rows readable while new
-	// evidence emits Texture event kinds.
-	LegacyEventVTextAgentRevisionStarted    EventKind = "vtext.agent_revision.started"
-	LegacyEventVTextAgentRevisionProgress   EventKind = "vtext.agent_revision.progress"
-	LegacyEventVTextAgentRevisionCompleted  EventKind = "vtext.agent_revision.completed"
-	LegacyEventVTextAgentRevisionFailed     EventKind = "vtext.agent_revision.failed"
-	LegacyEventVTextDocumentRevisionCreated EventKind = "vtext.document_revision.created"
-	LegacyEventVTextDecisionRecorded        EventKind = "vtext.decision.recorded"
-
-	// EventVText* symbols are compatibility aliases for source that has not yet
-	// been mechanically renamed; they emit the current Texture event kinds.
-	EventVTextAgentRevisionStarted    EventKind = EventTextureAgentRevisionStarted
-	EventVTextAgentRevisionProgress   EventKind = EventTextureAgentRevisionProgress
-	EventVTextAgentRevisionCompleted  EventKind = EventTextureAgentRevisionCompleted
-	EventVTextAgentRevisionFailed     EventKind = EventTextureAgentRevisionFailed
-	EventVTextDocumentRevisionCreated EventKind = EventTextureDocumentRevisionCreated
-	EventVTextDecisionRecorded        EventKind = EventTextureDecisionRecorded
-
 	// EventDesktopStateUpdated is emitted when a user's persisted desktop
 	// workspace changes.
 	EventDesktopStateUpdated EventKind = "desktop.state.updated"

@@ -323,7 +323,7 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 		}
 		warnings = append(warnings, scanHeresyTerms(p, string(content), detectorTerms)...)
 		warnings = append(warnings, scanOverclaims(p, string(content), info)...)
-		warnings = append(warnings, scanVTextAgency(p, string(content), info)...)
+		warnings = append(warnings, scanTextureAgency(p, string(content), info)...)
 		warnings = append(warnings, scanCurrentTargetCollapse(p, string(content), info)...)
 	}
 
@@ -1097,12 +1097,12 @@ func scanOverclaims(path, content string, info *docInfo) []warning {
 	return scanLinePatterns("H2", path, content, patterns, "unscoped safety/correctness claim", "name the verifier contract, evidence scope, or remaining risk")
 }
 
-func scanVTextAgency(path, content string, info *docInfo) []warning {
+func scanTextureAgency(path, content string, info *docInfo) []warning {
 	if info.IsEvidence {
 		return nil
 	}
-	patterns := []string{"VText workflow", "VText pipeline", "VText must call", "VText always calls", "requiredContinuationAfterVTextEdit", "initialVTextToolChoice"}
-	return scanLinePatterns("H3", path, content, patterns, "VText agency may be collapsed into a fixed workflow", "preserve VText as canonical document actor with authority to choose delegation")
+	patterns := []string{"Texture workflow", "Texture pipeline", "Texture must call", "Texture always calls", "requiredContinuationAfterTextureEdit", "initialTextureToolChoice"}
+	return scanLinePatterns("H3", path, content, patterns, "Texture agency may be collapsed into a fixed workflow", "preserve Texture as canonical document actor with authority to choose delegation")
 }
 
 func scanCurrentTargetCollapse(path, content string, info *docInfo) []warning {

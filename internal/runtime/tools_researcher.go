@@ -58,7 +58,7 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 		target, err := rt.store.GetAgent(ctx, explicitAgentID)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				if fallbackAgentID, fallbackChannelID := vtextDeliveryFallbackFromContext(runRec, explicitAgentID); fallbackAgentID != "" && fallbackChannelID != "" {
+				if fallbackAgentID, fallbackChannelID := textureDeliveryFallbackFromContext(runRec, explicitAgentID); fallbackAgentID != "" && fallbackChannelID != "" {
 					return fallbackAgentID, fallbackChannelID, nil
 				}
 			}
@@ -66,10 +66,10 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 		}
 		return explicitAgentID, strings.TrimSpace(target.ChannelID), nil
 	}
-	return "", "", fmt.Errorf("structured delivery requires agent_id, a parent run, or a vtext requester")
+	return "", "", fmt.Errorf("structured delivery requires agent_id, a parent run, or a texture requester")
 }
 
-func vtextDeliveryFallbackFromContext(runRec *types.RunRecord, explicitAgentID string) (string, string) {
+func textureDeliveryFallbackFromContext(runRec *types.RunRecord, explicitAgentID string) (string, string) {
 	if runRec == nil {
 		return "", ""
 	}
@@ -222,5 +222,5 @@ func (rt *Runtime) emitChannelMessageEvent(ctx context.Context, message types.Ch
 		Actor:  events.ActorChannel,
 		Cause:  events.CauseChannelMessage,
 	})
-	rt.maybeWakeVTextOnWorkerMessage(ctx, ownerID, message)
+	rt.maybeWakeTextureOnWorkerMessage(ctx, ownerID, message)
 }

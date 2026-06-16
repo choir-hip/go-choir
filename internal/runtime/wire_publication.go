@@ -120,7 +120,7 @@ func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, st
 
 	headline := wireArticleArticleHeadline(storyDoc.Title, storyRev.Content)
 	if headline == "" {
-		headline = strings.TrimSuffix(strings.TrimSpace(storyDoc.Title), ".vtext")
+		headline = strings.TrimSuffix(strings.TrimSpace(storyDoc.Title), ".texture")
 	}
 	if headline == "" {
 		headline = "Wire article"
@@ -130,11 +130,11 @@ func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, st
 	if newContent != "" {
 		newContent += "\n\n"
 	}
-	newContent += fmt.Sprintf("- [%s](vtext:%s)", headline, storyDoc.DocID)
+	newContent += fmt.Sprintf("- [%s](texture:%s)", headline, storyDoc.DocID)
 
 	editionMeta, _ := json.Marshal(map[string]any{
 		"source":            "universal_wire_edition",
-		"revision_role":     vtextRevisionRoleCanonical,
+		"revision_role":     textureRevisionRoleCanonical,
 		"published_doc_ids": append(append([]string(nil), included...), storyDoc.DocID),
 	})
 	newEditionRev := types.Revision{
@@ -205,7 +205,7 @@ func wireEditionTrajectoryRef(docID, revisionID string) string {
 	if docID == "" || revisionID == "" {
 		return ""
 	}
-	return "vtext_edition:" + docID + "/" + revisionID
+	return "texture_edition:" + docID + "/" + revisionID
 }
 
 func (rt *Runtime) beginWireProcessorDecisionWorkItem(ctx context.Context, rec *types.RunRecord) (string, error) {
@@ -290,7 +290,7 @@ func (rt *Runtime) beginWireProcessorSourceDecisionWorkItems(ctx context.Context
 type wireProcessorDecisionVerdict string
 
 const (
-	wireProcessorDecisionOpenedVText        wireProcessorDecisionVerdict = "opened_vtext"
+	wireProcessorDecisionOpenedTexture      wireProcessorDecisionVerdict = "opened_texture"
 	wireProcessorDecisionAlreadyCovered     wireProcessorDecisionVerdict = "already_covered"
 	wireProcessorDecisionNotNewsworthy      wireProcessorDecisionVerdict = "not_newsworthy"
 	wireProcessorDecisionInsufficientSignal wireProcessorDecisionVerdict = "insufficient_evidence"
@@ -499,7 +499,7 @@ func (rt *Runtime) reconcileWireProcessorRequestResolution(ctx context.Context, 
 		return requestItem, nil
 	}
 	resolved := 0
-	hasOpenedVText := false
+	hasOpenedTexture := false
 	allAlreadyCovered := true
 	allTerminalWithoutStory := true
 	hasDeferred := false
@@ -516,8 +516,8 @@ func (rt *Runtime) reconcileWireProcessorRequestResolution(ctx context.Context, 
 		}
 		decision := metadataStringValue(item.Details, wireDetailKeyDecision)
 		coveredByDocID := strings.TrimSpace(metadataStringValue(item.Details, wireDetailKeyCoveredByDocID))
-		if decision == string(wireProcessorDecisionOpenedVText) {
-			hasOpenedVText = true
+		if decision == string(wireProcessorDecisionOpenedTexture) {
+			hasOpenedTexture = true
 		}
 		if decision != string(wireProcessorDecisionAlreadyCovered) || coveredByDocID == "" {
 			allAlreadyCovered = false
@@ -543,7 +543,7 @@ func (rt *Runtime) reconcileWireProcessorRequestResolution(ctx context.Context, 
 	switch {
 	case resolved < len(sourceItemIDs):
 		patch[wireDetailKeyResolutionState] = sourceapi.ResolutionStateAwaitingSourceItemDecisions
-	case hasOpenedVText:
+	case hasOpenedTexture:
 		patch[wireDetailKeyResolutionState] = sourceapi.ResolutionStateDecidedWithStoryRoute
 	case allAlreadyCovered:
 		patch[wireDetailKeyResolutionState] = sourceapi.ResolutionStateSuppressedAgainstPublishedCorpus
@@ -559,14 +559,14 @@ func (rt *Runtime) reconcileWireProcessorRequestResolution(ctx context.Context, 
 	// One rule: every item resolved closes the request; no story route means
 	// nothing on this trajectory can settle, so cancel it. Deferred items keep
 	// the request open until a later decision upgrades them.
-	if resolved == len(sourceItemIDs) && (hasOpenedVText || allTerminalWithoutStory) {
+	if resolved == len(sourceItemIDs) && (hasOpenedTexture || allTerminalWithoutStory) {
 		if requestItem.Status != types.WorkItemCompleted {
 			requestItem, err = rt.store.UpdateWorkItemStatus(ctx, ownerID, requestItem.WorkItemID, types.WorkItemCompleted)
 			if err != nil {
 				return types.WorkItemRecord{}, err
 			}
 		}
-		if !hasOpenedVText {
+		if !hasOpenedTexture {
 			if _, err := rt.store.UpdateTrajectoryStatus(ctx, ownerID, trajectoryID, types.TrajectoryCancelled); err != nil {
 				return types.WorkItemRecord{}, err
 			}
@@ -618,8 +618,8 @@ func (rt *Runtime) beginWireStoryResolutionWorkItem(ctx context.Context, rec *ty
 		OwnerID:              ownerID,
 		TrajectoryID:         trajectoryID,
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
-		Reason:               "processor opened a wire story VText route",
-		AuthorityProfile:     AgentProfileVText,
+		Reason:               "processor opened a wire story Texture route",
+		AuthorityProfile:     AgentProfileTexture,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint(trajectoryID, docID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{

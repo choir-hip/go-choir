@@ -399,7 +399,7 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 
 // Historical versions executed a hidden request_worker_vm -> delegate_worker_vm
 // transition here. That made super block inside one tool loop while the worker
-// ran, which prevented supervision, VText clarification, cancellation, and
+// ran, which prevented supervision, Texture clarification, cancellation, and
 // concurrent observation. Worker delegation is now explicit and asynchronous:
 // request_worker_vm leases, start_worker_delegation starts, and observe/finish
 // collect evidence. This hook intentionally does no worker handoff.
@@ -626,25 +626,25 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 
 	switch profile {
 	case AgentProfileConductor:
-		firstVText := -1
+		firstTexture := -1
 		for i, call := range calls {
 			if call.Name != "spawn_agent" {
 				continue
 			}
-			if toolCallSpawnProfile(call) == AgentProfileVText {
-				if firstVText == -1 {
-					firstVText = i
+			if toolCallSpawnProfile(call) == AgentProfileTexture {
+				if firstTexture == -1 {
+					firstTexture = i
 				} else {
-					setSkip(i, "tool_notice: conductor already routed this prompt to vtext; duplicate vtext route skipped")
+					setSkip(i, "tool_notice: conductor already routed this prompt to texture; duplicate texture route skipped")
 				}
 			}
 		}
-		if firstVText != -1 {
+		if firstTexture != -1 {
 			for i, call := range calls {
-				if i == firstVText || call.Name != "spawn_agent" {
+				if i == firstTexture || call.Name != "spawn_agent" {
 					continue
 				}
-				setSkip(i, "tool_notice: conductor routed this prompt to vtext; vtext owns downstream researcher/super requests")
+				setSkip(i, "tool_notice: conductor routed this prompt to texture; texture owns downstream researcher/super requests")
 			}
 		}
 	}
@@ -662,20 +662,20 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenExport := map[string]int{}
 	seenBash := map[string]int{}
 	seenDelegateWorker := map[string]int{}
-	seenVTextResearcherSpawn := map[string]int{}
-	firstVTextEdit := -1
+	seenTextureResearcherSpawn := map[string]int{}
+	firstTextureEdit := -1
 
 	for i, call := range calls {
 		switch call.Name {
 		case "patch_texture", "rewrite_texture":
-			if profile != AgentProfileVText {
+			if profile != AgentProfileTexture {
 				continue
 			}
-			if firstVTextEdit != -1 {
-				setSkip(i, fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, calls[firstVTextEdit].ID))
+			if firstTextureEdit != -1 {
+				setSkip(i, fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, calls[firstTextureEdit].ID))
 				continue
 			}
-			firstVTextEdit = i
+			firstTextureEdit = i
 		case "bash":
 			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 				continue
@@ -691,16 +691,16 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 			seenBash[key] = i
 		case "spawn_agent":
 			switch profile {
-			case AgentProfileVText:
-				key, ok := toolCallVTextResearcherSpawnKey(call)
+			case AgentProfileTexture:
+				key, ok := toolCallTextureResearcherSpawnKey(call)
 				if !ok {
 					continue
 				}
-				if previous, exists := seenVTextResearcherSpawn[key]; exists {
-					setSkip(i, fmt.Sprintf("tool_notice: duplicate vtext researcher spawn for %s already planned in this turn at call %s; one worker for this exact objective is enough", key, calls[previous].ID))
+				if previous, exists := seenTextureResearcherSpawn[key]; exists {
+					setSkip(i, fmt.Sprintf("tool_notice: duplicate texture researcher spawn for %s already planned in this turn at call %s; one worker for this exact objective is enough", key, calls[previous].ID))
 					continue
 				}
-				seenVTextResearcherSpawn[key] = i
+				seenTextureResearcherSpawn[key] = i
 			case AgentProfileVSuper:
 				key, ok := toolCallVSuperCoSuperSpawnKey(call)
 				if !ok {
@@ -788,7 +788,7 @@ func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
 }
 
-func toolCallVTextResearcherSpawnKey(call types.ToolCall) (string, bool) {
+func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
 	var in struct {
 		Role      string `json:"role"`
 		Profile   string `json:"profile"`

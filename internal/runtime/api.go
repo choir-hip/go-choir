@@ -483,7 +483,7 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		"input_source":           "prompt_bar",
 		"requested_app":          requestedApp,
 		"seed_prompt":            text,
-		"initial_document_title": buildInitialVTextTitle(text, ""),
+		"initial_document_title": buildInitialTextureTitle(text, ""),
 		"submission_surface":     "prompt_bar",
 	}
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
@@ -500,7 +500,7 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		decision := conductorDecision{
 			Action:    "open_app",
 			App:       contentAppHint,
-			Title:     buildInitialVTextTitle(text, ""),
+			Title:     buildInitialTextureTitle(text, ""),
 			SourceURL: contentSourceURL,
 			MediaType: contentMediaType,
 			AppHint:   contentAppHint,
@@ -510,12 +510,12 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		decision := conductorDecision{
 			Action: "open_app",
 			App:    AgentProfileTexture,
-			Title:  buildInitialVTextTitle(text, ""),
+			Title:  buildInitialTextureTitle(text, ""),
 		}
 		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
 		if err == nil {
-			if _, routeErr := h.rt.ensureConductorVTextRoute(r.Context(), rec, text, ""); routeErr != nil {
-				log.Printf("runtime api: materialize prompt-bar vtext route: %v", routeErr)
+			if _, routeErr := h.rt.ensureConductorTextureRoute(r.Context(), rec, text, ""); routeErr != nil {
+				log.Printf("runtime api: materialize prompt-bar texture route: %v", routeErr)
 				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare prompt"})
 				return
 			}
@@ -1752,21 +1752,21 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/internal/runtime/refresh", h.HandleInternalRuntimeRefresh)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
-	s.HandleFunc("/internal/vtext/documents/", h.HandleInternalVTextDocument)
-	s.HandleFunc("/internal/vtext/revisions/", h.HandleInternalVTextRevision)
-	s.HandleFunc("/internal/vtext/proposals", h.HandleInternalVTextProposalDelivery)
+	s.HandleFunc("/internal/texture/documents/", h.HandleInternalTextureDocument)
+	s.HandleFunc("/internal/texture/revisions/", h.HandleInternalTextureRevision)
+	s.HandleFunc("/internal/texture/proposals", h.HandleInternalTextureProposalDelivery)
 	if h.rt.cfg.EnableTestAPIs {
 		s.HandleFunc("/api/prompts", h.HandlePromptList)
 		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
-		s.HandleFunc("/api/test/vtext/research-findings", h.HandleTestVTextResearchFindings)
-		s.HandleFunc("/api/test/vtext/worker-update", h.HandleTestVTextWorkerUpdate)
+		s.HandleFunc("/api/test/texture/research-findings", h.HandleTestTextureResearchFindings)
+		s.HandleFunc("/api/test/texture/worker-update", h.HandleTestTextureWorkerUpdate)
 	}
 
 	// Texture document/revision/history/diff/blame APIs.
 	// All routes are dispatched from a single prefix handler that inspects
 	// the URL path and method to route to the correct handler. This avoids
 	// ambiguity with Go's ServeMux prefix matching.
-	RegisterVTextRoutes(s, h)
+	RegisterTextureRoutes(s, h)
 }
 
 // HandleInternalRuntimeRunRouter dispatches internal service-to-service run
@@ -1783,15 +1783,15 @@ func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *ht
 	h.HandleInternalRunStatus(w, r)
 }
 
-// RegisterVTextRoutes registers the Texture API routes on the given server.
+// RegisterTextureRoutes registers the Texture API routes on the given server.
 // These routes expose document CRUD, revision, history, snapshot, diff,
 // and blame APIs through the authenticated same-origin proxy path.
-func RegisterVTextRoutes(s *server.Server, h *APIHandler) {
+func RegisterTextureRoutes(s *server.Server, h *APIHandler) {
 	// Exact match for document collection (create/list).
-	s.HandleFunc("/api/texture/documents", h.HandleVTextDocumentsRoot)
+	s.HandleFunc("/api/texture/documents", h.HandleTextureDocumentsRoot)
 
 	// Prefix match for all other Texture routes.
-	s.HandleFunc("/api/texture/", h.HandleVTextRouter)
+	s.HandleFunc("/api/texture/", h.HandleTextureRouter)
 }
 
 const (
@@ -1800,7 +1800,7 @@ const (
 	textureRevisionsPathPrefix = "/api/texture/revisions/"
 )
 
-// HandleVTextRouter dispatches Texture API requests based on URL path and
+// HandleTextureRouter dispatches Texture API requests based on URL path and
 // method. It handles all paths under /api/texture/ that are not matched by
 // the exact /api/texture/documents route.
 //
@@ -1828,20 +1828,20 @@ const (
 //	GET    /api/texture/revisions/{id}           → get revision (snapshot)
 //	GET    /api/texture/revisions/{id}/blame     → blame revision
 //	GET    /api/texture/diff                     → diff two revisions
-func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	// Diff endpoint: /api/texture/diff
 	if path == "/api/texture/diff" {
-		h.HandleVTextDiff(w, r)
+		h.HandleTextureDiff(w, r)
 		return
 	}
 	if path == "/api/texture/files/open" {
-		h.HandleVTextOpenFile(w, r)
+		h.HandleTextureOpenFile(w, r)
 		return
 	}
 	if path == "/api/texture/markdown-lineage/import" {
-		h.HandleVTextImportMarkdownLineage(w, r)
+		h.HandleTextureImportMarkdownLineage(w, r)
 		return
 	}
 
@@ -1849,10 +1849,10 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(path, textureRevisionsPathPrefix) {
 		// Check for blame suffix: /api/texture/revisions/{id}/blame
 		if strings.HasSuffix(path, "/blame") {
-			h.HandleVTextBlame(w, r)
+			h.HandleTextureBlame(w, r)
 			return
 		}
-		h.HandleVTextRevision(w, r)
+		h.HandleTextureRevision(w, r)
 		return
 	}
 
@@ -1864,59 +1864,59 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		// Check for sub-resource suffixes.
 		if strings.HasSuffix(rest, "/revisions") {
 			// /api/texture/documents/{id}/revisions
-			h.HandleVTextRevisions(w, r)
+			h.HandleTextureRevisions(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/manifest") {
 			// /api/texture/documents/{id}/manifest
-			h.HandleVTextEnsureManifest(w, r)
+			h.HandleTextureEnsureManifest(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/stream") {
 			// /api/texture/documents/{id}/stream
-			h.HandleVTextDocumentStream(w, r)
+			h.HandleTextureDocumentStream(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/revise") {
 			// /api/texture/documents/{id}/revise
-			h.HandleVTextAgentRevision(w, r)
+			h.HandleTextureAgentRevision(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/cancel") {
 			// /api/texture/documents/{id}/cancel
-			h.HandleVTextCancelAgentRevision(w, r)
+			h.HandleTextureCancelAgentRevision(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/compare") {
-			h.HandleVTextSemanticCompare(w, r)
+			h.HandleTextureSemanticCompare(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/merge-preview") {
-			h.HandleVTextMergePreview(w, r)
+			h.HandleTextureMergePreview(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/accept-merge") {
-			h.HandleVTextAcceptMerge(w, r)
+			h.HandleTextureAcceptMerge(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/source-repairs") {
-			h.HandleVTextSourceGapRepair(w, r)
+			h.HandleTextureSourceGapRepair(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/source-attachments") {
-			h.HandleVTextSourceArtifactAttachment(w, r)
+			h.HandleTextureSourceArtifactAttachment(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/restore") {
-			h.HandleVTextRestoreRevision(w, r)
+			h.HandleTextureRestoreRevision(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/diagnosis") {
-			h.HandleVTextDiagnosis(w, r)
+			h.HandleTextureDiagnosis(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/export") {
-			h.HandleVTextExportDocument(w, r)
+			h.HandleTextureExportDocument(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/agent-revision") {
@@ -1925,26 +1925,26 @@ func (h *APIHandler) HandleVTextRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.HasSuffix(rest, "/history") {
 			// /api/texture/documents/{id}/history
-			h.HandleVTextHistory(w, r)
+			h.HandleTextureHistory(w, r)
 			return
 		}
 
 		// Otherwise, it's a document item: /api/texture/documents/{id}
-		h.HandleVTextDocument(w, r)
+		h.HandleTextureDocument(w, r)
 		return
 	}
 
 	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 }
 
-// HandleVTextDocumentsRoot routes POST to create and GET to list at
+// HandleTextureDocumentsRoot routes POST to create and GET to list at
 // /api/texture/documents (exact match, no trailing slash).
-func (h *APIHandler) HandleVTextDocumentsRoot(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) HandleTextureDocumentsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		h.HandleVTextCreateDocument(w, r)
+		h.HandleTextureCreateDocument(w, r)
 	case http.MethodGet:
-		h.HandleVTextListDocuments(w, r)
+		h.HandleTextureListDocuments(w, r)
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}

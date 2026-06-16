@@ -63,7 +63,7 @@ func TestHandlePromptRoleSupportsSaveAndReset(t *testing.T) {
 	t.Parallel()
 	_, handler := testPromptAPISetup(t)
 
-	putReq := authenticatedRequest(http.MethodPut, "/api/prompts/vtext", `{"content":"Custom prompt"}`, "user-alice")
+	putReq := authenticatedRequest(http.MethodPut, "/api/prompts/texture", `{"content":"Custom prompt"}`, "user-alice")
 	putW := httptest.NewRecorder()
 	handler.HandlePromptRole(putW, putReq)
 
@@ -79,7 +79,7 @@ func TestHandlePromptRoleSupportsSaveAndReset(t *testing.T) {
 		t.Fatalf("put source = %q, want user", putResp.Source)
 	}
 
-	getReq := authenticatedRequest(http.MethodGet, "/api/prompts/vtext", "", "user-alice")
+	getReq := authenticatedRequest(http.MethodGet, "/api/prompts/texture", "", "user-alice")
 	getW := httptest.NewRecorder()
 	handler.HandlePromptRole(getW, getReq)
 	if getW.Code != http.StatusOK {
@@ -98,11 +98,11 @@ func TestHandlePromptRoleSupportsSaveAndReset(t *testing.T) {
 	if len(getResp.Tools) == 0 {
 		t.Fatal("expected tools in prompt response")
 	}
-	if getResp.RolePolicy.Profile != AgentProfileVText {
-		t.Fatalf("role policy profile = %q, want %q", getResp.RolePolicy.Profile, AgentProfileVText)
+	if getResp.RolePolicy.Profile != AgentProfileTexture {
+		t.Fatalf("role policy profile = %q, want %q", getResp.RolePolicy.Profile, AgentProfileTexture)
 	}
 
-	deleteReq := authenticatedRequest(http.MethodDelete, "/api/prompts/vtext", "", "user-alice")
+	deleteReq := authenticatedRequest(http.MethodDelete, "/api/prompts/texture", "", "user-alice")
 	deleteW := httptest.NewRecorder()
 	handler.HandlePromptRole(deleteW, deleteReq)
 	if deleteW.Code != http.StatusOK {

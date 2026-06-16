@@ -54,7 +54,7 @@ test('super console launches from floating desktop icon', async ({ page, authent
   const terminalWindow = page.locator('[data-window]').first();
   await expect(terminalWindow).toBeVisible();
 
-  const titleText = await terminalWindow.locator('[data-window-titlebar] .titlvtext, [data-window-titlebar]').first().textContent();
+  const titleText = await terminalWindow.locator('[data-window-titlebar] .titltexture, [data-window-titlebar]').first().textContent();
   expect(titleText).toContain('Super Console');
 });
 

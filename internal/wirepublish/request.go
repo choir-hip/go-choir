@@ -14,7 +14,7 @@ func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *
 	meta := decodeMetadata(enrichedMetadata)
 	meta["publication_kind"] = PublicationKind
 	meta["revision_role"] = RevisionRoleCanonical
-	meta["wire_publish_lineage"] = "full_vtext"
+	meta["wire_publish_lineage"] = "full_texture"
 	if cycleID := sourceNetworkCycleID(meta); cycleID != "" {
 		meta["source_network_cycle_id"] = cycleID
 	}

@@ -380,7 +380,7 @@ ORDER BY created_at ASC`, versionID)
 		}
 		edge.FromSelector = json.RawMessage(firstNonEmpty(fromSelector, "{}"))
 		edge.ToSelector = json.RawMessage(firstNonEmpty(toSelector, "{}"))
-		if edge.ToKind == "private_texture_revision" || edge.ToKind == "private_vtext_revision" { // texture-cutover-allow: legacy publication provenance rows remain readable until storage migration.
+		if edge.ToKind == "private_texture_revision" {
 			edge.ToKind = "source_revision_hash"
 			edge.ToID = sourceRevisionHash
 			if strings.HasPrefix(edge.EvidenceRef, "source_revision_hash:") {

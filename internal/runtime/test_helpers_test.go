@@ -99,7 +99,7 @@ func registeredRuntimeRequest(t *testing.T, handler *APIHandler, method, path, b
 	return w
 }
 
-func vtextRequest(t *testing.T, method, path string, body interface{}) *http.Request {
+func textureRequest(t *testing.T, method, path string, body interface{}) *http.Request {
 	t.Helper()
 	var reqBody *bytes.Reader
 	if body != nil {
@@ -120,7 +120,7 @@ func waitForTaskCompletion(t *testing.T, h *APIHandler, taskID string, timeout t
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		req := vtextRequest(t, http.MethodGet, "/api/agent/status?loop_id="+taskID, nil)
+		req := textureRequest(t, http.MethodGet, "/api/agent/status?loop_id="+taskID, nil)
 		w := httptest.NewRecorder()
 		h.HandleRunStatus(w, req)
 		if w.Code != http.StatusOK {

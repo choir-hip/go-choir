@@ -19,7 +19,7 @@ func TestRunAcceptanceStoresOwnerScopedSynthesizedRecord(t *testing.T) {
 		DesktopID:             "primary",
 		TrajectoryID:          "trajectory-1",
 		RunID:                 "run-1",
-		AuthorityProfile:      "conductor > vtext > super > vsuper",
+		AuthorityProfile:      "conductor > texture > super > vsuper",
 		BaseSHA:               "base-sha",
 		DeploymentCommit:      "deploy-sha",
 		HealthCommit:          "deploy-sha",

@@ -1,13 +1,13 @@
 // Package store provides durable runtime storage for the go-choir sandbox runtime.
 //
 // The store persists run records, agent records, channel messages, and event
-// records using the same embedded Dolt workspace that owns VText state, enabling
+// records using the same embedded Dolt workspace that owns Texture state, enabling
 // stable run IDs, durable agent/channel identity, and restart-safe recovery
 // (VAL-RUNTIME-003, VAL-RUNTIME-010).
 //
 // Design decisions:
 //   - One embedded Dolt workspace per user computer owns both runtime/control
-//     state and VText/app state.
+//     state and Texture/app state.
 //   - Legacy SQLite runtime files are imported into Dolt and left in place as
 //     rollback inputs during cutover.
 //   - Event sequence numbers are per-task, enabling incremental cursors for
@@ -44,7 +44,7 @@ func sanitizeStoreText(value string) string {
 }
 
 // Store wraps the embedded Dolt connection and provides persistence for run
-// records, agent records, channel messages, event records, and VText state.
+// records, agent records, channel messages, event records, and Texture state.
 type doltConnector interface {
 	driver.Connector
 	Close() error
@@ -54,8 +54,8 @@ type Store struct {
 	db            *sql.DB
 	readDB        *sql.DB
 	path          string
-	vtextDB       *sql.DB
-	vtextPath     string
+	textureDB     *sql.DB
+	texturePath   string
 	doltConnector doltConnector
 	jsonPatchMu   sync.Mutex
 }
@@ -546,7 +546,7 @@ CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_win
 `
 
 // Open opens (or creates) the unified embedded Dolt workspace derived from
-// dbPath and applies the runtime and vtext schemas. If dbPath points at a
+// dbPath and applies the runtime and texture schemas. If dbPath points at a
 // legacy runtime SQLite database, its rows are imported into Dolt once and the
 // SQLite file is left in place as a rollback source.
 func Open(dbPath string) (*Store, error) {
@@ -560,10 +560,10 @@ func Open(dbPath string) (*Store, error) {
 			return nil, fmt.Errorf("runtime store: stat marker or legacy sqlite: %w", err)
 		}
 		freshStore = true
-		_ = os.RemoveAll(deriveVTextWorkspacePath(dbPath))
+		_ = os.RemoveAll(deriveTextureWorkspacePath(dbPath))
 	}
 
-	db, workspacePath, connector, err := openVTextWorkspaceDB(dbPath)
+	db, workspacePath, connector, err := openTextureWorkspaceDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
@@ -571,16 +571,16 @@ func Open(dbPath string) (*Store, error) {
 	readDB := sql.OpenDB(connector)
 	configureEmbeddedDoltDB(readDB)
 
-	s := &Store{db: db, readDB: readDB, path: dbPath, vtextPath: workspacePath, doltConnector: connector}
+	s := &Store{db: db, readDB: readDB, path: dbPath, texturePath: workspacePath, doltConnector: connector}
 	if err := s.bootstrap(); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
 	}
 
-	// Apply the vtext schema to the embedded Dolt workspace.
-	if err := s.EnsureVTextSchema(); err != nil {
+	// Apply the texture schema to the embedded Dolt workspace.
+	if err := s.EnsureTextureSchema(); err != nil {
 		_ = s.Close()
-		return nil, fmt.Errorf("runtime store: bootstrap vtext: %w", err)
+		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
 	}
 
 	if err := s.importLegacySQLiteRuntime(dbPath); err != nil {
@@ -734,11 +734,11 @@ func validateIdentifier(name string) error {
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	var err error
-	if db := s.vtextDB; db != nil {
+	if db := s.textureDB; db != nil {
 		func() {
 			defer func() {
 				if r := recover(); r != nil && err == nil {
-					err = fmt.Errorf("close vtext workspace: %v", r)
+					err = fmt.Errorf("close texture workspace: %v", r)
 				}
 			}()
 			if closeErr := db.Close(); closeErr != nil && err == nil {
@@ -776,9 +776,9 @@ func (s *Store) queryDB() *sql.DB {
 	return s.db
 }
 
-// VTextPath returns the filesystem path backing the embedded vtext workspace.
-func (s *Store) VTextPath() string {
-	return s.vtextPath
+// TexturePath returns the filesystem path backing the embedded texture workspace.
+func (s *Store) TexturePath() string {
+	return s.texturePath
 }
 
 // UpsertAgent persists a durable agent record.
@@ -2046,7 +2046,7 @@ func markWorkerUpdatesDeliveredWithExec(ctx context.Context, exec workerUpdateDe
 
 // DispatchResearchFinding atomically persists the addressed channel message,
 // inbox delivery, and finding dispatch record inside the runtime store.
-// Evidence durability remains in the vtext workspace and should be handled
+// Evidence durability remains in the texture workspace and should be handled
 // before calling this method with deterministic evidence IDs.
 func (s *Store) DispatchResearchFinding(ctx context.Context, finding types.ResearchFindingRecord, message *types.ChannelMessage, delivery types.InboxDelivery) (types.ResearchFindingRecord, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)

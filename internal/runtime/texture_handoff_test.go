@@ -1,0 +1,29 @@
+package runtime
+
+import (
+	"context"
+	"testing"
+)
+
+func TestEnsureTextureHandoffCorpusWakeRequiresChannelID(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+
+	reconcilerRun, err := handler.rt.StartRunWithMetadata(ctx, "reconcile story corpus", "user-alice", map[string]any{
+		runMetadataAgentProfile:    "corpus-reconciler",
+		runMetadataAgentRole:       "corpus-reconciler",
+		runMetadataReconcilerScope: "story-corpus",
+	})
+	if err != nil {
+		t.Fatalf("start reconciler run: %v", err)
+	}
+
+	_, err = handler.rt.ensureTextureHandoff(ctx, reconcilerRun, textureHandoffRequest{
+		Kind:          textureHandoffKindCorpusWake,
+		CallerProfile: AgentProfileReconciler,
+		Objective:     "draft a corpus-wide correction without a target doc",
+	})
+	if err == nil {
+		t.Fatal("corpus_wake handoff without channel_id should fail")
+	}
+}

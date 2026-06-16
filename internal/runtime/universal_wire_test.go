@@ -44,7 +44,7 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 	doc := types.Document{
 		DocID:     docID,
 		OwnerID:   "universal-wire-platform",
-		Title:     "Madrid dispatch.vtext",
+		Title:     "Madrid dispatch.texture",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -53,7 +53,7 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 	}
 	metaMap := map[string]any{
 		"source":                         "edit_texture",
-		"revision_role":                  vtextRevisionRoleCanonical,
+		"revision_role":                  textureRevisionRoleCanonical,
 		"ingestion_handoff_cycle_id":     "cycle-live",
 		"ingestion_handoff_request_id":   "reconciler-live",
 		"ingestion_handoff_request_kind": "reconciler",
@@ -70,7 +70,7 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "vtext:" + doc.DocID,
+		AuthorLabel: "texture:" + doc.DocID,
 		Content: strings.Join([]string{
 			"# Madrid dispatch",
 			"",
@@ -99,7 +99,7 @@ func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, included
 	doc := types.Document{
 		DocID:     "doc-universal-wire-edition",
 		OwnerID:   "universal-wire-platform",
-		Title:     "Wire.vtext",
+		Title:     "Wire.texture",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -108,14 +108,14 @@ func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, included
 	}
 	lines := []string{"# Wire", "", "Universal Wire edition."}
 	for _, docID := range includedDocIDs {
-		lines = append(lines, "", fmt.Sprintf("- [Article](vtext:%s)", docID))
+		lines = append(lines, "", fmt.Sprintf("- [Article](texture:%s)", docID))
 	}
 	if err := handler.rt.Store().CreateRevision(ctx, types.Revision{
 		RevisionID:  "rev-universal-wire-edition",
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "vtext:" + doc.DocID,
+		AuthorLabel: "texture:" + doc.DocID,
 		Content:     strings.Join(lines, "\n"),
 		Citations:   json.RawMessage("[]"),
 		Metadata:    json.RawMessage(`{"source":"universal_wire_edition"}`),
@@ -194,9 +194,9 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	if !strings.Contains(string(storyJSON), `"story_texture_doc_id"`) ||
 		!strings.Contains(string(storyJSON), `"texture_content"`) ||
 		!strings.Contains(string(storyJSON), `"projection_texture_docs"`) ||
-		strings.Contains(string(storyJSON), "story_vtext_doc_id") ||
-		strings.Contains(string(storyJSON), "vtext_content") ||
-		strings.Contains(string(storyJSON), "projection_vtext_docs") {
+		strings.Contains(string(storyJSON), "story_texture_doc_id") ||
+		strings.Contains(string(storyJSON), "texture_content") ||
+		strings.Contains(string(storyJSON), "projection_texture_docs") {
 		t.Fatalf("indexed story JSON did not expose Texture projection fields only: %s", string(storyJSON))
 	}
 	if story.Headline != "Madrid dispatch" || !strings.Contains(story.Projections["wire-style"], "MADRID -- Pope Leo XIV") {
@@ -216,7 +216,7 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	claimText := strings.Join(story.Claims, "\n")
 	if strings.Contains(claimText, "Style.texture: Universal Wire") ||
 		strings.Contains(claimText, "Style.texture Source") ||
-		strings.Contains(claimText, "Style.vtext Source") ||
+		strings.Contains(claimText, "Style.texture Source") ||
 		!strings.Contains(claimText, "Source and style provenance are carried by the Texture revision metadata and citations") {
 		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
 	}
@@ -258,7 +258,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 	doc := types.Document{
 		DocID:     "doc-source-network-scoped-sources",
 		OwnerID:   "universal-wire-platform",
-		Title:     "Scoped sources.vtext",
+		Title:     "Scoped sources.texture",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -267,7 +267,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 	}
 	meta, _ := json.Marshal(map[string]any{
 		"source":                         "edit_texture",
-		"revision_role":                  vtextRevisionRoleCanonical,
+		"revision_role":                  textureRevisionRoleCanonical,
 		"ingestion_handoff_cycle_id":     "cycle-scoped",
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
@@ -300,7 +300,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "vtext:doc-source-network-scoped-sources",
+		AuthorLabel: "texture:doc-source-network-scoped-sources",
 		Content: strings.Join([]string{
 			"# Scoped sources",
 			"",
@@ -318,7 +318,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 			"",
 			"Selection rationale: Universal Wire style.",
 			"",
-			"## Style.vtext Source",
+			"## Style.texture Source",
 			"",
 			"Legacy selection rationale that should still be stripped.",
 		}, "\n"),
@@ -430,7 +430,7 @@ func TestNormalizeWireArticleSourceServiceProseRewritesBareLabels(t *testing.T) 
 		OwnerID: "universal-wire-platform",
 		Metadata: map[string]any{
 			"request_intent":             "integrate_worker_findings",
-			"type":                       "vtext_agent_revision",
+			"type":                       "texture_agent_revision",
 			"ingestion_handoff_cycle_id": "cycle-el-nino",
 		},
 	}

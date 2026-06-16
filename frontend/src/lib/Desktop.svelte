@@ -41,7 +41,7 @@
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
-  import { openFileDocument } from './vtext.js';
+  import { openFileDocument } from './texture.js';
   import {
     windows,
     activeWindowId,
@@ -168,7 +168,7 @@
   }
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
     lastOpenedPublicRoutePath = publicRoutePath;
-    openPublishedVText(publicRoutePath, !authenticated);
+    openPublishedTexture(publicRoutePath, !authenticated);
   }
   $: if (
     mounted &&
@@ -227,7 +227,7 @@
     setIconPositions(getDefaultIconPositions());
   }
 
-  function largePublicVTextGeometry() {
+  function largePublicTextureGeometry() {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
     const compact = viewportWidth < 768;
@@ -248,7 +248,7 @@
   }
 
   function seedPublicPreviewWindows() {
-    const geometry = largePublicVTextGeometry();
+    const geometry = largePublicTextureGeometry();
     const previewWindows = [
       {
         windowId: 'public-preview-texture',
@@ -1099,7 +1099,7 @@
     return current;
   }
 
-  function openPublishedVText(routePath, guest = false) {
+  function openPublishedTexture(routePath, guest = false) {
     const normalizedRoutePath = normalizePublicRoutePath(routePath);
     if (guest) {
       const preview = windowsSnapshot().find((win) => win.windowId === 'public-preview-texture');
@@ -1134,7 +1134,7 @@
       publishedRoutePath: normalizedRoutePath,
       publishedGuest: guest,
       allowMultiple: true,
-      windowGeometry: largePublicVTextGeometry(),
+      windowGeometry: largePublicTextureGeometry(),
     });
   }
 
@@ -1303,12 +1303,12 @@
     }
     const pathSegments = event.detail?.pathSegments || [];
     const fileName = event.detail?.fileName || pathSegments[pathSegments.length - 1] || 'Document';
-    const importToVText = event.detail?.importToVText === true;
+    const importToTexture = event.detail?.importToTexture === true;
     const path = '/api/files/' + pathSegments.map(encodeURIComponent).join('/');
 
     try {
       let content = '';
-      if (!importToVText) {
+      if (!importToTexture) {
         const res = await fetchWithRenewal(path, { method: 'GET' });
         if (!res.ok) {
           if (res.status === 401) {
@@ -1331,7 +1331,7 @@
         docId: doc.doc_id,
         sourcePath: pathSegments.join('/'),
       });
-      showToast(importToVText ? `Imported ${fileName} into Texture` : `Opened ${fileName} in Texture`);
+      showToast(importToTexture ? `Imported ${fileName} into Texture` : `Opened ${fileName} in Texture`);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
@@ -1366,7 +1366,7 @@
     showToast(`Opened ${detail.fileName || appId}`);
   }
 
-  function handleOpenVTextFromContent(event) {
+  function handleOpenTextureFromContent(event) {
     if (!authenticated) {
       const detail = event.detail || {};
       openApp('texture', 'Texture', getAppIcon('texture'), {
@@ -1702,7 +1702,7 @@
                 on:authrequired={(event) => requestAuth(event.detail || {})}
                 on:opentextfile={handleOpenTextFile}
                 on:openmediafile={handleOpenMediaFile}
-                on:openvtext={handleOpenVTextFromContent}
+                on:opentexture={handleOpenTextureFromContent}
                 on:launchapp={handleLaunchApp}
                 on:opentrace={handleOpenTraceFromContent}
                 on:clearsavedwindows={handleClearDesktopWindows}

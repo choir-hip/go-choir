@@ -165,7 +165,7 @@ func normalizeProxyHumanProof(raw map[string]any) map[string]any {
 	}
 	missing := []string{}
 	if !hasNarrative {
-		missing = append(missing, "narrative VText")
+		missing = append(missing, "narrative Texture")
 	}
 	if !hasHumanEvidence {
 		missing = append(missing, "successful screenshots, video, or benchmark evidence")

@@ -151,7 +151,7 @@ type traceMomentReferences struct {
 	DocID                string   `json:"doc_id,omitempty"`
 	RevisionID           string   `json:"revision_id,omitempty"`
 	CurrentRevisionID    string   `json:"current_revision_id,omitempty"`
-	VTextDecisionID      string   `json:"vtext_decision_id,omitempty"`
+	TextureDecisionID    string   `json:"texture_decision_id,omitempty"`
 	FindingID            string   `json:"finding_id,omitempty"`
 	EvidenceIDs          []string `json:"evidence_ids,omitempty"`
 	RunMemoryEntryID     string   `json:"run_memory_entry_id,omitempty"`
@@ -1170,7 +1170,7 @@ func buildTraceMomentReferences(payload map[string]any) traceMomentReferences {
 		DocID:                payloadString(payload, "doc_id"),
 		RevisionID:           payloadString(payload, "revision_id"),
 		CurrentRevisionID:    payloadString(payload, "current_revision_id"),
-		VTextDecisionID:      payloadString(payload, "decision_id"),
+		TextureDecisionID:    payloadString(payload, "decision_id"),
 		FindingID:            payloadString(payload, "finding_id"),
 		EvidenceIDs:          payloadStringSlice(payload, "evidence_ids"),
 		RunMemoryEntryID:     payloadString(payload, "entry_id"),
@@ -1463,29 +1463,29 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 			return errText
 		}
 		return string(ev.Kind)
-	case types.EventTextureAgentRevisionStarted, types.LegacyEventVTextAgentRevisionStarted:
+	case types.EventTextureAgentRevisionStarted:
 		return "Texture revision started"
-	case types.EventTextureAgentRevisionProgress, types.LegacyEventVTextAgentRevisionProgress:
+	case types.EventTextureAgentRevisionProgress:
 		if phase := payloadString(payload, "phase"); phase != "" {
 			return fmt.Sprintf("Texture %s", phase)
 		}
 		return "Texture revision progress"
-	case types.EventTextureAgentRevisionCompleted, types.LegacyEventVTextAgentRevisionCompleted:
+	case types.EventTextureAgentRevisionCompleted:
 		if revisionID := payloadString(payload, "revision_id"); revisionID != "" {
 			return fmt.Sprintf("created revision %s", shortTraceID(revisionID))
 		}
 		return "Texture revision completed"
-	case types.EventTextureAgentRevisionFailed, types.LegacyEventVTextAgentRevisionFailed:
+	case types.EventTextureAgentRevisionFailed:
 		if errText := payloadString(payload, "error"); errText != "" {
 			return errText
 		}
 		return "Texture revision failed"
-	case types.EventTextureDocumentRevisionCreated, types.LegacyEventVTextDocumentRevisionCreated:
+	case types.EventTextureDocumentRevisionCreated:
 		if revisionID := payloadString(payload, "revision_id"); revisionID != "" {
 			return fmt.Sprintf("document head -> %s", shortTraceID(revisionID))
 		}
 		return "document revision created"
-	case types.EventTextureDecisionRecorded, types.LegacyEventVTextDecisionRecorded:
+	case types.EventTextureDecisionRecorded:
 		kind := traceNonEmpty(payloadString(payload, "decision_kind"), "decision")
 		reason := traceExcerpt(payloadString(payload, "reason"), 96)
 		if reason != "" {
@@ -1499,9 +1499,9 @@ func traceEventSummary(ev types.EventRecord, payload map[string]any) string {
 
 func traceEventTone(ev types.EventRecord) string {
 	switch ev.Kind {
-	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventTextureAgentRevisionFailed, types.LegacyEventVTextAgentRevisionFailed:
+	case types.EventRunFailed, types.EventRunBlocked, types.EventRunCancelled, types.EventTextureAgentRevisionFailed:
 		return "error"
-	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventTextureAgentRevisionCompleted, types.LegacyEventVTextAgentRevisionCompleted, types.EventTextureDocumentRevisionCreated, types.LegacyEventVTextDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
+	case types.EventRunCompleted, types.EventRunCompactionCompleted, types.EventRunContinuationStarted, types.EventAppAdoptionVerified, types.EventAppAdoptionPromoted, types.EventTextureAgentRevisionCompleted, types.EventTextureDocumentRevisionCreated, types.EventBrowserNavigationCompleted, types.EventBrowserControlCompleted, types.EventBrowserSessionClosed:
 		return "success"
 	case types.EventRunPassivated, types.EventRunCompactionStarted, types.EventRunRetry, types.EventRunContinuationSelected, types.EventAppChangePackagePublished, types.EventAppAdoptionProposed, types.EventAppAdoptionVerificationStarted, types.EventBrowserSessionCreated:
 		return "active"
@@ -1511,7 +1511,7 @@ func traceEventTone(ev types.EventRecord) string {
 		return "message"
 	case types.EventToolInvoked, types.EventToolResult:
 		return "tool"
-	case types.EventTextureDecisionRecorded, types.LegacyEventVTextDecisionRecorded:
+	case types.EventTextureDecisionRecorded:
 		return "active"
 	default:
 		return "neutral"
@@ -1564,7 +1564,7 @@ func traceTrajectoryTitle(run types.RunRecord, trajectoryID string) string {
 		return title
 	}
 	if docID := traceRunMetadataString(run, "doc_id"); docID != "" {
-		return fmt.Sprintf("vtext %s", shortTraceID(docID))
+		return fmt.Sprintf("texture %s", shortTraceID(docID))
 	}
 	return trajectoryID
 }

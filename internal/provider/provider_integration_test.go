@@ -255,7 +255,7 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 	}
 }
 
-func TestIntegrationFireworksRuntimeToolLoopVTextShapedLive(t *testing.T) {
+func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
 		t.Skip("skipping integration test (set RUN_INTEGRATION_TESTS=1)")
 	}
@@ -267,7 +267,7 @@ func TestIntegrationFireworksRuntimeToolLoopVTextShapedLive(t *testing.T) {
 	registry := runtime.NewToolRegistry()
 	if err := registry.Register(runtime.Tool{
 		Name:        "record_status",
-		Description: strings.Repeat("Record status for a VText-shaped harness proof. ", 20),
+		Description: strings.Repeat("Record status for a Texture-shaped harness proof. ", 20),
 		Parameters: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"status": map[string]any{"type": "string"}},
@@ -280,10 +280,10 @@ func TestIntegrationFireworksRuntimeToolLoopVTextShapedLive(t *testing.T) {
 		t.Fatalf("register record_status: %v", err)
 	}
 	for i := 1; i < 12; i++ {
-		name := fmt.Sprintf("unused_vtext_like_tool_%02d", i)
+		name := fmt.Sprintf("unused_texture_like_tool_%02d", i)
 		if err := registry.Register(runtime.Tool{
 			Name:        name,
-			Description: strings.Repeat("Unused VText-like tool definition to simulate a broad appagent catalog. ", 16),
+			Description: strings.Repeat("Unused Texture-like tool definition to simulate a broad appagent catalog. ", 16),
 			Parameters: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"note": map[string]any{"type": "string"}},
@@ -302,8 +302,8 @@ func TestIntegrationFireworksRuntimeToolLoopVTextShapedLive(t *testing.T) {
 		ctx,
 		NewBridgeProvider(p),
 		registry,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_VTEXT_SHAPED_TOOL_LOOP_OK."}]}`)},
-		strings.Repeat("You are a VText appagent. Use the exact tool requested when the user asks for a tool proof. ", 160),
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_TEXTURE_SHAPED_TOOL_LOOP_OK."}]}`)},
+		strings.Repeat("You are a Texture appagent. Use the exact tool requested when the user asks for a tool proof. ", 160),
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
@@ -315,9 +315,9 @@ func TestIntegrationFireworksRuntimeToolLoopVTextShapedLive(t *testing.T) {
 		runtime.WithInitialToolChoice("required"),
 	)
 	if err != nil {
-		t.Fatalf("runtime vtext-shaped tool loop: %v", err)
+		t.Fatalf("runtime texture-shaped tool loop: %v", err)
 	}
-	if !strings.Contains(text, "FIREWORKS_VTEXT_SHAPED_TOOL_LOOP_OK") {
+	if !strings.Contains(text, "FIREWORKS_TEXTURE_SHAPED_TOOL_LOOP_OK") {
 		t.Fatalf("text = %q, want marker; usage=%+v", text, usage)
 	}
 	t.Logf("model=%s usage=%d+%d text=%q", model, usage.InputTokens, usage.OutputTokens, text)

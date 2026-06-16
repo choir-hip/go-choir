@@ -126,13 +126,13 @@ test('heavy restored background apps are lazily suspended behind the active wind
       app_context: {},
     },
     {
-      window_id: 'restore-vtext',
-      app_id: 'vtext',
-      title: 'VText',
+      window_id: 'restore-texture',
+      app_id: 'texture',
+      title: 'Texture',
       geometry: { x: 88, y: 62, width: 900, height: 640 },
       mode: 'normal',
       z_index: 3,
-      app_context: { windowTitle: 'VText' },
+      app_context: { windowTitle: 'Texture' },
     },
     {
       window_id: 'restore-pdf',

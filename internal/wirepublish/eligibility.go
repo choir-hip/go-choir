@@ -15,13 +15,11 @@ const (
 	RequestedByWirePolicy = "wire_publication_policy"
 	PublicationKind       = "universal_wire_autonomous"
 
-	patchTextureSource    = "patch_texture"
-	rewriteTextureSource  = "rewrite_texture"
-	editTextureSource     = "edit_texture" // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
-	legacyEditVTextSource = "edit_vtext"   // texture-cutover-allow: deletion receipt remove after legacy revision metadata migration
+	patchTextureSource   = "patch_texture"
+	rewriteTextureSource = "rewrite_texture"
+	editTextureSource    = "edit_texture"
 
-	textureAgentRevisionTaskType     = "texture_agent_revision"
-	legacyVTextAgentRevisionTaskType = "vtext_agent_revision"
+	textureAgentRevisionTaskType = "texture_agent_revision"
 )
 
 // PlatformOwnerID returns the durable owner id for the Universal Wire platform computer.
@@ -62,7 +60,7 @@ func EligibleForAutonomousPublish(doc types.Document, rev types.Revision, rec *t
 	return true
 }
 
-// IsWireArticleRevisionRun reports whether a VText run is part of the Universal
+// IsWireArticleRevisionRun reports whether a Texture run is part of the Universal
 // Wire article pipeline. Processor/reconciler handoffs use universal_wire_* intents;
 // worker-integration child runs inherit ingestion lineage without that intent.
 func IsWireArticleRevisionRun(rec *types.RunRecord) bool {
@@ -81,7 +79,7 @@ func IsWireArticleRevisionRun(rec *types.RunRecord) bool {
 
 func isTextureAgentRevisionTaskType(value string) bool {
 	switch strings.TrimSpace(value) {
-	case textureAgentRevisionTaskType, legacyVTextAgentRevisionTaskType:
+	case textureAgentRevisionTaskType:
 		return true
 	default:
 		return false
@@ -97,7 +95,7 @@ func RevisionIsPublishableWireArticle(meta map[string]any) bool {
 	}
 	if isTextureEditSource(metadataString(meta, "source")) &&
 		sourceNetworkCycleID(meta) != "" &&
-		metadataString(meta, "vtext_edit_kind") == "vtext_edit" {
+		metadataString(meta, "texture_edit_kind") == "texture_edit" {
 		return true
 	}
 	return false
@@ -105,7 +103,7 @@ func RevisionIsPublishableWireArticle(meta map[string]any) bool {
 
 func isTextureEditSource(source string) bool {
 	switch source {
-	case patchTextureSource, rewriteTextureSource, editTextureSource, legacyEditVTextSource:
+	case patchTextureSource, rewriteTextureSource, editTextureSource:
 		return true
 	default:
 		return false
