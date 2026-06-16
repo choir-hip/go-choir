@@ -262,6 +262,30 @@ Next behavior/source slice design:
 - prove with frontend build and residue searches that no public-preview Trace
   fixture actor id remains.
 
+## Local Repair: Public Preview Trace Fixture Deletion
+
+Mutation class: `yellow`, because this deletes unused frontend fixture exports
+and changes future optimization/documentation pressure without changing a live
+product path.
+
+Conjecture delta: deleting the unused fixture is a cleaner Texture cutover move
+than renaming it, because it removes a dead Trace-as-product preview and avoids
+creating a new public Trace surface.
+
+Protected surfaces: signed-out preview data module and frontend build.
+
+Local evidence on 2026-06-16:
+
+- `npm --prefix frontend run build` passed. Vite reported the existing
+  Universal Wire warnings for unused `currentUser` and `.wire-state` selectors.
+- `rg -n "previewTraceSnapshot|previewTraceTrajectories|preview-trace|Trace layout|agent_id: 'vtext'|to_agent_id: 'vtext'|from_agent_id: 'vtext'" frontend/src/lib/public-preview-data.ts frontend/src -g '!frontend/dist'`
+  returned no hits.
+
+Rollback path: restore the deleted fixture exports if a real consumer is found.
+
+Heresy delta: repaired locally for unused public-preview Trace fixture residue;
+no durable runtime agent-id or storage-symbol repair claimed.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -486,15 +510,16 @@ position / live conjectures / open edges:
   `data-app-id="texture"` and legacy `app=vtext` compatibility. Storage
   table/workspace/file and metadata symbols are much broader and require
   separate migration design.
-- C16 active: the public-preview Trace fixture is unused local preview data
-  carrying stale `vtext` actor ids. Because the fixture has no consumers and
-  Trace is not a public product surface, the preferred repair is deletion rather
-  than renaming.
+- C16 locally supported pending CI/deploy: the unused public-preview Trace
+  fixture exports were deleted instead of renamed. Frontend build passes and
+  residue search no longer finds `previewTraceSnapshot`,
+  `previewTraceTrajectories`, `preview-trace`, "Trace layout", or
+  public-preview `vtext` actor ids in `frontend/src`.
 
-next move: delete the unused public-preview Trace fixture exports, verify
-frontend build and residue searches, then return to storage
-schema/workspace/file suffixes, metadata keys, `/pub/vtext/...` route identity,
-`edit_texture` compatibility alias deletion, and protocol v0.
+next move: push the fixture-deletion commit, monitor CI/deploy if triggered,
+record evidence, then return to storage schema/workspace/file suffixes,
+metadata keys, `/pub/vtext/...` route identity, `edit_texture` compatibility
+alias deletion, and protocol v0.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 

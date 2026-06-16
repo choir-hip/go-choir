@@ -1092,3 +1092,39 @@ Receipts:
 
 Open edge: delete the unused fixture exports, verify frontend build and residue
 searches, then select the next storage/API/protocol residue class.
+
+## 2026-06-16 - Local Public Preview Trace Fixture Deletion
+
+Claim: because `previewTraceTrajectories` and `previewTraceSnapshot` are unused
+exports, deleting them is a better repair than renaming their actor ids.
+
+Move: delete the unused public-preview Trace fixture exports from
+`frontend/src/lib/public-preview-data.ts` while leaving the live
+`previewVTextDocument` signed-out Texture preview intact.
+
+Expected ΔV: support C16 locally; no global V decrease until CI/deploy evidence
+is recorded.
+
+Actual ΔV: pending deploy. Local build and residue searches support the repair.
+
+Conjecture delta: deleting dead Trace fixture data avoids preserving Trace as a
+public preview surface while removing stale Texture actor ids.
+
+Protected surfaces: signed-out preview data module and frontend build.
+
+Admissible evidence class: frontend build, residue searches, CI, and deploy
+identity if the frontend source change triggers staging.
+
+Rollback path: restore the deleted fixture exports if a real consumer is found.
+
+Heresy delta: repaired locally for unused public-preview Trace fixture residue;
+no durable runtime agent-id or storage-symbol repair claimed.
+
+Receipts:
+- `npm --prefix frontend run build` passed. Vite reported existing Universal
+  Wire warnings for unused `currentUser` and `.wire-state` selectors.
+- `rg -n "previewTraceSnapshot|previewTraceTrajectories|preview-trace|Trace layout|agent_id: 'vtext'|to_agent_id: 'vtext'|from_agent_id: 'vtext'" frontend/src/lib/public-preview-data.ts frontend/src -g '!frontend/dist'`
+  returned no hits.
+
+Open edge: push the fixture-deletion commit, monitor CI/deploy if triggered,
+record evidence, then select the next storage/API/protocol residue class.
