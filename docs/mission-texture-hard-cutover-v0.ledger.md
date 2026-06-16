@@ -4130,3 +4130,39 @@ Open edge: task type, tool profile wording, model-policy key naming,
 database/table symbols, content import app hints, stored legacy route rows,
 Universal Wire edition refs, deployed Universal Wire story-field proof, and
 protocol v0 remain outside C36.
+
+## 2026-06-16 - Problem Checkpoint: Content App-Hint Payload Residue
+
+Claim: the next repair target is current text-like content app-hint payload
+naming, not task type, storage, actor identity, or route-row migration. No
+runtime repair is claimed in this move.
+
+Move: document the source-discovered `app_hint:"vtext"` residue before a
+behavior fix. Expected ΔV: no repair decrease; convert another V=2 residual
+heresy into a typed problem with compatibility and rollback requirements.
+
+Actual ΔV: coarse V remains 2. The content app-hint payload slice is documented
+as the next candidate repair.
+
+Receipts:
+
+- `internal/runtime/content.go` maps DOCX, Markdown, and plain text through
+  `appHintForMedia` to `vtext`; prompt-bar bare URL routing copies that value
+  into `requested_app`, `content_app_hint`, `decision.app`, and
+  `decision.app_hint`.
+- `internal/runtime/content_extract.go` emits DOCX extraction
+  `AppHint: "vtext"`.
+- `internal/runtime/vtext_lineage.go` emits Markdown lineage snapshot content
+  items with `AppHint: "vtext"`.
+- `internal/runtime/content.go` emits YouTube derived transcript content items
+  with `AppHint: "vtext"`.
+- `internal/runtime/vtext_test.go` and
+  `frontend/tests/vtext-markdown-lineage.spec.js` still assert or create
+  current text-like content items with old app hints.
+- `normalizeAppHint` already accepts both `texture` and `vtext`, so old stored
+  content remains readable during the repair.
+
+Open edge: implement only the app-hint payload slice: new/current text-like
+content projections emit `texture`; legacy `vtext` hints remain accepted; do
+not fold task type, tool profile wording, model-policy keys, table/database
+symbols, durable actor ids, or stored route-row migration into this slice.

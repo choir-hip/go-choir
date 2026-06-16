@@ -2536,6 +2536,54 @@ Rollback path: revert commit
 `7a9042323a676879afe93f1e6ed226eb3f74e82b`; C35 actor/profile identity remains
 separately revertible at commit `32b7d98a4e096e9d0399afc841f46de2981e80cb`.
 
+## Problem Checkpoint: Content App-Hint Payload Residue
+
+Mutation class: `green` documentation and evidence only. No runtime behavior,
+schema, API response, prompt default, UI, test, or persistent state changed in
+this checkpoint.
+
+Read-only source inventory on 2026-06-16 shows that current text-like content
+artifacts still emit `app_hint: "vtext"` even though the current application
+identity is Texture and prompt-bar default document decisions now emit
+`app:"texture"`.
+
+Receipts:
+
+- `internal/runtime/content.go` still maps DOCX, Markdown, and plain text in
+  `appHintForMedia` to `vtext`; prompt-bar bare URL handling copies that value
+  into `requested_app`, `content_app_hint`, `decision.app`, and
+  `decision.app_hint`.
+- `internal/runtime/content_extract.go` still emits DOCX extraction
+  `AppHint: "vtext"`.
+- `internal/runtime/vtext_lineage.go` still emits Markdown lineage snapshot
+  content items with `AppHint: "vtext"`.
+- `internal/runtime/content.go` still emits YouTube derived transcript content
+  items with `AppHint: "vtext"`.
+- Runtime tests in `internal/runtime/vtext_test.go` still assert current
+  Markdown/file/DOCX content items use `AppHint == "vtext"`.
+- Deployed/frontend Markdown lineage acceptance fixtures still create
+  text/Markdown content items with `app_hint: "vtext"` in
+  `frontend/tests/vtext-markdown-lineage.spec.js`.
+- `normalizeAppHint` already accepts both `texture` and legacy `vtext`, so the
+  repair can emit current `texture` while preserving old stored content item
+  readability.
+
+Next behavior slice design:
+
+- make new/current text-like Texture content projections emit
+  `app_hint="texture"` for DOCX, Markdown, plain text, Markdown lineage
+  snapshots, and derived transcripts;
+- keep legacy `app_hint="vtext"` accepted at API/runtime/frontend boundaries;
+- update focused runtime/frontend tests to assert current `texture` hints while
+  retaining explicit legacy-read fixtures where they exist;
+- do not fold task type, tool profile wording, model-policy keys, storage table
+  names, durable actor ids, or stored route-row migration into this app-hint
+  slice.
+
+Rollback path for the later behavior slice: revert the app-hint payload commit
+to resume emitting `app_hint:"vtext"` for current text-like content while
+retaining C35 actor identity and C36 prompt decision payload repair.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -2721,11 +2769,11 @@ staging health, and targeted deployed prompt-bar/Trace proof passed. This slice
 excludes task type, tool profile, model-policy key, table/database, content
 app-hint, and stored route-row migration.
 
-next move: choose the next documented V=2 residue slice. The largest remaining
-current-name blockers are `vtext_agent_revision`, prompt/tool role wording,
-model-policy key naming, database/table symbols, content import app hints,
-stored legacy route rows, Universal Wire edition refs, deployed Universal Wire
-story-field proof, and protocol v0.
+next move: cut the documented content app-hint payload slice: new/current
+text-like Texture content projections should emit `app_hint:"texture"` while
+legacy `vtext` app hints remain accepted. Do not fold task type, tool profile
+wording, model-policy keys, storage table names, durable actor ids, or stored
+route-row migration into this app-hint slice.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
