@@ -3435,3 +3435,37 @@ Open edge: choose the next residue class. C30 does not repair canonical
 `.vtext` file import/open behavior, storage schema, workspace paths, metadata
 compatibility keys, durable `vtext:` actor ids, stored document titles, backend
 stored-route rows, or Universal Wire story-field proof.
+
+## 2026-06-16 - Problem Checkpoint: C31 Publication Helper Symbols
+
+Claim: the next highest-value bounded residue class is publication/export
+helper and API symbol naming. Current product routes and publication records
+are Texture-shaped, but code symbols still say `PublishVText`,
+`publishVText`, `publishVTextRequest`, `sandboxVTextDocument`, and
+`sandboxVTextRevision` on the active publication boundary.
+
+Move: probe by read-only inventory and document the problem before any behavior
+change. Expected ΔV: no coarse V decrease yet; this checkpoint should make the
+C31 repair admissible without crossing storage/public-route/actor migrations.
+
+Actual ΔV: documentation checkpoint only; C31 remains active.
+
+Receipts:
+
+- Read-only subagent `actor_route_export_residue_probe` classified stored
+  `/pub/vtext/...` route rows and durable `vtext:` actor ids as migration
+  surfaces, but identified publication helper/API symbols as an
+  orange/yellow slice that can avoid storage migration.
+- Read-only subagent `storage_file_residue_probe` classified durable storage
+  names, `.vtext` shortcut files, and durable actor identity as migration
+  surfaces.
+- Local inspection confirmed current hits in `internal/platform/types.go`,
+  `internal/platform/service.go`, `internal/platform/handlers.go`,
+  `internal/wirepublish`, `internal/proxy/platform_publish.go`,
+  `internal/runtime/wire_platform_publish.go`, `frontend/src/lib/vtext.js`,
+  and `frontend/src/lib/VTextEditor.svelte`.
+
+Open edge: run doccheck and commit this checkpoint, then rename the C31
+publication/export helper/API symbols while preserving JSON fields, HTTP
+routes, storage schema, stored route compatibility, `.vtext` file suffixes,
+and durable `vtext:` actor ids.

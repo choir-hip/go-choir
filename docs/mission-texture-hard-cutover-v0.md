@@ -1844,6 +1844,51 @@ surfaces. No canonical `.vtext` file import/open behavior, storage schema,
 workspace path, metadata compatibility key, durable `vtext:` actor id, stored
 document title, or protocol v0 repair is claimed.
 
+## 2026-06-16 - C31 Problem Checkpoint: Publication Helper Symbols
+
+Problem: publication/export behavior is already routed through Texture paths,
+but current helper and API symbols still teach the old ontology at the exact
+publication boundary. Read-only inventory found `PublishVTextRequest`,
+`PublishVTextResponse`, `Service.PublishVText`,
+`HandleInternalPublishVText`, frontend `publishVText`, proxy
+`publishVTextRequest`, and sandbox helper structs named
+`sandboxVTextDocument` / `sandboxVTextRevision` on the active Texture
+publication path. This is distinct from stored table names, durable
+`vtext:<doc_id>` actor ids, `.vtext` file shortcuts, and stored legacy
+`/pub/vtext/...` public route rows.
+
+Conjecture delta: C31 tests whether the publication/export residue can be
+repaired as code-symbol vocabulary while keeping the deployed product contract
+unchanged. If successful, new/current publication code will be named Texture
+without changing JSON payload fields, HTTP routes, database schema, public
+route compatibility, or publication bytes.
+
+Protected surfaces: platform publication creation and export, proxy
+publication POST, Wire autonomous publication, runtime publication refs,
+frontend publish action, and publication tests. Mutation class is `orange`
+because runtime code and product publication paths are touched, with red
+storage/actor/public-route surfaces explicitly excluded.
+
+Admissible evidence class:
+
+- focused Go tests for `internal/platform`, `internal/proxy`,
+  `internal/runtime`, and `internal/wirepublish` publication surfaces;
+- frontend build or focused frontend checks for the Texture editor publish
+  callsite;
+- scoped retired-name search showing the targeted helper/API symbols are gone
+  or reduced to explicit compatibility residue;
+- after behavior lands, normal CI/deploy identity and staging publication proof
+  if the pushed diff changes platform behavior.
+
+Rollback path: revert the C31 behavior commit to restore previous helper and
+API names while leaving already-deployed Texture routes and publication data
+unchanged.
+
+Heresy delta: discovered publication-helper vocabulary residue; repair target
+is the current code-symbol boundary only. C31 does not claim storage migration,
+durable actor-id migration, `.vtext` suffix migration, stored public-route-row
+migration, or protocol v0.
+
 ## Non-Goals
 
 - Do not write a full protocol cold.
@@ -1950,12 +1995,16 @@ cleanup recognition remains only as generated-content cleanup. CI/deploy passed
 after a manual forced staging deploy, staging reports the pushed head SHA, and
 deployed Universal Wire UI proof shows both `Style.vtext` and `Style.texture`
 style labels absent from the visible app. Canonical `.vtext` import/storage
-behavior and Universal Wire deployed story-field proof stay out of scope.
+behavior and Universal Wire deployed story-field proof stay out of scope. C31
+is documented as the next orange slice: publication/export helper and API
+symbols should move to Texture names while preserving JSON fields, current
+Texture routes, stored public route compatibility, storage tables, and durable
+actor ids.
 
-next move: choose the next remaining residue class, likely storage/file symbols,
-durable `vtext:` actor ids, export residue, stored-route migration, or a product
-path for the Universal Wire deployed story-field proof. Keep protocol v0
-unwritten until remaining working-surface proofs are complete.
+next move: commit the C31 Problem Documentation First checkpoint, then rename
+publication/export helper/API symbols from VText to Texture inside the bounded
+C31 surface. Keep protocol v0 unwritten until remaining working-surface proofs
+are complete.
 
 ledger file: `docs/mission-texture-hard-cutover-v0.ledger.md`
 
