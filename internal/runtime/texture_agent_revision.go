@@ -327,6 +327,13 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq
 	}
+	// Integrate wakes carry pending coagent findings. Mark the run so the cold
+	// packet prepend fires on the first inference turn (shouldPrependInitialCoagentUpdates),
+	// matching the warm-injection contract instead of relying on a later end_turn
+	// re-injection. See docs/texture-agentic-invariants-2026-06-13.md.
+	if workerWake {
+		runMetadata["request_source"] = "update_coagent"
+	}
 	for _, key := range durableMetadataKeys {
 		if val, ok := metadata[key]; ok && val != nil && val != "" {
 			runMetadata[key] = val

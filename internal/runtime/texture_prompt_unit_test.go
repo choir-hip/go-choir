@@ -632,13 +632,23 @@ func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.
 			want: "required",
 		},
 		{
-			name: "worker wake leaves texture free to choose",
+			name: "scheduled non-coagent run leaves texture free to choose",
 			metadata: map[string]any{
 				"type":                  "texture_agent_revision",
 				"original_prompt":       "research the sources and run one command",
 				"scheduled_message_seq": int64(3),
 			},
 			want: "",
+		},
+		{
+			name: "grounded integrate wake requires a durable action",
+			metadata: map[string]any{
+				"type":                  "texture_agent_revision",
+				"original_prompt":       "integrate the researcher findings",
+				"scheduled_message_seq": int64(3),
+				"request_source":        "update_coagent",
+			},
+			want: "required",
 		},
 	}
 	for _, tc := range tests {

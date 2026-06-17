@@ -2213,6 +2213,14 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
 	}
+	// Integrate wakes carry pending coagent findings into the first turn (cold
+	// prepend). A grounded integrate must take a durable action — write,
+	// delegate, or record an explicit decision — rather than silently ending
+	// with prose, which surfaces as "Revision failed". The model still chooses
+	// which durable action; this only bans the silent no-op.
+	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+		return "required"
+	}
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}

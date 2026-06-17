@@ -3711,6 +3711,18 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if wakeRun == nil {
 		t.Fatalf("expected findings-driven texture wake run on channel %s, got %+v", docID, runs)
 	}
+	// Fix #1: the integrate wake run must be cold-prepend eligible so the
+	// pending coagent findings land in the model's first inference turn.
+	if got := metadataStringValue(wakeRun.Metadata, "request_source"); got != "update_coagent" {
+		t.Fatalf("wake run request_source = %q, want update_coagent (cold-prepend eligibility)", got)
+	}
+	if !shouldPrependInitialCoagentUpdates(wakeRun) {
+		t.Fatalf("wake run should be cold-prepend eligible; metadata=%+v", wakeRun.Metadata)
+	}
+	// Fix #2: a grounded integrate wake must take a durable action, not end with prose.
+	if got := initialTextureToolChoice(wakeRun); got != "required" {
+		t.Fatalf("initialTextureToolChoice(wake run) = %q, want required", got)
+	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("choir:research-finding:finding-stream-001:0")).String()
 	if !strings.Contains(wakeRun.Prompt, evidenceID) {
 		t.Fatalf("wake run prompt missing durable evidence handle %s: %q", evidenceID, wakeRun.Prompt)
