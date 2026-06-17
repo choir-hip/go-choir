@@ -209,6 +209,59 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 - Texture wake after researcher delivery produces a revision when the model
   patches.
 
+## Problem: Texture integrate wake is blind on turn 1 (2026-06-17)
+
+Observed on staging `5e17138f` during the deployed live-search eval: the
+researcher web search succeeded and `update_coagent` reached `texture:<doc_id>`,
+but the Texture document stayed at v0 with "Texture run completed without storing
+a Texture revision" / "Revision failed". The activity log showed the Texture
+integrate run hitting repeated tool errors and ending without a canonical
+revision.
+
+Root cause (logic, model-independent):
+
+1. **First-turn blindness.** The integrate wake run is started by
+   `reconcileTextureAgentWake` via `submitTextureAgentRevisionRun` with intent
+   `integrate_worker_findings`. That run does **not** set
+   `request_source=update_coagent` or seed `worker_update_ids`, so
+   `shouldPrependInitialCoagentUpdates` is false and the cold packet prepend does
+   not fire. The integrate prompt itself no longer embeds worker messages
+   (delivery moved to injection). The model's **first** inference turn therefore
+   has the document and diff but none of the grounded findings; the injector only
+   splices them after the first tool round or at the `end_turn` checkpoint. A
+   model that ends the first turn with prose can complete the run before the
+   findings ever enter context.
+
+2. **No "must act" constraint on integrate.** `initialTextureToolChoice` returns
+   `required` only when `scheduled_message_seq == 0`; integrate wakes
+   (`scheduled_message_seq > 0`) get no initial tool-choice constraint, so a
+   grounded integrate turn may legally end with prose and produce no durable
+   artifact, which surfaces as "Revision failed".
+
+This is distinct from delivery accounting, which is correct:
+`markTextureWorkerUpdatesDelivered` runs only inside a successful write commit
+(`commitTextureToolEdit`), so a no-write integrate leaves updates pending and the
+doc is re-woken rather than silently dropping the findings.
+
+### Intended invariant
+
+- A Texture integrate wake must place the pending `update_coagent` findings in
+  the model's context on its **first** inference turn (cold prepend), matching
+  the warm-injection contract.
+- A grounded integrate turn must take a **durable action**: write
+  (`patch_texture`/`rewrite_texture`), delegate (`spawn_agent`/
+  `request_super_execution`), or record an explicit Texture decision
+  (`record_texture_decision`). It must not silently end with prose. This keeps
+  Texture agentic (it chooses which durable action) while banning the silent
+  no-op that presents as "Revision failed".
+
+### Required tests for this fix
+
+- integrate wake run carries cold-prepend eligibility so turn 1 sees findings;
+- `initialTextureToolChoice` requires a durable action on grounded integrate
+  wakes;
+- a no-write integrate still leaves worker updates pending for re-wake.
+
 ## Regression From M3
 
 During M3, the deployed restart proof required Trace to show conductor, Texture,
