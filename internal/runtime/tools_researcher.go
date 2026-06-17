@@ -25,14 +25,47 @@ type researchFindingEvidenceInput struct {
 }
 
 func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
-	runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
-	if runRec != nil && strings.TrimSpace(runRec.RequestedByRunID) != "" {
-		parent, err := rt.store.GetRun(ctx, strings.TrimSpace(runRec.RequestedByRunID))
-		if err != nil {
-			return "", "", fmt.Errorf("resolve delivery target parent lookup: %w", err)
+	profile := stringFromToolContext(ctx, toolCtxProfile)
+	if profile == "" {
+		if runRec := ctxRunRecord(ctx); runRec != nil {
+			profile = agentProfileForRun(runRec)
 		}
-		return agentIDForRun(&parent), channelIDForRun(&parent), nil
 	}
+	if profile == AgentProfileResearcher {
+		return resolveResearcherFindingsTarget(ctx, rt, explicitAgentID)
+	}
+	return resolveCoagentFindingsTarget(ctx, rt, explicitAgentID)
+}
+
+func resolveResearcherFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
+	explicitAgentID = strings.TrimSpace(explicitAgentID)
+	if explicitAgentID == "" {
+		return "", "", fmt.Errorf("researcher update_coagent requires agent_id naming the addressed Texture coagent (texture:<doc_id>)")
+	}
+	if !isTextureAgentID(explicitAgentID) {
+		return "", "", fmt.Errorf("researcher update_coagent agent_id must name a Texture coagent (texture:<doc_id>), got %q", explicitAgentID)
+	}
+	docID := docIDFromTextureAgentID(explicitAgentID)
+	if docID == "" {
+		return "", "", fmt.Errorf("researcher update_coagent agent_id %q is not a valid Texture coagent id", explicitAgentID)
+	}
+	channelID := docID
+	if rt != nil && rt.store != nil {
+		target, err := rt.store.GetAgent(ctx, explicitAgentID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return "", "", fmt.Errorf("resolve texture delivery target: %w", err)
+		}
+		if err == nil {
+			if ch := strings.TrimSpace(target.ChannelID); ch != "" {
+				channelID = ch
+			}
+		}
+	}
+	return explicitAgentID, channelID, nil
+}
+
+func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
+	runRec := ctxRunRecord(ctx)
 
 	if runRec != nil && isTextureProfileValue(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
 		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")
@@ -54,6 +87,13 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 		}
 	}
 
+	if runRec != nil {
+		if channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID)); channelID != "" {
+			return currentTextureAgentID(channelID), channelID, nil
+		}
+	}
+
+	explicitAgentID = strings.TrimSpace(explicitAgentID)
 	if explicitAgentID != "" {
 		target, err := rt.store.GetAgent(ctx, explicitAgentID)
 		if err != nil {
@@ -66,7 +106,7 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 		}
 		return explicitAgentID, strings.TrimSpace(target.ChannelID), nil
 	}
-	return "", "", fmt.Errorf("structured delivery requires agent_id, a parent run, or a texture requester")
+	return "", "", fmt.Errorf("structured delivery requires agent_id, requested_by_agent_id, or a texture channel context")
 }
 
 func textureDeliveryFallbackFromContext(runRec *types.RunRecord, explicitAgentID string) (string, string) {

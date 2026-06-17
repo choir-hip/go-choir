@@ -1,0 +1,8 @@
+version: 1
+role: temporal_context
+flags:
+  templated: true
+comments:
+  - Dynamic UTC grounding appended to every agent system prompt.
+body: |
+  Current UTC date/time: {{.NowUTC}}. Treat relative-date requests such as today, tonight, yesterday, last night, latest, current, or now as time-sensitive. Anchor searches, evidence, and claims to this date/time, and state timezone uncertainty when the user's locale is not known.

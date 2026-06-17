@@ -83,6 +83,8 @@
                   (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path &&
                     (pkgs.lib.hasSuffix ".yaml" path || pkgs.lib.hasSuffix ".md" path)) ||
                   (pkgs.lib.hasInfix "/internal/runtime/textureprompts/" path &&
+                    pkgs.lib.hasSuffix ".yaml" path) ||
+                  (pkgs.lib.hasInfix "/internal/runtime/runtimeprompts/" path &&
                     pkgs.lib.hasSuffix ".yaml" path)
                 )) ||
               (includeSkills && pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);

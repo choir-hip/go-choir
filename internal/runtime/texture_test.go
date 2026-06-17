@@ -3659,6 +3659,7 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherRun), "update_coagent", json.RawMessage(`{
 		"update_id":"finding-stream-001",
+		"agent_id":"texture:`+docID+`",
 		"findings":["A new release landed this week."],
 		"evidence":[
 			{

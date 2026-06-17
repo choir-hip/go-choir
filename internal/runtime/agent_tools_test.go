@@ -3158,6 +3158,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
 		"update_id":"finding-001",
+		"agent_id":"texture:doc-1",
 		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
 		"evidence":[
@@ -3218,6 +3219,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 
 	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
 		"update_id":"finding-001",
+		"agent_id":"texture:doc-1",
 		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
 		"evidence":[

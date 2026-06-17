@@ -780,8 +780,8 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 	})
 }
 
-func inheritTextureRequesterMetadata(metadata map[string]any, parent *types.RunRecord) map[string]any {
-	if parent == nil || canonicalAgentProfile(agentProfileForRun(parent)) != AgentProfileTexture {
+func inheritTextureRequesterMetadata(metadata map[string]any, requesterRun *types.RunRecord) map[string]any {
+	if requesterRun == nil || canonicalAgentProfile(agentProfileForRun(requesterRun)) != AgentProfileTexture {
 		return metadata
 	}
 	metadata = cloneMetadata(metadata)
@@ -789,10 +789,10 @@ func inheritTextureRequesterMetadata(metadata map[string]any, parent *types.RunR
 		metadata["requested_by_profile"] = AgentProfileTexture
 	}
 	if metadataStringValue(metadata, "requested_by_agent_id") == "" {
-		metadata["requested_by_agent_id"] = agentIDForRun(parent)
+		metadata["requested_by_agent_id"] = agentIDForRun(requesterRun)
 	}
 	if metadataStringValue(metadata, "requested_by_run_id") == "" {
-		metadata["requested_by_run_id"] = parent.RunID
+		metadata["requested_by_run_id"] = requesterRun.RunID
 	}
 	return metadata
 }
@@ -823,11 +823,11 @@ func inheritRequesterMetadataFromWorkItem(ctx context.Context, s *store.Store, o
 	if s == nil || requesterRunID == "" {
 		return metadata
 	}
-	parent, err := s.GetRun(ctx, requesterRunID)
-	if err != nil || parent.OwnerID != ownerID {
+	requesterRun, err := s.GetRun(ctx, requesterRunID)
+	if err != nil || requesterRun.OwnerID != ownerID {
 		return metadata
 	}
-	return inheritTextureRequesterMetadata(metadata, &parent)
+	return inheritTextureRequesterMetadata(metadata, &requesterRun)
 }
 
 func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.RunRecord, parent *types.RunRecord, metadataKey string) (types.WorkItemRecord, error) {
@@ -1561,6 +1561,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
+	initialMessages, err = rt.prependInitialCoagentUpdatePackets(ctx, rec, initialMessages)
+	if err != nil {
+		rt.handleExecutionError(ctx, rec, fmt.Errorf("prepend coagent update packets: %w", err))
+		return
+	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return
@@ -2145,7 +2150,7 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 	initialRun, err := rt.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
 		Prompt: initialPrompt,
-	}, rec.RunID, 0)
+	}, 0)
 	if err != nil {
 		return conductorDecision{}, fmt.Errorf("start initial Texture agent revision: %w", err)
 	}
@@ -2648,18 +2653,6 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 	_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
-	if mutation.ScheduledMessageSeq > 0 {
-		if err := rt.store.UpsertTextureControllerCheckpoint(persistCtx, store.TextureControllerCheckpoint{
-			DocID:                docID,
-			OwnerID:              rec.OwnerID,
-			IntegratedMessageSeq: mutation.ScheduledMessageSeq,
-			UpdatedAt:            time.Now().UTC(),
-		}); err != nil {
-			log.Printf("runtime: texture agent revision run %s: update no-edit checkpoint: %v", rec.RunID, err)
-		} else if err := rt.markTextureWorkerUpdatesDelivered(persistCtx, rec, docID, mutation.ScheduledMessageSeq); err != nil {
-			log.Printf("runtime: texture agent revision run %s: mark worker updates delivered: %v", rec.RunID, err)
-		}
-	}
 	failPayload, _ := json.Marshal(map[string]string{
 		"doc_id":  docID,
 		"loop_id": rec.RunID,

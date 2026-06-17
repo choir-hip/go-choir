@@ -160,6 +160,55 @@ Texture simply because they share an implementation registry. Split memory,
 evidence, and diagnostic affordances when needed instead of giving Texture a
 large generic tool bag.
 
+## Coagent update delivery (2026-06-17)
+
+`update_coagent` is the sole agent-to-agent wake primitive. Delivery semantics are
+uniform across Texture, super, researcher, vsuper, and co-super activations.
+
+### Typed packets, not inferred routing
+
+- Every delivered update becomes a **typed user turn** in the target activation's
+  context window: a `coagent_update` JSON packet with `packet_type`,
+  `delivery_phase` (`cold_activation`, `mid_activation`, `final_checkpoint`),
+  and structured update records.
+- **Warm activations** inject pending updates between tool-loop iterations.
+- **Cold activations** prepend pending updates at activation start when the run
+  was opened from an `update_coagent` wake (`request_source=update_coagent` or
+  seeded `worker_update_ids` metadata).
+- Runtime must **not** traverse spawned-by / parent-run edges to decide who
+  receives an update. Provenance fields (`RequestedByRunID`, `requested_by_run_id`)
+  are audit-only.
+
+### One Texture coagent per article
+
+- Each Texture document/article has a durable Texture coagent id:
+  `texture:<doc_id>`.
+- Researchers spawned for that article must address **that exact id** on every
+  `update_coagent` call via the required `agent_id` argument.
+- Spawn metadata (`requested_by_agent_id`, run-context overlay) names the
+  delivery target so the researcher can copy it; runtime does not infer the
+  target when the caller is a researcher.
+- Super and other roles may still use explicit `agent_id` or documented
+  non-researcher resolution paths; researchers may not omit `agent_id`.
+
+### Texture wake path
+
+- `wakeUpdatedCoagent` uses the same `reconcileUpdatedCoagentActor` entry path
+  for all addressed agents, including `texture:<doc_id>`.
+- Texture integrate runs (`integrate_worker_findings`) start when pending
+  updates exist and no conflicting pending mutation blocks; worker content
+  arrives through injected packets, not a separate channel-only prompt embed.
+- Failed Texture integrate runs must **not** advance the worker-update
+  checkpoint or mark updates delivered without a canonical revision.
+
+### Required tests for this contract
+
+- researcher `update_coagent` rejects missing or non-texture `agent_id`;
+- typed packet builder and Texture warm/cold injection paths;
+- coagent rewarm and resident-activation injection behavior;
+- Texture wake after researcher delivery produces a revision when the model
+  patches.
+
 ## Regression From M3
 
 During M3, the deployed restart proof required Trace to show conductor, Texture,

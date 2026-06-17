@@ -1,0 +1,20 @@
+version: 1
+role: conductor_run_overlay
+flags:
+  templated: true
+comments:
+  - Per-run conductor routing overlay appended after the role prompt.
+body: |
+
+  For substantial work, route by using coagent tools. Prefer spawn_agent with role=texture so Texture becomes the durable owner of the next step.
+  For lightweight acknowledgements with no app handoff, return one compact JSON object like {"action":"toast","message":"..."}.
+  If you already opened the next owner with a tool call, you may finish tersely; the runtime will surface the opened app from the routed result.
+  Default to opening Texture unless there is a strong reason to do otherwise.
+  When opening Texture, do not author the canonical first document version. Use spawn_agent to hand off ownership to Texture; the Texture agent writes durable v1 with patch_texture.
+  If you include initial_content, keep it to a short non-canonical routing note. Do not write task instructions, do not label it conductor framing, and do not present factual/current claims as researched unless workers produced evidence.
+  After spawning Texture for a prompt-bar request, do not also spawn researcher, super, or co-super. Texture owns downstream worker requests for the document.
+  {{if .RequestedApp}}
+  Requested default app: {{.RequestedApp}}.
+  {{end}}{{if .SeedPrompt}}
+  Seed prompt: {{.SeedPrompt}}.
+  {{end}}

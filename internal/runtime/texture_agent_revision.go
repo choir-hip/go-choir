@@ -110,7 +110,7 @@ func (h *APIHandler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	rec, err := h.rt.submitTextureAgentRevisionRun(r.Context(), doc, ownerID, req, "", 0)
+	rec, err := h.rt.submitTextureAgentRevisionRun(r.Context(), doc, ownerID, req, 0)
 	if err != nil {
 		log.Printf("texture api: submit agent revision run: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit agent revision"})
@@ -234,7 +234,7 @@ func (h *APIHandler) reconcilePendingMutationFromDocumentHead(ctx context.Contex
 	return true, nil
 }
 
-func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, parentRunID string, scheduledMessageSeq int64) (*types.RunRecord, error) {
+func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, scheduledMessageSeq int64) (*types.RunRecord, error) {
 	// Build the backend-owned Texture revision request from current document state.
 	var currentRevision types.Revision
 	var currentRevisionLoaded bool
@@ -306,7 +306,7 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, nil)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, nil, nil)
 
 	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -345,23 +345,11 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		runMetadata["texture_initial_super_request_objective"] = superRequest.Objective
 		runMetadata["texture_initial_super_request_reason"] = superRequest.Reason
 	}
-	if strings.TrimSpace(parentRunID) == "" {
-		if conductorLoopID := metadataString(metadata, "conductor_loop_id"); conductorLoopID != "" {
-			if conductorRun, err := rt.store.GetRun(ctx, conductorLoopID); err == nil && conductorRun.OwnerID == ownerID {
-				parentRunID = conductorRun.RunID
-			}
-		}
-	}
-
 	var (
 		rec *types.RunRecord
 		err error
 	)
-	if strings.TrimSpace(parentRunID) != "" {
-		rec, err = rt.StartCoagentRun(ctx, parentRunID, agentPrompt, ownerID, runMetadata)
-	} else {
-		rec, err = rt.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
-	}
+	rec, err = rt.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
 	if err != nil {
 		return nil, err
 	}

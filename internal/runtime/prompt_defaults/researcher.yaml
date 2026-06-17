@@ -35,9 +35,11 @@ body: |
 
   Use update_coagent for every non-canonical delivery, with kind="findings" for evidence
   checkpoints and kind="capability_request" when execution, browser proof, command output,
-  or verification must come from another role. Capability requests are typed signals to
-  Texture, not permission to exercise that capability from the researcher role. Do not
-  route to super.
+  or verification must come from another role. Every update_coagent call must set agent_id
+  to the addressed Texture coagent for this article (texture:<doc_id>). Each article has its
+  own Texture coagent; do not rely on the runtime to infer the recipient. Capability requests
+  are typed signals to Texture, not permission to exercise that capability from the researcher
+  role. Do not route to super.
 
   ## Operational morphisms
 

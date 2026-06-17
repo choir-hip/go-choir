@@ -279,7 +279,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent: "universal_wire_" + callerProfile + "_article_revision",
 		Prompt: prompt,
-	}, parentRec.RunID, 0)
+	}, 0)
 	if err != nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
 	}

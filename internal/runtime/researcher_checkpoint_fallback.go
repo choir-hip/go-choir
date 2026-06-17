@@ -103,14 +103,22 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 	if rec != nil && strings.TrimSpace(rec.RunID) != "" {
 		notes = append(notes, "Researcher loop: "+strings.TrimSpace(rec.RunID))
 	}
-	return map[string]any{
+	args := map[string]any{
 		"update_id": updateID,
 		"kind":      "blocker",
 		"summary":   summary,
 		"findings":  findings,
 		"refs":      trimDedupeNonEmpty(refs),
 		"notes":     trimDedupeNonEmpty(notes),
-	}, nil
+	}
+	if rec != nil {
+		if textureAgentID := strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by_agent_id")); isTextureAgentID(textureAgentID) {
+			args["agent_id"] = textureAgentID
+		} else if channelID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataChannelID)); channelID != "" {
+			args["agent_id"] = currentTextureAgentID(channelID)
+		}
+	}
+	return args, nil
 }
 
 func researcherFallbackFinding(toolName string, output map[string]any) string {

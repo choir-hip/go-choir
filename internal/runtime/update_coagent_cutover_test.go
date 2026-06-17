@@ -793,11 +793,8 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	} else if !containsString(ids, otherItem.WorkItemID) {
 		t.Fatalf("work_item_ids = %+v, want %s", ids, otherItem.WorkItemID)
 	}
-	if !strings.Contains(active.Prompt, update.Content) {
-		t.Fatalf("replacement prompt missing update content: %q", active.Prompt)
-	}
-	if !strings.Contains(active.Prompt, otherUpdate.Content) {
-		t.Fatalf("replacement prompt missing second update content: %q", active.Prompt)
+	if ids := metadataStringSlice(active.Metadata["worker_update_ids"]); !containsString(ids, update.UpdateID) || !containsString(ids, otherUpdate.UpdateID) {
+		t.Fatalf("worker_update_ids = %+v, want %s and %s", ids, update.UpdateID, otherUpdate.UpdateID)
 	}
 	if !strings.Contains(active.Prompt, item.Objective) {
 		t.Fatalf("replacement prompt missing work item objective: %q", active.Prompt)

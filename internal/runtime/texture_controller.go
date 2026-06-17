@@ -54,7 +54,7 @@ func (rt *Runtime) flushTextureWorkerWake(key string) {
 	if !ok {
 		return
 	}
-	if err := rt.reconcileTextureWorkerState(context.Background(), pending.ownerID, pending.docID); err != nil {
+	if _, err := rt.reconcileTextureAgentWake(context.Background(), pending.ownerID, pending.docID); err != nil {
 		log.Printf("runtime: reconcile texture wake failed for doc %s: %v", pending.docID, err)
 	}
 }
@@ -66,64 +66,68 @@ func (rt *Runtime) reconcileAllTextureDocuments(ctx context.Context) {
 		return
 	}
 	for _, doc := range docs {
-		if err := rt.reconcileTextureWorkerState(ctx, doc.OwnerID, doc.DocID); err != nil {
+		if _, err := rt.reconcileTextureAgentWake(ctx, doc.OwnerID, doc.DocID); err != nil {
 			log.Printf("runtime: reconcile doc %s: %v", doc.DocID, err)
 		}
 	}
 }
 
-// reconcileTextureWorkerState is the durable controller invariant for texture:
-// if worker messages newer than the integrated checkpoint exist, and no synth
-// run is active or pending, launch exactly one new synth run.
+// reconcileTextureWorkerState is retained as a doc-scoped alias for the unified
+// coagent wake path used by Texture agents.
 func (rt *Runtime) reconcileTextureWorkerState(ctx context.Context, ownerID, docID string) error {
+	_, err := rt.reconcileTextureAgentWake(ctx, ownerID, docID)
+	return err
+}
+
+// reconcileTextureAgentWake starts or reuses a Texture activation when pending
+// update_coagent records are addressed to texture:<docID>. Delivery uses the
+// same typed coagent update packets as other actors; integrate intent only
+// selects the Texture revision run shape.
+func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {
-		return nil
+		return nil, nil
+	}
+	textureAgentID := currentTextureAgentID(docID)
+	if _, found, err := rt.residentRunByAgent(ctx, ownerID, textureAgentID); err != nil {
+		return nil, fmt.Errorf("check resident Texture loop: %w", err)
+	} else if found {
+		return nil, nil
+	}
+	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, textureAgentID, 100)
+	if err != nil {
+		return nil, fmt.Errorf("list pending texture updates: %w", err)
+	}
+	if len(updates) == 0 {
+		return nil, nil
+	}
+	if mutation, err := rt.store.GetPendingAgentMutationByDoc(ctx, docID, ownerID); err == nil && mutation != nil {
+		rt.scheduleTextureWorkerWake(ownerID, docID, "")
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("check pending doc mutation: %w", err)
 	}
 	doc, err := rt.store.GetDocument(ctx, docID, ownerID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil
+			return nil, nil
 		}
-		return fmt.Errorf("load doc for reconcile: %w", err)
+		return nil, fmt.Errorf("load doc for texture wake: %w", err)
 	}
-	checkpoint, err := rt.store.GetTextureControllerCheckpoint(ctx, doc.DocID, ownerID)
-	if err != nil {
-		return fmt.Errorf("load controller checkpoint: %w", err)
-	}
-	integratedSeq := int64(0)
-	if checkpoint != nil {
-		integratedSeq = checkpoint.IntegratedMessageSeq
-	}
-	latestMessage, found, err := rt.latestEligibleWorkerMessage(ctx, ownerID, doc.DocID, integratedSeq)
-	if err != nil {
-		return fmt.Errorf("latest eligible worker message: %w", err)
-	}
-	if !found {
-		return nil
-	}
-	for _, agentID := range []string{currentTextureAgentID(doc.DocID)} {
-		if _, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
-			return fmt.Errorf("check resident Texture loop: %w", err)
-		} else if found {
-			rt.scheduleTextureWorkerWake(ownerID, doc.DocID, latestMessage.FromRunID)
-			return nil
+	var scheduledSeq int64
+	for _, update := range updates {
+		if update.MessageSeq > scheduledSeq {
+			scheduledSeq = update.MessageSeq
 		}
 	}
-	if mutation, err := rt.store.GetPendingAgentMutationByDoc(ctx, doc.DocID, ownerID); err == nil && mutation != nil {
-		rt.scheduleTextureWorkerWake(ownerID, doc.DocID, latestMessage.FromRunID)
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("check pending doc mutation: %w", err)
-	}
-	_, err = rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
+	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
-	}, latestMessage.FromRunID, latestMessage.Seq)
+	}, scheduledSeq)
 	if err != nil {
-		return fmt.Errorf("start reconciled Texture revision: %w", err)
+		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
-	return nil
+	return rec, nil
 }
 
 func (rt *Runtime) latestEligibleWorkerMessage(ctx context.Context, ownerID, channelID string, afterSeq int64) (types.ChannelMessage, bool, error) {

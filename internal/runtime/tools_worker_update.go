@@ -40,7 +40,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			"update_id":    map[string]any{"type": "string"},
 			"kind":         map[string]any{"type": "string", "enum": []string{"findings", "evidence", "capability_request", "blocker", "proposal", "status", "verification", "artifact", "question", "directive", "assignment"}},
 			"summary":      map[string]any{"type": "string"},
-			"agent_id":     map[string]any{"type": "string"},
+			"agent_id":     map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
 			"channel_id":   map[string]any{"type": "string"},
 			"findings":     stringArraySchema(),
 			"evidence_ids": stringArraySchema(),
@@ -134,6 +134,11 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
 			if err != nil {
 				return "", err
+			}
+			if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) == AgentProfileResearcher {
+				if explicitChannel := strings.TrimSpace(in.ChannelID); explicitChannel != "" && explicitChannel != targetChannelID {
+					return "", fmt.Errorf("update_coagent channel_id %q does not match Texture coagent %q channel %q", explicitChannel, targetAgentID, targetChannelID)
+				}
 			}
 			if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
 				targetProfile := canonicalAgentProfile(target.Profile)

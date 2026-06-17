@@ -1,0 +1,115 @@
+package runtime
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+const (
+	coagentPacketTypeUpdate     = "coagent_update"
+	coagentPacketDeliveryMid    = "mid_activation"
+	coagentPacketDeliveryFinal  = "final_checkpoint"
+	coagentPacketDeliveryCold   = "cold_activation"
+)
+
+type coagentUpdatePacket struct {
+	PacketType     string                   `json:"packet_type"`
+	DeliveryPhase  string                   `json:"delivery_phase"`
+	TargetAgentID  string                   `json:"target_agent_id,omitempty"`
+	ChannelID      string                   `json:"channel_id,omitempty"`
+	TrajectoryID   string                   `json:"trajectory_id,omitempty"`
+	Updates        []coagentUpdatePacketItem `json:"updates"`
+	Instruction    string                   `json:"instruction,omitempty"`
+}
+
+type coagentUpdatePacketItem struct {
+	UpdateID    string   `json:"update_id"`
+	FromAgentID string   `json:"from_agent_id,omitempty"`
+	FromRole    string   `json:"from_role,omitempty"`
+	ChannelID   string   `json:"channel_id,omitempty"`
+	Kind        string   `json:"kind,omitempty"`
+	Summary     string   `json:"summary,omitempty"`
+	MessageSeq  int64    `json:"message_seq,omitempty"`
+	Findings    []string `json:"findings,omitempty"`
+	Refs        []string `json:"refs,omitempty"`
+	Content     string   `json:"content"`
+}
+
+func buildCoagentUpdateUserMessages(updates []types.WorkerUpdateRecord, deliveryPhase string, targetAgentID string) ([]json.RawMessage, []string, error) {
+	if len(updates) == 0 {
+		return nil, nil, nil
+	}
+	packet := coagentUpdatePacket{
+		PacketType:    coagentPacketTypeUpdate,
+		DeliveryPhase: deliveryPhase,
+		TargetAgentID: strings.TrimSpace(targetAgentID),
+		Instruction:   coagentUpdateInstruction(deliveryPhase),
+		Updates:       make([]coagentUpdatePacketItem, 0, len(updates)),
+	}
+	updateIDs := make([]string, 0, len(updates))
+	for _, update := range updates {
+		id := strings.TrimSpace(update.UpdateID)
+		if id != "" {
+			updateIDs = append(updateIDs, id)
+		}
+		if packet.ChannelID == "" {
+			packet.ChannelID = strings.TrimSpace(update.ChannelID)
+		}
+		if packet.TrajectoryID == "" {
+			packet.TrajectoryID = strings.TrimSpace(update.TrajectoryID)
+		}
+		packet.Updates = append(packet.Updates, coagentUpdatePacketItem{
+			UpdateID:    id,
+			FromAgentID: strings.TrimSpace(update.AgentID),
+			FromRole:    strings.TrimSpace(update.Role),
+			ChannelID:   strings.TrimSpace(update.ChannelID),
+			Kind:        strings.TrimSpace(update.Kind),
+			Summary:     strings.TrimSpace(update.Summary),
+			MessageSeq:  update.MessageSeq,
+			Findings:    trimNonEmpty(update.Findings),
+			Refs:        trimNonEmpty(update.Refs),
+			Content:     strings.TrimSpace(update.Content),
+		})
+	}
+	packetJSON, err := json.Marshal(packet)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal coagent update packet: %w", err)
+	}
+	text := strings.TrimSpace(fmt.Sprintf("%s\n\n%s", coagentUpdatePacketPreamble(deliveryPhase), string(packetJSON)))
+	msg, err := json.Marshal(map[string]any{
+		"role": "user",
+		"content": []map[string]string{{
+			"type": "text",
+			"text": text,
+		}},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal coagent update user message: %w", err)
+	}
+	return []json.RawMessage{msg}, updateIDs, nil
+}
+
+func coagentUpdatePacketPreamble(deliveryPhase string) string {
+	switch deliveryPhase {
+	case coagentPacketDeliveryFinal:
+		return "Choir coagent update packet (final checkpoint before ending this activation)."
+	case coagentPacketDeliveryCold:
+		return "Choir coagent update packet (cold activation backlog)."
+	default:
+		return "Choir coagent update packet (mid-activation delivery)."
+	}
+}
+
+func coagentUpdateInstruction(deliveryPhase string) string {
+	switch deliveryPhase {
+	case coagentPacketDeliveryFinal:
+		return "New update_coagent records arrived before this activation finished. Process them before ending the turn."
+	case coagentPacketDeliveryCold:
+		return "Pending update_coagent records are being delivered at activation start. Incorporate them before continuing."
+	default:
+		return "New update_coagent records arrived while this activation was running. Treat this packet as the next user turn."
+	}
+}

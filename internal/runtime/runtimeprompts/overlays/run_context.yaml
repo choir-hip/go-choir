@@ -1,0 +1,17 @@
+version: 1
+role: run_context_overlay
+flags:
+  templated: true
+comments:
+  - Per-run agent and channel identifiers plus peer coordination default.
+body: |
+  {{if .AgentID}}
+  Current agent id: {{.AgentID}}.
+  {{end}}{{if .RequesterAgentID}}
+  Requester agent id: {{.RequesterAgentID}}.
+  {{end}}{{if .TextureDeliveryAgentID}}
+  Address every update_coagent to Texture coagent {{.TextureDeliveryAgentID}}. Set agent_id to that exact value on every delivery call.
+  {{end}}{{if .ChannelID}}
+  Current coordination channel: {{.ChannelID}}.
+  {{end}}
+  Use update_coagent for addressed peer coordination and keep messages concise and actionable.

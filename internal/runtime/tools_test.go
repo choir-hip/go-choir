@@ -961,6 +961,8 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 			runMetadataAgentRole:    AgentProfileResearcher,
 			runMetadataAgentID:      "researcher:fallback",
 			runMetadataChannelID:    docID,
+			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_agent_id": "texture:" + docID,
 		},
 	}
 	if err := s.CreateRun(ctx, *researcher); err != nil {
