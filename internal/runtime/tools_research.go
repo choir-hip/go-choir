@@ -656,6 +656,12 @@ func liveSourceAcquisitionDisabled(ctx context.Context) bool {
 		metadataBoolValue(runRec.Metadata, "scored_phase")
 }
 
+// webSearchAgentResultFloor is the minimum number of results every web_search
+// requests, so agent retrieval gets a broad candidate set even when the model
+// self-caps max_results at a human-page size. It matches the search-plane merge
+// target and gateway default; the gateway clamps the ceiling at 50.
+const webSearchAgentResultFloor = 40
+
 func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 	type args struct {
 		Query      string `json:"query"`
@@ -682,7 +688,16 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 			if strings.TrimSpace(in.Query) == "" {
 				return "", fmt.Errorf("query must not be empty")
 			}
-			resp, err := searchClient.Search(ctx, strings.TrimSpace(in.Query), in.MaxResults)
+			// Agent retrieval breadth floor: models routinely self-cap max_results
+			// at ~10 (a human result page), which collapses the router's merge
+			// target back down. Floor every search to the broad agent default so a
+			// broad first pass yields a wide candidate set; the model may still ask
+			// for more (up to the gateway cap).
+			maxResults := in.MaxResults
+			if maxResults < webSearchAgentResultFloor {
+				maxResults = webSearchAgentResultFloor
+			}
+			resp, err := searchClient.Search(ctx, strings.TrimSpace(in.Query), maxResults)
 			if err != nil {
 				return "", err
 			}
