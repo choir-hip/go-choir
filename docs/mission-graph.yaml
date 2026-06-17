@@ -134,7 +134,7 @@ nodes:
   title: M3.4 Prompt-Bar Texture First-Draft Regression
   path: docs/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
-  status: working
+  status: settled
   kind: spine
   depends_on:
   - m3.3-vm-bootstrap-recovery-race
@@ -181,8 +181,13 @@ nodes:
   title: M3 Lifecycle Cutover
   path: docs/mission-lifecycle-cutover-v0.md
   ledger: docs/mission-lifecycle-cutover-v0.ledger.md
-  status: working
+  status: settled
   kind: spine
+  # Lineage edge, not a blocking gate. M3's lifecycle settlement was proven
+  # against the deployed Texture product loop at commit 968ff7ff (see
+  # docs/mission-lifecycle-cutover-v0.md settlement) and does not require the
+  # texture-hard-cutover / texture-product-loop-recovery rename+residue-deletion
+  # missions to settle first; those remain open_handoff successors.
   depends_on:
   - texture-hard-cutover-v0
   enables:

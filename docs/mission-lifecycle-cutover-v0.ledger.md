@@ -2312,3 +2312,108 @@ Receipts:
 - `scripts/doccheck` passed report-only: 204 docs, 801 warnings, 3795ms.
 
 Open edge: use the new M3 goal string for the next implementation pass.
+
+## 2026-06-17T19:17:04Z - Deployed Vmctl Refresh Proof Settled M3
+
+Mutation class: red. Protected surfaces touched by the proof were vmctl
+refresh, vmctl-routed user-computer identity, Texture lifecycle evidence,
+trajectory/work-item rewarm, run acceptance, and staging deploy routing. No
+runtime source code changed in this pass; this was deployed proof plus durable
+docs/harness update only.
+
+Conjecture delta:
+
+- Supported: M3 no longer needs the false proxy of an exact researcher branch
+  before refresh. A generic coordination prompt can produce the required
+  lifecycle evidence.
+- Supported: deployed vmctl refresh can preserve the exact user computer
+  identity while passivating an in-flight activation, retaining its
+  `work_item_ids`, and rewarming a replacement activation from
+  `trajectory_work_item_sweep`.
+- Supported: the downstream update from that replacement activation can be
+  delivered back to Texture after refresh and leave
+  `worker_updates_pending=[]`, so this proof shape does not strand messages or
+  disappear into a zero-obligation stall.
+
+Move:
+
+- Promoted the lifecycle falsifier into repo harness
+  `scripts/m3_vmctl_refresh_probe.mjs`.
+- Executed the deployed proof against `https://choir.news` through a fresh
+  passkey owner and exact vmctl refresh on Node B.
+- Rewrote the M3 Parallax State to settled and named the proof artifact,
+  receipts, residual compatibility surfaces, and successor edge.
+
+Expected Delta V: -3 from the working V=3 finish line to settlement.
+
+Actual Delta V: -3. Current V=0. M3 is settled.
+
+Receipts:
+
+- Proof harness artifact:
+  `/tmp/m3_vmctl_refresh_probe.968ff7ff.out.json`.
+- Deployed commit identity:
+  `https://choir.news/health` and owner-routed guest `/health` both reported
+  `968ff7ffc35a0e2ee87a262dc0d8cdcef5cb87b4`.
+- Fresh owner:
+  `m3-vmctl-refresh-1781723752215-jc4h0h@example.com`
+  (`05cb7978-53b3-4419-a448-c7fd9de90331`).
+- Submission / trajectory:
+  `bfa4efc8-b252-4b85-89ec-f7510b0b01ff`.
+- Texture document:
+  `84075267-8855-4f0d-80e6-4dfb94ce4f8f`.
+- Vmctl target before refresh:
+  VM `vm-3f784a1d8af81b17d5fa4497869c6b24`,
+  sandbox `http://10.200.203.2:8085`, epoch `1`.
+- Vmctl target after refresh:
+  same VM `vm-3f784a1d8af81b17d5fa4497869c6b24`,
+  sandbox `http://10.200.204.2:8085`, epoch `2`.
+- Pre-refresh lifecycle evidence:
+  researcher activation `9b8af441-cb29-4940-ac8f-5c4abfc68c65` was `running`
+  and already carried requester metadata plus
+  `work_item_ids=["dd490475-a00d-4370-9589-67521d448733"]`.
+- Restart/passivation evidence:
+  the same researcher activation became `passivated` with
+  `passivated_reason=runtime_restarted`,
+  `passivated_spawned_work_item_id=dd490475-a00d-4370-9589-67521d448733`, and
+  the same `work_item_ids`.
+- Rewarm evidence:
+  replacement researcher activation
+  `b988c432-b5fd-43e6-ae07-abc0d0b2d93e` started at
+  `2026-06-17T19:16:37Z` with
+  `request_source=trajectory_work_item_sweep`,
+  `requested_by_profile=texture`, and the same `work_item_ids`.
+- Delivery/no-stranding evidence:
+  Texture run `3daed551-f97b-4a78-a202-c8aadd2a40cc` completed after refresh,
+  created revision `6c12fe1c-6805-4aec-a4f2-2a52eb1a9339`, consumed researcher
+  update `dd490475-a00d-4370-9589-67521d448733:checkpoint1`, and the head
+  metadata ended with `worker_updates_pending=[]`.
+- Trajectory settlement evidence:
+  `GET /api/trace/trajectories/bfa4efc8-b252-4b85-89ec-f7510b0b01ff` reported
+  `state=completed`, `live=false`, `delegation_count=1`, and latest activity
+  `2026-06-17T19:17:07Z`.
+- Acceptance packet:
+  `POST /api/run-acceptances/synthesize` produced
+  `runacc-d8d804ad592825e169fe` at `staging-smoke-level`; it remained
+  `blocked` only on generic export/promotion checkpoints that do not apply to
+  this non-package lifecycle proof.
+
+Rollback refs:
+
+- Pre-refresh route:
+  `vm-3f784a1d8af81b17d5fa4497869c6b24` epoch `1` at
+  `http://10.200.203.2:8085`.
+- Deployed baseline remained unchanged during this finishing pass:
+  commit `968ff7ffc35a0e2ee87a262dc0d8cdcef5cb87b4`.
+
+Heresy delta:
+
+- Repaired: the M3 falsifier no longer depends on forced exact researcher
+  sequencing.
+- Repaired: the real deployed lifecycle claim is now proven for the
+  trajectory-work-item-sweep rewarm shape.
+- Introduced: none accepted.
+- Residual compatibility surfaces named, not repaired here:
+  `parent_loop_id` provenance residue, `run_memory_entries.loop_id` physical
+  identity, and generic run-acceptance export-level blocking for non-package
+  trajectories.
