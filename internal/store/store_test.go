@@ -268,6 +268,60 @@ CREATE TABLE worker_updates (
 	}
 }
 
+func TestOpenMigratesRunsRequestedByRunIDBeforeIndex(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatalf("write store marker: %v", err)
+	}
+	db, _, connector, err := openTextureWorkspaceDB(path)
+	if err != nil {
+		t.Fatalf("open legacy dolt workspace: %v", err)
+	}
+	if _, err := db.Exec(`
+CREATE TABLE runs (
+	loop_id     VARCHAR(255) PRIMARY KEY,
+	agent_id    VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
+	trajectory_id VARCHAR(255) NOT NULL DEFAULT '',
+	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
+	agent_role VARCHAR(255) NOT NULL DEFAULT '',
+	owner_id    VARCHAR(255) NOT NULL DEFAULT '',
+	sandbox_id  VARCHAR(255) NOT NULL DEFAULT '',
+	state       VARCHAR(64) NOT NULL DEFAULT '',
+	prompt      LONGTEXT NOT NULL DEFAULT '',
+	result      LONGTEXT NOT NULL DEFAULT '',
+	error       LONGTEXT NOT NULL DEFAULT '',
+	created_at  DATETIME NOT NULL,
+	updated_at  DATETIME NOT NULL,
+	finished_at DATETIME NULL,
+	metadata_json LONGTEXT NOT NULL DEFAULT '{}'
+)`); err != nil {
+		_ = db.Close()
+		_ = connector.Close()
+		t.Fatalf("create legacy runs: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		_ = connector.Close()
+		t.Fatalf("close legacy dolt db: %v", err)
+	}
+	if err := connector.Close(); err != nil {
+		t.Fatalf("close legacy dolt connector: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open migrated runs store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	if !testDoltColumnExists(t, s, "runs", "requested_by_run_id") {
+		t.Fatal("expected runs.requested_by_run_id to be added before index creation")
+	}
+}
+
 func testDoltColumnExists(t *testing.T, s *Store, table, column string) bool {
 	t.Helper()
 	var count int

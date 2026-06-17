@@ -430,7 +430,6 @@ CREATE INDEX IF NOT EXISTS idx_runs_sandbox_id ON runs(sandbox_id);
 CREATE INDEX IF NOT EXISTS idx_runs_agent_id ON runs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_runs_owner_agent_state_updated ON runs(owner_id, agent_id, state, updated_at);
 CREATE INDEX IF NOT EXISTS idx_runs_channel_id ON runs(channel_id);
-CREATE INDEX IF NOT EXISTS idx_runs_requested_by_run_id ON runs(requested_by_run_id);
 CREATE INDEX IF NOT EXISTS idx_trajectories_owner_status ON trajectories(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_work_items_trajectory_status ON work_items(trajectory_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_work_items_owner_status ON work_items(owner_id, status, updated_at);
@@ -615,6 +614,7 @@ func (s *Store) bootstrap() error {
 		{"runs", "agent_profile", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "agent_role", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"runs", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"co_super_slots", "requested_by_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
@@ -650,6 +650,9 @@ func (s *Store) bootstrap() error {
 	// After ensureColumn so existing databases gain runs.trajectory_id first.
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_trajectory_id ON runs(trajectory_id)`); err != nil {
 		return fmt.Errorf("create idx_runs_trajectory_id: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_requested_by_run_id ON runs(requested_by_run_id)`); err != nil {
+		return fmt.Errorf("create idx_runs_requested_by_run_id: %w", err)
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)

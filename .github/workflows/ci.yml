@@ -885,10 +885,17 @@ jobs:
             note_phase "active computer refresh"
 
             echo "==> Smoke test: health endpoints"
-            for port in 8081 8082 8083 8084 8086 8087; do
+            for port in 8081 8082 8083 8084 8085 8086 8087; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done
+            proxy_health=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:8081/health)
+            if ! echo "$proxy_health" | grep -q '"upstream":"ok"'; then
+              echo "Proxy upstream is not ok: $proxy_health" >&2
+              dump_deploy_service_diagnostics "proxy upstream unhealthy"
+              exit 1
+            fi
+            echo "    Proxy upstream: OK"
             note_phase "health checks"
 
             echo "==> Smoke test: public frontend asset graph"
