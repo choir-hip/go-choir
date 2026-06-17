@@ -18,6 +18,31 @@ type gatewaySearchClient struct {
 	httpClient *http.Client
 }
 
+type gatewaySearchAttempt struct {
+	Provider  string `json:"provider"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	Status    string `json:"status"`
+	LatencyMs int64  `json:"latency_ms"`
+	Results   int    `json:"results"`
+	Error     string `json:"error,omitempty"`
+}
+
+type gatewaySearchOutageBody struct {
+	Error          string                           `json:"error"`
+	Code           string                           `json:"code"`
+	Query          string                           `json:"query,omitempty"`
+	ProviderHealth map[string]gatewayProviderHealth `json:"provider_health,omitempty"`
+	Attempts       []gatewaySearchAttempt           `json:"attempts,omitempty"`
+}
+
+type gatewayProviderHealth struct {
+	State            string `json:"state"`
+	CooldownUntil    string `json:"cooldown_until,omitempty"`
+	StrikeCount      int    `json:"strike_count"`
+	LastFailureClass string `json:"last_failure_class,omitempty"`
+	LastErrorSummary string `json:"last_error_summary,omitempty"`
+}
+
 func newGatewaySearchClientFromEnv() webSearchClient {
 	baseURL := strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_URL"))
 	if baseURL == "" {
@@ -64,17 +89,14 @@ func (c *gatewaySearchClient) Search(ctx context.Context, query string, maxResul
 		return nil, fmt.Errorf("gateway search: read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		if outage, ok := parseGatewaySearchOutage(body, query); ok {
+			return outage, nil
+		}
 		var errResp struct {
 			Error string `json:"error"`
-			Code  string `json:"code"`
 		}
-		if err := json.Unmarshal(body, &errResp); err == nil {
-			if strings.TrimSpace(errResp.Code) == "search_outage" {
-				return nil, fmt.Errorf("gateway search: search_outage")
-			}
-			if strings.TrimSpace(errResp.Error) != "" {
-				return nil, fmt.Errorf("gateway search: %s", errResp.Error)
-			}
+		if err := json.Unmarshal(body, &errResp); err == nil && strings.TrimSpace(errResp.Error) != "" {
+			return nil, fmt.Errorf("gateway search: %s", errResp.Error)
 		}
 		return nil, fmt.Errorf("gateway search: status %s", resp.Status)
 	}
@@ -84,4 +106,61 @@ func (c *gatewaySearchClient) Search(ctx context.Context, query string, maxResul
 		return nil, fmt.Errorf("gateway search: decode response: %w", err)
 	}
 	return &result, nil
+}
+
+func parseGatewaySearchOutage(body []byte, fallbackQuery string) (*webSearchResponse, bool) {
+	var outage gatewaySearchOutageBody
+	if err := json.Unmarshal(body, &outage); err != nil {
+		return nil, false
+	}
+	if strings.TrimSpace(outage.Code) != "search_outage" && strings.TrimSpace(outage.Error) != "search_outage" {
+		return nil, false
+	}
+	query := strings.TrimSpace(outage.Query)
+	if query == "" {
+		query = strings.TrimSpace(fallbackQuery)
+	}
+	attempts := make([]map[string]any, 0, len(outage.Attempts))
+	for _, attempt := range outage.Attempts {
+		entry := map[string]any{
+			"provider":   attempt.Provider,
+			"status":     attempt.Status,
+			"latency_ms": attempt.LatencyMs,
+			"results":    attempt.Results,
+		}
+		if attempt.Endpoint != "" {
+			entry["endpoint"] = attempt.Endpoint
+		}
+		if attempt.Error != "" {
+			entry["error"] = attempt.Error
+		}
+		attempts = append(attempts, entry)
+	}
+	providerHealth := make(map[string]any, len(outage.ProviderHealth))
+	for name, health := range outage.ProviderHealth {
+		entry := map[string]any{
+			"state":        health.State,
+			"strike_count": health.StrikeCount,
+		}
+		if health.CooldownUntil != "" {
+			entry["cooldown_until"] = health.CooldownUntil
+		}
+		if health.LastFailureClass != "" {
+			entry["last_failure_class"] = health.LastFailureClass
+		}
+		if health.LastErrorSummary != "" {
+			entry["last_error_summary"] = health.LastErrorSummary
+		}
+		providerHealth[name] = entry
+	}
+	return &webSearchResponse{
+		Query:          query,
+		Results:        []map[string]any{},
+		Attempts:       attempts,
+		ProviderHealth: providerHealth,
+		Outage:         true,
+		Code:           firstNonEmptyString(outage.Code, "search_outage"),
+		Error:          firstNonEmptyString(outage.Error, "search_outage"),
+		Degraded:       true,
+	}, true
 }

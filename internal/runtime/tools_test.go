@@ -642,6 +642,39 @@ func TestCompactWebSearchProjectionGuidesResearchFindingsCheckpoint(t *testing.T
 	}
 }
 
+func TestCompactWebSearchProjectionSurfacesGatewayOutage(t *testing.T) {
+	resp := &webSearchResponse{
+		Query:  "ai news",
+		Outage: true,
+		Code:   "search_outage",
+		Error:  "search_outage",
+		ProviderHealth: map[string]any{
+			"brave": map[string]any{
+				"state":              "cooling_down",
+				"last_failure_class": "rate_limited",
+			},
+		},
+		Attempts: []map[string]any{
+			{"provider": "brave", "status": "rate_limited", "latency_ms": 12, "results": 0, "error": "429"},
+		},
+		Degraded: true,
+	}
+	model, metadata := compactWebSearchProjection(map[string]any{"outage": true}, resp, true)
+	if model["search_outage"] != true {
+		t.Fatalf("search_outage = %#v, want true", model["search_outage"])
+	}
+	if model["provider_health"] == nil {
+		t.Fatalf("provider_health missing from outage projection")
+	}
+	if metadata["search_outage"] != true {
+		t.Fatalf("metadata search_outage = %#v, want true", metadata["search_outage"])
+	}
+	instruction := fmt.Sprint(model["next_instruction"])
+	if !strings.Contains(instruction, "precise blocker") {
+		t.Fatalf("next_instruction = %q, want blocker guidance", instruction)
+	}
+}
+
 func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
@@ -1210,15 +1243,15 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		"publish_app_change_package": counts["publish_app_change_package"],
 	}
 	mu.Unlock()
-	if gotCounts["spawn_agent"] != 2 || gotCounts["update_coagent"] != 1 || gotCounts["publish_app_change_package"] != 1 {
-		t.Fatalf("executed counts = %+v, want spawn=2 cast=1 export=1", gotCounts)
+	if gotCounts["spawn_agent"] != 2 || gotCounts["update_coagent"] != 2 || gotCounts["publish_app_change_package"] != 1 {
+		t.Fatalf("executed counts = %+v, want spawn=2 cast=2 export=1", gotCounts)
 	}
-	for _, idx := range []int{1, 4, 6} {
+	for _, idx := range []int{1, 6} {
 		if !results[idx].IsError || !strings.Contains(results[idx].Output, "duplicate") {
 			t.Fatalf("result[%d] = %#v, want duplicate skip error", idx, results[idx])
 		}
 	}
-	for _, idx := range []int{0, 2, 3, 5} {
+	for _, idx := range []int{0, 2, 3, 4, 5} {
 		if results[idx].IsError {
 			t.Fatalf("result[%d] = %#v, want successful execution", idx, results[idx])
 		}

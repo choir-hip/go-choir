@@ -29,6 +29,9 @@ type webSearchResponse struct {
 	Waves          int              `json:"waves,omitempty"`
 	Degraded       bool             `json:"degraded,omitempty"`
 	ProviderHealth map[string]any   `json:"provider_health,omitempty"`
+	Outage         bool             `json:"outage,omitempty"`
+	Code           string           `json:"code,omitempty"`
+	Error          string           `json:"error,omitempty"`
 }
 
 type sourceSearchClient interface {
@@ -684,11 +687,20 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 				return "", err
 			}
 			full := map[string]any{
-				"query":     resp.Query,
-				"provider":  resp.Provider,
-				"providers": resp.Providers,
-				"attempts":  resp.Attempts,
-				"results":   resp.Results,
+				"query":           resp.Query,
+				"provider":        resp.Provider,
+				"providers":       resp.Providers,
+				"attempts":        resp.Attempts,
+				"results":         resp.Results,
+				"merged_count":    resp.MergedCount,
+				"waves":           resp.Waves,
+				"degraded":        resp.Degraded,
+				"provider_health": resp.ProviderHealth,
+			}
+			if resp.Outage {
+				full["outage"] = true
+				full["code"] = resp.Code
+				full["error"] = resp.Error
 			}
 			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchFindingsAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
@@ -856,7 +868,7 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 		visibleResults = append(visibleResults, visible)
 	}
 	attempts := make([]map[string]any, 0, len(resp.Attempts))
-	degraded := false
+	degraded := resp.Degraded || resp.Outage
 	for _, attempt := range resp.Attempts {
 		compact := map[string]any{
 			"provider":   attempt["provider"],
@@ -885,10 +897,21 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 		"projection_policy":     "top bounded result cards with compact snippets",
 		"provider_health_owner": "gateway",
 	}
-	if requireFindingsCheckpoint {
+	if resp.Outage {
+		model["search_outage"] = true
+		model["code"] = firstNonEmptyString(resp.Code, "search_outage")
+		if strings.TrimSpace(resp.Error) != "" {
+			model["error"] = resp.Error
+		}
+		if len(resp.ProviderHealth) > 0 {
+			model["provider_health"] = resp.ProviderHealth
+		}
+		model["gateway_status"] = "search_outage: gateway returned no merged results; use provider_health and attempts for the precise blocker"
+		model["next_instruction"] = "Report a precise blocker from provider_health and attempts. Do not claim live search succeeded or invent grounded facts."
+	} else if requireFindingsCheckpoint {
 		model["next_instruction"] = "Submit concise first findings from this search result before any additional search-only turn. Include 2-4 grounded facts, notes, questions, or a precise blocker; evidence entries may be omitted until richer evidence is ready."
 	}
-	if degraded {
+	if degraded && !resp.Outage {
 		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"
 	}
 	metadata := map[string]any{
@@ -897,6 +920,9 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 		"visible_result_count": len(visibleResults),
 		"full_output_bytes":    len(researchMustJSON(full)),
 		"model_output_bytes":   len(researchMustJSON(model)),
+	}
+	if resp.Outage {
+		metadata["search_outage"] = true
 	}
 	return model, metadata
 }
