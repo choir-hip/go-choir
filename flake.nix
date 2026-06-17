@@ -79,8 +79,12 @@
               (pkgs.lib.hasPrefix (subPackage + "/") rel && isGoSource) ||
               (pkgs.lib.any inInternalDir internalDirs) ||
               (pkgs.lib.elem "internal/runtime" internalDirs &&
-                pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path &&
-                pkgs.lib.hasSuffix ".md" path) ||
+                (
+                  (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path &&
+                    (pkgs.lib.hasSuffix ".yaml" path || pkgs.lib.hasSuffix ".md" path)) ||
+                  (pkgs.lib.hasInfix "/internal/runtime/textureprompts/" path &&
+                    pkgs.lib.hasSuffix ".yaml" path)
+                )) ||
               (includeSkills && pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);
         };
 
