@@ -191,8 +191,8 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m4-continuation-deletion
   title: M4 Continuation Deletion
-  path: ''
-  ledger: ''
+  path: docs/mission-continuation-deletion-v0.md
+  ledger: docs/mission-continuation-deletion-v0.ledger.md
   status: planned
   kind: spine
   depends_on:
