@@ -7,6 +7,10 @@ const (
 	textureInputOriginUserPrompt        = "user_prompt"
 	textureInputOriginProcessorHandoff  = "processor_handoff"
 	textureInputOriginReconcilerHandoff = "reconciler_handoff"
+
+	// textureMetadataPromptUnixTS is the authoritative owner-prompt reference
+	// time for relative temporal language such as "today" or "tomorrow".
+	textureMetadataPromptUnixTS = "prompt_unix_ts"
 )
 
 func textureInputOriginForCaller(profile string) string {

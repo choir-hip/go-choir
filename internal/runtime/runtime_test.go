@@ -172,6 +172,12 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if metadataString(meta, "texture_version") != "v0" {
 		t.Fatalf("v0 metadata version: got %q, want v0", metadataString(meta, "texture_version"))
 	}
+	if promptUnixTS := metadataIntValue(meta, textureMetadataPromptUnixTS); promptUnixTS <= 0 {
+		t.Fatalf("v0 prompt_unix_ts: got %d, want positive unix timestamp", promptUnixTS)
+	}
+	if delta := time.Since(time.Unix(int64(promptUnixTS), 0)); delta < 0 || delta > 2*time.Minute {
+		t.Fatalf("v0 prompt_unix_ts %d too far from now: delta=%v", promptUnixTS, delta)
+	}
 
 	runs, err := s.ListRunsByOwner(ctx, "user-alice", 20)
 	if err != nil {

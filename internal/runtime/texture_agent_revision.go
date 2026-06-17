@@ -466,6 +466,14 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n\nOriginal user request:\n")
 		b.WriteString(seedPrompt)
 	}
+	if promptUnixTS := metadataIntValue(metadata, textureMetadataPromptUnixTS); promptUnixTS > 0 {
+		referenceTime := time.Unix(int64(promptUnixTS), 0).UTC()
+		b.WriteString("\n\nOwner prompt reference time: ")
+		b.WriteString(referenceTime.Format(time.RFC3339))
+		b.WriteString(" UTC (Unix ")
+		b.WriteString(fmt.Sprintf("%d", promptUnixTS))
+		b.WriteString("). Treat this as authoritative \"now\" when interpreting relative time words such as \"today\", \"tomorrow\", or \"this week\".")
+	}
 	if legacyPrompt := strings.TrimSpace(req.Prompt); legacyPrompt != "" {
 		b.WriteString("\n\nAdditional user instruction:\n")
 		b.WriteString(legacyPrompt)

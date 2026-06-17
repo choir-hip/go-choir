@@ -2080,14 +2080,15 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		metadataStringValue(rec.Metadata, "seed_prompt"),
 	)
 	userRevisionMetadata := map[string]any{
-		"seed_prompt":         routeSeedPrompt,
-		"conductor_loop_id":   rec.RunID,
-		runMetadataOwnerEmail: metadataString(rec.Metadata, runMetadataOwnerEmail),
-		"created_from":        "conductor",
-		"source":              "user_prompt",
-		"revision_role":       textureRevisionRoleInput,
-		"input_origin":        textureInputOriginUserPrompt,
-		"texture_version":     "v0",
+		"seed_prompt":                 routeSeedPrompt,
+		"conductor_loop_id":           rec.RunID,
+		runMetadataOwnerEmail:         metadataString(rec.Metadata, runMetadataOwnerEmail),
+		"created_from":                "conductor",
+		"source":                      "user_prompt",
+		"revision_role":               textureRevisionRoleInput,
+		"input_origin":                textureInputOriginUserPrompt,
+		"texture_version":             "v0",
+		textureMetadataPromptUnixTS: now.Unix(),
 	}
 	// The owner prompt is the canonical Texture V0. For prompt-bar-created
 	// Texture, V0 content is exactly the owner's prompt text, not blank metadata

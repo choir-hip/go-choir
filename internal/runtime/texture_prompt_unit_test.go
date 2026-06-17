@@ -183,8 +183,9 @@ func TestTexturePromptBarOwnerPromptIsCanonicalV0(t *testing.T) {
 		AuthorKind: types.AuthorUser,
 	}
 	metadata := map[string]any{
-		"seed_prompt":  promptText,
-		"input_origin": textureInputOriginUserPrompt,
+		"seed_prompt":               promptText,
+		"input_origin":              textureInputOriginUserPrompt,
+		textureMetadataPromptUnixTS: int64(1718582400), // 2024-06-17T00:00:00Z
 	}
 	request := buildAgentRevisionRequest(current, nil, metadata, textureAgentRevisionRequest{
 		Intent: "initial_conductor_workflow",
@@ -195,6 +196,8 @@ func TestTexturePromptBarOwnerPromptIsCanonicalV0(t *testing.T) {
 		"Treat the owner prompt as the request to fulfill: author the first useful reader-facing revision that addresses it.",
 		"Keep private coordination rationale, explicit off-document decision reasons, and tool instructions out of the canonical document body",
 		"Current canonical document content:\n---\n" + promptText + "\n---",
+		"Owner prompt reference time: 2024-06-17T00:00:00Z UTC (Unix 1718582400)",
+		`authoritative "now" when interpreting relative time words`,
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("prompt-bar owner-prompt V0 prompt missing %q:\n%s", want, request)
