@@ -736,6 +736,59 @@ func TestSerperProvider_Integration(t *testing.T) {
 	}
 }
 
+func TestParseSerpAPIResults(t *testing.T) {
+	results, err := parseSerpAPIResults([]byte(`{
+		"organic_results": [
+			{"title": "AI infra", "link": "https://example.com/ai", "snippet": "June 2026 launch", "date": "Jun 16, 2026"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("parseSerpAPIResults: %v", err)
+	}
+	if len(results) != 1 || results[0].URL != "https://example.com/ai" {
+		t.Fatalf("results = %#v, want one parsed organic hit", results)
+	}
+	if results[0].PublishedAt != "Jun 16, 2026" {
+		t.Fatalf("published_at = %q", results[0].PublishedAt)
+	}
+
+	_, err = parseSerpAPIResults([]byte(`{"error":"Invalid API key."}`))
+	if err == nil {
+		t.Fatal("expected error for API error envelope")
+	}
+}
+
+func TestSerpAPIProvider_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
+	apiKey := os.Getenv("SERPAPI_API_KEY")
+	if apiKey == "" {
+		t.Skip("SERPAPI_API_KEY not set, skipping integration test")
+	}
+
+	provider := &SerpAPIProvider{}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	results, err := provider.Search(ctx, "golang programming", 3)
+	if err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Error("expected at least one result")
+	}
+	for _, r := range results {
+		if r.Title == "" {
+			t.Error("expected non-empty title")
+		}
+		if r.URL == "" {
+			t.Error("expected non-empty URL")
+		}
+	}
+}
+
 func TestParallelProvider_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping live provider integration in -short mode")
@@ -774,6 +827,7 @@ func TestNewSearchClient_FromEnv(t *testing.T) {
 	parallelKey := os.Getenv("PARALLEL_API_KEY")
 	exaKey := os.Getenv("EXA_API_KEY")
 	serperKey := os.Getenv("SERPER_API_KEY")
+	serpapiKey := os.Getenv("SERPAPI_API_KEY")
 
 	// Clean up after test
 	defer func() {
@@ -782,6 +836,7 @@ func TestNewSearchClient_FromEnv(t *testing.T) {
 		os.Setenv("PARALLEL_API_KEY", parallelKey)
 		os.Setenv("EXA_API_KEY", exaKey)
 		os.Setenv("SERPER_API_KEY", serperKey)
+		os.Setenv("SERPAPI_API_KEY", serpapiKey)
 	}()
 
 	// Test with no keys set
@@ -790,6 +845,7 @@ func TestNewSearchClient_FromEnv(t *testing.T) {
 	os.Unsetenv("PARALLEL_API_KEY")
 	os.Unsetenv("EXA_API_KEY")
 	os.Unsetenv("SERPER_API_KEY")
+	os.Unsetenv("SERPAPI_API_KEY")
 
 	client := NewSearchClient()
 	providers := client.AvailableProviders()

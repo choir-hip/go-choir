@@ -28,6 +28,8 @@ DEFAULT_GATEWAY_FIREWORKS_MODELS="accounts/fireworks/models/kimi-k2p6"
 DEFAULT_GATEWAY_FIREWORKS_REASONING_EFFORT="medium"
 DEFAULT_GATEWAY_DEEPSEEK_MODELS="deepseek-v4-flash,deepseek-v4-pro"
 DEFAULT_GATEWAY_XIAOMI_MODELS="mimo-v2.5,mimo-v2.5-pro"
+DEFAULT_GATEWAY_ZAI_MODELS="glm-5.2,glm-5.1,glm-5-turbo"
+DEFAULT_ZAI_CODING_BASE_URL="https://api.z.ai/api/anthropic"
 
 # Load local deployment credentials when present. This keeps the common
 # operator path safe: running this script from the repo should deploy the
@@ -141,6 +143,13 @@ for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL DEEPSEEK
   add_env_once "$key"
 done
 
+if [ -n "${ZAI_API_KEY:-}" ] || has_env_key "ZAI_API_KEY"; then
+  ENVS+=("GATEWAY_ZAI_MODELS=${GATEWAY_ZAI_MODELS:-$DEFAULT_GATEWAY_ZAI_MODELS}")
+  if ! has_env_key "ZAI_BASE_URL"; then
+    ENVS+=("ZAI_BASE_URL=${DEFAULT_ZAI_CODING_BASE_URL}")
+  fi
+fi
+
 if [ -n "${DEEPSEEK_API_KEY:-}" ] || has_env_key "DEEPSEEK_API_KEY"; then
   ENVS+=("GATEWAY_DEEPSEEK_MODELS=${GATEWAY_DEEPSEEK_MODELS:-$DEFAULT_GATEWAY_DEEPSEEK_MODELS}")
   if [ -n "${GATEWAY_DEEPSEEK_REASONING_EFFORT:-}" ]; then
@@ -168,7 +177,7 @@ else
   echo "warning: $CODEX_AUTH not found; ChatGPT provider auth will not be deployed" >&2
 fi
 
-for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY PARALLEL_API_KEY; do
+for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY PARALLEL_API_KEY SERPAPI_API_KEY; do
   add_env_once "$key"
 done
 

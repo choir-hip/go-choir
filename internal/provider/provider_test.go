@@ -1150,6 +1150,43 @@ func TestZAIProviderFromEnvPassesModel(t *testing.T) {
 	}
 }
 
+func TestZAIProvider_GLM52_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live provider integration in -short mode")
+	}
+	if os.Getenv("ZAI_API_KEY") == "" {
+		t.Skip("ZAI_API_KEY not set, skipping integration test")
+	}
+
+	provider, err := NewZAIProviderFromEnv("glm-5.2")
+	if err != nil {
+		t.Fatalf("NewZAIProviderFromEnv: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	resp, err := provider.Call(ctx, LLMRequest{
+		Messages: []Message{{
+			Role: "user",
+			Content: []Block{{
+				Type: "text",
+				Text: "Reply with exactly: glm-5.2-ok",
+			}},
+		}},
+		MaxTokens: 32,
+		Model:     "glm-5.2",
+	})
+	if err != nil {
+		t.Fatalf("glm-5.2 call failed: %v", err)
+	}
+	if strings.TrimSpace(resp.Text) == "" {
+		t.Fatal("expected non-empty glm-5.2 response text")
+	}
+	if resp.Model != "glm-5.2" {
+		t.Fatalf("model = %q, want glm-5.2", resp.Model)
+	}
+}
+
 // --- Redaction Tests ---
 
 func TestRedactModel(t *testing.T) {

@@ -233,7 +233,7 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
     const searchProviders = Array.isArray(search.providers) && search.providers.length > 0
       ? search.providers
       : [search.provider];
-    expect(searchProviders.some((provider) => ['tavily', 'brave', 'exa', 'serper'].includes(provider))).toBeTruthy();
+    expect(searchProviders.some((provider) => ['tavily', 'brave', 'exa', 'serper', 'parallel', 'serpapi'].includes(provider))).toBeTruthy();
     expect(search.results.length).toBeGreaterThan(0);
 
     const finalState = await waitForGroundedTextureRevision(page, decision.doc_id, prompt, revisionSamples);

@@ -2506,6 +2506,12 @@ func TestProviderRouting(t *testing.T) {
 			wantProviderName: "zai",
 		},
 		{
+			name:             "model_glm5_2",
+			model:            "glm-5.2",
+			wantStatus:       http.StatusOK,
+			wantProviderName: "zai",
+		},
+		{
 			name:             "model_glm5_1",
 			model:            "glm-5.1",
 			wantStatus:       http.StatusOK,

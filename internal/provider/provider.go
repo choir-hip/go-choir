@@ -541,8 +541,9 @@ func NewZAIProvider(cfg ZAIConfig) (*ZAIProvider, error) {
 
 // NewZAIProviderFromEnv creates a Z.AI provider using credentials from
 // environment variables (ZAI_API_KEY) and the given model ID. The model
-// is a runtime concern, not an env var. The base URL defaults to
-// https://api.z.ai/api/anthropic unless ZAI_BASE_URL is set.
+// is a runtime concern, not an env var. The base URL defaults to the GLM
+// Coding Plan Anthropic-compatible endpoint https://api.z.ai/api/anthropic
+// unless ZAI_BASE_URL is set.
 func NewZAIProviderFromEnv(modelID string) (*ZAIProvider, error) {
 	apiKey := os.Getenv("ZAI_API_KEY")
 	baseURL := os.Getenv("ZAI_BASE_URL")

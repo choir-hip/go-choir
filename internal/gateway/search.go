@@ -1,6 +1,6 @@
 // Package gateway implements web search functionality with multi-provider
-// rotation and fallback. Supports Tavily, Brave, Parallel, Exa, and Serper
-// search APIs.
+// rotation and fallback. Supports Tavily, Brave, Parallel, Exa, Serper, and
+// SerpAPI search APIs.
 //
 // The SearchClient uses round-robin rotation across available providers and
 // queries more than one provider per request by default for result diversity.
@@ -134,6 +134,7 @@ func NewSearchClient() *SearchClient {
 		&ParallelProvider{},
 		&ExaProvider{},
 		&SerperProvider{},
+		&SerpAPIProvider{},
 	}
 
 	// Filter to only available providers.
@@ -168,7 +169,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 		return nil, fmt.Errorf("query is required")
 	}
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, or SERPER_API_KEY)")
+		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, or SERPAPI_API_KEY)")
 	}
 	return c.searchViaPlane(ctx, req)
 }
@@ -210,6 +211,8 @@ func searchProviderEndpoint(provider string) string {
 		return "https://api.exa.ai/search"
 	case "serper":
 		return "https://google.serper.dev/search"
+	case "serpapi":
+		return "https://serpapi.com/search.json"
 	default:
 		return ""
 	}
@@ -690,6 +693,100 @@ func parseSerperResults(data []byte) ([]SearchResult, error) {
 		})
 	}
 
+	return results, nil
+}
+
+// --- SerpAPI Provider ---
+
+type SerpAPIProvider struct {
+	httpClient *http.Client
+}
+
+func (p *SerpAPIProvider) Name() string { return "serpapi" }
+
+func (p *SerpAPIProvider) IsAvailable() bool {
+	return os.Getenv("SERPAPI_API_KEY") != ""
+}
+
+func (p *SerpAPIProvider) http() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
+func (p *SerpAPIProvider) Search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	apiKey := os.Getenv("SERPAPI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("SERPAPI_API_KEY not set")
+	}
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+
+	u, err := url.Parse("https://serpapi.com/search.json")
+	if err != nil {
+		return nil, fmt.Errorf("parse endpoint: %w", err)
+	}
+	q := u.Query()
+	q.Set("engine", "google")
+	q.Set("q", query)
+	q.Set("num", strconv.Itoa(maxResults))
+	q.Set("api_key", apiKey)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := p.http().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %s: %s", resp.Status, truncateError(bodyBytes))
+	}
+
+	return parseSerpAPIResults(bodyBytes)
+}
+
+func parseSerpAPIResults(data []byte) ([]SearchResult, error) {
+	var envelope struct {
+		Error string `json:"error"`
+		Organic []struct {
+			Title   string `json:"title"`
+			Link    string `json:"link"`
+			Snippet string `json:"snippet"`
+			Date    string `json:"date"`
+		} `json:"organic_results"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	if strings.TrimSpace(envelope.Error) != "" {
+		return nil, fmt.Errorf("status error: %s", envelope.Error)
+	}
+
+	results := make([]SearchResult, 0, len(envelope.Organic))
+	for _, r := range envelope.Organic {
+		if r.Link == "" {
+			continue
+		}
+		results = append(results, SearchResult{
+			Title:       r.Title,
+			URL:         r.Link,
+			Snippet:     r.Snippet,
+			PublishedAt: r.Date,
+		})
+	}
 	return results, nil
 }
 

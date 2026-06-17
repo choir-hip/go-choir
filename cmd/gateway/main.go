@@ -70,7 +70,7 @@ func loadProviderConfig() provider.ProviderConfig {
 			"us.anthropic.claude-sonnet-4-6",
 			"us.anthropic.claude-opus-4-6-v1",
 		},
-		ZAIModels: []string{"glm-5.1", "glm-5-turbo"},
+		ZAIModels: []string{"glm-5.2", "glm-5.1", "glm-5-turbo"},
 		DeepSeekModels: []string{
 			"deepseek-v4-flash",
 			"deepseek-v4-pro",

@@ -60,6 +60,16 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens: 32768,
 		},
 		{
+			ID:              "glm-5.2",
+			DisplayName:     "GLM-5.2",
+			Provider:        "zai",
+			MaxOutputTokens: 131072,
+			ContextWindowTokens: 1_000_000,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+			RecommendedFor:      []string{"super", "vsuper", "cosuper_coding", "verifier"},
+		},
+		{
 			ID:              "glm-5.1",
 			DisplayName:     "GLM-5.1",
 			Provider:        "zai",
