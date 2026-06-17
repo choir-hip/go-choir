@@ -845,8 +845,13 @@ func newFetchURLTool(httpClient *http.Client, rt *Runtime) Tool {
 }
 
 func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
-	const maxVisibleResults = 8
-	const maxSnippetChars = 700
+	// Agent retrieval, not a human result page: show the model a broad candidate
+	// set so a single broad first-pass search yields enough to ground and rerank.
+	// The router already accumulates up to ~40 merged hits (search plane defaults);
+	// surface them to the model instead of an 8-result human page. Snippets are
+	// trimmed so breadth does not blow up context. Full results remain in Trace.
+	const maxVisibleResults = 40
+	const maxSnippetChars = 400
 	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
 	for idx, result := range resp.Results {
 		if idx >= maxVisibleResults {
