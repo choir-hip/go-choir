@@ -443,6 +443,110 @@ func TestCompactionRecallEvalContinueStartsResearcherWithOverlay(t *testing.T) {
 	}
 }
 
+func TestHandleTexturePromptEvalPinsOverlayAcrossTextureRoute(t *testing.T) {
+	t.Parallel()
+	rt, handler := testAPISetup(t)
+	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	overlayDir := filepath.Join(filepath.Dir(policyPath), "model-policy-overlays")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyPath, []byte(`
+[defaults]
+fallback_provider = "deepseek"
+fallback_model = "deepseek-v4-flash"
+
+[roles.texture]
+provider = "xiaomi"
+model = "mimo-v2.5"
+reasoning = "medium"
+
+[roles.researcher]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	if err := os.WriteFile(filepath.Join(overlayDir, "glm-medium.toml"), []byte(`
+[overlay]
+expires_at = "`+future+`"
+
+[roles.texture]
+provider = "zai"
+model = "glm-5.2"
+reasoning = "medium"
+
+[roles.researcher]
+provider = "zai"
+model = "glm-5.2"
+reasoning = "medium"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt.cfg.ModelPolicyPath = policyPath
+
+	body := `{"text":"Write a briefing about new AI infra in 2026 with live evidence.","model_policy_overlay_id":"glm-medium"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
+	}
+	var resp texturePromptEvalStartResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.SubmissionID == "" || resp.DocID == "" {
+		t.Fatalf("response handles = %+v", resp)
+	}
+	if resp.Provider != "zai" || resp.Model != "glm-5.2" || resp.ReasoningEffort != "medium" {
+		t.Fatalf("texture arm resolution = %+v", resp)
+	}
+	if resp.StatusURL != "/api/prompt-bar/submissions/"+resp.SubmissionID {
+		t.Fatalf("status url = %q", resp.StatusURL)
+	}
+
+	// The conductor run carries the overlay for the trajectory.
+	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
+	if err != nil {
+		t.Fatalf("GetRun conductor: %v", err)
+	}
+	if got := metadataStringValue(conductor.Metadata, runMetadataLLMPolicyOverlayID); got != "glm-medium" {
+		t.Fatalf("conductor overlay = %q; metadata=%+v", got, conductor.Metadata)
+	}
+
+	// The Texture revision run on the doc channel must resolve to the pinned arm.
+	runs, err := rt.Store().ListRunsByChannel(context.Background(), "user-alice", resp.DocID, 20)
+	if err != nil {
+		t.Fatalf("ListRunsByChannel: %v", err)
+	}
+	var textureRun *types.RunRecord
+	for i := range runs {
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture {
+			textureRun = &runs[i]
+			break
+		}
+	}
+	if textureRun == nil {
+		t.Fatalf("expected a texture run on doc channel %s; runs=%d", resp.DocID, len(runs))
+	}
+	if got := metadataStringValue(textureRun.Metadata, runMetadataLLMPolicyOverlayID); got != "glm-medium" {
+		t.Fatalf("texture run overlay = %q; metadata=%+v", got, textureRun.Metadata)
+	}
+	if got := metadataStringValue(textureRun.Metadata, runMetadataLLMModel); got != "glm-5.2" {
+		t.Fatalf("texture run model = %q, want glm-5.2; metadata=%+v", got, textureRun.Metadata)
+	}
+}
+
+func TestHandleTexturePromptEvalRejectsMissingOverlay(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+	body := `{"text":"hello"}`
+	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+}
+
 func createCompletedCompactionRecallEvalRunForTest(t *testing.T, rt *Runtime, runID, result string, minimumReads int) types.RunRecord {
 	t.Helper()
 	now := time.Now().UTC()

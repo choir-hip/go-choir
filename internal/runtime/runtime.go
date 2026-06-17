@@ -563,6 +563,14 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		metadata[k] = v
 	}
 	inheritWorkerRepoMetadata(metadata, &requesterRec)
+	// A pinned model-policy overlay (e.g. an eval arm) covers the whole
+	// trajectory: a child coagent inherits the requester's overlay when it does
+	// not specify its own, so a Texture arm also pins the researchers it spawns.
+	if strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicyOverlayID)) == "" {
+		if overlayID := strings.TrimSpace(metadataStringValue(requesterRec.Metadata, runMetadataLLMPolicyOverlayID)); overlayID != "" {
+			metadata[runMetadataLLMPolicyOverlayID] = overlayID
+		}
+	}
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
 	}
@@ -2088,6 +2096,7 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		"seed_prompt":                 routeSeedPrompt,
 		"conductor_loop_id":           rec.RunID,
 		runMetadataTrajectoryID:       trajectoryIDForRun(rec),
+		runMetadataLLMPolicyOverlayID: metadataString(rec.Metadata, runMetadataLLMPolicyOverlayID),
 		runMetadataOwnerEmail:         metadataString(rec.Metadata, runMetadataOwnerEmail),
 		"created_from":                "conductor",
 		"source":                      "user_prompt",
@@ -2841,6 +2850,7 @@ var durableMetadataKeys = []string{
 	"selected_style_sources",
 	"selected_style_rationale",
 	runMetadataOwnerEmail,
+	runMetadataLLMPolicyOverlayID,
 }
 
 // buildAppagentRevisionMetadata constructs the metadata JSON for an

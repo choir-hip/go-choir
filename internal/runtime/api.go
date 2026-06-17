@@ -1744,6 +1744,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
 	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
+	s.HandleFunc("/api/evals/texture-prompt", h.HandleTexturePromptEval)
 	s.HandleFunc("/api/evals/compaction-recall", h.HandleCompactionRecallEvalRoot)
 	s.HandleFunc("/api/evals/compaction-recall/runs/", h.HandleCompactionRecallEvalDetail)
 	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
