@@ -22,6 +22,10 @@ func TestDefaultTexturePromptUsesDecisionNotesWithoutForcedSemanticSequence(t *t
 	normalizedPrompt := strings.Join(strings.Fields(prompt), " ")
 	for _, want := range []string{
 		"Texture owns canonical document versions",
+		"evidence-grounded document author",
+		"deep research by default",
+		"Model priors are not document evidence",
+		"marginal returns diminish",
 		"Use `record_texture_decision` for audit-worthy off-document choices",
 		"If the owner explicitly asks Texture to record an off-document decision note",
 		"unless the requested record would be false, unsafe, or outside Texture authority",
@@ -85,8 +89,11 @@ func TestTexturePromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"Because Texture owns the document, write the first useful owner-readable revision with patch_texture before opening longer worker work.",
-		"For factual/current/search requests, the first revision should be a short working brief with explicit uncertainty and no ungrounded claims; if more evidence is needed, researcher delegation is available as a Texture choice.",
+		"Texture fulfills substantive requests through grounded evidence",
+		"For factual/current/search requests, do not answer from model recall",
+		"researcher carries the knowledge obligation",
+		"depth scales with subject matter",
+		"marginal returns diminish",
 		"Worker messages can wake later texture runs and trigger the next revision.",
 	} {
 		if !strings.Contains(request, want) {
@@ -109,10 +116,10 @@ func TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent(t *testing
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"the first revision should be a short working brief with explicit uncertainty and no ungrounded claims",
+		"do not answer from model recall",
 		"Do not add factual claims, citations, or coding results from model priors",
-		"write a brief working revision with explicit uncertainty and record what evidence is needed",
-		"Texture may then choose researcher, super, both, neither, or a blocker",
+		"researcher and/or super carry those obligations",
+		"ending with only model-shaped substance and no worker path is a failure",
 		"Never describe coordination as already done unless the tool action really happened",
 	} {
 		if !strings.Contains(request, want) {

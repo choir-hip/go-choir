@@ -694,8 +694,8 @@ func TestSystemPromptForUniversalWireTextureRunsRequiresArticleHead(t *testing.T
 	if err != nil {
 		t.Fatalf("systemPromptForRun ordinary Texture: %v", err)
 	}
-	if !strings.Contains(ordinaryPrompt, "write the first useful owner-readable Texture revision") {
-		t.Fatalf("ordinary Texture prompt should preserve generic working-response rule: %q", ordinaryPrompt)
+	if !strings.Contains(ordinaryPrompt, "evidence-grounded author") {
+		t.Fatalf("ordinary Texture prompt should preserve grounded-author policy: %q", ordinaryPrompt)
 	}
 	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
 		t.Fatalf("ordinary Texture prompt should not get Universal Wire article-head rule: %q", ordinaryPrompt)
