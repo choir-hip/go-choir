@@ -5,7 +5,7 @@ import (
 	"strings"
 	"text/template"
 
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 // Document is a versioned agent prompt with metadata and multiline body text.

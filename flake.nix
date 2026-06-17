@@ -319,7 +319,7 @@
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
-          vendorHash = "sha256-ey1RVzcx2eQWtSjuB2wLQL0tdf5C8jklRnTyARH7kFw=";
+          vendorHash = "sha256-2uExDYKXWdF4NyIMX6NVVXcuXRoTm+/S/CxuwPExXiI=";
           internalDirs = [
             "internal/buildinfo"
             "internal/events"
