@@ -200,7 +200,10 @@ func (c *SearchClient) searchViaPlane(ctx context.Context, req SearchRequest) (*
 	}
 	maxResults := req.MaxResults
 	if maxResults <= 0 {
-		maxResults = 10
+		// Agent retrieval, not human reading: default deep so each search yields
+		// a broad candidate set (per-provider fan-out + dedup) for grounding and
+		// reranking. A 5-10 result page is a human default; agents want ~40.
+		maxResults = 40
 	}
 	if maxResults > 50 {
 		maxResults = 50

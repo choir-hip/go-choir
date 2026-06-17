@@ -398,7 +398,7 @@ func TestSearchClient_MaxResultsClamping(t *testing.T) {
 
 	client := testSearchClient([]SearchProvider{mock}, 1)
 
-	// Test zero (should default to 10)
+	// Test zero (should default to 40)
 	client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 0})
 
 	// Test too large (should clamp to 50)

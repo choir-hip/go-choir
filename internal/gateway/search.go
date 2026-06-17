@@ -96,7 +96,7 @@ type SearchRequest struct {
 	// Query is the search query string (required).
 	Query string `json:"query"`
 
-	// MaxResults is the maximum number of results (default 10, max 50).
+	// MaxResults is the maximum number of results (default 40, max 50).
 	MaxResults int `json:"max_results,omitempty"`
 }
 
