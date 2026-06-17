@@ -683,3 +683,52 @@ to deepen until budget / marginal returns; keep "what to research" model-driven.
 This treats interim-state delivery and a revision-cadence floor as mechanical
 invariants (legitimately runtime), not semantic role choreography, consistent
 with the harness-minimalism boundary in AGENTS.md.
+
+### Deployed-fix falsification (probe, 2026-06-17, commit 68d09cc3)
+
+Shipped the first runtime-cadence increment as commit `68d09cc3` (Codex-reviewed,
+GATE PASS, 0xP1/2xP2): (1) `scheduleTextureWorkerWake` leading + max-interval
+(no resetting-trailing); (2) `coagentUpdateTurnInjector` returns nil for Texture
+runs so each run consumes only its cold-prepended batch and ends, leaving later
+packets pending for `reconcileCompletedTextureRun`. CI all green; staging health
++ upstream(sandbox) both report `68d09cc3` (the CI "deploy" job went red only on
+the known post-deploy vmctl active-computer-refresh flake, `bus_error:
+MissingAddressRange`; host + sandbox identity are authoritative).
+
+Re-ran `scripts/texture_revision_cadence_probe.mjs` against the deployed change
+(prompt "What's going on with Anthropic and the US government?"):
+
+- V0 (user, 53 chars) at +0s; V1 (appagent, **837 chars**) at **+49s**.
+- **Still appagent revision count = 1 (V1-only).** No V2+ observed in the window.
+
+Falsification: removing Texture warm injection did NOT, by itself, produce the
+V1->Vn cadence or fast first paint. The warm-injection-batching hypothesis was
+necessary-but-not-sufficient. Two effects, both consistent with Codex [P2] #1:
+
+- First paint stayed ~49s (vs 60s baseline) - the dominant latency is NOT the
+  wake debounce; it is when the first findings packet exists. The researcher
+  overlay already mandates an early first checkpoint after one search batch
+  (`researcher_runtime.yaml:8,17-23`), but the deployed researcher is not
+  checkpointing early; the first packet appears ~49s in.
+- V1 got thinner (837 vs 2379 chars) without a compensating V2+. Single-run
+  variance is high (different question/results), so treat the char delta as a
+  weak signal, but the V1-only outcome reproduced.
+
+Refined (multi-causal) diagnosis - the cadence floor needs more than the Texture
+injector change:
+1. Researcher findings delivery: first checkpoint is late (~49s) and appears
+   batched, despite prompts to stream early. Biggest lever for both first paint
+   and revision count.
+2. Cold-prepend is still unbounded: even streamed checkpoints collapse into one
+   revision if they all land before the first wake/run (one run's cold-prepend
+   drains all pending). The injector change only protects packets arriving
+   *during* a run.
+3. Initial-run duration vs first-checkpoint time is not yet localized - the 49s
+   could be initial-run-stays-resident or researcher-late-checkpoint; the probe
+   hung before printing trace research counts, so this is unresolved.
+
+Decisive next probe (before more code): instrument first-checkpoint timestamp,
+researcher packet count/spacing, and initial Texture run end time to localize
+the 49s (researcher cadence vs initial-run duration). The deployed `68d09cc3`
+change is architecturally correct and CI-green; keep it pending that
+localization rather than reverting on one high-variance run.
