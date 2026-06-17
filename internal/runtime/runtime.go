@@ -2087,6 +2087,7 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 	userRevisionMetadata := map[string]any{
 		"seed_prompt":                 routeSeedPrompt,
 		"conductor_loop_id":           rec.RunID,
+		runMetadataTrajectoryID:       trajectoryIDForRun(rec),
 		runMetadataOwnerEmail:         metadataString(rec.Metadata, runMetadataOwnerEmail),
 		"created_from":                "conductor",
 		"source":                      "user_prompt",
@@ -2812,6 +2813,7 @@ var durableMetadataKeys = []string{
 	"import_manifest",
 	"migration_manifest",
 	"conductor_loop_id",
+	runMetadataTrajectoryID,
 	"media_source_refs",
 	"media_source_research_required",
 	"source_entities",
