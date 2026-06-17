@@ -385,7 +385,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if rec != nil {
 		ownerID = rec.OwnerID
 	}
-	rolePrompt := fmt.Sprintf("You are Choir %s.", profile)
+	rolePrompt := fmt.Sprintf("This is the system prompt for the %s agent in Choir.", profile)
 	if rt != nil && rt.promptStore != nil {
 		prompt, err := rt.promptStore.Load(ownerID, profile)
 		if err != nil {
@@ -396,7 +396,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 
-	corePrompt := "You are one agent inside Choir, a multiagent writing, research, and execution system."
+	corePrompt := "Choir is a multiagent writing, research, and execution system with one user-facing product, one runtime, and one standard of truth."
 	if rt != nil && rt.promptStore != nil {
 		if loaded, err := rt.promptStore.LoadCore(); err == nil && strings.TrimSpace(loaded) != "" {
 			corePrompt = loaded
@@ -499,9 +499,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == AgentProfileResearcher {
 		b.WriteString("\n\nResearcher work is iterative deep research, not one round and done.")
 		b.WriteString("\nCheckpoint early so Texture can improve the document incrementally, but keep going while each additional pass is likely to materially change the answer.")
+		b.WriteString("\nDefault pattern after the first probe: combine update_coagent with the next web_search, source_search, fetch_url, or import_url_content calls in the same parallel tool-call block. Repeat for multiple rounds in one run before ending the turn.")
+		b.WriteString("\nDo not end on update_coagent alone while the next distinct search or fetch is still likely to add marginal facts, refs, or verification. Understanding is saturated when further searches mostly repeat checkpointed findings or no longer change what Texture should publish.")
 		b.WriteString("\nUse web_search and fetch_url with the parallelism appropriate to the model, task, novelty, and provider health.")
 		b.WriteString("\nFor PDFs, DOCX, EPUBs, PPTX decks, HTML documents, and other durable source files, prefer import_document_content, list_content_item_selectors, and read_content_item_selector over fetch_url snippets. Read selectors such as pages, slides, sections, or chunks so long documents stay bounded and citeable.")
-		b.WriteString("\nSearch tool results and Trace expose provider endpoints, latency, errors, rate limits, and result counts; adapt your breadth from that feedback.")
+		b.WriteString("\nSearch tool results and Trace expose provider endpoints, latency, errors, rate limits, and result counts; adapt breadth from that feedback.")
 		b.WriteString("\nDo not keep issuing near-duplicate searches once additional passes are unlikely to change the document.")
 		b.WriteString("\nTreat rate-limit errors as backpressure: narrow, wait, or checkpoint what you already learned rather than continuing to issue searches.")
 		b.WriteString("\nBefore the first update_coagent call, run at most one focused search batch, or one search plus one targeted fetch. Do not gather comprehensive coverage before the first checkpoint.")
@@ -509,9 +511,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\nIf you do not yet have durable evidence excerpts, omit the evidence array rather than sending malformed evidence; findings and notes are enough for an early checkpoint.")
 		b.WriteString("\nFor live scores, schedules, rankings, weather, or other time-sensitive lookup work, anchor the target date/time explicitly, prefer official or established scoreboard/source pages, and say whether the result is final, only partial, or blocked.")
 		b.WriteString("\nFor sports/current-score work, do not treat blocked HTML scoreboard pages as the only possible source. If official pages block direct fetches, look for accessible structured league endpoints, boxscore APIs, static JSON, established scoreboard snippets, or reputable recaps; clearly distinguish verified final scores from live, pending, scheduled, or snippet-only states.")
-		b.WriteString("\nAfter update_coagent, continue while the next clearly named question is likely to improve the document. End the turn when marginal returns diminish, not merely because the first packet was useful.")
-		b.WriteString("\nIf you continue after a checkpoint, send another update_coagent after each additional search/fetch batch that changes the answer or proves a blocker.")
-		b.WriteString("\nYou are a persistent communicating coagent, not a one-shot subagent. Expect to support many Texture revisions over time across many research passes.")
+		b.WriteString("\nThe researcher is a persistent communicating coagent, not a one-shot subagent. Multi-revision documents stall when the researcher run ends after the first useful checkpoint. Expect many parallel checkpoint-plus-search rounds in one run and many Texture revisions over time.")
 	}
 	agentID := agentIDForRun(rec)
 	if agentID != "" {

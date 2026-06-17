@@ -10,7 +10,7 @@ func TestDefaultSystemPromptIsNonEmpty(t *testing.T) {
 	if prompt == "" {
 		t.Fatal("default system prompt should not be empty")
 	}
-	if !strings.Contains(prompt, "system prompt of the Texture agent") {
+	if !strings.Contains(prompt, "system prompt for the texture agent in Choir") {
 		t.Fatalf("unexpected default prompt: %q", prompt)
 	}
 	if !strings.Contains(prompt, "unit of work is not a turn") {

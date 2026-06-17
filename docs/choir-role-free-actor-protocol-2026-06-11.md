@@ -21,7 +21,7 @@ Companions: `docs/conjecture-learning-proof-theory-2026-06-11.md` (the
 untrusted-prover frame this builds on, §4),
 `docs/choir-rearchitecture-durable-actors-2026-06-11.md`,
 `docs/system-v1-one-cut-2026-06-11.md` (the POLICY leaf this doctrine
-governs).
+governs), `docs/choir-prompting-invariants.md` (seeded prompt opening frame).
 
 ---
 

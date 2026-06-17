@@ -17,7 +17,7 @@ func TestDefaultTexturePromptUsesDecisionNotesWithoutForcedSemanticSequence(t *t
 	prompt := textureprompts.DefaultSystemPrompt()
 	normalizedPrompt := strings.Join(strings.Fields(prompt), " ")
 	for _, want := range []string{
-		"system prompt of the Texture agent",
+		"system prompt for the texture agent in Choir",
 		"unit of work is not a turn",
 		"idea level, not action by action",
 		"Model priors may shape structure and tone, but they are not evidence",

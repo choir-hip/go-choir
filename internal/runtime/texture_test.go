@@ -1848,13 +1848,13 @@ func TestTextureSystemPromptSharesChoirCoreContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
-	if !strings.Contains(prompt, "You are one agent inside Choir, a multiagent writing, research, and execution system.") {
+	if !strings.Contains(prompt, "Choir is a multiagent writing, research, and execution system") {
 		t.Fatalf("system prompt missing shared Choir context: %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current UTC date/time:") || !strings.Contains(prompt, "Treat relative-date requests") {
 		t.Fatalf("system prompt missing temporal grounding context: %q", prompt)
 	}
-	if !strings.Contains(prompt, "Texture is a durable document owner, not a one-shot answerer.") {
+	if !strings.Contains(prompt, "canonical writer of a versioned artifact, not a one-shot answerer") {
 		t.Fatalf("system prompt missing Texture wake semantics: %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
