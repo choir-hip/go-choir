@@ -1388,6 +1388,86 @@ func (t *fakeTextureWakeTimer) fire() {
 	fn()
 }
 
+// TestScheduleTextureWorkerWakeLeadingCoalesce asserts the wake is leading +
+// max-interval, not resetting-trailing: a burst of packets for one doc rides a
+// single in-flight timer instead of pushing the flush back on every packet. The
+// resetting behavior was the slow-first-paint / batch-everything failure in
+// docs/mission-texture-product-loop-recovery-v0.md.
+func TestScheduleTextureWorkerWakeLeadingCoalesce(t *testing.T) {
+	provider := newTextureEditToolProvider(textureReplaceAllResult("noop"))
+	clock := &fakeTextureWakeClock{}
+	_, _, rt := textureAPISetupWithProviderAndOptions(t, provider, true, withTextureWakeAfterFuncForTest(clock.afterFunc))
+
+	key := textureWakeKey("user-1", "doc-cadence")
+	rt.scheduleTextureWorkerWake("user-1", "doc-cadence", "")
+	rt.textureWakeMu.Lock()
+	first := rt.textureWakePending[key].timer
+	rt.textureWakeMu.Unlock()
+	if first == nil {
+		t.Fatalf("first packet should schedule a wake timer")
+	}
+	for i := 0; i < 4; i++ {
+		rt.scheduleTextureWorkerWake("user-1", "doc-cadence", "")
+	}
+	rt.textureWakeMu.Lock()
+	again := rt.textureWakePending[key].timer
+	rt.textureWakeMu.Unlock()
+	if first != again {
+		t.Fatalf("leading+max-interval wake must not reset the in-flight timer on later packets")
+	}
+
+	// After the flush fires and clears the pending entry, the next packet is free
+	// to schedule a fresh timer so the cadence keeps going.
+	clock.fireAll()
+	rt.scheduleTextureWorkerWake("user-1", "doc-cadence", "")
+	rt.textureWakeMu.Lock()
+	next := rt.textureWakePending[key].timer
+	rt.textureWakeMu.Unlock()
+	if next == nil || next == first {
+		t.Fatalf("a packet after the flush should schedule a new timer")
+	}
+}
+
+// TestCoagentUpdateTurnInjectorSkipsTexture asserts Texture runs do not warm
+// inject mid-run coagent packets (one canonical revision per run), while super
+// and researcher runs keep warm injection for their ongoing multi-turn work.
+// This is what lets multiple findings packets become multiple Texture revisions
+// via reconcileCompletedTextureRun instead of one batched V1.
+func TestCoagentUpdateTurnInjectorSkipsTexture(t *testing.T) {
+	provider := newTextureEditToolProvider(textureReplaceAllResult("noop"))
+	_, _, rt := textureAPISetupWithProviderAndOptions(t, provider, true)
+
+	textureRec := &types.RunRecord{
+		RunID:        "run-texture",
+		OwnerID:      "user-1",
+		AgentID:      currentTextureAgentID("doc-x"),
+		AgentProfile: AgentProfileTexture,
+	}
+	if rt.coagentUpdateTurnInjector(textureRec) != nil {
+		t.Fatalf("Texture runs must not warm-inject coagent packets")
+	}
+
+	superRec := &types.RunRecord{
+		RunID:        "run-super",
+		OwnerID:      "user-1",
+		AgentID:      "super:user-1",
+		AgentProfile: AgentProfileSuper,
+	}
+	if rt.coagentUpdateTurnInjector(superRec) == nil {
+		t.Fatalf("super runs must keep warm injection")
+	}
+
+	researcherRec := &types.RunRecord{
+		RunID:        "run-researcher",
+		OwnerID:      "user-1",
+		AgentID:      "researcher:abc",
+		AgentProfile: AgentProfileResearcher,
+	}
+	if rt.coagentUpdateTurnInjector(researcherRec) == nil {
+		t.Fatalf("researcher runs must keep warm injection")
+	}
+}
+
 type revisionPromptEchoProvider struct {
 	delay time.Duration
 }

@@ -30,8 +30,18 @@ func (rt *Runtime) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 	key := textureWakeKey(ownerID, docID)
 	debounce := rt.cfg.TextureWakeDebounce
 	rt.textureWakeMu.Lock()
+	// Leading + max-interval coalescing. If a wake is already scheduled for this
+	// doc, let it fire on its existing schedule instead of pushing it back. A
+	// resetting-trailing timer (Stop + reschedule on every packet) defers the
+	// first revision until worker updates go quiet, which is exactly the
+	// slow-first-paint / batch-everything-into-one-revision failure recorded in
+	// docs/mission-texture-product-loop-recovery-v0.md. Keeping the in-flight
+	// timer means the first packet schedules a prompt flush and later packets in
+	// the same window ride that flush, giving a steady revision cadence instead
+	// of one terminal revision after all research completes.
 	if pending, ok := rt.textureWakePending[key]; ok && pending.timer != nil {
-		pending.timer.Stop()
+		rt.textureWakeMu.Unlock()
+		return
 	}
 	timer := rt.textureWakeAfter(debounce, func() {
 		rt.flushTextureWorkerWake(key)
