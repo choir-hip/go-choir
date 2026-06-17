@@ -3,35 +3,30 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestDefaultTexturePromptUsesDecisionNotesWithoutForcedSemanticSequence(t *testing.T) {
-	raw, err := fs.ReadFile(promptDefaultsFS, "prompt_defaults/texture.md")
-	if err != nil {
-		t.Fatalf("read default texture prompt: %v", err)
-	}
-	prompt := string(raw)
+	prompt := textureprompts.DefaultSystemPrompt()
 	normalizedPrompt := strings.Join(strings.Fields(prompt), " ")
 	for _, want := range []string{
-		"Texture owns canonical document versions",
-		"evidence-grounded document author",
-		"deep research by default",
-		"Model priors are not document evidence",
+		"system prompt of the Texture agent",
+		"unit of work is not a turn",
+		"idea level, not action by action",
+		"Model priors may shape structure and tone, but they are not evidence",
 		"marginal returns diminish",
-		"Use `record_texture_decision` for audit-worthy off-document choices",
-		"If the owner explicitly asks Texture to record an off-document decision note",
-		"unless the requested record would be false, unsafe, or outside Texture authority",
-		"Do not put agent process rationale",
-		"These are obligations and affordances, not a forced tool sequence",
-		"Texture may write, ask researcher, ask super, ask both, ask neither, wait, or report a blocker",
+		"Canonical document text is reader-facing belief state",
+		"off-document decision texts",
+		"Texture owns meaning and learning",
+		"Super owns privileged execution",
+		"chooses among them agentically",
 	} {
 		if !strings.Contains(normalizedPrompt, want) {
 			t.Fatalf("default texture prompt missing %q:\n%s", want, prompt)
@@ -89,9 +84,9 @@ func TestTexturePromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"Texture fulfills substantive requests through grounded evidence",
+		"Invariant: canonical meaning is Texture-owned",
 		"For factual/current/search requests, do not answer from model recall",
-		"researcher carries the knowledge obligation",
+		"Probe morphisms (spawn_agent researcher) gather world knowledge",
 		"depth scales with subject matter",
 		"marginal returns diminish",
 		"Worker messages can wake later texture runs and trigger the next revision.",
@@ -118,8 +113,8 @@ func TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent(t *testing
 	for _, want := range []string{
 		"do not answer from model recall",
 		"Do not add factual claims, citations, or coding results from model priors",
-		"researcher and/or super carry those obligations",
-		"ending with only model-shaped substance and no worker path is a failure",
+		"Probe and/or Execute morphisms are required",
+		"violates invariant 3 unless Texture Audits an audit-worthy reason",
 		"Never describe coordination as already done unless the tool action really happened",
 	} {
 		if !strings.Contains(request, want) {
@@ -577,11 +572,11 @@ func TestTexturePromptPrioritizesSuperAfterResearchForMixedObligation(t *testing
 
 	for _, want := range []string{
 		"recent worker messages do not include a super delivery",
-		"request_super_execution is available when Texture chooses that the execution obligation is ready for super",
-		"if Texture does not use it, record the precise blocker or missing evidence",
+		"Execute (request_super_execution) is available when Texture judges the execution objective is ready for super",
+		"if Texture does not use it, Audit the precise blocker or missing evidence",
 		"Keep any request_super_execution objective concise and concrete",
 		"must not use the final [CMD] evidence label before the super delivery arrives",
-		"if Texture does not use it, record the blocker instead of making a source-grounded edit look final",
+		"if Texture does not use it, Audit the blocker instead of making a source-grounded edit look final",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("mixed-obligation prompt missing %q:\n%s", want, request)

@@ -86,6 +86,45 @@ func TestValidateAssertionRegisterExtractsSections(t *testing.T) {
 	}
 }
 
+func TestScanForbiddenRuntimeMarkdownAllowsYAMLPrompts(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldwd)
+	})
+	if err := os.MkdirAll("internal/runtime/prompt_defaults", 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("internal/runtime/prompt_defaults/texture.yaml", []byte("version: 1\nbody: |\n  hello\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("internal/runtime/prompt_defaults/legacy.md", []byte("# no\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := scanForbiddenRuntimeMarkdown()
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !hasWarningPath(warnings, "internal/runtime/prompt_defaults/legacy.md") {
+		t.Fatalf("expected legacy.md warning, got %#v", warnings)
+	}
+}
+
+func hasWarningPath(warnings []warning, path string) bool {
+	for _, w := range warnings {
+		if w.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
 func TestClassifyHeresyContext(t *testing.T) {
 	docs := map[string]*docInfo{
 		"docs/evidence.md": {Path: "docs/evidence.md", Scope: "historical", IsEvidence: true},

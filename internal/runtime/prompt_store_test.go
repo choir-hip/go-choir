@@ -76,4 +76,7 @@ func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
 	if reset.Content == "" || reset.Content == "Custom texture prompt" {
 		t.Fatalf("reset content should return the default prompt, got %q", reset.Content)
 	}
+	if !strings.Contains(reset.Content, "system prompt of the Texture agent") {
+		t.Fatalf("reset content should load yaml-backed texture prompt, got %q", reset.Content)
+	}
 }

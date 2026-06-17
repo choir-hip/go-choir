@@ -1,0 +1,22 @@
+version: 1
+role: texture_revision_worker_findings
+flags:
+  templated: true
+comments:
+  - Worker-message policy appended to revision requests when recent worker texts exist.
+body: |
+  {{if .IntegrateWorkerFindings}}
+  This Texture run was woken by worker findings. Make those findings visible with patch_texture as this turn's next document revision before spawning additional workers.
+  If the worker evidence is partial, blocked, or inconclusive, still write an honest partial/blocker checkpoint instead of leaving the visible document at the pre-findings state.
+  Only spawn another researcher before editing if the worker message is unusable for any visible checkpoint; if so, name the precise blocker in the run output.
+  {{end}}{{if and .NeedsSuperExecution (not .HasSuperDelivery)}}
+  The original request still needs Execute evidence (command/code/browser/verification), but these recent worker messages do not include a super delivery.
+  Execute (request_super_execution) is available when Texture judges the execution objective is ready for super; if Texture does not use it, Audit the precise blocker or missing evidence in the document/run output.
+  Keep any request_super_execution objective concise and concrete so a later Incorporate revision can integrate both research and command/artifact evidence.
+  A source-grounded revision may still say command evidence is pending, but it must not use the final [CMD] evidence label before the super delivery arrives.
+  {{end}}{{if .ActiveWorkerDelegation}}
+  At least one recent worker message says a delegated worker is still active or lacks terminal evidence.
+  A useful next dashboard revision can summarize the available evidence and, when Texture decides continuation is needed, request_super_execution with a concrete continuation objective for persistent super.
+  The objective must tell super to continue the existing worker_run_id, not start a duplicate worker, and to observe, cancel, or finish only through super authority until there is an AppChangePackage, reviewable blocker, cancellation certificate, or bounded timeout certificate.
+  Texture may ask for clarification or continuation; Texture must not directly control worker/vsuper/co-super runs.
+  {{end}}

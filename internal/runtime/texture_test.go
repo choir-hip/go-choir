@@ -2782,8 +2782,8 @@ func TestTexturePromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 
 	for _, want := range []string{
 		"For factual/current claims, keep the revision uncertain until researcher evidence arrives.",
-		"Researcher carries the knowledge obligation",
-		"Ordinary factual, current-events, web, or \"what is going on now\" questions are research work",
+		"Probe (researcher) gathers world-knowledge evidence",
+		"Ordinary factual, current-events, web, or \"what is going on now\" questions are Probe work",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("current-events texture prompt missing %q:\n%s", want, prompt)
@@ -2807,7 +2807,7 @@ func TestTexturePromptExplicitResearcherExposesAffordanceWithoutForcing(t *testi
 
 	for _, want := range []string{
 		"The owner explicitly asked for researcher help.",
-		"Researcher is the right affordance for that knowledge obligation",
+		"Probe (researcher) is the correct morphism class for that world-knowledge gap",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("explicit researcher texture prompt missing %q:\n%s", want, prompt)
@@ -8191,7 +8191,7 @@ func TestTextureAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	if !strings.Contains(run.Prompt, "Detected durable media source refs") ||
 		!strings.Contains(run.Prompt, "Detected Texture source entities") ||
 		!strings.Contains(run.Prompt, "source claims need represented evidence") ||
-		!strings.Contains(run.Prompt, "Researcher is the knowledge affordance for that evidence obligation") ||
+		!strings.Contains(run.Prompt, "Probe (researcher) is the morphism class for that evidence gap") ||
 		!strings.Contains(buildTextureMediaSourceResearchObjective(refs, ""), "first call read_content_item") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
 	}

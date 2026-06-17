@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/runtime/promptspec"
+	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 )
 
-//go:embed prompt_defaults/*.md
+//go:embed prompt_defaults/*.yaml
 var promptDefaultsFS embed.FS
 
 type PromptDescriptor struct {
@@ -172,9 +175,19 @@ func (ps *PromptStore) ensureDefaults() error {
 	}
 	for _, name := range promptDefaultFiles() {
 		path := ps.defaultPromptPath(name)
-		content, err := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", name+".md")))
-		if err != nil {
-			return fmt.Errorf("load embedded prompt default %s: %w", name, err)
+		var content []byte
+		if name == AgentProfileTexture {
+			content = []byte(textureprompts.DefaultSystemPrompt() + "\n")
+		} else {
+			raw, readErr := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", name+".yaml")))
+			if readErr != nil {
+				return fmt.Errorf("load embedded prompt default %s: %w", name, readErr)
+			}
+			doc, parseErr := promptspec.Parse(raw)
+			if parseErr != nil {
+				return fmt.Errorf("parse embedded prompt default %s: %w", name, parseErr)
+			}
+			content = []byte(doc.BodyText() + "\n")
 		}
 		if current, err := os.ReadFile(path); err == nil && string(current) == string(content) {
 			continue

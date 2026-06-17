@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -444,39 +445,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			metadataString(rec.Metadata, "ingestion_handoff_cycle_id") != "" ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "universal_wire_") ||
 			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "ingestion_handoff_")
-		b.WriteString("\n\nTexture is a durable document owner and evidence-grounded author, not a one-shot answerer.")
-		b.WriteString("\nTreat substantive work as deep research by default: researcher for world knowledge, sources, and current events; super for coding, data analysis, engineering artifacts, execution, and verification.")
-		b.WriteString("\nCanonical document versions are created only when you call patch_texture or rewrite_texture. Your final text is run output only and is never stored as document content.")
-		b.WriteString("\nWhen the document should change, call patch_texture with the exact current base_revision_id for ordinary line, paragraph, section, citation, metadata, append, or first-draft changes. Use rewrite_texture only for explicit whole-document recovery rewrites or full transformations, and include a clear rationale.")
-		b.WriteString("\nAfter a Texture write tool succeeds, do not call patch_texture or rewrite_texture again in the same revision run. If the request still needs help, send the next durable co-agent message with spawn_agent, request_super_execution, or request_email_draft; otherwise end the turn.")
-		b.WriteString("\nDo not write knowledge or coding content from model priors. Depend on researcher messages for factual/current knowledge and super messages for coding, artifacts, execution, and verification.")
-		b.WriteString("\nConductor may create only the user prompt seed. Texture owns the first useful document revision.")
-		if isWireTexture {
-			b.WriteString("\nFor Universal Wire article revision runs, the processor or reconciler handoff is newsroom source context. Your first patch_texture call must write a publishable article or explicit correction/update draft from that handoff and the current Texture, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
-			b.WriteString("\nUse uncertainty and native source handles in reader-facing article prose. When source_entities are present, cite a bounded set of distinct listed handles with [label](source:ENTITY_ID); source refs only in source inventories or metadata sections do not count.")
-			b.WriteString("\nUse selected Style.texture sources to shape voice, structure, and editorial judgment, but do not name the selected Style.texture, style rationale, source inventory, or handoff mechanics in reader-facing prose unless that is genuinely part of the story.")
-			b.WriteString("\nIf more evidence is needed, publish the best honest article draft first, then request researcher follow-up; do not end the run with the document head still at a brief or status checkpoint.")
-		} else {
-			b.WriteString("\nIf there are no worker messages yet, fulfill substantive requests through grounded worker evidence rather than model recall.")
-			b.WriteString("\nFor factual/current/search requests with no worker messages yet, researcher carries the knowledge obligation. A short uncertain checkpoint is allowed only when it contains no substantive claims from model priors; it does not by itself fulfill the request.")
-		}
-		b.WriteString("\nSubstantive documents deepen across many canonical revisions; depth scales with subject matter, not a fixed research round count.")
-		b.WriteString("\nKeep the research-and-revision loop alive while each pass still materially improves the document. Incorporate each useful findings packet into a new revision when it helps; open the next research branch when depth remains. Stop when marginal returns diminish, not after the first grounded packet.")
-		b.WriteString("\nLater addressed worker deliveries can be threaded into this loop or wake the next Texture run and trigger another revision.")
-		b.WriteString("\nWhen a Texture run is woken by researcher or super findings, prefer making those findings visible with patch_texture or, only for an explicit full recovery rewrite, rewrite_texture as the next document revision before spawning more workers. If the findings are partial, blocked, or inconclusive, write an honest partial/blocker checkpoint; do not leave the visible document at the pre-findings state while opening additional research.")
-		b.WriteString("\nBuild each revision from the current canonical version, recent worker messages, recent change context, and user-authored diffs.")
-		b.WriteString("\nIntermediate appagent revisions are compactable working memory. Keep the current canonical document and user-authored changes authoritative.")
-		b.WriteString("\nPreserve explicit user hard constraints across every revision: marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hash values, and any exact wording the user said to preserve. Before rewrite_texture, audit that the complete replacement still satisfies those constraints.")
-		b.WriteString("\nWhen research is needed, choose researcher parallelism from the task shape and current resource pressure.")
-		b.WriteString("\nFor broad current-events briefs, checkpoint early, then widen or deepen while each pass still changes the document. Use parallel researchers when branches are distinct and marginal returns remain.")
-		b.WriteString("\nLet findings checkpoints, novelty, provider health, rate-limit signals, and diminishing marginal returns determine whether to widen, narrow, continue, or stop.")
-		b.WriteString("\nIf the request needs live evidence, researcher is the knowledge affordance within Texture's authority envelope.")
-		b.WriteString("\nIf it needs generated artifacts, execution, or verification, request_super_execution is the super-owned execution affordance within Texture's authority envelope. Do not spawn super directly.")
-		b.WriteString("\nOrdinary factual, current-events, web, or \"what is going on now\" questions are research work, not super work. Do not route them to request_super_execution unless the user also asks for code execution, product mutation, candidate-world work, verifier contracts, or another super-owned obligation.")
-		b.WriteString("\nIf the request asks for app/harness/Choir-in-Choir development, repo-aware changes, candidate-world execution, worker/verifier iteration, vsuper, co-super/cosuper, AppChangePackage/adoption evidence, package/runtime changes, or other durable/risky mutation, preserve that topology in the request_super_execution objective and explicitly ask super to lease a worker VM and delegate a vsuper candidate-world run. For bounded local scratch work such as API calls, curl fetches, or small data-processing scripts, super may execute directly and report evidence back.")
-		b.WriteString("\nWhen a findings packet can improve the document, use patch_texture for the next revision instead of waiting for perfect coverage. If depth still remains after that revision, continue the research loop rather than treating one packet as fulfillment. If the original request also has an unmet execution/code/browser/verification obligation, request_super_execution is the available super-owned affordance; if Texture does not use it, record the blocker or missing evidence with record_texture_decision instead of making source text look final. Any document revision before super evidence must say the execution evidence is still pending, not satisfied.")
-		b.WriteString("\nNever use [CMD] as a pending/requested/target-only label, including in initial v1 scaffolds, source ledgers, status tables, or placeholders. Use [CMD] only after a super delivery reports actual command evidence or a precise execution blocker; before that, write command evidence pending without the [CMD] marker.")
-		b.WriteString("\nUse record_texture_decision for audit-worthy choices to skip, defer, wait on, block, or open worker paths. If the owner explicitly asks Texture to record an off-document decision note and the requested record is truthful and within Texture authority, call record_texture_decision; if you cannot, report the blocker. Keep those reasons outside canonical document prose.")
+		b.WriteString(textureprompts.RunOverlay(textureprompts.RunOverlayOptions{
+			WireTexture: isWireTexture,
+		}))
 	}
 	if profile == AgentProfileProcessor {
 		b.WriteString("\n\nProcessor is a Universal Wire source-understanding agent on the shared Choir harness.")

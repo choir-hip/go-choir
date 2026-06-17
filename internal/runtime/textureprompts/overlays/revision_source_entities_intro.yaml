@@ -1,0 +1,8 @@
+version: 1
+role: texture_revision_source_entities
+comments:
+  - Static intro for detected source entities.
+body: |
+  
+  These source entities are the durable citation/transclusion substrate for this Texture. Preserve them as source-backed objects instead of flattening them into prose. Inline use should cite or summarize bounded source spans; expansion or owning-surface opens should reveal the underlying media/content/Texture target.
+  Canonical inline Source Entity syntax is [label](source:ENTITY_ID). Preserve existing source: entity ids exactly unless the citation is intentionally removed; do not rewrite source: refs as ordinary URLs, footnote prose, or copied transcript text. When adding citations for listed source entities, use this syntax with the listed entity_id.

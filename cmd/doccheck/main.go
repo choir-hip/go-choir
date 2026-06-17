@@ -341,6 +341,12 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 	} else {
 		warnings = append(warnings, textureWarnings...)
 	}
+	runtimeMarkdownWarnings, err := scanForbiddenRuntimeMarkdown()
+	if err != nil {
+		warnings = append(warnings, warning{Rule: "P1", Severity: "warning", Message: fmt.Sprintf("runtime markdown scan failed: %v", err)})
+	} else {
+		warnings = append(warnings, runtimeMarkdownWarnings...)
+	}
 
 	sortWarnings(warnings)
 	docList := make([]docInfo, 0, len(docs))
@@ -1034,11 +1040,36 @@ func classifyHeresyContext(path, line string, docs map[string]*docInfo) string {
 	return "current-violation"
 }
 
+func scanForbiddenRuntimeMarkdown() ([]warning, error) {
+	var warnings []warning
+	err := filepath.WalkDir("internal/runtime", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+		warnings = append(warnings, warning{
+			Rule:     "P1",
+			Severity: "warning",
+			Path:     cleanPath(path),
+			Message:  "internal/runtime must not contain markdown; docs belong in docs/ and agent prompts belong in YAML",
+			Hint:     "use internal/runtime/prompt_defaults/*.yaml or internal/runtime/textureprompts/*.yaml",
+		})
+		return nil
+	})
+	return warnings, err
+}
+
 func classifySurface(path string) string {
 	switch {
 	case strings.HasPrefix(path, "docs/") || path == "README.md" || path == "AGENTS.md":
 		return "docs"
-	case strings.HasPrefix(path, "internal/runtime/prompt_defaults/"):
+	case strings.HasPrefix(path, "internal/runtime/prompt_defaults/") ||
+		strings.HasPrefix(path, "internal/runtime/textureprompts/"):
 		return "runtime-prompt"
 	case strings.HasSuffix(path, ".go"):
 		return "go"
