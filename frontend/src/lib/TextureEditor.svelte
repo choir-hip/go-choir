@@ -802,6 +802,14 @@
         error = '';
         saveStatus = synthStatusLabel();
         return;
+      case 'synth_progress':
+        if (event.loop_id) {
+          agentRunId = event.loop_id;
+        }
+        if (agentPending) {
+          saveStatus = hasAppAgentRevision() ? 'Continuing…' : synthStatusLabel();
+        }
+        return;
       case 'synth_completed':
         agentPending = false;
         agentRunId = '';

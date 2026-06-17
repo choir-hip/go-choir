@@ -1659,8 +1659,10 @@ func textureStreamEventFromRecord(rec types.EventRecord) (textureDocumentStreamE
 		Error:             strings.TrimSpace(payload["error"]),
 	}
 	switch rec.Kind {
-	case types.EventTextureAgentRevisionStarted, types.EventTextureAgentRevisionProgress:
+	case types.EventTextureAgentRevisionStarted:
 		event.Kind = "synth_started"
+	case types.EventTextureAgentRevisionProgress:
+		event.Kind = "synth_progress"
 	case types.EventTextureAgentRevisionCompleted:
 		event.Kind = "synth_completed"
 	case types.EventTextureAgentRevisionFailed:

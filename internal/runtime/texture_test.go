@@ -6902,6 +6902,24 @@ func TestTextureDocumentStreamEmitsHeadChangeAfterAgentRevision(t *testing.T) {
 	}
 }
 
+func TestTextureStreamEventMapsProgressSeparatelyFromStarted(t *testing.T) {
+	t.Parallel()
+	started, ok := textureStreamEventFromRecord(types.EventRecord{
+		Kind:    types.EventTextureAgentRevisionStarted,
+		Payload: json.RawMessage(`{"doc_id":"doc-1","loop_id":"run-1"}`),
+	})
+	if !ok || started.Kind != "synth_started" {
+		t.Fatalf("started event = %+v, ok=%v, want synth_started", started, ok)
+	}
+	progress, ok := textureStreamEventFromRecord(types.EventRecord{
+		Kind:    types.EventTextureAgentRevisionProgress,
+		Payload: json.RawMessage(`{"doc_id":"doc-1","loop_id":"run-1"}`),
+	})
+	if !ok || progress.Kind != "synth_progress" {
+		t.Fatalf("progress event = %+v, ok=%v, want synth_progress", progress, ok)
+	}
+}
+
 func TestTextureDocumentStreamEmitsHeadChangeAfterUserRevision(t *testing.T) {
 	t.Parallel()
 	h, s, _ := textureAPISetupWithRuntime(t)
