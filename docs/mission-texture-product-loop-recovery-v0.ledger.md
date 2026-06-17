@@ -576,3 +576,110 @@ trim keeps only run-memory retrieval.
 Next move: commit when owner requests, push, monitor CI/deploy, run deployed
 acceptance on `https://choir.news`, then reevaluate whether Texture should gain
 narrow evidence-read affordances for already-persisted researcher findings.
+
+## 2026-06-17 - Problem checkpoint: second manual QA falsification (V1-only + slow first paint + supervision cadence)
+
+Problem Documentation First. No code changed in this pass. Owner manual QA on
+`https://choir.news` prompt bar, prompt "What's going on with Anthropic and the
+USG".
+
+Observed (owner screenshots):
+
+- `V0` appears immediately (prompt as canonical V0 - the prior repair holds).
+- The window shows "Writing first draft..." with a researcher running
+  (`...called source_search`) and the document stays at `V0` for ~90 seconds.
+- Then a single `V1` appears with a complete ~600-word answer. No `V2+`. The
+  loop stops at one revision.
+
+This sharpens the reopened mission. V-item 9 already requires "V2+ from that
+evidence", but this QA adds two dimensions that the current variant does not
+name explicitly:
+
+1. Slow first paint. The user stares at `V0` for ~90s before any content. There
+   are no interim revisions while research streams. This is a UX failure on its
+   own, independent of final depth.
+2. Revision cadence is the supervision control plane. Owner intent: revisions
+   serve (a) interim results, (b) deep-research depth (a substantive prompt
+   should grow to many revisions / 3k+ words, not one chatbot answer), and (c)
+   supervising long-running super/coding-agent hierarchies - a fresh version
+   roughly every minute is how an owner watches an agent that runs for hours or
+   days. One-shot `V1` defeats all three.
+
+Read-only diagnosis (code, this pass):
+
+- Integrate-once cadence -> slow first paint. The first Texture run blocks on the
+  researcher's findings packet, then writes a single revision at the end of the
+  run. There is no eager/early checkpoint revision before research completes,
+  so time-to-first-content equals time-to-full-research (~90s here).
+- Deepening loop dies at `V1`. `textureprompts/overlays/run_system.yaml` line 15
+  enforces one write per run, then the run must spawn the next worker or end.
+  `reconcileTextureAgentWake` (texture_controller.go) only re-fires on new
+  pending worker updates addressed to `texture:<docID>` and returns early if a
+  loop is resident. If the first run does not reliably open the next research
+  round, no further updates arrive and there is no `V2`. So depth depends on the
+  model choosing to keep probing - which it is not doing despite explicit
+  prompts.
+- Prompted-but-not-happening. `textureprompts/overlays/run_system.yaml`
+  (27-36) and `textureprompts/texture.yaml` (72-75) already mandate
+  "checkpoint early... keep the probe-and-incorporate loop alive... open
+  additional spawn_agent probes... stop when marginal returns diminish." The
+  instructions exist; the deployed behavior under the active model
+  (deepseek-v4-flash policy in the M3 receipts) under-iterates to one revision.
+- Debounce is not the 90s cause. `DefaultTextureWakeDebounce` is 3s and
+  `scheduleTextureWorkerWake` is a resetting trailing timer; it coalesces
+  worker wakes, but the first paint delay is the first run's
+  research-then-write-once shape, not debounce.
+- Possible regression interaction to measure, not assume: the 2026-06-17
+  web_search breadth changes (gateway default 40, search-plane MinMergedResults
+  40 / MaxWaves 4, projection visible 40, runtime floor 40) broaden and slow
+  each search, which can increase latency-to-first-finding and therefore first
+  paint. This must be measured against pre-change latency before attributing.
+
+Belief state: V-item 9 (V2+) is necessary but insufficient. The mission should
+also require (a) an eager interim first revision before full research completes,
+(b) a forced deepening cadence (runtime-driven periodic/eager revision vs
+stronger model forcing - a harness-minimalism trade-off to decide with a
+conjecture delta before code), and (c) explicit doctrine that revision cadence
+is the agent-supervision control plane for long-running trajectories.
+
+Remaining error / next discriminator (read-only first): instrument the deployed
+loop for one substantive prompt and measure time-to-V1, researcher findings
+packet count, revision count, and whether Texture opens follow-up research. Then
+choose the fix approach and record the conjecture delta. Do not code a cadence
+forcing path before the prompt-vs-runtime decision is documented.
+
+### Measurement receipts (read-only probe, 2026-06-17)
+
+Probe: `scripts/texture_revision_cadence_probe.mjs` (product/public APIs only:
+`/api/prompt-bar`, `/api/texture/documents/*`, `/api/trace/trajectories/*`; no
+vmctl, no writes beyond the single owner prompt). Deployed staging commit
+`2b4c4a3c3d0370588832d4407fc6468104542a40` (deployed 2026-06-17T19:41Z). Prompt:
+"What's going on with Anthropic and the US government?". Submission
+`f0c321a3-e7ff-4bcb-adb9-e4637b87ccb1`, doc `15d89744-901a-4684-a28c-11e7c4cd5451`.
+
+- V0 (user prompt, 53 chars) at +0.3s. Prompt-as-V0 repair holds.
+- First appagent revision (V1, 2379 chars ~370 words) at **+60.1s**. No revision
+  of any kind between V0 and V1: confirmed slow first paint (~60s blank-except-V0).
+- **appagent revision count = 1.** Trajectory then `completed`, `live=false`.
+  Final head stayed at 2379 chars. No V2+.
+- Research that drove the single V1: 2 web_search + 2 source_search tool results,
+  **2 spawn_agent (researchers), 4 update_coagent findings packets**, 109 trace
+  moments, agent_count=3, delegation_count=1.
+- Smoking gun: 4 findings packets and 2 researcher spawns produced exactly 1
+  revision. Packets landing during the resident run are coalesced into one V1 (or
+  left unconsumed); `reconcileTextureAgentWake` returns early while a loop is
+  resident; the trajectory then completes with no re-wake. The cadence collapses
+  many evidence packets into one write.
+- Breadth-change isolation: search_attempt_count=12 vs search_success_count=4
+  (provider failures / rate limits, not per-search latency). The 60s first paint
+  is the first run's research-then-write-once shape, not clearly the 2026-06-17
+  web_search breadth change. (Whether the breadth changes are even in
+  `2b4c4a3c` is unconfirmed; flag, do not attribute.)
+
+Owner decision recorded for the fix (next pass, not yet coded): runtime-driven
+cadence - eager first revision before full research completes, a leading /
+max-interval flush instead of the resetting-trailing wake, and runtime re-wake
+to deepen until budget / marginal returns; keep "what to research" model-driven.
+This treats interim-state delivery and a revision-cadence floor as mechanical
+invariants (legitimately runtime), not semantic role choreography, consistent
+with the harness-minimalism boundary in AGENTS.md.

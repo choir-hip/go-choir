@@ -242,6 +242,12 @@ Minimum product-loop proof:
 ## Suggested Goal String
 
 ```text
+/goal Use Parallax on docs/mission-texture-product-loop-recovery-v0.md. Mission focus this pass is the Texture revision-cadence defect confirmed by the 2026-06-17 read-only measurement recorded in docs/mission-texture-product-loop-recovery-v0.ledger.md. Deployed staging 2b4c4a3c, prompt "What's going on with Anthropic and the US government?" (submission f0c321a3-e7ff-4bcb-adb9-e4637b87ccb1, doc 15d89744-901a-4684-a28c-11e7c4cd5451): V0 prompt is instant, but the first appagent revision (V1, ~2.4k chars) lands at +60s with nothing shown in between, and the loop stops at one revision even though 4 update_coagent findings packets and 2 researcher spawns arrived. Root cause is cadence in internal/runtime/texture_controller.go, not missing research and not the prompts (textureprompts already mandate deepening). First reconcile the contradiction that the bottom of this paradoc still says "settled" (commit 689267df claiming V2+/V3) while the top is open_handoff and live behavior on 2b4c4a3c is V1-only: either 2b4c4a3c regressed from 689267df or the prior V2+ proof was non-representative; document which before fixing. Owner-chosen fix is runtime-driven cadence, treating interim-state delivery and a revision-cadence floor as mechanical invariants (legitimately runtime, not semantic role choreography), while "what to research" stays model-driven: (1) change scheduleTextureWorkerWake from resetting-trailing debounce to leading + max-interval flush so the first revision lands right after the first findings packet (~target under 20s), not after all research; (2) on resident Texture-run completion, re-wake reconcileTextureAgentWake when pending worker updates remain so multiple findings packets become multiple revisions (one canonical write per run preserved); (3) keep the loop alive to deepen while researchers/super keep delivering, with a soft revision/budget cap, letting the model decide when marginal returns diminish via record_texture_decision. This same wake path already accepts super/cosuper messages, so it must also serve as the long-running-agent supervision cadence (a fresh revision roughly every interval). Do not encode semantic decision trees, prompt classifiers, or fixed role choreography in the cadence; do not add compatibility shims. Mutation class red: protected surfaces are Texture canonical writes, the wake/debounce cadence, worker-update consumption/pending bookkeeping, and Trace. Rollback is revert of the cadence change; old V=0 settlement is already revoked. Verify with focused internal/runtime tests for leading-flush + re-wake-on-pending, scripts/go-test-runtime-shards, then commit -> push origin main -> CI -> Node B deploy identity -> deployed proof on https://choir.news using scripts/texture_revision_cadence_probe.mjs showing first-paint well under the 60s baseline and multiple appagent revisions (V2+) that track the findings packets. Record receipts and a RunAcceptanceRecord at staging-smoke-level. Earlier reopen requirements remain background context below.
+```
+
+## Prior Goal String (earlier reopen, background context)
+
+```text
 /goal Use Parallax on docs/mission-texture-product-loop-recovery-v0.md. Reopen the Texture product-loop recovery mission from the 2026-06-16 manual QA falsification. Treat the prior V=0 settlement as revoked: the deployed product still renders the owner prompt as separate `PROMPT`/`intake_prompt` chrome, leaves prompt-bar-created `V0` blank, can stop at a generic `V1` without Texture-created researcher/super evidence, grants Texture an overbroad evidence/model-diagnostic tool bundle, and still carries parent/child run control surfaces. Owner override remains binding: hard cutover, no compatibility shims, no rollback protection, no old route/tool/app/schema aliases, no preserving fake/test/demo old-ontology state, and no parent/child control semantics. First document the problem, then delete/fix forward. Required repairs: prompt-bar user prompt is exact canonical Texture `V0`; delete `prompt_bar_instruction_revision`, `intake_prompt`, and prompt-band UI/tests; remove `patch_texture` and `rewrite_texture` from Texture terminal-tool successes while preserving one canonical write per run; split Texture's tool inventory so researcher-owned evidence and `verify_model_capability` are not exposed to Texture unless separately justified; replace parent/child live control APIs/schema/helpers/prompts/tests with trajectory/channel/work-item/requester-provenance coagent semantics; update tests to prove patch-then-delegate and same-turn write-plus-delegate paths, Texture-created researcher/super evidence returning to the same Texture, and V2+ from that evidence; verify with focused tests, `scripts/go-test-runtime-shards`, frontend build if touched, grep residue proof, CI/deploy identity, and deployed browser/product-path proof on https://choir.news. Fix forward and stop rather than adding compatibility.
 ```
 
@@ -289,14 +295,17 @@ invariants / qualities / domain ramp (I/Q/D):
   verification; then run staging browser proof against `https://choir.news`
   with a real prompt-bar submission and public product APIs.
 
-variant (ranking function) V: current V=5 after local repair of the reopened
-mission. The old V=0 claim proved some route/evidence behavior but accepted the
-wrong prompt-bar ontology: blank canonical `V0` plus separate prompt chrome. The
-active variant now descends only when the exact owner prompt is canonical `V0`,
-prompt-band/intake metadata is deleted, write tools no longer terminate Texture
-before delegation/decision, Texture's tool inventory is trimmed to its real
-authority, parent/child control semantics are removed from live runtime
-surfaces, and deployed browser/product-path proof succeeds.
+variant (ranking function) V: current V=6 after the 2026-06-17 cadence
+measurement reopened a dimension the prior reopen did not name. The old V=0 claim
+proved some route/evidence behavior but accepted the wrong prompt-bar ontology:
+blank canonical `V0` plus separate prompt chrome. The active variant now descends
+only when the exact owner prompt is canonical `V0`, prompt-band/intake metadata
+is deleted, write tools no longer terminate Texture before delegation/decision,
+Texture's tool inventory is trimmed to its real authority, parent/child control
+semantics are removed from live runtime surfaces, the deployed loop emits an
+eager first revision (first paint well under the 60s baseline) and multiple
+appagent revisions (V2+) that track findings packets rather than collapsing them
+into one write, and deployed browser/product-path proof succeeds.
 
 1. completed: document the no-compatibility owner override and
    cutover-before-repair order;
@@ -423,9 +432,34 @@ position / live conjectures / open edges:
   `super_requested`, and `worker_leased`, but remained blocked at
   `worker_delegated` with the worker still observed as running.
 
-next move: promote settlement evidence outward only where useful, then start a
-separate mission for the residual acceptance-model/live-worker axis. Do not
-reopen compatibility shims or old route aliases as a workaround.
+- C17 active (2026-06-17 measurement): the deployed loop on `2b4c4a3c` is
+  V1-only with ~60s first paint. A read-only product-path probe
+  (`scripts/texture_revision_cadence_probe.mjs`) showed V0 at +0.3s, the first
+  appagent revision at +60.1s, and exactly one appagent revision despite 4
+  `update_coagent` findings packets and 2 researcher spawns. The cadence
+  collapses many evidence packets into one write; `reconcileTextureAgentWake`
+  returns early while a loop is resident and the trajectory then completes with
+  no re-wake. This is a cadence defect, not missing research or weak prompts.
+- C18 active: revision cadence is the agent-supervision control plane. The same
+  wake path already accepts super/cosuper messages, so an eager + max-interval
+  cadence simultaneously fixes interim-results UX, deep-research depth, and
+  owner supervision of long-running super/coding-agent trajectories. The fix is
+  runtime-driven (mechanical interim-state delivery) while research choice stays
+  model-driven.
+- C19 contradiction to reconcile: the settlement block below claims this mission
+  is settled on `689267df` with V2+/V3 proved, but live behavior on `2b4c4a3c`
+  is V1-only. Either `2b4c4a3c` regressed from `689267df` or the prior V2+ proof
+  was non-representative (manual-seeded or a prompt that happened to trigger
+  multiple wakes). Resolve which before landing the cadence fix; the bottom
+  settlement is superseded by the open_handoff status and the 2026-06-17
+  evidence.
+
+next move: implement the runtime-driven cadence fix in
+`internal/runtime/texture_controller.go` (leading + max-interval flush; re-wake
+on resident-run completion when pending updates remain; deepening re-wake with a
+soft cap), reprove on staging with the cadence probe, and only then promote
+settlement evidence outward. Do not reopen compatibility shims or old route
+aliases as a workaround.
 
 ledger file: docs/mission-texture-product-loop-recovery-v0.ledger.md
 
@@ -440,7 +474,13 @@ learning state: the central learning is retained here until promoted outward:
 Texture mission acceptance must prove both ontology coherence and the artifact
 loop. Compatibility progress is not progress.
 
-settlement: settled for this mission. The live non-doc codebase has no
+settlement: SUPERSEDED by status open_handoff and the 2026-06-17 cadence
+evidence (see C17-C19 and the ledger measurement receipts). The deployed loop on
+`2b4c4a3c` is V1-only with ~60s first paint, which contradicts the V2+/V3 claim
+in the note below. Treat the following as the prior (now-revoked) settlement
+record, retained as evidence, not current truth.
+
+prior settlement (revoked): settled for this mission. The live non-doc codebase has no
 old-ontology runtime surfaces, pushed behavior commit
 `689267dff0cd561395dfb99a4285256716e35740` passed CI and deployed to Node B,
 staging health reports that commit, and deployed browser/product-path
