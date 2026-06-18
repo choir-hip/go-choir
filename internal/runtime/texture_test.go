@@ -199,7 +199,9 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 		}, nil
 	}
 	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+		if !strings.Contains(req.ToolChoice, "patch_texture") || !messagesContainText(req.Messages, "update_coagent records") {
+			return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+		}
 	}
 	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
@@ -666,6 +668,103 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 	}
 	if graphChild.State != types.RunRunning {
 		t.Fatalf("spawned-by child on other trajectory state = %s, want running", graphChild.State)
+	}
+}
+
+func TestTextureDeleteDocumentCancelsPendingActorTrajectory(t *testing.T) {
+	t.Parallel()
+	h, s, _ := textureAPISetupWithRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	trajectoryID := "traj-delete-cancels-texture"
+	doc := types.Document{
+		DocID:     "doc-delete-cancels-texture",
+		OwnerID:   "user-1",
+		Title:     "Delete Cancels Texture",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	textureRun := types.RunRecord{
+		RunID:        "run-delete-cancels-texture",
+		AgentID:      currentTextureAgentID(doc.DocID),
+		ChannelID:    doc.DocID,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-texture-test",
+		State:        types.RunRunning,
+		Prompt:       "Parked Texture revision actor.",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}
+	if err := s.CreateRun(ctx, textureRun); err != nil {
+		t.Fatalf("create texture run: %v", err)
+	}
+	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              "user-1",
+		TrajectoryID:         trajectoryID,
+		Objective:            "finish Texture revision before delete",
+		ObjectiveFingerprint: "fp-delete-cancels-texture",
+		CreatedByRunID:       textureRun.RunID,
+	})
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     textureRun.RunID,
+		OwnerID:   "user-1",
+		State:     "pending",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create pending mutation: %v", err)
+	}
+
+	req := textureRequest(t, http.MethodDelete, "/api/texture/documents/"+doc.DocID, nil)
+	w := httptest.NewRecorder()
+	h.HandleTextureDocument(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if _, err := s.GetDocument(ctx, doc.DocID, "user-1"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetDocument after delete err = %v, want ErrNotFound", err)
+	}
+	mutation, err := s.GetAgentMutationByRun(ctx, textureRun.RunID)
+	if err != nil {
+		t.Fatalf("get mutation: %v", err)
+	}
+	if mutation.State != "cancelled" {
+		t.Fatalf("mutation state = %q, want cancelled", mutation.State)
+	}
+	cancelledRun, err := s.GetRun(ctx, textureRun.RunID)
+	if err != nil {
+		t.Fatalf("get cancelled run: %v", err)
+	}
+	if cancelledRun.State != types.RunCancelled {
+		t.Fatalf("run state = %s, want cancelled", cancelledRun.State)
+	}
+	cancelledItem, err := s.GetWorkItem(ctx, "user-1", item.WorkItemID)
+	if err != nil {
+		t.Fatalf("get cancelled work item: %v", err)
+	}
+	if cancelledItem.Status != types.WorkItemCancelled {
+		t.Fatalf("work item status = %s, want cancelled", cancelledItem.Status)
+	}
+	trajectory, err := s.GetTrajectory(ctx, "user-1", trajectoryID)
+	if err != nil {
+		t.Fatalf("get trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("trajectory status = %s, want cancelled", trajectory.Status)
 	}
 }
 

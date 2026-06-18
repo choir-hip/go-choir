@@ -1132,7 +1132,7 @@ func scanTextureAgency(path, content string, info *docInfo) []warning {
 	if info.IsEvidence {
 		return nil
 	}
-	patterns := []string{"Texture workflow", "Texture pipeline", "Texture must call", "Texture always calls", "requiredContinuationAfterTextureEdit", "initialTextureToolChoice"}
+	patterns := []string{"Texture workflow", "Texture pipeline", "Texture must call", "Texture always calls", "requiredContinuationAfterTextureEdit", "initialTextureToolChoice", "WithInitialToolChoice"}
 	return scanLinePatterns("H3", path, content, patterns, "Texture agency may be collapsed into a fixed workflow", "preserve Texture as canonical document actor with authority to choose delegation")
 }
 

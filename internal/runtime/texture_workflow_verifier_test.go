@@ -22,6 +22,12 @@ import (
 func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 	t.Parallel()
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Moss habitats working document.\n\nInitial useful draft."))
+	provider.resultFunc = func(prompt string) string {
+		if strings.Contains(prompt, "update_coagent records") {
+			return textureReplaceAllResult("Moss habitats working document.\n\nInitial useful draft.\n\nIntegrated structured worker update.")
+		}
+		return textureReplaceAllResult("Moss habitats working document.\n\nInitial useful draft.")
+	}
 	h, _, rt := textureAPISetupWithProvider(t, provider, true)
 	ctx := context.Background()
 	ownerID := "user-1"
@@ -91,6 +97,8 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 			Name: "update_coagent",
 			Arguments: json.RawMessage(`{
 				"update_id":"moss-finding-1",
+				"agent_id":"texture:` + decision.DocID + `",
+				"channel_id":"` + decision.DocID + `",
 				"findings":["Moss prefers damp shade and steady humidity."],
 				"evidence":[{"kind":"web_page","source_uri":"https://example.test/moss","title":"Moss habitat","content":"Moss prefers damp shade and steady humidity."}],
 				"notes":["Use this as a scoped habitat claim."]
@@ -197,6 +205,12 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 	const ownerID = "user-1"
 	rng := rand.New(rand.NewSource(20260501))
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Stochastic ordering document.\n\nResearch and worker updates integrated."))
+	provider.resultFunc = func(prompt string) string {
+		if strings.Contains(prompt, "update_coagent records") {
+			return textureReplaceAllResult("Stochastic ordering document.\n\nResearch and worker updates integrated.\n\nLatest worker update consumed.")
+		}
+		return textureReplaceAllResult("Stochastic ordering document.\n\nResearch and worker updates integrated.")
+	}
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	ctx := context.Background()
 
@@ -277,6 +291,8 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
 					"update_id":"stochastic-finding-1",
+					"agent_id":"texture:` + decision.DocID + `",
+					"channel_id":"` + decision.DocID + `",
 					"findings":["The stochastic order still preserves durable causality."],
 					"evidence":[{"kind":"note","content":"seeded stochastic evidence"}]
 				}`),
@@ -340,6 +356,90 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 		RequireToolBackedWorkerRuns: true,
 	}); err != nil {
 		t.Fatalf("verify stochastic texture workflow: %v", err)
+	}
+}
+
+func TestTextureRevisionCausalityAllowsManyRevisionsFromOneLoop(t *testing.T) {
+	t.Parallel()
+	loopID := "texture-loop-n-to-one"
+	now := time.Now().UTC()
+	revisions := []types.Revision{
+		{
+			RevisionID:    "rev-v0",
+			DocID:         "doc-n-to-one",
+			OwnerID:       "user-1",
+			AuthorKind:    types.AuthorUser,
+			VersionNumber: 0,
+			Content:       "Original prompt.",
+			CreatedAt:     now,
+		},
+		{
+			RevisionID:       "rev-v1",
+			DocID:            "doc-n-to-one",
+			OwnerID:          "user-1",
+			ParentRevisionID: "rev-v0",
+			AuthorKind:       types.AuthorAppAgent,
+			VersionNumber:    1,
+			Content:          "Initial model-prior draft.",
+			CreatedAt:        now.Add(time.Second),
+			Metadata: mustMarshalJSON(map[string]any{
+				"source":  "patch_texture",
+				"loop_id": loopID,
+			}),
+		},
+		{
+			RevisionID:       "rev-v2",
+			DocID:            "doc-n-to-one",
+			OwnerID:          "user-1",
+			ParentRevisionID: "rev-v1",
+			AuthorKind:       types.AuthorAppAgent,
+			VersionNumber:    2,
+			Content:          "Grounded follow-on draft.",
+			CreatedAt:        now.Add(2 * time.Second),
+			Metadata: mustMarshalJSON(map[string]any{
+				"source":  "patch_texture",
+				"loop_id": loopID,
+				"worker_updates_consumed": []map[string]any{{
+					"seq": 1,
+				}},
+			}),
+		},
+	}
+	events := []types.EventRecord{
+		successfulTextureWriteEvent(loopID, "tool-v1", "rev-v1"),
+		successfulTextureWriteEvent(loopID, "tool-v2", "rev-v2"),
+	}
+	updates := []types.WorkerUpdateRecord{{
+		MessageSeq: 1,
+	}}
+	if err := verifyTextureRevisionCausality(revisions, events, updates, true); err != nil {
+		t.Fatalf("verifyTextureRevisionCausality rejected N:1 loop causality: %v", err)
+	}
+}
+
+func mustMarshalJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func successfulTextureWriteEvent(loopID, toolCallID, revisionID string) types.EventRecord {
+	output, _ := json.Marshal(map[string]any{
+		"revision_id": revisionID,
+	})
+	payload, _ := json.Marshal(map[string]any{
+		"tool":     "patch_texture",
+		"call_id":  toolCallID,
+		"is_error": false,
+		"output":   string(output),
+	})
+	return types.EventRecord{
+		EventID: "event-" + toolCallID,
+		RunID:   loopID,
+		Kind:    types.EventToolResult,
+		Payload: payload,
 	}
 }
 

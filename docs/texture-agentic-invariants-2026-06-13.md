@@ -74,10 +74,15 @@ ordinary ingress target for user or source prompts.
    explicit, narrow, and documented separately.
 
    Texture write tools must also not become premature run terminators. A
-   successful Texture write stores one canonical revision; it should not prevent
-   the same Texture run from making the next legitimate coagent decision, such
-   as opening researcher work, requesting super execution, recording an
-   off-document decision, requesting an email handoff, or ending intentionally.
+   successful Texture write stores a canonical revision; the same logical
+   `texture:<doc_id>` actor may store later canonical revisions in the same
+   physical run as new evidence or owner direction arrives. The verifier and
+   Trace evidence must therefore support N:1 loop-to-revision causality instead
+   of assuming one run equals one write. A write should not prevent the same
+   Texture run from making the next legitimate coagent decision, such as opening
+   researcher work, requesting super execution, recording an off-document
+   decision, requesting an email handoff, parking for later updates, or ending
+   intentionally.
 
 5. **Required tool choice is not policy.** Exact next-tool enforcement is
    allowed only for mechanical tool protocols whose second call is part of the
@@ -175,9 +180,20 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 - **Cold activations** prepend pending updates at activation start when the run
   was opened from an `update_coagent` wake (`request_source=update_coagent` or
   seeded `worker_update_ids` metadata).
+- **Parked resident activations** wait without provider calls until runtime
+  injects a typed update turn or an idle/budget boundary fires. Park-and-wait is
+  a role-uniform tool-loop primitive, not a Texture-only semantic branch.
+- **Rewarmed activations** resume the same logical actor from durable run memory
+  after process refresh/passivation. Provider-call and token spend carry forward
+  across the replacement activation; elapsed wall-clock budget across sleeps is
+  still an explicit open edge until separately proven.
 - Runtime must **not** traverse spawned-by / parent-run edges to decide who
   receives an update. Provenance fields (`RequestedByRunID`, `requested_by_run_id`)
   are audit-only.
+- Deleting a Texture document cancels the addressed `texture:<doc_id>` actor and
+  any pending Texture revision trajectory before removing the canonical document
+  rows. Deletion must not leave a parked actor or pending mutation able to write
+  a deleted document.
 
 ### One Texture coagent per article
 
@@ -208,6 +224,10 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 - coagent rewarm and resident-activation injection behavior;
 - Texture wake after researcher delivery produces a revision when the model
   patches.
+- document deletion cancels the pending or parked Texture actor before deleting
+  the document;
+- workflow verification accepts many appagent revisions from one Texture loop
+  when each revision has write-tool evidence and valid parent causality.
 
 ## Problem: Texture integrate wake is blind on turn 1 (2026-06-17)
 

@@ -1052,12 +1052,38 @@ func (h *APIHandler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if err := h.cancelTextureActorForDeletedDocument(r.Context(), docID, ownerID); err != nil {
+		log.Printf("texture api: cancel actor before deleting document %s: %v", docID, err)
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+
 	if err := h.rt.Store().DeleteDocument(r.Context(), docID, ownerID); err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
 
 	writeAPIJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *APIHandler) cancelTextureActorForDeletedDocument(ctx context.Context, docID, ownerID string) error {
+	mutation, err := h.pendingAgentMutationByDoc(ctx, docID, ownerID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return fmt.Errorf("load pending Texture actor: %w", err)
+	}
+	if mutation != nil {
+		if _, err := h.rt.CancelRunTrajectory(ctx, mutation.RunID, ownerID); err != nil {
+			return fmt.Errorf("cancel Texture actor trajectory: %w", err)
+		}
+		if err := h.rt.Store().CancelAgentMutation(ctx, mutation.RunID); err != nil {
+			return fmt.Errorf("mark Texture actor mutation cancelled: %w", err)
+		}
+		return nil
+	}
+	if err := h.rt.CancelAgent(ctx, currentTextureAgentID(docID), ownerID); err != nil && !strings.Contains(err.Error(), "agent not found:") {
+		return fmt.Errorf("cancel Texture actor: %w", err)
+	}
+	return nil
 }
 
 // HandleTextureRevisions handles POST and GET

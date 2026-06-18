@@ -145,6 +145,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if err != nil {
 		return report, fmt.Errorf("list worker updates: %w", err)
 	}
+	textureUpdates := workerUpdatesForTextureDoc(updates, doc.DocID)
 	if opts.RequireResearchFindings {
 		researchUpdateCount := 0
 		for _, update := range updates {
@@ -165,27 +166,32 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		guarantee("researchers emitted structured findings and evidence")
 	}
 	if opts.RequireWorkerUpdates {
-		if len(updates) == 0 {
-			return report, fmt.Errorf("missing structured worker updates")
-		}
+		workerUpdateCount := 0
 		for _, update := range updates {
-			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
-				return report, fmt.Errorf("worker update %s is not routed to Texture document %s", update.UpdateID, doc.DocID)
+			if update.Role == AgentProfileResearcher {
+				continue
 			}
+			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
+				continue
+			}
+			workerUpdateCount++
 			if len(update.Artifacts) == 0 && len(update.Tests) == 0 && len(update.Refs) == 0 && len(update.Proposals) == 0 && len(update.Findings) == 0 {
 				return report, fmt.Errorf("worker update %s has no structured result fields", update.UpdateID)
 			}
 		}
+		if workerUpdateCount == 0 {
+			return report, fmt.Errorf("missing structured worker updates")
+		}
 		guarantee("execution workers emitted structured artifacts/tests/results")
 	}
 	if opts.RequireArtifactWriteEvent {
-		if err := verifyArtifactWritesCoverWorkerUpdates(events, updates); err != nil {
+		if err := verifyArtifactWritesCoverWorkerUpdates(events, textureUpdates); err != nil {
 			return report, err
 		}
 		guarantee("artifact write result matches a structured worker artifact")
 	}
 	if opts.RequireVerificationCmdEvent {
-		if err := verifyBashCoversWorkerUpdateTests(events, updates); err != nil {
+		if err := verifyBashCoversWorkerUpdateTests(events, textureUpdates); err != nil {
 			return report, err
 		}
 		guarantee("verification command result matches structured worker tests")
@@ -195,11 +201,11 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if err != nil {
 		return report, fmt.Errorf("list Texture revisions: %w", err)
 	}
-	if err := verifyTextureRevisionCausality(revisions, events, updates, opts.RequireWorkerConsumption); err != nil {
+	if err := verifyTextureRevisionCausality(revisions, events, textureUpdates, opts.RequireWorkerConsumption); err != nil {
 		return report, err
 	}
 	guarantee("Texture revisions have valid causal parents")
-	guarantee("Texture appagent revisions were created through a Texture write tool")
+	guarantee("Texture appagent revisions support N:1 loop-to-revision causality through Texture write tools")
 	if opts.RequireWorkerConsumption {
 		guarantee("Texture consumed worker update message sequences in a later revision")
 	}
@@ -239,6 +245,16 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		}
 	}
 	return nil
+}
+
+func workerUpdatesForTextureDoc(updates []types.WorkerUpdateRecord, docID string) []types.WorkerUpdateRecord {
+	out := []types.WorkerUpdateRecord{}
+	for _, update := range updates {
+		if textureAgentIDMatchesDoc(update.TargetAgentID, docID) && update.ChannelID == docID && update.MessageSeq > 0 {
+			out = append(out, update)
+		}
+	}
+	return out
 }
 
 func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
