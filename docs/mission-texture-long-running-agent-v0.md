@@ -429,7 +429,7 @@ prompt-copy guard and multi-revision cadence on staging, but the earlier
 same-SHA no-V1 formal probe remains a stochastic live failure to preserve as
 residual risk rather than erase.
 
-Current local T3 partial construct: the generic tool loop now accepts a
+Current deployed T3 partial construct: the generic tool loop now accepts a
 role-uniform cumulative `ToolLoopBudget` with provider-call, input-token,
 output-token, total-token, and elapsed-time limits, emits Trace-visible budget
 configuration and exhaustion evidence, and returns a budget-exhausted error
@@ -440,6 +440,21 @@ actor-labeled budget (`texture:<docID>`) through the existing run setup
 token, and elapsed-time limits. This repairs only the bounded-cost/kill-switch
 slice of T3; it does not implement park-and-wait, no-billed idle blocking, or
 cross-passivation cumulative accounting.
+
+Staging proof after deploy of `f5884e08` supports this partial construct as
+non-regressing for the currently supported cadence slice. CI test/build jobs
+passed, including internal/runtime shards 0-3; the workflow concluded failure
+only because the known Node B deploy job failed. Public `/health` confirmed both
+proxy and sandbox deployed at
+`f5884e08977f74ed463a55a19e9ece3cd24dc06f` (`deployed_at`
+`2026-06-18T04:59:36Z`). The deployed cadence probe submitted
+`820581e2-ef7f-430f-80a5-5e148a3552d7` / doc
+`1e9bae65-6953-49c2-a95d-c75370e3e855`, observed appagent V1 at +23.508s
+(880 chars) and appagent V2 at +73.013s (1786 chars), and finished completed
+with `web_search=2`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
+`agent_count=3`, and `delegation_count=1`. This does not settle the full mission:
+the probe produced one V2, not an hours/days parked actor stream or a
+RunAcceptanceRecord-backed lifecycle proof.
 
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive, and the separate cold wake/reconcile scaffolding remains
@@ -558,11 +573,10 @@ position / live conjectures / open edges:
   repeated deployed probes should quantify whether no-V1 is rare stochastic model
   behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
 
-next move: commit and deploy the T3 budget construct, then run the deployed
-cadence probe to confirm the conservative Texture budget does not regress the
-currently supported V1/V2/V3 staging branch. After that, continue T3 by adding
-the actual park-and-wait/no-billed-idle primitive; do not claim settlement until
-T4-T8 are also proven and a RunAcceptanceRecord exists.
+next move: continue T3 by adding the actual role-uniform park-and-wait /
+no-billed-idle primitive and deciding how the new budget becomes cumulative
+across sleep/rewarm. Do not claim settlement until T4-T8 are also proven and a
+RunAcceptanceRecord exists.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

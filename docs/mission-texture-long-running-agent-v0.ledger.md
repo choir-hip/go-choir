@@ -1139,3 +1139,58 @@ Open blockers / remaining error:
 Rollback ref: revert this T3 budget construct commit if staging shows the
 conservative Texture budget regresses first paint, V2+ update consumption, or
 long-running provider fallback behavior.
+
+## 2026-06-18 - Staging proof for T3 budget substrate (red evidence, green record)
+
+Claim under test: deployed `f5884e08977f74ed463a55a19e9ece3cd24dc06f` preserves
+the currently supported fast V1 + V2 cadence while adding the conservative
+Texture actor budget.
+
+Move: landing proof. Pushed `f5884e08`, monitored GitHub Actions, confirmed
+staging health identity, and ran the public product-path cadence probe against
+`https://choir.news`.
+
+Expected ΔV: prove the budget construct does not regress the staging cadence
+slice and record that T3 remains incomplete until park-and-wait exists. Actual
+ΔV: partial T3 supported on staging. Budget enforcement is deployed and the
+cadence probe still reaches fast V1 and one grounded follow-on V2. Full mission
+settlement remains open.
+
+Receipts:
+
+- Commit: `f5884e08977f74ed463a55a19e9ece3cd24dc06f`.
+- GitHub Actions: Docs Truth Check #27737645943 succeeded; FlakeHub
+  #27737645941 succeeded; CI #27737645928 concluded failure only because
+  `Deploy to Staging (Node B)` job #82058203814 failed. CI jobs for TLA+,
+  Go vet/build, deploy-impact detection, docs, runtime shards 0, 1, 2, and 3,
+  non-runtime Go tests, integration smoke, and the aggregate Go vet/test/build
+  job all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `f5884e08977f74ed463a55a19e9ece3cd24dc06f`,
+  `deployed_at=2026-06-18T04:59:36Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Probe submission / trajectory: `820581e2-ef7f-430f-80a5-5e148a3552d7`.
+- Texture doc: `1e9bae65-6953-49c2-a95d-c75370e3e855`.
+- Revision timing: V0 user at +0.291s, 53 chars; appagent V1 at +23.508s,
+  880 chars; appagent V2 at +73.013s, 1786 chars.
+- Probe counts: `appagent_revision_count=2`, `total_revision_count=3`,
+  `first_paint_ms=23508`, `final_head_chars=1786`.
+- Research / trajectory: `web_search=2`, `source_search=2`, `spawn_agent=2`,
+  `update_coagent=2`, `moment_count=114`, `search_attempt_count=12`,
+  `search_success_count=4`, `agent_count=3`, `delegation_count=1`, final
+  trajectory `state=completed`.
+
+Result: the conservative Texture actor budget is deployed and did not regress
+the fast useful V1 plus grounded V2 product path. Do not overclaim: this probe
+does not prove many V2+ revisions, park-and-wait, no-billed idle blocking,
+one-resident-run lifecycle, sleep/resume, cancellation, verifier N:1, or a
+RunAcceptanceRecord.
+
+Next move: continue T3 with the actual role-uniform park-and-wait primitive and
+cumulative budget accounting across sleep/rewarm, then resume the T4-T8 ramp.
+
+Rollback ref: revert `f5884e08` if future staging evidence shows the budget
+causes premature Texture failure, provider fallback regressions, or blocked
+multi-revision updates.
