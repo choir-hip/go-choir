@@ -413,6 +413,22 @@ trajectory `state=failed`. This proves the prompt-copy guard prevented the bad
 stored V1, but the live provider did not recover into a useful V1 before the run
 failed.
 
+Follow-up product-path evidence on the same deployed SHA split that branch
+instead of confirming deterministic failure. A focused diagnostic submission
+`534bdb39-b582-43d8-9fc9-8a961b8a4fbd` / doc
+`83a9d899-e062-4f49-9052-2f8f15a112f8` produced an honest V1
+(`model_prior_interim=true`, `revision_grounding=model_prior`,
+`texture_version_stage=interim`) with 602 chars, then consumed researcher
+updates into V2 and V3, finishing completed. A repeat formal cadence probe
+submitted `ca430c89-b259-453b-900c-2863c0e38567` / doc
+`37277fa3-7843-41ba-9e69-b6b6e16c37fb` and observed V1 at +23.795s
+(569 chars), V2 at +49.844s (859 chars), and V3 at +65.631s (1509 chars),
+with trajectory `state=completed`, `appagent_revision_count=3`,
+`web_search=4`, `spawn_agent=2`, and `update_coagent=4`. This supports the
+prompt-copy guard and multi-revision cadence on staging, but the earlier
+same-SHA no-V1 formal probe remains a stochastic live failure to preserve as
+residual risk rather than erase.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -479,10 +495,11 @@ position / live conjectures / open edges:
   stored a 53-char prompt-sized V1 only at +49.350s before deepening at V2, so
   first paint was neither clearly under the old ~49s baseline nor useful as a
   from-weights draft. Locally, identical prompt-only model-prior writes are now
-  rejected and retried before storage; staging `84038c4a` proved that this
-  prevents bad storage but does not make the live provider recover. The active
-  branch is again no-V1/no-research, now after a failed initial write rather than
-  a stored prompt-copy V1.
+  rejected and retried before storage; staging `84038c4a` proved both branches:
+  one formal probe failed with no appagent V1, while a focused diagnostic and a
+  repeat formal probe recovered into a useful V1 and multiple V2+ revisions. The
+  active residual risk is stochastic first-write recovery, not the deterministic
+  no-op storage branch.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -527,16 +544,17 @@ position / live conjectures / open edges:
   is the initial no-worker exact-write branch: a prompt-sized no-op V1 should be
   rejected or retried without delaying the first useful from-weights draft into
   the old first-findings window. The current local guard moved that branch from
-  "stored no-op V1" to "failed no-appagent V1" on staging. The next
-  discriminator is the exact Trace/tool-result branch: whether the live model
-  exhausted retries with unchanged/invalid patches, whether the retry reminder
-  lacks enough document context, or whether another failure path terminates the
-  run before the useful draft attempt.
+  "stored no-op V1" to a split live result: one failed no-appagent V1 branch and
+  multiple successful useful-V1 branches. The next discriminator is stability:
+  repeated deployed probes should quantify whether no-V1 is rare stochastic model
+  behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
 
-next move: run a metadata/tool-result focused diagnostic on `84038c4a` for the
-no-V1 branch. The next repair must preserve the no-prompt-copy invariant while
-making the live initial write recover into a useful draft, not by allowing
-unchanged prompt copies back into canonical Texture history.
+next move: update the ledger with the successful same-SHA diagnostics, then
+either run a small repeated-probe stability sample or move to the next ramp item
+with the no-V1 stochastic branch named as residual risk. Do not claim settlement:
+T3-T8 remain open, and even T2/T8 is supported only for cadence, not for
+long-running actor lifecycle, sleep/resume, budget, cancellation, verifier, or
+RunAcceptanceRecord.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -589,7 +607,11 @@ without erasing the route that now reaches substantive V2. The current local
 repair applies the same content-equality principle to prompt-only
 model-prior/interim writes and proves exact-tool retry can recover into a useful
 draft locally. Staging `84038c4a` disproved live recovery: the bad V1 was not
-stored, but no useful V1 or evidence path appeared before trajectory failure.
+stored in one formal probe, but no useful V1 or evidence path appeared before
+trajectory failure. A focused diagnostic and repeat formal probe on the same SHA
+then recovered into useful V1 + multiple V2+ revisions. The learning is now that
+the guard is structurally right but first-write recovery remains probabilistic on
+the live provider path.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

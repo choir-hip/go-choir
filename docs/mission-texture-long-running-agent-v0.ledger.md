@@ -1030,3 +1030,58 @@ Rollback ref: keep `84038c4a` until the diagnostic proves it blocks all
 recoverable initial drafts; it protects canonical history from prompt-copy V1s.
 Revert only if the next repair cannot preserve that invariant while restoring
 first paint.
+
+## 2026-06-18 - Same-SHA diagnostic proves useful V1 and V2+ branch (red evidence, green record)
+
+Claim under test: the `84038c4a` no-V1 result is deterministic live failure
+rather than a stochastic branch after rejected prompt-copy writes.
+
+Move: ran a focused product-path diagnostic and then reran the formal cadence
+probe against the same deployed SHA.
+
+Expected ΔV: classify the no-V1 branch by Trace/tool-result evidence. Actual
+ΔV: the branch split. The same deployed build can recover into useful V1 and
+multiple V2+ revisions; the earlier no-V1 result is residual stochastic risk,
+not deterministic failure of the guard.
+
+Receipts:
+
+- Deployed identity during both probes: proxy and sandbox
+  `84038c4ae972c0aa3a32b18b6b227e763a9be777`.
+- Focused diagnostic submission / trajectory:
+  `534bdb39-b582-43d8-9fc9-8a961b8a4fbd`.
+- Focused diagnostic doc: `83a9d899-e062-4f49-9052-2f8f15a112f8`.
+- Focused diagnostic revisions: V0 user 53 chars; V1 appagent 602 chars with
+  `model_prior_interim=true`, `revision_grounding=model_prior`,
+  `texture_version_stage=interim`, and no worker updates consumed; V2 appagent
+  695 chars consuming researcher seq 1; V3 appagent 2728 chars consuming
+  researcher seq 2. Trajectory completed with `agent_count=3`,
+  `delegation_count=1`, `moment_count=186`, `search_attempt_count=12`,
+  `search_success_count=4`.
+- Repeat formal probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Repeat formal probe submission / trajectory:
+  `ca430c89-b259-453b-900c-2863c0e38567`.
+- Repeat formal probe doc: `37277fa3-7843-41ba-9e69-b6b6e16c37fb`.
+- Repeat formal probe revisions: V0 user at +0.330s, 53 chars; V1 appagent at
+  +23.795s, 569 chars; V2 appagent at +49.844s, 859 chars; V3 appagent at
+  +65.631s, 1509 chars.
+- Repeat formal probe counts: `appagent_revision_count=3`,
+  `first_paint_ms=23795`, `total_revision_count=4`, `final_head_chars=1509`,
+  `web_search=4`, `source_search=0`, `spawn_agent=2`, `update_coagent=4`,
+  `moment_count=165`, final trajectory `state=completed`.
+
+Result: `84038c4a` supports the fast useful V1 + multi-revision V2+ cadence on
+staging, but not deterministically. The no-prompt-copy invariant holds in the
+successful branch, and the same deployed product can deepen across multiple
+canonical appagent revisions as researcher updates arrive. The earlier
+`e83758bf-5b54-44a7-8838-3c4e686a8b30` no-V1 failure remains a residual
+first-write recovery risk.
+
+Next move: either run a small repeated-probe stability sample before another
+runtime repair, or proceed to the next ramp item while naming stochastic no-V1 as
+residual risk. Do not claim mission settlement; T3-T8 remain open and no
+RunAcceptanceRecord should claim staging-smoke-level for the full mission yet.
+
+Rollback ref: keep `84038c4a`; the successful same-SHA branch proves the guard
+does not inherently block useful first drafts or V2+ cadence.
