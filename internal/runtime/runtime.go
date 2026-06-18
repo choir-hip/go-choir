@@ -1622,6 +1622,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
+		toolLoopOptions = append(toolLoopOptions, WithToolLoopBudget(textureActorToolLoopBudget(rec)))
 		// A canonical write (patch_texture/rewrite_texture) must not terminate the
 		// Texture run. The same logical Texture actor may write an immediate draft,
 		// receive warm coagent packets, and write deeper revisions before it ends or
@@ -2228,6 +2229,51 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 		return ""
 	}
 	return "function:patch_texture"
+}
+
+const (
+	defaultTextureActorMaxProviderCalls = 80
+	defaultTextureActorMaxTotalTokens   = 1200000
+	defaultTextureActorMaxElapsed       = 45 * time.Minute
+)
+
+func textureActorToolLoopBudget(rec *types.RunRecord) ToolLoopBudget {
+	docID := ""
+	if rec != nil {
+		docID = strings.TrimSpace(firstNonEmpty(
+			metadataStringValue(rec.Metadata, "doc_id"),
+			rec.ChannelID,
+		))
+	}
+	label := "texture"
+	if docID != "" {
+		label = "texture:" + docID
+	}
+	budget := ToolLoopBudget{
+		Label:            label,
+		MaxProviderCalls: defaultTextureActorMaxProviderCalls,
+		MaxTotalTokens:   defaultTextureActorMaxTotalTokens,
+		MaxElapsed:       defaultTextureActorMaxElapsed,
+	}
+	if rec == nil {
+		return budget
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_max_provider_calls"); value > 0 {
+		budget.MaxProviderCalls = value
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_max_input_tokens"); value > 0 {
+		budget.MaxInputTokens = value
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_max_output_tokens"); value > 0 {
+		budget.MaxOutputTokens = value
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_max_total_tokens"); value > 0 {
+		budget.MaxTotalTokens = value
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_max_elapsed_seconds"); value > 0 {
+		budget.MaxElapsed = time.Duration(value) * time.Second
+	}
+	return budget
 }
 
 func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLoopCompletionGuardFunc {

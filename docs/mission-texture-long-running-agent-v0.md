@@ -429,19 +429,28 @@ prompt-copy guard and multi-revision cadence on staging, but the earlier
 same-SHA no-V1 formal probe remains a stochastic live failure to preserve as
 residual risk rather than erase.
 
+Current local T3 partial construct: the generic tool loop now accepts a
+role-uniform cumulative `ToolLoopBudget` with provider-call, input-token,
+output-token, total-token, and elapsed-time limits, emits Trace-visible budget
+configuration and exhaustion evidence, and returns a budget-exhausted error
+instead of falling through to the bare 200-iteration ceiling
+(`internal/runtime/toolloop.go`). Texture revision runs attach a conservative
+actor-labeled budget (`texture:<docID>`) through the existing run setup
+(`internal/runtime/runtime.go`), with metadata overrides for provider-call,
+token, and elapsed-time limits. This repairs only the bounded-cost/kill-switch
+slice of T3; it does not implement park-and-wait, no-billed idle blocking, or
+cross-passivation cumulative accounting.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
-park-and-wait primitive or cumulative per-actor budget; the tool loop is still
-bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
-The separate cold wake/reconcile scaffolding remains
-(`internal/runtime/texture_controller.go:24-90`), so this construct proves
-multi-revision capability inside a run but does not yet make
-`texture:<docID>` a single parked resident actor. Restart still passivates
-Texture revision runs by marking pending mutations stale
-(`internal/runtime/runtime.go:1261-1302`), document deletion still deletes the
-document without cancelling the actor (`internal/runtime/texture.go:1048-1060`),
-and the workflow verifier still checks revision causality without proving the
-new one-run-to-many-revisions lifecycle end to end
-(`internal/runtime/texture_workflow_verifier.go:527-593`).
+park-and-wait primitive, and the separate cold wake/reconcile scaffolding remains
+(`internal/runtime/texture_controller.go:24-90`), so this construct proves a
+bounded resident-run substrate but does not yet make `texture:<docID>` a single
+parked resident actor. Restart still passivates Texture revision runs by marking
+pending mutations stale (`internal/runtime/runtime.go:1261-1302`), document
+deletion still deletes the document without cancelling the actor
+(`internal/runtime/texture.go:1048-1060`), and the workflow verifier still
+checks revision causality without proving the new one-run-to-many-revisions
+lifecycle end to end (`internal/runtime/texture_workflow_verifier.go:527-593`).
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -549,12 +558,11 @@ position / live conjectures / open edges:
   repeated deployed probes should quantify whether no-V1 is rare stochastic model
   behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
 
-next move: update the ledger with the successful same-SHA diagnostics, then
-either run a small repeated-probe stability sample or move to the next ramp item
-with the no-V1 stochastic branch named as residual risk. Do not claim settlement:
-T3-T8 remain open, and even T2/T8 is supported only for cadence, not for
-long-running actor lifecycle, sleep/resume, budget, cancellation, verifier, or
-RunAcceptanceRecord.
+next move: commit and deploy the T3 budget construct, then run the deployed
+cadence probe to confirm the conservative Texture budget does not regress the
+currently supported V1/V2/V3 staging branch. After that, continue T3 by adding
+the actual park-and-wait/no-billed-idle primitive; do not claim settlement until
+T4-T8 are also proven and a RunAcceptanceRecord exists.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

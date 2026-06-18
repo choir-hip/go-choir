@@ -132,6 +132,18 @@ type ToolLoopCompletionGuardResult struct {
 
 type ToolLoopCompletionGuardFunc func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error)
 
+// ToolLoopBudget is a cumulative kill switch for one tool-loop activation. It is
+// intentionally role-neutral: callers attach policy, while RunToolLoop enforces
+// provider-call, token, and elapsed-time limits uniformly.
+type ToolLoopBudget struct {
+	Label            string
+	MaxProviderCalls int
+	MaxInputTokens   int
+	MaxOutputTokens  int
+	MaxTotalTokens   int
+	MaxElapsed       time.Duration
+}
+
 type toolLoopOptions struct {
 	memoryHooks                   ToolLoopMemoryHooks
 	llmConfig                     LLMSelection
@@ -139,6 +151,7 @@ type toolLoopOptions struct {
 	initialToolChoice             string
 	terminalTools                 map[string]bool
 	completionGuard               ToolLoopCompletionGuardFunc
+	budget                        ToolLoopBudget
 }
 
 type pendingRequiredTool struct {
@@ -227,6 +240,15 @@ func WithCompletionGuard(guard ToolLoopCompletionGuardFunc) ToolLoopOption {
 	}
 }
 
+// WithToolLoopBudget applies cumulative loop limits. Zero-valued fields are
+// unbounded for that dimension; at least one positive field enables the budget.
+func WithToolLoopBudget(budget ToolLoopBudget) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		budget.Label = strings.TrimSpace(budget.Label)
+		opts.budget = budget
+	}
+}
+
 // maxToolLoopIterations prevents infinite tool-calling loops. If the LLM
 // keeps requesting tool use without reaching an end_turn, we bail out
 // after this many iterations. This is a temporary stability ceiling while
@@ -278,6 +300,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	var maxTokenContinuationAttempts int
 	var completionGuardAttempts int
 	var partialTextFragments []string
+	loopStartedAt := time.Now()
 
 	appendMessage := func(role string, msg json.RawMessage) error {
 		messages = append(messages, msg)
@@ -360,6 +383,10 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 
 	for i := 0; i < maxToolLoopIterations; i++ {
+		if err := checkToolLoopBudgetBeforeProvider(options.budget, i, loopStartedAt); err != nil {
+			emitToolLoopBudgetExhausted(emit, options.budget, i, totalUsage, err)
+			return "", totalUsage, err
+		}
 		if options.memoryHooks.BeforeProviderCall != nil {
 			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
 			if err != nil {
@@ -425,6 +452,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 				"model_policy":                         "run_metadata",
 				"provider_precondition_fallback_count": len(options.providerPreconditionFallbacks),
 				"provider_precondition_fallback_index": preconditionFallbackIndex,
+				"tool_loop_budget":                     toolLoopBudgetPayload(options.budget),
 			})
 			emit(types.EventRunProgress, "provider_call", preCallPayload)
 		}
@@ -522,6 +550,10 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		// Accumulate token usage.
 		totalUsage.InputTokens += resp.Usage.InputTokens
 		totalUsage.OutputTokens += resp.Usage.OutputTokens
+		if err := checkToolLoopBudgetAfterProvider(options.budget, totalUsage); err != nil {
+			emitToolLoopBudgetExhausted(emit, options.budget, i+1, totalUsage, err)
+			return "", totalUsage, err
+		}
 
 		// Emit progress event for this iteration.
 		progressPayload, _ := json.Marshal(map[string]any{
@@ -861,6 +893,94 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 
 	return "", totalUsage, fmt.Errorf("tool loop: exceeded %d iterations without end_turn", maxToolLoopIterations)
+}
+
+func (budget ToolLoopBudget) active() bool {
+	return budget.MaxProviderCalls > 0 ||
+		budget.MaxInputTokens > 0 ||
+		budget.MaxOutputTokens > 0 ||
+		budget.MaxTotalTokens > 0 ||
+		budget.MaxElapsed > 0
+}
+
+func toolLoopBudgetLabel(budget ToolLoopBudget) string {
+	if label := strings.TrimSpace(budget.Label); label != "" {
+		return label
+	}
+	return "tool_loop"
+}
+
+func checkToolLoopBudgetBeforeProvider(budget ToolLoopBudget, providerCalls int, startedAt time.Time) error {
+	if !budget.active() {
+		return nil
+	}
+	label := toolLoopBudgetLabel(budget)
+	if budget.MaxProviderCalls > 0 && providerCalls >= budget.MaxProviderCalls {
+		return fmt.Errorf("tool loop budget %q exhausted: provider calls %d reached max %d", label, providerCalls, budget.MaxProviderCalls)
+	}
+	if budget.MaxElapsed > 0 && time.Since(startedAt) >= budget.MaxElapsed {
+		return fmt.Errorf("tool loop budget %q exhausted: elapsed time reached max %s", label, budget.MaxElapsed)
+	}
+	return nil
+}
+
+func checkToolLoopBudgetAfterProvider(budget ToolLoopBudget, usage TokenUsage) error {
+	if !budget.active() {
+		return nil
+	}
+	label := toolLoopBudgetLabel(budget)
+	if budget.MaxInputTokens > 0 && usage.InputTokens > budget.MaxInputTokens {
+		return fmt.Errorf("tool loop budget %q exhausted: input tokens %d exceeded max %d", label, usage.InputTokens, budget.MaxInputTokens)
+	}
+	if budget.MaxOutputTokens > 0 && usage.OutputTokens > budget.MaxOutputTokens {
+		return fmt.Errorf("tool loop budget %q exhausted: output tokens %d exceeded max %d", label, usage.OutputTokens, budget.MaxOutputTokens)
+	}
+	total := usage.InputTokens + usage.OutputTokens
+	if budget.MaxTotalTokens > 0 && total > budget.MaxTotalTokens {
+		return fmt.Errorf("tool loop budget %q exhausted: total tokens %d exceeded max %d", label, total, budget.MaxTotalTokens)
+	}
+	return nil
+}
+
+func emitToolLoopBudgetExhausted(emit EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage, cause error) {
+	if emit == nil {
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"reason":         "tool_loop_budget_exhausted",
+		"error":          cause.Error(),
+		"provider_calls": providerCalls,
+		"input_tokens":   usage.InputTokens,
+		"output_tokens":  usage.OutputTokens,
+		"total_tokens":   usage.InputTokens + usage.OutputTokens,
+		"budget":         toolLoopBudgetPayload(budget),
+	})
+	emit(types.EventRunProgress, "tool_loop_budget", payload)
+}
+
+func toolLoopBudgetPayload(budget ToolLoopBudget) map[string]any {
+	payload := map[string]any{
+		"active": budget.active(),
+	}
+	if label := strings.TrimSpace(budget.Label); label != "" {
+		payload["label"] = label
+	}
+	if budget.MaxProviderCalls > 0 {
+		payload["max_provider_calls"] = budget.MaxProviderCalls
+	}
+	if budget.MaxInputTokens > 0 {
+		payload["max_input_tokens"] = budget.MaxInputTokens
+	}
+	if budget.MaxOutputTokens > 0 {
+		payload["max_output_tokens"] = budget.MaxOutputTokens
+	}
+	if budget.MaxTotalTokens > 0 {
+		payload["max_total_tokens"] = budget.MaxTotalTokens
+	}
+	if budget.MaxElapsed > 0 {
+		payload["max_elapsed_ms"] = budget.MaxElapsed.Milliseconds()
+	}
+	return payload
 }
 
 func requiredToolCalled(required *pendingRequiredTool, calls []types.ToolCall) bool {

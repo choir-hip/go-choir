@@ -1085,3 +1085,57 @@ RunAcceptanceRecord should claim staging-smoke-level for the full mission yet.
 
 Rollback ref: keep `84038c4a`; the successful same-SHA branch proves the guard
 does not inherently block useful first drafts or V2+ cadence.
+
+## 2026-06-18 - Local T3 tool-loop budget substrate (red construct)
+
+Claim under test: the T3 bounded-cost slice can descend before full
+park-and-wait by replacing Texture's inherited bare tool-loop ceiling with a
+role-uniform cumulative loop budget and Trace-visible kill switch.
+
+Move: construct. Added `ToolLoopBudget` to the generic `RunToolLoop` option
+surface, enforcing provider-call, input-token, output-token, total-token, and
+elapsed-time limits for any caller. The loop now emits the configured budget in
+`provider_call` progress payloads and emits `tool_loop_budget` progress evidence
+when a budget is exhausted. Texture revision runs attach a conservative
+actor-labeled budget (`texture:<docID>`) through the existing runtime run setup,
+with metadata overrides for provider-call, token, and elapsed limits.
+
+Expected ΔV: repair the "bare maxToolLoopIterations only" part of T3 without
+claiming park-and-wait, one-resident lifecycle, or passivation-as-sleep. Actual
+ΔV: partial T3 descent. There is now a uniform budget primitive and Texture uses
+it, but parked no-billed idle waits and cross-passivation cumulative accounting
+remain open.
+
+Receipts:
+
+- `internal/runtime/toolloop.go` defines `ToolLoopBudget`, `WithToolLoopBudget`,
+  before-provider provider-call/elapsed checks, after-provider cumulative token
+  checks, and `tool_loop_budget` evidence emission.
+- `internal/runtime/runtime.go` wires `textureActorToolLoopBudget` into Texture
+  revision runs next to the existing initial-tool and completion-guard options.
+- `internal/runtime/texture_prompt_unit_test.go` proves default Texture actor
+  budget labels and metadata overrides.
+- `internal/runtime/toolloop_test.go` proves provider-call budget exhaustion
+  stops after two provider calls and cumulative token exhaustion stops before
+  returning a final answer.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopBudgetLimitsProviderCalls|TestRunToolLoopBudgetLimitsCumulativeTokens|TestRunToolLoopMaxIterations|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestInitialTextureToolChoiceRequiresPatchBeforeContinuation' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunToolLoopBudgetLimitsProviderCalls|TestRunToolLoopBudgetLimitsCumulativeTokens|TestRunToolLoopMaxIterations|TestRunToolLoopCompletionGuardRetriesEndTurn|TestBuildAppagentRevisionMetadataMarksUserPromptArticleShapeAsInterim|TestBuildAppagentRevisionMetadataPreservesDurableKeys|TestProcessorAndReconcilerProfilesDelegateToTextureOnly|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestInitialTextureRevisionRejectsNoOpPromptCopy|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+
+Open blockers / remaining error:
+
+- T3 is not complete: there is still no park-and-wait primitive that blocks with
+  no billed provider calls until a packet/signal or idle deadline, and the new
+  budget is per activation rather than cumulative across passivation/rewarm.
+- T4 remains open: `texture_controller.go` still owns wake/reconcile scaffolding
+  instead of one parked resident `texture:<docID>` actor.
+- T5-T8 remain open: sleep/resume semantics, doc-delete cancellation,
+  N:1 verifier lifecycle proof, deployed proof, and RunAcceptanceRecord are not
+  yet satisfied.
+
+Rollback ref: revert this T3 budget construct commit if staging shows the
+conservative Texture budget regresses first paint, V2+ update consumption, or
+long-running provider fallback behavior.

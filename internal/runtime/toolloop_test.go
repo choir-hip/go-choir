@@ -2455,6 +2455,105 @@ func TestRunToolLoopMaxIterations(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name: "loop_tool",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return "result", nil
+		},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{ID: "call-loop", Name: "loop_tool", Arguments: json.RawMessage(`{}`)},
+			},
+			Usage: TokenUsage{InputTokens: 10, OutputTokens: 5},
+		},
+	)
+	var budgetEvents int
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunProgress && phase == "tool_loop_budget" {
+			budgetEvents++
+			var fields map[string]any
+			if err := json.Unmarshal(payload, &fields); err != nil {
+				t.Fatalf("budget payload: %v", err)
+			}
+			if fields["provider_calls"] != float64(2) {
+				t.Fatalf("provider_calls = %v, want 2", fields["provider_calls"])
+			}
+		}
+	}
+
+	_, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
+		"You are helpful.",
+		4096,
+		emit,
+		nil,
+		WithToolLoopBudget(ToolLoopBudget{Label: "test-budget", MaxProviderCalls: 2}),
+	)
+	if err == nil || !strings.Contains(err.Error(), `tool loop budget "test-budget" exhausted`) {
+		t.Fatalf("error = %v, want budget exhaustion", err)
+	}
+	if provider.CallCount() != 2 {
+		t.Fatalf("provider calls = %d, want 2", provider.CallCount())
+	}
+	if usage.InputTokens != 20 || usage.OutputTokens != 10 {
+		t.Fatalf("usage = %+v, want two accumulated responses", usage)
+	}
+	if budgetEvents != 1 {
+		t.Fatalf("budget events = %d, want 1", budgetEvents)
+	}
+}
+
+func TestRunToolLoopBudgetLimitsCumulativeTokens(t *testing.T) {
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "done",
+			Usage:      TokenUsage{InputTokens: 40, OutputTokens: 20},
+			Model:      "test-model",
+		},
+	)
+	var budgetEvents int
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunProgress && phase == "tool_loop_budget" {
+			budgetEvents++
+		}
+	}
+
+	text, usage, err := RunToolLoop(
+		context.Background(),
+		provider,
+		nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.",
+		4096,
+		emit,
+		nil,
+		WithToolLoopBudget(ToolLoopBudget{Label: "token-budget", MaxTotalTokens: 50}),
+	)
+	if err == nil || !strings.Contains(err.Error(), `total tokens 60 exceeded max 50`) {
+		t.Fatalf("error = %v, want token budget exhaustion", err)
+	}
+	if text != "" {
+		t.Fatalf("text = %q, want empty result on budget exhaustion", text)
+	}
+	if usage.InputTokens != 40 || usage.OutputTokens != 20 {
+		t.Fatalf("usage = %+v, want accumulated response usage", usage)
+	}
+	if budgetEvents != 1 {
+		t.Fatalf("budget events = %d, want 1", budgetEvents)
+	}
+}
+
 func TestRunToolLoopContinuesAfterMaxTokensPartialText(t *testing.T) {
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{

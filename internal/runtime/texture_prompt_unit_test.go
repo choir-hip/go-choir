@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
@@ -662,6 +663,43 @@ func TestInitialTextureToolChoiceRequiresPatchBeforeContinuation(t *testing.T) {
 				t.Fatalf("initialTextureToolChoice = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestTextureActorToolLoopBudgetDefaultsAndOverrides(t *testing.T) {
+	rec := &types.RunRecord{
+		ChannelID: "doc-channel",
+		Metadata: map[string]any{
+			"type":   "texture_agent_revision",
+			"doc_id": "doc-budget",
+		},
+	}
+	budget := textureActorToolLoopBudget(rec)
+	if budget.Label != "texture:doc-budget" {
+		t.Fatalf("label = %q, want texture:doc-budget", budget.Label)
+	}
+	if budget.MaxProviderCalls != defaultTextureActorMaxProviderCalls {
+		t.Fatalf("max provider calls = %d, want default %d", budget.MaxProviderCalls, defaultTextureActorMaxProviderCalls)
+	}
+	if budget.MaxTotalTokens != defaultTextureActorMaxTotalTokens {
+		t.Fatalf("max total tokens = %d, want default %d", budget.MaxTotalTokens, defaultTextureActorMaxTotalTokens)
+	}
+	if budget.MaxElapsed != defaultTextureActorMaxElapsed {
+		t.Fatalf("max elapsed = %s, want %s", budget.MaxElapsed, defaultTextureActorMaxElapsed)
+	}
+
+	rec.Metadata["actor_budget_max_provider_calls"] = int64(7)
+	rec.Metadata["actor_budget_max_input_tokens"] = int64(1000)
+	rec.Metadata["actor_budget_max_output_tokens"] = int64(2000)
+	rec.Metadata["actor_budget_max_total_tokens"] = int64(3000)
+	rec.Metadata["actor_budget_max_elapsed_seconds"] = int64(90)
+	budget = textureActorToolLoopBudget(rec)
+	if budget.MaxProviderCalls != 7 ||
+		budget.MaxInputTokens != 1000 ||
+		budget.MaxOutputTokens != 2000 ||
+		budget.MaxTotalTokens != 3000 ||
+		budget.MaxElapsed != 90*time.Second {
+		t.Fatalf("override budget = %+v", budget)
 	}
 }
 
