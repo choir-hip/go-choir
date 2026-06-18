@@ -80,7 +80,41 @@ Implemented D1 TDD-first. No regressions; additive and backward-compatible.
 Mutation class orange (additive schema + write-path attribution; no reader
 behavior change yet). Not pushed; staging proof deferred to D7 settlement.
 
+### 2026-06-18 — Recurring "tests pass, deploy fails" diagnosed + fixed (CI harness)
+
+D1 pushed (`e7967d16`): all CI test jobs green, but **Deploy to Staging (Node B)
+failed**. Root cause is harness debt, not a D1 regression: the post-deploy
+proxy-upstream gate added 2026-06-16 (`ceb12e66`) curls `127.0.0.1:8081` — the
+**auth** service, whose `/health` has no `"upstream"` field — so
+`grep '"upstream":"ok"'` always fails and every deploy since then went red even
+though the proxy (`:8082`) and all services were healthy at the deployed commit.
+Live evidence: `choir.news/health` returned `service:proxy`, `upstream:ok`,
+`deployed_commit: e7967d16`, HTTP 200; the in-job dump showed every service
+healthy at the pushed SHA. Fix (`01ad15e1`): probe `:8082` and assert
+`"service":"proxy"` so a future port slip fails loudly. The fix's own CI was
+green but the Deploy job was correctly **skipped** (workflow-only change has no
+deployable impact), so the corrected gate is validated on the next code push (D2).
+
+### 2026-06-18 — D2 landed locally (revision_hash chain)
+
+- **Types**: `internal/types/texture_revision_hash.go` —
+  `ComputeRevisionHash(parentHash, body, citations, provenance)` =
+  `sha256` over a fixed-order canonical payload (scheme-versioned `rev1:`),
+  empty citations/provenance normalized to `[]`/`{}`. `Revision.RevisionHash`
+  field added.
+- **Store**: additive `revision_hash VARCHAR(255) NOT NULL DEFAULT ''` column
+  (DDL + `ensureTextureColumn` migration); `CreateRevision` fetches the parent's
+  hash inside the txn and computes the child hash (genesis chains from ""),
+  threaded through insert + all SELECTs + `scanRevision`. Computing in the store
+  guarantees every revision is hashed regardless of write path.
+- **Tests (green)**: types determinism / empty-normalization / tamper-detection
+  (body + provenance) / parent-tamper-propagation; store genesis + chain
+  recomputation. Full build clean.
+
+Mutation class orange (additive schema + hash compute; no reader behavior change).
+
 ### State
 
-D1 landed locally (uncommitted). Next: D2 (per-revision `revision_hash` chain
-over canonical bytes; genesis + tamper-detection tests).
+CI deploy gate fixed (`01ad15e1`, pushed). D1 pushed (`e7967d16`, staging healthy).
+D2 implemented locally (uncommitted). Next: commit + push D2 (validates the fixed
+deploy gate), then D3 (collated sources + delete regex scraping).

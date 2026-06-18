@@ -426,6 +426,57 @@ func TestTextureRevisionProvenanceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTextureRevisionHashChain(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{DocID: "doc-hash", OwnerID: "user-1", Title: "Hash Doc"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+
+	rev0 := types.Revision{
+		RevisionID: "rev-0", DocID: "doc-hash", OwnerID: "user-1",
+		AuthorKind: types.AuthorUser, AuthorLabel: "alice",
+		Content: "v0 body", CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := s.CreateRevision(ctx, rev0); err != nil {
+		t.Fatalf("CreateRevision v0: %v", err)
+	}
+	got0, err := s.GetRevision(ctx, "rev-0", "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision v0: %v", err)
+	}
+	if got0.RevisionHash == "" {
+		t.Fatalf("genesis revision hash empty")
+	}
+	wantGenesis := types.ComputeRevisionHash("", got0.Content, []byte("[]"), []byte("{}"))
+	if got0.RevisionHash != wantGenesis {
+		t.Errorf("genesis hash = %q, want %q", got0.RevisionHash, wantGenesis)
+	}
+
+	rev1 := types.Revision{
+		RevisionID: "rev-1", DocID: "doc-hash", OwnerID: "user-1",
+		AuthorKind: types.AuthorAppAgent, AuthorLabel: "appagent",
+		Content: "v1 body", ParentRevisionID: "rev-0",
+		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := s.CreateRevision(ctx, rev1); err != nil {
+		t.Fatalf("CreateRevision v1: %v", err)
+	}
+	got1, err := s.GetRevision(ctx, "rev-1", "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision v1: %v", err)
+	}
+	wantV1 := types.ComputeRevisionHash(got0.RevisionHash, got1.Content, []byte("[]"), []byte("{}"))
+	if got1.RevisionHash != wantV1 {
+		t.Errorf("v1 hash = %q, want chained %q", got1.RevisionHash, wantV1)
+	}
+	if got1.RevisionHash == got0.RevisionHash {
+		t.Errorf("v1 hash equals v0 hash; chain not distinct")
+	}
+}
+
 func TestTextureRevisionWithoutProvenanceIsEmpty(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()

@@ -131,6 +131,13 @@ type Revision struct {
 	// the first revision of a document.
 	ParentRevisionID string `json:"parent_revision_id,omitempty"`
 
+	// RevisionHash is the tamper-evident hash for this revision, chaining its
+	// body+citations+provenance to the parent revision's hash (see
+	// ComputeRevisionHash). It is assigned by the store at creation and is the
+	// signable spine of the versioned document history. Empty on legacy revisions
+	// created before hashing existed.
+	RevisionHash string `json:"revision_hash,omitempty"`
+
 	// CreatedAt is when this revision was created.
 	CreatedAt time.Time `json:"created_at"`
 }
