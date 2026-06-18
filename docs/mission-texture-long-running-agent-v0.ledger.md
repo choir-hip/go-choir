@@ -603,3 +603,52 @@ Rollback ref: revert this completion-guard runtime commit if staging shows
 guard-induced loops, excessive failed trajectories, or a semantic forced-role
 regression. Otherwise keep it as the local repair for the post-V1 no-delegation
 edge and continue toward deployed V2+ proof.
+
+## 2026-06-18 - Staging falsified completion guard as sufficient (red evidence, green record)
+
+Claim under test: deployed `58895d28e56dec72e63852fd9eb35bc9ce441ab7` would
+convert the successful-V1/no-delegation branch into a fast model-prior V1
+followed by Probe work and later V2+ revisions, while preserving Texture agency.
+
+Move: deployed probe. Pushed `58895d28`, monitored Actions, checked staging
+health identity, then ran the public product-path cadence probe against
+`https://choir.news`.
+
+Expected ΔV: staged proof that the completion guard reaches the live provider
+path after V1, opens evidence work, and begins the V2+ cadence. Actual ΔV: no
+mission ramp item landed; the formal probe still fails before V1, so the
+completion guard branch remains unproven on staging.
+
+Receipts:
+
+- GitHub Actions for `58895d28`: Docs Truth Check #197 succeeded; FlakeHub #880
+  succeeded; CI #1298 had all test/build jobs success, including internal/runtime
+  shards 0-3, non-runtime Go tests, integration smoke, TLA+, docs, and vet/build.
+  `Deploy to Staging (Node B)` concluded failure.
+- Staging `/health` nevertheless reported proxy and sandbox both deployed at
+  `58895d28e56dec72e63852fd9eb35bc9ce441ab7`, `upstream=ok`,
+  `vmctl_status=ok`, `deployed_at=2026-06-18T03:17:36Z`.
+- `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`
+  submitted `012c7431-3645-4c7b-82a7-8efafedc4c2a`; doc
+  `0e0fcfba-ead8-411f-b264-32d495ba51dd`.
+- Probe result: V0 user at +0.330s; no appagent revisions;
+  `appagent_revision_count=0`; `first_paint_ms=null`; `total_revision_count=1`;
+  `final_head_chars=53`.
+- Trace summary from the probe: `web_search=0`, `source_search=0`,
+  `spawn_agent=0`, `update_coagent=0`, `moment_count=43`, `agent_count=2`,
+  `delegation_count=0`, trajectory `state=failed`, `live=false`.
+
+Result: the local completion guard may still be the right repair for the
+successful-V1/no-Probe sub-branch, but it does not address the formal probe's
+remaining no-V1 failure. The next construct must inspect Trace/provider/tool
+events for this deployed failure (or a fresh equivalent diagnostic) before
+changing runtime behavior again.
+
+Next move: run a focused product-path Trace diagnostic for the no-V1 branch and
+classify whether the failure is malformed edit arguments, exact-tool retry
+exhaustion, provider/adapter failure, mutation settlement, or activation/prompt
+assembly. Do not add another code fix before that classification.
+
+Rollback ref: revert `58895d28` only if the diagnostic shows the completion guard
+causes the no-V1 failure or a semantic forced-role regression. Otherwise keep it
+as a local repair for the post-V1 branch and repair the earlier no-V1 branch next.

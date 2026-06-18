@@ -287,6 +287,18 @@ work while preserving V1 model-prior metadata
 (`internal/runtime/toolloop_test.go:453-538`,
 `internal/runtime/texture_test.go:2543-2631`).
 
+Staging evidence after deploy of `58895d28` falsified that local repair as
+sufficient. CI test/build jobs passed, but the Node B deploy job again reported
+failure while `/health` confirmed both proxy and sandbox deployed at
+`58895d28e56dec72e63852fd9eb35bc9ce441ab7`. The formal cadence probe submitted
+`012c7431-3645-4c7b-82a7-8efafedc4c2a` / doc
+`0e0fcfba-ead8-411f-b264-32d495ba51dd` and still observed only V0:
+`appagent_revision_count=0`, `first_paint_ms=null`, no `web_search`,
+`source_search`, `spawn_agent`, or `update_coagent`, and trajectory
+`state=failed`. This proves the completion guard did not reach the formal probe
+path because the run failed before a successful model-prior V1, not because the
+guard allowed V1-only completion.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -346,8 +358,9 @@ position / live conjectures / open edges:
   model-prior/interim revision in the live product path (`29265cae` diagnostic
   V1 at about +16s), but the formal cadence probe still has a V0-only failed
   run. The local completion-guard construct now rejects silent completion after a
-  factual/current model-prior V1 unless Texture opens evidence work or records an
-  audit decision; staging has not yet proved this yields V2+.
+  factual/current model-prior V1 unless Texture opens evidence work or records
+  an audit decision; staging at `58895d28` still fails before V1 on the formal
+  cadence probe, so the guard branch remains unproven live.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -379,14 +392,15 @@ position / live conjectures / open edges:
   reaches that branch and can produce V1, but stochastic invalid edit arguments
   can still exhaust/failed-run the first write. The current local completion
   guard targets the successful-V1/no-Probe sub-branch without forced semantic
-  next-tool enforcement; staging remains the next discriminator.
+  next-tool enforcement. Staging `58895d28` showed the formal probe still dies in
+  the no-V1 branch, so the next discriminator is a Trace diagnostic of the
+  failed run's provider/tool errors rather than another post-V1 repair.
 
-next move: commit and push the completion-guard repair, monitor CI and Node B
-deploy identity, then rerun `scripts/texture_revision_cadence_probe.mjs` against
-`https://choir.news`. If staging shows fast V1 plus researcher activity and V2+,
-continue toward T3/T4 park-and-wait/resident lifecycle. If staging still fails,
-classify whether the blocker is no-V1 stochastic edit failure, guard not firing,
-researcher not delivering, or Texture not consuming findings.
+next move: inspect Trace events for the `58895d28` failed cadence run (or run a
+fresh equivalent diagnostic if the original trace is not accessible) and classify
+the no-V1 branch: malformed edit arguments, exact-tool retry exhaustion,
+provider/adapter failure, mutation settlement, or activation/prompt assembly.
+Only then construct the next repair.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -419,7 +433,9 @@ probe can still hit a failed no-V1 run. The current local repair is a bounded
 completion guard rather than a required researcher continuation: it preserves
 Texture agency by allowing Probe, Execute, follow-up, or an audit decision, but
 rejects silent completion while the only canonical appagent revision is still
-model-prior/interim for a factual/current request.
+model-prior/interim for a factual/current request. Staging `58895d28` showed this
+does not yet solve the formal acceptance path because the run still fails before
+the guarded V1 state exists.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and
