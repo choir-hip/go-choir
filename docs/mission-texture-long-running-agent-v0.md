@@ -361,6 +361,17 @@ remaining live failure is not only delivery or wake: Texture can receive and mar
 findings consumed, but the wake revision may satisfy the forced write without
 actually grounding or deepening the document.
 
+Current local repair after that no-op V2 diagnostic: `patch_texture` /
+`rewrite_texture` now reject a worker-update-consuming Texture write when the
+materialized content is identical to the current revision, before the revision is
+stored or worker updates are marked delivered (`internal/runtime/tools_texture.go`).
+The guard keys off actual content equality, not character-count delta, so
+same-length substantive edits remain valid. A regression test constructs an
+addressed researcher update, schedules an `update_coagent` Texture wake, attempts
+an unchanged patch with the live-style "no substantive content change intended"
+rationale, and proves no revision, checkpoint, or completed mutation is created
+(`internal/runtime/texture_test.go`).
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -423,7 +434,9 @@ position / live conjectures / open edges:
   model-prior/interim on staging and that V2 can consume a researcher update. It
   still does not settle T2/T8 because the consumed-evidence V2 can be a no-op
   rather than a grounded/deepened revision, and the formal probe still hit a
-  failed no-V2 branch.
+  failed no-V2 branch. Locally, no-op consumed-evidence writes are now rejected
+  before they can burn the worker update; staging must prove the model retries
+  into a substantive V2 instead of failing the wake.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -462,15 +475,16 @@ position / live conjectures / open edges:
   article revision semantics or forcing a semantic researcher continuation.
   Staging `f9626242` moved the live failure forward: V1 and evidence work happen;
   one formal probe failed before V2, while a focused diagnostic reached V2 but
-  stored a no-op revision that consumed researcher evidence without using it.
+  stored a no-op revision that consumed researcher evidence without using it. The
+  local no-op guard prevents that exact burn-update branch; its next
+  discriminator is live provider retry behavior.
 
-next move: inspect the integrate-wake first-tool/metadata path for Texture runs
-with `scheduled_message_seq > 0` or consumed worker updates. The repair should
-prevent a worker-update wake from satisfying the revision obligation with an
-empty/no-op patch that merely marks findings consumed; it must require the
-grounded revision to incorporate or explicitly account for consumed evidence,
-without forcing semantic role choreography or weakening the initial V1 exact
-write guard.
+next move: finish local verification for the no-op consumed-evidence guard, commit
+and push it, monitor CI/deploy identity, then rerun the deployed cadence probe
+and a metadata-aware focused diagnostic if the formal probe is ambiguous. Staging
+must show either a substantive V2 that incorporates/acknowledges consumed
+researcher evidence or a precise new failure branch where the live model exhausts
+retries instead of burning the update.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -514,7 +528,9 @@ showed a failed no-V2 branch, but the focused diagnostic proved the wake path ca
 produce V2 and consume researcher evidence. The new live learning is sharper:
 the V2 wake can be a no-op that marks evidence consumed without incorporating it,
 so the next repair must make consumed-evidence revisions substantively grounded
-or explicitly accountable.
+or explicitly accountable. The current local repair does this mechanically by
+rejecting identical content before consumed updates are marked delivered; it
+still needs staging proof that the live provider recovers with a meaningful V2.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

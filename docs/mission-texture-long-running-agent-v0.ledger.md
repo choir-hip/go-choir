@@ -860,3 +860,41 @@ consumed findings.
 Rollback ref: keep `f9626242`; it repaired V1 metadata and enabled evidence
 delivery. Revert a future repair if it regresses initial V1, blocks worker-update
 delivery, or forces Texture into a hard-coded researcher workflow.
+
+## 2026-06-18 - Local repair rejects no-op consumed-evidence writes (red construct)
+
+Claim under test: the no-op V2 branch can be repaired mechanically by refusing to
+store an unchanged Texture revision when that write would mark worker updates as
+consumed.
+
+Move: added a guard in `commitTextureToolEdit` after edit materialization and
+before metadata construction / revision creation / worker-update delivery. If
+`consumedThroughSeq > 0` and the materialized content exactly equals the current
+revision content, `patch_texture` / `rewrite_texture` returns an error instead
+of storing a revision or advancing the controller checkpoint. Added a
+comprehensive regression test that builds the live-shaped researcher update,
+scheduled `update_coagent` Texture wake, and no-op patch rationale, then verifies
+the revision history stays at the base revision, the mutation remains pending,
+and no Texture controller checkpoint is written.
+
+Expected ΔV: move the V2 defect from "worker update can be burned by a no-op
+revision" to "local guard forces the provider to produce a substantive revision
+or fail without consuming the update." Actual ΔV: focused local tests passed;
+staging remains unproven.
+
+Receipts:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite' -count=1`
+- `git diff --check`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestBuildAppagentRevisionMetadataMarksUserPromptArticleShapeAsInterim|TestBuildAppagentRevisionMetadataPreservesDurableKeys|TestProcessorAndReconcilerProfilesDelegateToTextureOnly|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`
+- `nix develop -c go test ./cmd/doccheck -count=1`
+- `nix develop -c scripts/go-test-runtime-shards` exited 0.
+
+Open edge: this guard prevents the exact no-op burn branch, but the live provider
+may still fail all exact `patch_texture` retries on a worker wake. Staging must
+decide whether the model recovers by writing a substantive grounded V2 or exposes
+a new retry-exhaustion failure.
+
+Rollback ref: revert the no-op guard commit if legitimate same-content
+evidence-accounting revisions are required and no alternative accounting path is
+available, or if staging shows it regresses initial V1 / worker update delivery.

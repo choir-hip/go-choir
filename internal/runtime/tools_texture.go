@@ -632,6 +632,9 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, fmt.Errorf("ensure canonical texture projection path: %w", err)
 	}
 	consumedThroughSeq := rt.textureWorkerUpdateCommitSeq(ctx, rec, doc.DocID, mutation)
+	if consumedThroughSeq > 0 && materialized.Content == currentRevision.Content {
+		return types.Revision{}, fmt.Errorf("worker update revision must change Texture content before consumed updates are marked delivered")
+	}
 	revMeta := addTextureEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation, consumedThroughSeq), materialized, rec)
 	if normalizedContent, normalizedCount := normalizeWireArticleBareSourceRefs(materialized.Content, revMeta, rec); normalizedCount > 0 {
 		materialized.Content = normalizedContent

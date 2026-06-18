@@ -7823,6 +7823,153 @@ func TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *
 	}
 }
 
+func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
+	t.Parallel()
+	_, s, rt := textureAPISetupWithRuntime(t)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-1"
+	docID := "doc-worker-noop-test"
+	agentID := currentTextureAgentID(docID)
+	baseContent := "Current draft before researcher evidence."
+	doc := types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Worker no-op guard",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	base := types.Revision{
+		RevisionID:  "rev-worker-noop-v1",
+		DocID:       docID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "appagent",
+		Content:     baseContent,
+		CreatedAt:   now,
+	}
+	if err := s.CreateRevision(ctx, base); err != nil {
+		t.Fatalf("create base revision: %v", err)
+	}
+	researchRun := types.RunRecord{
+		RunID:        "run-worker-noop-researcher",
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-texture-test",
+		AgentID:      "researcher-worker-noop",
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+		ChannelID:    docID,
+		State:        types.RunCompleted,
+		Prompt:       "Find the missing government evidence.",
+		CreatedAt:    now.Add(time.Second),
+		UpdatedAt:    now.Add(time.Second),
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataChannelID:    docID,
+			runMetadataAgentID:      "researcher-worker-noop",
+			runMetadataTrajectoryID: "traj-worker-noop",
+		},
+	}
+	if err := s.CreateRun(ctx, researchRun); err != nil {
+		t.Fatalf("create researcher run: %v", err)
+	}
+	message := &types.ChannelMessage{
+		ChannelID:    docID,
+		TrajectoryID: "traj-worker-noop",
+		From:         AgentProfileResearcher,
+		FromRunID:    researchRun.RunID,
+		FromAgentID:  researchRun.AgentID,
+		ToAgentID:    agentID,
+		Role:         AgentProfileResearcher,
+		Content:      "Finding: Anthropic has grounded government evidence that must be reflected in the Texture revision.",
+		Timestamp:    now.Add(2 * time.Second),
+	}
+	if err := s.AppendChannelMessage(ctx, message, ownerID); err != nil {
+		t.Fatalf("append researcher message: %v", err)
+	}
+
+	runID := "run-worker-noop-texture"
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:               docID,
+		RunID:               runID,
+		OwnerID:             ownerID,
+		State:               "pending",
+		ScheduledMessageSeq: message.Seq,
+		CreatedAt:           now.Add(3 * time.Second),
+	}); err != nil {
+		t.Fatalf("create agent mutation: %v", err)
+	}
+	textureRun := &types.RunRecord{
+		RunID:        runID,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-texture-test",
+		AgentID:      agentID,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		ChannelID:    docID,
+		State:        types.RunRunning,
+		Prompt:       "Integrate the researcher evidence.",
+		CreatedAt:    now.Add(3 * time.Second),
+		UpdatedAt:    now.Add(3 * time.Second),
+		Metadata: map[string]any{
+			"type":                  textureAgentRevisionTaskType,
+			"doc_id":                docID,
+			"current_revision_id":   base.RevisionID,
+			"request_source":        "update_coagent",
+			"scheduled_message_seq": message.Seq,
+			runMetadataAgentID:      agentID,
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataChannelID:    docID,
+			runMetadataTrajectoryID: "traj-worker-noop",
+		},
+	}
+	rawArgs, err := json.Marshal(editTextureArgs{
+		DocID:          docID,
+		BaseRevisionID: base.RevisionID,
+		Operation:      "apply_edits",
+		Edits: []textureTextEdit{{
+			Op:      "replace",
+			Find:    baseContent,
+			Replace: baseContent,
+		}},
+		Rationale: "No substantive content change intended.",
+	})
+	if err != nil {
+		t.Fatalf("marshal no-op patch: %v", err)
+	}
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "patch_texture", rawArgs); err == nil ||
+		!strings.Contains(err.Error(), "worker update revision must change Texture content") {
+		t.Fatalf("no-op worker update patch err = %v, want worker-update no-op guard", err)
+	}
+	revs, err := s.ListRevisionsByDoc(ctx, docID, ownerID, 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(revs) != 1 || revs[0].RevisionID != base.RevisionID {
+		t.Fatalf("revisions after rejected no-op = %+v, want only base revision", revs)
+	}
+	mutation, err := s.GetAgentMutationByRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "pending" {
+		t.Fatalf("mutation after rejected no-op = %+v, want pending", mutation)
+	}
+	checkpoint, err := s.GetTextureControllerCheckpoint(ctx, docID, ownerID)
+	if err != nil {
+		t.Fatalf("get checkpoint: %v", err)
+	}
+	if checkpoint != nil {
+		t.Fatalf("checkpoint after rejected no-op = %+v, want nil", checkpoint)
+	}
+}
+
 func TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T) {
 	t.Parallel()
 	_, s, rt := textureAPISetupWithRuntime(t)
