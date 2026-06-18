@@ -983,3 +983,50 @@ provider writes a useful V1 quickly or exposes a new retry-exhaustion branch.
 Rollback ref: revert the prompt-copy guard commit if staging shows legitimate
 initial model-prior drafts require same-content storage, or if it regresses the
 substantive V2 path repaired by `157db34f`.
+
+## 2026-06-18 - Staging prompt-copy guard becomes no-V1 failure (red evidence, green record)
+
+Claim under test: rejecting prompt-copy initial V1 writes lets the live provider
+recover through exact `patch_texture` retry into a useful model-prior first
+draft.
+
+Move: pushed `84038c4ae972c0aa3a32b18b6b227e763a9be777`, monitored CI/deploy
+identity, and ran the deployed cadence probe against `https://choir.news`.
+
+Expected ΔV: either prove useful V1 + substantive V2 on staging, or classify the
+live retry branch after the prompt-copy guard. Actual ΔV: the guard prevented the
+bad stored V1, but the live provider did not recover into any appagent revision.
+
+Receipts:
+
+- Commit: `84038c4ae972c0aa3a32b18b6b227e763a9be777`.
+- CI: Docs Truth Check and CI test/build jobs passed, including
+  internal/runtime shards 0, 1, 2, and 3; overall CI concluded failure only
+  because the Node B deploy job exited 1.
+- Deploy identity: public `/health` showed proxy and sandbox both at
+  `84038c4ae972c0aa3a32b18b6b227e763a9be777`, `deployed_at=2026-06-18T04:34:01Z`.
+- Probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Submission / trajectory: `e83758bf-5b54-44a7-8838-3c4e686a8b30`.
+- Texture doc: `6ed92ad9-c861-458c-b5c4-a09ca48dc529`.
+- Revisions: only V0 user at +0.252s, 53 chars.
+- Probe counts: `appagent_revision_count=0`, `first_paint_ms=null`,
+  `total_revision_count=1`, `final_head_chars=53`.
+- Research / trajectory: `web_search=0`, `source_search=0`, `spawn_agent=0`,
+  `update_coagent=0`, `moment_count=43`, `agent_count=2`,
+  `delegation_count=0`, final trajectory `state=failed`.
+
+Result: the local repair was directionally correct on canonical integrity - it
+did not store the prompt-copy V1 - but insufficient for product behavior. The
+live path is now a failed no-appagent-V1 branch instead of a stored no-op V1
+branch.
+
+Next move: run a focused diagnostic on the same deployed SHA that prints
+initial Texture tool results, retry events, and final error state. The next
+repair should improve live recovery after rejected no-op/invalid initial patches
+without re-allowing prompt-copy V1 storage.
+
+Rollback ref: keep `84038c4a` until the diagnostic proves it blocks all
+recoverable initial drafts; it protects canonical history from prompt-copy V1s.
+Revert only if the next repair cannot preserve that invariant while restoring
+first paint.

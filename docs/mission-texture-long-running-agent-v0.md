@@ -399,6 +399,20 @@ prompt-copy rejection leaves the mutation pending, and the prompt-bar path
 retries exact `patch_texture` after the failed no-op result and stores a useful
 model-prior V1 on the same run (`internal/runtime/texture_test.go`).
 
+Staging evidence after deploy of `84038c4a` falsified that local repair as
+sufficient. CI test/build jobs passed, including internal/runtime shards 0-3,
+but the Node B deploy job again concluded failure while public `/health`
+confirmed proxy and sandbox both deployed at
+`84038c4ae972c0aa3a32b18b6b227e763a9be777` (`deployed_at`
+`2026-06-18T04:34:01Z`). The deployed cadence probe submitted
+`e83758bf-5b54-44a7-8838-3c4e686a8b30` / doc
+`6ed92ad9-c861-458c-b5c4-a09ca48dc529`. It observed only V0 user content:
+`appagent_revision_count=0`, `first_paint_ms=null`, `total_revision_count=1`,
+`web_search=0`, `source_search=0`, `spawn_agent=0`, `update_coagent=0`, and
+trajectory `state=failed`. This proves the prompt-copy guard prevented the bad
+stored V1, but the live provider did not recover into a useful V1 before the run
+failed.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -465,8 +479,10 @@ position / live conjectures / open edges:
   stored a 53-char prompt-sized V1 only at +49.350s before deepening at V2, so
   first paint was neither clearly under the old ~49s baseline nor useful as a
   from-weights draft. Locally, identical prompt-only model-prior writes are now
-  rejected and retried before storage; staging must prove the live provider
-  recovers with a useful V1 without regressing substantive V2.
+  rejected and retried before storage; staging `84038c4a` proved that this
+  prevents bad storage but does not make the live provider recover. The active
+  branch is again no-V1/no-research, now after a failed initial write rather than
+  a stored prompt-copy V1.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -510,15 +526,17 @@ position / live conjectures / open edges:
   enough for the formal probe to reach a substantive V2. The next discriminator
   is the initial no-worker exact-write branch: a prompt-sized no-op V1 should be
   rejected or retried without delaying the first useful from-weights draft into
-  the old first-findings window. The current local guard moves that branch from
-  "stored no-op V1" to "retry exact patch_texture or fail without appagent V1";
-  staging must decide whether the live provider recovers quickly.
+  the old first-findings window. The current local guard moved that branch from
+  "stored no-op V1" to "failed no-appagent V1" on staging. The next
+  discriminator is the exact Trace/tool-result branch: whether the live model
+  exhausted retries with unchanged/invalid patches, whether the retry reminder
+  lacks enough document context, or whether another failure path terminates the
+  run before the useful draft attempt.
 
-next move: finish local verification for the initial model-prior no-op guard,
-commit and push it, monitor CI/deploy identity, then rerun the deployed cadence
-probe. Staging must show a useful model-prior V1 well under the old ~49s window
-and a substantive V2, or expose a precise retry-exhaustion branch without
-storing a prompt-copy V1.
+next move: run a metadata/tool-result focused diagnostic on `84038c4a` for the
+no-V1 branch. The next repair must preserve the no-prompt-copy invariant while
+making the live initial write recover into a useful draft, not by allowing
+unchanged prompt copies back into canonical Texture history.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -570,7 +588,8 @@ so the first-paint repair must make unchanged initial writes retry or fail
 without erasing the route that now reaches substantive V2. The current local
 repair applies the same content-equality principle to prompt-only
 model-prior/interim writes and proves exact-tool retry can recover into a useful
-draft locally; live provider recovery is still unproven.
+draft locally. Staging `84038c4a` disproved live recovery: the bad V1 was not
+stored, but no useful V1 or evidence path appeared before trajectory failure.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and
