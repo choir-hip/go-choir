@@ -214,7 +214,7 @@ evidence. The most likely new conjecture is that exact first-tool selection is
 not honored or is rejected/relaxed into a no-write completed path by the live
 provider/adapter, whereas local stub providers accepted it.
 
-Current local repair after the `7d462629` falsification: the general tool loop
+Repair after the `7d462629` falsification: the general tool loop
 now treats an `end_turn` response during an exact initial tool choice as a retry
 condition, not normal completion (`internal/runtime/toolloop.go:630-655`). This
 means a provider that ignores or declines exact `function:patch_texture` cannot
@@ -222,7 +222,20 @@ silently complete the initial Texture run without a write. The runtime also
 settles failed no-write Texture mutations before reconcile
 (`internal/runtime/runtime.go:3237-3273`), so a failed integrate wake cannot
 immediately requeue the same undelivered packet forever. Local runtime shards
-pass; staging proof is pending.
+passed.
+
+Staging evidence after deploy of `58f261c8` falsified that repair as sufficient:
+`scripts/texture_revision_cadence_probe.mjs` again observed only V0 user content
+and no appagent revision for prompt-bar submission
+`08c13c3b-8f80-4567-a4a5-7656dfee16b4` / doc
+`3d0ccff6-a89a-4a86-af43-c4a6189e9f28`, with `appagent_revision_count=0`,
+`first_paint_ms=null`, `research.web_search=0`, `research.source_search=0`,
+`research.spawn_agent=0`, `research.update_coagent=0`, and trajectory
+`state=completed`. Staging health identified both proxy and sandbox at
+`58f261c801f077e37f04ee480905422cbf925b52`, so this is not stale deploy
+evidence. The retry/no-write settlement repair did not reach the live failing
+branch or did not prevent the run from completing before any Texture appagent
+write.
 
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
@@ -279,11 +292,12 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 partially repaired locally but falsified on staging: first paint can be a
+- C2 partially repaired locally but repeatedly falsified on staging: first paint can be a
   flagged model-prior/interim revision under stub providers, and the runtime now
   tries to force the first Texture turn to write before terminal delegation.
-  Product-path proof regressed at `7d462629`: staging produced no appagent
-  revision, no delegation, and no research activity.
+  Product-path proof regressed at `7d462629` and repeated at `58f261c8`:
+  staging produced no appagent revision, no delegation, and no research
+  activity.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -303,19 +317,22 @@ position / live conjectures / open edges:
   construct must replace that contradiction by letting the same Texture
   activation warm-inject addressed packets and commit more than one canonical
   revision, with revision metadata showing which packet set each write consumed.
-- C8 falsified/refined by 2026-06-17 staging: prompt/tool choice can defeat a
+- C8 falsified/refined by 2026-06-17/18 staging: prompt/tool choice can defeat a
   merely "required" first action by choosing a terminal tool before any canonical
   revision, but exact first `patch_texture` as implemented can also collapse the
-  live provider path into no appagent revision and no delegation. The current
-  local repair preserves the first-write obligation by retrying provider
-  `end_turn` during exact initial tool choice and preventing no-write failure
-  reconcile loops. Staging must prove this is sufficient.
+  live provider path into no appagent revision and no delegation. Retrying
+  provider `end_turn` during exact initial tool choice and preventing no-write
+  failure reconcile loops did not change staging behavior at `58f261c8`, so the
+  next discriminator is no longer just "did the provider return end_turn?"
 
-next move: land and deploy the end-turn retry / no-write failure settlement
-repair, then re-run the deployed cadence probe. If staging still shows no
-appagent revision, inspect the emitted `initial_tool_choice` / provider
-precondition retry events to determine whether the live provider is returning
-wrong-tool, max_tokens, provider errors, or repeated end_turn.
+next move: inspect the deployed trajectory/Trace events for submission
+`08c13c3b-8f80-4567-a4a5-7656dfee16b4` / doc
+`3d0ccff6-a89a-4a86-af43-c4a6189e9f28` and classify the no-appagent path:
+whether Texture was never activated, exact initial tool choice was relaxed or
+precondition-failed before provider call, retry events were not emitted, the run
+was failed/settled before the tool loop, or `patch_texture` was unavailable in
+the live tool set. Only after that evidence should the next runtime construct
+touch protected surfaces.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -336,8 +353,10 @@ proved the intended order but staging produced no appagent revision at all. The
 redesign direction (long-running actor + from-weights V1) was owner-selected
 after the first falsification; the current learning is that the repair must be
 live-provider-compatible, not just exact-tool correct under stubs. The latest
-local repair makes provider `end_turn` non-terminal during exact first-tool
-obligations and avoids reconcile spin on no-write failures.
+local repair made provider `end_turn` non-terminal during exact first-tool
+obligations and avoided reconcile spin on no-write failures, but staging at
+`58f261c8` still produced V0-only with no research activity. The live failure is
+upstream or adjacent to the retry branch until Trace proves otherwise.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

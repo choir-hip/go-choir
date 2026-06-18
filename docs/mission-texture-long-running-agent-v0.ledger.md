@@ -362,3 +362,55 @@ Open blockers / remaining error:
 Rollback ref: revert this runtime repair commit, then `7d462629`, if the live
 provider still cannot satisfy the first-write obligation and the retry path
 creates blocked or failed trajectories instead of fast V1.
+
+## 2026-06-18 - Staging falsified end-turn retry as sufficient (red evidence, green record)
+
+Claim under test: the `58f261c8` tool-loop retry repair would convert the
+`7d462629` no-write staging result into a fast initial `patch_texture` V1, or at
+least expose a bounded retry/failure path instead of silent completion.
+
+Move: deployed probe. Pushed runtime construct commit
+`58f261c801f077e37f04ee480905422cbf925b52`, monitored GitHub Actions, checked
+staging health identity, then ran the product-path cadence probe against
+`https://choir.news`.
+
+Expected ΔV: staged proof of fast V1 or a new live-provider retry/failure
+signature. Actual ΔV: no ramp item landed; observer evidence shows the
+no-appagent failure repeats even after the end-turn retry repair.
+
+Receipts:
+
+- GitHub Actions for `58f261c801f077e37f04ee480905422cbf925b52`: Docs Truth
+  Check #195 success; CI #1296 had all test/build jobs success, including
+  internal/runtime shards 0-3, integration smoke, TLA+, and vet/build, but the
+  `Deploy to Staging (Node B)` job concluded failure. Public API access to
+  deploy logs still returned `403`.
+- Staging `/health` nevertheless reported both proxy and sandbox on
+  `58f261c801f077e37f04ee480905422cbf925b52`, `upstream=ok`,
+  `vmctl_status=ok`, `deployed_at=2026-06-18T02:33:02Z`.
+- `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`
+  ran through the public product path. Submission:
+  `08c13c3b-8f80-4567-a4a5-7656dfee16b4`; doc:
+  `3d0ccff6-a89a-4a86-af43-c4a6189e9f28`.
+- Probe result: V0 user at +0.332s; no appagent revisions;
+  `appagent_revision_count=0`; `first_paint_ms=null`; `total_revision_count=1`;
+  `final_head_chars=53`.
+- Trace summary: `web_search=0`, `source_search=0`, `spawn_agent=0`,
+  `update_coagent=0`, `moment_count=29`, `agent_count=2`,
+  `delegation_count=0`, trajectory `state=completed`, `live=false`.
+
+Result: the no-appagent staging failure from `7d462629` repeated at `58f261c8`.
+The end-turn retry branch may not be reached in the live product path, or the
+run may be completed/settled before the provider response shape covered by the
+local regression test. The next construct must not guess at another prompt or
+tool-loop tweak before inspecting product evidence around activation, initial
+tool-choice selection, provider-call events, retry events, tool definition
+filtering, and mutation settlement for this submission/doc.
+
+Next move: inspect the deployed trajectory/Trace events for submission
+`08c13c3b-8f80-4567-a4a5-7656dfee16b4` / doc
+`3d0ccff6-a89a-4a86-af43-c4a6189e9f28` and classify the exact no-appagent path.
+
+Rollback ref: revert `58f261c8`, then `7d462629`, if the next evidence shows the
+exact-first-write line is incompatible with the live provider/tool-selection
+path rather than only missing an activation or settlement guard.
