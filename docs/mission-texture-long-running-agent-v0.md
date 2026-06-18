@@ -114,7 +114,7 @@ as is safely provable in one pass and record precise blockers for the rest.
 
 ## Parallax State
 
-status: planned
+status: working
 
 mission conjecture: if Texture becomes a single long-running logical actor that
 drafts an immediate from-weights V1 and deepens the document across many
@@ -166,6 +166,17 @@ park-and-wait blocks without billed calls; per-actor budget enforced with a
 kill-switch; one-run-per-agent lifecycle with scaffolding removed; sleep/resume
 across vmctl refresh; doc-delete cancels; verifier N:1; tests/docs/heresy updated;
 deployed probe shows fast from-weights first paint and V2+ tracking findings.
+Current audited value: T1 remains open in the current tree. The code still
+disables Texture warm injection and documents one canonical revision per run in
+`internal/runtime/super_controller.go:417-438`; `patch_texture`/`rewrite_texture`
+still reject a second write after `texture_agent_mutations.state` leaves
+`pending` in `internal/runtime/tools_texture.go:549-576`; and the prompt overlay
+still instructs "do not call patch_texture or rewrite_texture again in the same
+revision run" in
+`internal/runtime/textureprompts/overlays/run_system.yaml:12`. The earlier
+leading-wake/re-wake cadence in `internal/runtime/texture_controller.go:25-44`
+and related tests is useful lineage but preserves the one-write-per-run model
+that this mission supersedes.
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -222,6 +233,22 @@ position / live conjectures / open edges:
 - C6 open edge: collapsing many revisions into one run must not muddy
   trajectory/work-item attribution or the per-revision supervision narrative;
   verifier and Trace projection must stay legible at N:1.
+- C7 active from 2026-06-17 audit: the current code has a contradictory
+  transitional shape. `texture_controller.go` schedules multiple separate
+  integrate runs to simulate cadence, while `super_controller.go` and
+  `tools_texture.go` still block the resident-run multi-revision model. The next
+  construct must replace that contradiction by letting the same Texture
+  activation warm-inject addressed packets and commit more than one canonical
+  revision, with revision metadata showing which packet set each write consumed.
+
+next move: T1 construct. Re-enable warm injection for Texture; replace the
+per-run completed-mutation write gate with a per-revision commit record that
+still preserves stale-write and retry safety; update consumed/pending worker
+metadata per revision; invert the old tests that asserted Texture warm injection
+is disabled and second writes are rejected. If this cannot be proven locally,
+record a file-cited blocker before moving to T2.
+
+ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
 lineage: supersedes and folds in
 `docs/mission-texture-product-loop-recovery-v0.md` (the V1-only cadence defect

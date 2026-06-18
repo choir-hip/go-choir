@@ -41,3 +41,41 @@ items.
 
 Lineage: supersedes/folds in `mission-texture-product-loop-recovery-v0`. The
 `68d09cc3` injector change is reverted/superseded by T1.
+
+## 2026-06-17 - Read-only T1 audit before runtime mutation (red planned, green checkpoint)
+
+Claim under test: the current source tree still carries the superseded
+one-write-per-run cadence workaround rather than the long-running Texture actor
+specified by this paradoc.
+
+Move: probe. Read the current Texture runtime, prompt overlay, mutation store,
+and cadence tests before editing protected code.
+
+Expected ΔV: -0 implementation, +1 observer evidence packet. Actual ΔV: no ramp
+item landed, but the route is now precise enough for the T1 construct.
+
+Receipts:
+
+- `internal/runtime/super_controller.go:417-438` still returns `nil` for Texture
+  warm injection and explicitly says Texture consumes only a cold-prepended
+  batch, one canonical revision per run.
+- `internal/runtime/tools_texture.go:549-576` still rejects a second
+  `patch_texture`/`rewrite_texture` in the same run once the run's
+  `texture_agent_mutations` row is no longer `pending`.
+- `internal/runtime/textureprompts/overlays/run_system.yaml:12` still instructs
+  Texture not to write again in the same revision run after a write succeeds.
+- `internal/runtime/texture_controller.go:25-44` implements leading coalesced
+  wakes, which was a useful prior repair but preserves separate revision runs
+  instead of making `texture:<docID>` one resident logical actor.
+- `internal/runtime/texture_test.go:1433-1468` and
+  `internal/runtime/texture_test.go:7431-7510` encode the old expectations:
+  Texture warm injection disabled and second same-run writes rejected.
+
+Open edge: the mutation row currently carries a single `revision_id`, so T1
+needs a narrow replacement for duplicate-write protection that does not recreate
+the one-write cap. Candidate repair: keep `texture_agent_mutations` as run
+liveness/idempotency state, stop completing it on each write, and let each
+canonical revision carry `loop_id`, parent revision, operation metadata, and
+worker-update consumption metadata as the per-revision commit record.
+
+Next move: documentation-first checkpoint commit, then T1 runtime construct.
