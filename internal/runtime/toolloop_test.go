@@ -658,6 +658,112 @@ func TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool(t *testing.T
 	}
 }
 
+func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T) {
+	registry := NewToolRegistry()
+	var edited int
+	if err := registry.Register(Tool{
+		Name:        "patch_texture",
+		Description: "Edit the Texture document.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			edited++
+			if strings.Contains(string(args), "bad-find") {
+				return "", fmt.Errorf("edit 0: find text not present")
+			}
+			return `{"status":"stored","revision_id":"rev-2"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register patch_texture: %v", err)
+	}
+
+	var choices []string
+	var requests []ToolLoopRequest
+	provider := &capturingToolChoiceProvider{
+		responses: []*ToolLoopResponse{
+			{
+				StopReason: "tool_use",
+				ToolCalls: []types.ToolCall{
+					{ID: "call-bad-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","find":"bad-find"}`)},
+					{ID: "call-bad-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","find":"bad-find"}`)},
+				},
+				Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+				Model: "test-model",
+			},
+			{
+				StopReason: "tool_use",
+				ToolCalls: []types.ToolCall{
+					{ID: "call-good", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"good"}`)},
+				},
+				Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+				Model: "test-model",
+			},
+			{
+				StopReason: "end_turn",
+				Text:       "done",
+				Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+				Model:      "test-model",
+			},
+		},
+		choices:  &choices,
+		requests: &requests,
+	}
+
+	var retrySeen bool
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunRetry || phase != "initial_tool_choice" {
+			return
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatalf("decode retry payload: %v", err)
+		}
+		if decoded["reason"] == "required_initial_tool_failed" {
+			retrySeen = true
+		}
+	}
+
+	run := &types.RunRecord{
+		RunID:        "run-texture",
+		OwnerID:      "owner-1",
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+	}
+	text, _, err := RunToolLoop(
+		WithToolExecutionContext(context.Background(), run),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write first"}`)},
+		"You are a Texture appagent.",
+		0,
+		emit,
+		nil,
+		WithInitialToolChoice("function:patch_texture"),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text = %q, want done", text)
+	}
+	if edited != 3 {
+		t.Fatalf("patch_texture executed %d times, want both failed attempts plus retry", edited)
+	}
+	if len(choices) != 3 || choices[0] != "function:patch_texture" || choices[1] != "function:patch_texture" || choices[2] != "" {
+		t.Fatalf("tool choices = %#v, want exact retry then unconstrained final", choices)
+	}
+	if len(requests) < 2 {
+		t.Fatalf("requests = %d, want at least 2", len(requests))
+	}
+	for i := 0; i < 2; i++ {
+		if len(requests[i].ToolDefinitions) != 1 || requests[i].ToolDefinitions[0].Name != "patch_texture" {
+			t.Fatalf("request %d tool definitions = %+v, want only patch_texture", i, requests[i].ToolDefinitions)
+		}
+	}
+	if !retrySeen {
+		t.Fatal("missing required_initial_tool_failed retry event")
+	}
+}
+
 func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T) {
 	registry := NewToolRegistry()
 	var edited int

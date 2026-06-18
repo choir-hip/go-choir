@@ -562,6 +562,28 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					return "", totalUsage, fmt.Errorf("tool loop persist injected turns after tools: %w", err)
 				}
 			}
+			if initialToolChoiceApplied {
+				if requiredName, ok := exactRequiredToolChoiceName(options.initialToolChoice); ok && !requiredToolSucceeded(requiredName, resp.ToolCalls, toolResults) {
+					initialToolChoiceAttempts++
+					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: required initial tool %q did not succeed after %d retries", requiredName, maxRequiredNextToolRetries)
+					}
+					if err := appendRequiredInitialToolChoiceReminder(requiredName, "required_initial_tool_failed"); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist failed initial tool-choice retry: %w", err)
+					}
+					forceInitialToolChoiceRetry = true
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_tool": requiredName,
+							"tool_choice":   req.ToolChoice,
+							"reason":        "required_initial_tool_failed",
+							"attempt":       initialToolChoiceAttempts,
+						})
+						emit(types.EventRunRetry, "initial_tool_choice", payload)
+					}
+					continue
+				}
+			}
 			if activeRequired != nil && requiredCalled {
 				requiredNextTool = nil
 			}

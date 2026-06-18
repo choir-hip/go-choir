@@ -513,6 +513,47 @@ func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 	}
 }
 
+func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
+	registry := NewToolRegistry()
+	var executed int
+	if err := registry.Register(Tool{
+		Name: "patch_texture",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			executed++
+			if strings.Contains(string(args), "bad") {
+				return "", fmt.Errorf("edit 0: find text not present")
+			}
+			return `{"status":"stored","revision_id":"rev-2"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register patch_texture: %v", err)
+	}
+
+	run := &types.RunRecord{
+		RunID:        "run-texture",
+		OwnerID:      "owner-1",
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+	}
+	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
+		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"bad"}`)},
+		{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"good"}`)},
+	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+
+	if executed != 2 {
+		t.Fatalf("executed patch_texture %d times, want 2", executed)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+	if !results[0].IsError {
+		t.Fatalf("first edit result = %#v, want error", results[0])
+	}
+	if results[1].IsError || !strings.Contains(results[1].Output, `"status":"stored"`) {
+		t.Fatalf("second edit result = %#v, want stored success", results[1])
+	}
+}
+
 func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	var executed []string
@@ -946,16 +987,16 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 		t.Fatalf("create parent run: %v", err)
 	}
 	researcher := &types.RunRecord{
-		RunID:        "run-researcher-failed",
-		AgentID:      "researcher:fallback",
-		ChannelID:    docID,
-		RequestedByRunID:  parent.RunID,
-		OwnerID:      ownerID,
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
-		State:        types.RunFailed,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "run-researcher-failed",
+		AgentID:          "researcher:fallback",
+		ChannelID:        docID,
+		RequestedByRunID: parent.RunID,
+		OwnerID:          ownerID,
+		AgentProfile:     AgentProfileResearcher,
+		AgentRole:        AgentProfileResearcher,
+		State:            types.RunFailed,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileResearcher,
 			runMetadataAgentRole:    AgentProfileResearcher,

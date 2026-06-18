@@ -272,8 +272,17 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	skipped := plannedToolSkips(ctx, calls)
 
 	if shouldExecuteToolsSequentially(calls) {
+		profile := canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile))
+		successfulTextureEditCallID := ""
 		for i, call := range calls {
-			results[i] = executeOneTool(ctx, registry, call, skipped[i], emit)
+			skipReason := skipped[i]
+			if skipReason == "" && profile == AgentProfileTexture && isTextureWriteToolName(call.Name) && successfulTextureEditCallID != "" {
+				skipReason = fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, successfulTextureEditCallID)
+			}
+			results[i] = executeOneTool(ctx, registry, call, skipReason, emit)
+			if skipReason == "" && profile == AgentProfileTexture && isTextureWriteToolName(call.Name) && !results[i].IsError && isStructuredToolSuccess(results[i].Output) {
+				successfulTextureEditCallID = call.ID
+			}
 		}
 		executeRequiredToolTransitions(ctx, registry, calls, results, emit)
 		return results
@@ -663,19 +672,13 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenBash := map[string]int{}
 	seenDelegateWorker := map[string]int{}
 	seenTextureResearcherSpawn := map[string]int{}
-	firstTextureEdit := -1
 
 	for i, call := range calls {
 		switch call.Name {
 		case "patch_texture", "rewrite_texture":
-			if profile != AgentProfileTexture {
-				continue
-			}
-			if firstTextureEdit != -1 {
-				setSkip(i, fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, calls[firstTextureEdit].ID))
-				continue
-			}
-			firstTextureEdit = i
+			// Texture writes are sequential side effects. Duplicate suppression is
+			// decided during execution, after we know a prior write actually stored
+			// a revision; a failed first write must not make later writes no-ops.
 		case "bash":
 			if profile != AgentProfileSuper && profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
 				continue

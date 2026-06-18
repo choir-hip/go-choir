@@ -237,6 +237,27 @@ evidence. The retry/no-write settlement repair did not reach the live failing
 branch or did not prevent the run from completing before any Texture appagent
 write.
 
+Follow-up Trace diagnostic on the same deployed SHA identified the concrete live
+branch. Prompt-bar submission `02be18d3-dfa9-4294-9327-4567e1a4b008` / doc
+`76dee478-d2f5-4c73-86ff-781fd9dadfee` activated Texture with exact
+`function:patch_texture` and a one-tool `patch_texture` definition. The live
+model emitted two `patch_texture` calls. The first failed (`edit 0: find text
+not present`) because it tried to replace a fenced prompt block that was only
+present in the prompt framing, not the canonical V0 content. The duplicate
+write guard then returned the second call as a non-error duplicate notice even
+though no revision had been stored. The next unconstrained provider turn ended
+with prose, and the run completed with `Texture run completed without storing a
+Texture revision`.
+
+Current local repair after that diagnostic: Texture duplicate-write suppression
+is now dynamic in sequential tool execution and only suppresses later Texture
+write tools after a prior same-turn write has actually stored a structured
+revision (`internal/runtime/tools.go:272-288`). The exact-initial-tool branch now
+retries when the required initial tool was called but did not succeed
+(`internal/runtime/toolloop.go:562-584`), preserving exact `patch_texture` until
+there is a stored first revision or bounded retry exhaustion. Local focused tests
+and runtime shards pass; staging proof for this repair is pending.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -322,17 +343,17 @@ position / live conjectures / open edges:
   revision, but exact first `patch_texture` as implemented can also collapse the
   live provider path into no appagent revision and no delegation. Retrying
   provider `end_turn` during exact initial tool choice and preventing no-write
-  failure reconcile loops did not change staging behavior at `58f261c8`, so the
-  next discriminator is no longer just "did the provider return end_turn?"
+  failure reconcile loops did not change staging behavior at `58f261c8`. A
+  follow-up Trace diagnostic narrowed the branch to failed `patch_texture`
+  results being treated as a satisfied initial write because a duplicate
+  same-turn Texture write returned a non-error notice.
 
-next move: inspect the deployed trajectory/Trace events for submission
-`08c13c3b-8f80-4567-a4a5-7656dfee16b4` / doc
-`3d0ccff6-a89a-4a86-af43-c4a6189e9f28` and classify the no-appagent path:
-whether Texture was never activated, exact initial tool choice was relaxed or
-precondition-failed before provider call, retry events were not emitted, the run
-was failed/settled before the tool loop, or `patch_texture` was unavailable in
-the live tool set. Only after that evidence should the next runtime construct
-touch protected surfaces.
+next move: land and deploy the failed-initial-write retry repair, then re-run the
+deployed cadence probe. If staging produces fast V1 but still V1-only, shift
+back to T3/T4 park-and-wait / resident actor lifecycle and worker-update
+delivery. If staging still produces V0-only, inspect whether retries exhausted,
+the live model repeated invalid fenced replacements, or `patch_texture` success
+failed after retry.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -355,8 +376,11 @@ after the first falsification; the current learning is that the repair must be
 live-provider-compatible, not just exact-tool correct under stubs. The latest
 local repair made provider `end_turn` non-terminal during exact first-tool
 obligations and avoided reconcile spin on no-write failures, but staging at
-`58f261c8` still produced V0-only with no research activity. The live failure is
-upstream or adjacent to the retry branch until Trace proves otherwise.
+`58f261c8` still produced V0-only with no research activity. Follow-up Trace
+proved the live failure is inside the write batch: a failed first
+`patch_texture` plus non-error duplicate notice let the initial write obligation
+fall through. The latest local repair makes success, not mere tool-call
+presence, the condition for satisfying exact initial `patch_texture`.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

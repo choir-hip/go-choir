@@ -414,3 +414,76 @@ Next move: inspect the deployed trajectory/Trace events for submission
 Rollback ref: revert `58f261c8`, then `7d462629`, if the next evidence shows the
 exact-first-write line is incompatible with the live provider/tool-selection
 path rather than only missing an activation or settlement guard.
+
+## 2026-06-18 - Failed initial write retry repair (red runtime, staging pending)
+
+Claim under test: the repeated V0-only staging result is not because Texture was
+never activated or exact tool choice was unavailable. It is because the first
+exact `patch_texture` batch can call the right tool but fail to store a revision,
+then be treated as satisfied by a duplicate non-error notice.
+
+Move: probe + construct. Ran a fresh product-path Trace diagnostic against
+deployed `58f261c8`, then repaired the general sequential tool execution and
+exact initial tool-choice loop.
+
+Expected ΔV: classify the live no-appagent branch and repair the first-write
+fallthrough without adding semantic role choreography. Actual local ΔV: the
+staging-shaped branch is covered by focused tests and the runtime shard suite;
+deployed proof remains pending.
+
+Diagnostic receipts:
+
+- Trace diagnostic submission `02be18d3-dfa9-4294-9327-4567e1a4b008`, doc
+  `76dee478-d2f5-4c73-86ff-781fd9dadfee`, initial Texture run
+  `323ea93b-668a-4355-a202-d2f2046f2537`, on staging health identity
+  `58f261c801f077e37f04ee480905422cbf925b52`.
+- Trace showed Texture activated and provider calls used exact
+  `function:patch_texture` with a one-tool `patch_texture` definition after
+  Xiaomi and DeepSeek provider-availability fallbacks.
+- ChatGPT returned `stop_reason=tool_use` with two `patch_texture` calls. The
+  first returned `tool_error: edit 0: find text not present` because it tried to
+  replace a fenced prompt block from prompt framing (`--- ... ---`) that was not
+  present in canonical V0. The duplicate call returned a non-error duplicate
+  notice: `duplicate Texture write tool patch_texture ... one canonical document
+  mutation is allowed per revision run`.
+- The following provider turn was unconstrained, returned `end_turn` prose
+  saying no canonical revision was created, then Texture emitted
+  `Texture run completed without storing a Texture revision`.
+
+Repair receipts:
+
+- `internal/runtime/tools.go` now performs Texture duplicate-write suppression
+  during sequential execution, after observing that a prior same-turn Texture
+  write returned a structured non-error success. A failed first write no longer
+  makes later same-turn Texture writes no-ops.
+- `internal/runtime/toolloop.go` now treats an exact initial tool choice as
+  unsatisfied when the required tool was called but all results were errors,
+  appends an initial-tool reminder, emits `loop.retry` phase
+  `initial_tool_choice` with reason `required_initial_tool_failed`, and retries
+  with the exact initial tool choice still active.
+- `internal/runtime/toolloop_test.go` adds
+  `TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool`, matching the
+  staging shape: duplicate failed `patch_texture` calls, exact retry, then a
+  stored revision.
+- `internal/runtime/tools_test.go` adds
+  `TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt`, proving failed
+  Texture writes do not suppress later writes in the same turn.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool|TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool|TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool|TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn|TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestInitialTextureToolChoiceRequiresPatchBeforeContinuation|TestHandlePromptBarOperationalProofInitialRunStartsWithTexture|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestSubmitResearchFindingsWakeUsesSameDebouncedPath|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTexturePromptInitialRevisionUsesSingleWriterLoop|TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent|TestResearcherFailureSynthesizesCheckpointAfterSearch|TestRunSupportsCoagentUpdateInjectionIncludesTexture' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestCoagentUpdateTurnInjectorSupportsTexture|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestBuildAppagentRevisionMetadataCarriesForwardDurableKeys|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+
+Open blockers / remaining error:
+
+- Staging must still prove this repair yields a visible V1. If V1 appears but no
+  V2+ follows, the next open edge is T3/T4: a real park-and-wait / resident actor
+  lifecycle rather than wake-driven integrate runs.
+- This repair does not implement park-and-wait, cumulative actor budget,
+  passivation-as-sleep, doc-delete cancellation, or verifier N:1 settlement.
+
+Rollback ref: revert this failed-initial-write runtime repair commit if staging
+shows retry exhaustion, repeated invalid fenced replacements, or a broader
+tool-loop regression.
