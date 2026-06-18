@@ -2419,3 +2419,70 @@ a durable blocker that acceptance can classify.
 Rollback ref: revert `af141a05` if later evidence shows explicit-blocker
 requirements trap valid Texture-visible blockers or suppress legitimate
 non-worker Texture-requested Super completions.
+
+## 2026-06-18 - Owner-side critical review of the overnight one-shot (problem doc, no code)
+
+Reviewer: Cursor agent (owner-side), with an independent `codex exec` read-only
+review of `git diff 488e9182..HEAD`. This checkpoint documents the problems
+before any fix commit, per the Problem-Documentation-First invariant.
+
+State of `main` after the overnight run (HEAD `1a470554`): 45 commits, worktree
+clean, local == origin. The full Go suite is green on every commit (runtime
+shards 0-3, non-runtime, integration smoke, Go vet/build, TLA+). The repeated
+"failing CI" signal was the `Deploy to Staging (Node B)` job only (vmctl resolve
+timeouts, `no route to host`, proxy WS timeouts, one nix-switch retry) -
+infrastructure, not a Go build/test failure.
+
+What landed and is supported as good:
+
+- T1-T6 of the paramission are in place. Multi-write-in-one-run works: the write
+  gate (`internal/runtime/tools_texture.go:566`) keeps the per-run
+  `AgentMutation` `pending` across writes instead of completing on first write,
+  so a resident actor can store multiple canonical revisions.
+- From-weights V1 + park-and-wait + per-actor tool-loop budget landed. The
+  park waiter blocks before the next provider call
+  (`internal/runtime/toolloop.go`), so parked time avoids billed model calls.
+- Deployed staging cadence is the intended shape: probe on `af141a05`
+  (submission `ece414f0-6e9b-4036-9708-6062afb0795f`) showed V0 at +0.33s, V1
+  appagent at +8.06s (from-weights), V2 appagent at +57.6s; `first_paint_ms=8064`
+  vs the ~49s baseline, `total_revision_count=3`.
+
+Problems found (documented now; fixes to follow as separate commits):
+
+- P1 (foreground lost update): `internal/runtime/texture_agent_revision.go:99-111`
+  (`HandleTextureAgentRevision`). When a Texture actor already has a pending
+  mutation - which, with parked long-running actors, is most of its life - a new
+  `/api/texture/documents/{id}/revise` returns the existing run ID and never
+  records the new owner prompt/edit anywhere. The owner receives `202` and the
+  edit is silently dropped. Violates the mission invariant "no lost foreground
+  updates."
+- P1 (idempotency vs multi-write conflict):
+  `internal/runtime/texture_agent_revision.go:209-234`
+  (`reconcilePendingMutationFromDocumentHead`) is one-write-era logic. Any
+  external pending-mutation lookup (foreground revise or cancel handler) sees the
+  appagent head with a texture-write source and matching `loop_id` and completes
+  the mutation at line 231. The still-running actor's next write then fails at
+  `tools_texture.go:566` ("no longer writable"). The old idempotency machinery
+  fights the new multi-revision design.
+- P2 (semantic role-choreography in runtime - mission-forbidden): the tail
+  commits `623a33de`, `f4eca79c`, `f26e1f7c`, `8c2bfa71`, `af141a05`,
+  `1a470554` add a Texture-requested-Super completion guard plus broad string
+  classifiers in `internal/runtime/runtime.go` (markers include ordinary words
+  like `fix`, `test`, `verify`, `code`, `artifact`) that force a
+  request_worker_vm -> start/observe/finish_worker_delegation path. This is
+  semantic appagent policy baked into the core tool loop, which the paramission
+  explicitly forbids ("no semantic role-choreography decision trees;
+  harness-minimal uniform primitives"). It is also the direct cause of the
+  overnight loop: ~13 commits chasing a self-imposed `worker_leased` acceptance
+  checkpoint the live prompt never required, each cycle redeploying and
+  re-probing while the RunAcceptanceRecord stayed `state=blocked`.
+
+Owner decision: revert the tail choreography family to restore harness-uniform
+behavior, then fix the two P1 foreground-interaction bugs, verify, and land.
+Keep T1-T6 + from-weights V1 + park/budget.
+
+Remaining error / open edges after this checkpoint: the lifecycle/worker
+"acceptance" goal these tail commits chased is not abandoned, but it must be
+re-expressed as a generic, role-uniform evidence contract (or a product-path
+acceptance that does not require a worker lease for prompts that need none), not
+as in-runtime role choreography.
