@@ -7901,6 +7901,115 @@ func TestTextureAgentRevisionNoDuplicateOnRenewalRetry(t *testing.T) {
 	}
 }
 
+// TestTextureAgentRevisionDeliversOwnerRequestToResidentActor verifies the
+// long-running-actor foreground path. A /revise while a resident (non-terminal)
+// Texture actor holds a pending mutation must NOT complete that mutation (P1#1:
+// the actor stays writable for further revisions), and must deliver the owner's
+// new request to the actor as an addressed update instead of dropping it (P1#2:
+// no lost foreground updates). An identical retry stays idempotent (VAL-CROSS-122).
+func TestTextureAgentRevisionDeliversOwnerRequestToResidentActor(t *testing.T) {
+	t.Parallel()
+	h, s, _ := textureAPISetupWithRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	docID, baseRevisionID := createDocWithUserRevision(t, h)
+	agentID := currentTextureAgentID(docID)
+	runID := "run-resident-texture-actor"
+
+	run := types.RunRecord{
+		RunID:        runID,
+		AgentID:      agentID,
+		ChannelID:    docID,
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-texture-test",
+		State:        types.RunRunning,
+		Prompt:       "Revise the document.",
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentID:      agentID,
+			runMetadataChannelID:    docID,
+			"doc_id":                docID,
+		},
+	}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatalf("create resident run: %v", err)
+	}
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: runID, OwnerID: "user-1", State: "pending", CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create pending mutation: %v", err)
+	}
+	// An appagent head revision the resident actor already wrote (matching source
+	// + loop_id) so the old reconcile path would have completed the mutation.
+	headMeta, _ := json.Marshal(map[string]any{"source": "patch_texture", "loop_id": runID})
+	if err := s.CreateRevision(ctx, types.Revision{
+		RevisionID:       "rev-resident-head",
+		DocID:            docID,
+		OwnerID:          "user-1",
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "appagent",
+		Content:          "Resident actor wrote V1.",
+		Citations:        json.RawMessage("[]"),
+		Metadata:         headMeta,
+		ParentRevisionID: baseRevisionID,
+		CreatedAt:        now,
+	}); err != nil {
+		t.Fatalf("create appagent head: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	h.HandleTextureAgentRevision(w, textureRequest(t, http.MethodPost,
+		"/api/texture/documents/"+docID+"/revise", map[string]string{"prompt": "Add a risks section"}))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("revise status = %d, want 202; body: %s", w.Code, w.Body.String())
+	}
+	var resp textureAgentRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode revise response: %v", err)
+	}
+	if resp.RunID != runID {
+		t.Fatalf("revise returned run %q, want resident run %q", resp.RunID, runID)
+	}
+
+	mutation, err := s.GetAgentMutationByRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get mutation: %v", err)
+	}
+	if mutation.State != "pending" {
+		t.Fatalf("resident actor mutation state = %q, want pending (P1#1: must stay writable)", mutation.State)
+	}
+
+	updates, err := s.ListPendingWorkerUpdates(ctx, "user-1", agentID, 10)
+	if err != nil {
+		t.Fatalf("list pending updates: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("pending owner updates = %d, want 1 (P1#2: owner request must not be dropped)", len(updates))
+	}
+	if updates[0].Kind != "owner_revision_request" || !strings.Contains(updates[0].Content, "Add a risks section") {
+		t.Fatalf("delivered update = %+v, want owner_revision_request carrying the prompt", updates[0])
+	}
+
+	wRetry := httptest.NewRecorder()
+	h.HandleTextureAgentRevision(wRetry, textureRequest(t, http.MethodPost,
+		"/api/texture/documents/"+docID+"/revise", map[string]string{"prompt": "Add a risks section"}))
+	if wRetry.Code != http.StatusAccepted {
+		t.Fatalf("retry status = %d, want 202; body: %s", wRetry.Code, wRetry.Body.String())
+	}
+	updates, err = s.ListPendingWorkerUpdates(ctx, "user-1", agentID, 10)
+	if err != nil {
+		t.Fatalf("list pending updates after retry: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("pending owner updates after identical retry = %d, want 1 (VAL-CROSS-122 idempotency)", len(updates))
+	}
+}
+
 // TestTextureAgentRevisionMutationCompletedOnlyOnce verifies that Texture write tools are
 // the idempotency boundary for canonical appagent revisions (VAL-CROSS-122).
 func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {

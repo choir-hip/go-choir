@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -100,7 +102,18 @@ func (h *APIHandler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.R
 	if err != nil {
 		log.Printf("texture api: check pending mutation: %v", err)
 	} else if existing != nil {
-		// Return the existing run — idempotent response.
+		// A Texture actor is already resident (running or parked) for this
+		// document. Deliver the owner's new request to that actor as an
+		// addressed update and wake it, instead of silently dropping the prompt.
+		// This preserves the "no lost foreground updates" invariant now that a
+		// long-running actor is pending for most of its life. The same run ID is
+		// returned because the owner's request is handled by the resident actor,
+		// not a new run.
+		if err := h.rt.deliverOwnerRevisionToTextureActor(r.Context(), doc, ownerID, req); err != nil {
+			log.Printf("texture api: deliver owner revision to resident texture actor %s: %v", existing.RunID, err)
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "a revision is already in progress for this document; please retry shortly"})
+			return
+		}
 		writeAPIJSON(w, http.StatusAccepted, textureAgentRevisionResponse{
 			RunID:     existing.RunID,
 			DocID:     docID,
@@ -186,17 +199,29 @@ func (h *APIHandler) pendingAgentMutationByDoc(ctx context.Context, docID, owner
 	if err != nil || mutation == nil {
 		return mutation, err
 	}
+	run, runErr := h.rt.GetRun(ctx, mutation.RunID, ownerID)
+	if runErr == nil && !run.State.Terminal() {
+		// The Texture actor is still resident (running or parked). A long-running
+		// actor keeps its single pending mutation across many canonical revisions,
+		// so it must not be reconciled/completed here. Completing a live actor's
+		// mutation would lock it out of further writes (its next write fails the
+		// pending-state gate in commitTextureToolEdit). Reconcile is cleanup for
+		// terminal/missing runs only.
+		return mutation, nil
+	}
+	// The run is terminal or unresolvable. Clean up its pending mutation: if the
+	// canonical head is the appagent write this run produced, complete the
+	// mutation; otherwise (for a confirmed terminal run) mark it stale so a fresh
+	// revision can start.
 	reconciled, reconcileErr := h.reconcilePendingMutationFromDocumentHead(ctx, mutation)
 	if reconcileErr != nil {
 		log.Printf("texture api: reconcile pending mutation %s from document head: %v", mutation.RunID, reconcileErr)
 	} else if reconciled {
 		return nil, nil
 	}
-	run, err := h.rt.GetRun(ctx, mutation.RunID, ownerID)
-	if err != nil {
-		return mutation, nil
-	}
-	if !run.State.Terminal() {
+	if runErr != nil {
+		// Could not resolve the run; leave the pending mutation as-is rather than
+		// marking a possibly-transient lookup failure stale.
 		return mutation, nil
 	}
 	if err := h.rt.Store().MarkAgentMutationStale(ctx, mutation.RunID); err != nil {
@@ -232,6 +257,73 @@ func (h *APIHandler) reconcilePendingMutationFromDocumentHead(ctx context.Contex
 		return false, err
 	}
 	return true, nil
+}
+
+func stableOwnerRevisionUpdateID(ownerID, docID, intent, prompt string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{ownerID, docID, intent, prompt}, "\x00")))
+	return "owner-rev-" + hex.EncodeToString(sum[:])[:20]
+}
+
+// deliverOwnerRevisionToTextureActor delivers an owner-originated revision
+// request to the document's resident Texture actor as an addressed coagent
+// update, then signals the actor so a parked run wakes. It reuses the same
+// pending-update substrate that researcher/super deliveries use, so the warm
+// injector folds the owner instruction into the running actor's context and it
+// produces a new canonical revision. This is the foreground-update path for a
+// long-running, mostly-parked Texture actor; without it a new /revise during a
+// pending actor would be silently dropped.
+func (rt *Runtime) deliverOwnerRevisionToTextureActor(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("runtime store unavailable")
+	}
+	targetAgentID := currentTextureAgentID(doc.DocID)
+	if strings.TrimSpace(targetAgentID) == "" {
+		return fmt.Errorf("texture agent id unavailable for doc %s", doc.DocID)
+	}
+	intent := strings.TrimSpace(req.Intent)
+	prompt := strings.TrimSpace(req.Prompt)
+	summary := "Owner revision request"
+	if intent != "" {
+		summary = "Owner revision request: " + intent
+	}
+	var notes []string
+	if prompt != "" {
+		notes = append(notes, prompt)
+	}
+	update := types.WorkerUpdateRecord{
+		// Deterministic update id keyed on the request content so a renewal/retry
+		// of the same owner request dedupes (DispatchWorkerUpdate is idempotent by
+		// owner_id+update_id, preserving VAL-CROSS-122) while a genuinely new
+		// owner instruction is delivered as a distinct packet.
+		UpdateID:      stableOwnerRevisionUpdateID(ownerID, doc.DocID, intent, prompt),
+		OwnerID:       ownerID,
+		AgentID:       targetAgentID,
+		TargetAgentID: targetAgentID,
+		ChannelID:     doc.DocID,
+		Role:          "owner",
+		Kind:          "owner_revision_request",
+		Summary:       summary,
+		Notes:         notes,
+		CreatedAt:     time.Now().UTC(),
+	}
+	update.Content = buildWorkerUpdateMessage(update)
+	message := &types.ChannelMessage{
+		ChannelID: doc.DocID,
+		From:      "owner",
+		ToAgentID: targetAgentID,
+		Role:      update.Role,
+		Content:   update.Content,
+		Timestamp: update.CreatedAt,
+	}
+	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
+	if err != nil {
+		return fmt.Errorf("dispatch owner revision update: %w", err)
+	}
+	if created {
+		rt.emitChannelMessageEvent(ctx, *message, ownerID)
+		rt.wakeUpdatedCoagent(ctx, stored)
+	}
+	return nil
 }
 
 func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, scheduledMessageSeq int64) (*types.RunRecord, error) {
