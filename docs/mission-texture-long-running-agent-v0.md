@@ -329,6 +329,23 @@ tests were also updated to satisfy addressed `update_coagent` semantics and the
 exact-first-write contract used by the current tool loop
 (`internal/runtime/texture_test.go:2120-2683`).
 
+Staging evidence after deploy of `f9626242` shows partial repair, not
+settlement. CI test/build jobs passed, including internal/runtime shards 0-3,
+but the Node B deploy job again concluded failure while public `/health`
+confirmed proxy and sandbox both deployed at
+`f96262421748902f257fd20aadd61477f7727353` (`deployed_at`
+`2026-06-18T03:53:52Z`). The deployed cadence probe submitted
+`bddc8556-602a-4cb1-b2be-134371cbb274` / doc
+`fff50f6c-93b5-46e8-9a2e-b74cf02a2869`. It observed V0 at +0.386s and a fast
+appagent V1 at +28.966s, then no V2: `appagent_revision_count=1`,
+`total_revision_count=2`, `first_paint_ms=28966`, and final trajectory
+`state=failed`. Trace summary showed the evidence path did open
+(`web_search=2`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
+`delegation_count=1`, `agent_count=3`, `moment_count=128`). This supports the
+metadata/guard repair enough to move past no-V1/no-delegation as the only live
+branch, but it falsifies the V2+ cadence: worker findings are not being consumed
+into a follow-on Texture revision before the trajectory fails.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -384,13 +401,12 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 locally repaired again, staging pending: first paint can now be fast in the
-  live product path (`29265cae` diagnostic V1 at about +16s, `58895d28`
-  diagnostic fast V1), and the latest local metadata repair makes prompt-only
-  initial user-prompt V1 non-publishable and explicitly model-prior/interim even
-  when the run metadata is article-shaped. Staging still must prove that this
-  survives live provider behavior and unlocks the completion guard / evidence
-  path.
+- C2 partially supported on staging: first paint can now be fast in the live
+  product path (`29265cae` diagnostic V1 at about +16s, `58895d28` diagnostic
+  fast V1, `f9626242` formal probe V1 at +28.966s). The `f9626242` probe also
+  opened research/delegation, so the metadata/guard path is no longer purely
+  local. It still does not settle T2/T8 because no V2 consumed the returned
+  evidence and the trajectory failed.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -425,16 +441,19 @@ position / live conjectures / open edges:
   next-tool enforcement. Staging `58895d28` showed the formal probe can still die
   in the no-V1 branch; a fresh diagnostic also showed a successful V1 branch
   where `article_revision` metadata suppresses the model-prior/interim flags. The
-  latest local repair fixes that metadata classification without weakening real
-  Wire article revision semantics or forcing a semantic researcher continuation;
-  the next discriminator is staging.
+  latest metadata repair fixes that classification without weakening real Wire
+  article revision semantics or forcing a semantic researcher continuation.
+  Staging `f9626242` moved the live failure forward: V1 and evidence work happen,
+  but returned updates do not become V2 before trajectory failure.
 
-next move: commit and push the metadata repair, monitor CI and staging deploy
-identity, then rerun the deployed cadence probe against `https://choir.news`.
-The staging proof must distinguish whether the remaining blocker is no-V1 edit
-failure, guard-not-fired, researcher-not-delivering, or
-Texture-not-consuming-findings. If staging reveals a new failure branch, record
-it in this paradoc/ledger before any further code fix.
+next move: run a focused product-path diagnostic for the `f9626242` V1-plus-
+research/no-V2 failure. Capture revision metadata and terminal Trace/tool
+details for submission `bddc8556-602a-4cb1-b2be-134371cbb274` if still
+accessible, or reproduce with a fresh diagnostic that prints revision metadata,
+`update_coagent` payload/target, integrate wake runs, and the terminal error.
+Only after that documentation checkpoint should the next code repair target
+Texture-not-consuming-findings, failed integrate wake, or trajectory failure
+settlement.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -471,10 +490,12 @@ model-prior/interim for a factual/current request. Staging `58895d28` showed thi
 does not yet solve acceptance: the formal probe still hit a no-V1 failure, and a
 fresh product-path diagnostic showed that the successful V1 branch can omit the
 model-prior/interim flags by classifying the prompt-bar revision as
-`article_revision`. The latest local repair covers the honest-grounding half by
-making prompt-only initial revisions model-prior/interim even when article-shaped;
-staging must still prove that this reaches the live product path and produces an
-evidence-opening V2+ cadence rather than another no-V1 or V1-only branch.
+`article_revision`. The latest repair covers the honest-grounding half by making
+prompt-only initial revisions model-prior/interim even when article-shaped, and
+staging `f9626242` reached V1 plus research/delegation. The new live learning is
+that evidence can return without producing V2 before trajectory failure; the
+failure has moved from no-V1/no-delegation toward update consumption or integrate
+wake completion.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

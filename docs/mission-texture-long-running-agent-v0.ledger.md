@@ -746,3 +746,59 @@ code repair.
 Rollback ref: revert the runtime repair commit if staging shows sourced Wire
 article revisions lose canonical metadata, the completion guard loops, or
 prompt-only V1s still bypass interim model-prior metadata.
+
+## 2026-06-18 - Staging moved failure to V1-plus-research/no-V2 (red evidence, green record)
+
+Claim under test: deployed `f96262421748902f257fd20aadd61477f7727353` would make
+prompt-only initial Texture V1s honest model-prior/interim, let the completion
+guard open evidence work, and produce V2+ after researcher findings.
+
+Move: monitored the pushed main commit through CI, confirmed staging identity,
+then ran the public product-path cadence probe against `https://choir.news`.
+
+Expected ΔV: prove fast V1 plus evidence-opening V2+ cadence on staging. Actual
+ΔV: C2/T2 is partially supported on staging because V1 and evidence work now
+happen; T8 remains falsified because no V2 was written and the trajectory failed.
+
+Receipts:
+
+- Commit: `f96262421748902f257fd20aadd61477f7727353`.
+- GitHub Actions: Docs Truth Check #27735436095 succeeded; FlakeHub #27735436119
+  succeeded; CI #27735436104 test/build jobs all succeeded, including
+  non-runtime Go tests, integration smoke, docs, TLA+, vet/build, deploy-impact
+  detection, and internal/runtime shards 0, 1, 2, and 3. The CI workflow
+  concluded failure only because `Deploy to Staging (Node B)` job #82051591616
+  exited 1.
+- Deploy identity: the deploy job's health probes and public
+  `curl https://choir.news/health` both reported proxy and sandbox deployed at
+  `f96262421748902f257fd20aadd61477f7727353`, `deployed_at=2026-06-18T03:53:52Z`,
+  with `status=ok`, `upstream=ok`, and `vmctl_status=ok`.
+- Probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Probe submission / trajectory:
+  `bddc8556-602a-4cb1-b2be-134371cbb274`.
+- Texture doc: `fff50f6c-93b5-46e8-9a2e-b74cf02a2869`.
+- Probe timing: V0 user at +0.386s; appagent V1 at +28.966s; no V2 within the
+  probe window; `appagent_revision_count=1`, `total_revision_count=2`,
+  `final_head_chars=1035`.
+- Trace summary: `web_search=2`, `source_search=2`, `spawn_agent=2`,
+  `update_coagent=2`, `moment_count=128`, `search_attempt_count=12`,
+  `search_success_count=4`, `agent_count=3`, `delegation_count=1`.
+- Final trajectory: `state=failed`, `live=false`.
+
+Result: the branch advanced. The live system no longer failed only as no-V1 or
+V1-without-delegation; it produced fast V1 and researcher/supervision evidence
+activity, but returned updates did not become a V2 revision before the trajectory
+failed. The likely next classes are addressed-update delivery, integrate wake
+failure, worker-update consumption metadata, or trajectory failure settlement.
+
+Next move: run a focused product-path diagnostic that prints revision metadata,
+terminal Trace/tool results, `update_coagent` targets/payloads, and any integrate
+wake runs for this branch. If the original authenticated context is unavailable,
+reproduce with a fresh one-off diagnostic. Document that diagnostic before any
+next code repair.
+
+Rollback ref: do not revert `f9626242` solely for this result; it moved staging
+from no-V1/no-delegation to V1-plus-research. Revert only if the next diagnostic
+shows the metadata repair itself caused the trajectory failure or damaged sourced
+Wire article revision semantics.
