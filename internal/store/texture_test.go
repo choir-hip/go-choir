@@ -358,6 +358,103 @@ func TestTextureCreateRevision(t *testing.T) {
 	}
 }
 
+func TestTextureRevisionProvenanceRoundTrip(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{DocID: "doc-prov", OwnerID: "user-1", Title: "Prov Doc"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+
+	prov := types.Provenance{
+		SchemaVersion:  types.ProvenanceSchemaVersion,
+		AuthoringModel: types.ProvenanceModel{Provider: "fireworks", Model: "test-model"},
+		AuthoredAt:     time.Date(2026, 6, 18, 14, 0, 0, 0, time.UTC),
+		QueriesExecuted: []types.ProvenanceQuery{
+			{Tool: "web_search", Query: "grounding query", ResultCount: 2},
+		},
+		Sources: []types.SourceEntity{
+			{EntityID: "src_aaaa", Kind: "content_item", Target: types.SourceEntityTarget{TargetKind: "content_item", ContentID: "ci-1"}},
+		},
+	}
+	canonical, err := prov.CanonicalJSON()
+	if err != nil {
+		t.Fatalf("CanonicalJSON: %v", err)
+	}
+
+	rev := types.Revision{
+		RevisionID:  "rev-prov",
+		DocID:       "doc-prov",
+		OwnerID:     "user-1",
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "appagent",
+		Content:     "Grounded body.",
+		Provenance:  json.RawMessage(canonical),
+		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := s.CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+
+	got, err := s.GetRevision(ctx, "rev-prov", "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision: %v", err)
+	}
+	if len(got.Provenance) == 0 {
+		t.Fatalf("Provenance not persisted")
+	}
+	var roundtrip types.Provenance
+	if err := json.Unmarshal(got.Provenance, &roundtrip); err != nil {
+		t.Fatalf("unmarshal provenance: %v", err)
+	}
+	if roundtrip.SchemaVersion != types.ProvenanceSchemaVersion {
+		t.Errorf("SchemaVersion = %d, want %d", roundtrip.SchemaVersion, types.ProvenanceSchemaVersion)
+	}
+	if roundtrip.AuthoringModel.Model != "test-model" {
+		t.Errorf("AuthoringModel.Model = %q, want %q", roundtrip.AuthoringModel.Model, "test-model")
+	}
+	if len(roundtrip.Sources) != 1 || roundtrip.Sources[0].EntityID != "src_aaaa" {
+		t.Errorf("Sources round-trip mismatch: %+v", roundtrip.Sources)
+	}
+	again, err := roundtrip.CanonicalJSON()
+	if err != nil {
+		t.Fatalf("CanonicalJSON after round-trip: %v", err)
+	}
+	if string(again) != string(canonical) {
+		t.Errorf("canonical bytes not stable across persistence:\n%s\n%s", again, canonical)
+	}
+}
+
+func TestTextureRevisionWithoutProvenanceIsEmpty(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{DocID: "doc-np", OwnerID: "user-1", Title: "No Prov"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	rev := types.Revision{
+		RevisionID:  "rev-np",
+		DocID:       "doc-np",
+		OwnerID:     "user-1",
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "alice",
+		Content:     "plain",
+		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := s.CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+	got, err := s.GetRevision(ctx, "rev-np", "user-1")
+	if err != nil {
+		t.Fatalf("GetRevision: %v", err)
+	}
+	if len(got.Provenance) != 0 {
+		t.Errorf("expected empty provenance, got %q", string(got.Provenance))
+	}
+}
+
 func TestTextureCreateRevisionRejectsStaleHead(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()

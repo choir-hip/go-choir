@@ -546,6 +546,33 @@ func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerI
 	return types.ChannelMessage{}, false, nil
 }
 
+// buildAppagentRevisionProvenance assembles the system-attributed provenance
+// record for an appagent revision. The runtime records the authoring model, the
+// authoring time, and the collated sources behind the body; the model never
+// authors provenance. Sources come from the runtime-maintained source_entities
+// in the revision metadata. Returns canonical JSON (Provenance.CanonicalJSON);
+// provenance is best-effort and never blocks a write, so a marshal failure
+// yields nil rather than an error.
+func buildAppagentRevisionProvenance(rec *types.RunRecord, revMeta json.RawMessage, now time.Time) json.RawMessage {
+	meta := decodeRevisionMetadata(revMeta)
+	prov := types.Provenance{
+		SchemaVersion: types.ProvenanceSchemaVersion,
+		AuthoredAt:    now.UTC(),
+		Sources:       decodeTextureSourceEntities(meta["source_entities"]),
+	}
+	if rec != nil {
+		prov.AuthoringModel = types.ProvenanceModel{
+			Provider: strings.TrimSpace(metadataStringValue(rec.Metadata, "provider")),
+			Model:    strings.TrimSpace(metadataStringValue(rec.Metadata, "model")),
+		}
+	}
+	canonical, err := prov.CanonicalJSON()
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(canonical)
+}
+
 func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunRecord, in editTextureArgs) (types.Revision, error) {
 	if rt == nil || rt.store == nil {
 		return types.Revision{}, fmt.Errorf("runtime store unavailable")
@@ -678,6 +705,7 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		Content:          materialized.Content,
 		Citations:        json.RawMessage("[]"),
 		Metadata:         revMeta,
+		Provenance:       buildAppagentRevisionProvenance(rec, revMeta, now),
 		ParentRevisionID: baseRevisionID,
 		CreatedAt:        now,
 	}

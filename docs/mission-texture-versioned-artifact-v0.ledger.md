@@ -51,8 +51,36 @@ Decisions (owner):
 - Delete regex source-scraping (`sourceServiceItemIDsFromText`,
   `contentItemIDsFromWorkerMessage`, body-URL scraping) for typed findings packets.
 
+### 2026-06-18 — D1 landed locally (typed provenance + store column + write path)
+
+Implemented D1 TDD-first. No regressions; additive and backward-compatible.
+
+- **Types**: new `internal/types/texture_provenance.go` — typed `Provenance`
+  (`schema_version`, `authoring_model`, `authored_at`, `queries_executed`,
+  `sources`) with **no map fields**, plus `CanonicalJSON()` (sorts sources by
+  EntityID; preserves query order). Moved the collated source-entity schema
+  (`SourceEntity` + sub-structs) into `types` as its canonical home.
+- **Runtime**: `texture_media_sources.go` now aliases the runtime
+  `textureSourceEntity*` names to the `types` versions (deleted ~60 lines of
+  duplicate struct defs). `tools_texture.go` `commitTextureToolEdit` populates
+  `rev.Provenance` via system-attributed `buildAppagentRevisionProvenance`
+  (model/provider from run metadata, authored_at, sources from the
+  runtime-maintained `source_entities`). Best-effort; never blocks a write.
+- **Store**: added additive `provenance_json LONGTEXT NOT NULL DEFAULT '{}'`
+  column to `texture_revisions` (schema DDL + `ensureTextureColumn` migration);
+  threaded it through `CreateRevision` insert, all revision SELECTs, and
+  `scanRevision`. `types.Revision` gains a `Provenance json.RawMessage` field.
+- **Tests (green)**: `internal/types` provenance canonical determinism +
+  order-independence + no-mutate; `internal/store` revision provenance round-trip
+  + empty-provenance; `internal/runtime` `buildAppagentRevisionProvenance`
+  system-attribution. Full `internal/store` (64s) and `internal/types` packages
+  pass; focused runtime suite (source entities / media / edit-commit /
+  revision-metadata) passes.
+
+Mutation class orange (additive schema + write-path attribution; no reader
+behavior change yet). Not pushed; staging proof deferred to D7 settlement.
+
 ### State
 
-Design only; no code authored. The paradoc body is the gate. Ramp D1-D7 defined.
-Next: owner review of this paradoc, then begin D1 (typed per-revision provenance
-in a new `provenance_json` column on `texture_revisions`) TDD-first.
+D1 landed locally (uncommitted). Next: D2 (per-revision `revision_hash` chain
+over canonical bytes; genesis + tamper-detection tests).

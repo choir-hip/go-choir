@@ -120,6 +120,13 @@ type Revision struct {
 	// inspecting a selected historical revision (VAL-ETEXT-010).
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 
+	// Provenance is the canonical-JSON, system-attributed grounding record for
+	// this revision (see Provenance / Provenance.CanonicalJSON). It is filled by
+	// the runtime from ground truth, never authored by the model, and is the
+	// signable substrate for the per-revision hash chain. Stored in its own
+	// provenance_json column, separate from the loose Metadata map.
+	Provenance json.RawMessage `json:"provenance,omitempty"`
+
 	// ParentRevisionID is the revision this one was based on. Empty for
 	// the first revision of a document.
 	ParentRevisionID string `json:"parent_revision_id,omitempty"`

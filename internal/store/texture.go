@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS texture_revisions (
 	content             LONGTEXT NOT NULL,
 	citations_json      LONGTEXT NOT NULL,
 	metadata_json       LONGTEXT NOT NULL,
+	provenance_json     LONGTEXT NOT NULL DEFAULT '{}',
 	parent_revision_id  VARCHAR(255) NOT NULL DEFAULT '',
 	created_at          DATETIME NOT NULL
 );
@@ -362,6 +363,9 @@ func (s *Store) bootstrapTexture() error {
 		return err
 	}
 	if err := s.ensureTextureColumn("texture_revisions", "version_number", "BIGINT NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureTextureColumn("texture_revisions", "provenance_json", "LONGTEXT NOT NULL DEFAULT '{}'"); err != nil {
 		return err
 	}
 	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number DESC)`); err != nil {
@@ -834,6 +838,10 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 	if metadata == "" {
 		metadata = "{}"
 	}
+	provenance := string(rev.Provenance)
+	if strings.TrimSpace(provenance) == "" {
+		provenance = "{}"
+	}
 	tx, err := s.textureHandle().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin texture revision transaction: %w", err)
@@ -876,8 +884,8 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 	rev.VersionNumber = versionNumber
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO texture_revisions (revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO texture_revisions (revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, parent_revision_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rev.RevisionID,
 		rev.DocID,
 		rev.OwnerID,
@@ -887,6 +895,7 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 		rev.Content,
 		citations,
 		metadata,
+		provenance,
 		rev.ParentRevisionID,
 		rev.CreatedAt.UTC().Format(time.RFC3339Nano),
 	)
@@ -981,7 +990,7 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 // the given owner.
 func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (types.Revision, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, parent_revision_id, created_at
 		   FROM texture_revisions
 		  WHERE revision_id = ? AND owner_id = ?`,
 		revisionID, ownerID,
@@ -994,7 +1003,7 @@ func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (ty
 // is already known to belong to the same owner.
 func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (types.Revision, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, parent_revision_id, created_at
 		   FROM texture_revisions
 		  WHERE revision_id = ?`,
 		revisionID,
@@ -1010,7 +1019,7 @@ func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, l
 		limit = 50
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, parent_revision_id, created_at
 		   FROM texture_revisions
 		  WHERE doc_id = ? AND owner_id = ?
 		  ORDER BY version_number DESC, created_at DESC
@@ -1624,7 +1633,7 @@ func scanDocument(row interface{ Scan(...any) error }) (types.Document, error) {
 func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 	var rev types.Revision
 	var authorKind, createdAt string
-	var citationsJSON, metadataJSON string
+	var citationsJSON, metadataJSON, provenanceJSON string
 	var parentRevID string
 
 	err := row.Scan(
@@ -1637,6 +1646,7 @@ func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 		&rev.Content,
 		&citationsJSON,
 		&metadataJSON,
+		&provenanceJSON,
 		&parentRevID,
 		&createdAt,
 	)
@@ -1660,6 +1670,9 @@ func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 	}
 	if metadataJSON != "" && metadataJSON != "{}" {
 		rev.Metadata = json.RawMessage(metadataJSON)
+	}
+	if provenanceJSON != "" && provenanceJSON != "{}" {
+		rev.Provenance = json.RawMessage(provenanceJSON)
 	}
 
 	return rev, nil

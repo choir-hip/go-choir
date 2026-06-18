@@ -30,66 +30,15 @@ type textureMediaSourceRef struct {
 	ResearchState          string `json:"research_state,omitempty"`
 }
 
-type textureSourceEntity struct {
-	EntityID   string                        `json:"entity_id"`
-	Kind       string                        `json:"kind"`
-	Label      string                        `json:"label,omitempty"`
-	Target     textureSourceEntityTarget     `json:"target"`
-	Selectors  []textureSourceEntitySelector `json:"selectors,omitempty"`
-	Display    textureSourceEntityDisplay    `json:"display"`
-	Evidence   textureSourceEntityEvidence   `json:"evidence"`
-	Provenance textureSourceEntityProvenance `json:"provenance"`
-}
-
-type textureSourceEntityTarget struct {
-	TargetKind           string `json:"target_kind"`
-	ItemID               string `json:"item_id,omitempty"`
-	SourceID             string `json:"source_id,omitempty"`
-	FetchID              string `json:"fetch_id,omitempty"`
-	ContentID            string `json:"content_id,omitempty"`
-	FilePath             string `json:"file_path,omitempty"`
-	DocID                string `json:"doc_id,omitempty"`
-	RevisionID           string `json:"revision_id,omitempty"`
-	PublicationID        string `json:"publication_id,omitempty"`
-	PublicationVersionID string `json:"publication_version_id,omitempty"`
-	PublicRecordID       string `json:"public_record_id,omitempty"`
-	URL                  string `json:"url,omitempty"`
-	CanonicalURL         string `json:"canonical_url,omitempty"`
-}
-
-type textureSourceEntitySelector struct {
-	SelectorKind string  `json:"selector_kind"`
-	StartSeconds float64 `json:"start_seconds,omitempty"`
-	EndSeconds   float64 `json:"end_seconds,omitempty"`
-	TextQuote    string  `json:"text_quote,omitempty"`
-	ContentHash  string  `json:"content_hash,omitempty"`
-}
-
-type textureSourceEntityDisplay struct {
-	InlineMode       string `json:"inline_mode"`
-	ExpandedMode     string `json:"expanded_mode"`
-	OpenSurface      string `json:"open_surface,omitempty"`
-	DefaultCollapsed bool   `json:"default_collapsed"`
-}
-
-type textureSourceEntityEvidence struct {
-	State                  string `json:"state"`
-	ResearchState          string `json:"research_state,omitempty"`
-	Relation               string `json:"relation,omitempty"`
-	BodyKind               string `json:"body_kind,omitempty"`
-	BodyLength             int    `json:"body_length,omitempty"`
-	ReaderSnapshot         bool   `json:"reader_snapshot,omitempty"`
-	TranscriptContentID    string `json:"transcript_content_id,omitempty"`
-	TranscriptAvailability string `json:"transcript_availability,omitempty"`
-	SourceRepresentationID string `json:"source_representation_id,omitempty"`
-	Uncertainty            string `json:"uncertainty,omitempty"`
-}
-
-type textureSourceEntityProvenance struct {
-	CreatedBy           string `json:"created_by"`
-	RightsScope         string `json:"rights_scope,omitempty"`
-	UntrustedSourceText bool   `json:"untrusted_source_text,omitempty"`
-}
+// The collated source-entity schema is owned by internal/types (mission
+// texture-versioned-artifact D1/D3). Runtime aliases the canonical types so a
+// single schema backs both per-revision provenance and the source renderer.
+type textureSourceEntity = types.SourceEntity
+type textureSourceEntityTarget = types.SourceEntityTarget
+type textureSourceEntitySelector = types.SourceEntitySelector
+type textureSourceEntityDisplay = types.SourceEntityDisplay
+type textureSourceEntityEvidence = types.SourceEntityEvidence
+type textureSourceEntityProvenance = types.SourceEntityProvenance
 
 var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 var textureSourceServiceItemRefRE = regexp.MustCompile(`\bsource_service_item:([A-Za-z0-9_-]+)\b`)
