@@ -2523,3 +2523,89 @@ Remaining error / open edges after this checkpoint: the lifecycle/worker
 re-expressed as a generic, role-uniform evidence contract (or a product-path
 acceptance that does not require a worker lease for prompts that need none), not
 as in-runtime role choreography.
+
+## 2026-06-18 owner-side review: re-point to the durable-thread model (problem doc)
+
+Documentation-first checkpoint, no code change. After the revert + P1 fixes, the
+owner-side review investigated the remaining "detritus" and why deep-research
+queries still stop at V2. Findings:
+
+- The landed mechanics sit on a **run-centric spine**, not a thread. A parked
+  Texture actor dies at the 2-minute idle deadline; the next findings packet
+  starts a brand-new run (`reconcileTextureAgentWake` ->
+  `submitTextureAgentRevisionRun`) that rebuilds the user turn from the doc head
+  + recent channel messages and injects only a **summary** of prior run-memory
+  (`actor_rewarm`). This is lossy reconstruction ("cold rewarm"), not a
+  continuing conversation.
+- Depth is **reactive and capped**: the thread revises only when a packet is
+  delivered; it never drives its own next question, so deep queries settle at
+  ~V2. The overlay encodes the wrong model (`revision_policy.yaml:57`).
+- **Ad-hoc keyword classifiers and guards remain**:
+  `texturePromptNeedsSuperExecution` (~40 keywords),
+  `texturePromptNeedsWorldKnowledge`, `texturePromptExplicitlyRequests*` /
+  `explicit*FromPrompt`, the wired `textureModelPriorCompletionGuard`, and the
+  no-op/prompt-copy content-reject guards + exact-first-tool retry machinery.
+- The park primitive itself is fine (channel-based `waitForAgentSignal`, no
+  busy-poll; boot-only all-docs reconcile), but the policy around it (2-min idle
+  death, generic wake, DB-discovery via `ListPendingWorkerUpdates`, summary
+  reconstruction) is wrong for the target.
+
+Owner direction (re-pointing the mission, captured in the rewritten paradoc):
+
+- Texture = **one durable agent thread per document**; context accumulates;
+  resume the literal thread (compaction only on overflow); never reconstruct
+  from the doc head.
+- **Always deep research** — the standard, not a mode; the thread actively
+  requests more research and deepens by default. No per-prompt classifier.
+- **No parent/child semantics**; uniform peer actors. **Super is a per-owner
+  singleton**, addressed by request, never spawned by Texture.
+- **No polling**; event-driven delivery into the thread.
+- **Hard cutover, maximize deletion**: no migration, no shims, no dual-path;
+  delete cold rewarm, the classifiers/guards, the exact-first-tool machinery,
+  the AgentMutation one-write scaffolding, and the idle-death/resume-cap gates.
+
+The paradoc body (`docs/mission-texture-long-running-agent-v0.md`) was rewritten
+to this target with ramp R1-R7. The earlier T1-T8 construct/falsification trail
+above is retained as historical evidence only. No fix has been authored against
+this re-pointing yet; the design is the gate before code (owner reviews the
+rewritten paradoc first).
+
+### Design refinements folded into the rewritten paradoc (provenance + R0)
+
+After the rewrite, owner review added a provenance/document-format layer and an
+adversarial Codex pass hardened it. Decisions now in the paradoc body:
+
+- **R0 document format**: Texture document = versioned record, **canonical JSON**
+  (RFC 8785 JCS canonicalizable for future signatures; YAML rejected for having no
+  robust canonical form). Body stays a **markdown column**; provenance is a
+  **typed sibling** (not JSON stuffed into `Revision.Content`). Provenance is
+  **system-attributed** (model authors only body + citation refs).
+- **R0b chain of custody**: source ids runtime-minted at retrieval. Two retrieval
+  boundaries: (1) **deterministic media ingestion** — YouTube/image URLs retrieved
+  + embedded by the runtime with **no model tool call** (owner direction), incl.
+  deterministic YouTube transcript fetch; (2) **researcher semantic retrieval**
+  for facts. "Texture does no retrieval" = no semantic retrieval. Deterministic
+  **source-type-aware** citation validation: quote-must-match-stored-body-version
+  for text-bodied sources, id+selector existence for media/whole-resource/summary
+  projections; failures return a tool error for retry.
+- **Adversarial Codex review** (read-only, `codex exec` on the paradoc + runtime)
+  surfaced P0s folded in: (a) same-thread resume is a **run-lifecycle change**
+  (resume same `loop_id`, replay run-memory verbatim), not just deleting
+  `actor_rewarm` (boot passivates + replacement-run rewarm strands threads);
+  (b) `AgentMutation` is **load-bearing** (write authority, liveness, cancel
+  handle, stale recovery) — collapse its roles into the durable-thread record, do
+  not naively delete; (c) budget exhaustion currently **fails the run** — needs a
+  real budget-quiesced state + spend ledger + bounded reauthorization;
+  (d) delivery to a quiesced/passivated thread needs a **durable inbox cursor**
+  consumed on resume, plus a per-turn idempotency key + revision transaction
+  protocol (keep optimistic `base_revision_id` head check); (e) the JSON rebase
+  touches store + frontend + Wire — "no shim" means no dual path / no data
+  migration, not "readers untouched"; (f) verifier/acceptance need a **quiescence
+  state contract** (cadence + quiescence evidence, not terminal completion).
+- **Owner direction on stop semantics**: **infinite deepening is acceptable** (a
+  looping Texture that keeps improving a doc is a feature, distinct from the
+  overnight `/goal` failure mode; tune later). Quiescence is for cheap idle/await
+  + budget accounting and observability, **not** an infinite-loop guard; proving
+  termination is not a settlement requirement.
+- **Deferred**: media transcript delivery to researchers (inject vs content-handle
+  read via selectors, possibly adaptive to context window) — does not block R0.
