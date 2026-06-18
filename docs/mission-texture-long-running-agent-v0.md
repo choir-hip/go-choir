@@ -796,7 +796,14 @@ position / live conjectures / open edges:
   Texture requested Super, but Super completed after `update_coagent` responses
   without any `request_worker_vm`, delegation, package, or explicit
   `record_texture_decision` evidence, so acceptance stayed blocked at
-  `super_requested`.
+  `super_requested`. Commit `af141a05` then required explicit terminal blocker
+  evidence for worker-shaped Texture-requested Super runs. Staging showed that
+  stricter blocker predicate changed the live branch but did not settle C9:
+  Super still made no worker request. The likely remaining defect is
+  classification, not blocker semantics. Live persistent Super runs appear to
+  carry a generic processing prompt/metadata while the actual Texture-requested
+  objective sits in pending `update_coagent` delivery content, so the completion
+  guard may not recognize the run as worker-shaped.
 
 Current local T4 construct after the `4da4ffa3` proof: `LoadConfig` now defaults
 Texture revision actors into bounded park-on-idle with
@@ -864,34 +871,34 @@ The delete-cancellation probe submitted
 404, and Trace ended `state=cancelled`, `live=false`, with the Texture agent
 state `cancelled`.
 
-Current deployed proof after `8c2bfa71` supports ordinary cadence but still
+Current deployed proof after `af141a05` supports ordinary cadence but still
 blocks lifecycle acceptance. CI test/build jobs passed, including runtime shards
 0-3; the workflow concluded failure only because the known Node B deploy job
 failed, while public `/health` confirmed proxy and sandbox both deployed at
-`8c2bfa71f670e601e111bdbd1f40abfdd1305baf` (`deployed_at`
-`2026-06-18T09:34:42Z`). The formal cadence probe submitted
-`fbb637f0-d7df-44ec-89ce-c556d8c6c83d` / doc
-`1b74a841-d94c-410a-986a-facd48406f84`, reached V1 at 13.266s and V2 at
-57.583s, and completed with `web_search=2`, `source_search=2`,
+`af141a055718f46a2ac4f272959aaaec95031676` (`deployed_at`
+`2026-06-18T09:54:47Z`). The formal cadence probe submitted
+`ece414f0-6e9b-4036-9708-6062afb0795f` / doc
+`97310201-83da-4db5-b711-da5985f8bdf5`, reached V1 at 8.064s and V2 at
+57.606s, and completed with `web_search=2`, `source_search=2`,
 `spawn_agent=2`, and `update_coagent=2`. The lifecycle discriminator submitted
-`e85802c7-2f27-47cf-b0a4-4ef51b625527` / doc
-`ac95eaf4-2165-41f5-8e19-f7578de8bdc0`, reached V1 at 8.025s and V2 at
-34.041s, and synthesized `RunAcceptanceRecord`
-`runacc-1090090c8e674898bf3d` at `staging-smoke-level`, state `blocked`.
-Trace showed `request_super_execution=2` and `update_coagent=2`, but
-`request_worker_vm=0`, `start_worker_delegation=0`,
-`observe_worker_delegation=0`, `finish_worker_delegation=0`,
-`publish_app_change_package=0`, and `record_texture_decision=0`.
+`988e2640-8bb8-4674-a043-839ec1193376` / doc
+`775b1920-4e3c-47d5-9348-3942f6374be7`, reached V1 at 10.629s, V2 at
+39.206s, and V3 at 52.348s, then synthesized `RunAcceptanceRecord`
+`runacc-852978f224d07441271d` at `staging-smoke-level`, state `blocked`.
+Trace showed `request_super_execution=2`, `update_coagent=4`, and
+`record_texture_decision=2`, but `request_worker_vm=0`,
+`start_worker_delegation=0`, `observe_worker_delegation=0`,
+`finish_worker_delegation=0`, and `publish_app_change_package=0`.
 
-next move: repair the C9 Super-settlement branch exposed by `8c2bfa71`.
-For a Texture-requested objective that explicitly requires worker VM /
-delegation evidence, `update_coagent` must not stand in for worker execution
-unless it carries an acceptance-visible structured blocker that the
-RunAcceptanceRecord can classify. Super must either request the worker and drive
-it to terminal worker-update/package evidence, or return a durable blocker
-rather than complete after generic Texture updates. Residuals after that remain
-elapsed-time budget across sleep, full wake/reconcile collapse, Trace projection
-legibility, and first-write stochasticity.
+next move: repair the C9 Super worker-shape classification branch exposed by
+`af141a05`. The completion guard must inspect the actual Texture-requested
+objective delivered to persistent Super, not only the generic Super run prompt
+or top-level metadata. For a delivered objective that explicitly requires worker
+VM / delegation evidence, Super must either request the worker and drive it to
+terminal worker-update/package evidence, or return a durable
+acceptance-visible blocker. Residuals after that remain elapsed-time budget
+across sleep, full wake/reconcile collapse, Trace projection legibility, and
+first-write stochasticity.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

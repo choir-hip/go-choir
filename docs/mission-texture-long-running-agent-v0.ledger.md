@@ -2311,3 +2311,111 @@ worker-update/package evidence.
 Rollback ref: revert `8c2bfa71` if later evidence shows terminal-worker
 classification traps legitimate Super blockers or prevents valid non-worker
 Texture-requested Super runs from completing.
+
+## 2026-06-18 - Explicit worker blocker guard deploys; live Super worker-shape classification still misses objective (red construct + proof)
+
+Claim under test: commit `af141a055718f46a2ac4f272959aaaec95031676` repairs the
+C9 Super update/blocker branch exposed by `8c2bfa71`: for a worker-shaped
+Texture-requested Super objective, a generic `update_coagent` delivery should
+not stand down the completion guard unless it carries explicit terminal blocker
+evidence that acceptance can classify.
+
+Move: require worker-shaped Texture-requested Super runs to produce terminal
+worker/delegation evidence, package/update evidence, or explicit
+`terminal_error` / `completion_blocker` output before the guard stands down.
+Weak `update_coagent` summaries and delivery metadata are no longer sufficient.
+Run focused comprehensive runtime tests, doccheck, diff check, runtime shards,
+push, monitor CI, verify deployed identity, run the formal cadence probe, and
+run the lifecycle discriminator that synthesizes a `RunAcceptanceRecord`.
+
+Expected ΔV: Super no longer completes a worker-shaped Texture lifecycle request
+through generic `update_coagent`; the lifecycle discriminator should either show
+worker VM / delegation progress or a durable blocker. Actual ΔV: local blocker
+semantics are tighter and ordinary staging cadence passed, but lifecycle
+acceptance exposed a deeper classification branch. Super still made no worker
+request. The live trace showed extra `update_coagent` and
+`record_texture_decision` activity, which suggests the stricter blocker
+predicate changed behavior, but the completion guard likely did not recognize
+the delivered Super objective as worker-shaped.
+
+Receipts:
+
+- Commit: `af141a055718f46a2ac4f272959aaaec95031676`
+  (`runtime: require explicit worker blocker evidence`).
+- Code: `superTextureExecutionCompletionGuard` now states that successful
+  `update_coagent` delivery alone is not terminal worker evidence. For
+  worker-shaped Texture-requested Super runs,
+  `superTextureExecutionHasSufficientEvidence` accepts terminal
+  worker/delegation evidence, package/update evidence, or explicit
+  `terminal_error` / `completion_blocker` evidence, and rejects weak status /
+  summary text (`internal/runtime/runtime.go`). The regression proves a weak
+  blocked `update_coagent` continues while explicit `completion_blocker`
+  satisfies the synthetic terminal-blocker path (`internal/runtime/api_test.go`).
+- Local proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestSuperTextureExecutionCompletionGuardRequiresEvidence|TestTextureSuperExecutionCompletionGuardRequiresEvidencePath|TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper|TestRunToolLoopCompletionGuardRetriesEndTurn' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions: FlakeHub run `27751256231` succeeded. CI run `27751256254`
+  concluded failure only because `Deploy to Staging (Node B)` failed; runtime
+  shards 0-3, non-runtime tests, Go vet/build, integration smoke, Docs Truth
+  Check, and TLA+ all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `af141a055718f46a2ac4f272959aaaec95031676`, deployed at
+  `2026-06-18T09:54:47Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed cadence command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed cadence result: submission
+  `ece414f0-6e9b-4036-9708-6062afb0795f`; doc
+  `97310201-83da-4db5-b711-da5985f8bdf5`; V0 user at +0.330s, V1 appagent at
+  +8.064s with 743 chars, V2 appagent at +57.606s with 2218 chars;
+  `appagent_revision_count=2`, `first_paint_ms=8064`,
+  `total_revision_count=3`, `web_search=2`, `source_search=2`,
+  `spawn_agent=2`, `update_coagent=2`, `moment_count=165`, trajectory
+  `state=completed`, `agent_count=3`, `delegation_count=1`.
+- Lifecycle discriminator marker:
+  `TEXTURE_LIFECYCLE_ACCEPTANCE_1781776770815`; synthetic owner
+  `texture-lifecycle-1781776771627-iih86v@example.com`.
+- Lifecycle prompt-bar submission / trajectory:
+  `988e2640-8bb8-4674-a043-839ec1193376`; doc
+  `775b1920-4e3c-47d5-9348-3942f6374be7`.
+- Lifecycle Trace result: final `state=completed`, `live=false`,
+  `agent_count=3`, `delegation_count=0`, `message_count=0`,
+  `finding_count=0`, final Texture revisions `4` with `3` appagent revisions.
+- Lifecycle tool-result counts: `request_super_execution=2`,
+  `request_worker_vm=0`, `start_worker_delegation=0`,
+  `observe_worker_delegation=0`, `finish_worker_delegation=0`,
+  `delegate_worker_vm=0`, `update_coagent=4`,
+  `publish_app_change_package=0`, `record_texture_decision=2`,
+  `moment_count=148`.
+- RunAcceptanceRecord: `runacc-852978f224d07441271d`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `988e2640-8bb8-4674-a043-839ec1193376`, deployment/health commit
+  `af141a055718f46a2ac4f272959aaaec95031676`, acceptance level
+  `staging-smoke-level`, state `blocked`, authority profile
+  `texture > conductor > super`, checkpoints `submitted`, `texture_opened`,
+  and `super_requested` passed; no `worker_leased` or `worker_delegated`
+  checkpoint passed. `trace-derived-state-machine` passed;
+  `export-level-product-path` remained blocked.
+
+Result: explicit blocker semantics are necessary but not sufficient. The
+remaining live C9 branch is likely worker-shape classification for persistent
+Super. The guard currently checks `RunRecord.Prompt` and top-level metadata
+fields such as `objective`, `task`, and `request`. Live persistent Super runs
+may instead have a generic "process pending update_coagent records" prompt,
+while the real Texture-requested objective is embedded in pending delivered
+update content. Acceptance therefore sees a completed Super run with no worker
+checkpoint, even though the owner-visible prompt explicitly required downstream
+worker/delegation evidence.
+
+Open edge: repair the Super classification path so the completion guard sees
+the actual Texture-requested objective delivered to persistent Super. For a
+delivered objective that requires worker VM / delegation evidence, Super must
+request the worker and settle terminal worker-update/package evidence, or return
+a durable blocker that acceptance can classify.
+
+Rollback ref: revert `af141a05` if later evidence shows explicit-blocker
+requirements trap valid Texture-visible blockers or suppress legitimate
+non-worker Texture-requested Super completions.
