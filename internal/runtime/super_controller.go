@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -472,6 +473,51 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTur
 	}
 }
 
+func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFunc {
+	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
+		return nil
+	}
+	if !metadataBoolValue(rec.Metadata, "actor_park_on_idle") {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if ownerID == "" || agentID == "" {
+		return nil
+	}
+	maxWait := time.Duration(metadataIntValue(rec.Metadata, "actor_park_idle_seconds")) * time.Second
+	return func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error) {
+		ready := func() (bool, error) {
+			updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, agentID, 100)
+			if err != nil {
+				return false, fmt.Errorf("list pending update_coagent records for park wait: %w", err)
+			}
+			seen := map[string]bool{}
+			for _, id := range coagentUpdateIDsForRun(rec) {
+				id = strings.TrimSpace(id)
+				if id != "" {
+					seen[id] = true
+				}
+			}
+			for _, update := range updates {
+				id := strings.TrimSpace(update.UpdateID)
+				if id != "" && !seen[id] {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+		ok, err := rt.waitForAgentSignal(ctx, ownerID, agentID, maxWait, ready)
+		if err != nil {
+			return ToolLoopParkResult{}, err
+		}
+		if ok {
+			return ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
+		}
+		return ToolLoopParkResult{Continue: false, Reason: "idle_deadline"}, nil
+	}
+}
+
 func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
@@ -547,6 +593,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.WorkerUp
 	if target == "" {
 		return
 	}
+	rt.notifyAgentSignal(update.OwnerID, target)
 	if target == persistentSuperAgentID(update.OwnerID) {
 		if _, err := rt.reconcilePersistentSuperActor(context.Background(), update.OwnerID, target); err != nil {
 			log.Printf("runtime: wake persistent super for update %s: %v", update.UpdateID, err)

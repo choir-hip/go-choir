@@ -456,16 +456,32 @@ with `web_search=2`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
 the probe produced one V2, not an hours/days parked actor stream or a
 RunAcceptanceRecord-backed lifecycle proof.
 
+Current local T3 construct extends the budget substrate with a role-uniform
+park-and-wait primitive. `RunToolLoop` can now accept `WithParkWaiter`, emit
+`park_wait_started` / `park_wait_finished` progress, block without provider
+calls, and resume only after runtime-owned user turns are injected
+(`internal/runtime/toolloop.go`). Runtime now keeps an owner+agent waiter map
+and `update_coagent` notifies resident waiters before the existing warm/cold
+wake path (`internal/runtime/runtime.go`, `internal/runtime/super_controller.go`).
+The coagent waiter is metadata-gated by `actor_park_on_idle`, so this is an
+opt-in foundation and not yet the default Texture lifecycle. Local focused tests
+prove no provider calls occur while parked until an injected update arrives, and
+prove runtime owner+agent signaling wakes a parked waiter
+(`internal/runtime/toolloop_test.go`). This repairs the no-billed-idle primitive
+slice of T3 locally; it does not yet settle cross-passivation cumulative budget
+accounting or make every `texture:<docID>` a parked actor by default.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
-park-and-wait primitive, and the separate cold wake/reconcile scaffolding remains
-(`internal/runtime/texture_controller.go:24-90`), so this construct proves a
-bounded resident-run substrate but does not yet make `texture:<docID>` a single
-parked resident actor. Restart still passivates Texture revision runs by marking
-pending mutations stale (`internal/runtime/runtime.go:1261-1302`), document
-deletion still deletes the document without cancelling the actor
-(`internal/runtime/texture.go:1048-1060`), and the workflow verifier still
-checks revision causality without proving the new one-run-to-many-revisions
-lifecycle end to end (`internal/runtime/texture_workflow_verifier.go:527-593`).
+default parked `texture:<docID>` lifecycle, and the separate cold
+wake/reconcile scaffolding remains (`internal/runtime/texture_controller.go:24-90`),
+so this construct proves a bounded, signal-wakeable resident-run substrate but
+does not yet make `texture:<docID>` a single parked resident actor. Restart still
+passivates Texture revision runs by marking pending mutations stale
+(`internal/runtime/runtime.go:1261-1302`), document deletion still deletes the
+document without cancelling the actor (`internal/runtime/texture.go:1048-1060`),
+and the workflow verifier still checks revision causality without proving the
+new one-run-to-many-revisions lifecycle end to end
+(`internal/runtime/texture_workflow_verifier.go:527-593`).
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -524,9 +540,12 @@ position / live conjectures / open edges:
   repeat formal probe recovered into a useful V1 and multiple V2+ revisions. The
   active residual risk is stochastic first-write recovery, not the deterministic
   no-op storage branch.
-- C3 active: "one run per agent" is more minimal as a model but requires a real
-  park-and-wait + budget; without them a long run either idles on billed calls or
-  hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
+- C3 partially repaired locally: "one run per agent" is more minimal as a model
+  but requires a real park-and-wait + budget. The budget and role-uniform
+  park-and-wait primitive now exist locally; the remaining error is enabling
+  them as the Texture lifecycle, making budget accounting cumulative across
+  sleep/rewarm, and proving the actor parks without billed calls in the deployed
+  product path.
 - C4 active: passivation means even "one run" is one logical actor across
   physical runs; sleep/resume from the run-memory snapshot is the continuity
   mechanism, not an immortal process.
@@ -573,10 +592,10 @@ position / live conjectures / open edges:
   repeated deployed probes should quantify whether no-V1 is rare stochastic model
   behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
 
-next move: continue T3 by adding the actual role-uniform park-and-wait /
-no-billed-idle primitive and deciding how the new budget becomes cumulative
-across sleep/rewarm. Do not claim settlement until T4-T8 are also proven and a
-RunAcceptanceRecord exists.
+next move: land and deploy the local T3 park-and-wait primitive, then continue
+T3/T4 by deciding how the metadata-gated waiter becomes the default Texture
+lifecycle and how the budget becomes cumulative across sleep/rewarm. Do not
+claim settlement until T4-T8 are also proven and a RunAcceptanceRecord exists.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

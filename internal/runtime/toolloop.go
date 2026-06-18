@@ -132,6 +132,19 @@ type ToolLoopCompletionGuardResult struct {
 
 type ToolLoopCompletionGuardFunc func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error)
 
+type ToolLoopParkState struct {
+	Messages  []json.RawMessage
+	FinalText string
+	Attempts  int
+}
+
+type ToolLoopParkResult struct {
+	Continue bool
+	Reason   string
+}
+
+type ToolLoopParkWaiterFunc func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error)
+
 // ToolLoopBudget is a cumulative kill switch for one tool-loop activation. It is
 // intentionally role-neutral: callers attach policy, while RunToolLoop enforces
 // provider-call, token, and elapsed-time limits uniformly.
@@ -151,6 +164,7 @@ type toolLoopOptions struct {
 	initialToolChoice             string
 	terminalTools                 map[string]bool
 	completionGuard               ToolLoopCompletionGuardFunc
+	parkWaiter                    ToolLoopParkWaiterFunc
 	budget                        ToolLoopBudget
 }
 
@@ -165,6 +179,8 @@ const maxRequiredNextToolRetries = 2
 const maxTokenContinuationRetries = 3
 
 const maxCompletionGuardRetries = 2
+
+const maxToolLoopParkResumes = 16
 
 var requiredNextToolCallTimeout = 45 * time.Second
 
@@ -240,6 +256,16 @@ func WithCompletionGuard(guard ToolLoopCompletionGuardFunc) ToolLoopOption {
 	}
 }
 
+// WithParkWaiter lets a caller suspend normal completion until a durable signal
+// or idle deadline. The waiter must not call the provider; on Continue=true the
+// loop injects runtime-owned user turns and resumes provider calls only after
+// new context is available.
+func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.parkWaiter = waiter
+	}
+}
+
 // WithToolLoopBudget applies cumulative loop limits. Zero-valued fields are
 // unbounded for that dimension; at least one positive field enables the budget.
 func WithToolLoopBudget(budget ToolLoopBudget) ToolLoopOption {
@@ -299,6 +325,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	var requiredNextTool *pendingRequiredTool
 	var maxTokenContinuationAttempts int
 	var completionGuardAttempts int
+	var parkAttempts int
 	var partialTextFragments []string
 	loopStartedAt := time.Now()
 
@@ -814,6 +841,54 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 						})
 						emit(types.EventRunRetry, "completion_guard", payload)
 					}
+					continue
+				}
+			}
+			if options.parkWaiter != nil {
+				if parkAttempts >= maxToolLoopParkResumes {
+					return "", totalUsage, fmt.Errorf("tool loop: park waiter resumed %d times without completing", maxToolLoopParkResumes)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"attempt": parkAttempts + 1,
+						"reason":  "idle_before_completion",
+					})
+					emit(types.EventRunProgress, "park_wait_started", payload)
+				}
+				parkResult, err := options.parkWaiter(ctx, ToolLoopParkState{
+					Messages:  append([]json.RawMessage(nil), messages...),
+					FinalText: resp.Text,
+					Attempts:  parkAttempts,
+				})
+				if err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop park waiter: %w", err)
+				}
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"attempt":  parkAttempts + 1,
+						"continue": parkResult.Continue,
+						"reason":   strings.TrimSpace(parkResult.Reason),
+					})
+					emit(types.EventRunProgress, "park_wait_finished", payload)
+				}
+				if parkResult.Continue {
+					if injectUserTurns == nil {
+						return "", totalUsage, fmt.Errorf("tool loop park waiter continued without an injector")
+					}
+					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist parked assistant message: %w", err)
+					}
+					injected, err := injectUserTurns(true)
+					if err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop inject turns after park: %w", err)
+					}
+					if len(injected) == 0 {
+						return "", totalUsage, fmt.Errorf("tool loop park waiter continued without injected turns")
+					}
+					if err := appendInjected(injected); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist injected turns after park: %w", err)
+					}
+					parkAttempts++
 					continue
 				}
 			}

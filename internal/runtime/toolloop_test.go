@@ -2554,6 +2554,169 @@ func TestRunToolLoopBudgetLimitsCumulativeTokens(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn(t *testing.T) {
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "idle for now",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+		&ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       "processed update",
+			Usage:      TokenUsage{InputTokens: 2, OutputTokens: 2},
+			Model:      "test-model",
+		},
+	)
+	parkEntered := make(chan struct{})
+	releasePark := make(chan struct{})
+	done := make(chan struct {
+		text  string
+		usage TokenUsage
+		err   error
+	}, 1)
+	var injectCount int32
+	var updateReady int32
+	var parkEnteredClosed int32
+	var parkStarted, parkFinished int32
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunProgress {
+			return
+		}
+		switch phase {
+		case "park_wait_started":
+			atomic.AddInt32(&parkStarted, 1)
+		case "park_wait_finished":
+			atomic.AddInt32(&parkFinished, 1)
+		}
+	}
+	injector := func(finalCheckpoint bool) ([]json.RawMessage, error) {
+		if atomic.LoadInt32(&updateReady) == 0 {
+			return nil, nil
+		}
+		if atomic.AddInt32(&injectCount, 1) != 1 {
+			return nil, nil
+		}
+		msg, _ := json.Marshal(map[string]any{
+			"role": "user",
+			"content": []map[string]string{{
+				"type": "text",
+				"text": "New durable update arrived.",
+			}},
+		})
+		return []json.RawMessage{msg}, nil
+	}
+	waiter := func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error) {
+		if state.Attempts > 0 {
+			return ToolLoopParkResult{Continue: false, Reason: "test_idle_deadline"}, nil
+		}
+		if atomic.CompareAndSwapInt32(&parkEnteredClosed, 0, 1) {
+			close(parkEntered)
+		}
+		select {
+		case <-ctx.Done():
+			return ToolLoopParkResult{}, ctx.Err()
+		case <-releasePark:
+			return ToolLoopParkResult{Continue: true, Reason: "test_signal"}, nil
+		}
+	}
+
+	go func() {
+		text, usage, err := RunToolLoop(
+			context.Background(),
+			provider,
+			nil,
+			[]json.RawMessage{json.RawMessage(`{"role":"user","content":"wait for updates"}`)},
+			"You are helpful.",
+			4096,
+			emit,
+			injector,
+			WithParkWaiter(waiter),
+		)
+		done <- struct {
+			text  string
+			usage TokenUsage
+			err   error
+		}{text: text, usage: usage, err: err}
+	}()
+
+	select {
+	case <-parkEntered:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for park")
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls while parked = %d, want 1", provider.CallCount())
+	}
+	select {
+	case result := <-done:
+		t.Fatalf("tool loop completed while parked: text=%q err=%v", result.text, result.err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	atomic.StoreInt32(&updateReady, 1)
+	close(releasePark)
+	var result struct {
+		text  string
+		usage TokenUsage
+		err   error
+	}
+	select {
+	case result = <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for parked loop to resume")
+	}
+	if result.err != nil {
+		t.Fatalf("run tool loop: %v", result.err)
+	}
+	if result.text != "processed update" {
+		t.Fatalf("text = %q, want processed update", result.text)
+	}
+	if provider.CallCount() != 2 {
+		t.Fatalf("provider calls after signal = %d, want 2", provider.CallCount())
+	}
+	if result.usage.InputTokens != 3 || result.usage.OutputTokens != 3 {
+		t.Fatalf("usage = %+v, want accumulated usage after resume", result.usage)
+	}
+	if atomic.LoadInt32(&parkStarted) != 2 || atomic.LoadInt32(&parkFinished) != 2 {
+		t.Fatalf("park events started=%d finished=%d, want 2/2", parkStarted, parkFinished)
+	}
+}
+
+func TestRuntimeAgentSignalWakesParkWaiter(t *testing.T) {
+	rt := New(Config{SandboxID: "sandbox-test"}, nil, nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var readyFlag int32
+	done := make(chan struct {
+		ok  bool
+		err error
+	}, 1)
+	go func() {
+		ok, err := rt.waitForAgentSignal(ctx, "user-alice", "texture:doc-signal", time.Second, func() (bool, error) {
+			return atomic.LoadInt32(&readyFlag) == 1, nil
+		})
+		done <- struct {
+			ok  bool
+			err error
+		}{ok: ok, err: err}
+	}()
+	time.Sleep(20 * time.Millisecond)
+	atomic.StoreInt32(&readyFlag, 1)
+	rt.notifyAgentSignal("user-alice", "texture:doc-signal")
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("wait signal: %v", result.err)
+		}
+		if !result.ok {
+			t.Fatal("wait signal returned ready=false after notification")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for signal")
+	}
+}
+
 func TestRunToolLoopContinuesAfterMaxTokensPartialText(t *testing.T) {
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{

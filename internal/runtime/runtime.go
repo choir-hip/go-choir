@@ -38,6 +38,7 @@ type Runtime struct {
 	// residentAgents is the volatile actor-residency index for this process.
 	// Durable run rows remain evidence; warm/cold decisions use this map.
 	residentAgents map[string]string // owner_id + NUL + agent_id → loop_id
+	agentWaiters   map[string]map[chan struct{}]struct{}
 
 	wg           sync.WaitGroup
 	toolRegistry *ToolRegistry
@@ -84,6 +85,7 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		health:             types.HealthReady,
 		running:            make(map[string]context.CancelFunc),
 		residentAgents:     make(map[string]string),
+		agentWaiters:       make(map[string]map[chan struct{}]struct{}),
 		channelMgr:         NewChannelManager(),
 		promptStore:        NewPromptStore(cfg.PromptRoot),
 		textureWakePending: make(map[string]pendingTextureWake),
@@ -1620,6 +1622,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		WithToolLoopLLMConfig(llmConfig),
 		WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
+	injectUserTurns := rt.coagentUpdateTurnInjector(rec)
+	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
+		toolLoopOptions = append(toolLoopOptions, WithParkWaiter(waiter))
+	}
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithToolLoopBudget(textureActorToolLoopBudget(rec)))
@@ -1635,7 +1641,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.textureModelPriorCompletionGuard(rec)))
 	}
 
-	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, rt.coagentUpdateTurnInjector(rec), toolLoopOptions...)
+	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
@@ -3572,6 +3578,90 @@ func agentResidencyKey(ownerID, agentID string) string {
 	return strings.TrimSpace(ownerID) + "\x00" + strings.TrimSpace(agentID)
 }
 
+func (rt *Runtime) notifyAgentSignal(ownerID, agentID string) {
+	if rt == nil {
+		return
+	}
+	key := agentResidencyKey(ownerID, agentID)
+	if key == "\x00" {
+		return
+	}
+	rt.mu.Lock()
+	waiters := rt.agentWaiters[key]
+	delete(rt.agentWaiters, key)
+	rt.mu.Unlock()
+	for waiter := range waiters {
+		close(waiter)
+	}
+}
+
+func (rt *Runtime) waitForAgentSignal(ctx context.Context, ownerID, agentID string, maxWait time.Duration, ready func() (bool, error)) (bool, error) {
+	if rt == nil {
+		return false, nil
+	}
+	if ready != nil {
+		ok, err := ready()
+		if err != nil || ok {
+			return ok, err
+		}
+	}
+	key := agentResidencyKey(ownerID, agentID)
+	if key == "\x00" {
+		return false, nil
+	}
+	waiter := make(chan struct{})
+	rt.mu.Lock()
+	if rt.agentWaiters == nil {
+		rt.agentWaiters = make(map[string]map[chan struct{}]struct{})
+	}
+	if rt.agentWaiters[key] == nil {
+		rt.agentWaiters[key] = map[chan struct{}]struct{}{}
+	}
+	rt.agentWaiters[key][waiter] = struct{}{}
+	rt.mu.Unlock()
+	removeWaiter := func() {
+		rt.mu.Lock()
+		if waiters := rt.agentWaiters[key]; waiters != nil {
+			delete(waiters, waiter)
+			if len(waiters) == 0 {
+				delete(rt.agentWaiters, key)
+			}
+		}
+		rt.mu.Unlock()
+	}
+	if ready != nil {
+		ok, err := ready()
+		if err != nil || ok {
+			removeWaiter()
+			return ok, err
+		}
+	}
+	if maxWait <= 0 {
+		select {
+		case <-ctx.Done():
+			removeWaiter()
+			return false, ctx.Err()
+		case <-waiter:
+		}
+	} else {
+		timer := time.NewTimer(maxWait)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			removeWaiter()
+			return false, ctx.Err()
+		case <-timer.C:
+			removeWaiter()
+			return false, nil
+		case <-waiter:
+		}
+	}
+	if ready != nil {
+		return ready()
+	}
+	return true, nil
+}
+
 func (rt *Runtime) registerRunActivation(rec *types.RunRecord, cancel context.CancelFunc) {
 	if rt == nil || rec == nil {
 		return
@@ -3589,6 +3679,12 @@ func (rt *Runtime) removeRunningLocked(runID string) {
 	for key, residentRunID := range rt.residentAgents {
 		if residentRunID == runID {
 			delete(rt.residentAgents, key)
+			if waiters := rt.agentWaiters[key]; len(waiters) > 0 {
+				for waiter := range waiters {
+					close(waiter)
+				}
+				delete(rt.agentWaiters, key)
+			}
 		}
 	}
 }

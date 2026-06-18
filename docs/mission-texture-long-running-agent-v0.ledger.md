@@ -1194,3 +1194,55 @@ cumulative budget accounting across sleep/rewarm, then resume the T4-T8 ramp.
 Rollback ref: revert `f5884e08` if future staging evidence shows the budget
 causes premature Texture failure, provider fallback regressions, or blocked
 multi-revision updates.
+
+## 2026-06-18 - Local T3 park-and-wait primitive (red construct)
+
+Claim under test: a uniform tool-loop park waiter can suspend a resident actor
+with no provider calls while idle, then resume only after runtime-owned context
+is injected from a durable signal.
+
+Move: added `WithParkWaiter` to the generic tool loop, owner+agent waiter
+registration in runtime, and a metadata-gated coagent waiter wired to
+`update_coagent` signaling. The new waiter is opt-in through
+`actor_park_on_idle`; it is not yet the default Texture lifecycle.
+
+Expected ΔV: repair the no-billed-idle primitive slice of T3 without adding a
+Texture-specific harness branch. Actual ΔV: local runtime evidence supports the
+primitive and warm signal path. Remaining error: cross-passivation cumulative
+budget accounting and T4 one-resident-run Texture lifecycle are still open.
+
+Receipts:
+
+- `internal/runtime/toolloop.go` accepts `WithParkWaiter`, emits
+  `park_wait_started` / `park_wait_finished`, blocks outside provider calls, and
+  resumes only after injected user turns are appended.
+- `internal/runtime/runtime.go` keeps an in-memory owner+agent waiter registry
+  and wakes waiters when the resident run is signaled or removed.
+- `internal/runtime/super_controller.go` notifies waiters when `update_coagent`
+  targets a resident agent and exposes an opt-in coagent park waiter.
+- `internal/runtime/toolloop_test.go` adds
+  `TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn` and
+  `TestRuntimeAgentSignalWakesParkWaiter`.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestRuntimeAgentSignalWakesParkWaiter|TestRunToolLoopBudgetLimitsProviderCalls|TestRunToolLoopBudgetLimitsCumulativeTokens|TestRunToolLoopMaxIterations' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestRuntimeAgentSignalWakesParkWaiter|TestRunToolLoopBudgetLimitsProviderCalls|TestRunToolLoopBudgetLimitsCumulativeTokens|TestRunToolLoopMaxIterations|TestRunToolLoopCompletionGuardRetriesEndTurn|TestBuildAppagentRevisionMetadataMarksUserPromptArticleShapeAsInterim|TestBuildAppagentRevisionMetadataPreservesDurableKeys|TestProcessorAndReconcilerProfilesDelegateToTextureOnly|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestInitialTextureRevisionRejectsNoOpPromptCopy|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+- `nix develop -c go test ./cmd/doccheck -count=1`
+- `git diff --check`
+
+Open blockers / remaining error:
+
+- T3 is not fully complete: the new budget is still per activation rather than
+  cumulative across passivation/rewarm.
+- T4 remains open: Texture does not yet enable `actor_park_on_idle` by default
+  or replace `texture_controller.go` wake/reconcile scaffolding with one parked
+  resident `texture:<docID>` actor.
+- T5-T8 remain open: sleep/resume semantics, doc-delete cancellation,
+  N:1 verifier lifecycle proof, deployed product proof, and RunAcceptanceRecord
+  are not yet satisfied.
+
+Rollback ref: revert the T3 park-waiter construct commit if deployed evidence
+shows stalled Texture runs, lost `update_coagent` delivery, extra provider calls
+while idle, or broken cadence non-regression.
