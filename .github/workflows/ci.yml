@@ -889,7 +889,12 @@ jobs:
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done
-            proxy_health=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:8081/health)
+            proxy_health=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/health)
+            if ! echo "$proxy_health" | grep -q '"service":"proxy"'; then
+              echo "Proxy health probe hit the wrong service (expected proxy on :8082): $proxy_health" >&2
+              dump_deploy_service_diagnostics "proxy health probe wrong service"
+              exit 1
+            fi
             if ! echo "$proxy_health" | grep -q '"upstream":"ok"'; then
               echo "Proxy upstream is not ok: $proxy_health" >&2
               dump_deploy_service_diagnostics "proxy upstream unhealthy"
