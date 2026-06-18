@@ -806,6 +806,54 @@ func TestSuperTextureExecutionCompletionGuardRequiresEvidence(t *testing.T) {
 		t.Fatalf("guard result after update_coagent = %+v, want satisfied", result)
 	}
 
+	deliveredWorkerObjective := "Texture requested downstream Super lifecycle evidence. Call request_worker_vm, start_worker_delegation, collect a worker update, and finish_worker_delegation with concrete evidence ids."
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-super-texture-delivered-worker-objective",
+		OwnerID:       rec.OwnerID,
+		AgentID:       "texture:doc-texture-guard",
+		TargetAgentID: rec.AgentID,
+		ChannelID:     rec.ChannelID,
+		TrajectoryID:  "traj-texture-guard",
+		Role:          AgentProfileTexture,
+		Kind:          "assignment",
+		Summary:       deliveredWorkerObjective,
+		CreatedAt:     time.Now().UTC(),
+	}
+	update.Content = buildWorkerUpdateMessage(update)
+	message := &types.ChannelMessage{
+		ChannelID:    update.ChannelID,
+		From:         "run-texture-guard",
+		FromAgentID:  update.AgentID,
+		FromRunID:    "run-texture-guard",
+		ToAgentID:    update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID,
+		Role:         AgentProfileTexture,
+		Content:      update.Content,
+		Timestamp:    update.CreatedAt,
+	}
+	storedUpdate, _, err := rt.store.DispatchWorkerUpdate(context.Background(), update, message)
+	if err != nil {
+		t.Fatalf("dispatch worker-shaped update: %v", err)
+	}
+	deliveredWorkerRec := *rec
+	deliveredWorkerRec.RunID = "run-super-texture-delivered-worker-guard"
+	deliveredWorkerRec.Prompt = "Process pending coagent update packets for privileged execution."
+	deliveredWorkerRec.Metadata = cloneMetadata(rec.Metadata)
+	deliveredWorkerRec.Metadata["request_source"] = "update_coagent"
+	deliveredWorkerRec.Metadata["worker_update_ids"] = []string{storedUpdate.UpdateID}
+	guard = rt.superTextureExecutionCompletionGuard(&deliveredWorkerRec)
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-delivered-worker-update", deliveredWorkerRec.RunID, deliveredWorkerRec.AgentID, "traj-texture-guard", deliveredWorkerRec.ChannelID, time.Now().UTC(), "update_coagent", map[string]any{
+		"status":    "submitted",
+		"update_id": "update-super-texture-delivered-worker-guard",
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 1})
+	if err != nil {
+		t.Fatalf("worker guard after delivered objective update: %v", err)
+	}
+	if !result.Continue || result.Reason != "texture_requested_super_execution_without_evidence" {
+		t.Fatalf("worker guard after delivered objective update_coagent = %+v, want continued worker evidence requirement", result)
+	}
+
 	workerRec := *rec
 	workerRec.RunID = "run-super-texture-worker-guard"
 	workerRec.Prompt = "Request a worker VM, start a worker delegation, have the worker send an update_coagent packet, then finish_worker_delegation."

@@ -2419,7 +2419,7 @@ func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) To
 		if err != nil {
 			return ToolLoopCompletionGuardResult{}, fmt.Errorf("check Texture-requested super completion evidence: %w", err)
 		}
-		if superTextureExecutionHasSufficientEvidence(events, rec) {
+		if rt.superTextureExecutionHasSufficientEvidence(ctx, events, rec) {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
 		return ToolLoopCompletionGuardResult{
@@ -2430,8 +2430,8 @@ func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) To
 	}
 }
 
-func superTextureExecutionHasSufficientEvidence(events []types.EventRecord, rec *types.RunRecord) bool {
-	if !superTextureExecutionRequiresWorkerEvidence(rec) {
+func (rt *Runtime) superTextureExecutionHasSufficientEvidence(ctx context.Context, events []types.EventRecord, rec *types.RunRecord) bool {
+	if !rt.superTextureExecutionRequiresWorkerEvidence(ctx, rec) {
 		return eventsContainAnySuccessfulTool(events,
 			"request_worker_vm",
 			"start_worker_delegation",
@@ -2513,11 +2513,34 @@ func superTextureUpdateIsStructuredBlocker(output map[string]any) bool {
 	return status == ""
 }
 
-func superTextureExecutionRequiresWorkerEvidence(rec *types.RunRecord) bool {
+func (rt *Runtime) superTextureExecutionRequiresWorkerEvidence(ctx context.Context, rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	text := strings.ToLower(rec.Prompt + "\n" + metadataStringValue(rec.Metadata, "objective") + "\n" + metadataStringValue(rec.Metadata, "task") + "\n" + metadataStringValue(rec.Metadata, "request"))
+	if superTextureTextRequiresWorkerEvidence(rec.Prompt + "\n" + metadataStringValue(rec.Metadata, "objective") + "\n" + metadataStringValue(rec.Metadata, "task") + "\n" + metadataStringValue(rec.Metadata, "request")) {
+		return true
+	}
+	if rt == nil || rt.store == nil || strings.TrimSpace(rec.OwnerID) == "" {
+		return false
+	}
+	for _, updateID := range coagentUpdateIDsForRun(rec) {
+		updateID = strings.TrimSpace(updateID)
+		if updateID == "" {
+			continue
+		}
+		update, err := rt.store.GetWorkerUpdate(ctx, rec.OwnerID, updateID)
+		if err != nil {
+			continue
+		}
+		if superTextureTextRequiresWorkerEvidence(workerUpdateTextForSuperEvidenceClassification(update)) {
+			return true
+		}
+	}
+	return false
+}
+
+func superTextureTextRequiresWorkerEvidence(text string) bool {
+	text = strings.ToLower(text)
 	for _, needle := range []string{
 		"request_worker_vm",
 		"start_worker_delegation",
@@ -2532,6 +2555,43 @@ func superTextureExecutionRequiresWorkerEvidence(rec *types.RunRecord) bool {
 		}
 	}
 	return false
+}
+
+func workerUpdateTextForSuperEvidenceClassification(update types.WorkerUpdateRecord) string {
+	var b strings.Builder
+	b.WriteString(update.Kind)
+	b.WriteString("\n")
+	b.WriteString(update.Summary)
+	b.WriteString("\n")
+	b.WriteString(update.Content)
+	for _, group := range [][]string{
+		update.Findings,
+		update.EvidenceIDs,
+		update.Artifacts,
+		update.Refs,
+		update.Tests,
+		update.Questions,
+		update.Proposals,
+		update.Notes,
+	} {
+		for _, value := range group {
+			b.WriteString("\n")
+			b.WriteString(value)
+		}
+	}
+	for _, req := range update.CapabilityRequests {
+		b.WriteString("\n")
+		b.WriteString(req.Capability)
+		b.WriteString("\n")
+		b.WriteString(req.RequestedRole)
+		b.WriteString("\n")
+		b.WriteString(req.Objective)
+		b.WriteString("\n")
+		b.WriteString(req.WhyNeeded)
+		b.WriteString("\n")
+		b.WriteString(req.EvidenceNeededFor)
+	}
+	return b.String()
 }
 
 func (rt *Runtime) textureRunOpenedEvidencePath(ctx context.Context, rec *types.RunRecord, docID string) bool {
