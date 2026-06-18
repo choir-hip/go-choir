@@ -699,3 +699,50 @@ without changing genuinely sourced Wire article revision semantics.
 Rollback ref: docs-only evidence checkpoint. Runtime rollback remains reverting
 the later repair commit if it damages sourced article revisions, loops the guard,
 or introduces semantic role choreography.
+
+## 2026-06-18 - Local repair for article-shaped prompt-only V1 metadata (red construct)
+
+Claim under test: the `58895d28` diagnostic branch failed because the successful
+prompt-bar V1 was classified as a canonical Wire article revision, so the
+model-prior completion guard could not see that factual/current V1 as interim.
+
+Move: repaired `buildAppagentRevisionMetadata` so prompt-only initial Texture
+revision runs override accidental article metadata when there is no consumed
+worker update, scheduled message, or `update_coagent` source. Added a regression
+test that constructs a user-prompt run which still satisfies
+`wirepublish.IsWireArticleRevisionRun` and requires `model_prior_interim`,
+`revision_grounding=model_prior`, `grounding_status=model_prior_interim`, and
+non-publishable working/input metadata. Updated completion-guard fixture
+providers to use addressed `update_coagent` packets and exact first-write
+behavior matching the current runtime.
+
+Expected ΔV: C2/T2 descends from live-metadata falsified to locally repaired
+again; C8's next discriminator moves from code inspection to staging proof.
+Actual ΔV: local repair and focused verification succeeded; staging remains
+unproven.
+
+Receipts:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestBuildAppagentRevisionMetadataMarksUserPromptArticleShapeAsInterim|TestTextureModelPriorCompletionGuardOpensProbePath|TestRunToolLoopCompletionGuardRetriesEndTurn' -count=1`
+- `nix develop -c go test ./internal/runtime -run TestRunToolLoopCompletionGuardRetriesEndTurn -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run TestProcessorAndReconcilerProfilesDelegateToTextureOnly -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run TestTextureCreatedResearcherEvidenceWakesTextureV2 -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run TestTextureCreatedSuperEvidenceWakesTextureV2 -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestBuildAppagentRevisionMetadataMarksUserPromptArticleShapeAsInterim|TestBuildAppagentRevisionMetadataPreservesDurableKeys|TestProcessorAndReconcilerProfilesDelegateToTextureOnly|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`
+- `nix develop -c go test ./internal/wirepublish -count=1`
+- `nix develop -c go test ./cmd/doccheck -count=1`
+- `git diff --check`
+- `nix develop -c scripts/go-test-runtime-shards` exited 0; output showed
+  shards 0, 1, and 3 passed, with shard 2 output elided by command-output
+  truncation but covered by the zero exit status.
+
+Open edge: this does not settle T3/T4/T8. The runtime still has no park-and-wait
+primitive, no cumulative per-actor budget, and no one-resident-run lifecycle.
+The next product proof must show the live cadence path: fast model-prior V1,
+completion guard opening evidence work, and V2+ consuming findings. If staging
+instead shows no-V1 or V1-only behavior, document that failure before another
+code repair.
+
+Rollback ref: revert the runtime repair commit if staging shows sourced Wire
+article revisions lose canonical metadata, the completion guard loops, or
+prompt-only V1s still bypass interim model-prior metadata.

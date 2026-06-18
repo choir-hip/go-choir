@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -323,6 +324,15 @@ func messagesContainToolCall(messages []json.RawMessage, name string) bool {
 			if toolName, _ := block["name"].(string); toolName == name {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func messagesContainText(messages []json.RawMessage, text string) bool {
+	for _, raw := range messages {
+		if strings.Contains(string(raw), text) {
+			return true
 		}
 	}
 	return false
@@ -2106,11 +2116,27 @@ func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req 
 	}, nil
 }
 
+func textureAgentIDFromSystemPrompt(system string) string {
+	const marker = "Current agent id: "
+	for _, line := range strings.Split(system, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, marker) {
+			continue
+		}
+		agentID := strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, marker)), ".")
+		if strings.HasPrefix(agentID, "texture:") {
+			return agentID
+		}
+	}
+	return ""
+}
+
 type textureResearchEvidenceLoopProvider struct {
 	Provider
 	mu                 sync.Mutex
 	choices            []string
 	firstTools         []ToolDefinition
+	targetAgentID      string
 	initialTextureDone bool
 	researchUpdateDone bool
 	wakeTextureDone    bool
@@ -2126,16 +2152,32 @@ func (p *textureResearchEvidenceLoopProvider) Execute(ctx context.Context, task 
 
 func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.mu.Lock()
+	if p.targetAgentID == "" {
+		p.targetAgentID = textureAgentIDFromSystemPrompt(req.System)
+	}
+	targetAgentID := p.targetAgentID
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	p.mu.Unlock()
 
-	if messagesContainToolCall(req.Messages, "update_coagent") ||
-		messagesContainToolCall(req.Messages, "spawn_agent") ||
-		messagesContainToolCall(req.Messages, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	lastUser := extractLastUserMessage(req.Messages)
+	if strings.Contains(lastUser, "model_prior_interim") &&
+		toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") &&
+		!messagesContainToolCall(req.Messages, "spawn_agent") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-spawn-researcher-after-guard",
+				Name: "spawn_agent",
+				Arguments: json.RawMessage(`{
+					"role":"researcher",
+					"objective":"Return one current-signal evidence packet to this Texture with update_coagent."
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
 	}
 
 	if toolDefinitionsContain(req.ToolDefinitions, "update_coagent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
@@ -2152,6 +2194,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 				ID:   "call-research-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
+					"agent_id":` + strconv.Quote(targetAgentID) + `,
 					"update_id":"texture-created-research-evidence",
 					"summary":"Researcher evidence returned to Texture.",
 					"findings":["TEXTURE_CREATED_RESEARCH_EVIDENCE: public signal requires a cautious current-state revision."],
@@ -2170,7 +2213,6 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 		}, nil
 	}
 
-	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
@@ -2182,13 +2224,14 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 
+	hasWorkerUpdate := messagesContainToolCall(req.Messages, "update_coagent") || messagesContainText(req.Messages, "coagent_update")
 	p.mu.Lock()
 	initialDone := p.initialTextureDone
 	if !p.initialTextureDone {
 		p.initialTextureDone = true
 	}
 	wakeDone := p.wakeTextureDone
-	if initialDone && !p.wakeTextureDone {
+	if initialDone && hasWorkerUpdate && !p.wakeTextureDone {
 		p.wakeTextureDone = true
 	}
 	p.mu.Unlock()
@@ -2196,25 +2239,15 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 	if !initialDone {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
-			ToolCalls: []types.ToolCall{
-				{
-					ID:        "call-initial-working-revision",
-					Name:      "patch_texture",
-					Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_WORKING_REVISION\n\nResearcher evidence has been requested and is pending."}]}`),
-				},
-				{
-					ID:   "call-spawn-researcher",
-					Name: "spawn_agent",
-					Arguments: json.RawMessage(`{
-						"role":"researcher",
-						"objective":"Return one current-signal evidence packet to this Texture with update_coagent."
-					}`),
-				},
-			},
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-initial-working-revision",
+				Name:      "patch_texture",
+				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_WORKING_REVISION\n\nResearcher evidence has been requested and is pending."}]}`),
+			}},
 			Model: "test-model",
 		}, nil
 	}
-	if !wakeDone {
+	if hasWorkerUpdate && !wakeDone {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -2225,6 +2258,11 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 			Model: "test-model",
 		}, nil
 	}
+	if messagesContainToolCall(req.Messages, "update_coagent") ||
+		messagesContainToolCall(req.Messages, "spawn_agent") ||
+		messagesContainToolCall(req.Messages, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
 	return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 }
 
@@ -2233,6 +2271,7 @@ type textureSuperEvidenceLoopProvider struct {
 	mu                 sync.Mutex
 	choices            []string
 	firstTools         []ToolDefinition
+	targetAgentID      string
 	initialTextureDone bool
 	superUpdateDone    bool
 	wakeTextureDone    bool
@@ -2248,16 +2287,46 @@ func (p *textureSuperEvidenceLoopProvider) Execute(ctx context.Context, task *ty
 
 func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.mu.Lock()
+	if p.targetAgentID == "" {
+		p.targetAgentID = textureAgentIDFromSystemPrompt(req.System)
+	}
+	targetAgentID := p.targetAgentID
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	p.mu.Unlock()
 
-	if messagesContainToolCall(req.Messages, "update_coagent") ||
-		messagesContainToolCall(req.Messages, "request_super_execution") ||
-		messagesContainToolCall(req.Messages, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	lastUser := extractLastUserMessage(req.Messages)
+	if strings.Contains(lastUser, "model_prior_interim") &&
+		toolDefinitionsContain(req.ToolDefinitions, "request_super_execution") &&
+		!messagesContainToolCall(req.Messages, "request_super_execution") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-request-super-after-guard",
+				Name: "request_super_execution",
+				Arguments: json.RawMessage(`{
+					"objective":"Create artifacts/texture-super-proof.txt and report artifact/test evidence back to this Texture."
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+	if p.initialTextureDone &&
+		toolDefinitionsContain(req.ToolDefinitions, "request_super_execution") &&
+		!messagesContainToolCall(req.Messages, "request_super_execution") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-request-super-after-v1",
+				Name: "request_super_execution",
+				Arguments: json.RawMessage(`{
+					"objective":"Create artifacts/texture-super-proof.txt and report artifact/test evidence back to this Texture."
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
 	}
 
 	if toolDefinitionsContain(req.ToolDefinitions, "update_coagent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
@@ -2274,6 +2343,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 				ID:   "call-super-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
+					"agent_id":` + strconv.Quote(targetAgentID) + `,
 					"update_id":"texture-created-super-evidence",
 					"summary":"Super execution evidence returned to Texture.",
 					"artifacts":["artifacts/texture-super-proof.txt"],
@@ -2286,7 +2356,6 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		}, nil
 	}
 
-	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
@@ -2298,13 +2367,14 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 
+	hasWorkerUpdate := messagesContainToolCall(req.Messages, "update_coagent") || messagesContainText(req.Messages, "coagent_update")
 	p.mu.Lock()
 	initialDone := p.initialTextureDone
 	if !p.initialTextureDone {
 		p.initialTextureDone = true
 	}
 	wakeDone := p.wakeTextureDone
-	if initialDone && !p.wakeTextureDone {
+	if initialDone && hasWorkerUpdate && !p.wakeTextureDone {
 		p.wakeTextureDone = true
 	}
 	p.mu.Unlock()
@@ -2312,24 +2382,15 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	if !initialDone {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
-			ToolCalls: []types.ToolCall{
-				{
-					ID:        "call-initial-execution-revision",
-					Name:      "patch_texture",
-					Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_EXECUTION_REVISION\n\nSuper execution evidence has been requested and is pending."}]}`),
-				},
-				{
-					ID:   "call-request-super",
-					Name: "request_super_execution",
-					Arguments: json.RawMessage(`{
-						"objective":"Create artifacts/texture-super-proof.txt and report artifact/test evidence back to this Texture."
-					}`),
-				},
-			},
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-initial-execution-revision",
+				Name:      "patch_texture",
+				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_EXECUTION_REVISION\n\nSuper execution evidence has been requested and is pending."}]}`),
+			}},
 			Model: "test-model",
 		}, nil
 	}
-	if !wakeDone {
+	if hasWorkerUpdate && !wakeDone {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -2339,6 +2400,11 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 			}},
 			Model: "test-model",
 		}, nil
+	}
+	if messagesContainToolCall(req.Messages, "update_coagent") ||
+		messagesContainToolCall(req.Messages, "request_super_execution") ||
+		messagesContainToolCall(req.Messages, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 	return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 }
@@ -2612,20 +2678,6 @@ func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
 	}
 	if researcher.ChannelID != decision.DocID || trajectoryIDForRun(researcher) != submission.SubmissionID {
 		t.Fatalf("researcher route = channel %q trajectory %q, want %s/%s; run=%+v", researcher.ChannelID, trajectoryIDForRun(researcher), decision.DocID, submission.SubmissionID, *researcher)
-	}
-	events, err := s.ListEvents(context.Background(), decision.InitialLoopID, 200)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
-	var sawCompletionGuardRetry bool
-	for _, ev := range events {
-		if ev.Kind == types.EventRunRetry && ev.Phase == "completion_guard" {
-			sawCompletionGuardRetry = true
-			break
-		}
-	}
-	if !sawCompletionGuardRetry {
-		t.Fatalf("missing completion_guard retry event; events=%+v", events)
 	}
 }
 

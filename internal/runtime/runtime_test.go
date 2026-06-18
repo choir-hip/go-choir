@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 func TestSubmitTaskReturnsStableHandle(t *testing.T) {
@@ -1656,5 +1657,78 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 	}
 	if resultMap[canonicalTextureSourcePathMetadataKey] != "/notes/run-metadata.texture" {
 		t.Errorf("%s from run metadata: got %v, want '/notes/run-metadata.texture'", canonicalTextureSourcePathMetadataKey, resultMap[canonicalTextureSourcePathMetadataKey])
+	}
+}
+
+func TestBuildAppagentRevisionMetadataMarksUserPromptArticleShapeAsInterim(t *testing.T) {
+	t.Parallel()
+	rt, s := testRuntime(t)
+
+	ctx := context.Background()
+	ownerID := "test-user"
+	doc := types.Document{
+		DocID:   "doc-user-prompt-article-shape",
+		OwnerID: ownerID,
+		Title:   "article-shaped user prompt",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	parentMeta, _ := json.Marshal(map[string]any{
+		"seed_prompt":           "What's going on with Anthropic and the US government?",
+		"input_origin":          textureInputOriginUserPrompt,
+		"revision_role":         textureRevisionRoleInput,
+		"artifact_kind":         "article_revision",
+		"texture_version_stage": "article_revision",
+	})
+	parentRev := types.Revision{
+		RevisionID: "rev-user-prompt-v0",
+		DocID:      doc.DocID,
+		OwnerID:    ownerID,
+		AuthorKind: types.AuthorUser,
+		Content:    "What's going on with Anthropic and the US government?",
+		Citations:  json.RawMessage("[]"),
+		Metadata:   parentMeta,
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateRevision(ctx, parentRev); err != nil {
+		t.Fatalf("create parent revision: %v", err)
+	}
+	doc.CurrentRevisionID = parentRev.RevisionID
+
+	rec := &types.RunRecord{
+		RunID:   "run-user-prompt-v1",
+		OwnerID: ownerID,
+		Metadata: map[string]any{
+			"type":                    textureAgentRevisionTaskType,
+			"doc_id":                  doc.DocID,
+			"request_intent":          "initial_conductor_workflow",
+			"original_prompt":         "What's going on with Anthropic and the US government?",
+			"input_origin":            textureInputOriginUserPrompt,
+			"source_network_cycle_id": "leaked-cycle",
+			"artifact_kind":           "article_revision",
+			"revision_role":           textureRevisionRoleCanonical,
+			"texture_version_stage":   "article_revision",
+		},
+	}
+	if !wirepublish.IsWireArticleRevisionRun(rec) {
+		t.Fatal("fixture should exercise the article-revision classifier branch")
+	}
+	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, 0)
+	var meta map[string]any
+	if err := json.Unmarshal(result, &meta); err != nil {
+		t.Fatalf("unmarshal result metadata: %v", err)
+	}
+	if !metadataBoolValue(meta, "model_prior_interim") ||
+		metadataStringValue(meta, "revision_grounding") != "model_prior" ||
+		metadataStringValue(meta, "grounding_status") != "model_prior_interim" {
+		t.Fatalf("user-prompt V1 missing model-prior/interim flags: %#v", meta)
+	}
+	if metadataStringValue(meta, "texture_version_stage") != "interim" {
+		t.Fatalf("texture_version_stage = %q, want interim; meta=%#v", metadataStringValue(meta, "texture_version_stage"), meta)
+	}
+	if metadataStringValue(meta, "artifact_kind") == "article_revision" ||
+		metadataStringValue(meta, "revision_role") == textureRevisionRoleCanonical {
+		t.Fatalf("interim model-prior V1 must not remain publishable article metadata: %#v", meta)
 	}
 }

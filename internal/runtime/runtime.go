@@ -3005,17 +3005,24 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 			meta[canonicalTextureSourcePathMetadataKey] = val
 		}
 	}
-	if wirepublish.IsWireArticleRevisionRun(rec) {
+	promptOnlyInitialModelPrior := promptOnlyInitialModelPriorTextureRevision(rec, meta, consumedThroughSeq)
+	if wirepublish.IsWireArticleRevisionRun(rec) && !promptOnlyInitialModelPrior {
 		meta["artifact_kind"] = "article_revision"
 		meta["revision_role"] = textureRevisionRoleCanonical
 		meta["texture_version_stage"] = "article_revision"
 	}
 	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation, consumedThroughSeq)
-	if !wirepublish.IsWireArticleRevisionRun(rec) && consumedThroughSeq == 0 && metadataIntValue(rec.Metadata, "scheduled_message_seq") == 0 {
+	if promptOnlyInitialModelPrior {
 		meta["grounding_status"] = "model_prior_interim"
 		meta["revision_grounding"] = "model_prior"
 		meta["texture_version_stage"] = "interim"
 		meta["model_prior_interim"] = true
+		if metadataString(meta, "artifact_kind") == "article_revision" {
+			meta["artifact_kind"] = "working_revision"
+		}
+		if metadataString(meta, "revision_role") == textureRevisionRoleCanonical {
+			meta["revision_role"] = textureRevisionRoleInput
+		}
 	}
 	if textureWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
 		markTextureMediaSourceRefsResearchState(meta, "represented")
@@ -3029,6 +3036,30 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		return json.RawMessage(`{"source":"patch_texture","loop_id":"` + rec.RunID + `"}`)
 	}
 	return data
+}
+
+func promptOnlyInitialModelPriorTextureRevision(rec *types.RunRecord, meta map[string]any, consumedThroughSeq int64) bool {
+	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+		return false
+	}
+	if consumedThroughSeq != 0 || metadataIntValue(rec.Metadata, "scheduled_message_seq") != 0 {
+		return false
+	}
+	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+		return false
+	}
+	inputOrigin := firstNonEmpty(
+		metadataString(meta, "input_origin"),
+		metadataStringValue(rec.Metadata, "input_origin"),
+	)
+	if inputOrigin == textureInputOriginUserPrompt {
+		return true
+	}
+	if strings.TrimSpace(metadataStringValue(rec.Metadata, "request_intent")) == "initial_conductor_workflow" &&
+		strings.TrimSpace(metadataStringValue(rec.Metadata, "seed_prompt")) != "" {
+		return true
+	}
+	return false
 }
 
 func textureWorkerUpdateMetadataHasRole(value any, role string) bool {

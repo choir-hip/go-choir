@@ -311,6 +311,24 @@ means the guard did not fire on this live V1 branch because prompt-bar initial
 Texture revisions can be treated as Wire article revisions, bypassing the
 model-prior/interim metadata that the T2 invariant requires.
 
+Current local repair after that metadata diagnostic: prompt-only initial Texture
+agent revisions now override accidental Wire article classification before
+revision metadata is stored (`internal/runtime/runtime.go:3005-3059`). A
+prompt-bar initial V1 with user-prompt / initial-conductor-workflow origin,
+no consumed worker update, no scheduled message, and no `update_coagent` source
+is marked `model_prior_interim`, `revision_grounding=model_prior`,
+`grounding_status=model_prior_interim`, and `texture_version_stage=interim`,
+and any leaked `artifact_kind=article_revision` / `revision_role=canonical`
+metadata is downgraded to non-publishable working/input metadata. Genuine sourced
+Wire article revisions keep the canonical article metadata because the override
+only applies to prompt-only initial Texture revision runs. A regression test now
+builds the exact article-shaped user-prompt branch and requires interim
+model-prior metadata while proving the Wire classifier would otherwise match
+(`internal/runtime/runtime_test.go:1662-1734`). The completion-guard product-path
+tests were also updated to satisfy addressed `update_coagent` semantics and the
+exact-first-write contract used by the current tool loop
+(`internal/runtime/texture_test.go:2120-2683`).
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -366,13 +384,13 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 locally repaired but live-metadata falsified: first paint can now be fast in
-  the live product path (`29265cae` diagnostic V1 at about +16s, `58895d28`
-  diagnostic fast V1), but staging proves the successful V1 branch may be
-  recorded as a canonical `article_revision` without model-prior/interim flags.
-  That violates the T2 grounding-honesty invariant and also prevents the
-  completion guard from recognizing a factual/current prompt's interim V1 as
-  incomplete.
+- C2 locally repaired again, staging pending: first paint can now be fast in the
+  live product path (`29265cae` diagnostic V1 at about +16s, `58895d28`
+  diagnostic fast V1), and the latest local metadata repair makes prompt-only
+  initial user-prompt V1 non-publishable and explicitly model-prior/interim even
+  when the run metadata is article-shaped. Staging still must prove that this
+  survives live provider behavior and unlocks the completion guard / evidence
+  path.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -407,16 +425,16 @@ position / live conjectures / open edges:
   next-tool enforcement. Staging `58895d28` showed the formal probe can still die
   in the no-V1 branch; a fresh diagnostic also showed a successful V1 branch
   where `article_revision` metadata suppresses the model-prior/interim flags. The
-  next repair must fix that metadata classification without weakening real Wire
-  article revision semantics or forcing a semantic researcher continuation.
+  latest local repair fixes that metadata classification without weakening real
+  Wire article revision semantics or forcing a semantic researcher continuation;
+  the next discriminator is staging.
 
-next move: inspect the Wire article revision classifier and Texture revision
-metadata builder. Repair prompt-bar initial no-worker factual/current V1 so it is
-explicitly `model_prior_interim` / `revision_grounding=model_prior` even when the
-artifact is article-shaped, while preserving canonical Wire article revision
-metadata for genuinely sourced article revision runs. Add a local test that
-would have failed for the staging diagnostic, then re-run the focused Texture
-cadence tests and shards.
+next move: commit and push the metadata repair, monitor CI and staging deploy
+identity, then rerun the deployed cadence probe against `https://choir.news`.
+The staging proof must distinguish whether the remaining blocker is no-V1 edit
+failure, guard-not-fired, researcher-not-delivering, or
+Texture-not-consuming-findings. If staging reveals a new failure branch, record
+it in this paradoc/ledger before any further code fix.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -453,8 +471,10 @@ model-prior/interim for a factual/current request. Staging `58895d28` showed thi
 does not yet solve acceptance: the formal probe still hit a no-V1 failure, and a
 fresh product-path diagnostic showed that the successful V1 branch can omit the
 model-prior/interim flags by classifying the prompt-bar revision as
-`article_revision`. The live-provider-compatible repair must therefore cover both
-write success and honest grounding metadata.
+`article_revision`. The latest local repair covers the honest-grounding half by
+making prompt-only initial revisions model-prior/interim even when article-shaped;
+staging must still prove that this reaches the live product path and produces an
+evidence-opening V2+ cadence rather than another no-V1 or V1-only branch.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and
