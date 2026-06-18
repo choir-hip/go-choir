@@ -299,6 +299,18 @@ failure while `/health` confirmed both proxy and sandbox deployed at
 path because the run failed before a successful model-prior V1, not because the
 guard allowed V1-only completion.
 
+Follow-up product-path diagnostic on the same deployed SHA refined the branch:
+prompt-bar submission `653300e5-8f29-4094-8e45-00601bd378b0` / doc
+`16301311-92a1-4e57-b87d-88c4c0f99c45` did store a fast appagent V1, but the
+revision metadata identified it as `artifact_kind=article_revision`,
+`revision_role=canonical`, and `texture_version_stage=article_revision`; it did
+not carry `model_prior_interim`, `revision_grounding=model_prior`, or
+`grounding_status=model_prior_interim`. Trace showed no `completion_guard` retry,
+no researcher delegation, no findings, and trajectory `state=completed`. This
+means the guard did not fire on this live V1 branch because prompt-bar initial
+Texture revisions can be treated as Wire article revisions, bypassing the
+model-prior/interim metadata that the T2 invariant requires.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -354,13 +366,13 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 locally repaired further, staging pending: first paint can now be a fast flagged
-  model-prior/interim revision in the live product path (`29265cae` diagnostic
-  V1 at about +16s), but the formal cadence probe still has a V0-only failed
-  run. The local completion-guard construct now rejects silent completion after a
-  factual/current model-prior V1 unless Texture opens evidence work or records
-  an audit decision; staging at `58895d28` still fails before V1 on the formal
-  cadence probe, so the guard branch remains unproven live.
+- C2 locally repaired but live-metadata falsified: first paint can now be fast in
+  the live product path (`29265cae` diagnostic V1 at about +16s, `58895d28`
+  diagnostic fast V1), but staging proves the successful V1 branch may be
+  recorded as a canonical `article_revision` without model-prior/interim flags.
+  That violates the T2 grounding-honesty invariant and also prevents the
+  completion guard from recognizing a factual/current prompt's interim V1 as
+  incomplete.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -392,15 +404,19 @@ position / live conjectures / open edges:
   reaches that branch and can produce V1, but stochastic invalid edit arguments
   can still exhaust/failed-run the first write. The current local completion
   guard targets the successful-V1/no-Probe sub-branch without forced semantic
-  next-tool enforcement. Staging `58895d28` showed the formal probe still dies in
-  the no-V1 branch, so the next discriminator is a Trace diagnostic of the
-  failed run's provider/tool errors rather than another post-V1 repair.
+  next-tool enforcement. Staging `58895d28` showed the formal probe can still die
+  in the no-V1 branch; a fresh diagnostic also showed a successful V1 branch
+  where `article_revision` metadata suppresses the model-prior/interim flags. The
+  next repair must fix that metadata classification without weakening real Wire
+  article revision semantics or forcing a semantic researcher continuation.
 
-next move: inspect Trace events for the `58895d28` failed cadence run (or run a
-fresh equivalent diagnostic if the original trace is not accessible) and classify
-the no-V1 branch: malformed edit arguments, exact-tool retry exhaustion,
-provider/adapter failure, mutation settlement, or activation/prompt assembly.
-Only then construct the next repair.
+next move: inspect the Wire article revision classifier and Texture revision
+metadata builder. Repair prompt-bar initial no-worker factual/current V1 so it is
+explicitly `model_prior_interim` / `revision_grounding=model_prior` even when the
+artifact is article-shaped, while preserving canonical Wire article revision
+metadata for genuinely sourced article revision runs. Add a local test that
+would have failed for the staging diagnostic, then re-run the focused Texture
+cadence tests and shards.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -434,8 +450,11 @@ completion guard rather than a required researcher continuation: it preserves
 Texture agency by allowing Probe, Execute, follow-up, or an audit decision, but
 rejects silent completion while the only canonical appagent revision is still
 model-prior/interim for a factual/current request. Staging `58895d28` showed this
-does not yet solve the formal acceptance path because the run still fails before
-the guarded V1 state exists.
+does not yet solve acceptance: the formal probe still hit a no-V1 failure, and a
+fresh product-path diagnostic showed that the successful V1 branch can omit the
+model-prior/interim flags by classifying the prompt-bar revision as
+`article_revision`. The live-provider-compatible repair must therefore cover both
+write success and honest grounding metadata.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

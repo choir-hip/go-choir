@@ -652,3 +652,50 @@ assembly. Do not add another code fix before that classification.
 Rollback ref: revert `58895d28` only if the diagnostic shows the completion guard
 causes the no-V1 failure or a semantic forced-role regression. Otherwise keep it
 as a local repair for the post-V1 branch and repair the earlier no-V1 branch next.
+
+## 2026-06-18 - Fresh diagnostic found article-revision metadata bypass (green record)
+
+Claim under test: the next discriminator for deployed `58895d28e56dec72e63852fd9eb35bc9ce441ab7`
+was still only the no-V1 formal-probe branch.
+
+Move: fresh product-path Trace/Texture diagnostic against `https://choir.news`
+using the same factual/current prompt shape as the cadence probe.
+
+Expected ΔV: classify whether the live branch is still malformed edit arguments,
+exact-tool retry exhaustion, provider/adapter failure, mutation settlement, or
+activation/prompt assembly. Actual ΔV: observer evidence changed the branch. A
+successful V1 can be stored on staging, but it is not flagged
+model-prior/interim, so the completion guard cannot recognize it.
+
+Receipts:
+
+- Diagnostic submission / trajectory:
+  `653300e5-8f29-4094-8e45-00601bd378b0`.
+- Texture doc: `16301311-92a1-4e57-b87d-88c4c0f99c45`.
+- Initial loop id: `0859bdb0-8be2-45af-8570-dd0a2717b5e5`.
+- Staging health identity during the diagnostic:
+  `58895d28e56dec72e63852fd9eb35bc9ce441ab7`.
+- Trajectory result: `state=completed`, `live=false`, `agent_count=2`,
+  `delegation_count=0`, `finding_count=0`, `moment_count=30`.
+- Revisions: V0 user plus appagent V1. V1 metadata included
+  `artifact_kind=article_revision`, `revision_role=canonical`,
+  `texture_version_stage=article_revision`, `source=patch_texture`,
+  `texture_edit_operation=apply_edits`, and a rationale that called the revision
+  an "honest interim revision"; it did not include `model_prior_interim`,
+  `revision_grounding=model_prior`, or `grounding_status=model_prior_interim`.
+- Trace had two `patch_texture` invocations/results, no `completion_guard`
+  event, no `spawn_agent`, no researcher findings, and no `update_coagent`.
+
+Result: the local guard is structurally unable to fire on this live successful-V1
+branch because the metadata builder treats the prompt-bar initial revision as a
+canonical Wire article revision instead of an interim prompt-only model-prior
+revision. This is a T2 grounding-honesty failure before it is a cadence failure.
+
+Next move: inspect `wirepublish.IsWireArticleRevisionRun`, prompt-bar Texture
+run metadata, and `buildAppagentRevisionMetadata`; repair prompt-bar initial
+no-worker factual/current revisions so model-prior/interim metadata is present
+without changing genuinely sourced Wire article revision semantics.
+
+Rollback ref: docs-only evidence checkpoint. Runtime rollback remains reverting
+the later repair commit if it damages sourced article revisions, loops the guard,
+or introduces semantic role choreography.
