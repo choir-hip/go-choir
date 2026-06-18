@@ -506,18 +506,18 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		},
 	}
 	child := types.RunRecord{
-		RunID:        "run-cancel-child",
-		AgentID:      "agent-vsuper-cancel",
-		RequestedByRunID:  "spawned-by-other-run",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
-		OwnerID:      "user-1",
-		SandboxID:    "sandbox-texture-test",
-		State:        types.RunRunning,
-		Prompt:       "Background candidate.",
-		TrajectoryID: trajectoryID,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "run-cancel-child",
+		AgentID:          "agent-vsuper-cancel",
+		RequestedByRunID: "spawned-by-other-run",
+		AgentProfile:     AgentProfileVSuper,
+		AgentRole:        AgentProfileVSuper,
+		OwnerID:          "user-1",
+		SandboxID:        "sandbox-texture-test",
+		State:            types.RunRunning,
+		Prompt:           "Background candidate.",
+		TrajectoryID:     trajectoryID,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileVSuper,
 			runMetadataAgentRole:    AgentProfileVSuper,
@@ -525,18 +525,18 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		},
 	}
 	graphChildDifferentTrajectory := types.RunRecord{
-		RunID:        "run-cancel-graph-child-other-trajectory",
-		AgentID:      "agent-other-trajectory",
-		RequestedByRunID:  parent.RunID,
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
-		OwnerID:      "user-1",
-		SandboxID:    "sandbox-texture-test",
-		State:        types.RunRunning,
-		Prompt:       "Different trajectory despite spawned-by provenance.",
-		TrajectoryID: "traj-other-cancel-agent",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "run-cancel-graph-child-other-trajectory",
+		AgentID:          "agent-other-trajectory",
+		RequestedByRunID: parent.RunID,
+		AgentProfile:     AgentProfileVSuper,
+		AgentRole:        AgentProfileVSuper,
+		OwnerID:          "user-1",
+		SandboxID:        "sandbox-texture-test",
+		State:            types.RunRunning,
+		Prompt:           "Different trajectory despite spawned-by provenance.",
+		TrajectoryID:     "traj-other-cancel-agent",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileVSuper,
 			runMetadataAgentRole:    AgentProfileVSuper,
@@ -1428,12 +1428,10 @@ func TestScheduleTextureWorkerWakeLeadingCoalesce(t *testing.T) {
 	}
 }
 
-// TestCoagentUpdateTurnInjectorSkipsTexture asserts Texture runs do not warm
-// inject mid-run coagent packets (one canonical revision per run), while super
-// and researcher runs keep warm injection for their ongoing multi-turn work.
-// This is what lets multiple findings packets become multiple Texture revisions
-// via reconcileCompletedTextureRun instead of one batched V1.
-func TestCoagentUpdateTurnInjectorSkipsTexture(t *testing.T) {
+// TestCoagentUpdateTurnInjectorSupportsTexture asserts Texture uses the same
+// warm-injection path as other durable actors so one logical Texture activation
+// can deepen across multiple addressed findings packets.
+func TestCoagentUpdateTurnInjectorSupportsTexture(t *testing.T) {
 	provider := newTextureEditToolProvider(textureReplaceAllResult("noop"))
 	_, _, rt := textureAPISetupWithProviderAndOptions(t, provider, true)
 
@@ -1443,8 +1441,8 @@ func TestCoagentUpdateTurnInjectorSkipsTexture(t *testing.T) {
 		AgentID:      currentTextureAgentID("doc-x"),
 		AgentProfile: AgentProfileTexture,
 	}
-	if rt.coagentUpdateTurnInjector(textureRec) != nil {
-		t.Fatalf("Texture runs must not warm-inject coagent packets")
+	if rt.coagentUpdateTurnInjector(textureRec) == nil {
+		t.Fatalf("Texture runs must warm-inject coagent packets")
 	}
 
 	superRec := &types.RunRecord{
@@ -4162,15 +4160,15 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 	}
 
 	interruptedRun := types.RunRecord{
-		RunID:       "texture-interrupted-restart",
-		OwnerID:     "user-1",
-		SandboxID:   "sandbox-texture-test",
-		ChannelID:   doc.DocID,
-		State:       types.RunRunning,
-		Prompt:      "Integrate the durable finding",
+		RunID:            "texture-interrupted-restart",
+		OwnerID:          "user-1",
+		SandboxID:        "sandbox-texture-test",
+		ChannelID:        doc.DocID,
+		State:            types.RunRunning,
+		Prompt:           "Integrate the durable finding",
 		RequestedByRunID: researchRun.RunID,
-		CreatedAt:   now.Add(4 * time.Second),
-		UpdatedAt:   now.Add(4 * time.Second),
+		CreatedAt:        now.Add(4 * time.Second),
+		UpdatedAt:        now.Add(4 * time.Second),
 		Metadata: map[string]any{
 			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
@@ -7479,14 +7477,36 @@ func TestTextureAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 		t.Fatalf("first rewrite_texture: %v", err)
 	}
 	if _, err := textureRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "rewrite_texture", rawArgs); err == nil {
-		t.Fatal("second rewrite_texture should be rejected after mutation completion")
+		t.Fatal("duplicate rewrite_texture against the stale base revision should be rejected")
+	}
+
+	afterFirst, err := s.GetDocument(ctx, "doc-mutation-test", "user-1")
+	if err != nil {
+		t.Fatalf("get document after first rewrite: %v", err)
+	}
+	secondArgs, err := json.Marshal(editTextureArgs{
+		DocID:          "doc-mutation-test",
+		BaseRevisionID: afterFirst.CurrentRevisionID,
+		Operation:      "apply_edits",
+		Edits: []textureTextEdit{{
+			Op:      "append",
+			Text:    "\n\nSecond same-run revision from later evidence.",
+			Replace: "",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal second rewrite args: %v", err)
+	}
+	if _, err := textureRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "patch_texture", secondArgs); err != nil {
+		t.Fatalf("second same-run patch_texture: %v", err)
 	}
 
 	// Call handleRunCompletion twice to simulate duplicate recovery processing.
 	rt.handleRunCompletion(ctx, taskRec)
 	rt.handleRunCompletion(ctx, taskRec)
 
-	// Verify only one appagent revision was created.
+	// Verify both legitimate same-run appagent revisions were created, while the
+	// stale duplicate attempt produced no extra revision.
 	revs, err := s.ListRevisionsByDoc(ctx, "doc-mutation-test", "user-1", 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
@@ -7498,8 +7518,8 @@ func TestTextureAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 			agentCount++
 		}
 	}
-	if agentCount != 1 {
-		t.Errorf("found %d appagent revisions, want 1 — duplicate canonical revision detected (VAL-CROSS-122)", agentCount)
+	if agentCount != 2 {
+		t.Errorf("found %d appagent revisions, want 2 legitimate same-run revisions", agentCount)
 	}
 }
 

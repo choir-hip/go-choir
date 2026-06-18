@@ -166,17 +166,35 @@ park-and-wait blocks without billed calls; per-actor budget enforced with a
 kill-switch; one-run-per-agent lifecycle with scaffolding removed; sleep/resume
 across vmctl refresh; doc-delete cancels; verifier N:1; tests/docs/heresy updated;
 deployed probe shows fast from-weights first paint and V2+ tracking findings.
-Current audited value: T1 remains open in the current tree. The code still
-disables Texture warm injection and documents one canonical revision per run in
-`internal/runtime/super_controller.go:417-438`; `patch_texture`/`rewrite_texture`
-still reject a second write after `texture_agent_mutations.state` leaves
-`pending` in `internal/runtime/tools_texture.go:549-576`; and the prompt overlay
-still instructs "do not call patch_texture or rewrite_texture again in the same
-revision run" in
-`internal/runtime/textureprompts/overlays/run_system.yaml:12`. The earlier
-leading-wake/re-wake cadence in `internal/runtime/texture_controller.go:25-44`
-and related tests is useful lineage but preserves the one-write-per-run model
-that this mission supersedes.
+Current audited value after the 2026-06-17 T1/T2 construct: T1 is locally
+repaired for the resident-run write cadence. Texture now participates in warm
+coagent update injection (`internal/runtime/super_controller.go:424-438`), a
+Texture run may commit multiple canonical revisions while its mutation remains
+pending (`internal/runtime/tools_texture.go:564-688` and
+`internal/store/texture.go:1744-1790`), and injected worker packets are marked
+delivered only when a Texture revision consumes them
+(`internal/runtime/runtime.go:2959-3072`). T2 is partially repaired: a
+no-worker appagent revision is marked as `model_prior_interim` /
+`revision_grounding=model_prior` in revision metadata
+(`internal/runtime/runtime.go:2868-2926`), and the Texture prompt overlays now
+allow an explicitly uncertain fast scaffold while still forbidding grounded
+world facts from model recall
+(`internal/runtime/textureprompts/overlays/revision_policy.yaml:22-48`,
+`internal/runtime/textureprompts/overlays/run_system.yaml:12-25`).
+
+Remaining audited value: T3-T8 remain open. The runtime still has no
+park-and-wait primitive or cumulative per-actor budget; the tool loop is still
+bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
+The separate cold wake/reconcile scaffolding remains
+(`internal/runtime/texture_controller.go:24-90`), so this construct proves
+multi-revision capability inside a run but does not yet make
+`texture:<docID>` a single parked resident actor. Restart still passivates
+Texture revision runs by marking pending mutations stale
+(`internal/runtime/runtime.go:1261-1302`), document deletion still deletes the
+document without cancelling the actor (`internal/runtime/texture.go:1048-1060`),
+and the workflow verifier still checks revision causality without proving the
+new one-run-to-many-revisions lifecycle end to end
+(`internal/runtime/texture_workflow_verifier.go:527-593`).
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -215,12 +233,13 @@ do not count their naming as repair.
 
 position / live conjectures / open edges:
 
-- C1 active: one-write-per-run is the artificial cap. Removing the AgentMutation
-  gate plus enabling warm injection lets a resident run deepen the doc; this is
-  the core lever.
-- C2 active: first paint is gated by the first findings packet, not the wake
-  debounce. A from-weights V1 before retrieval is the intended fast-paint fix;
-  it requires a doctrine change to allow a flagged model-prior initial revision.
+- C1 repaired locally: one-write-per-run was the artificial cap. The
+  AgentMutation row is now run-liveness/idempotency state rather than the
+  per-write terminal gate; stale base revisions still reject duplicate writes,
+  while fresh same-run writes can deepen the document.
+- C2 partially repaired locally: first paint can now be a flagged
+  model-prior/interim revision before retrieval. Product-path proof is still
+  open because staging has not yet shown the fast first paint or V2+ cadence.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -241,12 +260,11 @@ position / live conjectures / open edges:
   activation warm-inject addressed packets and commit more than one canonical
   revision, with revision metadata showing which packet set each write consumed.
 
-next move: T1 construct. Re-enable warm injection for Texture; replace the
-per-run completed-mutation write gate with a per-revision commit record that
-still preserves stale-write and retry safety; update consumed/pending worker
-metadata per revision; invert the old tests that asserted Texture warm injection
-is disabled and second writes are rejected. If this cannot be proven locally,
-record a file-cited blocker before moving to T2.
+next move: land the local T1/T2 construct if review remains clean, then continue
+with T3. Build the uniform park-and-wait plus cumulative actor budget before
+removing the remaining cold wake/reconcile lifecycle, because without that
+foundation a long-running Texture actor either burns tool-loop turns or remains
+separate-run wake driven.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -262,9 +280,9 @@ learning state: prior increment `68d09cc3` deployed and falsified on staging
 and reinforced the cap. The redesign direction (long-running actor + from-weights
 V1) was owner-selected after that falsification.
 
-settlement requirement: settles only with deployed staging proof of a
-from-weights first paint well under the ~49s baseline and multiple grounded
-revisions (V2+) that track findings packets, one logical actor per doc surviving
-a vmctl refresh as sleep/resume, an enforced per-actor budget, doc-delete
-cancellation, updated verifier/tests/docs/heresy detectors, and a
+settlement requirement: not yet met. The mission settles only with deployed
+staging proof of a from-weights first paint well under the ~49s baseline and
+multiple grounded revisions (V2+) that track findings packets, one logical actor
+per doc surviving a vmctl refresh as sleep/resume, an enforced per-actor budget,
+doc-delete cancellation, updated verifier/tests/docs/heresy detectors, and a
 RunAcceptanceRecord at staging-smoke-level (or higher).

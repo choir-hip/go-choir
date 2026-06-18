@@ -1744,10 +1744,34 @@ func (s *Store) GetAgentMutationByRun(ctx context.Context, runID string) (*Agent
 	return scanAgentMutation(row)
 }
 
-// CompleteAgentMutation marks an agent mutation as completed with the
-// revision ID of the newly created canonical revision. It returns
-// ErrMutationAlreadyCompleted if the mutation is already in a completed
-// state, preventing duplicate canonical revisions (VAL-CROSS-122).
+// RecordAgentMutationRevision records the latest canonical revision written by
+// a still-active Texture mutation without closing the run. Multi-revision
+// Texture actors use the row as run-liveness/idempotency state; the revision
+// rows themselves are the per-write commit records.
+func (s *Store) RecordAgentMutationRevision(ctx context.Context, runID, revisionID string) error {
+	result, err := s.textureHandle().ExecContext(ctx,
+		`UPDATE texture_agent_mutations
+		    SET revision_id = ?
+		  WHERE loop_id = ? AND state = 'pending'`,
+		revisionID,
+		runID,
+	)
+	if err != nil {
+		return fmt.Errorf("record texture agent mutation revision: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check recorded mutation revision rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrMutationAlreadyCompleted
+	}
+	return nil
+}
+
+// CompleteAgentMutation marks an agent mutation as completed with the latest
+// revision ID written by the run. It returns ErrMutationAlreadyCompleted if the
+// mutation is no longer pending.
 var ErrMutationAlreadyCompleted = errors.New("agent mutation already completed")
 
 func (s *Store) CompleteAgentMutation(ctx context.Context, runID, revisionID string) error {

@@ -1618,7 +1618,7 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 		Metadata: map[string]any{"type": "texture_agent_revision"},
 	}
 
-	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil)
+	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, 0)
 	var resultMap map[string]any
 	if err := json.Unmarshal(result, &resultMap); err != nil {
 		t.Fatalf("unmarshal result metadata: %v", err)
@@ -1650,7 +1650,7 @@ func TestBuildAppagentRevisionMetadataPreservesDurableKeys(t *testing.T) {
 		"type":                                "texture_agent_revision",
 		canonicalTextureSourcePathMetadataKey: "/notes/run-metadata.texture",
 	}
-	result = rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil)
+	result = rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, 0)
 	if err := json.Unmarshal(result, &resultMap); err != nil {
 		t.Fatalf("unmarshal run metadata result: %v", err)
 	}

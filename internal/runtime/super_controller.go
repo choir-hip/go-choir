@@ -158,6 +158,12 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
+	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			return err
+		}
+		return rt.completeSuccessfulRunWorkItems(ctx, rec)
+	}
 	if len(updateIDs) == 0 || rec.State != types.RunCompleted {
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			return err
@@ -418,22 +424,10 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTur
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
-	// Texture runs write exactly one canonical revision per run (see the
-	// run_system overlay: after a write tool succeeds, do not write again).
-	// Warm-injecting every packet that arrives mid run would batch many findings
-	// into that single revision, producing one terminal V1 instead of an
-	// interim-revision cadence. That is the V1-only / slow-first-paint failure in
-	// docs/mission-texture-product-loop-recovery-v0.md. Texture consumes only its
-	// cold-prepended batch (prependInitialCoagentUpdatePackets), writes one
-	// revision, and ends; packets that arrive during the run stay pending and
-	// drive the next revision through reconcileCompletedTextureRun. This is what
-	// gives the V1 -> Vn deepening cadence and the long-running-agent supervision
-	// stream (a fresh revision per delivered checkpoint). Other roles (super,
-	// vsuper, co-super, researcher) keep warm injection because they do ongoing
-	// multi-turn work in a single run.
-	if agentProfileForRun(rec) == AgentProfileTexture {
-		return nil
-	}
+	// Texture participates in the same warm-injection path as the other durable
+	// actors. A Texture activation may now incorporate an addressed packet, write
+	// a canonical revision, then receive later packets and write deeper revisions
+	// in the same logical actor run.
 	ownerID := strings.TrimSpace(rec.OwnerID)
 	agentID := strings.TrimSpace(rec.AgentID)
 	if ownerID == "" || agentID == "" {

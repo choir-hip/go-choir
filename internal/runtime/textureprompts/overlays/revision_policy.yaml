@@ -22,7 +22,7 @@ body: |
   {{if .ExplicitResearcherRequest}}
   The owner explicitly asked for researcher help. Probe (researcher) is the correct morphism class for that world-knowledge gap.
   {{end}}
-  For factual/current/search requests, do not answer from model recall. A short uncertain checkpoint is allowed only when it contains no ungrounded claims; substantive world knowledge requires Probe (researcher) evidence before the document states facts.
+  For factual/current/search requests, do not answer substantive world facts from model recall. On activation, an immediate model-prior/interim V1 is allowed before retrieval only as an explicitly uncertain scaffold: name the question, known uncertainty, evidence plan, and unresolved branches without asserting current facts as grounded. Substantive world knowledge requires Probe (researcher) evidence before the document states facts as grounded.
   For coding/execution requests, Execute (request_super_execution) is how super delivers command/artifact/verification evidence.
   If execution evidence is still pending in an initial or interim revision, do not include the final [CMD] evidence label yet; describe pending command evidence without that label.
   For owner requests to send, draft, or prepare an email whose content is already supplied, store the exact email artifact and use request_email_draft in the same run. Do not request super for a simple email draft handoff, and do not send mail directly.
@@ -39,11 +39,11 @@ body: |
   {{if .OwnerPromptRequestRevision}}
   The canonical content is the owner's original prompt; write the first useful document that fulfills it while excluding control-only rationale from the body.
   {{end}}
-  Do not add factual claims, citations, or coding results from model priors.
+  Do not add factual claims, citations, or coding results from model priors as grounded. An immediate model-prior/interim V1 may structure the question and uncertainty before retrieval, but it must not present world claims as evidence-backed.
   If the request needs facts, current events, citations, generated artifacts, execution, or verification, Probe and/or Execute morphisms are required. A short uncertain checkpoint may name what evidence is still missing, but ending with only model-shaped substance and no worker path violates invariant 3 unless Texture Audits an audit-worthy reason.
   {{else}}
   Do not use patch_texture or rewrite_texture to add factual claims from model priors.
-  For factual/current claims, keep the revision uncertain until researcher evidence arrives. Probe (researcher) gathers world-knowledge evidence; a checkpoint alone does not satisfy the objective.
+  For factual/current claims, keep the revision explicitly model-prior/interim and uncertain until researcher evidence arrives. Probe (researcher) gathers world-knowledge evidence; a checkpoint alone does not satisfy the objective.
   Ordinary factual, current-events, web, or "what is going on now" questions are Probe work, not Execute work. Do not route them to request_super_execution merely to avoid research; use Execute only when the user also asks for code execution, product mutation, candidate-world work, verifier contracts, or other execution evidence.
   For coding, generated artifacts, execution, or verification, Execute (request_super_execution) is how super delivers that evidence.
   If Texture starts worker request(s), keep the interim revision short: name the objective, worker type, evidence being gathered, and what remains unresolved. Worker deliveries will wake later Texture runs to create evidence-backed revisions.

@@ -54,7 +54,7 @@ type Runtime struct {
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
 	superRequestMu        sync.Mutex
-	coagentSpawnMu          sync.Mutex
+	coagentSpawnMu        sync.Mutex
 	workerRequestMu       sync.Mutex
 	workerRequests        map[string]string
 	conductorRouteMu      sync.Mutex
@@ -660,19 +660,19 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 
 	// Create the runtime run record.
 	rec := &types.RunRecord{
-		RunID:        runID,
-		AgentID:      agentRec.AgentID,
-		ChannelID:    agentRec.ChannelID,
-		RequestedByRunID:  requesterRunID,
-		AgentProfile: agentRec.Profile,
-		AgentRole:    agentRec.Role,
-		OwnerID:      ownerID,
-		SandboxID:    rt.cfg.SandboxID,
-		State:        types.RunPending,
-		Prompt:       objective,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata:     metadata,
+		RunID:            runID,
+		AgentID:          agentRec.AgentID,
+		ChannelID:        agentRec.ChannelID,
+		RequestedByRunID: requesterRunID,
+		AgentProfile:     agentRec.Profile,
+		AgentRole:        agentRec.Role,
+		OwnerID:          ownerID,
+		SandboxID:        rt.cfg.SandboxID,
+		State:            types.RunPending,
+		Prompt:           objective,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		Metadata:         metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
 	if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id"); err != nil {
@@ -690,7 +690,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	// Emit submitted event.
 	objectiveLenPayload, _ := json.Marshal(map[string]any{
 		"prompt_length": len(objective),
-		"requested_by":     requesterRunID,
+		"requested_by":  requesterRunID,
 	})
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, objectiveLenPayload)
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&requesterRec) {
@@ -1497,7 +1497,12 @@ func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
 // Provider.Execute path (stub or bridge provider).
 func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) {
 	defer rt.wg.Done()
-	defer rt.removeRunning(rec.RunID)
+	defer func() {
+		rt.removeRunning(rec.RunID)
+		if rec.State == types.RunCompleted && !metadataBoolValue(rec.Metadata, "texture_revision_failed_no_write") {
+			rt.reconcileCompletedTextureRun(rec)
+		}
+	}()
 
 	now := time.Now().UTC()
 
@@ -1617,13 +1622,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
-		// A canonical write (patch_texture/rewrite_texture) must NOT terminate the
-		// Texture run: the run has to remain able to spawn a researcher, request
-		// super execution, record a Texture decision, request an email handoff, or
-		// intentionally end after the write. Exactly one canonical write per run is
-		// preserved mechanically by the per-run agent mutation (commitTextureToolEdit
-		// requires a pending mutation and completes it). Only genuine delegation /
-		// handoff successes are terminal; a write leaves the loop running.
+		// A canonical write (patch_texture/rewrite_texture) must not terminate the
+		// Texture run. The same logical Texture actor may write an immediate draft,
+		// receive warm coagent packets, and write deeper revisions before it ends or
+		// delegates. Only genuine delegation/handoff successes are terminal.
 		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
 			"spawn_agent",
 			"request_super_execution",
@@ -1681,7 +1683,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
-	rt.reconcileCompletedTextureRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]any{
 		"result_length": len(text),
 		"input_tokens":  usage.InputTokens,
@@ -1769,7 +1770,6 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
-	rt.reconcileCompletedTextureRun(rec)
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
@@ -2103,7 +2103,7 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		"revision_role":               textureRevisionRoleInput,
 		"input_origin":                textureInputOriginUserPrompt,
 		"texture_version":             "v0",
-		textureMetadataPromptUnixTS: now.Unix(),
+		textureMetadataPromptUnixTS:   now.Unix(),
 	}
 	// The owner prompt is the canonical Texture V0. For prompt-bar-created
 	// Texture, V0 content is exactly the owner's prompt text, not blank metadata
@@ -2655,6 +2655,14 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
+	if strings.TrimSpace(mutation.RevisionID) != "" {
+		if err := rt.store.CompleteAgentMutation(persistCtx, rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
+			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)
+			return nil
+		}
+		return nil
+	}
+
 	if rt.textureRunRequestedWorkers(persistCtx, rec) {
 		if err := rt.store.DeferAgentMutation(persistCtx, rec.RunID); err != nil {
 			log.Printf("runtime: texture agent revision run %s: defer no-edit mutation: %v", rec.RunID, err)
@@ -2671,6 +2679,10 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 	_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	rec.Metadata["texture_revision_failed_no_write"] = true
 	failPayload, _ := json.Marshal(map[string]string{
 		"doc_id":  docID,
 		"loop_id": rec.RunID,
@@ -2856,7 +2868,7 @@ var durableMetadataKeys = []string{
 // buildAppagentRevisionMetadata constructs the metadata JSON for an
 // appagent-authored revision, carrying forward durable context keys
 // from the parent revision so they remain available on the next revise.
-func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types.RunRecord, doc types.Document, ownerID string, mutation *store.AgentMutation) json.RawMessage {
+func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types.RunRecord, doc types.Document, ownerID string, mutation *store.AgentMutation, consumedThroughSeq int64) json.RawMessage {
 	meta := map[string]any{
 		"source":  "patch_texture",
 		"loop_id": rec.RunID,
@@ -2893,7 +2905,13 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		meta["revision_role"] = textureRevisionRoleCanonical
 		meta["texture_version_stage"] = "article_revision"
 	}
-	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation)
+	workerUpdateMeta := rt.workerUpdateRevisionMetadata(ctx, ownerID, doc.DocID, mutation, consumedThroughSeq)
+	if !wirepublish.IsWireArticleRevisionRun(rec) && consumedThroughSeq == 0 && metadataIntValue(rec.Metadata, "scheduled_message_seq") == 0 {
+		meta["grounding_status"] = "model_prior_interim"
+		meta["revision_grounding"] = "model_prior"
+		meta["texture_version_stage"] = "interim"
+		meta["model_prior_interim"] = true
+	}
 	if textureWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
 		markTextureMediaSourceRefsResearchState(meta, "represented")
 	}
@@ -2941,7 +2959,7 @@ type textureWorkerUpdateMetadata struct {
 	Reason         string `json:"reason,omitempty"`
 }
 
-func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, docID string, mutation *store.AgentMutation) map[string]any {
+func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, docID string, mutation *store.AgentMutation, consumedThroughSeq int64) map[string]any {
 	out := map[string]any{
 		"worker_updates_policy":         "eligible_addressed_channel_messages",
 		"worker_updates_checkpoint_seq": int64(0),
@@ -2957,6 +2975,9 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 	scheduledSeq := int64(0)
 	if mutation != nil {
 		scheduledSeq = mutation.ScheduledMessageSeq
+	}
+	if consumedThroughSeq > scheduledSeq {
+		scheduledSeq = consumedThroughSeq
 	}
 	out["worker_updates_scheduled_seq"] = scheduledSeq
 
@@ -3016,6 +3037,39 @@ func (rt *Runtime) workerUpdateRevisionMetadata(ctx context.Context, ownerID, do
 	out["worker_updates_skipped"] = skipped
 	out["worker_updates_pending"] = pending
 	return out
+}
+
+func (rt *Runtime) textureWorkerUpdateCommitSeq(ctx context.Context, rec *types.RunRecord, docID string, mutation *store.AgentMutation) int64 {
+	seq := int64(0)
+	if mutation != nil {
+		seq = mutation.ScheduledMessageSeq
+	}
+	if rt == nil || rt.store == nil || rec == nil {
+		return seq
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	targetAgentID := currentTextureAgentID(docID)
+	if ownerID == "" || strings.TrimSpace(targetAgentID) == "" {
+		return seq
+	}
+	for _, updateID := range coagentUpdateIDsForRun(rec) {
+		updateID = strings.TrimSpace(updateID)
+		if updateID == "" {
+			continue
+		}
+		update, err := rt.store.GetWorkerUpdate(ctx, ownerID, updateID)
+		if err != nil {
+			log.Printf("runtime: load injected texture worker update %s for revision metadata: %v", updateID, err)
+			continue
+		}
+		if strings.TrimSpace(update.TargetAgentID) != targetAgentID || strings.TrimSpace(update.ChannelID) != strings.TrimSpace(docID) {
+			continue
+		}
+		if update.MessageSeq > seq {
+			seq = update.MessageSeq
+		}
+	}
+	return seq
 }
 
 func (rt *Runtime) previousTextureWorkerMetadataSeq(ctx context.Context, ownerID, docID string) int64 {

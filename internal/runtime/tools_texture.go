@@ -564,12 +564,7 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, fmt.Errorf("texture mutation not found for run %s", rec.RunID)
 	}
 	if mutation.State != "pending" {
-		// One canonical write per run is mechanically enforced here: once this run
-		// has stored its revision the mutation is no longer pending. A second write
-		// attempt is rejected so the run keeps exactly one canonical revision. The
-		// run is still live and should now delegate (spawn_agent), request super
-		// execution, record a Texture decision, request an email handoff, or end.
-		return types.Revision{}, fmt.Errorf("texture mutation is %s, not pending: this run already stored its one canonical revision; do not write again, instead delegate, request super, record a decision, request an email handoff, or end the run", mutation.State)
+		return types.Revision{}, fmt.Errorf("texture mutation is %s, not pending: this Texture actor run is no longer writable", mutation.State)
 	}
 	if docID == "" {
 		docID = strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
@@ -636,7 +631,8 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("ensure canonical texture projection path: %w", err)
 	}
-	revMeta := addTextureEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation), materialized, rec)
+	consumedThroughSeq := rt.textureWorkerUpdateCommitSeq(ctx, rec, doc.DocID, mutation)
+	revMeta := addTextureEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation, consumedThroughSeq), materialized, rec)
 	if normalizedContent, normalizedCount := normalizeWireArticleBareSourceRefs(materialized.Content, revMeta, rec); normalizedCount > 0 {
 		materialized.Content = normalizedContent
 		revMeta = mergeTextureRevisionMetadata(revMeta, map[string]any{
@@ -684,21 +680,21 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	if err != nil {
 		return types.Revision{}, fmt.Errorf("load created Texture revision: %w", err)
 	}
-	if err := rt.store.CompleteAgentMutation(ctx, rec.RunID, rev.RevisionID); err != nil {
+	if err := rt.store.RecordAgentMutationRevision(ctx, rec.RunID, rev.RevisionID); err != nil {
 		if err != store.ErrMutationAlreadyCompleted {
-			return types.Revision{}, fmt.Errorf("complete Texture mutation: %w", err)
+			return types.Revision{}, fmt.Errorf("record Texture mutation revision: %w", err)
 		}
 	}
-	if mutation.ScheduledMessageSeq > 0 {
+	if consumedThroughSeq > 0 {
 		if err := rt.store.UpsertTextureControllerCheckpoint(ctx, store.TextureControllerCheckpoint{
 			DocID:                docID,
 			OwnerID:              rec.OwnerID,
-			IntegratedMessageSeq: mutation.ScheduledMessageSeq,
+			IntegratedMessageSeq: consumedThroughSeq,
 			UpdatedAt:            time.Now().UTC(),
 		}); err != nil {
 			return types.Revision{}, fmt.Errorf("update texture controller checkpoint: %w", err)
 		}
-		if err := rt.markTextureWorkerUpdatesDelivered(ctx, rec, docID, mutation.ScheduledMessageSeq); err != nil {
+		if err := rt.markTextureWorkerUpdatesDelivered(ctx, rec, docID, consumedThroughSeq); err != nil {
 			return types.Revision{}, fmt.Errorf("mark texture worker updates delivered: %w", err)
 		}
 	}

@@ -85,7 +85,8 @@ func TestTexturePromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 
 	for _, want := range []string{
 		"Invariant: canonical meaning is Texture-owned",
-		"For factual/current/search requests, do not answer from model recall",
+		"For factual/current/search requests, do not answer substantive world facts from model recall",
+		"immediate model-prior/interim V1 is allowed before retrieval only as an explicitly uncertain scaffold",
 		"Probe morphisms (spawn_agent researcher) gather world knowledge",
 		"depth scales with subject matter",
 		"marginal returns diminish",
@@ -111,8 +112,9 @@ func TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent(t *testing
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"do not answer from model recall",
-		"Do not add factual claims, citations, or coding results from model priors",
+		"do not answer substantive world facts from model recall",
+		"immediate model-prior/interim V1 is allowed before retrieval only as an explicitly uncertain scaffold",
+		"Do not add factual claims, citations, or coding results from model priors as grounded",
 		"Probe and/or Execute morphisms are required",
 		"violates invariant 3 unless Texture Audits an audit-worthy reason",
 		"Never describe coordination as already done unless the tool action really happened",

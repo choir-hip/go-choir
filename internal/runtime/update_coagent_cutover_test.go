@@ -101,6 +101,118 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	}
 }
 
+func TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-texture-warm-consume"
+	agentID := "texture:" + docID
+	trajectoryID := "traj-texture-warm-consume"
+	now := time.Now().UTC()
+	researcherRun, err := rt.StartRunWithMetadata(ctx, "produce a warm Texture finding", ownerID, map[string]any{
+		runMetadataAgentID:      "researcher:warm",
+		runMetadataAgentProfile: AgentProfileResearcher,
+		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataChannelID:    docID,
+		runMetadataTrajectoryID: trajectoryID,
+	})
+	if err != nil {
+		t.Fatalf("start researcher run: %v", err)
+	}
+
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-texture-warm-consume",
+		OwnerID:       ownerID,
+		AgentID:       "researcher:warm",
+		TargetAgentID: agentID,
+		ChannelID:     docID,
+		TrajectoryID:  trajectoryID,
+		Role:          AgentProfileResearcher,
+		Kind:          "findings",
+		Summary:       "grounded warm finding",
+		Content:       "grounded warm finding",
+		Findings:      []string{"grounded warm finding"},
+		CreatedAt:     now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:    update.ChannelID,
+		FromAgentID:  update.AgentID,
+		FromRunID:    researcherRun.RunID,
+		ToAgentID:    update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID,
+		Role:         update.Role,
+		Content:      update.Content,
+		Timestamp:    update.CreatedAt,
+	}
+	stored, created, err := s.DispatchWorkerUpdate(ctx, update, &message)
+	if err != nil {
+		t.Fatalf("dispatch texture update: %v", err)
+	}
+	if !created {
+		t.Fatal("dispatch texture update returned existing record")
+	}
+
+	rec := &types.RunRecord{
+		RunID:        "run-texture-warm-consume",
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		ChannelID:    docID,
+		Metadata: map[string]any{
+			"type":           textureAgentRevisionTaskType,
+			"request_source": "update_coagent",
+			"doc_id":         docID,
+		},
+	}
+	inject := rt.coagentUpdateTurnInjector(rec)
+	if inject == nil {
+		t.Fatal("Texture coagent update injector is nil")
+	}
+	msgs, err := inject(false)
+	if err != nil {
+		t.Fatalf("inject texture update: %v", err)
+	}
+	if len(msgs) == 0 {
+		t.Fatal("inject texture update returned no user turns")
+	}
+	if ids := coagentUpdateIDsForRun(rec); len(ids) != 1 || ids[0] != stored.UpdateID {
+		t.Fatalf("worker_update_ids = %+v, want %s", ids, stored.UpdateID)
+	}
+	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, agentID, 10)
+	if err != nil {
+		t.Fatalf("list pending before revision write: %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("pending before revision write = %+v, want one", pending)
+	}
+
+	consumedThroughSeq := rt.textureWorkerUpdateCommitSeq(ctx, rec, docID, nil)
+	if consumedThroughSeq != stored.MessageSeq {
+		t.Fatalf("consumedThroughSeq = %d, want %d", consumedThroughSeq, stored.MessageSeq)
+	}
+	meta := rt.workerUpdateRevisionMetadata(ctx, ownerID, docID, nil, consumedThroughSeq)
+	consumed := metadataArray(meta["worker_updates_consumed"])
+	if len(consumed) != 1 {
+		t.Fatalf("worker_updates_consumed = %+v, want one", meta["worker_updates_consumed"])
+	}
+	consumedItem, _ := consumed[0].(map[string]any)
+	if got := int64(metadataIntValue(consumedItem, "seq")); got != stored.MessageSeq {
+		t.Fatalf("consumed seq = %d, want %d", got, stored.MessageSeq)
+	}
+
+	if err := rt.markTextureWorkerUpdatesDelivered(ctx, rec, docID, consumedThroughSeq); err != nil {
+		t.Fatalf("mark texture update delivered: %v", err)
+	}
+	pending, err = s.ListPendingWorkerUpdates(ctx, ownerID, agentID, 10)
+	if err != nil {
+		t.Fatalf("list pending after revision write: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending after revision write = %+v, want none", pending)
+	}
+}
+
 func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -316,25 +428,25 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		t.Fatalf("create parent run: %v", err)
 	}
 	interrupted := types.RunRecord{
-		RunID:        childID,
-		AgentID:      agentID,
-		ChannelID:    channelID,
-		RequestedByRunID:  parentID,
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
-		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
-		State:        types.RunRunning,
-		Prompt:       objective,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            childID,
+		AgentID:          agentID,
+		ChannelID:        channelID,
+		RequestedByRunID: parentID,
+		AgentProfile:     AgentProfileResearcher,
+		AgentRole:        AgentProfileResearcher,
+		OwnerID:          ownerID,
+		SandboxID:        "sandbox-test",
+		State:            types.RunRunning,
+		Prompt:           objective,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileResearcher,
 			runMetadataAgentRole:    AgentProfileResearcher,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
-			"requested_by":             parentID,
+			"requested_by":          parentID,
 			"spawned_by":            ownerID,
 		},
 	}
@@ -497,25 +609,25 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		t.Fatalf("create parent run: %v", err)
 	}
 	alreadyPassivated := types.RunRecord{
-		RunID:        childID,
-		AgentID:      agentID,
-		ChannelID:    channelID,
-		RequestedByRunID:  parentID,
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
-		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
-		State:        types.RunPassivated,
-		Prompt:       objective,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            childID,
+		AgentID:          agentID,
+		ChannelID:        channelID,
+		RequestedByRunID: parentID,
+		AgentProfile:     AgentProfileResearcher,
+		AgentRole:        AgentProfileResearcher,
+		OwnerID:          ownerID,
+		SandboxID:        "sandbox-test",
+		State:            types.RunPassivated,
+		Prompt:           objective,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileResearcher,
 			runMetadataAgentRole:    AgentProfileResearcher,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
-			"requested_by":             parentID,
+			"requested_by":          parentID,
 			"passivated_reason":     "runtime_restarted",
 			"spawned_by":            ownerID,
 		},

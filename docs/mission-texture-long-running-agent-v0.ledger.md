@@ -79,3 +79,72 @@ canonical revision carry `loop_id`, parent revision, operation metadata, and
 worker-update consumption metadata as the per-revision commit record.
 
 Next move: documentation-first checkpoint commit, then T1 runtime construct.
+
+## 2026-06-17 - T1/T2 local construct (red runtime, not settled)
+
+Claim under test: Texture can stop being capped at one canonical write per
+revision run without losing stale-write safety, and an initial appagent revision
+can honestly be marked as model-prior/interim before worker evidence arrives.
+
+Move: construct. Re-enabled Texture warm update injection and replaced the
+per-write completed mutation gate with a pending run-liveness mutation plus
+per-revision metadata.
+
+Expected ΔV: land T1 locally and part of T2; leave T3-T8 blocked by file-cited
+remaining architecture work. Actual ΔV: T1 locally repaired, T2 metadata/prompt
+policy locally repaired, settlement still open.
+
+Receipts:
+
+- `internal/runtime/super_controller.go:424-438` no longer excludes Texture from
+  warm coagent update injection.
+- `internal/runtime/tools_texture.go:564-688` keeps the Texture mutation pending
+  across canonical writes, records the latest revision after each write, and
+  advances worker-update delivery only through the consumed message sequence.
+- `internal/store/texture.go:1744-1790` adds
+  `RecordAgentMutationRevision`, preserving the mutation row as run
+  liveness/idempotency state until run completion.
+- `internal/runtime/runtime.go:2655-2689` completes a written Texture mutation at
+  run completion and marks no-write completions so they do not immediately
+  re-wake the same pending work forever.
+- `internal/runtime/runtime.go:2868-2926` marks no-worker appagent revisions as
+  `model_prior_interim` / `revision_grounding=model_prior`.
+- `internal/runtime/runtime.go:2959-3072` computes the consumed worker-update
+  sequence from injected `worker_update_ids` and emits per-revision consumption
+  metadata.
+- `internal/runtime/textureprompts/overlays/revision_policy.yaml:22-48` and
+  `internal/runtime/textureprompts/overlays/run_system.yaml:12-25` allow a fast,
+  explicitly uncertain model-prior scaffold while preserving the no-grounded
+  facts-from-recall invariant.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce' -count=1`
+- `nix develop -c go test ./internal/store -run 'TestTextureAgentMutation' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestCoagentUpdateTurnInjectorSupportsTexture|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestBuildAppagentRevisionMetadataCarriesForwardDurableKeys|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestTexturePromptInitialRevisionUsesSingleWriterLoop|TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent|TestResearcherFailureSynthesizesCheckpointAfterSearch|TestRunSupportsCoagentUpdateInjectionIncludesTexture|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+
+Open blockers / remaining error:
+
+- T3 remains open: no uniform park-and-wait primitive and no cumulative
+  per-actor budget/kill switch. The loop is still bounded by
+  `maxToolLoopIterations=200` in `internal/runtime/toolloop.go:203-209`.
+- T4 remains open: `internal/runtime/texture_controller.go:24-90` still contains
+  separate wake/reconcile scaffolding. This construct proves multi-revision
+  capability inside one run but does not yet make the doc actor a parked
+  resident lifecycle.
+- T5 remains open: restart passivation still marks pending Texture mutations
+  stale in `internal/runtime/runtime.go:1261-1302`; a real sleep/resume model
+  must preserve a multi-write actor safely across vmctl refresh.
+- T6 remains open: document delete still only calls `DeleteDocument` and does
+  not cancel the resident actor in `internal/runtime/texture.go:1048-1060`.
+- T7 remains open: the verifier still checks per-revision causality but not the
+  full one-run-to-many-revisions lifecycle in
+  `internal/runtime/texture_workflow_verifier.go:527-593`; heresy detector docs
+  have not been updated.
+- T8 remains open: no CI/deploy/staging cadence proof or RunAcceptanceRecord has
+  been produced for this partial construct yet.
+
+Rollback ref: revert this runtime construct commit after the prior checkpoint
+commit `54b71842` if the local proof falsifies in staging or review.
