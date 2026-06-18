@@ -372,6 +372,23 @@ an unchanged patch with the live-style "no substantive content change intended"
 rationale, and proves no revision, checkpoint, or completed mutation is created
 (`internal/runtime/texture_test.go`).
 
+Staging evidence after deploy of `157db34f` supports that no-op V2 guard but
+falsifies the current V1 quality/timing claim. CI test/build jobs passed,
+including internal/runtime shards 0-3, but the Node B deploy job again concluded
+failure while public `/health` confirmed proxy and sandbox both deployed at
+`157db34f3330e64ff55541a71afc5776ba4e1410` (`deployed_at`
+`2026-06-18T04:14:54Z`). The deployed cadence probe submitted
+`dfb565f2-affe-4cab-a422-f3049777eff5` / doc
+`947e4baf-65d0-47c5-97ea-20d04b692840`. It observed V0 at +0.326s, an
+appagent V1 at +49.350s with only 53 chars (the same prompt-sized content as
+V0), and an appagent V2 at +88.448s with 1336 chars. The trajectory completed
+with `appagent_revision_count=2`, `total_revision_count=3`, `web_search=8`,
+`source_search=2`, `spawn_agent=2`, `update_coagent=2`, `delegation_count=1`,
+and `agent_count=3`. This proves the evidence-consuming no-op V2 branch can
+recover into a substantive V2 on staging, but it also proves the initial exact
+write can still burn the fast first paint as a no-op prompt copy and miss the
+under-49s useful-V1 target.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -431,12 +448,13 @@ position / live conjectures / open edges:
   product path (`29265cae` diagnostic V1 at about +16s, `58895d28` diagnostic
   fast V1, `f9626242` formal probe V1 at +28.966s, focused diagnostic V1 at
   about +24s). The `f9626242` focused diagnostic proves V1 metadata is now
-  model-prior/interim on staging and that V2 can consume a researcher update. It
-  still does not settle T2/T8 because the consumed-evidence V2 can be a no-op
-  rather than a grounded/deepened revision, and the formal probe still hit a
-  failed no-V2 branch. Locally, no-op consumed-evidence writes are now rejected
-  before they can burn the worker update; staging must prove the model retries
-  into a substantive V2 instead of failing the wake.
+  model-prior/interim on staging and that V2 can consume a researcher update.
+  Staging `157db34f` then proved a consumed-evidence wake can recover into a
+  substantive V2 instead of burning the update with identical content. The live
+  T2/T8 blocker has moved back to initial V1 quality: the same formal probe
+  stored a 53-char prompt-sized V1 only at +49.350s before deepening at V2, so
+  first paint was neither clearly under the old ~49s baseline nor useful as a
+  from-weights draft.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -476,15 +494,18 @@ position / live conjectures / open edges:
   Staging `f9626242` moved the live failure forward: V1 and evidence work happen;
   one formal probe failed before V2, while a focused diagnostic reached V2 but
   stored a no-op revision that consumed researcher evidence without using it. The
-  local no-op guard prevents that exact burn-update branch; its next
-  discriminator is live provider retry behavior.
+  `157db34f` no-op guard prevents that exact burn-update branch on staging well
+  enough for the formal probe to reach a substantive V2. The next discriminator
+  is the initial no-worker exact-write branch: a prompt-sized no-op V1 should be
+  rejected or retried without delaying the first useful from-weights draft into
+  the old first-findings window.
 
-next move: finish local verification for the no-op consumed-evidence guard, commit
-and push it, monitor CI/deploy identity, then rerun the deployed cadence probe
-and a metadata-aware focused diagnostic if the formal probe is ambiguous. Staging
-must show either a substantive V2 that incorporates/acknowledges consumed
-researcher evidence or a precise new failure branch where the live model exhausts
-retries instead of burning the update.
+next move: run a metadata-aware focused diagnostic on `157db34f` if needed to
+confirm the V1 no-op metadata/tool-result branch, then repair the initial
+no-worker Texture write path so unchanged prompt-copy V1s cannot satisfy the
+from-weights first-paint obligation. The repair must preserve honest
+model-prior/interim metadata, avoid forced semantic researcher choreography, and
+not regress the now-supported substantive V2 path.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -527,10 +548,13 @@ staging `f9626242` reached V1 plus research/delegation. A formal probe still
 showed a failed no-V2 branch, but the focused diagnostic proved the wake path can
 produce V2 and consume researcher evidence. The new live learning is sharper:
 the V2 wake can be a no-op that marks evidence consumed without incorporating it,
-so the next repair must make consumed-evidence revisions substantively grounded
-or explicitly accountable. The current local repair does this mechanically by
-rejecting identical content before consumed updates are marked delivered; it
-still needs staging proof that the live provider recovers with a meaningful V2.
+so consumed-evidence revisions must be substantively grounded or explicitly
+accountable. The `157db34f` repair rejects identical consumed-evidence writes
+before marking updates delivered, and staging then recovered into a substantive
+V2. The current live learning is that the initial no-worker exact write can
+still store a prompt-sized no-op V1 after roughly the old first-findings delay,
+so the first-paint repair must make unchanged initial writes retry or fail
+without erasing the route that now reaches substantive V2.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

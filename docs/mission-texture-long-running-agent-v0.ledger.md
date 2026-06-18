@@ -898,3 +898,52 @@ a new retry-exhaustion failure.
 Rollback ref: revert the no-op guard commit if legitimate same-content
 evidence-accounting revisions are required and no alternative accounting path is
 available, or if staging shows it regresses initial V1 / worker update delivery.
+
+## 2026-06-18 - Staging probe supports V2 guard, exposes no-op V1 (red evidence, green record)
+
+Claim under test: rejecting identical consumed-evidence Texture writes is enough
+for the live provider to recover into a substantive V2 while preserving fast
+from-weights V1.
+
+Move: pushed `157db34f3330e64ff55541a71afc5776ba4e1410`, monitored CI/deploy
+identity, and ran the deployed cadence probe against `https://choir.news`.
+
+Expected ΔV: either settle the immediate V1 + substantive V2 slice, or classify
+the next live branch after the no-op V2 guard. Actual ΔV: the consumed-evidence
+V2 branch improved, but V1 quality/timing is now the active blocker.
+
+Receipts:
+
+- Commit: `157db34f3330e64ff55541a71afc5776ba4e1410`.
+- CI: Docs Truth Check and CI test/build jobs passed, including
+  internal/runtime shards 0, 1, 2, and 3; overall CI concluded failure only
+  because the Node B deploy job exited 1.
+- Deploy identity: public `/health` showed proxy and sandbox both at
+  `157db34f3330e64ff55541a71afc5776ba4e1410`, `deployed_at=2026-06-18T04:14:54Z`.
+- Probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Submission / trajectory: `dfb565f2-affe-4cab-a422-f3049777eff5`.
+- Texture doc: `947e4baf-65d0-47c5-97ea-20d04b692840`.
+- Revision timing: V0 user at +0.326s, 53 chars; appagent V1 at +49.350s,
+  53 chars; appagent V2 at +88.448s, 1336 chars.
+- Probe counts: `appagent_revision_count=2`, `total_revision_count=3`,
+  `first_paint_ms=49350`, `final_head_chars=1336`.
+- Research / trajectory: `web_search=8`, `source_search=2`, `spawn_agent=2`,
+  `update_coagent=2`, `moment_count=117`, `search_attempt_count=48`,
+  `search_success_count=16`, `agent_count=3`, `delegation_count=1`,
+  final trajectory `state=completed`.
+
+Result: the no-op V2 guard has staging support because the formal probe reached
+a substantive V2 rather than burning the researcher update with identical
+content. The first-paint requirement remains falsified: V1 was prompt-sized,
+not a useful from-weights draft, and it landed at 49.350s rather than well under
+the prior ~49s first-findings baseline.
+
+Next move: diagnose the initial no-worker exact-write branch on `157db34f` with
+metadata/tool-result evidence if needed, then repair it so unchanged prompt-copy
+V1 writes do not satisfy the first-paint obligation. The repair must preserve
+model-prior/interim metadata and the now-working substantive V2 path.
+
+Rollback ref: keep `157db34f`; it improved the V2 branch. Revert a future V1
+repair if it regresses substantive V2, worker-update delivery, or honest
+model-prior/interim metadata.
