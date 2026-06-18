@@ -182,6 +182,16 @@ world facts from model recall
 (`internal/runtime/textureprompts/overlays/revision_policy.yaml:22-48`,
 `internal/runtime/textureprompts/overlays/run_system.yaml:12-25`).
 
+Staging evidence after deploy of `8dbdd458` falsified full mission settlement:
+`scripts/texture_revision_cadence_probe.mjs` observed first appagent paint at
+47.057s and only one appagent revision for prompt-bar submission
+`d33edcc6-7f05-43af-b3a8-063679d68a5e` / doc
+`893bcb64-d82e-4c99-856e-93d7d97e2f06`, even though Trace reported researcher
+activity (`web_search=6`, `source_search=2`, `spawn_agent=2`,
+`update_coagent=2`). The deployed health identity did match
+`8dbdd4585417974bc2dd3f3d07b9c5ad58af542b`, so this is a product-path cadence
+falsification of the partial T1/T2 construct, not a stale-deploy artifact.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).

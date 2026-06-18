@@ -148,3 +148,48 @@ Open blockers / remaining error:
 
 Rollback ref: revert this runtime construct commit after the prior checkpoint
 commit `54b71842` if the local proof falsifies in staging or review.
+
+## 2026-06-17 - Staging proof falsified full cadence settlement (red evidence, green record)
+
+Claim under test: the local T1/T2 construct is enough to show faster
+from-weights first paint and multiple grounded V2+ revisions on staging.
+
+Move: deployed probe. Pushed runtime construct commit
+`8dbdd4585417974bc2dd3f3d07b9c5ad58af542b`, monitored GitHub Actions via the
+public API, checked staging health identity, then ran the product-path cadence
+probe against `https://choir.news`.
+
+Receipts:
+
+- GitHub Actions for `8dbdd4585417974bc2dd3f3d07b9c5ad58af542b`: Docs Truth
+  Check #191 success; FlakeHub #876 success; CI #1294 had all test/build jobs
+  success, but the `Deploy to Staging (Node B)` job concluded failure at step
+  "Deploy to staging". Public API access did not allow fetching private deploy
+  logs (`403`).
+- Staging `/health` nevertheless reported both proxy and sandbox on
+  `8dbdd4585417974bc2dd3f3d07b9c5ad58af542b`, `upstream=ok`,
+  `vmctl_status=ok`, `deployed_at=2026-06-18T01:50:01Z`.
+- `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`
+  ran through the public product path. Submission:
+  `d33edcc6-7f05-43af-b3a8-063679d68a5e`; doc:
+  `893bcb64-d82e-4c99-856e-93d7d97e2f06`.
+- Probe result: V0 user at +0.328s; V1 appagent at +47.057s; no V2+ appagent
+  revisions; `appagent_revision_count=1`; `total_revision_count=2`;
+  `final_head_chars=2483`.
+- Trace activity existed despite the single revision:
+  `web_search=6`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
+  `moment_count=120`, `search_attempt_count=36`, `search_success_count=12`,
+  `agent_count=3`, `delegation_count=1`.
+
+Result: full mission settlement is falsified. T1/T2 local mechanics are still a
+valid partial repair, but staging shows they are not sufficient for fast
+from-weights first paint or multiple visible grounded revisions. The next
+conjecture is that prompt/tool-loop behavior still waits for research before the
+first write and terminates after the first incorporated packet; T3/T4 must add a
+real park-and-wait/resident lifecycle, and T2 may need stronger first-tool /
+first-write scaffolding to force an honest interim V1 before Probe work.
+
+Next move: documentation-first checkpoint commit for this falsification, then
+investigate the deployed trajectory events for why the first write waited 47s
+and why warm `update_coagent` activity did not yield V2+ before trajectory
+completion.
