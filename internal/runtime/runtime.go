@@ -2373,7 +2373,8 @@ func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLo
 			metadataStringValue(rec.Metadata, "seed_prompt"),
 			rec.Prompt,
 		))
-		if !texturePromptNeedsWorldKnowledge(prompt) {
+		needsSuperExecution := texturePromptNeedsSuperExecution(prompt)
+		if !needsSuperExecution && !texturePromptNeedsWorldKnowledge(prompt) {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
 		doc, err := rt.store.GetDocument(ctx, docID, rec.OwnerID)
@@ -2384,11 +2385,18 @@ func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLo
 		if err != nil || rev.AuthorKind != types.AuthorAppAgent {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
-		meta := decodeRevisionMetadata(rev.Metadata)
-		if !metadataBoolValue(meta, "model_prior_interim") && metadataStringValue(meta, "revision_grounding") != "model_prior" {
+		if rt.textureRunOpenedEvidencePath(ctx, rec, docID) {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
-		if rt.textureRunOpenedEvidencePath(ctx, rec, docID) {
+		if needsSuperExecution {
+			return ToolLoopCompletionGuardResult{
+				Continue:    true,
+				Reason:      "texture_super_execution_needs_evidence_path",
+				Instruction: "The prompt asks Texture to open downstream Super/execution/worker evidence for this document. A Texture-only revision is not completion. Continue by calling request_super_execution with a concrete objective that requires worker VM, delegation, update, or package evidence; or record_texture_decision with a truthful blocker, delegation_deferred, or wait_for_evidence reason explaining why execution cannot proceed. Do not end with only a Texture revision.",
+			}, nil
+		}
+		meta := decodeRevisionMetadata(rev.Metadata)
+		if !metadataBoolValue(meta, "model_prior_interim") && metadataStringValue(meta, "revision_grounding") != "model_prior" {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
 		return ToolLoopCompletionGuardResult{
