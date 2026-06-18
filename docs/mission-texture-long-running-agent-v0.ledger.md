@@ -2099,3 +2099,115 @@ cadence probe passed.
 Rollback ref: revert `f4eca79c` if later evidence shows worker-shaped prompt
 classification traps valid non-worker Super runs or prevents legitimate
 Texture-visible blockers from being reported.
+
+## 2026-06-18 - Texture Super-execution guard deploys; worker delegation settlement remains blocked (red construct + proof)
+
+Claim under test: commit `f26e1f7c3650b84e346afff9394db1dd409f0fe0` repairs the
+upstream lifecycle branch exposed by `f4eca79c`: Texture should not complete an
+explicit downstream-Super / worker prompt after a Texture-only revision with no
+`request_super_execution` evidence.
+
+Move: extend the existing Texture model-prior completion guard rather than
+adding a second guard slot. For prompts classified by `texturePromptNeedsSuperExecution`,
+the guard now rejects completion until the run opens an evidence path
+(`request_super_execution`, `record_texture_decision`, successful worker/research
+handoff evidence already recognized by `textureRunOpenedEvidencePath`). Add a
+comprehensive regression that creates a Texture doc with an appagent revision
+and an explicit worker/Super prompt, proves the guard continues before evidence,
+and proves it stands down after a Trace `request_super_execution` tool result.
+Run focused tests, doccheck, diff check, runtime shards, push, monitor CI,
+verify deployed identity, run the formal cadence probe, and run a lifecycle
+acceptance discriminator with `/api/run-acceptances/synthesize`.
+
+Expected ΔV: close the upstream Texture-only lifecycle branch and either produce
+a non-blocked staging-smoke RunAcceptanceRecord or expose the next downstream
+worker evidence branch. Actual ΔV: upstream branch is repaired on staging;
+Texture requests Super, Super leases a worker VM, and delegation tools are
+Trace-visible. Non-blocked lifecycle acceptance remains open because the worker
+delegation stayed active/running with no AppChangePackage/adoption evidence.
+
+Receipts:
+
+- Commit: `f26e1f7c3650b84e346afff9394db1dd409f0fe0`
+  (`runtime: require texture super execution evidence`).
+- Code: `textureModelPriorCompletionGuard` now treats explicit
+  Super/execution/worker prompts as requiring an opened evidence path before
+  Texture can complete; the existing factual/current model-prior guard remains
+  unchanged for non-execution prompts (`internal/runtime/runtime.go`). The
+  comprehensive regression
+  `TestTextureSuperExecutionCompletionGuardRequiresEvidencePath` proves the
+  new branch and the stand-down after `request_super_execution`
+  (`internal/runtime/texture_test.go`).
+- Local proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureSuperExecutionCompletionGuardRequiresEvidencePath|TestTextureModelPriorCompletionGuardOpensProbePath|TestSuperTextureExecutionCompletionGuardRequiresEvidence|TestRunAcceptanceTextureDecisionCountsAsSuperRequest' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions: FlakeHub run `27748513112` succeeded. CI run `27748513416`
+  concluded failure only because `Deploy to Staging (Node B)` failed; Docs Truth
+  Check, Go vet/build, runtime shards 0-3, non-runtime tests, integration smoke,
+  and TLA+ all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `f26e1f7c3650b84e346afff9394db1dd409f0fe0`, deployed at
+  `2026-06-18T09:03:45Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed cadence command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed cadence result: submission
+  `983f18ea-e15b-43e4-83a7-eb4bfc2b2e4a`; doc
+  `3cc32113-7625-44d9-80d5-f46aa1183cae`; V0 user at +0.336s, V1 appagent at
+  +26.135s with 1039 chars, V2 appagent at +65.212s with 1985 chars;
+  `appagent_revision_count=2`, `first_paint_ms=26135`,
+  `total_revision_count=3`, `web_search=8`, `source_search=2`,
+  `spawn_agent=2`, `update_coagent=2`, `moment_count=120`, trajectory
+  `state=completed`, `agent_count=3`, `delegation_count=1`.
+- Lifecycle discriminator marker:
+  `TEXTURE_LIFECYCLE_ACCEPTANCE_1781773743655`; synthetic owner
+  `texture-lifecycle-1781773744603-uybw2i@example.com`.
+- Lifecycle prompt-bar submission / trajectory:
+  `a6daf4be-c820-43e1-94ed-4ff58820c19c`; doc
+  `970aebb5-f43f-4fb3-804c-8f83b2dad4cf`.
+- Lifecycle Trace result: final `state=completed`, `live=false`,
+  `agent_count=3`, `delegation_count=0`, `message_count=5`,
+  `finding_count=0`, final Texture revisions `4` with `3` appagent revisions.
+- Lifecycle tool-result counts: `request_super_execution=2`,
+  `request_worker_vm=2`, `start_worker_delegation=2`,
+  `observe_worker_delegation=2`, `finish_worker_delegation=2`,
+  `delegate_worker_vm=0`, `update_coagent=4`,
+  `publish_app_change_package=0`, `record_texture_decision=2`,
+  `moment_count=183`.
+- RunAcceptanceRecord: `runacc-3dba253452a1c51b98f9`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `a6daf4be-c820-43e1-94ed-4ff58820c19c`, deployment/health commit
+  `f26e1f7c3650b84e346afff9394db1dd409f0fe0`, acceptance level
+  `staging-smoke-level`, state `blocked`, authority profile
+  `texture > conductor > super`, checkpoints `submitted`, `texture_opened`,
+  `super_requested`, and `worker_leased` passed; `worker_delegated` blocked.
+  The blocked details show worker `worker-71f801c7d3669be1` /
+  `vm-e5acb68b5cc1bdf13f58e6f2b4297d17`, worker loop
+  `a4ff0938-fa1d-48d4-b7da-231158a63ce7`, child run
+  `1c36720e-150b-4799-9a21-daa8e54f7ae7` still `running`, and no package
+  evidence. `trace-derived-state-machine` passed;
+  `export-level-product-path` remained blocked.
+
+Result: the C9 blocker moved downstream. Texture no longer completes the
+explicit lifecycle prompt as Texture-only: it calls `request_super_execution`,
+Super requests a worker VM, and delegation observation/finish tools appear in
+Trace. Lifecycle acceptance is still blocked because the delegated worker path
+does not settle into bounded worker-update/package evidence before acceptance
+synthesis.
+
+Open edge: repair worker delegation settlement for Texture-requested lifecycle
+proof. The next construct should ensure `finish_worker_delegation` cannot leave
+acceptance with only `worker_run_active` indefinitely when the lifecycle prompt
+requires finished worker evidence; either the worker must settle to a bounded
+worker-update/package evidence packet, or Super/Texture must record a durable
+blocker that acceptance can classify without promotion overclaiming. The
+first-write stochastic branch remains residual but did not fire in this cadence
+probe.
+
+Rollback ref: revert `f26e1f7c` if later evidence shows execution-shaped prompt
+classification traps valid Texture prompts, suppresses legitimate Texture-only
+completion when no worker is requested, or causes repeated Super requests after
+an evidence path is already opened.

@@ -624,6 +624,35 @@ agent, no `request_worker_vm`, and no delegation evidence. The synthesized
 Super guard: Texture can still treat an explicit downstream-Super/worker prompt
 as satisfied after a Texture-only revision.
 
+Current deployed proof after `f26e1f7c` repairs that upstream C9 branch but does
+not settle lifecycle acceptance. CI run `27748513416` concluded failure only
+because `Deploy to Staging (Node B)` failed; Docs Truth Check, Go vet/build, Go
+runtime shards 0-3, non-runtime tests, integration smoke, and TLA+ all
+succeeded. FlakeHub run `27748513112` succeeded. Public `/health` confirmed
+proxy and sandbox both deployed at
+`f26e1f7c3650b84e346afff9394db1dd409f0fe0` (`deployed_at`
+`2026-06-18T09:03:45Z`). The formal cadence probe submitted
+`983f18ea-e15b-43e4-83a7-eb4bfc2b2e4a` / doc
+`3cc32113-7625-44d9-80d5-f46aa1183cae`, reached V1 at +26.135s and V2 at
++65.212s, and completed with `web_search=8`, `source_search=2`,
+`spawn_agent=2`, `update_coagent=2`, `agent_count=3`, and
+`delegation_count=1`. The lifecycle discriminator submitted
+`a6daf4be-c820-43e1-94ed-4ff58820c19c` / doc
+`970aebb5-f43f-4fb3-804c-8f83b2dad4cf`; it reached V1 at +10.598s, V2 at
++49.628s, and V3 at +75.908s, with conductor + Texture + Super agents and
+Trace tool counts `request_super_execution=2`, `request_worker_vm=2`,
+`start_worker_delegation=2`, `observe_worker_delegation=2`,
+`finish_worker_delegation=2`, `update_coagent=4`, and
+`record_texture_decision=2`. The synthesized `RunAcceptanceRecord`
+`runacc-3dba253452a1c51b98f9` remained `staging-smoke-level`, state `blocked`:
+checkpoints `submitted`, `texture_opened`, `super_requested`, and
+`worker_leased` passed, while `worker_delegated` was blocked because the worker
+child run was still `running` and no AppChangePackage/adoption evidence existed.
+The next live gap is now downstream of Texture and Super entry: worker
+delegation must either finish with bounded worker-update/package evidence or
+surface a durable blocker that acceptance can classify without overclaiming
+promotion.
+
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
 yet and the owner values the correct long-running-agent architecture over
@@ -755,6 +784,12 @@ position / live conjectures / open edges:
   `f4eca79c` then tightened that Super branch locally, but deployed proof showed
   a more upstream live branch: Texture can complete the explicit
   downstream-Super/worker prompt before any `request_super_execution` occurs.
+  Commit `f26e1f7c` repaired that upstream branch: deployed proof now shows
+  Texture requesting Super, Super leasing a worker VM, and delegation tools
+  appearing in Trace. The remaining C9 blocker is downstream worker settlement:
+  the worker delegation can remain active/running with no AppChangePackage or
+  acceptance-visible completed worker-update evidence, so the synthesized
+  staging-smoke record remains blocked at `worker_delegated`.
 
 Current local T4 construct after the `4da4ffa3` proof: `LoadConfig` now defaults
 Texture revision actors into bounded park-on-idle with
@@ -822,14 +857,14 @@ The delete-cancellation probe submitted
 404, and Trace ended `state=cancelled`, `live=false`, with the Texture agent
 state `cancelled`.
 
-next move: documentation-first checkpoint for the deployed `f4eca79c` proof,
-then repair the upstream C9 branch: Texture initial completion must recognize
-explicit downstream-Super/worker objectives as an unsatisfied evidence path, so
-Texture cannot finish after only a Texture revision when the prompt asks for
-`request_super_execution` / worker evidence. The already-landed Super guard
-still matters once Texture actually starts Super. Residuals after that remain
-elapsed-time budget across sleep, full wake/reconcile collapse, Trace projection
-legibility, and first-write stochasticity.
+next move: documentation-first checkpoint for the deployed `f26e1f7c` proof,
+then repair the downstream C9 worker-settlement branch: a Texture-requested
+Super lifecycle must not synthesize only `worker_run_active` forever after
+`finish_worker_delegation`; it must reach bounded worker-update/package evidence
+or a durable blocker that acceptance can classify without promotion overclaiming.
+Residuals after that remain elapsed-time budget across sleep, full
+wake/reconcile collapse, Trace projection legibility, and first-write
+stochasticity.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
