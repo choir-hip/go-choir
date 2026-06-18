@@ -538,17 +538,30 @@ seeds an `actor_rewarm` run-memory snapshot, carries cumulative budget metadata,
 and consumes the pending worker update without duplicate pending mutation
 (`internal/runtime/texture_test.go:4623-4827`).
 
-Remaining audited value: T5 is deployed and accepted as a blocked
-staging-smoke slice for rewarm snapshot plus provider-call/token budget
-carry-forward. The old goroutine is still passivated and a replacement
-activation resumes the logical actor from memory; literal same-process
-continuation across OS kill is impossible and not claimed. Elapsed-time
-budgeting still measures activation wall time rather than durable actor active
-time across sleeps. T6-T8 remain open: document deletion still does not cancel
-the actor (`internal/runtime/texture.go:1048-1060`), the workflow verifier still
-needs N:1 lifecycle proof
-(`internal/runtime/texture_workflow_verifier.go:527-593`), and heresy/docs need
-the remaining lifecycle update.
+Remaining audited value after deployed `6f54e890`: T6 is locally repaired.
+DELETE `/api/texture/documents/{id}` now cancels a pending Texture actor
+trajectory/mutation before deleting document rows
+(`internal/runtime/texture.go:1048-1087`), and the focused runtime test proves
+document deletion cancels the document, mutation, run, work item, and
+trajectory (`internal/runtime/texture_test.go:674-769`). T7 is locally repaired:
+the workflow verifier accepts N:1 loop-to-revision causality and scopes
+worker-update checks to updates addressed to the routed Texture document
+(`internal/runtime/texture_workflow_verifier.go:144-208`,
+`internal/runtime/texture_workflow_verifier.go:250-258`), with direct N:1 proof
+(`internal/runtime/texture_workflow_verifier_test.go:362-418`), doctrine updates,
+and doccheck coverage for `WithInitialToolChoice`. Deployed staging proof after
+`6f54e890` is cadence non-regression plus a blocked staging-smoke acceptance
+record, not delete-specific product proof. The formal deployed probe
+`971f62fc-b451-4683-95c2-91e38a7e0c72` / doc
+`ded70294-5bd8-46ee-8cca-9767a0c11301` reached V1 at 13.281s and V2 at
+60.538s. The same-session acceptance proof
+`da8a98bd-a42b-499f-ac94-e70d4b0d17b1` / doc
+`d3269cd5-cc93-49c4-9cb0-8c38f4fbe7f2` reached V1 at 8.131s and V2 at
+47.374s, then synthesized `RunAcceptanceRecord`
+`runacc-bc65036ba592ab3b18cd` at `staging-smoke-level`, state `blocked`.
+Remaining T8: non-blocked lifecycle acceptance, delete-specific staging proof if
+required, elapsed-time budget across sleeps, full removal/collapse of
+wake/reconcile scaffolding, and stronger first-write determinism if needed.
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -619,12 +632,14 @@ position / live conjectures / open edges:
 - C4 active: passivation means even "one run" is one logical actor across
   physical runs; sleep/resume from the run-memory snapshot is the continuity
   mechanism, not an immortal process.
-- C5 open edge: cost/runaway and cancellation are the top risks of a long-lived
-  actor; the budget kill-switch and the doc-delete->cancel gap must close before
-  or with the lifecycle change.
-- C6 open edge: collapsing many revisions into one run must not muddy
-  trajectory/work-item attribution or the per-revision supervision narrative;
-  verifier and Trace projection must stay legible at N:1.
+- C5 partially repaired: cost/runaway and cancellation are the top risks of a
+  long-lived actor. Provider-call/token budget carry-forward and doc-delete
+  cancellation now have local construct proof; elapsed-time budget across sleeps
+  and deployed delete-specific product proof remain open.
+- C6 partially repaired locally: collapsing many revisions into one run must not
+  muddy trajectory/work-item attribution or the per-revision supervision
+  narrative. The workflow verifier now accepts N:1 loop-to-revision causality;
+  Trace projection legibility remains a residual T8 edge.
 - C7 active from 2026-06-17 audit: the current code has a contradictory
   transitional shape. `texture_controller.go` schedules multiple separate
   integrate runs to simulate cadence, while `super_controller.go` and
@@ -678,14 +693,16 @@ writes V2 in the same run, marks the worker update delivered, and keeps first
 turn `patch_texture` exact while parked follow-up turns are unconstrained.
 
 This is a bounded T4 construct, not full settlement. It has now been extended
-locally with a T5 rewarm construct: a restarted Texture actor passivates the old
+with a T5 rewarm construct: a restarted Texture actor passivates the old
 activation, marks the old mutation stale, starts a replacement activation for
 the same logical `texture:<docID>` actor, seeds an `actor_rewarm` memory snapshot,
-and carries provider-call/token budget spend into the new activation. It still
-does not remove every wake/reconcile scaffold, does not make elapsed-time budget
-durable across sleep, and does not update verifier/doc-delete
-cancellation/heresy doctrine. It should be deployed and measured against the
-product cadence probe next.
+and carries provider-call/token budget spend into the new activation. T6/T7
+added local cancellation and verifier proof: document deletion cancels pending
+Texture actor trajectory/mutation before deleting rows, and the verifier accepts
+N:1 loop-to-revision causality for Texture write tools. The remaining lifecycle
+edges are elapsed-time budget across sleep, full wake/reconcile collapse,
+delete-specific deployed product proof if required, Trace projection, and a
+non-blocked lifecycle acceptance record.
 
 Deployed proof after `68c6e5b0` shows the bounded default-park construct did not
 regress the product cadence slice. Staging health identified proxy and sandbox at
@@ -708,8 +725,22 @@ and `update_coagent=2`. A same-session acceptance rerun submitted
 39.238s, then synthesized `RunAcceptanceRecord`
 `runacc-b5021f57de1fbd3a5c97` at `staging-smoke-level`, state `blocked`.
 
-next move: continue T6-T8: doc-delete cancellation, verifier N:1 lifecycle
-proof, heresy/docs updates, and a non-blocked lifecycle acceptance record.
+Deployed proof after `6f54e890` shows the T6/T7 cancellation/verifier/heresy
+slice did not regress the prompt-bar cadence slice. Staging health identified
+proxy and sandbox at `6f54e8906205e38db14a2460c13d44666cef9532`. The formal
+cadence probe submitted `971f62fc-b451-4683-95c2-91e38a7e0c72` / doc
+`ded70294-5bd8-46ee-8cca-9767a0c11301`, reached V1 at 13.281s and V2 at
+60.538s, and completed with `web_search=2`, `source_search=2`,
+`spawn_agent=2`, and `update_coagent=2`. A same-session acceptance rerun
+submitted `da8a98bd-a42b-499f-ac94-e70d4b0d17b1` / doc
+`d3269cd5-cc93-49c4-9cb0-8c38f4fbe7f2`, reached V1 at 8.131s and V2 at
+47.374s, then synthesized `RunAcceptanceRecord`
+`runacc-bc65036ba592ab3b18cd` at `staging-smoke-level`, state `blocked`.
+
+next move: continue T8: decide whether to run delete-specific deployed
+cancellation proof, then chase non-blocked lifecycle acceptance. Residuals:
+elapsed-time budget across sleep, full wake/reconcile collapse, Trace projection
+legibility, and first-write stochasticity.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

@@ -1685,3 +1685,95 @@ Rollback ref: revert `5f1f056a` if later staging evidence shows budget
 carry-forward false positives, stuck replacement activations, degraded
 first-paint/cadence, duplicate Texture revision runs, or pending mutations after
 restart.
+
+## 2026-06-18 - Texture delete cancellation and N:1 verifier deployed as blocked staging-smoke (red construct + proof)
+
+Claim under test: commit `6f54e8906205e38db14a2460c13d44666cef9532` can repair
+T6 document-deletion cancellation and T7 N:1 verifier/doctrine coverage without
+regressing the deployed prompt-bar Texture cadence slice.
+
+Move: construct the cancellation/verifier/heresy-doc slice, run focused local
+runtime/doc checks plus runtime shards, push `6f54e890`, monitor GitHub Actions,
+verify staging health identity, run the deployed cadence probe, then rerun a
+same-owner product proof and synthesize a `RunAcceptanceRecord`.
+
+Expected ΔV: repair T6 and T7 locally, then prove the deployed cadence slice
+still reaches fast V1 and V2 after the code change. Actual ΔV: T6/T7 code landed
+and deployed; staging cadence did not regress; the acceptance record remains
+`blocked`, and delete-specific deployed product proof was not run.
+
+Receipts:
+
+- Commit: `6f54e8906205e38db14a2460c13d44666cef9532`
+  (`runtime: cancel texture actors on document delete`).
+- Code: `handleTextureDeleteDocument` now cancels pending Texture actor
+  trajectory/mutation before `Store.DeleteDocument`, falling back to
+  `CancelAgent` for the current `texture:<docID>` actor when no pending mutation
+  exists (`internal/runtime/texture.go:1048-1087`).
+- Local T6 proof:
+  `TestTextureDeleteDocumentCancelsPendingActorTrajectory` proves DELETE removes
+  the document and cancels the mutation, run, work item, and trajectory
+  (`internal/runtime/texture_test.go:674-769`).
+- Local T7 proof: `VerifyTextureWorkflow` scopes worker-update checks to updates
+  addressed to the routed Texture document and guarantees N:1 appagent
+  loop-to-revision causality (`internal/runtime/texture_workflow_verifier.go:144-208`,
+  `internal/runtime/texture_workflow_verifier.go:250-258`); direct predicate
+  proof `TestTextureRevisionCausalityAllowsManyRevisionsFromOneLoop` accepts V1
+  and V2 from the same loop id (`internal/runtime/texture_workflow_verifier_test.go:362-418`).
+- Local verification:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureDeleteDocumentCancelsPendingActorTrajectory|TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable|TestTextureRevisionCausalityAllowsManyRevisionsFromOneLoop|TestVerifyTextureWorkflowDeterministicEventLog|TestVerifyTextureWorkflowSeededStochasticOrdering' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions: Docs Truth Check run `27743861275` succeeded; FlakeHub run
+  `27743861239` succeeded; CI run `27743861242` concluded failure only because
+  `Deploy to Staging (Node B)` job `82077926825` failed. CI jobs for deploy
+  impact, Docs Truth Check, Go vet/build, Go vet/test/build, non-runtime Go
+  tests, integration smoke, TLA+, and runtime shards 0-3 all succeeded.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `6f54e8906205e38db14a2460c13d44666cef9532`, deployed at
+  `2026-06-18T07:33:56Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed probe submission / trajectory:
+  `971f62fc-b451-4683-95c2-91e38a7e0c72`; doc
+  `ded70294-5bd8-46ee-8cca-9767a0c11301`.
+- Formal deployed probe revisions: V0 user at +0.314s, 53 chars; V1 appagent
+  at +13.281s, 1297 chars; V2 appagent at +60.538s, 2636 chars.
+- Formal deployed probe counts: `appagent_revision_count=2`,
+  `total_revision_count=3`, `first_paint_ms=13281`, `final_head_chars=2636`,
+  `web_search=2`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
+  `moment_count=145`, `agent_count=3`, `delegation_count=1`, trajectory
+  `state=completed`.
+- Acceptance-enabled same-session proof: trajectory
+  `da8a98bd-a42b-499f-ac94-e70d4b0d17b1`; doc
+  `d3269cd5-cc93-49c4-9cb0-8c38f4fbe7f2`; V0 user at +0.369s, V1 appagent at
+  +8.131s with 809 chars, V2 appagent at +47.374s with 2087 chars;
+  `web_search=2`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
+  `moment_count=122`, trajectory `state=completed`.
+- RunAcceptanceRecord: `runacc-bc65036ba592ab3b18cd`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `da8a98bd-a42b-499f-ac94-e70d4b0d17b1`, deployment/health commit
+  `6f54e8906205e38db14a2460c13d44666cef9532`, acceptance level
+  `staging-smoke-level`, state `blocked`, checkpoints `submitted` and
+  `texture_opened` passed, invariant checks `product path`,
+  `worker mutation bounded`, `promotion not overclaimed`, and
+  `checkpoint causal order` passed, verifier contract
+  `trace-derived-state-machine` passed, verifier contract
+  `export-level-product-path` blocked.
+
+Result: T6 document-deletion cancellation and T7 verifier/doctrine coverage are
+locally repaired and deployed. The deployed proof is cadence non-regression plus
+blocked staging-smoke acceptance, not delete-specific product proof. The mission
+is not settled.
+
+Open edge: T8 remains open: non-blocked lifecycle acceptance,
+delete-specific staging proof if required, elapsed-time budget across sleeps,
+full wake/reconcile collapse, Trace projection legibility, and first-write
+stochasticity.
+
+Rollback ref: revert `6f54e890` if later evidence shows document deletion blocks
+valid deletes, cancels another owner's actor, leaves stuck mutations, or causes
+verifier false positives/false negatives around worker-update routing or N:1
+Texture write causality.
