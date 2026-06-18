@@ -1433,3 +1433,59 @@ Rollback ref: revert `4da4ffa3` if subsequent deployed evidence shows the retry
 guidance increases initial write failures or weakens the no-op guard; otherwise
 the broader rollback for this mission remains reverting the mission commits back
 through the last accepted checkpoint.
+
+## 2026-06-18 - Bounded default Texture park lifecycle constructed locally (red construct)
+
+Claim under test: the metadata-gated park waiter can become the default
+Texture revision lifecycle without regressing the current multi-revision cadence
+slice. A `texture:<docID>` revision run should write V1, remain resident and
+parked while idle, receive a later `update_coagent` signal, and write V2 in the
+same run instead of requiring a cold wake run.
+
+Move: enable `actor_park_on_idle` metadata from runtime config for Texture
+revision runs. Production `LoadConfig` now defaults
+`RUNTIME_TEXTURE_ACTOR_PARK_IDLE` to two minutes, while hand-constructed test
+configs remain zero unless they opt in. Add a comprehensive resident-Texture
+test that drives the real `update_coagent` tool into a parked revision run and
+asserts V2, delivery marking, no pending update, no second Texture revision run,
+and exact-first/unconstrained-follow-up tool choice. Update the legacy
+debounced-wake test to use a stored nonresident Texture requester so it still
+tests the cold wake path rather than accidentally depending on a live resident.
+
+Expected ΔV: T4 descends from "park waiter exists but is metadata-only" to
+"default Texture revision runs are bounded parked residents when config is
+loaded." Actual ΔV: local construct passes focused and sharded runtime evidence.
+Remaining T4/T5 error: process restart still passivates instead of sleeping and
+resuming the same logical actor, budgets are not yet cumulative across
+sleep/rewarm, and deployed product proof has not yet shown whether findings are
+consumed by a resident parked run rather than a cold wake.
+
+Receipts:
+
+- Changed `internal/runtime/config.go`: added
+  `DefaultTextureActorParkIdle = 2 * time.Minute`, config field
+  `TextureActorParkIdle`, and `RUNTIME_TEXTURE_ACTOR_PARK_IDLE` loading.
+- Changed `internal/runtime/texture_agent_revision.go`:
+  `submitTextureAgentRevisionRun` stamps `actor_park_on_idle` and
+  `actor_park_idle_seconds` when the config is positive.
+- Changed `internal/runtime/texture_test.go`: added
+  `TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake` and adjusted
+  `TestSubmitResearchFindingsWakeUsesSameDebouncedPath` to preserve the
+  nonresident cold-wake contract.
+- Verification:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake|TestSubmitResearchFindingsWakeUsesSameDebouncedPath|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestRuntimeAgentSignalWakesParkWaiter|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestLoadConfigDefaultsResearcherCount|TestLoadConfigReadsResearcherCount' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+
+Result: bounded T4 is locally constructed but not settled. Next move is land,
+push, monitor CI/deploy, verify staging identity, and run the deployed cadence
+probe. Settlement remains open until deployed proof plus T5-T8 close the restart,
+budget, cancellation, verifier, and acceptance-record gaps.
+
+Rollback ref: revert the bounded default-park commit if staging shows worse
+first-paint/cadence behavior or stuck resident Texture runs. The config escape
+hatch is `RUNTIME_TEXTURE_ACTOR_PARK_IDLE=0` for emergency disablement if a
+deploy config path is faster than code revert, but the durable rollback remains
+reverting the commit.

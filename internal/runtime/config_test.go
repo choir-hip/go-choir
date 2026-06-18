@@ -12,10 +12,14 @@ func TestLoadConfigDefaultsResearcherCount(t *testing.T) {
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "")
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "")
 	t.Setenv("RUNTIME_RESEARCHER_COUNT", "")
+	t.Setenv("RUNTIME_TEXTURE_ACTOR_PARK_IDLE", "")
 
 	cfg := LoadConfig()
 	if cfg.ResearcherCount != DefaultResearcherCount {
 		t.Fatalf("researcher_count = %d, want %d", cfg.ResearcherCount, DefaultResearcherCount)
+	}
+	if cfg.TextureActorParkIdle != DefaultTextureActorParkIdle {
+		t.Fatalf("texture_actor_park_idle = %s, want %s", cfg.TextureActorParkIdle, DefaultTextureActorParkIdle)
 	}
 	if cfg.PromptRoot == "" {
 		t.Fatal("prompt_root should not be empty")
@@ -27,10 +31,14 @@ func TestLoadConfigReadsResearcherCount(t *testing.T) {
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "7s")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "3s")
 	t.Setenv("RUNTIME_SKILLS_ROOT", "/tmp/choir-skills")
+	t.Setenv("RUNTIME_TEXTURE_ACTOR_PARK_IDLE", "45s")
 
 	cfg := LoadConfig()
 	if cfg.ResearcherCount != 5 {
 		t.Fatalf("researcher_count = %d, want 5", cfg.ResearcherCount)
+	}
+	if cfg.TextureActorParkIdle != 45*time.Second {
+		t.Fatalf("texture_actor_park_idle = %s, want 45s", cfg.TextureActorParkIdle)
 	}
 	if cfg.SupervisionInterval != 7*time.Second {
 		t.Fatalf("supervision interval = %s, want 7s", cfg.SupervisionInterval)

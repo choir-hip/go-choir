@@ -645,12 +645,31 @@ position / live conjectures / open edges:
   parked lifecycle should be enabled first and measure recovery over many
   packets.
 
-next move: continue T3/T4 from deployed `4da4ffa3`: decide how the
-metadata-gated waiter becomes the default Texture lifecycle and how the budget
-becomes cumulative across sleep/rewarm, while preserving the current
-multi-revision cadence proof and reducing weak/late V1 stochasticity. Do not
-claim settlement until T4-T8 are also proven and a non-blocked acceptance record
-exists for the relevant lifecycle level.
+Current local T4 construct after the `4da4ffa3` proof: `LoadConfig` now defaults
+Texture revision actors into bounded park-on-idle with
+`RUNTIME_TEXTURE_ACTOR_PARK_IDLE` / `DefaultTextureActorParkIdle`, and
+`submitTextureAgentRevisionRun` stamps `actor_park_on_idle` plus
+`actor_park_idle_seconds` only when the runtime config enables it. This turns
+the existing metadata-gated waiter from a test-only primitive into the deployed
+default lifecycle for `texture:<docID>` revision runs, while keeping
+hand-constructed test configs zero unless they opt in. A new comprehensive
+runtime test proves one resident Texture revision run writes V1, remains running
+while parked, consumes a later `update_coagent` packet without a cold wake run,
+writes V2 in the same run, marks the worker update delivered, and keeps first
+turn `patch_texture` exact while parked follow-up turns are unconstrained.
+
+This is a bounded T4 construct, not full settlement. It does not yet make
+parked time survive process restart as logical sleep, does not make the budget
+cumulative across sleep/rewarm, does not remove every wake/reconcile scaffold,
+and does not update verifier/doc-delete cancellation/heresy doctrine. It should
+be deployed and measured against the product cadence probe next.
+
+next move: land the bounded default-park construct, push, monitor CI and staging
+identity, then run deployed product proof. The deployed proof should check that
+fast useful V1 and V2+ cadence still hold and, if possible, distinguish whether
+findings are consumed by a resident parked Texture run rather than a cold wake.
+Do not claim settlement until T5-T8 are also proven and a non-blocked acceptance
+record exists for the relevant lifecycle level.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

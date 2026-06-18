@@ -41,6 +41,13 @@ const (
 	// findings before the runtime schedules the next texture synthesis.
 	DefaultTextureWakeDebounce = 3 * time.Second
 
+	// DefaultTextureActorParkIdle is how long a Texture revision actor may park
+	// after an idle turn before completing. The parked interval is long enough
+	// to catch live researcher/super packets without a cold wake run, while
+	// still bounding the intermediate T4 lifecycle until passivation-as-sleep
+	// and cumulative cross-activation budgets are complete.
+	DefaultTextureActorParkIdle = 2 * time.Minute
+
 	// DefaultRunMemoryContextThresholdTokens is zero so normal runtime
 	// compaction derives from the selected model's context window. Set
 	// RUNTIME_RUN_MEMORY_CONTEXT_THRESHOLD_TOKENS only for explicit diagnostics.
@@ -104,6 +111,11 @@ type Config struct {
 	// TextureWakeDebounce is the coalescing window for addressed worker findings
 	// before the runtime schedules the next texture synthesis.
 	TextureWakeDebounce time.Duration
+
+	// TextureActorParkIdle enables default park-on-idle for Texture revision
+	// actors when positive. Hand-constructed test configs leave this zero unless
+	// they opt into parked lifecycle behavior explicitly.
+	TextureActorParkIdle time.Duration
 
 	// VmctlURL is the host-side vmctl control plane URL, used by super-only
 	// lifecycle tools to request branch desktops and worker VMs.
@@ -191,15 +203,19 @@ func LoadConfig() Config {
 		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", DefaultSupervisionInterval),
 		ResearcherCount:     intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearcherCount),
 		TextureWakeDebounce: durationOr("RUNTIME_TEXTURE_WAKE_DEBOUNCE", DefaultTextureWakeDebounce),
-		VmctlURL:            envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
-		MaildURL:            os.Getenv("RUNTIME_MAILD_URL"),
-		WirePublishURL:      os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
-		PlatformdURL:        envOr("RUNTIME_PLATFORMD_URL", os.Getenv("PROXY_PLATFORMD_URL")),
-		LLMProvider:         os.Getenv("RUNTIME_LLM_PROVIDER"),
-		LLMModel:            os.Getenv("RUNTIME_LLM_MODEL"),
-		LLMReasoningEffort:  os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),
-		ModelPolicyPath:     os.Getenv("RUNTIME_MODEL_POLICY_PATH"),
-		ObscuraPath:         envOr("CHOIR_OBSCURA_BIN", os.Getenv("OBSCURA_BIN")),
+		TextureActorParkIdle: durationOr(
+			"RUNTIME_TEXTURE_ACTOR_PARK_IDLE",
+			DefaultTextureActorParkIdle,
+		),
+		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
+		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),
+		WirePublishURL:     os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
+		PlatformdURL:       envOr("RUNTIME_PLATFORMD_URL", os.Getenv("PROXY_PLATFORMD_URL")),
+		LLMProvider:        os.Getenv("RUNTIME_LLM_PROVIDER"),
+		LLMModel:           os.Getenv("RUNTIME_LLM_MODEL"),
+		LLMReasoningEffort: os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),
+		ModelPolicyPath:    os.Getenv("RUNTIME_MODEL_POLICY_PATH"),
+		ObscuraPath:        envOr("CHOIR_OBSCURA_BIN", os.Getenv("OBSCURA_BIN")),
 		ObscuraCDPScreenshots: boolOr(
 			"CHOIR_OBSCURA_CDP_SCREENSHOTS",
 			boolOr("OBSCURA_CDP_SCREENSHOTS", false),

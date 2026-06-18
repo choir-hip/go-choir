@@ -324,6 +324,10 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		"texture_context_mode": contextMode,
 		"texture_prompt_chars": len(agentPrompt),
 	}
+	if rt != nil && rt.cfg.TextureActorParkIdle > 0 {
+		runMetadata["actor_park_on_idle"] = true
+		runMetadata["actor_park_idle_seconds"] = int((rt.cfg.TextureActorParkIdle + time.Second - 1) / time.Second)
+	}
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq
 	}
@@ -549,7 +553,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			IntegrateWorkerFindings: strings.EqualFold(intent, "integrate_worker_findings") && !texturePromptNeedsSuperExecution(seedAndPrompt),
 			NeedsSuperExecution:     texturePromptNeedsSuperExecution(seedAndPrompt),
 			HasSuperDelivery:        textureWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper),
-			ActiveWorkerDelegation:    workerMessagesContainActiveDelegation(recentWorkerMessages),
+			ActiveWorkerDelegation:  workerMessagesContainActiveDelegation(recentWorkerMessages),
 		}))
 	}
 	if textureUseFocusedUserEditContext(current, previous) {
