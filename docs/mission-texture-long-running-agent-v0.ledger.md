@@ -1489,3 +1489,72 @@ first-paint/cadence behavior or stuck resident Texture runs. The config escape
 hatch is `RUNTIME_TEXTURE_ACTOR_PARK_IDLE=0` for emergency disablement if a
 deploy config path is faster than code revert, but the durable rollback remains
 reverting the commit.
+
+## 2026-06-18 - Bounded default Texture park lifecycle deployed and accepted as blocked staging-smoke (red proof + green record)
+
+Claim under test: commit `68c6e5b0b5dd4315719ee27cc11a861e8eaa70cb` can make
+Texture revision actors park by default without regressing the deployed
+prompt-bar cadence slice.
+
+Move: push `68c6e5b0`, monitor GitHub Actions, verify staging identity, run the
+deployed Texture cadence probe, then rerun the product proof and synthesize a
+same-owner `RunAcceptanceRecord`.
+
+Expected ΔV: deployed proof that fast V1 and V2+ cadence still hold with the
+bounded default-park lifecycle enabled. Actual ΔV: two staging prompt-bar proofs
+reached fast V1 and V2. A staging-smoke RunAcceptanceRecord was synthesized and
+correctly remains `blocked` because T5-T8 are not yet settled.
+
+Receipts:
+
+- Commit: `68c6e5b0b5dd4315719ee27cc11a861e8eaa70cb`
+  (`runtime: park texture revision actors by default`).
+- GitHub Actions:
+  - Docs Truth Check run `27740883099`: success.
+  - FlakeHub run `27740883077`: success.
+  - CI run `27740883113`: aggregate failure only because `Deploy to Staging
+    (Node B)` job `82068117891` failed. CI jobs for Docs Truth Check, Go Test
+    non-runtime, TLA+, deploy-impact detection, Go vet/build, runtime shards
+    0-3, integration smoke, and aggregate Go vet/test/build all succeeded.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `68c6e5b0b5dd4315719ee27cc11a861e8eaa70cb`, deployed at
+  `2026-06-18T06:26:29Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed probe submission / trajectory:
+  `ed344528-ba08-425a-919e-fe813479f56c`; doc
+  `dae4b2b1-78d3-4931-a708-f163e5487767`.
+- Formal deployed probe revisions: V0 user at +0.317s, 53 chars; V1 appagent
+  at +18.409s, 835 chars; V2 appagent at +68.035s, 1372 chars.
+- Formal deployed probe counts: `appagent_revision_count=2`,
+  `total_revision_count=3`, `first_paint_ms=18409`, `web_search=6`,
+  `source_search=2`, `spawn_agent=2`, `update_coagent=2`, `moment_count=146`,
+  `agent_count=3`, `delegation_count=1`, trajectory `state=completed`.
+- Acceptance-enabled same-session proof: trajectory
+  `1b99eff4-272d-4784-85d5-f5e43325cf2d`; doc
+  `bc86ad0f-1502-4ba0-98c7-2376c1a77a5d`; V0 user at +0.256s, V1 appagent at
+  +18.356s with 742 chars, V2 appagent at +60.096s with 1800 chars;
+  `web_search=2`, `source_search=2`, `spawn_agent=2`, `update_coagent=2`,
+  `moment_count=140`, trajectory `state=completed`.
+- RunAcceptanceRecord: `runacc-60e41bc0a8f6cf708f3e`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `1b99eff4-272d-4784-85d5-f5e43325cf2d`, deployment/health commit
+  `68c6e5b0b5dd4315719ee27cc11a861e8eaa70cb`, CI run `27740883113`, deploy job
+  `82068117891`, acceptance level `staging-smoke-level`, state `blocked`,
+  checkpoints `submitted` and `texture_opened` passed.
+
+Result: bounded default Texture parking is deployed and product-path accepted as
+a blocked staging-smoke slice. This does not settle the full long-running actor
+mission. The acceptance record remains blocked because continuation-level and
+full lifecycle evidence are not proven: passivation-as-sleep, cumulative
+sleep/rewarm budget, cancellation gaps, verifier N:1 updates, heresy/docs
+updates, and a non-blocked lifecycle acceptance record remain open.
+
+Next move: T5. Make a parked Texture actor survive process restart as logical
+sleep and rewarm, preserve/charge cumulative budget across that boundary, and
+prove no lost foreground updates or duplicate revisions.
+
+Rollback ref: revert `68c6e5b0` if later staging evidence shows stuck resident
+Texture runs or degraded first-paint/cadence. Emergency config escape hatch:
+`RUNTIME_TEXTURE_ACTOR_PARK_IDLE=0`.

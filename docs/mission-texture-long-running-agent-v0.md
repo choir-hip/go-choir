@@ -664,12 +664,19 @@ cumulative across sleep/rewarm, does not remove every wake/reconcile scaffold,
 and does not update verifier/doc-delete cancellation/heresy doctrine. It should
 be deployed and measured against the product cadence probe next.
 
-next move: land the bounded default-park construct, push, monitor CI and staging
-identity, then run deployed product proof. The deployed proof should check that
-fast useful V1 and V2+ cadence still hold and, if possible, distinguish whether
-findings are consumed by a resident parked Texture run rather than a cold wake.
-Do not claim settlement until T5-T8 are also proven and a non-blocked acceptance
-record exists for the relevant lifecycle level.
+Deployed proof after `68c6e5b0` shows the bounded default-park construct did not
+regress the product cadence slice. Staging health identified proxy and sandbox at
+`68c6e5b0b5dd4315719ee27cc11a861e8eaa70cb`, and the product prompt-bar cadence
+probe reached V1 at 18.409s and V2 at 68.035s. A same-session acceptance rerun
+reached V1 at 18.356s and V2 at 60.096s, then synthesized
+`RunAcceptanceRecord` `runacc-60e41bc0a8f6cf708f3e` at
+`staging-smoke-level`, state `blocked`. This records acceptance evidence for the
+bounded T4 slice while explicitly preserving the T5-T8 blockers.
+
+next move: continue T5 from deployed `68c6e5b0`: make parked time survive
+process restart as logical sleep, make budget accounting cumulative across
+sleep/rewarm, then update verifier/doc-delete cancellation/heresy doctrine and
+produce a non-blocked acceptance record for the full lifecycle level.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
