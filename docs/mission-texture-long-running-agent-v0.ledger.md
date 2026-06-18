@@ -2481,6 +2481,43 @@ Owner decision: revert the tail choreography family to restore harness-uniform
 behavior, then fix the two P1 foreground-interaction bugs, verify, and land.
 Keep T1-T6 + from-weights V1 + park/budget.
 
+### Landing evidence (fix commits)
+
+- `8efa47ad` docs: this problem checkpoint.
+- `f002e07a` runtime: revert texture-super completion-guard choreography
+  (reverts `623a33de`, `f4eca79c`, `f26e1f7c`, `8c2bfa71`, `af141a05`,
+  `1a470554`; removes `superTextureExecutionCompletionGuard`,
+  `superTextureExecutionHasSufficientEvidence`, and
+  `addAcceptanceTextureSuperDecisionCheckpoints` plus their tests).
+- `dfc78fcd` runtime: deliver owner revises to resident texture actor; keep live
+  mutation writable. P1#1 `pendingAgentMutationByDoc` reconciles only for
+  terminal/unresolvable runs; P1#2 `deliverOwnerRevisionToTextureActor`
+  dispatches the owner request as an addressed coagent update with a
+  content-derived (idempotent) update id and wakes the resident actor. New test
+  `TestTextureAgentRevisionDeliversOwnerRequestToResidentActor`.
+- Local proof: `nix develop -c go test -tags comprehensive ./internal/runtime
+  -run 'TestTextureAgentRevisionDeliversOwnerRequestToResidentActor|TestTextureDocumentResponseReconcilesPendingMutationFromCurrentHead|TestTextureAgentRevisionNoDuplicateOnRenewalRetry|TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable|TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle|TestTextureAgentRevisionMutationCompletedOnlyOnce'`
+  (pass); `nix develop -c scripts/go-test-runtime-shards` (exit 0); `go vet
+  ./internal/runtime/... && go build ./...` (exit 0).
+- CI run `27757003374`: all Go jobs passed (runtime shards 0-3, non-runtime,
+  Go vet+test+build, deploy-impact, docs truth check). Only `Deploy to Staging
+  (Node B)` failed, on the non-authoritative post-deploy sandbox hot-refresh
+  substep (same Node B infra flake as overnight); host deploy + health remained
+  authoritative.
+- Staging identity: `/health` reports proxy and sandbox both at
+  `dfc78fcd200b3c98408e0db38f610a9b605c0216`, deployed `2026-06-18T11:46:32Z`,
+  `status=ok`, `upstream=ok`, `vmctl_status=ok`.
+- Deployed cadence probe (`scripts/texture_revision_cadence_probe.mjs` vs
+  `https://choir.news`): submission `ceed6b3a-9d4e-4f6f-a081-be9dbe672716`, doc
+  `4ec70dc1-6333-4fed-b5ce-b83c72e6446e`; V0 user +0.30s, V1 appagent +26.09s
+  (707 chars), V2 appagent +62.71s (1352 chars); `first_paint_ms=26093`
+  (under the ~49s baseline), `total_revision_count=3`,
+  `appagent_revision_count=2`, trajectory `state=completed`. Confirms the revert
+  + P1 fixes preserved the from-weights interim-paint + multi-revision cadence.
+
+Rollback ref: `git revert dfc78fcd f002e07a` restores the pre-fix tree (and
+re-applies the reverted choreography family) if needed.
+
 Remaining error / open edges after this checkpoint: the lifecycle/worker
 "acceptance" goal these tail commits chased is not abandoned, but it must be
 re-expressed as a generic, role-uniform evidence contract (or a product-path
