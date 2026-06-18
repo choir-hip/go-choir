@@ -2609,3 +2609,19 @@ adversarial Codex pass hardened it. Decisions now in the paradoc body:
   termination is not a settlement requirement.
 - **Deferred**: media transcript delivery to researchers (inject vs content-handle
   read via selectors, possibly adaptive to context window) — does not block R0.
+
+### Carve-out: document schema / provenance / publish split into its own mission
+
+Starting R0 implementation, a grounding read of `internal/store/texture.go`
+contradicted the "markdown→JSON rebase" framing: `texture_revisions` already
+separates `content`/`citations_json`/`metadata_json`, and `content_items` already
+has `text_content`/`content_hash`/`provenance_json`. The document is already
+body-plus-sibling. Then an owner design pass reframed the document as **its full
+versioned history** — publishing must carry the whole chain + per-revision
+metadata + transclusions, not the head (current publish is head-only,
+`internal/wirepublish/types.go`). Owner decisions: the document IS its versioned
+history; add a per-revision `revision_hash` chain now (signable spine; signatures
+still out of scope); split the schema/provenance/publish concern into its own
+paradoc. Result: R0/R0b moved to
+`docs/mission-texture-versioned-artifact-v0.md`; this mission now depends on it
+and consumes the schema (R1-R7 unchanged). No code authored.

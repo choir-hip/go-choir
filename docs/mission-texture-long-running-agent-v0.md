@@ -92,67 +92,22 @@ first paint, a cheap park primitive, a per-actor budget) but built them on the
 
 Roughly in dependency order. Each item should *remove* more than it adds.
 
-- **R0 Texture document as a versioned JSON record (body + system-attributed
-  provenance).** Rebase the canonical unit from a bare markdown string to a typed
-  record serialized as **JSON** (chosen over YAML: JSON has a real
-  canonicalization standard, RFC 8785 JCS, which the future digital-signature
-  work needs; YAML has no robust canonical form and implicit-typing footguns).
-  The record carries `schema_version`, `body` (a markdown string), and a
-  `provenance` block: authoring model, timestamps, the queries actually executed,
-  and the collated `sources` (evolve the existing `textureSourceEntity` schema in
-  `texture_media_sources.go`, which already has entity ids, selectors with
-  `TextQuote`/`ContentHash`, evidence state, and `provenance.created_by`).
-  **Provenance is system-attributed, not model-authored**: the model authors only
-  the `body` and inline citation markers referencing real source ids; the runtime
-  fills provenance from ground truth. DELETE the regex source-scraping
-  (`sourceServiceItemIDsFromText`, `contentItemIDsFromWorkerMessage`, body-URL
-  scraping) in favor of typed findings packets. YAML, if wanted, is only a
-  human/export projection rendered from the JSON. Digital signatures are
-  explicitly out of scope now, but the canonical serialization is chosen so they
-  can be added without a re-format.
-  Storage shape: do **not** stuff the JSON record into the existing markdown
-  `Revision.Content` `LONGTEXT`. Keep `body` as the markdown column and add
-  provenance as a **typed sibling** (column/blob), so the editor, renderer,
-  diff/blame, export, user save, source renderer, and Wire publication keep
-  reading a markdown body. "Hard cutover / no shim" means no dual code path and no
-  data migration (there are no users) — it does **not** mean readers are
-  untouched; every reader of `revision.content` (frontend `TextureEditor.svelte`,
-  `texture-source-renderer.ts`, `internal/wirepublish`, store, diff) is updated in
-  the same cutover. This is the largest-blast-radius ramp item; sequence it first
-  and behind tests precisely because it touches store schema + UI + Wire.
-- **R0b Source chain of custody (deterministic citation validation).** A source
-  id is **minted by the runtime at the retrieval boundary**, never chosen by a
-  model. Two retrieval boundaries exist:
-  - **Deterministic media ingestion (runtime, no model call).** YouTube and image
-    URLs are retrieved + embedded by the runtime itself the moment a URL appears
-    (in the prompt or body), not by a researcher or Texture tool call. This is the
-    existing `registerTextureMediaSourceRefs` -> `ImportURLContent` path, kept and
-    promoted to deterministic infrastructure (it must not wait on a model tool
-    call). For YouTube this includes a **deterministic transcript fetch** stored as
-    a content item (the ref already carries `transcript_content_id` /
-    `transcript_availability`). It produces importer-attributed source entities.
-  - **Researcher semantic retrieval.** Facts come from researcher peers
-    (`web_search`/`source_search`/`fetch`); Texture does no *semantic* retrieval
-    and authors/cites only from delivered findings + deterministically-ingested
-    media. So "Texture does no retrieval" means no semantic/research retrieval; it
-    does not forbid the deterministic media-embedding pipeline.
-  The same deterministic validator runs at each boundary (harness-uniform):
-  (1) researcher -> finding: every source id a finding cites must be in the set
-  that researcher actually retrieved; (2) Texture body -> collated list: every
-  inline citation must resolve to a real collated source. Validation is
-  **source-type-aware** (per Codex review — a blanket quote gate both
-  false-rejects and false-accepts):
-  - sources with a **verifiable text body** (researcher full-text fetch / reader
-    snapshot): require the cited quote to match a *specific stored body
-    version/selector* (bind the marker to the selector text + content version, not
-    just any `ContentHash`, since raw bytes vs cleaned reader markdown differ);
-  - **media / whole-resource / source-service projections / feed summaries /
-    metadata packets** (often no full body, only a hash or excerpt): validate by
-    id existence (+ selector/timestamp where present), **not** by quote match.
-  Validation failures return a tool error (listing offending refs + the valid id
-  set) to the model for retry. Hard gate: "every citation resolves, and where the
-  source has a verifiable text body its quote matches that stored body version";
-  the reverse ("every retrieved source must be cited") is soft and not enforced.
+- **R0 Document schema, provenance, chain of custody, and history-publish —
+  DEPENDENCY, owned by a separate mission.** The earlier R0/R0b here (typed
+  system-attributed provenance, canonical JSON, runtime-minted source ids,
+  deterministic media ingestion, source-type-aware citation/quote validation,
+  delete regex source-scraping) plus the newly-surfaced **versioned-history
+  publish + per-revision hash chain** are carved out into
+  `docs/mission-texture-versioned-artifact-v0.md`. Rationale (2026-06-18 design
+  pass): a grounding read showed the document is **already** body-plus-sibling
+  (`texture_revisions` has separate `content`/`citations_json`/`metadata_json`
+  columns; `content_items` has `text_content`/`content_hash`/`provenance_json`),
+  so this was never a markdown→JSON rebase; and the owner reframed the document as
+  **its full versioned history** (publish carries the whole chain + metadata +
+  transclusions, not the head), which is a distinct concern from thread lifecycle.
+  This thread mission **depends on** that schema: the durable thread (R1-R6 below)
+  writes provenance-bearing, hash-chained revisions into it. Do that mission
+  first or in lockstep; do not re-specify the schema here.
 - **R1 Collapse to one durable thread (a real run-lifecycle change, not just a
   deletion).** Make `texture:<docID>` a single persistent agent whose message
   history accumulates; V0 is the first user turn, each canonical revision is an
@@ -269,23 +224,17 @@ Roughly in dependency order. Each item should *remove* more than it adds.
   interim/model-prior and must not assert current facts as grounded; grounded
   turns cite retrieved evidence. Depth is driven by retrieved evidence, never by
   fabricated structure. Prompt-enforced.
-- **I source provenance & chain of custody**: source ids are runtime-minted at
-  the retrieval boundary; provenance is system-attributed (the model authors only
-  body + citation refs). Cited refs are deterministically validated at the
-  researcher->finding and Texture-body->collated-list boundaries; every inline
-  citation must resolve to a real collated source, and **for sources with a
-  verifiable text body** the quote must match a specific stored body version. The
-  gate is source-type-aware (quote-match for text-bodied sources; id+selector
-  existence for media/whole-resource/summary projections). Failures return a tool
-  error for retry. This is a deterministic gate, not a classifier.
 - **I retrieval split**: Texture does no *semantic/research* retrieval — facts
   come from researcher peers and Texture authors/cites from delivered findings.
   But **deterministic media ingestion** (YouTube/image URL retrieval + embedding)
   is runtime infrastructure that runs without any model tool call. The collated
   source list = researcher-delivered sources + deterministically-ingested media.
-- **I JSON canonical document**: the canonical Texture document is a versioned
-  JSON record (body + system-attributed provenance), chosen for canonicalizable
-  bytes (future signatures); YAML is at most a human projection.
+- **I document schema is a dependency**: the canonical document format, typed
+  system-attributed provenance, runtime-minted source ids, source-type-aware
+  citation/quote validation, the per-revision hash chain, and versioned-history
+  publish are owned by `docs/mission-texture-versioned-artifact-v0.md`. This
+  mission consumes that schema (the thread writes provenance-bearing, hash-chained
+  revisions); it does not redefine it.
 - **I canonical integrity**: monotonic versions, no lost foreground updates, no
   duplicate/garbled revisions.
 - **I bounded autonomous cost**: a cumulative per-actor budget bounds autonomous
@@ -310,8 +259,9 @@ Roughly in dependency order. Each item should *remove* more than it adds.
   conversational scratch but must re-seed the window verbatim with **grounded**
   state only: the latest canonical doc head (durable; re-read via tool), the index
   of **sources actually retrieved** with their citations, and a record of
-  **queries/approaches already tried** — all of which now live as fields in the
-  R0 JSON provenance record, so compaction re-seeds from durable structured state
+  **queries/approaches already tried** — all of which live as fields in the typed
+  provenance record owned by `docs/mission-texture-versioned-artifact-v0.md`, so
+  compaction re-seeds from durable structured state
   rather than from a free-text summary. It must NOT synthesize or carry a
   model-invented
   agenda of what the answer "should" cover — that is the hallucination risk to
@@ -393,7 +343,12 @@ risk note. Rollback = revert the mission commits.
 
 Supersedes the prior framing of this mission (wake-driven actor + park/rewarm +
 per-prompt classifiers) and folds in
-`docs/mission-texture-product-loop-recovery-v0.md`. Sits on the portfolio spine
+`docs/mission-texture-product-loop-recovery-v0.md`. **Depends on
+`docs/mission-texture-versioned-artifact-v0.md`** (carved out of this mission's
+R0/R0b on 2026-06-18): that mission owns the document schema, typed
+system-attributed provenance, per-revision hash chain, source chain-of-custody
+validation, and versioned-history publish; this thread mission writes
+provenance-bearing, hash-chained revisions into it. Sits on the portfolio spine
 after the Texture product-loop work and before continuation deletion (M4); the
 sleep/resume work here should be reconciled with M4 and the durable-actors
 rearchitecture (`docs/choir-rearchitecture-durable-actors-2026-06-11.md`), which

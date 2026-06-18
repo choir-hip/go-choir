@@ -50,6 +50,7 @@ nodes:
   - m3.3-vm-bootstrap-recovery-race
   - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   - texture-product-loop-recovery-v0
+  - texture-versioned-artifact-v0
   - texture-long-running-agent-v0
   - texture-hard-cutover-v0
   - m3-lifecycle-cutover
@@ -174,11 +175,31 @@ nodes:
   # work here must be reconciled with m3-lifecycle-cutover and m4.
   depends_on:
   - texture-product-loop-recovery-v0
+  - texture-versioned-artifact-v0
   enables: []
   sources:
   - docs/mission-texture-product-loop-recovery-v0.md
   - docs/mission-texture-product-loop-recovery-v0.ledger.md
   - docs/texture-agentic-invariants-2026-06-13.md
+  - docs/choir-doctrine.md
+  - AGENTS.md
+- id: texture-versioned-artifact-v0
+  title: Texture As A Versioned Provenanced Artifact v0
+  path: docs/mission-texture-versioned-artifact-v0.md
+  ledger: docs/mission-texture-versioned-artifact-v0.ledger.md
+  status: planned
+  kind: spine
+  # Carved out of texture-long-running-agent-v0 R0/R0b on 2026-06-18: the document
+  # is its full versioned history (publish carries the chain + per-revision
+  # provenance + transclusions, not the head), with a per-revision hash chain as
+  # the signable spine (signatures out of scope). Owns the document schema,
+  # provenance, source chain-of-custody validation, and history-publish.
+  depends_on: []
+  enables:
+  - texture-long-running-agent-v0
+  sources:
+  - docs/mission-texture-hard-cutover-v0.md
+  - docs/mission-portfolio-2026-06-11.md
   - docs/choir-doctrine.md
   - AGENTS.md
 - id: texture-hard-cutover-v0
