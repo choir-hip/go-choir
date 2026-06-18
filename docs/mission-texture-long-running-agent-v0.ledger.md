@@ -487,3 +487,60 @@ Open blockers / remaining error:
 Rollback ref: revert this failed-initial-write runtime repair commit if staging
 shows retry exhaustion, repeated invalid fenced replacements, or a broader
 tool-loop regression.
+
+## 2026-06-18 - Staging partially repaired first paint, falsified settlement (red evidence, green record)
+
+Claim under test: the failed-initial-write retry repair in
+`29265caeb836b1f975e13ab5497b6f5f40554c1f` would make the product path produce a
+fast first appagent V1 and then continue toward grounded V2+ revisions.
+
+Move: deployed probe + Trace diagnostic. Pushed `29265cae`, monitored CI, checked
+staging health identity, ran the cadence probe, then ran a targeted Trace
+diagnostic because the cadence probe failed V0-only.
+
+Expected ΔV: staged proof of fast V1 and progress toward V2+. Actual ΔV:
+partial descent. The retry repair can produce fast V1 in the live product path,
+but it is not reliable enough for the formal cadence probe and it does not yet
+produce researcher/delegation or V2+.
+
+Receipts:
+
+- CI #1297 for `29265cae`: all test/build jobs passed, including internal/runtime
+  shards 0-3, non-runtime Go tests, integration smoke, TLA+, Docs Truth Check,
+  and vet/build. `Deploy to Staging (Node B)` concluded failure again.
+- Staging `/health` nevertheless reported proxy and sandbox both on
+  `29265caeb836b1f975e13ab5497b6f5f40554c1f`, `upstream=ok`,
+  `vmctl_status=ok`, `deployed_at=2026-06-18T02:51:42Z`.
+- `scripts/texture_revision_cadence_probe.mjs` on staging submitted
+  `00523d55-5dee-4a1b-94e6-bb205ea1618d`; doc
+  `771fa753-3c8e-4484-a24e-1c333a95271e`. Probe result: V0 only,
+  `appagent_revision_count=0`, `first_paint_ms=null`, trajectory `state=failed`,
+  no `web_search`, `source_search`, `spawn_agent`, or `update_coagent`.
+- Follow-up Trace diagnostic on the same deployed SHA submitted
+  `05ddee7c-8ccb-48f9-bc93-1bc313593d2a`; doc
+  `9cdf22a3-4ac5-4f4b-81cd-564a76b69c1a`; initial Texture run
+  `580a69d4-98ec-405b-98d1-836c7960bd53`.
+- The diagnostic showed the intended retry branch: initial exact
+  `function:patch_texture` calls failed twice with `append edit requires text`,
+  emitted `loop.retry` reason `required_initial_tool_failed`, retried exact
+  `function:patch_texture`, then stored appagent revision
+  `cf3d52b0-90c5-4ded-8dd3-ca240e0b2f19` at about +16s.
+- The successful V1 diagnostic still ended after that one appagent revision:
+  trajectory `state=completed`, `delegation_count=0`, `finding_count=0`,
+  no researcher activity, and no V2+.
+
+Result: full mission settlement remains falsified. The new live position is more
+specific than the previous no-appagent failure: fast from-weights V1 is possible
+and the retry branch works, but the actor can still fail before V1 on malformed
+edit arguments and, when V1 succeeds, Texture still ends instead of continuing
+into a Probe path for factual/current prompts.
+
+Next move: before any further code, keep this docs checkpoint as the problem
+record. The next runtime construct should preserve fast V1 and repair the
+post-V1 factual-request transition so a model-prior/interim V1 is followed by
+researcher/delegation and later grounded V2+, without adding semantic
+role-choreography or pretending this is the T3/T4 park-and-wait lifecycle.
+
+Rollback ref: revert `29265cae` if the first-write retry branch is judged too
+stochastic or disruptive; otherwise keep it as a partial repair and continue from
+the post-V1 no-delegation edge.

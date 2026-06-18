@@ -256,7 +256,21 @@ revision (`internal/runtime/tools.go:272-288`). The exact-initial-tool branch no
 retries when the required initial tool was called but did not succeed
 (`internal/runtime/toolloop.go:562-584`), preserving exact `patch_texture` until
 there is a stored first revision or bounded retry exhaustion. Local focused tests
-and runtime shards pass; staging proof for this repair is pending.
+and runtime shards passed.
+
+Staging evidence after deploy of `29265cae` shows partial repair, not
+settlement. The formal cadence probe for submission
+`00523d55-5dee-4a1b-94e6-bb205ea1618d` / doc
+`771fa753-3c8e-4484-a24e-1c333a95271e` still observed only V0 and ended with
+trajectory `state=failed`, `appagent_revision_count=0`, and no research or
+delegation. A follow-up Trace diagnostic on the same deployed SHA then observed
+the intended retry branch and a fast V1: submission
+`05ddee7c-8ccb-48f9-bc93-1bc313593d2a` / doc
+`9cdf22a3-4ac5-4f4b-81cd-564a76b69c1a` failed two initial malformed
+`patch_texture` calls (`append edit requires text`), emitted
+`required_initial_tool_failed`, retried exact `function:patch_texture`, and
+stored appagent V1 at about +16s. That trajectory still stopped after V1 with
+`delegation_count=0`, no researcher activity, and no V2+ grounded revision.
 
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
@@ -313,12 +327,10 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 partially repaired locally but repeatedly falsified on staging: first paint can be a
-  flagged model-prior/interim revision under stub providers, and the runtime now
-  tries to force the first Texture turn to write before terminal delegation.
-  Product-path proof regressed at `7d462629` and repeated at `58f261c8`:
-  staging produced no appagent revision, no delegation, and no research
-  activity.
+- C2 partially repaired on staging: first paint can now be a fast flagged
+  model-prior/interim revision in the live product path (`29265cae` diagnostic
+  V1 at about +16s), but the formal cadence probe still has a V0-only failed
+  run, and the successful V1 path stops without research, delegation, or V2+.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -346,14 +358,18 @@ position / live conjectures / open edges:
   failure reconcile loops did not change staging behavior at `58f261c8`. A
   follow-up Trace diagnostic narrowed the branch to failed `patch_texture`
   results being treated as a satisfied initial write because a duplicate
-  same-turn Texture write returned a non-error notice.
+  same-turn Texture write returned a non-error notice. The `29265cae` repair
+  reaches that branch and can produce V1, but stochastic invalid edit arguments
+  can still exhaust/failed-run the first write, and a successful V1 path still
+  ends instead of probing for evidence.
 
-next move: land and deploy the failed-initial-write retry repair, then re-run the
-deployed cadence probe. If staging produces fast V1 but still V1-only, shift
-back to T3/T4 park-and-wait / resident actor lifecycle and worker-update
-delivery. If staging still produces V0-only, inspect whether retries exhausted,
-the live model repeated invalid fenced replacements, or `patch_texture` success
-failed after retry.
+next move: documentation-first checkpoint for `29265cae`, then repair the
+post-V1 factual-request transition without role-specific choreography: after a
+model-prior/interim V1 for a factual/current prompt, Texture must continue into a
+Probe path (likely via existing prompt/tool-loop required-next-tool machinery or
+a Texture tool result contract) instead of ending. Preserve the fast V1 branch
+and avoid weakening T3/T4: this is still not the final resident park-and-wait
+actor lifecycle.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -379,8 +395,10 @@ obligations and avoided reconcile spin on no-write failures, but staging at
 `58f261c8` still produced V0-only with no research activity. Follow-up Trace
 proved the live failure is inside the write batch: a failed first
 `patch_texture` plus non-error duplicate notice let the initial write obligation
-fall through. The latest local repair makes success, not mere tool-call
-presence, the condition for satisfying exact initial `patch_texture`.
+fall through. The `29265cae` repair makes success, not mere tool-call presence,
+the condition for satisfying exact initial `patch_texture`; staging proved it can
+produce fast V1, but also proved V1-only/no-delegation remains and the cadence
+probe can still hit a failed no-V1 run.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and
