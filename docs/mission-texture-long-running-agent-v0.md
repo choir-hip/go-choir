@@ -604,6 +604,26 @@ closed the "super request invisible" half of C9, but the completion guard's
 `update_coagent` fallback is too broad for objectives that explicitly require
 worker/delegation evidence.
 
+Current deployed proof after `f4eca79c` supports the ordinary cadence slice but
+falsifies the narrower Super-guard repair as sufficient for lifecycle
+acceptance. CI test/build jobs passed, including runtime shards 0-3; the known
+Node B deploy job failed while public `/health` confirmed proxy and sandbox both
+deployed at `f4eca79c26d933a2038a097f79117d8c360f9add` (`deployed_at`
+`2026-06-18T08:39:21Z`). The formal cadence probe submitted
+`8ef2b5af-d081-40eb-bc12-11433fb622d4` / doc
+`6e4f47ba-eb75-4e25-aa0a-3a0865cc6bc7`, reached V1 at +33.981s, V2 at
+75.851s, and V3 at +104.807s with `web_search=6`, `spawn_agent=2`,
+`update_coagent=4`, and trajectory `state=completed`. A lifecycle discriminator
+on the same SHA submitted `c1d89f74-f77d-47ad-ab29-2770930df51b` / doc
+`ff2f6142-e274-4ed1-81bd-50b410d609a5`; it completed with only conductor +
+Texture agents, one appagent revision, no `request_super_execution`, no Super
+agent, no `request_worker_vm`, and no delegation evidence. The synthesized
+`RunAcceptanceRecord` `runacc-5ff8fb28e8fa5efa0d05` remained
+`staging-smoke-level`, state `blocked`, with only `submitted` and
+`texture_opened` checkpoints. This shows the next live gap is upstream of the
+Super guard: Texture can still treat an explicit downstream-Super/worker prompt
+as satisfied after a Texture-only revision.
+
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
 yet and the owner values the correct long-running-agent architecture over
@@ -731,7 +751,10 @@ position / live conjectures / open edges:
   repaired the Trace/acceptance visibility half: deployed acceptance now records
   `super_requested` from `request_super_execution`. It did not repair the worker
   evidence half: Super can still complete a worker-shaped Texture request after
-  `update_coagent` without `request_worker_vm` or delegation evidence.
+  `update_coagent` without `request_worker_vm` or delegation evidence. Commit
+  `f4eca79c` then tightened that Super branch locally, but deployed proof showed
+  a more upstream live branch: Texture can complete the explicit
+  downstream-Super/worker prompt before any `request_super_execution` occurs.
 
 Current local T4 construct after the `4da4ffa3` proof: `LoadConfig` now defaults
 Texture revision actors into bounded park-on-idle with
@@ -799,15 +822,14 @@ The delete-cancellation probe submitted
 404, and Trace ended `state=cancelled`, `live=false`, with the Texture agent
 state `cancelled`.
 
-next move: documentation-first checkpoint for the deployed `623a33de` proof,
-then repair the smallest remaining C9 gap: distinguish Texture-requested Super
-runs that explicitly require worker/delegation evidence from runs that may
-legitimately report a structured blocker via `update_coagent`, so a
-worker-shaped objective cannot satisfy the completion guard without
-`request_worker_vm` / delegation evidence or an acceptance-visible blocker
-checkpoint. Residuals after that remain elapsed-time budget across sleep, full
-wake/reconcile collapse, Trace projection legibility, and first-write
-stochasticity.
+next move: documentation-first checkpoint for the deployed `f4eca79c` proof,
+then repair the upstream C9 branch: Texture initial completion must recognize
+explicit downstream-Super/worker objectives as an unsatisfied evidence path, so
+Texture cannot finish after only a Texture revision when the prompt asks for
+`request_super_execution` / worker evidence. The already-landed Super guard
+still matters once Texture actually starts Super. Residuals after that remain
+elapsed-time budget across sleep, full wake/reconcile collapse, Trace projection
+legibility, and first-write stochasticity.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

@@ -2002,3 +2002,100 @@ formal probe on this SHA.
 Rollback ref: revert `623a33de` if later evidence shows the Super completion
 guard traps valid Texture-requested Super runs, hides legitimate blockers, or
 causes duplicated acceptance checkpoints.
+
+## 2026-06-18 - Worker-shaped Super guard deploys; Texture-only lifecycle branch remains (red construct + proof)
+
+Claim under test: commit `f4eca79c26d933a2038a097f79117d8c360f9add` repairs the
+remaining worker-shaped half of C9 by refusing to treat `update_coagent` alone as
+sufficient completion evidence when a Texture-requested Super prompt explicitly
+requires worker VM / delegation evidence.
+
+Move: refine the Super completion guard so `update_coagent` remains acceptable
+for non-worker Texture-requested Super blockers, but not for prompts containing
+explicit worker VM / worker delegation / `request_worker_vm` /
+`start_worker_delegation` obligations. Run focused comprehensive runtime tests,
+doccheck, diff check, runtime shards, push to `origin/main`, monitor CI, verify
+deployed identity, run the formal cadence probe, and run a lifecycle acceptance
+discriminator.
+
+Expected ΔV: make the deployed lifecycle discriminator produce worker lease /
+delegation evidence, or expose the next upstream branch. Actual ΔV: the ordinary
+cadence slice passed on staging; the lifecycle discriminator did not reach the
+Super guard because Texture completed before any `request_super_execution`.
+
+Receipts:
+
+- Commit: `f4eca79c26d933a2038a097f79117d8c360f9add`
+  (`runtime: require worker evidence for texture super objectives`).
+- Code: `superTextureExecutionCompletionGuard` now classifies worker-shaped
+  Texture-requested Super prompts and does not let `update_coagent` satisfy the
+  guard for those prompts; `request_worker_vm`, delegation tools, or package
+  evidence are required instead (`internal/runtime/runtime.go`). The
+  comprehensive guard test proves both branches: non-worker Texture requests can
+  finish with `update_coagent`, while worker-shaped requests continue after
+  `update_coagent` and only stand down after `request_worker_vm`
+  (`internal/runtime/api_test.go`).
+- Local proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestSuperTextureExecutionCompletionGuardRequiresEvidence|TestRunAcceptanceTextureDecisionCountsAsSuperRequest|TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions: FlakeHub run `27747215020` succeeded. CI run `27747215012`
+  concluded failure only because `Deploy to Staging (Node B)` failed; Docs Truth
+  Check, Go vet/build, runtime shards 0-3, non-runtime tests, integration smoke,
+  and TLA+ all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `f4eca79c26d933a2038a097f79117d8c360f9add`, deployed at
+  `2026-06-18T08:39:21Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed cadence command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed cadence result: submission
+  `8ef2b5af-d081-40eb-bc12-11433fb622d4`; doc
+  `6e4f47ba-eb75-4e25-aa0a-3a0865cc6bc7`; V0 user at +0.323s, V1 appagent at
+  +33.981s with 1376 chars, V2 appagent at +75.851s with 3007 chars, V3
+  appagent at +104.807s with 3545 chars; `appagent_revision_count=3`,
+  `first_paint_ms=33981`, `total_revision_count=4`, `web_search=6`,
+  `source_search=0`, `spawn_agent=2`, `update_coagent=4`, `moment_count=193`,
+  trajectory `state=completed`, `agent_count=3`, `delegation_count=1`.
+- Lifecycle discriminator marker:
+  `TEXTURE_LIFECYCLE_ACCEPTANCE_1781772298948`; synthetic owner
+  `texture-lifecycle-1781772299813-dxvd4u@example.com`.
+- Lifecycle prompt-bar submission / trajectory:
+  `c1d89f74-f77d-47ad-ab29-2770930df51b`; doc
+  `ff2f6142-e274-4ed1-81bd-50b410d609a5`; initial Texture loop
+  `2c9a68a2-69ce-4a54-9dc4-1677a2432173`.
+- Lifecycle Trace result: final `state=completed`, `live=false`,
+  `agent_count=2`, `delegation_count=0`, `message_count=0`,
+  `finding_count=0`, final Texture revisions `2` with `1` appagent revision.
+- Lifecycle tool-result counts: `request_super_execution=0`,
+  `request_worker_vm=0`, `start_worker_delegation=0`,
+  `observe_worker_delegation=0`, `finish_worker_delegation=0`,
+  `delegate_worker_vm=0`, `update_coagent=0`,
+  `publish_app_change_package=0`, `moment_count=45`.
+- RunAcceptanceRecord: `runacc-5ff8fb28e8fa5efa0d05`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `c1d89f74-f77d-47ad-ab29-2770930df51b`, deployment/health commit
+  `f4eca79c26d933a2038a097f79117d8c360f9add`, acceptance level
+  `staging-smoke-level`, state `blocked`, authority profile
+  `texture > conductor`, checkpoints `submitted` and `texture_opened` passed;
+  verifier contract `trace-derived-state-machine` passed; verifier contract
+  `export-level-product-path` blocked.
+
+Result: the worker-shaped Super guard is locally repaired and deployed, and the
+formal cadence slice succeeded on this run. Non-blocked lifecycle acceptance is
+still open because the live branch moved upstream: Texture can complete an
+explicit downstream-Super/worker prompt without ever calling
+`request_super_execution`, so the Super guard never runs.
+
+Open edge: repair Texture completion for explicit downstream-Super / worker
+objectives. Texture should not complete after a single Texture-only revision
+when the prompt asks it to request Super and worker evidence; it must either call
+`request_super_execution` or record an acceptance-visible blocker explaining why
+it cannot. The no-V1 stochastic branch remains residual even though this formal
+cadence probe passed.
+
+Rollback ref: revert `f4eca79c` if later evidence shows worker-shaped prompt
+classification traps valid non-worker Super runs or prevents legitimate
+Texture-visible blockers from being reported.
