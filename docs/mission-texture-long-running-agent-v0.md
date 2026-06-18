@@ -214,6 +214,16 @@ evidence. The most likely new conjecture is that exact first-tool selection is
 not honored or is rejected/relaxed into a no-write completed path by the live
 provider/adapter, whereas local stub providers accepted it.
 
+Current local repair after the `7d462629` falsification: the general tool loop
+now treats an `end_turn` response during an exact initial tool choice as a retry
+condition, not normal completion (`internal/runtime/toolloop.go:630-655`). This
+means a provider that ignores or declines exact `function:patch_texture` cannot
+silently complete the initial Texture run without a write. The runtime also
+settles failed no-write Texture mutations before reconcile
+(`internal/runtime/runtime.go:3237-3273`), so a failed integrate wake cannot
+immediately requeue the same undelivered packet forever. Local runtime shards
+pass; staging proof is pending.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -296,15 +306,16 @@ position / live conjectures / open edges:
 - C8 falsified/refined by 2026-06-17 staging: prompt/tool choice can defeat a
   merely "required" first action by choosing a terminal tool before any canonical
   revision, but exact first `patch_texture` as implemented can also collapse the
-  live provider path into no appagent revision and no delegation. The next repair
-  must preserve the first-write obligation while matching the live provider's
-  supported tool-choice semantics.
+  live provider path into no appagent revision and no delegation. The current
+  local repair preserves the first-write obligation by retrying provider
+  `end_turn` during exact initial tool choice and preventing no-write failure
+  reconcile loops. Staging must prove this is sufficient.
 
-next move: document this falsification first, then inspect live-compatible
-tool-choice semantics and the provider precondition path. Candidate repairs must
-prove that the first Texture turn cannot end without a canonical write while
-also avoiding exact-tool adapter behavior that produces a no-write completed
-trajectory.
+next move: land and deploy the end-turn retry / no-write failure settlement
+repair, then re-run the deployed cadence probe. If staging still shows no
+appagent revision, inspect the emitted `initial_tool_choice` / provider
+precondition retry events to determine whether the live provider is returning
+wrong-tool, max_tokens, provider errors, or repeated end_turn.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -324,7 +335,9 @@ before a canonical write. The `7d462629` exact-first-write construct locally
 proved the intended order but staging produced no appagent revision at all. The
 redesign direction (long-running actor + from-weights V1) was owner-selected
 after the first falsification; the current learning is that the repair must be
-live-provider-compatible, not just exact-tool correct under stubs.
+live-provider-compatible, not just exact-tool correct under stubs. The latest
+local repair makes provider `end_turn` non-terminal during exact first-tool
+obligations and avoids reconcile spin on no-write failures.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

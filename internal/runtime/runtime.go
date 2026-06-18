@@ -3234,10 +3234,32 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		log.Printf("runtime: synthesize researcher update for run %s: %v", rec.RunID, synthErr)
 	}
 
-	// If this is an texture agent revision task, mark the mutation as failed
-	// and emit the texture-specific failure event.
+	// If this is a Texture agent revision task, settle the mutation before any
+	// reconcile pass. A no-write failure must not immediately requeue the same
+	// undelivered packet forever; a failure after a successful write should still
+	// close the mutation on the latest stored revision.
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
-		_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+		failedNoWrite := true
+		if mutation, mutationErr := rt.store.GetAgentMutationByRun(persistCtx, rec.RunID); mutationErr != nil {
+			log.Printf("runtime: texture agent revision run %s: get mutation after failure: %v", rec.RunID, mutationErr)
+		} else if mutation != nil {
+			if strings.TrimSpace(mutation.RevisionID) != "" {
+				if completeErr := rt.store.CompleteAgentMutation(persistCtx, rec.RunID, mutation.RevisionID); completeErr != nil && completeErr != store.ErrMutationAlreadyCompleted {
+					log.Printf("runtime: texture agent revision run %s: complete written mutation after failure: %v", rec.RunID, completeErr)
+				}
+				failedNoWrite = false
+			} else {
+				_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+			}
+		} else {
+			_ = rt.store.FailAgentMutation(persistCtx, rec.RunID)
+		}
+		if failedNoWrite {
+			if rec.Metadata == nil {
+				rec.Metadata = map[string]any{}
+			}
+			rec.Metadata["texture_revision_failed_no_write"] = true
+		}
 		if docID, _ := rec.Metadata["doc_id"].(string); docID != "" {
 			failPayload, _ := json.Marshal(map[string]string{
 				"doc_id":  docID,
@@ -3248,7 +3270,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 				events.CauseProviderFailure, failPayload)
 		}
 	}
-	if state.Terminal() {
+	if state.Terminal() && !metadataBoolValue(rec.Metadata, "texture_revision_failed_no_write") {
 		rt.reconcileCompletedTextureRun(rec)
 	}
 

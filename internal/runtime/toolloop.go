@@ -244,6 +244,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 	forceInitialToolChoiceRetry := false
 	relaxInitialExactToolChoice := false
+	initialToolChoiceAttempts := 0
 	activeLLMConfig := options.llmConfig
 	preconditionFallbackIndex := 0
 	var requiredNextTool *pendingRequiredTool
@@ -503,6 +504,10 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			}
 			if initialToolChoiceApplied {
 				if requiredName, ok := exactRequiredToolChoiceName(options.initialToolChoice); ok && !toolCallsExactlyMatchName(resp.ToolCalls, requiredName) {
+					initialToolChoiceAttempts++
+					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: required initial tool %q was not called after %d retries", requiredName, maxRequiredNextToolRetries)
+					}
 					if err := appendRequiredInitialToolChoiceReminder(requiredName, "model_called_different_initial_tool"); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist initial tool-choice retry: %w", err)
 					}
@@ -513,6 +518,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 							"called_tools":  toolCallNames(resp.ToolCalls),
 							"tool_choice":   req.ToolChoice,
 							"reason":        "model_called_different_initial_tool",
+							"attempt":       initialToolChoiceAttempts,
 						})
 						emit(types.EventRunRetry, "initial_tool_choice", payload)
 					}
@@ -624,6 +630,31 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
 
 		case "end_turn", "":
+			if initialToolChoiceApplied {
+				if requiredName, ok := exactRequiredToolChoiceName(options.initialToolChoice); ok && len(toolDefs) > 0 {
+					initialToolChoiceAttempts++
+					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: required initial tool %q was not called after %d retries", requiredName, maxRequiredNextToolRetries)
+					}
+					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist assistant ignored initial tool-choice text: %w", err)
+					}
+					if err := appendRequiredInitialToolChoiceReminder(requiredName, "model_ended_turn_without_required_initial_tool"); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist initial tool-choice retry: %w", err)
+					}
+					forceInitialToolChoiceRetry = true
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_tool": requiredName,
+							"tool_choice":   req.ToolChoice,
+							"reason":        "model_ended_turn_without_required_initial_tool",
+							"attempt":       initialToolChoiceAttempts,
+						})
+						emit(types.EventRunRetry, "initial_tool_choice", payload)
+					}
+					continue
+				}
+			}
 			if requiredNextTool != nil && len(toolDefs) > 0 {
 				requiredNextTool.Attempts++
 				if requiredNextTool.Attempts > maxRequiredNextToolRetries {

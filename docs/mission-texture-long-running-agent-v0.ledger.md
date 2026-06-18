@@ -304,3 +304,61 @@ provider path.
 Rollback ref: revert `7d462629` if the next repair cannot preserve exact
 first-write semantics safely. This docs checkpoint is the required
 problem-documentation-first commit before the next code change.
+
+## 2026-06-17 - End-turn exact-tool retry repair (red runtime, staging pending)
+
+Claim under test: the `7d462629` no-write staging result happened because the
+tool loop accepted a provider `end_turn` as normal completion even while an
+exact initial tool choice was active. If `end_turn` is retried as a missing
+required initial tool, the live provider path should be unable to complete
+Texture V1 without calling `patch_texture`.
+
+Move: construct. Tightened the general tool loop, not Texture-specific
+choreography: exact initial tool choice now retries on `end_turn` without a tool,
+with the same filtered tool definition set. Also settled failed no-write Texture
+mutations before reconcile so a failed integrate wake does not spin by
+immediately requeueing the same undelivered packet.
+
+Expected ΔV: repair the no-appagent-revision failure mode from `7d462629` while
+preserving the first-write-before-delegation order from the previous construct.
+Actual local ΔV: the staging-shaped no-tool `end_turn` path is covered by a new
+tool-loop regression test; the previously hanging researcher fallback test now
+passes; runtime shards pass. Deployed proof remains pending.
+
+Receipts:
+
+- `internal/runtime/toolloop.go:630-655` retries exact initial tool choice when
+  the provider returns `end_turn` without the required tool, emits
+  `initial_tool_choice`, and preserves the filtered exact-tool definitions for
+  the retry.
+- `internal/runtime/toolloop.go:504-520` now bounds repeated wrong-tool initial
+  tool-choice retries with the same retry ceiling used for required-next-tool
+  loops.
+- `internal/runtime/runtime.go:3237-3273` completes a failed Texture mutation
+  if it had already written a revision, otherwise marks a no-write failure and
+  skips immediate reconcile for that terminal no-write failure.
+- `internal/runtime/toolloop_test.go` adds
+  `TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool`, simulating
+  the live failure shape: first provider response is `end_turn`, second response
+  calls `patch_texture`, final response completes normally.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool|TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition|TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError|TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestInitialTextureToolChoiceRequiresPatchBeforeContinuation|TestHandlePromptBarOperationalProofInitialRunStartsWithTexture|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestSubmitResearchFindingsWakeUsesSameDebouncedPath|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTexturePromptInitialRevisionUsesSingleWriterLoop|TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent|TestResearcherFailureSynthesizesCheckpointAfterSearch|TestRunSupportsCoagentUpdateInjectionIncludesTexture|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestCoagentUpdateTurnInjectorSupportsTexture|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestBuildAppagentRevisionMetadataCarriesForwardDurableKeys|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards` returned success for shards 0-2 in visible output; `nix develop -c env SHARD_INDEX=3 TOTAL_SHARDS=4 scripts/go-test-runtime-shards` then explicitly passed shard 3/4 to remove ambiguity.
+
+Open blockers / remaining error:
+
+- Staging must still prove fast V1 and V2+. This repair only prevents silent
+  no-write completion and reconcile spin; it does not implement T3/T4
+  park-and-wait or one resident actor.
+- If staging still fails, use Trace `provider_call`, `tool_loop`,
+  `provider_tool_choice`, and `initial_tool_choice` events to classify the live
+  provider behavior precisely.
+
+Rollback ref: revert this runtime repair commit, then `7d462629`, if the live
+provider still cannot satisfy the first-write obligation and the retry path
+creates blocked or failed trajectories instead of fast V1.
