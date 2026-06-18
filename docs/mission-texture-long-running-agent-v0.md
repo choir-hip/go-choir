@@ -582,6 +582,28 @@ the synthesized `RunAcceptanceRecord` `runacc-3efa017d5d01175a8bcf` stayed
 `texture_opened` checkpoints. This newly documents the T8 blocker for
 non-blocked lifecycle acceptance.
 
+Current deployed proof after `623a33de` refines C9 but does not settle T8. CI
+test/build jobs passed, including runtime shards 0-3; the workflow concluded
+failure only because the known Node B deploy job failed. Public `/health`
+confirmed proxy and sandbox both deployed at
+`623a33de8157ce66714ead581575d5a188cf80d2` (`deployed_at`
+`2026-06-18T08:20:04Z`). The required cadence probe then hit the known no-V1
+branch: submission `b52686cd-d54a-4856-a08c-18e24ea64f6b` / doc
+`61fa7f9f-00f9-4f4b-994e-f8262f461d48` produced only V0, no appagent
+revision, no research/delegation activity, and trajectory `state=failed`. A
+runtime-supervision discriminator on the same SHA submitted
+`375ff7b6-25f4-4054-84c8-31c2d2509cfd` / doc
+`789b7401-b03d-41cd-81c4-ee4d396a2854`; it produced two appagent revisions and
+the acceptance synthesizer now recorded `super_requested` from
+`request_super_execution`, yielding `RunAcceptanceRecord`
+`runacc-d8560d65cb9f8a118c8f` at `staging-smoke-level`, state `blocked`, with
+checkpoints `submitted`, `texture_opened`, and `super_requested`. Trace still
+showed `request_worker_vm=0`, `start_worker_delegation=0`, and
+`delegation_count=0`, while `update_coagent=2`. The acceptance repair therefore
+closed the "super request invisible" half of C9, but the completion guard's
+`update_coagent` fallback is too broad for objectives that explicitly require
+worker/delegation evidence.
+
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
 yet and the owner values the correct long-running-agent architecture over
@@ -705,7 +727,11 @@ position / live conjectures / open edges:
   `request_worker_vm`, and no delegation/worker-update evidence. The next
   discriminator is whether deterministic initial Texture super requests need
   explicit Trace/acceptance evidence, whether super needs a bounded completion
-  guard for Texture-requested execution objectives, or both.
+  guard for Texture-requested execution objectives, or both. Commit `623a33de`
+  repaired the Trace/acceptance visibility half: deployed acceptance now records
+  `super_requested` from `request_super_execution`. It did not repair the worker
+  evidence half: Super can still complete a worker-shaped Texture request after
+  `update_coagent` without `request_worker_vm` or delegation evidence.
 
 Current local T4 construct after the `4da4ffa3` proof: `LoadConfig` now defaults
 Texture revision actors into bounded park-on-idle with
@@ -773,11 +799,13 @@ The delete-cancellation probe submitted
 404, and Trace ended `state=cancelled`, `live=false`, with the Texture agent
 state `cancelled`.
 
-next move: documentation-first checkpoint for the runtime-supervision acceptance
-blocker, then repair the smallest live gap: either acceptance must recognize the
-deterministic Texture->super request evidence, super must be prevented from
-silently completing a Texture-requested worker objective without worker evidence,
-or both. Residuals after that remain elapsed-time budget across sleep, full
+next move: documentation-first checkpoint for the deployed `623a33de` proof,
+then repair the smallest remaining C9 gap: distinguish Texture-requested Super
+runs that explicitly require worker/delegation evidence from runs that may
+legitimately report a structured blocker via `update_coagent`, so a
+worker-shaped objective cannot satisfy the completion guard without
+`request_worker_vm` / delegation evidence or an acceptance-visible blocker
+checkpoint. Residuals after that remain elapsed-time budget across sleep, full
 wake/reconcile collapse, Trace projection legibility, and first-write
 stochasticity.
 

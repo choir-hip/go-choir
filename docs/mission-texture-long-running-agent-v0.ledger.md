@@ -1905,3 +1905,100 @@ without worker evidence or a structured blocker.
 Rollback ref: no runtime change in this pass. If a later repair is attempted,
 rollback will be that repair commit; this checkpoint only records staging
 evidence and narrows T8.
+
+## 2026-06-18 - Texture-requested Super evidence repair deploys but worker lifecycle remains blocked (red construct + proof)
+
+Claim under test: commit `623a33de8157ce66714ead581575d5a188cf80d2` repairs
+the C9 lifecycle acceptance gap by making Texture-requested Super execution
+Trace-visible for acceptance and by preventing a Texture-requested Super run
+from completing with prose only when no execution evidence exists.
+
+Move: after the documentation checkpoint for C9, add acceptance synthesis for
+Texture decision/request evidence and a bounded Super completion guard for runs
+requested by Texture. Run focused comprehensive runtime tests, doccheck, diff
+check, runtime shards, push to `origin/main`, monitor CI, verify deployed
+identity, run the formal cadence probe, and run a same-SHA lifecycle
+discriminator with `/api/run-acceptances/synthesize`.
+
+Expected ΔV: close the invisible-super-request half of C9 and either produce a
+non-blocked lifecycle acceptance record or expose the next missing worker
+evidence branch. Actual ΔV: the invisible-super-request half is repaired on
+staging; non-blocked lifecycle acceptance is still open because Super can satisfy
+the completion guard with `update_coagent` while producing no worker lease or
+delegation evidence.
+
+Receipts:
+
+- Commit: `623a33de8157ce66714ead581575d5a188cf80d2`
+  (`runtime: require evidence for texture-requested super runs`).
+- Code: `SynthesizeRunAcceptance` now adds a `super_requested` checkpoint from
+  Texture downstream-super decision evidence when no direct
+  `request_super_execution` checkpoint is already present
+  (`internal/runtime/run_acceptance.go`). Super runs whose metadata says they
+  were requested by Texture now attach a completion guard that rejects end-turn
+  completion until Trace has a successful worker/delegation/package tool result
+  or a Texture-visible `update_coagent` blocker (`internal/runtime/runtime.go`).
+- Local proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunAcceptanceTextureDecisionCountsAsSuperRequest|TestSuperTextureExecutionCompletionGuardRequiresEvidence|TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage|TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions: FlakeHub run `27746167033` succeeded. CI run `27746167307`
+  concluded failure only because `Deploy to Staging (Node B)` failed; Docs Truth
+  Check, Go vet/build, runtime shards 0-3, non-runtime tests, integration smoke,
+  and TLA+ all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `623a33de8157ce66714ead581575d5a188cf80d2`, deployed at
+  `2026-06-18T08:20:04Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed cadence command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed cadence result: submission
+  `b52686cd-d54a-4856-a08c-18e24ea64f6b`; doc
+  `61fa7f9f-00f9-4f4b-994e-f8262f461d48`; V0 user at +0.322s, no appagent
+  revision, `appagent_revision_count=0`, `first_paint_ms=null`,
+  `web_search=0`, `source_search=0`, `spawn_agent=0`, `update_coagent=0`,
+  `moment_count=49`, trajectory `state=failed`, `agent_count=2`,
+  `delegation_count=0`.
+- Lifecycle discriminator marker:
+  `TEXTURE_LIFECYCLE_ACCEPTANCE_1781771171484`; synthetic owner
+  `texture-lifecycle-1781771172316-9zsh8x@example.com`.
+- Lifecycle prompt-bar submission / trajectory:
+  `375ff7b6-25f4-4054-84c8-31c2d2509cfd`; doc
+  `789b7401-b03d-41cd-81c4-ee4d396a2854`; initial Texture loop
+  `eacedd49-51c3-49e3-a3a6-2dff7b84d8fe`; Super loop
+  `b6729bf4-434e-4cce-9998-902c85d906d9`.
+- Lifecycle Trace result: final `state=completed`, `live=false`,
+  `agent_count=3`, `delegation_count=0`, `message_count=0`,
+  `finding_count=0`, final Texture revisions `3` with `2` appagent revisions.
+- Lifecycle tool-result counts: `request_super_execution=2`,
+  `request_worker_vm=0`, `start_worker_delegation=0`,
+  `observe_worker_delegation=0`, `finish_worker_delegation=0`,
+  `delegate_worker_vm=0`, `update_coagent=2`,
+  `publish_app_change_package=0`, `moment_count=102`.
+- RunAcceptanceRecord: `runacc-d8560d65cb9f8a118c8f`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `375ff7b6-25f4-4054-84c8-31c2d2509cfd`, deployment/health commit
+  `623a33de8157ce66714ead581575d5a188cf80d2`, acceptance level
+  `staging-smoke-level`, state `blocked`, authority profile
+  `conductor > texture > super`, checkpoints `submitted`, `texture_opened`, and
+  `super_requested` passed; verifier contract `trace-derived-state-machine`
+  passed; verifier contract `export-level-product-path` blocked.
+
+Result: C9 is refined. Acceptance no longer misses the Texture->Super request:
+`super_requested` is durable and backed by a Trace tool-result evidence ref. The
+worker lifecycle acceptance remains blocked: a prompt that explicitly requires
+`request_worker_vm`, `start_worker_delegation`, `update_coagent`, and
+`finish_worker_delegation` still completed with no worker lease or delegation.
+
+Open edge: repair the completion guard so the `update_coagent` fallback is not a
+catch-all for worker-shaped objectives. Either the guard must classify explicit
+worker/delegation objectives and require worker evidence, or `update_coagent`
+must produce an acceptance-visible blocker checkpoint that explains why no
+worker can be leased. The no-V1 cadence branch also remains live and blocked the
+formal probe on this SHA.
+
+Rollback ref: revert `623a33de` if later evidence shows the Super completion
+guard traps valid Texture-requested Super runs, hides legitimate blockers, or
+causes duplicated acceptance checkpoints.
