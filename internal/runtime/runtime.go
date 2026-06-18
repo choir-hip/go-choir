@@ -1640,9 +1640,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		))
 		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.textureModelPriorCompletionGuard(rec)))
 	}
-	if agentProfileForRun(rec) == AgentProfileSuper && isTextureProfileValue(metadataStringValue(rec.Metadata, "requested_by_profile")) {
-		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.superTextureExecutionCompletionGuard(rec)))
-	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
@@ -2373,8 +2370,7 @@ func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLo
 			metadataStringValue(rec.Metadata, "seed_prompt"),
 			rec.Prompt,
 		))
-		needsSuperExecution := texturePromptNeedsSuperExecution(prompt)
-		if !needsSuperExecution && !texturePromptNeedsWorldKnowledge(prompt) {
+		if !texturePromptNeedsWorldKnowledge(prompt) {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
 		doc, err := rt.store.GetDocument(ctx, docID, rec.OwnerID)
@@ -2385,18 +2381,11 @@ func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLo
 		if err != nil || rev.AuthorKind != types.AuthorAppAgent {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
-		if rt.textureRunOpenedEvidencePath(ctx, rec, docID) {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		if needsSuperExecution {
-			return ToolLoopCompletionGuardResult{
-				Continue:    true,
-				Reason:      "texture_super_execution_needs_evidence_path",
-				Instruction: "The prompt asks Texture to open downstream Super/execution/worker evidence for this document. A Texture-only revision is not completion. Continue by calling request_super_execution with a concrete objective that requires worker VM, delegation, update, or package evidence; or record_texture_decision with a truthful blocker, delegation_deferred, or wait_for_evidence reason explaining why execution cannot proceed. Do not end with only a Texture revision.",
-			}, nil
-		}
 		meta := decodeRevisionMetadata(rev.Metadata)
 		if !metadataBoolValue(meta, "model_prior_interim") && metadataStringValue(meta, "revision_grounding") != "model_prior" {
+			return ToolLoopCompletionGuardResult{}, nil
+		}
+		if rt.textureRunOpenedEvidencePath(ctx, rec, docID) {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
 		return ToolLoopCompletionGuardResult{
@@ -2405,193 +2394,6 @@ func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLo
 			Instruction: "The latest canonical Texture revision is flagged model_prior_interim for a factual/current request. That checkpoint is not completion. Continue by choosing the next legitimate agentic action: open Probe work with spawn_agent role=\"researcher\" for concise current evidence back to this Texture, request execution only if execution evidence is actually needed, send follow-up to an active worker, or record_texture_decision with a truthful no_worker_needed, delegation_deferred, wait_for_evidence, or blocker reason. Do not end with only the model-prior/interim revision.",
 		}, nil
 	}
-}
-
-func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) ToolLoopCompletionGuardFunc {
-	return func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error) {
-		if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		if !isTextureProfileValue(metadataStringValue(rec.Metadata, "requested_by_profile")) {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		events, err := rt.store.ListEvents(ctx, rec.RunID, 1000)
-		if err != nil {
-			return ToolLoopCompletionGuardResult{}, fmt.Errorf("check Texture-requested super completion evidence: %w", err)
-		}
-		if rt.superTextureExecutionHasSufficientEvidence(ctx, events, rec) {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		return ToolLoopCompletionGuardResult{
-			Continue:    true,
-			Reason:      "texture_requested_super_execution_without_evidence",
-			Instruction: "Texture requested privileged execution for this document. Do not end this Super run with prose only. If the objective asks for worker/delegation evidence, call request_worker_vm now with the concrete purpose; after the lease, follow the runtime-required start_worker_delegation step and later observe_worker_delegation or finish_worker_delegation. A worker_run_active finish is progress, not completion: keep supervising until finish_worker_delegation returns terminal evidence, package/update evidence, or an explicit terminal blocker. A successful update_coagent delivery alone is not terminal worker evidence. Do not finish until Trace contains terminal worker/delegation evidence, package/update evidence, or explicit terminal_error/completion_blocker output.",
-		}, nil
-	}
-}
-
-func (rt *Runtime) superTextureExecutionHasSufficientEvidence(ctx context.Context, events []types.EventRecord, rec *types.RunRecord) bool {
-	if !rt.superTextureExecutionRequiresWorkerEvidence(ctx, rec) {
-		return eventsContainAnySuccessfulTool(events,
-			"request_worker_vm",
-			"start_worker_delegation",
-			"observe_worker_delegation",
-			"finish_worker_delegation",
-			"delegate_worker_vm",
-			"publish_app_change_package",
-			"update_coagent",
-		)
-	}
-	if len(successfulToolResultPayloads(events, "publish_app_change_package")) > 0 {
-		return true
-	}
-	for _, toolName := range []string{"request_worker_vm", "finish_worker_delegation", "delegate_worker_vm"} {
-		for _, payload := range successfulToolResultPayloads(events, toolName) {
-			var output map[string]any
-			if err := json.Unmarshal([]byte(toolPayloadOutput(payload)), &output); err != nil {
-				continue
-			}
-			if superTextureWorkerBlockerIsTerminal(output) {
-				return true
-			}
-			if toolName == "request_worker_vm" {
-				continue
-			}
-			if superTextureWorkerResultIsTerminal(output) {
-				return true
-			}
-		}
-	}
-	for _, payload := range successfulToolResultPayloads(events, "update_coagent") {
-		var output map[string]any
-		if err := json.Unmarshal([]byte(toolPayloadOutput(payload)), &output); err != nil {
-			continue
-		}
-		if superTextureUpdateIsStructuredBlocker(output) {
-			return true
-		}
-	}
-	return false
-}
-
-func superTextureWorkerResultIsTerminal(output map[string]any) bool {
-	status := strings.TrimSpace(stringMapValue(output, "status"))
-	if status == "" {
-		return false
-	}
-	if len(mapSliceValue(output, "app_change_packages")) > 0 || intMapValue(output, "mirrored_worker_update_count") > 0 {
-		return true
-	}
-	if stringMapValue(output, "worker_update_checkpoint") == "worker_submit_update_mirrored" {
-		return true
-	}
-	switch status {
-	case "worker_run_active", "worker_observed", "worker_run_started", "worker_requested":
-		return false
-	case "worker_run_incomplete", "worker_finish_status_failed":
-		return stringMapValue(output, "terminal_error") != "" || stringMapValue(output, "completion_blocker") != ""
-	default:
-		return strings.HasPrefix(status, "worker_run_") && status != "worker_run_active"
-	}
-}
-
-func superTextureWorkerBlockerIsTerminal(output map[string]any) bool {
-	if stringMapValue(output, "terminal_error") != "" || stringMapValue(output, "completion_blocker") != "" {
-		return true
-	}
-	return false
-}
-
-func superTextureUpdateIsStructuredBlocker(output map[string]any) bool {
-	if !superTextureWorkerBlockerIsTerminal(output) {
-		return false
-	}
-	status := strings.ToLower(strings.TrimSpace(stringMapValue(output, "status")))
-	if strings.Contains(status, "block") || strings.Contains(status, "fail") || strings.Contains(status, "error") {
-		return true
-	}
-	return status == ""
-}
-
-func (rt *Runtime) superTextureExecutionRequiresWorkerEvidence(ctx context.Context, rec *types.RunRecord) bool {
-	if rec == nil {
-		return false
-	}
-	if superTextureTextRequiresWorkerEvidence(rec.Prompt + "\n" + metadataStringValue(rec.Metadata, "objective") + "\n" + metadataStringValue(rec.Metadata, "task") + "\n" + metadataStringValue(rec.Metadata, "request")) {
-		return true
-	}
-	if rt == nil || rt.store == nil || strings.TrimSpace(rec.OwnerID) == "" {
-		return false
-	}
-	for _, updateID := range coagentUpdateIDsForRun(rec) {
-		updateID = strings.TrimSpace(updateID)
-		if updateID == "" {
-			continue
-		}
-		update, err := rt.store.GetWorkerUpdate(ctx, rec.OwnerID, updateID)
-		if err != nil {
-			continue
-		}
-		if superTextureTextRequiresWorkerEvidence(workerUpdateTextForSuperEvidenceClassification(update)) {
-			return true
-		}
-	}
-	return false
-}
-
-func superTextureTextRequiresWorkerEvidence(text string) bool {
-	text = strings.ToLower(text)
-	for _, needle := range []string{
-		"request_worker_vm",
-		"start_worker_delegation",
-		"worker vm",
-		"worker delegation",
-		"worker-update",
-		"worker update",
-		"finish_worker_delegation",
-	} {
-		if strings.Contains(text, needle) {
-			return true
-		}
-	}
-	return false
-}
-
-func workerUpdateTextForSuperEvidenceClassification(update types.WorkerUpdateRecord) string {
-	var b strings.Builder
-	b.WriteString(update.Kind)
-	b.WriteString("\n")
-	b.WriteString(update.Summary)
-	b.WriteString("\n")
-	b.WriteString(update.Content)
-	for _, group := range [][]string{
-		update.Findings,
-		update.EvidenceIDs,
-		update.Artifacts,
-		update.Refs,
-		update.Tests,
-		update.Questions,
-		update.Proposals,
-		update.Notes,
-	} {
-		for _, value := range group {
-			b.WriteString("\n")
-			b.WriteString(value)
-		}
-	}
-	for _, req := range update.CapabilityRequests {
-		b.WriteString("\n")
-		b.WriteString(req.Capability)
-		b.WriteString("\n")
-		b.WriteString(req.RequestedRole)
-		b.WriteString("\n")
-		b.WriteString(req.Objective)
-		b.WriteString("\n")
-		b.WriteString(req.WhyNeeded)
-		b.WriteString("\n")
-		b.WriteString(req.EvidenceNeededFor)
-	}
-	return b.String()
 }
 
 func (rt *Runtime) textureRunOpenedEvidencePath(ctx context.Context, rec *types.RunRecord, docID string) bool {
