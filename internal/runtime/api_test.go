@@ -830,8 +830,38 @@ func TestSuperTextureExecutionCompletionGuardRequiresEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worker guard after request_worker_vm: %v", err)
 	}
+	if !result.Continue || result.Reason != "texture_requested_super_execution_without_evidence" {
+		t.Fatalf("worker guard after request_worker_vm = %+v, want continued terminal worker evidence requirement", result)
+	}
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-worker-finish-active", workerRec.RunID, workerRec.AgentID, "traj-texture-guard", workerRec.ChannelID, time.Now().UTC(), "finish_worker_delegation", map[string]any{
+		"status":        "worker_run_active",
+		"worker_id":     "worker-texture-guard",
+		"worker_run_id": "run-worker-texture-guard",
+		"state":         string(types.RunRunning),
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 3})
+	if err != nil {
+		t.Fatalf("worker guard after active finish: %v", err)
+	}
+	if !result.Continue || result.Reason != "texture_requested_super_execution_without_evidence" {
+		t.Fatalf("worker guard after active finish = %+v, want continued terminal worker evidence requirement", result)
+	}
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-worker-finish-completed", workerRec.RunID, workerRec.AgentID, "traj-texture-guard", workerRec.ChannelID, time.Now().UTC(), "finish_worker_delegation", map[string]any{
+		"status":                        "worker_run_completed",
+		"worker_id":                     "worker-texture-guard",
+		"worker_run_id":                 "run-worker-texture-guard",
+		"state":                         string(types.RunCompleted),
+		"mirrored_worker_update_count":  1,
+		"worker_update_checkpoint":      "worker_submit_update_mirrored",
+		"mirrored_worker_update_ids":    []string{"update-worker-texture-guard"},
+		"mirrored_worker_update_errors": []string{},
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 4})
+	if err != nil {
+		t.Fatalf("worker guard after terminal finish: %v", err)
+	}
 	if result.Continue {
-		t.Fatalf("worker guard after request_worker_vm = %+v, want satisfied", result)
+		t.Fatalf("worker guard after terminal finish = %+v, want satisfied", result)
 	}
 }
 
