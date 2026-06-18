@@ -2211,3 +2211,103 @@ Rollback ref: revert `f26e1f7c` if later evidence shows execution-shaped prompt
 classification traps valid Texture prompts, suppresses legitimate Texture-only
 completion when no worker is requested, or causes repeated Super requests after
 an evidence path is already opened.
+
+## 2026-06-18 - Terminal worker evidence guard deploys; Super update blocker remains under-specified (red construct + proof)
+
+Claim under test: commit `8c2bfa71f670e601e111bdbd1f40abfdd1305baf` repairs the
+downstream C9 worker-settlement branch exposed by `f26e1f7c`: a
+Texture-requested Super run whose objective explicitly requires worker VM /
+delegation evidence should not treat `finish_worker_delegation` status
+`worker_run_active` as terminal completion evidence.
+
+Move: refine `superTextureExecutionCompletionGuard` so worker-shaped objectives
+require terminal worker/delegation evidence, package evidence, mirrored worker
+update evidence, or a structured Texture-visible blocker. Keep the prior
+`update_coagent` completion path for non-worker Texture-requested Super prompts.
+Run focused comprehensive runtime tests, doccheck, diff check, runtime shards,
+push, monitor CI, verify deployed identity, run the formal cadence probe, and
+run a lifecycle discriminator that synthesizes a `RunAcceptanceRecord`.
+
+Expected ΔV: close the worker-run-active acceptance gap, or expose the next live
+Super-settlement branch. Actual ΔV: local branch is repaired and ordinary
+cadence passed on staging; lifecycle acceptance exposed a different branch where
+Super completed after `update_coagent` responses without requesting a worker VM
+or recording an explicit Texture decision/blocker.
+
+Receipts:
+
+- Commit: `8c2bfa71f670e601e111bdbd1f40abfdd1305baf`
+  (`runtime: require terminal worker evidence for texture super`).
+- Code: `superTextureExecutionHasSufficientEvidence` now distinguishes
+  non-worker Texture-requested Super prompts from worker-shaped prompts; for
+  worker-shaped prompts, `publish_app_change_package`, terminal
+  `finish_worker_delegation` / `delegate_worker_vm` output, mirrored worker
+  update evidence, or a structured blocker in `update_coagent` is required
+  before the guard stands down (`internal/runtime/runtime.go`). The regression
+  proves `request_worker_vm` and `worker_run_active` are insufficient, and a
+  completed finish with mirrored worker update evidence is sufficient
+  (`internal/runtime/api_test.go`).
+- Local proof:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestSuperTextureExecutionCompletionGuardRequiresEvidence|TestTextureSuperExecutionCompletionGuardRequiresEvidencePath|TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions: FlakeHub run `27750164990` succeeded. CI run `27750165277`
+  concluded failure only because `Deploy to Staging (Node B)` failed; Docs Truth
+  Check, Go vet/build, runtime shards 0-3, non-runtime tests, integration smoke,
+  and TLA+ all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `8c2bfa71f670e601e111bdbd1f40abfdd1305baf`, deployed at
+  `2026-06-18T09:34:42Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed cadence command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed cadence result: submission
+  `fbb637f0-d7df-44ec-89ce-c556d8c6c83d`; doc
+  `1b74a841-d94c-410a-986a-facd48406f84`; V0 user at +0.331s, V1 appagent at
+  +13.266s with 700 chars, V2 appagent at +57.583s with 1984 chars;
+  `appagent_revision_count=2`, `first_paint_ms=13266`,
+  `total_revision_count=3`, `web_search=2`, `source_search=2`,
+  `spawn_agent=2`, `update_coagent=2`, `moment_count=148`, trajectory
+  `state=completed`, `agent_count=3`, `delegation_count=1`.
+- Lifecycle discriminator marker:
+  `TEXTURE_LIFECYCLE_ACCEPTANCE_1781775603360`; synthetic owner
+  `texture-lifecycle-1781775604326-d0m06i@example.com`.
+- Lifecycle prompt-bar submission / trajectory:
+  `e85802c7-2f27-47cf-b0a4-4ef51b625527`; doc
+  `ac95eaf4-2165-41f5-8e19-f7578de8bdc0`.
+- Lifecycle Trace result: final `state=completed`, `live=false`,
+  `agent_count=3`, `delegation_count=0`, `message_count=0`,
+  `finding_count=0`, final Texture revisions `3` with `2` appagent revisions.
+- Lifecycle tool-result counts: `request_super_execution=2`,
+  `request_worker_vm=0`, `start_worker_delegation=0`,
+  `observe_worker_delegation=0`, `finish_worker_delegation=0`,
+  `delegate_worker_vm=0`, `update_coagent=2`,
+  `publish_app_change_package=0`, `record_texture_decision=0`,
+  `moment_count=91`.
+- RunAcceptanceRecord: `runacc-1090090c8e674898bf3d`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `e85802c7-2f27-47cf-b0a4-4ef51b625527`, deployment/health commit
+  `8c2bfa71f670e601e111bdbd1f40abfdd1305baf`, acceptance level
+  `staging-smoke-level`, state `blocked`, authority profile
+  `texture > conductor > super`, checkpoints `submitted`, `texture_opened`,
+  and `super_requested` passed; no `worker_leased` or `worker_delegated`
+  checkpoint passed. `trace-derived-state-machine` passed;
+  `export-level-product-path` remained blocked.
+
+Result: local terminal-worker evidence logic is necessary but not sufficient for
+non-blocked lifecycle acceptance. The live branch did not exercise
+`worker_run_active` at all. Super can still satisfy the completion guard through
+`update_coagent` for an explicitly worker-shaped objective without producing an
+acceptance-visible blocker or requesting a worker VM.
+
+Open edge: repair the Super update/blocker predicate. For worker-shaped
+Texture-requested Super objectives, `update_coagent` should stand down the guard
+only when it carries a durable blocker that acceptance can classify, not generic
+progress or a weak status/reason string. Otherwise Super must call
+`request_worker_vm` and drive the worker/delegation path to terminal
+worker-update/package evidence.
+
+Rollback ref: revert `8c2bfa71` if later evidence shows terminal-worker
+classification traps legitimate Super blockers or prevents valid non-worker
+Texture-requested Super runs from completing.
