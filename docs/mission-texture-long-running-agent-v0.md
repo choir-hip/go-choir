@@ -346,6 +346,21 @@ metadata/guard repair enough to move past no-V1/no-delegation as the only live
 branch, but it falsifies the V2+ cadence: worker findings are not being consumed
 into a follow-on Texture revision before the trajectory fails.
 
+Follow-up focused diagnostic on the same deployed SHA refined the remaining
+branch again. Fresh submission `8b935f7f-339b-4934-959e-6070ad71243c` / doc
+`568d6131-0988-4c77-b886-cb541e70c698` produced V0, an appagent V1 at about
++24s, and an appagent V2 at about +73s, with trajectory `state=completed`.
+V1 metadata was correctly honest (`model_prior_interim=true`,
+`revision_grounding=model_prior`, `grounding_status=model_prior_interim`,
+`texture_version_stage=interim`, `revision_role=input`). V2 metadata consumed
+researcher update seq 1 (`worker_updates_consumed` role `researcher`,
+`worker_updates_pending=[]`) and became canonical `article_revision`, but the
+edit was a no-op: `texture_edit_delta_chars=0`, content length stayed 794, and
+the rationale said no substantive content change was intended. This means the
+remaining live failure is not only delivery or wake: Texture can receive and mark
+findings consumed, but the wake revision may satisfy the forced write without
+actually grounding or deepening the document.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -403,10 +418,12 @@ position / live conjectures / open edges:
   while fresh same-run writes can deepen the document.
 - C2 partially supported on staging: first paint can now be fast in the live
   product path (`29265cae` diagnostic V1 at about +16s, `58895d28` diagnostic
-  fast V1, `f9626242` formal probe V1 at +28.966s). The `f9626242` probe also
-  opened research/delegation, so the metadata/guard path is no longer purely
-  local. It still does not settle T2/T8 because no V2 consumed the returned
-  evidence and the trajectory failed.
+  fast V1, `f9626242` formal probe V1 at +28.966s, focused diagnostic V1 at
+  about +24s). The `f9626242` focused diagnostic proves V1 metadata is now
+  model-prior/interim on staging and that V2 can consume a researcher update. It
+  still does not settle T2/T8 because the consumed-evidence V2 can be a no-op
+  rather than a grounded/deepened revision, and the formal probe still hit a
+  failed no-V2 branch.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -443,17 +460,17 @@ position / live conjectures / open edges:
   where `article_revision` metadata suppresses the model-prior/interim flags. The
   latest metadata repair fixes that classification without weakening real Wire
   article revision semantics or forcing a semantic researcher continuation.
-  Staging `f9626242` moved the live failure forward: V1 and evidence work happen,
-  but returned updates do not become V2 before trajectory failure.
+  Staging `f9626242` moved the live failure forward: V1 and evidence work happen;
+  one formal probe failed before V2, while a focused diagnostic reached V2 but
+  stored a no-op revision that consumed researcher evidence without using it.
 
-next move: run a focused product-path diagnostic for the `f9626242` V1-plus-
-research/no-V2 failure. Capture revision metadata and terminal Trace/tool
-details for submission `bddc8556-602a-4cb1-b2be-134371cbb274` if still
-accessible, or reproduce with a fresh diagnostic that prints revision metadata,
-`update_coagent` payload/target, integrate wake runs, and the terminal error.
-Only after that documentation checkpoint should the next code repair target
-Texture-not-consuming-findings, failed integrate wake, or trajectory failure
-settlement.
+next move: inspect the integrate-wake first-tool/metadata path for Texture runs
+with `scheduled_message_seq > 0` or consumed worker updates. The repair should
+prevent a worker-update wake from satisfying the revision obligation with an
+empty/no-op patch that merely marks findings consumed; it must require the
+grounded revision to incorporate or explicitly account for consumed evidence,
+without forcing semantic role choreography or weakening the initial V1 exact
+write guard.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -492,10 +509,12 @@ fresh product-path diagnostic showed that the successful V1 branch can omit the
 model-prior/interim flags by classifying the prompt-bar revision as
 `article_revision`. The latest repair covers the honest-grounding half by making
 prompt-only initial revisions model-prior/interim even when article-shaped, and
-staging `f9626242` reached V1 plus research/delegation. The new live learning is
-that evidence can return without producing V2 before trajectory failure; the
-failure has moved from no-V1/no-delegation toward update consumption or integrate
-wake completion.
+staging `f9626242` reached V1 plus research/delegation. A formal probe still
+showed a failed no-V2 branch, but the focused diagnostic proved the wake path can
+produce V2 and consume researcher evidence. The new live learning is sharper:
+the V2 wake can be a no-op that marks evidence consumed without incorporating it,
+so the next repair must make consumed-evidence revisions substantively grounded
+or explicitly accountable.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

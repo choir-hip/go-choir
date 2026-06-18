@@ -802,3 +802,61 @@ Rollback ref: do not revert `f9626242` solely for this result; it moved staging
 from no-V1/no-delegation to V1-plus-research. Revert only if the next diagnostic
 shows the metadata repair itself caused the trajectory failure or damaged sourced
 Wire article revision semantics.
+
+## 2026-06-18 - Focused diagnostic found no-op consumed-evidence V2 (red evidence, green record)
+
+Claim under test: the `f9626242` post-probe blocker was simply that returned
+researcher updates were not delivered to Texture before failure.
+
+Move: ran a fresh product-path diagnostic against `https://choir.news` that
+printed revision metadata and filtered Trace moments for the same prompt shape.
+
+Expected ΔV: classify the no-V2 branch as update delivery, integrate wake, or
+terminal trajectory failure. Actual ΔV: the branch split. A fresh run can deliver
+researcher evidence and write V2, but V2 can be a no-op that marks the evidence
+consumed without deepening the document.
+
+Receipts:
+
+- Deployed identity during diagnostic: proxy and sandbox
+  `f96262421748902f257fd20aadd61477f7727353`, `deployed_at=2026-06-18T03:53:52Z`.
+- Diagnostic submission / trajectory:
+  `8b935f7f-339b-4934-959e-6070ad71243c`.
+- Texture doc: `568d6131-0988-4c77-b886-cb541e70c698`.
+- Initial loop id: `2b47db7e-a4a6-48a5-8d0b-ce31e8ba72a6`.
+- Revisions: V0 user at +0s; V1 appagent at about +24s; V2 appagent at about
+  +73s.
+- V1 metadata: `model_prior_interim=true`, `revision_grounding=model_prior`,
+  `grounding_status=model_prior_interim`, `texture_version_stage=interim`,
+  `revision_role=input`, `worker_updates_consumed=[]`.
+- V2 metadata: `artifact_kind=article_revision`, `revision_role=canonical`,
+  `texture_version_stage=article_revision`,
+  `texture_edit_base_revision_id=6a17822f-2976-40c9-a098-4742d4b42fe0`,
+  `worker_updates_checkpoint_seq=0`, `worker_updates_scheduled_seq=1`,
+  `worker_updates_consumed` contained researcher seq 1 from loop
+  `69dfe453-ff39-46cc-b27b-5b1ea1040cf8`, and `worker_updates_pending=[]`.
+- V2 content did not deepen: V1 and V2 both had 794 chars,
+  `texture_edit_delta_chars=0`, and the V2 rationale was "Required immediate
+  Texture write call in response to the user's instruction; no substantive
+  content change intended."
+- Trace: trajectory completed, `agent_count=3`, `delegation_count=1`,
+  `moment_count=160`, `search_attempt_count=12`, `search_success_count=4`.
+  Trace included researcher `update_coagent`, one duplicate `update_coagent`
+  error, an integrate Texture run, failed `patch_texture` attempts followed by
+  retry after `required_initial_tool_failed`, and then successful `patch_texture`
+  results for V2.
+
+Result: C2/T2 is now partially supported on staging: V1 metadata is honest and a
+V2 wake can consume researcher evidence. T8 remains falsified because the
+grounded/deepening quality is absent; the revision stream can advance with a
+no-op patch that burns the worker update.
+
+Next move: inspect the scheduled-message / consumed-worker-update Texture
+first-tool path. The next repair should keep the initial V1 exact-write guard,
+but prevent evidence-bearing wake runs from satisfying the write obligation with
+an empty/no-op patch that neither incorporates nor explicitly accounts for the
+consumed findings.
+
+Rollback ref: keep `f9626242`; it repaired V1 metadata and enabled evidence
+delivery. Revert a future repair if it regresses initial V1, blocks worker-update
+delivery, or forces Texture into a hard-coded researcher workflow.
