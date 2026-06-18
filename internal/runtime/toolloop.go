@@ -384,7 +384,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		return appendMessage("user", msg)
 	}
 	appendRequiredInitialToolChoiceReminder := func(requiredName, reason string) error {
-		text := fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
+		text := requiredInitialToolChoiceReminderText(requiredName, reason)
 		msg, _ := json.Marshal(map[string]any{
 			"role": "user",
 			"content": []map[string]string{{
@@ -1291,6 +1291,15 @@ func requiredNextToolReminderText(required pendingRequiredTool, reason string) s
 		b.WriteString(reason)
 	}
 	return b.String()
+}
+
+func requiredInitialToolChoiceReminderText(requiredName, reason string) string {
+	requiredName = strings.TrimSpace(requiredName)
+	reason = strings.TrimSpace(reason)
+	if requiredName == "patch_texture" && reason == "required_initial_tool_failed" {
+		return "The previous required initial patch_texture call failed. Call patch_texture again now, and do not write prose or call any other tool. For an initial first-paint draft from a user prompt, do not try to replace prompt text and do not copy the prompt unchanged. Use an append edit with substantive draft content that changes the document. If you use a replace edit, its find text must exactly match text currently in the document."
+	}
+	return fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
 }
 
 func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvider, req ToolLoopRequest, emit EventEmitFunc) (*ToolLoopResponse, error) {

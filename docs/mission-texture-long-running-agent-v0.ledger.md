@@ -1300,3 +1300,56 @@ docs checkpoint as the first commit after the staging evidence.
 Rollback ref: revert `d7b7ae49` if Trace shows the new park waiter or waiter
 signal plumbing caused the no-V1 branch; otherwise treat the failure as the
 pre-existing stochastic no-V1 branch and repair that separately.
+
+## 2026-06-18 - Local initial patch retry guidance repair (red construct)
+
+Claim under test: the no-V1 live branch is retry exhaustion on malformed
+initial `patch_texture` calls, not a park-waiter regression. The model needs
+more precise retry pressure after a failed required initial `patch_texture`.
+
+Move: inspected authenticated product Trace details through
+`/api/trace/trajectories/{id}` and
+`/api/trace/trajectories/{id}/moments/{moment_id}`, then changed the generic
+required-initial-tool reminder text for failed `patch_texture` to direct initial
+first-paint drafts away from prompt-text replacement/no-op copies and toward an
+append edit with substantive draft content.
+
+Expected ΔV: reduce the live no-V1 branch while preserving the no-op guard and
+without adding Texture-specific harness control flow. Actual ΔV: local focused
+tests cover the observed error sequence and recover into a useful V1. Deployed
+acceptance remains open until the repair is pushed and probed.
+
+Receipts:
+
+- Failure reproduction diagnostic: `038fc8b3-a422-42a3-bf63-dbf5d6d122fe` /
+  doc `06274f82-702f-41db-9567-ce7c0e0ccbf1` failed with no appagent revision;
+  Trace ended with `tool loop: required initial tool "patch_texture" did not
+  succeed after 2 retries`.
+- Detail diagnostic: `ff54e889-bb5e-42c9-b679-f89aa9e90c9e` / doc
+  `bc97e669-3517-434a-8921-00978e5e4fa7` recovered after initial tool errors:
+  `tool_error: edit 0: find text not present`, then
+  `tool_error: initial model-prior Texture revision must change prompt content
+  before first paint is stored`, then a stored appagent V1.
+- `internal/runtime/toolloop.go` now emits a specific retry reminder for
+  failed required initial `patch_texture`.
+- `internal/runtime/texture_test.go` updates
+  `TestInitialTextureNoOpPatchRetriesIntoUsefulDraft` to exercise missing-find,
+  prompt-copy/no-op, then append-based recovery and assert the new guidance is
+  visible to the provider.
+
+Verification so far:
+
+- `nix develop -c go test ./internal/runtime -run 'TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries|TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestRuntimeAgentSignalWakesParkWaiter|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestRunToolLoopCompletionGuardRetriesEndTurn|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher' -count=1`
+
+Open blockers / remaining error:
+
+- Full runtime shards, CI, deploy identity, and deployed cadence proof remain to
+  run for this repair.
+- Even if cadence proof passes, T3/T4-T8 remain open: default parked Texture
+  lifecycle, cumulative budget across sleep/rewarm, doc-delete cancellation,
+  N:1 verifier proof, and RunAcceptanceRecord are not yet satisfied.
+
+Rollback ref: revert the initial patch retry-guidance repair if deployed
+evidence shows it increases initial Texture failures, suppresses useful V1
+creation, or weakens the prompt-copy/no-op guard.

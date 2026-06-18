@@ -487,6 +487,22 @@ live branch. It does not falsify the metadata-gated park primitive directly,
 because the probe does not enable `actor_park_on_idle`, but it blocks acceptance
 for the deployed product path.
 
+Follow-up product-path diagnostics narrowed that branch without using internal
+routes. Diagnostic `038fc8b3-a422-42a3-bf63-dbf5d6d122fe` / doc
+`06274f82-702f-41db-9567-ce7c0e0ccbf1` reproduced the no-V1 failure with
+Texture failing after `required initial tool "patch_texture" did not succeed
+after 2 retries`; every `patch_texture` result in that run was an error.
+Diagnostic `ff54e889-bb5e-42c9-b679-f89aa9e90c9e` / doc
+`bc97e669-3517-434a-8921-00978e5e4fa7` captured the actual live tool errors on
+a recovered branch: first `tool_error: edit 0: find text not present`, then
+`tool_error: initial model-prior Texture revision must change prompt content
+before first paint is stored`, then a successful stored appagent V1 and later
+V2. Current local repair makes the generic required-initial-tool retry reminder
+specific for failed initial `patch_texture`: for first-paint drafts it tells the
+model not to replace prompt text or copy it unchanged, and to use an append edit
+with substantive draft content. This targets the observed live failure without
+changing the park waiter or adding Texture-specific harness control flow.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 default parked `texture:<docID>` lifecycle, and the separate cold
 wake/reconcile scaffolding remains (`internal/runtime/texture_controller.go:24-90`),
@@ -608,12 +624,11 @@ position / live conjectures / open edges:
   repeated deployed probes should quantify whether no-V1 is rare stochastic model
   behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
 
-next move: continue from the `d7b7ae49` no-V1 staging branch: inspect Trace/run
-evidence for why the initial Texture activation produced no appagent revision,
-then continue T3/T4 by deciding how the metadata-gated waiter becomes the
-default Texture lifecycle and how the budget becomes cumulative across
-sleep/rewarm. Do not claim settlement until T4-T8 are also proven and a
-RunAcceptanceRecord exists.
+next move: land and deploy the local initial `patch_texture` retry-guidance
+repair, rerun the deployed cadence probe, then continue T3/T4 by deciding how
+the metadata-gated waiter becomes the default Texture lifecycle and how the
+budget becomes cumulative across sleep/rewarm. Do not claim settlement until
+T4-T8 are also proven and a RunAcceptanceRecord exists.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

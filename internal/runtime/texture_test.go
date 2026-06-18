@@ -2118,9 +2118,10 @@ func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req 
 
 type textureInitialNoOpThenDraftProvider struct {
 	Provider
-	choices      []string
-	attempts     int
-	sawNoOpError bool
+	choices                 []string
+	attempts                int
+	sawNoOpError            bool
+	sawInitialPatchGuidance bool
 }
 
 func (p *textureInitialNoOpThenDraftProvider) ProviderName() string {
@@ -2136,14 +2137,33 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 	for _, msg := range req.Messages {
 		if strings.Contains(string(msg), "initial model-prior Texture revision must change prompt content") {
 			p.sawNoOpError = true
-			break
+		}
+		if strings.Contains(string(msg), "Use an append edit with substantive draft content") {
+			p.sawInitialPatchGuidance = true
 		}
 	}
-	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") || p.attempts >= 2 {
+	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") || p.attempts >= 3 {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 	p.attempts++
 	if p.attempts == 1 {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-initial-missing-find",
+				Name: "patch_texture",
+				Arguments: json.RawMessage(`{
+					"edits":[{
+						"op":"replace",
+						"find":"Missing exact section",
+						"replace":"USEFUL_MODEL_PRIOR_V1"
+					}]
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+	if p.attempts == 2 {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -8171,8 +8191,15 @@ func TestInitialTextureNoOpPatchRetriesIntoUsefulDraft(t *testing.T) {
 	if !provider.sawNoOpError {
 		t.Fatalf("provider never saw initial no-op guard error; choices=%#v", provider.choices)
 	}
-	if len(provider.choices) < 3 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "function:patch_texture" || provider.choices[2] != "" {
-		t.Fatalf("initial texture choices = %#v, want exact retry then unconstrained completion", provider.choices)
+	if !provider.sawInitialPatchGuidance {
+		t.Fatalf("provider never saw initial patch failure guidance; choices=%#v", provider.choices)
+	}
+	if len(provider.choices) < 4 ||
+		provider.choices[0] != "function:patch_texture" ||
+		provider.choices[1] != "function:patch_texture" ||
+		provider.choices[2] != "function:patch_texture" ||
+		provider.choices[3] != "" {
+		t.Fatalf("initial texture choices = %#v, want exact retries then unconstrained completion", provider.choices)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
