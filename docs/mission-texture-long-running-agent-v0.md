@@ -538,16 +538,17 @@ seeds an `actor_rewarm` run-memory snapshot, carries cumulative budget metadata,
 and consumes the pending worker update without duplicate pending mutation
 (`internal/runtime/texture_test.go:4623-4827`).
 
-Remaining audited value: T5 is locally repaired for rewarm snapshot plus
-provider-call/token budget carry-forward, but not deployed. The old goroutine is
-still passivated and a replacement activation resumes the logical actor from
-memory; literal same-process continuation across OS kill is impossible and not
-claimed. Elapsed-time budgeting still measures activation wall time rather than
-durable actor active time across sleeps. T6-T8 remain open: document deletion
-still does not cancel the actor (`internal/runtime/texture.go:1048-1060`), the
-workflow verifier still needs N:1 lifecycle proof
-(`internal/runtime/texture_workflow_verifier.go:527-593`), heresy/docs need the
-remaining lifecycle update, and staging has not yet proven this T5 construct.
+Remaining audited value: T5 is deployed and accepted as a blocked
+staging-smoke slice for rewarm snapshot plus provider-call/token budget
+carry-forward. The old goroutine is still passivated and a replacement
+activation resumes the logical actor from memory; literal same-process
+continuation across OS kill is impossible and not claimed. Elapsed-time
+budgeting still measures activation wall time rather than durable actor active
+time across sleeps. T6-T8 remain open: document deletion still does not cancel
+the actor (`internal/runtime/texture.go:1048-1060`), the workflow verifier still
+needs N:1 lifecycle proof
+(`internal/runtime/texture_workflow_verifier.go:527-593`), and heresy/docs need
+the remaining lifecycle update.
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -695,10 +696,20 @@ reached V1 at 18.356s and V2 at 60.096s, then synthesized
 `staging-smoke-level`, state `blocked`. This records acceptance evidence for the
 bounded T4 slice while explicitly preserving the T5-T8 blockers.
 
-next move: land the local T5 rewarm/budget carry-forward construct, push,
-monitor CI and Node B deploy identity, run the deployed cadence probe, and then
-continue T6-T8: doc-delete cancellation, verifier N:1 lifecycle proof,
-heresy/docs updates, and a non-blocked lifecycle acceptance record.
+Deployed proof after `5f1f056a` shows the T5 rewarm/budget carry-forward
+construct did not regress the prompt-bar cadence slice. Staging health identified
+proxy and sandbox at `5f1f056a3a8ffce8d26e8f04dc1900e0628c5d78`. The formal
+cadence probe submitted `b0397265-e664-4ef6-8a0c-bbf56ec5f108` / doc
+`d7d6b6f6-2236-456d-8d54-10984d8a2247`, reached V1 at 23.635s and V2 at
+86.381s, and completed with `web_search=6`, `source_search=2`, `spawn_agent=2`,
+and `update_coagent=2`. A same-session acceptance rerun submitted
+`b35e05de-6aae-4b34-874f-1df2b8a6642b` / doc
+`b7a51541-5a44-4c8b-9e8a-76320ba1bdd7`, reached V1 at 13.220s and V2 at
+39.238s, then synthesized `RunAcceptanceRecord`
+`runacc-b5021f57de1fbd3a5c97` at `staging-smoke-level`, state `blocked`.
+
+next move: continue T6-T8: doc-delete cancellation, verifier N:1 lifecycle
+proof, heresy/docs updates, and a non-blocked lifecycle acceptance record.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

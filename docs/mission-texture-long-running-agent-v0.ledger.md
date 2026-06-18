@@ -1620,3 +1620,68 @@ Rollback ref: revert this T5 construct if CI or staging shows budget exhaustion
 false positives, missing first paint, duplicate Texture revision runs, or stuck
 pending mutations after restart. Broader mission rollback remains reverting the
 mission commits back through the last accepted checkpoint.
+
+## 2026-06-18 - Texture restart rewarm deployed and accepted as blocked staging-smoke (red proof + green record)
+
+Claim under test: commit `5f1f056a3a8ffce8d26e8f04dc1900e0628c5d78` can deploy
+the T5 rewarm/budget carry-forward construct without regressing the prompt-bar
+Texture cadence slice.
+
+Move: push `5f1f056a`, monitor GitHub Actions, verify staging health identity,
+run the deployed Texture cadence probe, then rerun a same-owner product proof
+and synthesize a `RunAcceptanceRecord`.
+
+Expected ΔV: deployed proof that fast V1 and V2+ cadence still hold after the
+rewarm/budget construct, plus a staging-smoke acceptance record for the current
+mission state. Actual ΔV: staging reached fast V1 and V2 in both probe runs, and
+a staging-smoke record was synthesized. The record remains `blocked` because
+T6-T8 are not yet settled.
+
+Receipts:
+
+- Commit: `5f1f056a3a8ffce8d26e8f04dc1900e0628c5d78`
+  (`runtime: rewarm texture actors with budget carry-forward`).
+- GitHub Actions: Docs Truth Check run `27742255861` succeeded; FlakeHub run
+  `27742255868` succeeded; CI run `27742255877` concluded failure only because
+  `Deploy to Staging (Node B)` job `82072629179` failed. CI jobs for deploy
+  impact, Docs Truth Check, Go vet/build, non-runtime Go tests, integration
+  smoke, TLA+, runtime shards 0-3, and aggregate Go vet/test/build all
+  succeeded.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `5f1f056a3a8ffce8d26e8f04dc1900e0628c5d78`, deployed at
+  `2026-06-18T06:59:02Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal deployed probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal deployed probe submission / trajectory:
+  `b0397265-e664-4ef6-8a0c-bbf56ec5f108`; doc
+  `d7d6b6f6-2236-456d-8d54-10984d8a2247`.
+- Formal deployed probe revisions: V0 user at +0.325s, 53 chars; V1 appagent
+  at +23.635s, 1021 chars; V2 appagent at +86.381s, 1816 chars.
+- Formal deployed probe counts: `appagent_revision_count=2`,
+  `total_revision_count=3`, `first_paint_ms=23635`, `web_search=6`,
+  `source_search=2`, `spawn_agent=2`, `update_coagent=2`, `moment_count=159`,
+  `agent_count=3`, `delegation_count=1`, trajectory `state=completed`.
+- Acceptance-enabled same-session proof: trajectory
+  `b35e05de-6aae-4b34-874f-1df2b8a6642b`; doc
+  `b7a51541-5a44-4c8b-9e8a-76320ba1bdd7`; V0 user at +0.317s, V1 appagent at
+  +13.220s with 872 chars, V2 appagent at +39.238s with 1728 chars;
+  `web_search=2`, `source_search=0`, `spawn_agent=2`, `update_coagent=2`,
+  `moment_count=151`, trajectory `state=completed`.
+- RunAcceptanceRecord: `runacc-b5021f57de1fbd3a5c97`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `b35e05de-6aae-4b34-874f-1df2b8a6642b`, deployment/health commit
+  `5f1f056a3a8ffce8d26e8f04dc1900e0628c5d78`, acceptance level
+  `staging-smoke-level`, state `blocked`, checkpoints `submitted` and
+  `texture_opened` passed, residual risk `continuation-level acceptance is not
+  proven until run-memory compaction and continuation evidence are recorded`.
+
+Result: T5 is deployed and product-path accepted as a blocked staging-smoke
+slice. This does not settle the mission. T6-T8 remain open: document-deletion
+cancellation, verifier N:1 lifecycle proof, heresy/docs updates, and a
+non-blocked lifecycle acceptance record.
+
+Rollback ref: revert `5f1f056a` if later staging evidence shows budget
+carry-forward false positives, stuck replacement activations, degraded
+first-paint/cadence, duplicate Texture revision runs, or pending mutations after
+restart.
