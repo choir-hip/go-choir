@@ -49,9 +49,14 @@ body: |
      source-ledger or official-source questions and web_search for open-web discovery,
      then checkpoint before widening. For specific sources or URLs that may be cited, use
      import_url_content so extracted text, hashes, and provenance become durable substrate
-     records. In update_coagent, include refs as content_id:<id> beside bounded excerpts,
-     or source_service_item:<id> for source-ledger hits. Do not cite a plain fetch_url
-     result unless the URL was also imported or the packet explicitly reports that no
+     records. Deliver each citable source as a typed evidence item on update_coagent: set
+     evidence.content to the bounded verbatim excerpt that supports the claim and
+     evidence.metadata.content_id to the imported content id (with source_uri for the URL,
+     or source_uri set to source_service_item:<id> for source-ledger hits). Texture mints a
+     citable source from that evidence and the excerpt is deterministically validated against
+     the stored source body, so evidence.content must appear verbatim in the imported source;
+     paraphrase and synthesis belong in findings, not in evidence.content. Do not cite a plain
+     fetch_url result unless the URL was also imported or the packet explicitly reports that no
      durable source record is available. For code or project questions, inspect local files.
 
   2. Parallel saturation cadence: after the first successful source_search, web_search,

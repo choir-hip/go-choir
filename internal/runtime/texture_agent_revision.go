@@ -373,10 +373,20 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 			metadata["media_source_refs"] = mediaSourceRefs
 			metadata["media_source_research_required"] = addedMediaSourceRefs
 		}
-		// Source entities are collated from deterministic media ingestion plus the
-		// typed coagent findings already persisted into metadata["source_entities"];
-		// researcher prose is no longer regex-scraped into sources here.
+		// Source entities are collated from deterministic media ingestion, the
+		// typed coagent findings already persisted into metadata["source_entities"],
+		// and (on worker integration) the typed evidence records attached to pending
+		// researcher update_coagent deliveries. Researcher prose is no longer
+		// regex-scraped into sources; excerpts arrive as typed evidence and become
+		// text_quote selectors the citation/quote validator checks at write time.
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceRefs)
+		if workerWake {
+			if evidenceEntities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(evidenceEntities) > 0 {
+				var changedEvidenceEntities bool
+				sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
+				changedSourceEntities = changedSourceEntities || changedEvidenceEntities
+			}
+		}
 		if len(sourceEntities) > 0 {
 			metadata["source_entities"] = sourceEntities
 			if changedSourceEntities {

@@ -152,17 +152,38 @@ regex researcher-prose scraping; **merge D3+D4**; **keep** body-ref normalizatio
 
 Mutation class red (researcher↔Texture source contract + canonical-write gate).
 
-**Remaining D3 wiring (honest gap)**: the runtime no longer mints `text_quote`
-selectors at all, so the quote-match branch of the gate is correct but dormant.
-Activating the "quote verifiably in source" invariant needs a typed per-source
-quote field threaded through `spawn_agent`/`update_coagent` →
-`textureHandoffRequest` → `coagentTextureRouteRequest` → a `text_quote` selector.
-Until then the gate enforces citation resolution (`unknown_source`) and would
-enforce quote-match for any future typed quote. Tracked as the next D3 step.
+### 2026-06-18 — D3 cleanly completed (typed evidence activates the quote-match gate)
+
+Instead of adding a parallel quote field, reused the **existing typed `evidence`**
+researchers already deliver on `update_coagent` (`{kind, source_uri, title,
+content, metadata}`, persisted as `EvidenceRecord`, referenced by
+`WorkerUpdateRecord.EvidenceIDs`). `evidence.content` is the bounded excerpt.
+
+- `texture_evidence_sources.go`: `evidenceRecordToSourceEntity` mints a
+  `text_quote` selector (excerpt = `evidence.content`) when the evidence
+  references a retrievable content item (`metadata.content_id`); URL-only or
+  excerpt-less evidence becomes `whole_resource`; unaddressable evidence is
+  skipped. `evidenceSourceEntitiesFromPendingUpdates` lists pending
+  `update_coagent` records addressed to `texture:<doc_id>`, loads their evidence,
+  and collates entities.
+- `texture_agent_revision.go`: on worker integration, folds those typed
+  evidence entities into `metadata["source_entities"]` — the typed replacement
+  for the deleted regex researcher-prose scrape.
+- `prompt_defaults/researcher.yaml`: replaced the prose-refs instruction
+  (`content_id:<id> beside bounded excerpts`, which fed the deleted scraper) with
+  the typed-evidence contract: put the verbatim excerpt in `evidence.content` and
+  the imported id in `evidence.metadata.content_id`; the excerpt is validated
+  verbatim against the stored source, paraphrase goes in findings.
+
+Result: the validator's `quote_not_in_source` branch is now **active** —
+proven by `TestEvidenceDerivedEntityFeedsCitationValidator` (excerpt present →
+pass; absent → `quote_not_in_source`). Builder unit tests + full
+`scripts/go-test-runtime-shards` green; build clean. Mutation class red (no new
+store column or tool field — pure reuse of typed evidence).
 
 ### State
 
-Deploy gate fixed + verified. D1 (`e7967d16`) and D2 (`f592052e`) deployed green.
-D3+D4 implemented locally (validator gate + delete prose-scraping). Next: commit +
-push (validates deploy gate), then thread the typed per-source quote field (dormant
-quote-match branch), then D5 (full-history publish).
+Deploy gate fixed + verified. D1 (`e7967d16`), D2 (`f592052e`), D3+D4
+(`7a2980c8`) deployed green. D3 completion (typed-evidence quote path) implemented
+locally. Next: commit + push (validates deploy gate), then D5 (full-history
+publish), D7 (readers/verifier reconcile + staging acceptance proof).
