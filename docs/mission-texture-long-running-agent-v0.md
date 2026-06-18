@@ -497,11 +497,27 @@ Diagnostic `ff54e889-bb5e-42c9-b679-f89aa9e90c9e` / doc
 a recovered branch: first `tool_error: edit 0: find text not present`, then
 `tool_error: initial model-prior Texture revision must change prompt content
 before first paint is stored`, then a successful stored appagent V1 and later
-V2. Current local repair makes the generic required-initial-tool retry reminder
+V2. Commit `4da4ffa3` made the generic required-initial-tool retry reminder
 specific for failed initial `patch_texture`: for first-paint drafts it tells the
 model not to replace prompt text or copy it unchanged, and to use an append edit
-with substantive draft content. This targets the observed live failure without
-changing the park waiter or adding Texture-specific harness control flow.
+with substantive draft content. CI test/build jobs passed and public `/health`
+confirmed proxy and sandbox both deployed at
+`4da4ffa3fc9d6831e3d5643b6993aaba4ad67d9e` (`deployed_at`
+`2026-06-18T05:48:23Z`). The formal deployed cadence probe then submitted
+`ce488219-549d-439e-8f90-a6c20edf2318` / doc
+`f756294c-3610-4a7d-bf3e-97bc40e55665` and observed V1 at +23.469s
+(670 chars), V2 at +67.701s (1284 chars), and V3 at +86.062s (1831 chars),
+with `appagent_revision_count=3`, `web_search=6`, `source_search=2`,
+`spawn_agent=2`, `update_coagent=4`, and trajectory `state=completed`.
+
+An acceptance-enabled rerun synthesized RunAcceptanceRecord
+`runacc-7760011a3b329bc50fb5` for trajectory
+`7df99090-4ed4-4571-a63e-cb03ed5b2f78` at `staging-smoke-level`, state
+`blocked`. That same rerun still exposed residual first-paint stochasticity:
+V1 arrived at +49.355s with only 65 chars before a substantive V2 at +83.212s.
+So the current construct supports the cadence slice on staging but does not yet
+settle the mission's stronger "useful immediate V1 every time" or long-running
+resident actor lifecycle claims.
 
 Remaining audited value: T3-T8 remain open. The runtime still has no
 default parked `texture:<docID>` lifecycle, and the separate cold
@@ -569,9 +585,12 @@ position / live conjectures / open edges:
   from-weights draft. Locally, identical prompt-only model-prior writes are now
   rejected and retried before storage; staging `84038c4a` proved both branches:
   one formal probe failed with no appagent V1, while a focused diagnostic and a
-  repeat formal probe recovered into a useful V1 and multiple V2+ revisions. The
-  active residual risk is stochastic first-write recovery, not the deterministic
-  no-op storage branch.
+  repeat formal probe recovered into a useful V1 and multiple V2+ revisions.
+  Commit `4da4ffa3` then produced a formal staging probe with V1 at +23.469s and
+  V2/V3 revisions that tracked researcher activity, but the acceptance-enabled
+  rerun still produced a weak late V1 (+49.355s, 65 chars) before substantive
+  V2. The active residual risk is stochastic first-write quality/timing, not the
+  deterministic no-op storage branch.
 - C3 partially repaired locally: "one run per agent" is more minimal as a model
   but requires a real park-and-wait + budget. The budget and role-uniform
   park-and-wait primitive now exist locally; the remaining error is enabling
@@ -618,17 +637,20 @@ position / live conjectures / open edges:
   enough for the formal probe to reach a substantive V2. The next discriminator
   is the initial no-worker exact-write branch: a prompt-sized no-op V1 should be
   rejected or retried without delaying the first useful from-weights draft into
-  the old first-findings window. The current local guard moved that branch from
-  "stored no-op V1" to a split live result: one failed no-appagent V1 branch and
-  multiple successful useful-V1 branches. The next discriminator is stability:
-  repeated deployed probes should quantify whether no-V1 is rare stochastic model
-  behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
+  the old first-findings window. The `4da4ffa3` retry-guidance repair improved
+  the formal probe into fast useful V1 plus V2/V3, but a follow-up acceptance run
+  still hit a weak late V1 branch. The next discriminator is no longer whether
+  multi-revision cadence can happen on staging; it is whether the first-paint
+  obligation should become a stronger mechanical draft scaffold or whether T4's
+  parked lifecycle should be enabled first and measure recovery over many
+  packets.
 
-next move: land and deploy the local initial `patch_texture` retry-guidance
-repair, rerun the deployed cadence probe, then continue T3/T4 by deciding how
-the metadata-gated waiter becomes the default Texture lifecycle and how the
-budget becomes cumulative across sleep/rewarm. Do not claim settlement until
-T4-T8 are also proven and a RunAcceptanceRecord exists.
+next move: continue T3/T4 from deployed `4da4ffa3`: decide how the
+metadata-gated waiter becomes the default Texture lifecycle and how the budget
+becomes cumulative across sleep/rewarm, while preserving the current
+multi-revision cadence proof and reducing weak/late V1 stochasticity. Do not
+claim settlement until T4-T8 are also proven and a non-blocked acceptance record
+exists for the relevant lifecycle level.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

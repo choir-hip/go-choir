@@ -1353,3 +1353,83 @@ Open blockers / remaining error:
 Rollback ref: revert the initial patch retry-guidance repair if deployed
 evidence shows it increases initial Texture failures, suppresses useful V1
 creation, or weakens the prompt-copy/no-op guard.
+
+## 2026-06-18 - Retry guidance deployed, cadence slice accepted, lifecycle still blocked (red proof + green record)
+
+Claim under test: the initial `patch_texture` retry-guidance repair in
+`4da4ffa3fc9d6831e3d5643b6993aaba4ad67d9e` reduces the deployed no-V1 branch
+enough for the product-path cadence probe to show fast useful V1 and multiple
+V2+ revisions again.
+
+Move: land + deployed probe + acceptance synthesis. Pushed `4da4ffa3`, monitored
+GitHub Actions, checked staging health identity, ran the formal cadence probe,
+then reran a product-path proof that synthesized a `RunAcceptanceRecord` in the
+same authenticated browser session.
+
+Expected ΔV: staged proof for the current cadence slice and a
+`staging-smoke-level` acceptance record, while leaving T4-T8 open. Actual ΔV:
+the formal cadence probe passed with fast useful V1 and V2/V3; a
+staging-smoke-level record was synthesized; the acceptance rerun exposed
+remaining weak/late V1 stochasticity and the record state is correctly blocked.
+
+Receipts:
+
+- Commit: `4da4ffa3fc9d6831e3d5643b6993aaba4ad67d9e`
+  (`runtime: guide initial texture patch retries`).
+- Local verification before commit:
+  `nix develop -c go test ./internal/runtime -run 'TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries|TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool' -count=1`;
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestRuntimeAgentSignalWakesParkWaiter|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestRunToolLoopCompletionGuardRetriesEndTurn|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`; `nix develop -c scripts/go-test-runtime-shards`.
+- GitHub Actions for `4da4ffa3`: Docs Truth Check run `27739387244` succeeded;
+  FlakeHub run `27739387274` succeeded; CI run `27739387251` concluded failure
+  only because `Deploy to Staging (Node B)` job `82063482453` failed. CI jobs
+  for Go vet/build, TLA+, non-runtime Go tests, deploy-impact detection,
+  integration smoke, internal/runtime shards 0-3, Docs Truth Check, and the
+  aggregate Go vet/test/build job all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `4da4ffa3fc9d6831e3d5643b6993aaba4ad67d9e`,
+  `deployed_at=2026-06-18T05:48:23Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Formal probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Formal probe submission / trajectory:
+  `ce488219-549d-439e-8f90-a6c20edf2318`; doc
+  `f756294c-3610-4a7d-bf3e-97bc40e55665`.
+- Formal probe revisions: V0 user at +0.274s, 53 chars; V1 appagent at
+  +23.469s, 670 chars; V2 appagent at +67.701s, 1284 chars; V3 appagent at
+  +86.062s, 1831 chars.
+- Formal probe counts: `appagent_revision_count=3`, `total_revision_count=4`,
+  `first_paint_ms=23469`, `web_search=6`, `source_search=2`, `spawn_agent=2`,
+  `update_coagent=4`, `moment_count=166`, `agent_count=3`,
+  `delegation_count=1`, final trajectory `state=completed`.
+- Acceptance-enabled rerun: trajectory
+  `7df99090-4ed4-4571-a63e-cb03ed5b2f78`; doc
+  `8f5b2eea-519a-4814-91fc-1a651742df7e`; V1 at +49.355s with 65 chars, V2 at
+  +83.212s with 1606 chars; `web_search=2`, `source_search=2`,
+  `spawn_agent=2`, `update_coagent=2`, trajectory `state=completed`.
+- RunAcceptanceRecord: `runacc-7760011a3b329bc50fb5`, target mission
+  `mission-texture-long-running-agent-v0`, trajectory
+  `7df99090-4ed4-4571-a63e-cb03ed5b2f78`, deployment/health commit
+  `4da4ffa3fc9d6831e3d5643b6993aaba4ad67d9e`, CI run `27739387251`, deploy job
+  `82063482453`, acceptance level `staging-smoke-level`, state `blocked`,
+  checkpoints `submitted` and `texture_opened` passed.
+
+Result: the cadence slice is product-path proven for one formal staging run and
+the mission now has a durable staging-smoke RunAcceptanceRecord. This does not
+settle the mission. The acceptance rerun shows the weak/late V1 branch still
+exists, and T4-T8 remain open: default parked Texture lifecycle, cumulative
+budget across sleep/rewarm, passivation-as-sleep, doc-delete cancellation, N:1
+verifier proof, and a non-blocked acceptance record for the long-running
+lifecycle are still missing.
+
+Next move: continue T3/T4. Decide how the metadata-gated park waiter becomes the
+default `texture:<docID>` lifecycle and how cumulative budget survives
+sleep/rewarm, without regressing the deployed multi-revision cadence slice or
+pretending the current wake-driven reconcile scaffolding is the final actor
+model.
+
+Rollback ref: revert `4da4ffa3` if subsequent deployed evidence shows the retry
+guidance increases initial write failures or weakens the no-op guard; otherwise
+the broader rollback for this mission remains reverting the mission commits back
+through the last accepted checkpoint.
