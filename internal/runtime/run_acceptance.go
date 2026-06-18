@@ -173,6 +173,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 			"agent_id":      payloadString(item.output, "agent_id"),
 		})
 	}
+	addAcceptanceTextureSuperDecisionCheckpoints(&builder, events)
 
 	workerResults := collectAcceptanceToolResults(events, "request_worker_vm")
 	if len(workerResults) > 0 {
@@ -369,6 +370,35 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		return types.RunAcceptanceRecord{}, err
 	}
 	return rec, nil
+}
+
+func addAcceptanceTextureSuperDecisionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
+	if builder == nil || acceptanceRecordHasPassedCheckpoint(builder.record, "super_requested") {
+		return
+	}
+	for _, ev := range events {
+		if ev.Kind != types.EventTextureDecisionRecorded {
+			continue
+		}
+		payload := parseTracePayload(ev.Payload)
+		if payloadString(payload, "decision_kind") != "delegation_opened" {
+			continue
+		}
+		ref := builder.addEventEvidence(ev, "Texture recorded deterministic downstream super execution request", map[string]any{
+			"decision_id":   payloadString(payload, "decision_id"),
+			"doc_id":        payloadString(payload, "doc_id"),
+			"decision_kind": payloadString(payload, "decision_kind"),
+			"reason":        payloadString(payload, "reason"),
+			"next_action":   payloadString(payload, "next_action"),
+		})
+		builder.addCheckpoint("super_requested", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, map[string]any{
+			"decision_id":    payloadString(payload, "decision_id"),
+			"doc_id":         payloadString(payload, "doc_id"),
+			"decision_kind":  payloadString(payload, "decision_kind"),
+			"request_source": "texture_decision",
+		})
+		return
+	}
 }
 
 func stableRunAcceptanceID(ownerID, missionID, trajectoryID string) string {

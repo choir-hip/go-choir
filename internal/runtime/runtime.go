@@ -1640,6 +1640,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		))
 		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.textureModelPriorCompletionGuard(rec)))
 	}
+	if agentProfileForRun(rec) == AgentProfileSuper && isTextureProfileValue(metadataStringValue(rec.Metadata, "requested_by_profile")) {
+		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.superTextureExecutionCompletionGuard(rec)))
+	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
@@ -2392,6 +2395,37 @@ func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLo
 			Continue:    true,
 			Reason:      "texture_model_prior_interim_needs_evidence_path",
 			Instruction: "The latest canonical Texture revision is flagged model_prior_interim for a factual/current request. That checkpoint is not completion. Continue by choosing the next legitimate agentic action: open Probe work with spawn_agent role=\"researcher\" for concise current evidence back to this Texture, request execution only if execution evidence is actually needed, send follow-up to an active worker, or record_texture_decision with a truthful no_worker_needed, delegation_deferred, wait_for_evidence, or blocker reason. Do not end with only the model-prior/interim revision.",
+		}, nil
+	}
+}
+
+func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) ToolLoopCompletionGuardFunc {
+	return func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error) {
+		if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
+			return ToolLoopCompletionGuardResult{}, nil
+		}
+		if !isTextureProfileValue(metadataStringValue(rec.Metadata, "requested_by_profile")) {
+			return ToolLoopCompletionGuardResult{}, nil
+		}
+		events, err := rt.store.ListEvents(ctx, rec.RunID, 1000)
+		if err != nil {
+			return ToolLoopCompletionGuardResult{}, fmt.Errorf("check Texture-requested super completion evidence: %w", err)
+		}
+		if eventsContainAnySuccessfulTool(events,
+			"request_worker_vm",
+			"start_worker_delegation",
+			"observe_worker_delegation",
+			"finish_worker_delegation",
+			"delegate_worker_vm",
+			"update_coagent",
+			"publish_app_change_package",
+		) {
+			return ToolLoopCompletionGuardResult{}, nil
+		}
+		return ToolLoopCompletionGuardResult{
+			Continue:    true,
+			Reason:      "texture_requested_super_execution_without_evidence",
+			Instruction: "Texture requested privileged execution for this document. Do not end this Super run with prose only. If the objective asks for worker/delegation evidence, call request_worker_vm now with the concrete purpose; after the lease, follow the runtime-required start_worker_delegation step and later observe_worker_delegation or finish_worker_delegation. If no worker can or should run, call update_coagent back to the requesting Texture document with a structured blocker and evidence refs. Do not finish until Trace contains worker/delegation evidence or a structured Texture-visible blocker.",
 		}, nil
 	}
 }

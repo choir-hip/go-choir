@@ -728,6 +728,84 @@ func TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke(t *testing.T
 	}
 }
 
+func TestRunAcceptanceTextureDecisionCountsAsSuperRequest(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	builder := acceptanceBuilder{
+		record:      types.RunAcceptanceRecord{},
+		evidenceSet: map[string]bool{},
+	}
+	addAcceptanceTextureSuperDecisionCheckpoints(&builder, []types.EventRecord{{
+		EventID:      "event-texture-delegation-opened",
+		RunID:        "run-texture",
+		AgentID:      "texture:doc-acceptance",
+		ChannelID:    "doc-acceptance",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-acceptance",
+		Timestamp:    now,
+		Kind:         types.EventTextureDecisionRecorded,
+		StreamSeq:    42,
+		Payload:      json.RawMessage(`{"decision_id":"decision-acceptance","doc_id":"doc-acceptance","decision_kind":"delegation_opened","reason":"Owner requested downstream super execution.","next_action":"Wait for super evidence."}`),
+	}})
+	checkpoint := acceptanceCheckpoint(builder.record, "super_requested", "passed")
+	if checkpoint == nil {
+		t.Fatalf("missing super_requested checkpoint: %+v", builder.record.Checkpoints)
+	}
+	if checkpoint.StreamSeq != 42 {
+		t.Fatalf("stream seq = %d, want 42", checkpoint.StreamSeq)
+	}
+	if got, _ := checkpoint.Details["request_source"].(string); got != "texture_decision" {
+		t.Fatalf("request_source = %q, want texture_decision; details=%+v", got, checkpoint.Details)
+	}
+	if len(builder.evidence) != 1 || builder.evidence[0].Kind != string(types.EventTextureDecisionRecorded) {
+		t.Fatalf("evidence = %+v, want one Texture decision event ref", builder.evidence)
+	}
+}
+
+func TestSuperTextureExecutionCompletionGuardRequiresEvidence(t *testing.T) {
+	t.Parallel()
+	rt, _ := testAPISetup(t)
+	rec := &types.RunRecord{
+		RunID:        "run-super-texture-guard",
+		AgentID:      "super:user-alice",
+		ChannelID:    "doc-texture-guard",
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		OwnerID:      "user-alice",
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataTrajectoryID: "traj-texture-guard",
+			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_agent_id": "texture:doc-texture-guard",
+			"requested_by_run_id":   "run-texture-guard",
+		},
+	}
+	guard := rt.superTextureExecutionCompletionGuard(rec)
+	result, err := guard(context.Background(), ToolLoopCompletionState{})
+	if err != nil {
+		t.Fatalf("guard: %v", err)
+	}
+	if !result.Continue || result.Reason != "texture_requested_super_execution_without_evidence" {
+		t.Fatalf("guard result = %+v, want required continuation", result)
+	}
+	if !strings.Contains(result.Instruction, "request_worker_vm") || !strings.Contains(result.Instruction, "update_coagent") {
+		t.Fatalf("guard instruction missing tool choices: %q", result.Instruction)
+	}
+
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-update", rec.RunID, rec.AgentID, "traj-texture-guard", rec.ChannelID, time.Now().UTC(), "update_coagent", map[string]any{
+		"status":    "submitted",
+		"update_id": "update-super-texture-guard",
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 1})
+	if err != nil {
+		t.Fatalf("guard after update: %v", err)
+	}
+	if result.Continue {
+		t.Fatalf("guard result after update_coagent = %+v, want satisfied", result)
+	}
+}
+
 func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
@@ -1138,19 +1216,19 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-texture-source-package",
-			AgentID:      "agent-texture-source-package",
-			ChannelID:    "channel-source-package",
-			RequestedByRunID:  "run-conductor-source-package",
-			AgentProfile: AgentProfileTexture,
-			AgentRole:    AgentProfileTexture,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Own the package proof document.",
-			CreatedAt:    now.Add(3 * time.Second),
-			UpdatedAt:    now.Add(4 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-texture-source-package",
+			AgentID:          "agent-texture-source-package",
+			ChannelID:        "channel-source-package",
+			RequestedByRunID: "run-conductor-source-package",
+			AgentProfile:     AgentProfileTexture,
+			AgentRole:        AgentProfileTexture,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Own the package proof document.",
+			CreatedAt:        now.Add(3 * time.Second),
+			UpdatedAt:        now.Add(4 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileTexture,
 				runMetadataAgentRole:    AgentProfileTexture,
@@ -1159,19 +1237,19 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-super-source-package",
-			AgentID:      "agent-super-source-package",
-			ChannelID:    "channel-source-package",
-			RequestedByRunID:  "run-texture-source-package",
-			AgentProfile: AgentProfileSuper,
-			AgentRole:    AgentProfileSuper,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and publish one AppChangePackage.",
-			CreatedAt:    now.Add(5 * time.Second),
-			UpdatedAt:    now.Add(12 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-super-source-package",
+			AgentID:          "agent-super-source-package",
+			ChannelID:        "channel-source-package",
+			RequestedByRunID: "run-texture-source-package",
+			AgentProfile:     AgentProfileSuper,
+			AgentRole:        AgentProfileSuper,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Delegate a worker and publish one AppChangePackage.",
+			CreatedAt:        now.Add(5 * time.Second),
+			UpdatedAt:        now.Add(12 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileSuper,
 				runMetadataAgentRole:    AgentProfileSuper,
@@ -1294,19 +1372,19 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-texture-runtime-supervision",
-			AgentID:      "agent-texture-runtime-supervision",
-			ChannelID:    "channel-runtime-supervision",
-			RequestedByRunID:  "run-conductor-runtime-supervision",
-			AgentProfile: AgentProfileTexture,
-			AgentRole:    AgentProfileTexture,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Own the runtime supervision document.",
-			CreatedAt:    now.Add(3 * time.Second),
-			UpdatedAt:    now.Add(4 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-texture-runtime-supervision",
+			AgentID:          "agent-texture-runtime-supervision",
+			ChannelID:        "channel-runtime-supervision",
+			RequestedByRunID: "run-conductor-runtime-supervision",
+			AgentProfile:     AgentProfileTexture,
+			AgentRole:        AgentProfileTexture,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Own the runtime supervision document.",
+			CreatedAt:        now.Add(3 * time.Second),
+			UpdatedAt:        now.Add(4 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileTexture,
 				runMetadataAgentRole:    AgentProfileTexture,
@@ -1315,19 +1393,19 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-super-runtime-supervision",
-			AgentID:      "agent-super-runtime-supervision",
-			ChannelID:    "channel-runtime-supervision",
-			RequestedByRunID:  "run-texture-runtime-supervision",
-			AgentProfile: AgentProfileSuper,
-			AgentRole:    AgentProfileSuper,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and collect a Texture worker update. Do not publish an AppChangePackage.",
-			CreatedAt:    now.Add(5 * time.Second),
-			UpdatedAt:    now.Add(12 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-super-runtime-supervision",
+			AgentID:          "agent-super-runtime-supervision",
+			ChannelID:        "channel-runtime-supervision",
+			RequestedByRunID: "run-texture-runtime-supervision",
+			AgentProfile:     AgentProfileSuper,
+			AgentRole:        AgentProfileSuper,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Delegate a worker and collect a Texture worker update. Do not publish an AppChangePackage.",
+			CreatedAt:        now.Add(5 * time.Second),
+			UpdatedAt:        now.Add(12 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileSuper,
 				runMetadataAgentRole:    AgentProfileSuper,
@@ -1458,19 +1536,19 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			},
 		},
 		{
-			RunID:        "run-texture-acceptance",
-			AgentID:      "agent-texture-acceptance",
-			ChannelID:    "channel-acceptance",
-			RequestedByRunID:  "run-conductor-acceptance",
-			AgentProfile: AgentProfileTexture,
-			AgentRole:    AgentProfileTexture,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Own the acceptance document.",
-			CreatedAt:    now.Add(3 * time.Second),
-			UpdatedAt:    now.Add(4 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-texture-acceptance",
+			AgentID:          "agent-texture-acceptance",
+			ChannelID:        "channel-acceptance",
+			RequestedByRunID: "run-conductor-acceptance",
+			AgentProfile:     AgentProfileTexture,
+			AgentRole:        AgentProfileTexture,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Own the acceptance document.",
+			CreatedAt:        now.Add(3 * time.Second),
+			UpdatedAt:        now.Add(4 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileTexture,
 				runMetadataAgentRole:    AgentProfileTexture,
@@ -1479,19 +1557,19 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			},
 		},
 		{
-			RunID:        "run-super-acceptance",
-			AgentID:      "agent-super-acceptance",
-			ChannelID:    "channel-acceptance",
-			RequestedByRunID:  "run-texture-acceptance",
-			AgentProfile: AgentProfileSuper,
-			AgentRole:    AgentProfileSuper,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and publish an AppChangePackage.",
-			CreatedAt:    now.Add(5 * time.Second),
-			UpdatedAt:    now.Add(12 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-super-acceptance",
+			AgentID:          "agent-super-acceptance",
+			ChannelID:        "channel-acceptance",
+			RequestedByRunID: "run-texture-acceptance",
+			AgentProfile:     AgentProfileSuper,
+			AgentRole:        AgentProfileSuper,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Delegate a worker and publish an AppChangePackage.",
+			CreatedAt:        now.Add(5 * time.Second),
+			UpdatedAt:        now.Add(12 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileSuper,
 				runMetadataAgentRole:    AgentProfileSuper,
@@ -1643,19 +1721,19 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-texture-acceptance",
-			AgentID:      "agent-texture-acceptance",
-			ChannelID:    "channel-acceptance",
-			RequestedByRunID:  "run-conductor-acceptance",
-			AgentProfile: AgentProfileTexture,
-			AgentRole:    AgentProfileTexture,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Own the acceptance document.",
-			CreatedAt:    now.Add(3 * time.Second),
-			UpdatedAt:    now.Add(4 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-texture-acceptance",
+			AgentID:          "agent-texture-acceptance",
+			ChannelID:        "channel-acceptance",
+			RequestedByRunID: "run-conductor-acceptance",
+			AgentProfile:     AgentProfileTexture,
+			AgentRole:        AgentProfileTexture,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Own the acceptance document.",
+			CreatedAt:        now.Add(3 * time.Second),
+			UpdatedAt:        now.Add(4 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileTexture,
 				runMetadataAgentRole:    AgentProfileTexture,
@@ -1664,19 +1742,19 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-super-acceptance",
-			AgentID:      "agent-super-acceptance",
-			ChannelID:    "channel-acceptance",
-			RequestedByRunID:  "run-texture-acceptance",
-			AgentProfile: AgentProfileSuper,
-			AgentRole:    AgentProfileSuper,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Delegate a worker and publish an AppChangePackage.",
-			CreatedAt:    now.Add(5 * time.Second),
-			UpdatedAt:    now.Add(12 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-super-acceptance",
+			AgentID:          "agent-super-acceptance",
+			ChannelID:        "channel-acceptance",
+			RequestedByRunID: "run-texture-acceptance",
+			AgentProfile:     AgentProfileSuper,
+			AgentRole:        AgentProfileSuper,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Delegate a worker and publish an AppChangePackage.",
+			CreatedAt:        now.Add(5 * time.Second),
+			UpdatedAt:        now.Add(12 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileSuper,
 				runMetadataAgentRole:    AgentProfileSuper,
@@ -1762,19 +1840,19 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-texture-pending-delegate",
-			AgentID:      "agent-texture-pending-delegate",
-			ChannelID:    "channel-pending-delegate",
-			RequestedByRunID:  "run-conductor-pending-delegate",
-			AgentProfile: AgentProfileTexture,
-			AgentRole:    AgentProfileTexture,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunCompleted,
-			Prompt:       "Own the acceptance document.",
-			CreatedAt:    now.Add(3 * time.Second),
-			UpdatedAt:    now.Add(4 * time.Second),
-			FinishedAt:   &finishedAt,
+			RunID:            "run-texture-pending-delegate",
+			AgentID:          "agent-texture-pending-delegate",
+			ChannelID:        "channel-pending-delegate",
+			RequestedByRunID: "run-conductor-pending-delegate",
+			AgentProfile:     AgentProfileTexture,
+			AgentRole:        AgentProfileTexture,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunCompleted,
+			Prompt:           "Own the acceptance document.",
+			CreatedAt:        now.Add(3 * time.Second),
+			UpdatedAt:        now.Add(4 * time.Second),
+			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileTexture,
 				runMetadataAgentRole:    AgentProfileTexture,
@@ -1783,18 +1861,18 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			},
 		},
 		{
-			RunID:        "run-super-pending-delegate",
-			AgentID:      "agent-super-pending-delegate",
-			ChannelID:    "channel-pending-delegate",
-			RequestedByRunID:  "run-texture-pending-delegate",
-			AgentProfile: AgentProfileSuper,
-			AgentRole:    AgentProfileSuper,
-			OwnerID:      "user-alice",
-			SandboxID:    "sandbox-test",
-			State:        types.RunRunning,
-			Prompt:       "Delegate a worker and publish an AppChangePackage.",
-			CreatedAt:    now.Add(5 * time.Second),
-			UpdatedAt:    now.Add(8 * time.Second),
+			RunID:            "run-super-pending-delegate",
+			AgentID:          "agent-super-pending-delegate",
+			ChannelID:        "channel-pending-delegate",
+			RequestedByRunID: "run-texture-pending-delegate",
+			AgentProfile:     AgentProfileSuper,
+			AgentRole:        AgentProfileSuper,
+			OwnerID:          "user-alice",
+			SandboxID:        "sandbox-test",
+			State:            types.RunRunning,
+			Prompt:           "Delegate a worker and publish an AppChangePackage.",
+			CreatedAt:        now.Add(5 * time.Second),
+			UpdatedAt:        now.Add(8 * time.Second),
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileSuper,
 				runMetadataAgentRole:    AgentProfileSuper,
