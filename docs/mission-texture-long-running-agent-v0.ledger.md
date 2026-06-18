@@ -1777,3 +1777,67 @@ Rollback ref: revert `6f54e890` if later evidence shows document deletion blocks
 valid deletes, cancels another owner's actor, leaves stuck mutations, or causes
 verifier false positives/false negatives around worker-update routing or N:1
 Texture write causality.
+
+## 2026-06-18 - Deployed doc-delete cancellation product proof (red probe + green record)
+
+Claim under test: the local T6 cancellation repair in
+`6f54e8906205e38db14a2460c13d44666cef9532` embeds in the deployed product path:
+deleting a Texture document with a pending resident actor cancels the live
+trajectory and removes the document.
+
+Move: run an ephemeral Playwright/Node probe against `https://choir.news` using
+only public product APIs and a synthetic registered owner. The probe submitted
+through prompt-bar, waited for a Texture decision and live Trace evidence,
+deleted the document via `/api/texture/documents/{id}`, then checked document
+404 and `/api/trace/trajectories/{id}` terminal state.
+
+Expected ΔV: close the T8 delete-specific staging proof gap. Actual ΔV:
+delete-specific deployed proof is supported for the synthetic prompt-bar
+Texture path; the non-blocked lifecycle acceptance, elapsed-time budget across
+sleep, wake/reconcile collapse, Trace projection, and first-write stochasticity
+remain open.
+
+Receipts:
+
+- Deployed identity: `/health` reported proxy and sandbox both at
+  `6f54e8906205e38db14a2460c13d44666cef9532`, deployed at
+  `2026-06-18T07:33:56Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Probe command shape:
+  `nix shell nixpkgs#nodejs_22 -c node --input-type=module` with imports from
+  `frontend/node_modules/playwright/index.mjs`,
+  `frontend/tests/helpers/auth.js`, and
+  `frontend/tests/helpers/webauthn.js`.
+- Synthetic owner:
+  `texture-delete-1781769027471-80u7r7@example.com`.
+- Prompt-bar submission / trajectory:
+  `33433a32-2d00-400d-b471-81277b731282`; doc
+  `40d38988-6427-4ee7-aefe-e36826570981`.
+- Pre-delete state: Trace `state=running`, `live=true`, `agent_count=2`,
+  `delegation_count=0`, `moment_count=11`, with
+  `texture:40d38988-6427-4ee7-aefe-e36826570981` profile `texture` state
+  `running`. Document GET returned version 0 with `agent_revision_pending=true`
+  and `agent_revision_run_id=00d01775-4e20-48d2-96c2-0a847cd36797`.
+- Delete action: `DELETE /api/texture/documents/40d38988-6427-4ee7-aefe-e36826570981`
+  returned HTTP 200 body `{"ok":true}` at +372ms from prompt submit.
+- Post-delete document proof:
+  `GET /api/texture/documents/40d38988-6427-4ee7-aefe-e36826570981` returned
+  HTTP 404 body `{"error":"document not found"}`.
+- Post-delete Trace proof: trajectory `33433a32-2d00-400d-b471-81277b731282`
+  ended `state=cancelled`, `live=false`, `agent_count=2`,
+  `delegation_count=0`, `moment_count=13`; Texture agent state was
+  `cancelled`; cancellation moments included `loop.cancelled` and
+  `texture.agent_revision.failed`, both summarized as `context canceled`.
+
+Result: deployed doc-delete cancellation is supported for a live pending
+prompt-bar Texture actor. This is product-path proof, not a local/store-only
+claim.
+
+Open edge: T8 is still not settled. This probe did not prove non-blocked
+lifecycle acceptance, elapsed-time budget across sleeps, removal/collapse of all
+wake/reconcile scaffolding, Trace projection legibility over long N:1 streams,
+or deterministic useful first paint.
+
+Rollback ref: no new runtime change in this pass. If this probe later becomes
+flaky or contradicts future evidence, rollback target remains the T6 runtime
+commit `6f54e8906205e38db14a2460c13d44666cef9532`.

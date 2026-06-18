@@ -550,8 +550,8 @@ worker-update checks to updates addressed to the routed Texture document
 `internal/runtime/texture_workflow_verifier.go:250-258`), with direct N:1 proof
 (`internal/runtime/texture_workflow_verifier_test.go:362-418`), doctrine updates,
 and doccheck coverage for `WithInitialToolChoice`. Deployed staging proof after
-`6f54e890` is cadence non-regression plus a blocked staging-smoke acceptance
-record, not delete-specific product proof. The formal deployed probe
+`6f54e890` is cadence non-regression, a blocked staging-smoke acceptance
+record, and delete-specific product proof. The formal deployed probe
 `971f62fc-b451-4683-95c2-91e38a7e0c72` / doc
 `ded70294-5bd8-46ee-8cca-9767a0c11301` reached V1 at 13.281s and V2 at
 60.538s. The same-session acceptance proof
@@ -559,9 +559,17 @@ record, not delete-specific product proof. The formal deployed probe
 `d3269cd5-cc93-49c4-9cb0-8c38f4fbe7f2` reached V1 at 8.131s and V2 at
 47.374s, then synthesized `RunAcceptanceRecord`
 `runacc-bc65036ba592ab3b18cd` at `staging-smoke-level`, state `blocked`.
-Remaining T8: non-blocked lifecycle acceptance, delete-specific staging proof if
-required, elapsed-time budget across sleeps, full removal/collapse of
-wake/reconcile scaffolding, and stronger first-write determinism if needed.
+The delete-cancellation probe submitted
+`33433a32-2d00-400d-b471-81277b731282` / doc
+`40d38988-6427-4ee7-aefe-e36826570981`; before delete, Trace showed
+`texture:40d38988-6427-4ee7-aefe-e36826570981` running and the document exposed
+`agent_revision_pending=true` with run
+`00d01775-4e20-48d2-96c2-0a847cd36797`. DELETE returned 200 at +0.372s, the
+document then returned 404, and Trace ended `state=cancelled`, `live=false`,
+with the Texture agent state `cancelled`. Remaining T8: non-blocked lifecycle
+acceptance, elapsed-time budget across sleeps, full removal/collapse of
+wake/reconcile scaffolding, Trace projection legibility, and stronger
+first-write determinism if needed.
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -634,8 +642,9 @@ position / live conjectures / open edges:
   mechanism, not an immortal process.
 - C5 partially repaired: cost/runaway and cancellation are the top risks of a
   long-lived actor. Provider-call/token budget carry-forward and doc-delete
-  cancellation now have local construct proof; elapsed-time budget across sleeps
-  and deployed delete-specific product proof remain open.
+  cancellation now have local construct proof; doc-delete cancellation also has
+  deployed product-path proof on staging. Elapsed-time budget across sleeps
+  remains open.
 - C6 partially repaired locally: collapsing many revisions into one run must not
   muddy trajectory/work-item attribution or the per-revision supervision
   narrative. The workflow verifier now accepts N:1 loop-to-revision causality;
@@ -726,8 +735,9 @@ and `update_coagent=2`. A same-session acceptance rerun submitted
 `runacc-b5021f57de1fbd3a5c97` at `staging-smoke-level`, state `blocked`.
 
 Deployed proof after `6f54e890` shows the T6/T7 cancellation/verifier/heresy
-slice did not regress the prompt-bar cadence slice. Staging health identified
-proxy and sandbox at `6f54e8906205e38db14a2460c13d44666cef9532`. The formal
+slice did not regress the prompt-bar cadence slice, and later product-path proof
+shows doc-delete cancels a live pending Texture actor on staging. Staging health
+identified proxy and sandbox at `6f54e8906205e38db14a2460c13d44666cef9532`. The formal
 cadence probe submitted `971f62fc-b451-4683-95c2-91e38a7e0c72` / doc
 `ded70294-5bd8-46ee-8cca-9767a0c11301`, reached V1 at 13.281s and V2 at
 60.538s, and completed with `web_search=2`, `source_search=2`,
@@ -736,9 +746,15 @@ submitted `da8a98bd-a42b-499f-ac94-e70d4b0d17b1` / doc
 `d3269cd5-cc93-49c4-9cb0-8c38f4fbe7f2`, reached V1 at 8.131s and V2 at
 47.374s, then synthesized `RunAcceptanceRecord`
 `runacc-bc65036ba592ab3b18cd` at `staging-smoke-level`, state `blocked`.
+The delete-cancellation probe submitted
+`33433a32-2d00-400d-b471-81277b731282` / doc
+`40d38988-6427-4ee7-aefe-e36826570981`, observed
+`agent_revision_pending=true` and Trace `state=running`, `live=true`,
+`agent_count=2` before deletion, then DELETE returned 200, document GET returned
+404, and Trace ended `state=cancelled`, `live=false`, with the Texture agent
+state `cancelled`.
 
-next move: continue T8: decide whether to run delete-specific deployed
-cancellation proof, then chase non-blocked lifecycle acceptance. Residuals:
+next move: continue T8: chase non-blocked lifecycle acceptance. Residuals:
 elapsed-time budget across sleep, full wake/reconcile collapse, Trace projection
 legibility, and first-write stochasticity.
 
