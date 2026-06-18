@@ -328,6 +328,27 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		runMetadata["actor_park_on_idle"] = true
 		runMetadata["actor_park_idle_seconds"] = int((rt.cfg.TextureActorParkIdle + time.Second - 1) / time.Second)
 	}
+	if rt != nil {
+		if spend, ok, err := rt.latestActorToolLoopBudgetSpend(ctx, ownerID, currentTextureAgentID(doc.DocID)); err != nil {
+			log.Printf("texture api: load actor budget spend for doc %s: %v", doc.DocID, err)
+		} else if ok {
+			runMetadata["actor_rewarm_source_loop_id"] = spend.SourceRunID
+			if spend.ProviderCalls > 0 {
+				runMetadata["actor_budget_spent_provider_calls"] = spend.ProviderCalls
+			}
+			if spend.InputTokens > 0 {
+				runMetadata["actor_budget_spent_input_tokens"] = spend.InputTokens
+			}
+			if spend.OutputTokens > 0 {
+				runMetadata["actor_budget_spent_output_tokens"] = spend.OutputTokens
+			}
+			if spend.ObservedUsageEvent {
+				runMetadata["actor_budget_spend_source"] = "tool_loop_budget_usage"
+			} else {
+				runMetadata["actor_budget_spend_source"] = "provider_call_events"
+			}
+		}
+	}
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq
 	}

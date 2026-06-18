@@ -2279,7 +2279,77 @@ func textureActorToolLoopBudget(rec *types.RunRecord) ToolLoopBudget {
 	if value := metadataIntValue(rec.Metadata, "actor_budget_max_elapsed_seconds"); value > 0 {
 		budget.MaxElapsed = time.Duration(value) * time.Second
 	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_spent_provider_calls"); value > 0 {
+		budget.SpentProviderCalls = value
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_spent_input_tokens"); value > 0 {
+		budget.SpentInputTokens = value
+	}
+	if value := metadataIntValue(rec.Metadata, "actor_budget_spent_output_tokens"); value > 0 {
+		budget.SpentOutputTokens = value
+	}
 	return budget
+}
+
+type actorToolLoopBudgetSpend struct {
+	SourceRunID        string
+	ProviderCalls      int
+	InputTokens        int
+	OutputTokens       int
+	ObservedUsageEvent bool
+}
+
+func (rt *Runtime) latestActorToolLoopBudgetSpend(ctx context.Context, ownerID, agentID string) (actorToolLoopBudgetSpend, bool, error) {
+	var spend actorToolLoopBudgetSpend
+	if rt == nil || rt.store == nil {
+		return spend, false, nil
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	if ownerID == "" || agentID == "" {
+		return spend, false, nil
+	}
+	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, agentID, "")
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return spend, false, nil
+		}
+		return spend, false, err
+	}
+	spend.SourceRunID = sourceRunID
+	eventsForRun, err := rt.store.ListEvents(ctx, sourceRunID, 5000)
+	if err != nil {
+		return spend, false, err
+	}
+	providerCallsFromPreflight := 0
+	for _, ev := range eventsForRun {
+		if ev.Kind != types.EventRunProgress {
+			continue
+		}
+		switch ev.Phase {
+		case "provider_call":
+			providerCallsFromPreflight++
+		case "tool_loop_budget_usage", "tool_loop_budget":
+			var payload map[string]any
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				continue
+			}
+			spend.ObservedUsageEvent = true
+			if value := metadataIntValue(payload, "provider_calls"); value > spend.ProviderCalls {
+				spend.ProviderCalls = value
+			}
+			if value := metadataIntValue(payload, "input_tokens"); value > spend.InputTokens {
+				spend.InputTokens = value
+			}
+			if value := metadataIntValue(payload, "output_tokens"); value > spend.OutputTokens {
+				spend.OutputTokens = value
+			}
+		}
+	}
+	if spend.ProviderCalls == 0 && providerCallsFromPreflight > 0 {
+		spend.ProviderCalls = providerCallsFromPreflight
+	}
+	return spend, true, nil
 }
 
 func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLoopCompletionGuardFunc {

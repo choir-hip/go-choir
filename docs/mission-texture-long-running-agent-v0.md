@@ -519,17 +519,35 @@ So the current construct supports the cadence slice on staging but does not yet
 settle the mission's stronger "useful immediate V1 every time" or long-running
 resident actor lifecycle claims.
 
-Remaining audited value: T3-T8 remain open. The runtime still has no
-default parked `texture:<docID>` lifecycle, and the separate cold
-wake/reconcile scaffolding remains (`internal/runtime/texture_controller.go:24-90`),
-so this construct proves a bounded, signal-wakeable resident-run substrate but
-does not yet make `texture:<docID>` a single parked resident actor. Restart still
-passivates Texture revision runs by marking pending mutations stale
-(`internal/runtime/runtime.go:1261-1302`), document deletion still deletes the
-document without cancelling the actor (`internal/runtime/texture.go:1048-1060`),
-and the workflow verifier still checks revision causality without proving the
-new one-run-to-many-revisions lifecycle end to end
-(`internal/runtime/texture_workflow_verifier.go:527-593`).
+Current local T5 construct after the bounded default-park staging proof:
+replacement Texture activations now carry an `actor_rewarm_source_loop_id` and
+budget-spend baseline from the latest completed/passivated run for the same
+owner+agent. The generic tool-loop budget accepts prior provider-call and token
+spend, emits `tool_loop_budget_usage` after every provider response, and checks
+new activations against cumulative spend rather than granting a fresh full
+budget (`internal/runtime/toolloop.go:151-160`,
+`internal/runtime/toolloop.go:580-585`,
+`internal/runtime/toolloop.go:992-1078`). Texture revision run metadata reads
+that spend from durable prior-run events and stores it on rewarm
+(`internal/runtime/runtime.go:2246-2325`,
+`internal/runtime/texture_agent_revision.go:327-350`). The restart regression
+now uses a real durable `update_coagent` row, passivates an interrupted Texture
+run with prior run-memory and budget events, then proves the replacement
+activation stores a recovered appagent revision, marks the old mutation stale,
+seeds an `actor_rewarm` run-memory snapshot, carries cumulative budget metadata,
+and consumes the pending worker update without duplicate pending mutation
+(`internal/runtime/texture_test.go:4623-4827`).
+
+Remaining audited value: T5 is locally repaired for rewarm snapshot plus
+provider-call/token budget carry-forward, but not deployed. The old goroutine is
+still passivated and a replacement activation resumes the logical actor from
+memory; literal same-process continuation across OS kill is impossible and not
+claimed. Elapsed-time budgeting still measures activation wall time rather than
+durable actor active time across sleeps. T6-T8 remain open: document deletion
+still does not cancel the actor (`internal/runtime/texture.go:1048-1060`), the
+workflow verifier still needs N:1 lifecycle proof
+(`internal/runtime/texture_workflow_verifier.go:527-593`), heresy/docs need the
+remaining lifecycle update, and staging has not yet proven this T5 construct.
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -658,11 +676,15 @@ while parked, consumes a later `update_coagent` packet without a cold wake run,
 writes V2 in the same run, marks the worker update delivered, and keeps first
 turn `patch_texture` exact while parked follow-up turns are unconstrained.
 
-This is a bounded T4 construct, not full settlement. It does not yet make
-parked time survive process restart as logical sleep, does not make the budget
-cumulative across sleep/rewarm, does not remove every wake/reconcile scaffold,
-and does not update verifier/doc-delete cancellation/heresy doctrine. It should
-be deployed and measured against the product cadence probe next.
+This is a bounded T4 construct, not full settlement. It has now been extended
+locally with a T5 rewarm construct: a restarted Texture actor passivates the old
+activation, marks the old mutation stale, starts a replacement activation for
+the same logical `texture:<docID>` actor, seeds an `actor_rewarm` memory snapshot,
+and carries provider-call/token budget spend into the new activation. It still
+does not remove every wake/reconcile scaffold, does not make elapsed-time budget
+durable across sleep, and does not update verifier/doc-delete
+cancellation/heresy doctrine. It should be deployed and measured against the
+product cadence probe next.
 
 Deployed proof after `68c6e5b0` shows the bounded default-park construct did not
 regress the product cadence slice. Staging health identified proxy and sandbox at
@@ -673,10 +695,10 @@ reached V1 at 18.356s and V2 at 60.096s, then synthesized
 `staging-smoke-level`, state `blocked`. This records acceptance evidence for the
 bounded T4 slice while explicitly preserving the T5-T8 blockers.
 
-next move: continue T5 from deployed `68c6e5b0`: make parked time survive
-process restart as logical sleep, make budget accounting cumulative across
-sleep/rewarm, then update verifier/doc-delete cancellation/heresy doctrine and
-produce a non-blocked acceptance record for the full lifecycle level.
+next move: land the local T5 rewarm/budget carry-forward construct, push,
+monitor CI and Node B deploy identity, run the deployed cadence probe, and then
+continue T6-T8: doc-delete cancellation, verifier N:1 lifecycle proof,
+heresy/docs updates, and a non-blocked lifecycle acceptance record.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 

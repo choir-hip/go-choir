@@ -149,12 +149,15 @@ type ToolLoopParkWaiterFunc func(ctx context.Context, state ToolLoopParkState) (
 // intentionally role-neutral: callers attach policy, while RunToolLoop enforces
 // provider-call, token, and elapsed-time limits uniformly.
 type ToolLoopBudget struct {
-	Label            string
-	MaxProviderCalls int
-	MaxInputTokens   int
-	MaxOutputTokens  int
-	MaxTotalTokens   int
-	MaxElapsed       time.Duration
+	Label              string
+	SpentProviderCalls int
+	SpentInputTokens   int
+	SpentOutputTokens  int
+	MaxProviderCalls   int
+	MaxInputTokens     int
+	MaxOutputTokens    int
+	MaxTotalTokens     int
+	MaxElapsed         time.Duration
 }
 
 type toolLoopOptions struct {
@@ -577,6 +580,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 		// Accumulate token usage.
 		totalUsage.InputTokens += resp.Usage.InputTokens
 		totalUsage.OutputTokens += resp.Usage.OutputTokens
+		emitToolLoopBudgetUsage(emit, options.budget, i+1, totalUsage)
 		if err := checkToolLoopBudgetAfterProvider(options.budget, totalUsage); err != nil {
 			emitToolLoopBudgetExhausted(emit, options.budget, i+1, totalUsage, err)
 			return "", totalUsage, err
@@ -990,8 +994,9 @@ func checkToolLoopBudgetBeforeProvider(budget ToolLoopBudget, providerCalls int,
 		return nil
 	}
 	label := toolLoopBudgetLabel(budget)
-	if budget.MaxProviderCalls > 0 && providerCalls >= budget.MaxProviderCalls {
-		return fmt.Errorf("tool loop budget %q exhausted: provider calls %d reached max %d", label, providerCalls, budget.MaxProviderCalls)
+	spentProviderCalls := budget.SpentProviderCalls + providerCalls
+	if budget.MaxProviderCalls > 0 && spentProviderCalls >= budget.MaxProviderCalls {
+		return fmt.Errorf("tool loop budget %q exhausted: provider calls %d reached max %d", label, spentProviderCalls, budget.MaxProviderCalls)
 	}
 	if budget.MaxElapsed > 0 && time.Since(startedAt) >= budget.MaxElapsed {
 		return fmt.Errorf("tool loop budget %q exhausted: elapsed time reached max %s", label, budget.MaxElapsed)
@@ -1004,13 +1009,15 @@ func checkToolLoopBudgetAfterProvider(budget ToolLoopBudget, usage TokenUsage) e
 		return nil
 	}
 	label := toolLoopBudgetLabel(budget)
-	if budget.MaxInputTokens > 0 && usage.InputTokens > budget.MaxInputTokens {
-		return fmt.Errorf("tool loop budget %q exhausted: input tokens %d exceeded max %d", label, usage.InputTokens, budget.MaxInputTokens)
+	inputTokens := budget.SpentInputTokens + usage.InputTokens
+	outputTokens := budget.SpentOutputTokens + usage.OutputTokens
+	if budget.MaxInputTokens > 0 && inputTokens > budget.MaxInputTokens {
+		return fmt.Errorf("tool loop budget %q exhausted: input tokens %d exceeded max %d", label, inputTokens, budget.MaxInputTokens)
 	}
-	if budget.MaxOutputTokens > 0 && usage.OutputTokens > budget.MaxOutputTokens {
-		return fmt.Errorf("tool loop budget %q exhausted: output tokens %d exceeded max %d", label, usage.OutputTokens, budget.MaxOutputTokens)
+	if budget.MaxOutputTokens > 0 && outputTokens > budget.MaxOutputTokens {
+		return fmt.Errorf("tool loop budget %q exhausted: output tokens %d exceeded max %d", label, outputTokens, budget.MaxOutputTokens)
 	}
-	total := usage.InputTokens + usage.OutputTokens
+	total := inputTokens + outputTokens
 	if budget.MaxTotalTokens > 0 && total > budget.MaxTotalTokens {
 		return fmt.Errorf("tool loop budget %q exhausted: total tokens %d exceeded max %d", label, total, budget.MaxTotalTokens)
 	}
@@ -1024,13 +1031,32 @@ func emitToolLoopBudgetExhausted(emit EventEmitFunc, budget ToolLoopBudget, prov
 	payload, _ := json.Marshal(map[string]any{
 		"reason":         "tool_loop_budget_exhausted",
 		"error":          cause.Error(),
-		"provider_calls": providerCalls,
-		"input_tokens":   usage.InputTokens,
-		"output_tokens":  usage.OutputTokens,
-		"total_tokens":   usage.InputTokens + usage.OutputTokens,
+		"provider_calls": budget.SpentProviderCalls + providerCalls,
+		"input_tokens":   budget.SpentInputTokens + usage.InputTokens,
+		"output_tokens":  budget.SpentOutputTokens + usage.OutputTokens,
+		"total_tokens":   budget.SpentInputTokens + budget.SpentOutputTokens + usage.InputTokens + usage.OutputTokens,
 		"budget":         toolLoopBudgetPayload(budget),
 	})
 	emit(types.EventRunProgress, "tool_loop_budget", payload)
+}
+
+func emitToolLoopBudgetUsage(emit EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage) {
+	if emit == nil || !budget.active() {
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"reason":                    "tool_loop_budget_usage",
+		"label":                     toolLoopBudgetLabel(budget),
+		"provider_calls":            budget.SpentProviderCalls + providerCalls,
+		"input_tokens":              budget.SpentInputTokens + usage.InputTokens,
+		"output_tokens":             budget.SpentOutputTokens + usage.OutputTokens,
+		"total_tokens":              budget.SpentInputTokens + budget.SpentOutputTokens + usage.InputTokens + usage.OutputTokens,
+		"activation_provider_calls": providerCalls,
+		"activation_input_tokens":   usage.InputTokens,
+		"activation_output_tokens":  usage.OutputTokens,
+		"budget":                    toolLoopBudgetPayload(budget),
+	})
+	emit(types.EventRunProgress, "tool_loop_budget_usage", payload)
 }
 
 func toolLoopBudgetPayload(budget ToolLoopBudget) map[string]any {
@@ -1039,6 +1065,15 @@ func toolLoopBudgetPayload(budget ToolLoopBudget) map[string]any {
 	}
 	if label := strings.TrimSpace(budget.Label); label != "" {
 		payload["label"] = label
+	}
+	if budget.SpentProviderCalls > 0 {
+		payload["spent_provider_calls"] = budget.SpentProviderCalls
+	}
+	if budget.SpentInputTokens > 0 {
+		payload["spent_input_tokens"] = budget.SpentInputTokens
+	}
+	if budget.SpentOutputTokens > 0 {
+		payload["spent_output_tokens"] = budget.SpentOutputTokens
 	}
 	if budget.MaxProviderCalls > 0 {
 		payload["max_provider_calls"] = budget.MaxProviderCalls

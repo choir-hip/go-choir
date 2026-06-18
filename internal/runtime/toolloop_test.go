@@ -2513,6 +2513,71 @@ func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopBudgetCountsPriorProviderCalls(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{
+		Name: "loop_tool",
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return "result", nil
+		},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	provider := newMockToolLoopProvider(
+		&ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{ID: "call-loop", Name: "loop_tool", Arguments: json.RawMessage(`{}`)},
+			},
+			Usage: TokenUsage{InputTokens: 10, OutputTokens: 5},
+		},
+	)
+
+	var usageEvents int
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunProgress && phase == "tool_loop_budget_usage" {
+			usageEvents++
+			var fields map[string]any
+			if err := json.Unmarshal(payload, &fields); err != nil {
+				t.Fatalf("usage payload: %v", err)
+			}
+			if fields["provider_calls"] != float64(3) {
+				t.Fatalf("provider_calls = %v, want prior 2 + activation 1", fields["provider_calls"])
+			}
+			if fields["input_tokens"] != float64(110) || fields["output_tokens"] != float64(205) {
+				t.Fatalf("tokens = %v/%v, want prior + activation", fields["input_tokens"], fields["output_tokens"])
+			}
+		}
+	}
+
+	_, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
+		"You are helpful.",
+		4096,
+		emit,
+		nil,
+		WithToolLoopBudget(ToolLoopBudget{
+			Label:              "rewarm-budget",
+			SpentProviderCalls: 2,
+			SpentInputTokens:   100,
+			SpentOutputTokens:  200,
+			MaxProviderCalls:   3,
+		}),
+	)
+	if err == nil || !strings.Contains(err.Error(), `tool loop budget "rewarm-budget" exhausted`) {
+		t.Fatalf("error = %v, want cumulative provider-call exhaustion", err)
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls = %d, want one activation call before cumulative exhaustion", provider.CallCount())
+	}
+	if usageEvents != 1 {
+		t.Fatalf("usage events = %d, want 1", usageEvents)
+	}
+}
+
 func TestRunToolLoopBudgetLimitsCumulativeTokens(t *testing.T) {
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{

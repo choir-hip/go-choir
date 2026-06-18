@@ -693,12 +693,18 @@ func TestTextureActorToolLoopBudgetDefaultsAndOverrides(t *testing.T) {
 	rec.Metadata["actor_budget_max_output_tokens"] = int64(2000)
 	rec.Metadata["actor_budget_max_total_tokens"] = int64(3000)
 	rec.Metadata["actor_budget_max_elapsed_seconds"] = int64(90)
+	rec.Metadata["actor_budget_spent_provider_calls"] = int64(2)
+	rec.Metadata["actor_budget_spent_input_tokens"] = int64(100)
+	rec.Metadata["actor_budget_spent_output_tokens"] = int64(200)
 	budget = textureActorToolLoopBudget(rec)
 	if budget.MaxProviderCalls != 7 ||
 		budget.MaxInputTokens != 1000 ||
 		budget.MaxOutputTokens != 2000 ||
 		budget.MaxTotalTokens != 3000 ||
-		budget.MaxElapsed != 90*time.Second {
+		budget.MaxElapsed != 90*time.Second ||
+		budget.SpentProviderCalls != 2 ||
+		budget.SpentInputTokens != 100 ||
+		budget.SpentOutputTokens != 200 {
 		t.Fatalf("override budget = %+v", budget)
 	}
 }

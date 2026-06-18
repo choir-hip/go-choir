@@ -4631,12 +4631,31 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 		Content:      "Durable finding: the corrected fact landed while the sandbox was about to restart.",
 		Timestamp:    now.Add(3 * time.Second),
 	}
-	if err := s1.AppendChannelMessage(ctx, message, "user-1"); err != nil {
-		t.Fatalf("append channel message: %v", err)
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-restart-rewarm",
+		OwnerID:       "user-1",
+		AgentID:       message.FromAgentID,
+		TargetAgentID: message.ToAgentID,
+		ChannelID:     message.ChannelID,
+		TrajectoryID:  message.TrajectoryID,
+		Role:          message.Role,
+		Kind:          "findings",
+		Summary:       "restart rewarm finding",
+		Findings:      []string{message.Content},
+		Content:       message.Content,
+		CreatedAt:     message.Timestamp,
 	}
+	storedUpdate, _, err := s1.DispatchWorkerUpdate(ctx, update, message)
+	if err != nil {
+		t.Fatalf("dispatch worker update: %v", err)
+	}
+	message.Seq = storedUpdate.MessageSeq
 
 	interruptedRun := types.RunRecord{
 		RunID:            "texture-interrupted-restart",
+		AgentID:          "texture:" + doc.DocID,
+		AgentProfile:     AgentProfileTexture,
+		AgentRole:        AgentProfileTexture,
 		OwnerID:          "user-1",
 		SandboxID:        "sandbox-texture-test",
 		ChannelID:        doc.DocID,
@@ -4659,6 +4678,29 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 	}
 	if err := s1.CreateRun(ctx, interruptedRun); err != nil {
 		t.Fatalf("create interrupted texture run: %v", err)
+	}
+	if _, err := s1.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID:   interruptedRun.RunID,
+		OwnerID: interruptedRun.OwnerID,
+		AgentID: interruptedRun.AgentID,
+		Kind:    types.RunMemoryEntryMessage,
+		Role:    "assistant",
+		Message: json.RawMessage(`{"role":"assistant","content":"Stored V1 before restart; retain this actor context."}`),
+	}); err != nil {
+		t.Fatalf("append interrupted run memory: %v", err)
+	}
+	if err := s1.AppendEvent(ctx, &types.EventRecord{
+		RunID:        interruptedRun.RunID,
+		AgentID:      interruptedRun.AgentID,
+		ChannelID:    interruptedRun.ChannelID,
+		OwnerID:      interruptedRun.OwnerID,
+		TrajectoryID: message.TrajectoryID,
+		Timestamp:    now.Add(5 * time.Second),
+		Kind:         types.EventRunProgress,
+		Phase:        "tool_loop_budget_usage",
+		Payload:      json.RawMessage(`{"provider_calls":3,"input_tokens":120,"output_tokens":40,"total_tokens":160}`),
+	}); err != nil {
+		t.Fatalf("append interrupted budget event: %v", err)
 	}
 	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
 		DocID:               doc.DocID,
@@ -4751,13 +4793,31 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 	if recoveredRun == nil {
 		t.Fatalf("expected a replacement texture run after restart, got %+v", runs)
 	}
-	if recoveredRun.RequestedByRunID != researchRun.RunID {
-		t.Fatalf("replacement run parent = %q, want %q", recoveredRun.RequestedByRunID, researchRun.RunID)
+	if got := metadataStringValue(recoveredRun.Metadata, "actor_rewarm_source_loop_id"); got != interruptedRun.RunID {
+		t.Fatalf("replacement rewarm source = %q, want %q; metadata=%+v", got, interruptedRun.RunID, recoveredRun.Metadata)
 	}
-	if !strings.Contains(recoveredRun.Prompt, "Durable finding: the corrected fact landed while the sandbox was about to restart.") {
-		t.Fatalf("replacement run prompt missing durable finding: %q", recoveredRun.Prompt)
+	if got := metadataIntValue(recoveredRun.Metadata, "actor_budget_spent_provider_calls"); got != 3 {
+		t.Fatalf("replacement spent provider calls = %d, want 3; metadata=%+v", got, recoveredRun.Metadata)
 	}
-
+	if got := metadataIntValue(recoveredRun.Metadata, "actor_budget_spent_input_tokens"); got != 120 {
+		t.Fatalf("replacement spent input tokens = %d, want 120; metadata=%+v", got, recoveredRun.Metadata)
+	}
+	if got := metadataIntValue(recoveredRun.Metadata, "actor_budget_spent_output_tokens"); got != 40 {
+		t.Fatalf("replacement spent output tokens = %d, want 40; metadata=%+v", got, recoveredRun.Metadata)
+	}
+	memoryEntries, err := s2.ListRunMemoryEntries(ctx, "user-1", recoveredRun.RunID)
+	if err != nil {
+		t.Fatalf("list recovered run memory: %v", err)
+	}
+	if len(memoryEntries) == 0 || memoryEntries[0].Kind != types.RunMemoryEntryCompaction || memoryEntries[0].Reason != "actor_rewarm" {
+		t.Fatalf("recovered memory entries = %+v, want actor_rewarm snapshot first", memoryEntries)
+	}
+	if !strings.Contains(memoryEntries[0].Summary, "Stored V1 before restart") {
+		t.Fatalf("actor_rewarm summary missing prior actor context: %q", memoryEntries[0].Summary)
+	}
+	if ids := metadataStringSlice(recoveredRun.Metadata["worker_update_ids"]); !containsString(ids, storedUpdate.UpdateID) {
+		t.Fatalf("replacement worker_update_ids = %+v, want %s", ids, storedUpdate.UpdateID)
+	}
 	checkpoint, err := s2.GetTextureControllerCheckpoint(ctx, doc.DocID, "user-1")
 	if err != nil {
 		t.Fatalf("get controller checkpoint after recovery: %v", err)

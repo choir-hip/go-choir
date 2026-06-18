@@ -1558,3 +1558,65 @@ prove no lost foreground updates or duplicate revisions.
 Rollback ref: revert `68c6e5b0` if later staging evidence shows stuck resident
 Texture runs or degraded first-paint/cadence. Emergency config escape hatch:
 `RUNTIME_TEXTURE_ACTOR_PARK_IDLE=0`.
+
+## 2026-06-18 - Texture restart rewarm and budget carry-forward constructed locally (red construct)
+
+Claim under test: a parked/restarted Texture actor can resume as the same
+logical `texture:<docID>` actor after process restart by passivating the old run,
+staling its pending mutation, seeding the next activation from durable run
+memory, and carrying prior provider-call/token budget spend into the new
+activation.
+
+Move: extend the role-neutral `ToolLoopBudget` with prior-spend fields and emit
+`tool_loop_budget_usage` after each provider response. Texture revision run
+submission now looks up the latest completed/passivated run-memory source for
+the same owner+agent, derives provider-call/token spend from durable budget
+usage events (falling back to provider-call preflight events), and stamps the
+replacement activation with `actor_rewarm_source_loop_id` plus
+`actor_budget_spent_*` metadata. The restart recovery test now uses a real
+durable `update_coagent` row and proves rewarm snapshot, stale mutation,
+cumulative budget metadata, update consumption, and recovered canonical revision.
+
+Expected ΔV: T5 descends from "restart passivates then cold-reconciles without
+budget continuity" to "replacement activation resumes the logical actor from
+run-memory and charged provider/token spend." Actual ΔV: local construct passes
+focused and sharded runtime evidence. Remaining T5 error: this is a replacement
+activation seeded from memory, not literal same-goroutine continuation; elapsed
+time budget remains per activation rather than active actor time across sleeps;
+deployed staging proof is not yet run.
+
+Receipts:
+
+- Changed `internal/runtime/toolloop.go`: `ToolLoopBudget` now carries
+  `SpentProviderCalls`, `SpentInputTokens`, and `SpentOutputTokens`; budget
+  checks and exhaustion payloads include prior spend; `tool_loop_budget_usage`
+  records cumulative usage after every provider response.
+- Changed `internal/runtime/runtime.go`: `textureActorToolLoopBudget` reads
+  prior-spend metadata, and `latestActorToolLoopBudgetSpend` reconstructs the
+  latest actor budget baseline from durable events for the same owner+agent.
+- Changed `internal/runtime/texture_agent_revision.go`: Texture revision runs
+  stamp `actor_rewarm_source_loop_id`, `actor_budget_spent_*`, and
+  `actor_budget_spend_source` when prior actor memory exists.
+- Changed `internal/runtime/texture_test.go`: restart recovery now dispatches a
+  real worker update, seeds interrupted Texture run-memory and budget events,
+  and proves the replacement run has `actor_rewarm` memory, cumulative budget
+  metadata, the worker update id, no duplicate pending mutation, and a recovered
+  appagent revision.
+- Verification:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestRunToolLoopBudgetCountsPriorProviderCalls|TestRunToolLoopBudgetLimitsProviderCalls|TestRunToolLoopBudgetLimitsCumulativeTokens|TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches' -count=1`;
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake|TestSubmitResearchFindingsWakeUsesSameDebouncedPath|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestRuntimeAgentSignalWakesParkWaiter|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches|TestRunToolLoopBudgetCountsPriorProviderCalls' -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestTextureActorToolLoopBudgetDefaultsAndOverrides|TestRunToolLoopBudgetCountsPriorProviderCalls|TestRunToolLoopBudgetLimitsProviderCalls|TestRunToolLoopBudgetLimitsCumulativeTokens|TestLoadConfigDefaultsResearcherCount|TestLoadConfigReadsResearcherCount' -count=1`;
+  `nix develop -c go test ./cmd/doccheck -count=1`;
+  `git diff --check`;
+  `nix develop -c scripts/go-test-runtime-shards`.
+
+Result: T5 has local construct evidence for run-memory rewarm and cumulative
+provider/token budget carry-forward. The mission is not settled. Next move is
+land, push, monitor CI/deploy, run deployed cadence proof, then continue T6-T8
+for document-deletion cancellation, verifier N:1 lifecycle proof, heresy/docs,
+and a non-blocked lifecycle acceptance record.
+
+Rollback ref: revert this T5 construct if CI or staging shows budget exhaustion
+false positives, missing first paint, duplicate Texture revision runs, or stuck
+pending mutations after restart. Broader mission rollback remains reverting the
+mission commits back through the last accepted checkpoint.
