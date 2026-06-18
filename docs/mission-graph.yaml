@@ -50,6 +50,7 @@ nodes:
   - m3.3-vm-bootstrap-recovery-race
   - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   - texture-product-loop-recovery-v0
+  - texture-long-running-agent-v0
   - texture-hard-cutover-v0
   - m3-lifecycle-cutover
   - m4-continuation-deletion
@@ -160,6 +161,24 @@ nodes:
   - docs/why-texture-background-2026-06-15.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/mission-texture-hard-cutover-v0.md
+  - docs/choir-doctrine.md
+  - AGENTS.md
+- id: texture-long-running-agent-v0
+  title: Texture As A Long-Running Agent v0
+  path: docs/mission-texture-long-running-agent-v0.md
+  ledger: docs/mission-texture-long-running-agent-v0.ledger.md
+  status: planned
+  kind: spine
+  # Supersedes/folds in the cadence defect of texture-product-loop-recovery-v0
+  # (the 68d09cc3 falsification is its direct lineage). Lifecycle/passivation
+  # work here must be reconciled with m3-lifecycle-cutover and m4.
+  depends_on:
+  - texture-product-loop-recovery-v0
+  enables: []
+  sources:
+  - docs/mission-texture-product-loop-recovery-v0.md
+  - docs/mission-texture-product-loop-recovery-v0.ledger.md
+  - docs/texture-agentic-invariants-2026-06-13.md
   - docs/choir-doctrine.md
   - AGENTS.md
 - id: texture-hard-cutover-v0
