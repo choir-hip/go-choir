@@ -1841,3 +1841,67 @@ or deterministic useful first paint.
 Rollback ref: no new runtime change in this pass. If this probe later becomes
 flaky or contradicts future evidence, rollback target remains the T6 runtime
 commit `6f54e8906205e38db14a2460c13d44666cef9532`.
+
+## 2026-06-18 - Runtime-supervision acceptance probe documents non-blocked T8 blocker (red probe + green checkpoint)
+
+Claim under test: an execution-shaped prompt can produce the product-path
+evidence needed for a non-blocked `staging-smoke-level` acceptance record:
+Texture opens the artifact, requests super execution, super leases a worker VM,
+and worker supervision evidence is mirrored back.
+
+Move: run an ephemeral Playwright/Node probe against `https://choir.news` using
+only public product APIs and a synthetic registered owner. The prompt explicitly
+asked Texture to ask downstream super execution to request a worker VM, start a
+worker delegation, have the worker submit one concise worker update back to the
+Texture document, and finish delegation. The probe polled Trace and repeatedly
+synthesized `/api/run-acceptances/synthesize`.
+
+Expected ΔV: either produce a non-blocked lifecycle acceptance record, or name
+the exact live blocker. Actual ΔV: blocker documented. The deployed product path
+created conductor, Texture, and super agents, but produced no
+`request_super_execution`, worker lease, delegation, or `update_coagent` tool
+results; acceptance remained blocked.
+
+Receipts:
+
+- Deployed identity: `/health` reported proxy and sandbox both at
+  `6f54e8906205e38db14a2460c13d44666cef9532`, deployed at
+  `2026-06-18T07:33:56Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Probe marker: `TEXTURE_LIFECYCLE_ACCEPTANCE_1781769416142`.
+- Synthetic owner:
+  `texture-lifecycle-1781769417197-fo3zw0@example.com`.
+- Prompt-bar submission / trajectory:
+  `65cce9c1-86ab-4cef-871a-16481b25be49`; doc
+  `1aa44fff-62c7-4913-a17d-3a04fd79c317`; initial Texture loop
+  `bcfa7a71-6747-454c-9ff7-5c75d98c5013`.
+- Trace result: trajectory completed by +20.701s and remained completed through
+  +183.140s; final Trace `state=completed`, `live=false`, `agent_count=3`,
+  `delegation_count=0`, `moment_count=52`, `message_count=1`,
+  `finding_count=0`, roles `conductor`, `texture`, `super`.
+- Tool-result counts: `request_super_execution=0`, `request_worker_vm=0`,
+  `start_worker_delegation=0`, `observe_worker_delegation=0`,
+  `finish_worker_delegation=0`, `delegate_worker_vm=0`, `update_coagent=0`.
+- Revision count: final Texture revision count was 2.
+- RunAcceptanceRecord: `runacc-3efa017d5d01175a8bcf`, target mission
+  `mission-texture-long-running-agent-v0`, deployment/health commit
+  `6f54e8906205e38db14a2460c13d44666cef9532`, acceptance level
+  `staging-smoke-level`, state `blocked`, authority profile
+  `super > conductor > texture`, checkpoints only `submitted` and
+  `texture_opened`, verifier contract `trace-derived-state-machine` passed,
+  verifier contract `export-level-product-path` blocked.
+
+Result: non-blocked lifecycle acceptance is still open. The probe shows a new
+T8/C9 blocker: deterministic initial Texture super request may create a super
+agent/run, but the durable evidence stream contains no `request_super_execution`
+tool result and super does not lease/delegate worker evidence before completing.
+
+Open edge: decide the smallest repair after this documentation checkpoint. Two
+candidate deltas are now explicit: acceptance may need to recognize
+deterministic Texture->super request evidence, and/or super needs a bounded
+completion guard for Texture-requested execution objectives so it cannot complete
+without worker evidence or a structured blocker.
+
+Rollback ref: no runtime change in this pass. If a later repair is attempted,
+rollback will be that repair commit; this checkpoint only records staging
+evidence and narrows T8.

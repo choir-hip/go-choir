@@ -569,7 +569,18 @@ document then returned 404, and Trace ended `state=cancelled`, `live=false`,
 with the Texture agent state `cancelled`. Remaining T8: non-blocked lifecycle
 acceptance, elapsed-time budget across sleeps, full removal/collapse of
 wake/reconcile scaffolding, Trace projection legibility, and stronger
-first-write determinism if needed.
+first-write determinism if needed. A follow-up runtime-supervision acceptance
+probe on the same deployed SHA submitted
+`65cce9c1-86ab-4cef-871a-16481b25be49` / doc
+`1aa44fff-62c7-4913-a17d-3a04fd79c317` with an explicit downstream-super /
+worker-delegation prompt. Trace showed conductor + Texture + super agents, but
+zero `request_super_execution`, `request_worker_vm`, `start_worker_delegation`,
+`observe_worker_delegation`, `finish_worker_delegation`, `delegate_worker_vm`, or
+`update_coagent` tool results; the trajectory completed after two revisions and
+the synthesized `RunAcceptanceRecord` `runacc-3efa017d5d01175a8bcf` stayed
+`staging-smoke-level`, state `blocked`, with only `submitted` and
+`texture_opened` checkpoints. This newly documents the T8 blocker for
+non-blocked lifecycle acceptance.
 
 budget: one broad red-surface paramission executed iteratively (Codex one-shot ->
 critical review -> iterate). Broad change is authorized; there are no real users
@@ -687,6 +698,14 @@ position / live conjectures / open edges:
   obligation should become a stronger mechanical draft scaffold or whether T4's
   parked lifecycle should be enabled first and measure recovery over many
   packets.
+- C9 discovered by 2026-06-18 runtime-supervision acceptance probe: an
+  execution-shaped prompt that should open downstream super/worker evidence can
+  complete as Texture-only for acceptance purposes. The trajectory has a super
+  agent, but no durable `request_super_execution` tool result, no
+  `request_worker_vm`, and no delegation/worker-update evidence. The next
+  discriminator is whether deterministic initial Texture super requests need
+  explicit Trace/acceptance evidence, whether super needs a bounded completion
+  guard for Texture-requested execution objectives, or both.
 
 Current local T4 construct after the `4da4ffa3` proof: `LoadConfig` now defaults
 Texture revision actors into bounded park-on-idle with
@@ -754,9 +773,13 @@ The delete-cancellation probe submitted
 404, and Trace ended `state=cancelled`, `live=false`, with the Texture agent
 state `cancelled`.
 
-next move: continue T8: chase non-blocked lifecycle acceptance. Residuals:
-elapsed-time budget across sleep, full wake/reconcile collapse, Trace projection
-legibility, and first-write stochasticity.
+next move: documentation-first checkpoint for the runtime-supervision acceptance
+blocker, then repair the smallest live gap: either acceptance must recognize the
+deterministic Texture->super request evidence, super must be prevented from
+silently completing a Texture-requested worker objective without worker evidence,
+or both. Residuals after that remain elapsed-time budget across sleep, full
+wake/reconcile collapse, Trace projection legibility, and first-write
+stochasticity.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
