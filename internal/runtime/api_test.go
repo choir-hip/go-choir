@@ -772,6 +772,7 @@ func TestSuperTextureExecutionCompletionGuardRequiresEvidence(t *testing.T) {
 		AgentProfile: AgentProfileSuper,
 		AgentRole:    AgentProfileSuper,
 		OwnerID:      "user-alice",
+		Prompt:       "Inspect this Texture request and report back.",
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileSuper,
 			runMetadataAgentRole:    AgentProfileSuper,
@@ -803,6 +804,34 @@ func TestSuperTextureExecutionCompletionGuardRequiresEvidence(t *testing.T) {
 	}
 	if result.Continue {
 		t.Fatalf("guard result after update_coagent = %+v, want satisfied", result)
+	}
+
+	workerRec := *rec
+	workerRec.RunID = "run-super-texture-worker-guard"
+	workerRec.Prompt = "Request a worker VM, start a worker delegation, have the worker send an update_coagent packet, then finish_worker_delegation."
+	guard = rt.superTextureExecutionCompletionGuard(&workerRec)
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-worker-update", workerRec.RunID, workerRec.AgentID, "traj-texture-guard", workerRec.ChannelID, time.Now().UTC(), "update_coagent", map[string]any{
+		"status":    "submitted",
+		"update_id": "update-super-texture-worker-guard",
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 1})
+	if err != nil {
+		t.Fatalf("worker guard after update: %v", err)
+	}
+	if !result.Continue || result.Reason != "texture_requested_super_execution_without_evidence" {
+		t.Fatalf("worker guard after update_coagent = %+v, want continued worker evidence requirement", result)
+	}
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-worker-lease", workerRec.RunID, workerRec.AgentID, "traj-texture-guard", workerRec.ChannelID, time.Now().UTC(), "request_worker_vm", map[string]any{
+		"status":        "worker_requested",
+		"worker_id":     "worker-texture-guard",
+		"delegation_id": "delegation-texture-guard",
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 2})
+	if err != nil {
+		t.Fatalf("worker guard after request_worker_vm: %v", err)
+	}
+	if result.Continue {
+		t.Fatalf("worker guard after request_worker_vm = %+v, want satisfied", result)
 	}
 }
 

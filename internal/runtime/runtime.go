@@ -2411,15 +2411,18 @@ func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) To
 		if err != nil {
 			return ToolLoopCompletionGuardResult{}, fmt.Errorf("check Texture-requested super completion evidence: %w", err)
 		}
-		if eventsContainAnySuccessfulTool(events,
+		tools := []string{
 			"request_worker_vm",
 			"start_worker_delegation",
 			"observe_worker_delegation",
 			"finish_worker_delegation",
 			"delegate_worker_vm",
-			"update_coagent",
 			"publish_app_change_package",
-		) {
+		}
+		if !superTextureExecutionRequiresWorkerEvidence(rec) {
+			tools = append(tools, "update_coagent")
+		}
+		if eventsContainAnySuccessfulTool(events, tools...) {
 			return ToolLoopCompletionGuardResult{}, nil
 		}
 		return ToolLoopCompletionGuardResult{
@@ -2428,6 +2431,27 @@ func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) To
 			Instruction: "Texture requested privileged execution for this document. Do not end this Super run with prose only. If the objective asks for worker/delegation evidence, call request_worker_vm now with the concrete purpose; after the lease, follow the runtime-required start_worker_delegation step and later observe_worker_delegation or finish_worker_delegation. If no worker can or should run, call update_coagent back to the requesting Texture document with a structured blocker and evidence refs. Do not finish until Trace contains worker/delegation evidence or a structured Texture-visible blocker.",
 		}, nil
 	}
+}
+
+func superTextureExecutionRequiresWorkerEvidence(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	text := strings.ToLower(rec.Prompt + "\n" + metadataStringValue(rec.Metadata, "objective") + "\n" + metadataStringValue(rec.Metadata, "task") + "\n" + metadataStringValue(rec.Metadata, "request"))
+	for _, needle := range []string{
+		"request_worker_vm",
+		"start_worker_delegation",
+		"worker vm",
+		"worker delegation",
+		"worker-update",
+		"worker update",
+		"finish_worker_delegation",
+	} {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func (rt *Runtime) textureRunOpenedEvidencePath(ctx context.Context, rec *types.RunRecord, docID string) bool {
