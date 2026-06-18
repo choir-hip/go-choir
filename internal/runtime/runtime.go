@@ -2425,7 +2425,7 @@ func (rt *Runtime) superTextureExecutionCompletionGuard(rec *types.RunRecord) To
 		return ToolLoopCompletionGuardResult{
 			Continue:    true,
 			Reason:      "texture_requested_super_execution_without_evidence",
-			Instruction: "Texture requested privileged execution for this document. Do not end this Super run with prose only. If the objective asks for worker/delegation evidence, call request_worker_vm now with the concrete purpose; after the lease, follow the runtime-required start_worker_delegation step and later observe_worker_delegation or finish_worker_delegation. A worker_run_active finish is progress, not completion: keep supervising until finish_worker_delegation returns terminal evidence, package/update evidence, or a structured blocker. If no worker can or should run, call update_coagent back to the requesting Texture document with a structured blocker and evidence refs. Do not finish until Trace contains terminal worker/delegation evidence or a structured Texture-visible blocker.",
+			Instruction: "Texture requested privileged execution for this document. Do not end this Super run with prose only. If the objective asks for worker/delegation evidence, call request_worker_vm now with the concrete purpose; after the lease, follow the runtime-required start_worker_delegation step and later observe_worker_delegation or finish_worker_delegation. A worker_run_active finish is progress, not completion: keep supervising until finish_worker_delegation returns terminal evidence, package/update evidence, or an explicit terminal blocker. A successful update_coagent delivery alone is not terminal worker evidence. Do not finish until Trace contains terminal worker/delegation evidence, package/update evidence, or explicit terminal_error/completion_blocker output.",
 		}, nil
 	}
 }
@@ -2445,10 +2445,16 @@ func superTextureExecutionHasSufficientEvidence(events []types.EventRecord, rec 
 	if len(successfulToolResultPayloads(events, "publish_app_change_package")) > 0 {
 		return true
 	}
-	for _, toolName := range []string{"finish_worker_delegation", "delegate_worker_vm"} {
+	for _, toolName := range []string{"request_worker_vm", "finish_worker_delegation", "delegate_worker_vm"} {
 		for _, payload := range successfulToolResultPayloads(events, toolName) {
 			var output map[string]any
 			if err := json.Unmarshal([]byte(toolPayloadOutput(payload)), &output); err != nil {
+				continue
+			}
+			if superTextureWorkerBlockerIsTerminal(output) {
+				return true
+			}
+			if toolName == "request_worker_vm" {
 				continue
 			}
 			if superTextureWorkerResultIsTerminal(output) {
@@ -2489,18 +2495,22 @@ func superTextureWorkerResultIsTerminal(output map[string]any) bool {
 	}
 }
 
-func superTextureUpdateIsStructuredBlocker(output map[string]any) bool {
-	status := strings.ToLower(strings.TrimSpace(stringMapValue(output, "status")))
-	if strings.Contains(status, "block") || strings.Contains(status, "defer") || strings.Contains(status, "wait") {
+func superTextureWorkerBlockerIsTerminal(output map[string]any) bool {
+	if stringMapValue(output, "terminal_error") != "" || stringMapValue(output, "completion_blocker") != "" {
 		return true
 	}
-	for _, key := range []string{"blocker", "completion_blocker", "terminal_error", "reason", "summary"} {
-		value := strings.ToLower(strings.TrimSpace(stringMapValue(output, key)))
-		if strings.Contains(value, "block") || strings.Contains(value, "cannot") || strings.Contains(value, "unable") || strings.Contains(value, "defer") || strings.Contains(value, "wait") {
-			return true
-		}
-	}
 	return false
+}
+
+func superTextureUpdateIsStructuredBlocker(output map[string]any) bool {
+	if !superTextureWorkerBlockerIsTerminal(output) {
+		return false
+	}
+	status := strings.ToLower(strings.TrimSpace(stringMapValue(output, "status")))
+	if strings.Contains(status, "block") || strings.Contains(status, "fail") || strings.Contains(status, "error") {
+		return true
+	}
+	return status == ""
 }
 
 func superTextureExecutionRequiresWorkerEvidence(rec *types.RunRecord) bool {

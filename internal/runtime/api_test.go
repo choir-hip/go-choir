@@ -863,6 +863,33 @@ func TestSuperTextureExecutionCompletionGuardRequiresEvidence(t *testing.T) {
 	if result.Continue {
 		t.Fatalf("worker guard after terminal finish = %+v, want satisfied", result)
 	}
+
+	blockerRec := *rec
+	blockerRec.RunID = "run-super-texture-worker-blocker-guard"
+	blockerRec.Prompt = "Request a worker VM and start_worker_delegation, or report a terminal blocker if the worker VM cannot be leased."
+	guard = rt.superTextureExecutionCompletionGuard(&blockerRec)
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-worker-weak-blocker", blockerRec.RunID, blockerRec.AgentID, "traj-texture-guard", blockerRec.ChannelID, time.Now().UTC(), "update_coagent", map[string]any{
+		"status":  "blocked",
+		"summary": "worker lease is blocked",
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 1})
+	if err != nil {
+		t.Fatalf("worker guard after weak update blocker: %v", err)
+	}
+	if !result.Continue || result.Reason != "texture_requested_super_execution_without_evidence" {
+		t.Fatalf("worker guard after weak update blocker = %+v, want continued explicit blocker requirement", result)
+	}
+	appendAcceptanceToolResultForTrajectory(t, rt, "event-super-texture-worker-terminal-blocker", blockerRec.RunID, blockerRec.AgentID, "traj-texture-guard", blockerRec.ChannelID, time.Now().UTC(), "update_coagent", map[string]any{
+		"status":             "blocked",
+		"completion_blocker": "worker_vm_capacity_unavailable",
+	})
+	result, err = guard(context.Background(), ToolLoopCompletionState{Attempts: 2})
+	if err != nil {
+		t.Fatalf("worker guard after terminal update blocker: %v", err)
+	}
+	if result.Continue {
+		t.Fatalf("worker guard after terminal update blocker = %+v, want satisfied", result)
+	}
 }
 
 func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *testing.T) {
