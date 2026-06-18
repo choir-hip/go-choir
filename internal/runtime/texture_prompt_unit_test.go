@@ -1,16 +1,11 @@
 package runtime
 
 import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
-	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -387,139 +382,26 @@ func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
 	}
 }
 
-func TestTexturePromptDerivesSourceServiceEntitiesFromResearcherUpdates(t *testing.T) {
-	current := types.Revision{
-		DocID:      "doc-source-service",
-		RevisionID: "rev-source-service-v1",
-		Content:    "# Source Service Brief\n\nResearch checkpoint pending.",
-		AuthorKind: types.AuthorAppAgent,
-	}
-	recent := []ChannelMessage{{
-		Role: AgentProfileResearcher,
-		From: "researcher:source",
-		Content: strings.Join([]string{
-			"Coagent update ready.",
-			"Role: researcher.",
-			"Kind: findings.",
-			"Summary: Source Service returned current evidence.",
-			"",
-			"Findings:",
-			"- The source-service result identified a current economy item.",
-			"",
-			"Refs:",
-			"- source_service_item:srcitem_current_economy",
-			"- Source Service Item ID: srcitem_labor_market_signal",
-			"- source:gdelt:15min",
-		}, "\n"),
-	}}
-	sourceEntities, changed := mergeTextureSourceEntities(nil, sourceServiceEntitiesFromWorkerMessages(recent))
-	if !changed || len(sourceEntities) != 2 {
-		t.Fatalf("source entities changed=%v len=%d: %#v", changed, len(sourceEntities), sourceEntities)
-	}
-	if sourceEntities[0].Target.TargetKind != "source_service_item" ||
-		sourceEntities[0].Target.ItemID != "srcitem_current_economy" ||
-		sourceEntities[0].Display.InlineMode != "collapsed_citation" ||
-		sourceEntities[0].Display.OpenSurface != "source" ||
-		sourceEntities[0].Evidence.ResearchState != "represented" {
-		t.Fatalf("derived source entity = %#v", sourceEntities[0])
-	}
-	if sourceEntities[1].Target.TargetKind != "source_service_item" ||
-		sourceEntities[1].Target.ItemID != "srcitem_labor_market_signal" {
-		t.Fatalf("derived raw item source entity = %#v", sourceEntities[1])
-	}
-
-	request := buildAgentRevisionRequest(current, nil, map[string]any{
-		"source_entities": sourceEntities,
-		"seed_prompt":     "Write a source-service grounded brief.",
-	}, textureAgentRevisionRequest{
-		Intent: "integrate_worker_findings",
-		Prompt: "Write a source-service grounded brief.",
-	}, "", true, recent, nil)
-
-	for _, want := range []string{
-		"Detected Texture source entities:",
-		"source_service_item",
-		"item_id=srcitem_current_economy",
-		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
-		"Make those findings visible with patch_texture",
-	} {
-		if !strings.Contains(request, want) {
-			t.Fatalf("source-service prompt missing %q:\n%s", want, request)
-		}
-	}
-}
-
-func TestTextureSourceServiceEntitiesResolveItemTitles(t *testing.T) {
-	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/source-service/items/srcitem_current_economy" {
-			t.Fatalf("unexpected source service path %s", r.URL.Path)
-		}
-		_ = json.NewEncoder(w).Encode(sourceapi.ResolveItemResponse{
-			Provider: sourceapi.ProviderName,
-			Item: sourceapi.ItemResult{
-				TargetKind:   sourceapi.TargetKind,
-				ItemID:       "srcitem_current_economy",
-				SourceID:     "rss:market-wire",
-				SourceType:   "rss",
-				FetchID:      "fetch-market-wire",
-				Title:        "Markets reprice rate-cut odds after inflation print",
-				URL:          "https://example.test/markets/rates",
-				CanonicalURL: "https://example.test/markets/rates",
-				ContentHash:  "hash-rate-cut-odds",
-			},
-		})
-	}))
-	defer sourceServer.Close()
-	t.Setenv("SOURCE_SERVICE_BASE_URL", sourceServer.URL)
-	t.Setenv("SOURCE_SERVICE_URL", "")
-	t.Setenv("SOURCECYCLED_API_URL", "")
-
-	recent := []ChannelMessage{{
-		Role:    AgentProfileResearcher,
-		From:    "researcher:source",
-		Content: "Refs:\n- source_service_item:srcitem_current_economy",
-	}}
-	entities := (&Runtime{}).sourceEntitiesFromWorkerMessages(context.Background(), "user-source", recent)
-	if len(entities) != 1 {
-		t.Fatalf("source entities len = %d: %#v", len(entities), entities)
-	}
-	entity := entities[0]
-	if entity.Label != "Markets reprice rate-cut odds after inflation print" ||
-		entity.Target.SourceID != "rss:market-wire" ||
-		entity.Target.FetchID != "fetch-market-wire" ||
-		entity.Target.CanonicalURL != "https://example.test/markets/rates" ||
-		len(entity.Selectors) != 1 ||
-		entity.Selectors[0].ContentHash != "hash-rate-cut-odds" {
-		t.Fatalf("source-service entity was not enriched from resolved item: %#v", entity)
-	}
-}
-
-func TestTextureDerivesContentItemSourceEntitiesFromResearcherRefs(t *testing.T) {
-	content := strings.Join([]string{
-		"Findings:",
-		"- The official source supports the bounded claim: \"Cloud providers should preserve auditability.\" content_id:content-cloud-audit",
-		"- Duplicate JSON ref should not add a second entity: \"content_id\":\"content-cloud-audit\"",
-	}, "\n")
-	ids := contentItemIDsFromWorkerMessage(content)
-	if len(ids) != 1 || ids[0] != "content-cloud-audit" {
-		t.Fatalf("content item ids = %#v", ids)
-	}
-
+func TestTextureContentItemSourceEntityDefaultsToWholeResource(t *testing.T) {
+	// After the D3 cutover, content-item source entities are whole_resource by
+	// default; text_quote selectors (and their quote-match validation) come from
+	// typed researcher findings, never from regex-scraping prose context.
 	entity := contentItemRefToSourceEntity(types.ContentItem{
 		ContentID:    "content-cloud-audit",
 		Title:        "Cloud auditability source",
 		SourceURL:    "https://example.com/cloud-audit",
 		CanonicalURL: "https://example.com/cloud-audit",
 		ContentHash:  "sha256-cloud-audit",
-	}, content)
+	})
 	if entity.Kind != "content_item" ||
 		entity.Target.TargetKind != "content_item" ||
 		entity.Target.ContentID != "content-cloud-audit" ||
 		entity.Display.OpenSurface != "source" ||
 		entity.Evidence.ResearchState != "represented" ||
-		entity.Selectors[0].SelectorKind != "text_quote" ||
+		len(entity.Selectors) != 1 ||
+		entity.Selectors[0].SelectorKind != "whole_resource" ||
 		entity.Selectors[0].ContentHash != "sha256-cloud-audit" ||
-		!strings.Contains(entity.Selectors[0].TextQuote, "Cloud providers should preserve auditability") {
+		entity.Selectors[0].TextQuote != "" {
 		t.Fatalf("derived content item source entity = %#v", entity)
 	}
 }

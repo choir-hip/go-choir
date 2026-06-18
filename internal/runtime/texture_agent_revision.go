@@ -367,26 +367,16 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 	}
 
-	var recentWorkerMessages []ChannelMessage
-	if workerWake {
-		var workerErr error
-		recentWorkerMessages, workerErr = rt.recentWorkerMessages(ctx, ownerID, doc.DocID, 12)
-		if workerErr != nil {
-			log.Printf("texture api: recent worker messages: %v", workerErr)
-		}
-	}
 	if currentRevisionLoaded {
 		mediaSourceRefs, addedMediaSourceRefs := rt.registerTextureMediaSourceRefs(ctx, ownerID, currentRevision.Content, metadata)
 		if len(mediaSourceRefs) > 0 {
 			metadata["media_source_refs"] = mediaSourceRefs
 			metadata["media_source_research_required"] = addedMediaSourceRefs
 		}
+		// Source entities are collated from deterministic media ingestion plus the
+		// typed coagent findings already persisted into metadata["source_entities"];
+		// researcher prose is no longer regex-scraped into sources here.
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceRefs)
-		if workerSourceEntities := rt.sourceEntitiesFromWorkerMessages(ctx, ownerID, recentWorkerMessages); len(workerSourceEntities) > 0 {
-			var changedWorkerSourceEntities bool
-			sourceEntities, changedWorkerSourceEntities = mergeTextureSourceEntities(sourceEntities, workerSourceEntities)
-			changedSourceEntities = changedSourceEntities || changedWorkerSourceEntities
-		}
 		if len(sourceEntities) > 0 {
 			metadata["source_entities"] = sourceEntities
 			if changedSourceEntities {

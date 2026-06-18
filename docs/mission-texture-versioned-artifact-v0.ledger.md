@@ -113,8 +113,56 @@ deployable impact), so the corrected gate is validated on the next code push (D2
 
 Mutation class orange (additive schema + hash compute; no reader behavior change).
 
+### 2026-06-18 — D2 deployed; deploy gate fix verified
+
+D2 pushed (`f592052e`): full CI green and **Deploy to Staging (Node B) ✓ in 40s**
+— the corrected proxy-upstream gate passed. `choir.news/health` serves
+`deployed_commit f592052e`. The recurring "tests pass, deploy fails" is resolved.
+
+### 2026-06-18 — D3+D4 landed locally (typed sources authoritative + citation/quote gate)
+
+Owner decisions (design pass): typed findings packet authoritative; **delete**
+regex researcher-prose scraping; **merge D3+D4**; **keep** body-ref normalization
+(model's own prose → native refs), revisit later.
+
+- **D4 validator (new, pure, TDD)**: `texture_citation_validation.go` —
+  `validateTextureCitations(body, entities, sourceBodies)` checks every inline
+  `[label](source:ENTITY_ID)` citation resolves to a collated source entity, and
+  for `text_quote` selectors that the quote verifiably appears in the retrieved
+  source body (whitespace/case-tolerant). Reasons: `unknown_source`,
+  `quote_not_in_source`, `missing_source_body`. `collateCitationSourceBodies`
+  fetches bodies from owner content items / resolved source-service items.
+  Wired into `commitTextureToolEdit` **before** `CreateRevision`: on any issue it
+  returns a tool error (`executeTextureEditTool` surfaces it) so the authoring
+  model retries — no mutation-state corruption (gate runs pre-create).
+- **D3 cutover**: deleted the regex prose-scrapers
+  `sourceServiceItemIDsFromText`, `contentItemIDsFromWorkerMessage`,
+  `sourceServiceEntitiesFromWorkerMessages`, `sourceEntitiesFromWorkerMessages`,
+  `sourceEntityQuoteFromContext`, and 4 dead REs. Researcher-message scraping
+  removed from `texture_agent_revision.go`; coagent prose scraping removed from
+  `coagentTextureSourceEntities`/`coagentTextureSourceContentIDs` (typed
+  `req.SourceItemIDs` + metadata keys remain authoritative). `contentItemRefToSourceEntity`
+  now defaults to `whole_resource` (no scraped quote). Kept `enrichSourceServiceEntities`
+  (used by `universal_wire.go`), the body-ref normalizer, and
+  `sourceServiceItemRefToSourceEntity`.
+- **Tests**: new validator tests (unknown/whole_resource/quote-present/
+  whitespace-tolerant/quote-absent/missing-body/error-format); removed three
+  obsolete scraping tests; added `TestTextureContentItemSourceEntityDefaultsToWholeResource`.
+  Full `scripts/go-test-runtime-shards` green; build + vet clean.
+
+Mutation class red (researcher↔Texture source contract + canonical-write gate).
+
+**Remaining D3 wiring (honest gap)**: the runtime no longer mints `text_quote`
+selectors at all, so the quote-match branch of the gate is correct but dormant.
+Activating the "quote verifiably in source" invariant needs a typed per-source
+quote field threaded through `spawn_agent`/`update_coagent` →
+`textureHandoffRequest` → `coagentTextureRouteRequest` → a `text_quote` selector.
+Until then the gate enforces citation resolution (`unknown_source`) and would
+enforce quote-match for any future typed quote. Tracked as the next D3 step.
+
 ### State
 
-CI deploy gate fixed (`01ad15e1`, pushed). D1 pushed (`e7967d16`, staging healthy).
-D2 implemented locally (uncommitted). Next: commit + push D2 (validates the fixed
-deploy gate), then D3 (collated sources + delete regex scraping).
+Deploy gate fixed + verified. D1 (`e7967d16`) and D2 (`f592052e`) deployed green.
+D3+D4 implemented locally (validator gate + delete prose-scraping). Next: commit +
+push (validates deploy gate), then thread the typed per-source quote field (dormant
+quote-match branch), then D5 (full-history publish).

@@ -41,11 +41,13 @@ type textureSourceEntityEvidence = types.SourceEntityEvidence
 type textureSourceEntityProvenance = types.SourceEntityProvenance
 
 var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
-var textureSourceServiceItemRefRE = regexp.MustCompile(`\bsource_service_item:([A-Za-z0-9_-]+)\b`)
+
+// textureRawSourceServiceItemIDRE matches bare source-service item ids in the
+// authoring model's own body prose (used by the body-ref normalizer to rewrite
+// "srcitem_..." mentions into native [label](source:id) refs). It is NOT used to
+// scrape researcher findings into sources; those arrive via the typed coagent
+// findings path.
 var textureRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
-var textureContentIDRefRE = regexp.MustCompile(`(?i)\bcontent_id\b\s*[:=]\s*"?([A-Za-z0-9_-]+)"?`)
-var textureContentItemRefRE = regexp.MustCompile(`(?i)\bcontent_item\b\s*[:=]\s*"?([A-Za-z0-9_-]+)"?`)
-var textureContentItemIDRefRE = regexp.MustCompile(`(?i)\bcontent[ _-]item[ _-]id\b\s*[:=]\s*"?([A-Za-z0-9_-]+)"?`)
 
 func (rt *Runtime) registerTextureMediaSourceRefs(ctx context.Context, ownerID, content string, metadata map[string]any) ([]textureMediaSourceRef, bool) {
 	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
@@ -244,54 +246,6 @@ func mergeTextureSourceEntities(entities []textureSourceEntity, incoming []textu
 	return entities, changed
 }
 
-func sourceServiceEntitiesFromWorkerMessages(messages []ChannelMessage) []textureSourceEntity {
-	entities := []textureSourceEntity{}
-	seen := map[string]bool{}
-	for _, message := range messages {
-		if !strings.EqualFold(strings.TrimSpace(message.Role), AgentProfileResearcher) {
-			continue
-		}
-		for _, itemID := range sourceServiceItemIDsFromText(message.Content) {
-			if itemID == "" || seen[itemID] {
-				continue
-			}
-			seen[itemID] = true
-			entities = append(entities, sourceServiceItemRefToSourceEntity(itemID, message.Content))
-		}
-	}
-	return entities
-}
-
-func (rt *Runtime) sourceEntitiesFromWorkerMessages(ctx context.Context, ownerID string, messages []ChannelMessage) []textureSourceEntity {
-	entities := sourceServiceEntitiesFromWorkerMessages(messages)
-	enrichSourceServiceEntities(ctx, entities)
-	seen := map[string]bool{}
-	for _, entity := range entities {
-		if key := sourceEntityKey(entity); key != "" {
-			seen[key] = true
-		}
-	}
-	for _, message := range messages {
-		if !strings.EqualFold(strings.TrimSpace(message.Role), AgentProfileResearcher) {
-			continue
-		}
-		for _, contentID := range contentItemIDsFromWorkerMessage(message.Content) {
-			item, err := rt.Store().GetContentItem(ctx, ownerID, contentID)
-			if err != nil {
-				continue
-			}
-			entity := contentItemRefToSourceEntity(item, message.Content)
-			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" || seen[key] {
-				continue
-			}
-			seen[key] = true
-			entities = append(entities, entity)
-		}
-	}
-	return entities
-}
-
 func enrichSourceServiceEntities(ctx context.Context, entities []textureSourceEntity) {
 	if len(entities) == 0 {
 		return
@@ -366,50 +320,6 @@ func sourceServiceEntityLabelShouldUseResolvedTitle(label, itemID string) bool {
 	return strings.Contains(label, strings.TrimSpace(itemID))
 }
 
-func sourceServiceItemIDsFromText(text string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, match := range textureSourceServiceItemRefRE.FindAllStringSubmatch(text, -1) {
-		if len(match) < 2 {
-			continue
-		}
-		itemID := strings.TrimSpace(match[1])
-		if itemID == "" || seen[itemID] {
-			continue
-		}
-		seen[itemID] = true
-		out = append(out, itemID)
-	}
-	for _, itemID := range textureRawSourceServiceItemIDRE.FindAllString(text, -1) {
-		itemID = strings.TrimSpace(itemID)
-		if itemID == "" || seen[itemID] {
-			continue
-		}
-		seen[itemID] = true
-		out = append(out, itemID)
-	}
-	return out
-}
-
-func contentItemIDsFromWorkerMessage(text string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, re := range []*regexp.Regexp{textureContentIDRefRE, textureContentItemRefRE, textureContentItemIDRefRE} {
-		for _, match := range re.FindAllStringSubmatch(text, -1) {
-			if len(match) < 2 {
-				continue
-			}
-			contentID := strings.Trim(strings.TrimSpace(match[1]), `"'`)
-			if contentID == "" || seen[contentID] {
-				continue
-			}
-			seen[contentID] = true
-			out = append(out, contentID)
-		}
-	}
-	return out
-}
-
 func sourceServiceItemRefToSourceEntity(itemID, contextText string) textureSourceEntity {
 	return textureSourceEntity{
 		EntityID: stableSourceEntityID("source_service_item", itemID),
@@ -438,13 +348,12 @@ func sourceServiceItemRefToSourceEntity(itemID, contextText string) textureSourc
 	}
 }
 
-func contentItemRefToSourceEntity(item types.ContentItem, contextText string) textureSourceEntity {
+func contentItemRefToSourceEntity(item types.ContentItem) textureSourceEntity {
 	canonicalURL := firstNonEmpty(item.CanonicalURL, item.SourceURL)
+	// whole_resource by default: text_quote selectors (and their quote-match
+	// validation) come from typed researcher findings, never from regex-scraping
+	// prose context.
 	selector := textureSourceEntitySelector{SelectorKind: "whole_resource"}
-	if quote := sourceEntityQuoteFromContext(contextText, item.ContentID); quote != "" {
-		selector.SelectorKind = "text_quote"
-		selector.TextQuote = quote
-	}
 	if item.ContentHash != "" {
 		selector.ContentHash = item.ContentHash
 	}
@@ -475,31 +384,6 @@ func contentItemRefToSourceEntity(item types.ContentItem, contextText string) te
 			UntrustedSourceText: true,
 		},
 	}
-}
-
-func sourceEntityQuoteFromContext(contextText, contentID string) string {
-	contentID = strings.TrimSpace(contentID)
-	if contentID == "" {
-		return ""
-	}
-	for _, line := range strings.Split(contextText, "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
-		if !strings.Contains(line, contentID) {
-			continue
-		}
-		line = strings.TrimSpace(strings.TrimPrefix(line, "Evidence:"))
-		line = strings.TrimSpace(strings.TrimPrefix(line, "Source:"))
-		line = strings.TrimSpace(strings.TrimPrefix(line, "Refs:"))
-		line = strings.TrimSpace(strings.ReplaceAll(line, "content_id:"+contentID, ""))
-		line = strings.TrimSpace(strings.ReplaceAll(line, "content_id: "+contentID, ""))
-		line = strings.TrimSpace(strings.ReplaceAll(line, `"content_id":"`+contentID+`"`, ""))
-		line = strings.TrimSpace(strings.ReplaceAll(line, `"content_id": "`+contentID+`"`, ""))
-		line = strings.Trim(line, " -:;")
-		if line != "" && len(line) <= 500 {
-			return line
-		}
-	}
-	return ""
 }
 
 func sourceServiceItemLabel(itemID, contextText string) string {

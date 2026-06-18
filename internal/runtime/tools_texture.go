@@ -695,6 +695,13 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			canonicalTextureSourcePathMetadataKey: canonicalPath,
 		})
 	}
+	collatedEntities := decodeTextureSourceEntities(decodeRevisionMetadata(revMeta)["source_entities"])
+	if citedIDs := extractInlineCitationEntityIDs(materialized.Content); len(citedIDs) > 0 {
+		sourceBodies := rt.collateCitationSourceBodies(ctx, rec.OwnerID, citedIDs, collatedEntities)
+		if issues := validateTextureCitations(materialized.Content, collatedEntities, sourceBodies); len(issues) > 0 {
+			return types.Revision{}, fmt.Errorf("%s", formatCitationValidationError(issues))
+		}
+	}
 	now := time.Now().UTC()
 	rev := types.Revision{
 		RevisionID:       uuid.NewString(),

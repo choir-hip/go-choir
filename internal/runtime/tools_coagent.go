@@ -542,28 +542,24 @@ func (rt *Runtime) coagentTextureSourceEntities(ctx context.Context, parentRec *
 		return nil
 	}
 	entities := decodeTextureSourceEntities(parentRec.Metadata["source_entities"])
-	seenText := strings.Join([]string{strings.TrimSpace(req.Objective), strings.TrimSpace(req.InitialContent)}, "\n")
-	for _, itemID := range sourceServiceItemIDsFromText(seenText) {
-		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{sourceServiceItemRefToSourceEntity(itemID, seenText)})
-	}
 
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	if rt == nil || rt.store == nil || ownerID == "" {
 		return entities
 	}
-	for _, contentID := range coagentTextureSourceContentIDs(parentRec, req, seenText) {
+	for _, contentID := range coagentTextureSourceContentIDs(parentRec, req) {
 		item, err := rt.Store().GetContentItem(ctx, ownerID, contentID)
 		if err != nil {
 			continue
 		}
-		entity := contentItemRefToSourceEntity(item, seenText)
+		entity := contentItemRefToSourceEntity(item)
 		entity.Provenance.CreatedBy = firstNonEmpty(canonicalAgentProfile(req.CallerProfile), entity.Provenance.CreatedBy)
 		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{entity})
 	}
 	return entities
 }
 
-func coagentTextureSourceContentIDs(parentRec *types.RunRecord, req coagentTextureRouteRequest, text string) []string {
+func coagentTextureSourceContentIDs(parentRec *types.RunRecord, req coagentTextureRouteRequest) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	add := func(raw string) {
@@ -584,9 +580,6 @@ func coagentTextureSourceContentIDs(parentRec *types.RunRecord, req coagentTextu
 				add(value)
 			}
 		}
-	}
-	for _, value := range contentItemIDsFromWorkerMessage(text) {
-		add(value)
 	}
 	return out
 }
