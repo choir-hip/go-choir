@@ -252,3 +252,55 @@ Open blockers / remaining error:
 Rollback ref: revert this exact-first-write runtime commit and return to the
 documented `8dbdd458` partial construct if staging or review shows the exact
 first patch policy breaks valid Texture entry paths.
+
+## 2026-06-17 - Staging falsified exact first-write repair (red evidence, green record)
+
+Claim under test: exact initial `function:patch_texture` would force a fast V1
+before terminal delegation and allow later V2+ integrate wakes.
+
+Move: deployed probe. Pushed runtime construct commit
+`7d462629ca4a5df9b3df3c7b7a707742a8e5b6eb`, monitored GitHub Actions, checked
+staging health identity, then ran the product-path cadence probe against
+`https://choir.news`.
+
+Receipts:
+
+- GitHub Actions for `7d462629ca4a5df9b3df3c7b7a707742a8e5b6eb`: Docs Truth
+  Check #193 success; FlakeHub #877 success; CI #1295 had all test/build jobs
+  success, but `Deploy to Staging (Node B)` concluded failure. Public API access
+  to deploy logs still returned `403`.
+- Staging `/health` nevertheless reported both proxy and sandbox on
+  `7d462629ca4a5df9b3df3c7b7a707742a8e5b6eb`, `upstream=ok`,
+  `vmctl_status=ok`, `deployed_at=2026-06-18T02:11:15Z`.
+- `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`
+  ran through the public product path. Submission:
+  `42fb44c0-a0f0-43c2-a883-6c85a007eb8c`; doc:
+  `f01de6d5-c638-414c-8232-db483469da2f`.
+- Probe result: V0 user at +0.267s; no appagent revisions;
+  `appagent_revision_count=0`; `first_paint_ms=null`; `total_revision_count=1`;
+  `final_head_chars=53`.
+- Trace summary: `web_search=0`, `source_search=0`, `spawn_agent=0`,
+  `update_coagent=0`, `moment_count=29`, `agent_count=2`,
+  `delegation_count=0`, trajectory `state=completed`, `live=false`.
+
+Result: exact first-write is locally proven but product-path falsified. The
+failure mode changed from late V1 after researcher wake (`8dbdd458`) to no
+appagent revision and no delegation at all (`7d462629`). This suggests the live
+provider/adapter path may reject or ignore exact `function:patch_texture`, hit a
+provider precondition fallback that relaxes or completes without the required
+tool, or otherwise let the initial Texture run complete without a canonical
+write despite the local stub tests.
+
+Expected ΔV: staged proof of fast V1 and V2+. Actual ΔV: negative for product
+path, but useful observer evidence: the first-write obligation must be enforced
+in a way compatible with live provider tool-choice semantics.
+
+Next move: before any code fix, inspect live-compatible tool-choice handling and
+provider precondition fallback. A candidate repair must prove that an initial
+Texture run cannot complete without a canonical write, while preserving
+post-write delegation and avoiding exact-tool behavior that collapses the live
+provider path.
+
+Rollback ref: revert `7d462629` if the next repair cannot preserve exact
+first-write semantics safely. This docs checkpoint is the required
+problem-documentation-first commit before the next code change.

@@ -195,15 +195,24 @@ falsification of the partial T1/T2 construct, not a stale-deploy artifact.
 Current local construct after that falsification: the first Texture provider
 turn for initial `texture_agent_revision` runs and `update_coagent` integrate
 wakes is now mechanically constrained to `function:patch_texture`
-(`internal/runtime/runtime.go:2214-2229`). This repairs the specific observed
-failure mode where `"required"` allowed the model to choose terminal delegation
-(`spawn_agent`) before any canonical appagent revision, so V1 waited for a later
-researcher wake. The continuation after that first write is unconstrained, so
-Texture can still delegate, request super execution, record a decision, or end
-after publishing the interim revision. Local tests now prove first-call
-write-only tool filtering, unconstrained follow-up, and V2 wake writes for both
-researcher and super evidence. Staging proof for fast first paint and V2+
-cadence remains pending.
+(`internal/runtime/runtime.go:2214-2229`). This was intended to repair the
+specific observed failure mode where `"required"` allowed the model to choose
+terminal delegation (`spawn_agent`) before any canonical appagent revision. Local
+tests proved first-call write-only tool filtering, unconstrained follow-up, and
+V2 wake writes for both researcher and super evidence.
+
+Staging evidence after deploy of `7d462629` falsified that repair as currently
+implemented: `scripts/texture_revision_cadence_probe.mjs` observed only V0 user
+content and no appagent revision at all for prompt-bar submission
+`42fb44c0-a0f0-43c2-a883-6c85a007eb8c` / doc
+`f01de6d5-c638-414c-8232-db483469da2f`, with `appagent_revision_count=0`,
+`research.web_search=0`, `research.source_search=0`, `research.spawn_agent=0`,
+`research.update_coagent=0`, and trajectory `state=completed`. Staging health
+identified both proxy and sandbox at
+`7d462629ca4a5df9b3df3c7b7a707742a8e5b6eb`, so this is not stale deploy
+evidence. The most likely new conjecture is that exact first-tool selection is
+not honored or is rejected/relaxed into a no-write completed path by the live
+provider/adapter, whereas local stub providers accepted it.
 
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
@@ -260,11 +269,11 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 partially repaired locally: first paint can now be a flagged
-  model-prior/interim revision before retrieval, and the runtime now forces the
-  first Texture turn to write before terminal delegation. Product-path proof is
-  still open because staging has not yet shown the fast first paint or V2+
-  cadence after this stricter first-write construct.
+- C2 partially repaired locally but falsified on staging: first paint can be a
+  flagged model-prior/interim revision under stub providers, and the runtime now
+  tries to force the first Texture turn to write before terminal delegation.
+  Product-path proof regressed at `7d462629`: staging produced no appagent
+  revision, no delegation, and no research activity.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -284,17 +293,18 @@ position / live conjectures / open edges:
   construct must replace that contradiction by letting the same Texture
   activation warm-inject addressed packets and commit more than one canonical
   revision, with revision metadata showing which packet set each write consumed.
-- C8 active from 2026-06-17 staging falsification: prompt/tool choice can defeat
-  a merely "required" first action by choosing a terminal tool before any
-  canonical revision. The current construct repairs this by exact first
-  `patch_texture`; staging must still prove the provider honors the exact tool
-  choice and that later findings produce V2+ revisions.
+- C8 falsified/refined by 2026-06-17 staging: prompt/tool choice can defeat a
+  merely "required" first action by choosing a terminal tool before any canonical
+  revision, but exact first `patch_texture` as implemented can also collapse the
+  live provider path into no appagent revision and no delegation. The next repair
+  must preserve the first-write obligation while matching the live provider's
+  supported tool-choice semantics.
 
-next move: land and deploy the exact-first-write T2 repair, then re-run the
-deployed cadence probe. If staging shows fast V1 and V2+ wakes, continue with
-T3. If staging still shows V1-only or late first paint, record that falsification
-before the next code move and inspect provider/tool-loop evidence for exact tool
-choice relaxation or post-write lifecycle termination.
+next move: document this falsification first, then inspect live-compatible
+tool-choice semantics and the provider precondition path. Candidate repairs must
+prove that the first Texture turn cannot end without a canonical write while
+also avoiding exact-tool adapter behavior that produces a no-write completed
+trajectory.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -310,9 +320,11 @@ learning state: prior increment `68d09cc3` deployed and falsified on staging
 and reinforced the cap. The `8dbdd458` construct then re-enabled Texture warm
 injection and same-run multi-write, but staging still produced V1-only at
 47.057s because the initial "required" tool choice allowed terminal delegation
-before a canonical write. The redesign direction (long-running actor +
-from-weights V1) was owner-selected after the first falsification; exact
-first-write is the current local repair under staging test.
+before a canonical write. The `7d462629` exact-first-write construct locally
+proved the intended order but staging produced no appagent revision at all. The
+redesign direction (long-running actor + from-weights V1) was owner-selected
+after the first falsification; the current learning is that the repair must be
+live-provider-compatible, not just exact-tool correct under stubs.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and
