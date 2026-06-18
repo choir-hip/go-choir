@@ -2211,29 +2211,22 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 	}
 }
 
-// initialTextureToolChoice constrains only whether the first Texture turn must
-// act, never which tool it picks. A first Texture turn is required to make a
-// durable tool call, but it chooses among its full affordance — patch_texture,
-// rewrite_texture, spawn_agent, record_texture_decision, request_super_execution,
-// request_email_draft. This is a mechanical "take an action" invariant, not a
-// prompt classifier, exact-tool imprisonment, or fixed role choreography: the
-// model, not the runtime, decides whether to write, delegate, decide, or block.
+// initialTextureToolChoice requires the first Texture turn to publish a
+// canonical revision before it can delegate, request execution, record a
+// decision, hand off email, or end. The exact tool obligation is mechanical
+// revision-cadence policy, not semantic role choreography: Texture still decides
+// the revision content and any later action after the first write.
 func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
 	}
-	// Integrate wakes carry pending coagent findings into the first turn (cold
-	// prepend). A grounded integrate must take a durable action — write,
-	// delegate, or record an explicit decision — rather than silently ending
-	// with prose, which surfaces as "Revision failed". The model still chooses
-	// which durable action; this only bans the silent no-op.
 	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
-		return "required"
+		return "function:patch_texture"
 	}
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
 	}
-	return "required"
+	return "function:patch_texture"
 }
 
 func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {

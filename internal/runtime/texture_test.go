@@ -337,17 +337,10 @@ func toolDefinitionsContain(defs []ToolDefinition, name string) bool {
 	return false
 }
 
-func assertFullInitialTextureAffordance(t *testing.T, defs []ToolDefinition) {
+func assertInitialTextureWriteOnly(t *testing.T, defs []ToolDefinition) {
 	t.Helper()
-	for _, name := range []string{
-		"patch_texture",
-		"record_texture_decision",
-		"spawn_agent",
-		"request_super_execution",
-	} {
-		if !toolDefinitionsContain(defs, name) {
-			t.Fatalf("initial Texture tool definitions missing %s: %+v", name, defs)
-		}
+	if len(defs) != 1 || defs[0].Name != "patch_texture" {
+		t.Fatalf("initial Texture tool definitions = %+v, want only patch_texture", defs)
 	}
 }
 
@@ -1994,6 +1987,7 @@ type textureWriteAndResearchProvider struct {
 	choices    []string
 	firstTools []ToolDefinition
 	wrote      bool
+	spawned    bool
 }
 
 func (p *textureWriteAndResearchProvider) ProviderName() string {
@@ -2020,27 +2014,34 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 			Model:      "test-model",
 		}, nil
 	}
+	if p.wrote && !p.spawned && toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") {
+		p.spawned = true
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{
+				{
+					ID:   "call-open-researcher",
+					Name: "spawn_agent",
+					Arguments: json.RawMessage(`{
+						"role":"researcher",
+						"objective":"Research the owner request and send concise evidence back to this Texture."
+					}`),
+				},
+			},
+			Model: "test-model",
+		}, nil
+	}
 	if p.wrote || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 	p.wrote = true
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
-		ToolCalls: []types.ToolCall{
-			{
-				ID:        "call-write-working-revision",
-				Name:      "patch_texture",
-				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"FIRST_TURN_WRITE_AND_RESEARCH\n\nWorking revision while researcher evidence is pending."}]}`),
-			},
-			{
-				ID:   "call-open-researcher",
-				Name: "spawn_agent",
-				Arguments: json.RawMessage(`{
-					"role":"researcher",
-					"objective":"Research the owner request and send concise evidence back to this Texture."
-				}`),
-			},
-		},
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-write-working-revision",
+			Name:      "patch_texture",
+			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"FIRST_TURN_WRITE_AND_RESEARCH\n\nWorking revision while researcher evidence is pending."}]}`),
+		}},
 		Model: "test-model",
 	}, nil
 }
@@ -2325,10 +2326,10 @@ func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *test
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != "required" {
-		t.Fatalf("initial texture tool_choice = %#v, want first choice required", provider.choices)
+	if len(provider.choices) == 0 || provider.choices[0] != "function:patch_texture" {
+		t.Fatalf("initial texture tool_choice = %#v, want first choice function:patch_texture", provider.choices)
 	}
-	assertFullInitialTextureAffordance(t, provider.firstTools)
+	assertInitialTextureWriteOnly(t, provider.firstTools)
 	if len(provider.choices) != 2 {
 		t.Fatalf("texture provider calls = %d choices=%#v, want a write turn plus a non-terminal continuation turn", len(provider.choices), provider.choices)
 	}
@@ -2411,7 +2412,7 @@ func TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
 	}
 }
 
-func TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn(t *testing.T) {
+func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 	t.Parallel()
 	provider := &textureWriteAndResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
 
@@ -2443,10 +2444,10 @@ func TestInitialTextureRunCanWriteAndSpawnResearcherInSameFirstTurn(t *testing.T
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != "required" {
-		t.Fatalf("initial texture tool choices = %#v, want required first choice", provider.choices)
+	if len(provider.choices) < 2 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "" {
+		t.Fatalf("initial texture tool choices = %#v, want write-only first choice then unconstrained continuation", provider.choices)
 	}
-	assertFullInitialTextureAffordance(t, provider.firstTools)
+	assertInitialTextureWriteOnly(t, provider.firstTools)
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
@@ -2512,7 +2513,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	assertFullInitialTextureAffordance(t, provider.firstTools)
+	assertInitialTextureWriteOnly(t, provider.firstTools)
 
 	var researcherRun *types.RunRecord
 	deadline := time.Now().Add(5 * time.Second)
@@ -2623,7 +2624,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	assertFullInitialTextureAffordance(t, provider.firstTools)
+	assertInitialTextureWriteOnly(t, provider.firstTools)
 
 	var superRun *types.RunRecord
 	deadline := time.Now().Add(5 * time.Second)
@@ -2737,13 +2738,13 @@ func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T)
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if len(provider.choices) != 2 || provider.choices[0] != "required" {
-		t.Fatalf("texture provider choices = %#v, want a required write turn plus a non-terminal continuation turn", provider.choices)
+	if len(provider.choices) != 2 || provider.choices[0] != "function:patch_texture" {
+		t.Fatalf("texture provider choices = %#v, want a write-only turn plus a non-terminal continuation turn", provider.choices)
 	}
 	if provider.choices[1] != "" {
 		t.Fatalf("continuation tool_choice = %q, want unconstrained after the non-terminal write", provider.choices[1])
 	}
-	assertFullInitialTextureAffordance(t, provider.firstTools)
+	assertInitialTextureWriteOnly(t, provider.firstTools)
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
@@ -2838,11 +2839,11 @@ func TestInitialTextureDecisionPromptRejectsPrematureEditBeforeDecision(t *testi
 		t.Fatalf("appagent revision leaked private decision rationale: %q", appContent)
 	}
 	if len(provider.choices) < 2 ||
-		provider.choices[0] != "required" ||
+		provider.choices[0] != "function:patch_texture" ||
 		provider.choices[1] != "" {
-		t.Fatalf("tool choices = %#v, want required first turn and free follow-up after decision record", provider.choices)
+		t.Fatalf("tool choices = %#v, want write-only first turn and free follow-up after decision record", provider.choices)
 	}
-	assertFullInitialTextureAffordance(t, provider.firstTools)
+	assertInitialTextureWriteOnly(t, provider.firstTools)
 }
 
 func TestTexturePromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
@@ -3797,9 +3798,10 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if !shouldPrependInitialCoagentUpdates(wakeRun) {
 		t.Fatalf("wake run should be cold-prepend eligible; metadata=%+v", wakeRun.Metadata)
 	}
-	// Fix #2: a grounded integrate wake must take a durable action, not end with prose.
-	if got := initialTextureToolChoice(wakeRun); got != "required" {
-		t.Fatalf("initialTextureToolChoice(wake run) = %q, want required", got)
+	// Fix #2: a grounded integrate wake must write a revision before it can end
+	// or take a terminal delegation action.
+	if got := initialTextureToolChoice(wakeRun); got != "function:patch_texture" {
+		t.Fatalf("initialTextureToolChoice(wake run) = %q, want function:patch_texture", got)
 	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("choir:research-finding:finding-stream-001:0")).String()
 	if !strings.Contains(wakeRun.Prompt, evidenceID) {

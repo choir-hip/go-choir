@@ -193,3 +193,62 @@ Next move: documentation-first checkpoint commit for this falsification, then
 investigate the deployed trajectory events for why the first write waited 47s
 and why warm `update_coagent` activity did not yield V2+ before trajectory
 completion.
+
+## 2026-06-17 - Exact first-write T2 repair (red runtime, staging pending)
+
+Claim under test: the `8dbdd458` construct still let Texture choose a terminal
+tool before any canonical revision because the initial tool choice was only
+`"required"`. If the first Texture turn is constrained to `patch_texture`, V1
+should publish before researcher/super delegation, and subsequent integrate
+wakes should write V2 from the delivered findings before they can terminate.
+
+Move: construct. Changed initial Texture tool selection from "some durable tool"
+to exact first `function:patch_texture` for initial revision runs and
+`update_coagent` integrate wakes. The next provider call after the write remains
+unconstrained, preserving Texture's ability to delegate, request super
+execution, record a decision, hand off email, or end after publishing the
+interim revision.
+
+Expected ΔV: repair the staging-observed late-V1 mechanism without adding a
+Texture-specific tool-loop branch; leave T3/T4 long-running actor lifecycle
+open. Actual local ΔV: first-write ordering is mechanically proven in focused
+runtime tests and the shard suite; deployed proof is still pending.
+
+Receipts:
+
+- `internal/runtime/runtime.go:2214-2229` now returns
+  `function:patch_texture` for initial Texture revision tasks and
+  `request_source=update_coagent` wakes, while scheduled non-coagent runs remain
+  unconstrained.
+- `internal/runtime/texture_test.go` now asserts the first Texture tool
+  definition set contains only `patch_texture`, and the write+research fixture
+  proves write-first / delegate-second ordering.
+- `internal/runtime/texture_prompt_unit_test.go` now covers the exact
+  first-patch policy for ordinary prompts, product work, proof prompts, creative
+  document work, explicit decision notes, and update-coagent wakes.
+- `internal/runtime/prompt_bar_unit_test.go` now records the product-route
+  expectation that explicit no-worker decisions still write before delegating.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestInitialTextureToolChoiceRequiresPatchBeforeContinuation|TestHandlePromptBarOperationalProofInitialRunStartsWithTexture|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestSubmitResearchFindingsWakeUsesSameDebouncedPath|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTexturePromptInitialRevisionUsesSingleWriterLoop|TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent|TestResearcherFailureSynthesizesCheckpointAfterSearch|TestRunSupportsCoagentUpdateInjectionIncludesTexture|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestCoagentUpdateTurnInjectorSupportsTexture|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestBuildAppagentRevisionMetadataCarriesForwardDurableKeys|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit' -count=1`
+- `nix develop -c go test ./internal/store -run 'TestTextureAgentMutation' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+
+Open blockers / remaining error:
+
+- Staging must still prove the provider honors exact `function:patch_texture`
+  and does not relax to "any required tool" through an adapter fallback.
+- T3/T4 remain open: this repair can yield fast V1 and wake-driven V2+, but it
+  still does not provide a role-uniform park-and-wait primitive, cumulative
+  actor budget, or one resident `texture:<docID>` lifecycle.
+- If staging still shows late V1 or V1-only, the next documentation-first record
+  should capture whether exact tool choice was relaxed, `patch_texture` failed,
+  the post-write continuation ended before delegation, or integrate wakes failed
+  to consume findings.
+
+Rollback ref: revert this exact-first-write runtime commit and return to the
+documented `8dbdd458` partial construct if staging or review shows the exact
+first patch policy breaks valid Texture entry paths.

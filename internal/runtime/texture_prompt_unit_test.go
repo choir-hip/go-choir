@@ -587,7 +587,7 @@ func TestTexturePromptPrioritizesSuperAfterResearchForMixedObligation(t *testing
 	assertNoForcedSemanticDelegation(t, request)
 }
 
-func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.T) {
+func TestInitialTextureToolChoiceRequiresPatchBeforeContinuation(t *testing.T) {
 	tests := []struct {
 		name     string
 		metadata map[string]any
@@ -599,7 +599,7 @@ func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.
 				"type":            "texture_agent_revision",
 				"original_prompt": "what is the weather in boston now",
 			},
-			want: "required",
+			want: "function:patch_texture",
 		},
 		{
 			name: "mutable product work does not force super request",
@@ -607,7 +607,7 @@ func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.
 				"type":            "texture_agent_revision",
 				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "required",
+			want: "function:patch_texture",
 		},
 		{
 			name: "community wire operational proof does not force super request",
@@ -615,7 +615,7 @@ func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.
 				"type":        "texture_agent_revision",
 				"seed_prompt": "Universal Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article Texture, update universal-wire/Wire.texture, then leave evidence ids and verifier proof.",
 			},
-			want: "required",
+			want: "function:patch_texture",
 		},
 		{
 			name: "creative direct document work edits texture",
@@ -623,15 +623,15 @@ func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.
 				"type":            "texture_agent_revision",
 				"original_prompt": "tell me a story about computers",
 			},
-			want: "required",
+			want: "function:patch_texture",
 		},
 		{
-			name: "explicit decision note keeps full affordance",
+			name: "explicit decision note still writes first",
 			metadata: map[string]any{
 				"type":            "texture_agent_revision",
 				"original_prompt": "Create a short Texture document. Record an off-document Texture decision note with decision_kind no_worker_needed first.",
 			},
-			want: "required",
+			want: "function:patch_texture",
 		},
 		{
 			name: "scheduled non-coagent run leaves texture free to choose",
@@ -650,7 +650,7 @@ func TestInitialTextureToolChoiceRequiresActionWithoutExactFiltering(t *testing.
 				"scheduled_message_seq": int64(3),
 				"request_source":        "update_coagent",
 			},
-			want: "required",
+			want: "function:patch_texture",
 		},
 	}
 	for _, tc := range tests {
