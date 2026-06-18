@@ -389,6 +389,16 @@ recover into a substantive V2 on staging, but it also proves the initial exact
 write can still burn the fast first paint as a no-op prompt copy and miss the
 under-49s useful-V1 target.
 
+Current local repair after that no-op V1 staging result: the same content-equality
+guard now also rejects prompt-only initial model-prior Texture writes before any
+revision is stored (`internal/runtime/tools_texture.go`). This applies only after
+metadata classification proves the write is `model_prior_interim` /
+`revision_grounding=model_prior`, so sourced Wire article revisions and ordinary
+non-initial edits are not reclassified. New tests prove the low-level no-op
+prompt-copy rejection leaves the mutation pending, and the prompt-bar path
+retries exact `patch_texture` after the failed no-op result and stores a useful
+model-prior V1 on the same run (`internal/runtime/texture_test.go`).
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -454,7 +464,9 @@ position / live conjectures / open edges:
   T2/T8 blocker has moved back to initial V1 quality: the same formal probe
   stored a 53-char prompt-sized V1 only at +49.350s before deepening at V2, so
   first paint was neither clearly under the old ~49s baseline nor useful as a
-  from-weights draft.
+  from-weights draft. Locally, identical prompt-only model-prior writes are now
+  rejected and retried before storage; staging must prove the live provider
+  recovers with a useful V1 without regressing substantive V2.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -498,14 +510,15 @@ position / live conjectures / open edges:
   enough for the formal probe to reach a substantive V2. The next discriminator
   is the initial no-worker exact-write branch: a prompt-sized no-op V1 should be
   rejected or retried without delaying the first useful from-weights draft into
-  the old first-findings window.
+  the old first-findings window. The current local guard moves that branch from
+  "stored no-op V1" to "retry exact patch_texture or fail without appagent V1";
+  staging must decide whether the live provider recovers quickly.
 
-next move: run a metadata-aware focused diagnostic on `157db34f` if needed to
-confirm the V1 no-op metadata/tool-result branch, then repair the initial
-no-worker Texture write path so unchanged prompt-copy V1s cannot satisfy the
-from-weights first-paint obligation. The repair must preserve honest
-model-prior/interim metadata, avoid forced semantic researcher choreography, and
-not regress the now-supported substantive V2 path.
+next move: finish local verification for the initial model-prior no-op guard,
+commit and push it, monitor CI/deploy identity, then rerun the deployed cadence
+probe. Staging must show a useful model-prior V1 well under the old ~49s window
+and a substantive V2, or expose a precise retry-exhaustion branch without
+storing a prompt-copy V1.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -554,7 +567,10 @@ before marking updates delivered, and staging then recovered into a substantive
 V2. The current live learning is that the initial no-worker exact write can
 still store a prompt-sized no-op V1 after roughly the old first-findings delay,
 so the first-paint repair must make unchanged initial writes retry or fail
-without erasing the route that now reaches substantive V2.
+without erasing the route that now reaches substantive V2. The current local
+repair applies the same content-equality principle to prompt-only
+model-prior/interim writes and proves exact-tool retry can recover into a useful
+draft locally; live provider recovery is still unproven.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

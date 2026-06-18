@@ -947,3 +947,39 @@ model-prior/interim metadata and the now-working substantive V2 path.
 Rollback ref: keep `157db34f`; it improved the V2 branch. Revert a future V1
 repair if it regresses substantive V2, worker-update delivery, or honest
 model-prior/interim metadata.
+
+## 2026-06-18 - Local repair rejects prompt-copy initial V1 (red construct)
+
+Claim under test: the no-op V1 branch can be repaired by refusing to store an
+unchanged prompt-only model-prior Texture revision, letting the existing exact
+initial tool retry path ask the provider for a real draft.
+
+Move: extended the content-equality guard in `commitTextureToolEdit` to reject
+unchanged writes whose revision metadata is `model_prior_interim` or
+`revision_grounding=model_prior`, after metadata classification and before
+revision storage. Added one direct guard test for a current-events prompt-copy
+patch and one prompt-bar path test proving the failed no-op `patch_texture`
+keeps exact tool choice active and the same run stores a useful V1 on retry.
+
+Expected ΔV: move the active branch from "prompt-copy V1 can satisfy first
+paint" to "prompt-copy V1 is a failed tool result that must retry or fail
+without storing appagent V1." Actual ΔV: focused local tests passed; staging
+remains unproven.
+
+Receipts:
+
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestInitialTextureRevisionRejectsNoOpPromptCopy|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestTextureWorkerUpdateRevisionRejectsNoOpPatch|TestTextureModelPriorCompletionGuardOpensProbePath|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite' -count=1`
+
+Result: local storage and tool-loop behavior now match the desired branch. A
+prompt-only no-op V1 does not create an appagent revision or complete the
+mutation, and the exact initial `patch_texture` retry can recover into one
+useful model-prior V1. The worker-update no-op guard and evidence wake tests
+still pass in the same focused batch.
+
+Next move: run the broader focused runtime batch, docs check, whitespace check,
+and runtime shards; then commit/push and let staging decide whether the live
+provider writes a useful V1 quickly or exposes a new retry-exhaustion branch.
+
+Rollback ref: revert the prompt-copy guard commit if staging shows legitimate
+initial model-prior drafts require same-content storage, or if it regresses the
+substantive V2 path repaired by `157db34f`.

@@ -2116,6 +2116,61 @@ func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req 
 	}, nil
 }
 
+type textureInitialNoOpThenDraftProvider struct {
+	Provider
+	choices      []string
+	attempts     int
+	sawNoOpError bool
+}
+
+func (p *textureInitialNoOpThenDraftProvider) ProviderName() string {
+	return "texture-initial-noop-then-draft"
+}
+
+func (p *textureInitialNoOpThenDraftProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+}
+
+func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
+	for _, msg := range req.Messages {
+		if strings.Contains(string(msg), "initial model-prior Texture revision must change prompt content") {
+			p.sawNoOpError = true
+			break
+		}
+	}
+	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") || p.attempts >= 2 {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	}
+	p.attempts++
+	if p.attempts == 1 {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-initial-noop",
+				Name: "patch_texture",
+				Arguments: json.RawMessage(`{
+					"edits":[{
+						"op":"replace",
+						"find":"Draft a short private note.",
+						"replace":"Draft a short private note."
+					}]
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-initial-useful-draft",
+			Name:      "patch_texture",
+			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"USEFUL_MODEL_PRIOR_V1\n\nA short private note should name the audience, the decision to make, and the next concrete follow-up."}]}`),
+		}},
+		Model: "test-model",
+	}, nil
+}
+
 func textureAgentIDFromSystemPrompt(system string) string {
 	const marker = "Current agent id: "
 	for _, line := range strings.Split(system, "\n") {
@@ -7967,6 +8022,173 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 	}
 	if checkpoint != nil {
 		t.Fatalf("checkpoint after rejected no-op = %+v, want nil", checkpoint)
+	}
+}
+
+func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
+	t.Parallel()
+	_, s, rt := textureAPISetupWithRuntime(t)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-1"
+	docID := "doc-initial-noop-test"
+	agentID := currentTextureAgentID(docID)
+	promptContent := "What's going on with Anthropic and the US government?"
+	doc := types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Initial no-op guard",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	baseMetadata, err := json.Marshal(map[string]any{
+		"input_origin": textureInputOriginUserPrompt,
+		"seed_prompt":  promptContent,
+	})
+	if err != nil {
+		t.Fatalf("marshal base metadata: %v", err)
+	}
+	base := types.Revision{
+		RevisionID:  "rev-initial-noop-v0",
+		DocID:       docID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     promptContent,
+		Metadata:    baseMetadata,
+		CreatedAt:   now,
+	}
+	if err := s.CreateRevision(ctx, base); err != nil {
+		t.Fatalf("create base revision: %v", err)
+	}
+
+	runID := "run-initial-noop-texture"
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     docID,
+		RunID:     runID,
+		OwnerID:   ownerID,
+		State:     "pending",
+		CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("create agent mutation: %v", err)
+	}
+	textureRun := &types.RunRecord{
+		RunID:        runID,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-texture-test",
+		AgentID:      agentID,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		ChannelID:    docID,
+		State:        types.RunRunning,
+		Prompt:       "Draft the first model-prior Texture revision.",
+		CreatedAt:    now.Add(time.Second),
+		UpdatedAt:    now.Add(time.Second),
+		Metadata: map[string]any{
+			"type":                  textureAgentRevisionTaskType,
+			"doc_id":                docID,
+			"current_revision_id":   base.RevisionID,
+			"request_intent":        "initial_conductor_workflow",
+			"seed_prompt":           promptContent,
+			"input_origin":          textureInputOriginUserPrompt,
+			runMetadataAgentID:      agentID,
+			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataChannelID:    docID,
+			runMetadataTrajectoryID: "traj-initial-noop",
+		},
+	}
+	rawArgs, err := json.Marshal(editTextureArgs{
+		DocID:          docID,
+		BaseRevisionID: base.RevisionID,
+		Operation:      "apply_edits",
+		Edits: []textureTextEdit{{
+			Op:      "replace",
+			Find:    promptContent,
+			Replace: promptContent,
+		}},
+		Rationale: "Store the initial draft.",
+	})
+	if err != nil {
+		t.Fatalf("marshal initial no-op patch: %v", err)
+	}
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "patch_texture", rawArgs); err == nil ||
+		!strings.Contains(err.Error(), "initial model-prior Texture revision must change prompt content") {
+		t.Fatalf("no-op initial patch err = %v, want model-prior no-op guard", err)
+	}
+	revs, err := s.ListRevisionsByDoc(ctx, docID, ownerID, 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(revs) != 1 || revs[0].RevisionID != base.RevisionID {
+		t.Fatalf("revisions after rejected initial no-op = %+v, want only user V0", revs)
+	}
+	mutation, err := s.GetAgentMutationByRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "pending" {
+		t.Fatalf("mutation after rejected initial no-op = %+v, want pending", mutation)
+	}
+}
+
+func TestInitialTextureNoOpPatchRetriesIntoUsefulDraft(t *testing.T) {
+	t.Parallel()
+	provider := &textureInitialNoOpThenDraftProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Draft a short private note."}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create texture route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial texture state = %q, want completed", state)
+	}
+	if !provider.sawNoOpError {
+		t.Fatalf("provider never saw initial no-op guard error; choices=%#v", provider.choices)
+	}
+	if len(provider.choices) < 3 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "function:patch_texture" || provider.choices[2] != "" {
+		t.Fatalf("initial texture choices = %#v, want exact retry then unconstrained completion", provider.choices)
+	}
+	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	var appagentRevs []types.Revision
+	for _, rev := range revs {
+		if rev.AuthorKind == types.AuthorAppAgent {
+			appagentRevs = append(appagentRevs, rev)
+		}
+	}
+	if len(appagentRevs) != 1 {
+		t.Fatalf("appagent revisions = %+v, want one useful V1 after retry", appagentRevs)
+	}
+	if !strings.Contains(appagentRevs[0].Content, "USEFUL_MODEL_PRIOR_V1") {
+		t.Fatalf("stored V1 content = %q, want useful draft", appagentRevs[0].Content)
 	}
 }
 
