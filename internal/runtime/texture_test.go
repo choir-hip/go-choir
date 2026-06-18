@@ -2046,6 +2046,66 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 	}, nil
 }
 
+type textureGuardedResearchProvider struct {
+	Provider
+	choices  []string
+	wrote    bool
+	spawned  bool
+	sawGuard bool
+}
+
+func (p *textureGuardedResearchProvider) ProviderName() string {
+	return "texture-guarded-research"
+}
+
+func (p *textureGuardedResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+}
+
+func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	p.choices = append(p.choices, req.ToolChoice)
+	if messagesContainToolCall(req.Messages, "spawn_agent") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "research opened", Model: "test-model"}, nil
+	}
+	lastUser := extractLastUserMessage(req.Messages)
+	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
+			Model:      "test-model",
+		}, nil
+	}
+	if p.wrote && !p.spawned && strings.Contains(lastUser, "model_prior_interim") {
+		p.sawGuard = true
+		p.spawned = true
+		return &ToolLoopResponse{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:   "call-open-researcher-after-guard",
+				Name: "spawn_agent",
+				Arguments: json.RawMessage(`{
+					"role":"researcher",
+					"objective":"Research what is going on with Anthropic and the US government. Send concise current evidence back to texture."
+				}`),
+			}},
+			Model: "test-model",
+		}, nil
+	}
+	if p.wrote || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "premature interim-only completion", Model: "test-model"}, nil
+	}
+	p.wrote = true
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		ToolCalls: []types.ToolCall{{
+			ID:        "call-write-guarded-working-revision",
+			Name:      "patch_texture",
+			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"GUARDED_MODEL_PRIOR_V1\n\nThis is an interim model-prior question map. Current evidence is still unresolved."}]}`),
+		}},
+		Model: "test-model",
+	}, nil
+}
+
 type textureResearchEvidenceLoopProvider struct {
 	Provider
 	mu                 sync.Mutex
@@ -2477,6 +2537,95 @@ func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 	}
 	if researcher.ChannelID != decision.DocID || trajectoryIDForRun(researcher) != submission.SubmissionID {
 		t.Fatalf("researcher route = channel %q trajectory %q, want %s/%s; run=%+v", researcher.ChannelID, trajectoryIDForRun(researcher), decision.DocID, submission.SubmissionID, *researcher)
+	}
+}
+
+func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
+	t.Parallel()
+	provider := &textureGuardedResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's going on with Anthropic and the US government?"}`, "user-1")
+	w := httptest.NewRecorder()
+	h.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("prompt-bar status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var submission promptBarSubmitResponse
+	if err := json.NewDecoder(w.Body).Decode(&submission); err != nil {
+		t.Fatalf("decode prompt-bar response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, submission.SubmissionID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("conductor state = %q, want completed", state)
+	}
+	conductor, err := rt.GetRun(context.Background(), submission.SubmissionID, "user-1")
+	if err != nil {
+		t.Fatalf("get conductor run: %v", err)
+	}
+	var decision conductorDecision
+	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
+		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
+	}
+	if decision.DocID == "" || decision.InitialLoopID == "" {
+		t.Fatalf("conductor did not create texture route: %+v", decision)
+	}
+	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("initial texture state = %q, want completed", state)
+	}
+	if !provider.sawGuard {
+		t.Fatalf("provider never saw model-prior completion guard; choices=%#v", provider.choices)
+	}
+	if len(provider.choices) < 3 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "" || provider.choices[2] != "" {
+		t.Fatalf("texture choices = %#v, want exact write then unconstrained completion guard retry", provider.choices)
+	}
+	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	var v1 *types.Revision
+	for i := range revs {
+		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "GUARDED_MODEL_PRIOR_V1") {
+			v1 = &revs[i]
+			break
+		}
+	}
+	if v1 == nil {
+		t.Fatalf("missing guarded model-prior V1; revisions=%+v", revs)
+	}
+	meta := decodeRevisionMetadata(v1.Metadata)
+	if !metadataBoolValue(meta, "model_prior_interim") || metadataStringValue(meta, "revision_grounding") != "model_prior" {
+		t.Fatalf("V1 metadata not marked model-prior/interim: %+v", meta)
+	}
+	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	var researcher *types.RunRecord
+	for i := range runs {
+		if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+			researcher = &runs[i]
+			break
+		}
+	}
+	if researcher == nil {
+		t.Fatalf("completion guard did not lead to researcher probe; runs=%+v", runs)
+	}
+	if researcher.ChannelID != decision.DocID || trajectoryIDForRun(researcher) != submission.SubmissionID {
+		t.Fatalf("researcher route = channel %q trajectory %q, want %s/%s; run=%+v", researcher.ChannelID, trajectoryIDForRun(researcher), decision.DocID, submission.SubmissionID, *researcher)
+	}
+	events, err := s.ListEvents(context.Background(), decision.InitialLoopID, 200)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	var sawCompletionGuardRetry bool
+	for _, ev := range events {
+		if ev.Kind == types.EventRunRetry && ev.Phase == "completion_guard" {
+			sawCompletionGuardRetry = true
+			break
+		}
+	}
+	if !sawCompletionGuardRetry {
+		t.Fatalf("missing completion_guard retry event; events=%+v", events)
 	}
 }
 

@@ -118,12 +118,27 @@ type ToolLoopMemoryHooks struct {
 	OnProviderError    func(ctx context.Context, messages []json.RawMessage, err error) ([]json.RawMessage, bool, error)
 }
 
+type ToolLoopCompletionState struct {
+	Messages  []json.RawMessage
+	FinalText string
+	Attempts  int
+}
+
+type ToolLoopCompletionGuardResult struct {
+	Continue    bool
+	Reason      string
+	Instruction string
+}
+
+type ToolLoopCompletionGuardFunc func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error)
+
 type toolLoopOptions struct {
 	memoryHooks                   ToolLoopMemoryHooks
 	llmConfig                     LLMSelection
 	providerPreconditionFallbacks []LLMSelection
 	initialToolChoice             string
 	terminalTools                 map[string]bool
+	completionGuard               ToolLoopCompletionGuardFunc
 }
 
 type pendingRequiredTool struct {
@@ -135,6 +150,8 @@ type pendingRequiredTool struct {
 const maxRequiredNextToolRetries = 2
 
 const maxTokenContinuationRetries = 3
+
+const maxCompletionGuardRetries = 2
 
 var requiredNextToolCallTimeout = 45 * time.Second
 
@@ -200,6 +217,16 @@ func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
 	}
 }
 
+// WithCompletionGuard lets a caller reject an end_turn as incomplete and append
+// an ordinary user turn describing the remaining obligation. The guard does not
+// choose a tool; it keeps the tool loop uniform while letting app-level policy
+// define what counts as a complete turn.
+func WithCompletionGuard(guard ToolLoopCompletionGuardFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.completionGuard = guard
+	}
+}
+
 // maxToolLoopIterations prevents infinite tool-calling loops. If the LLM
 // keeps requesting tool use without reaching an end_turn, we bail out
 // after this many iterations. This is a temporary stability ceiling while
@@ -249,6 +276,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	preconditionFallbackIndex := 0
 	var requiredNextTool *pendingRequiredTool
 	var maxTokenContinuationAttempts int
+	var completionGuardAttempts int
 	var partialTextFragments []string
 
 	appendMessage := func(role string, msg json.RawMessage) error {
@@ -307,6 +335,20 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	}
 	appendRequiredInitialToolChoiceReminder := func(requiredName, reason string) error {
 		text := fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
+		msg, _ := json.Marshal(map[string]any{
+			"role": "user",
+			"content": []map[string]string{{
+				"type": "text",
+				"text": text,
+			}},
+		})
+		return appendMessage("user", msg)
+	}
+	appendCompletionGuardReminder := func(result ToolLoopCompletionGuardResult) error {
+		text := strings.TrimSpace(result.Instruction)
+		if text == "" {
+			text = "The previous model turn ended before satisfying an app-level completion obligation. Continue with the next legitimate tool action or record an audit-worthy blocker/decision before ending."
+		}
 		msg, _ := json.Marshal(map[string]any{
 			"role": "user",
 			"content": []map[string]string{{
@@ -709,6 +751,36 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					}
 					if err := appendInjected(injected); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist final injected turns: %w", err)
+					}
+					continue
+				}
+			}
+			if options.completionGuard != nil {
+				guardResult, err := options.completionGuard(ctx, ToolLoopCompletionState{
+					Messages:  append([]json.RawMessage(nil), messages...),
+					FinalText: resp.Text,
+					Attempts:  completionGuardAttempts,
+				})
+				if err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop completion guard: %w", err)
+				}
+				if guardResult.Continue {
+					completionGuardAttempts++
+					if completionGuardAttempts > maxCompletionGuardRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: completion guard %q was not satisfied after %d retries", strings.TrimSpace(guardResult.Reason), maxCompletionGuardRetries)
+					}
+					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist guarded assistant final message: %w", err)
+					}
+					if err := appendCompletionGuardReminder(guardResult); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist completion guard reminder: %w", err)
+					}
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"attempt": completionGuardAttempts,
+							"reason":  strings.TrimSpace(guardResult.Reason),
+						})
+						emit(types.EventRunRetry, "completion_guard", payload)
 					}
 					continue
 				}

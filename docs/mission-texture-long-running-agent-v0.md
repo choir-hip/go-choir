@@ -272,6 +272,21 @@ the intended retry branch and a fast V1: submission
 stored appagent V1 at about +16s. That trajectory still stopped after V1 with
 `delegation_count=0`, no researcher activity, and no V2+ grounded revision.
 
+Current local repair after that partial staging proof: the tool loop has a
+uniform completion-guard hook that can reject an `end_turn` as incomplete and
+append an ordinary user-turn reminder, without selecting a semantic next tool
+(`internal/runtime/toolloop.go:118-230`, `internal/runtime/toolloop.go:755-784`).
+Texture uses that hook only for initial factual/current prompts whose latest
+canonical head is still flagged `model_prior_interim` / `revision_grounding:
+model_prior`; the guard stands down once the same run opens an evidence path or
+records an off-document decision (`internal/runtime/runtime.go:2233-2343`). This
+repairs the local V1-only/no-delegation branch without making `edit_texture`
+smuggle a forced researcher continuation. New tests prove the generic guard and
+the prompt-bar Texture path where a guarded interim V1 opens researcher Probe
+work while preserving V1 model-prior metadata
+(`internal/runtime/toolloop_test.go:453-538`,
+`internal/runtime/texture_test.go:2543-2631`).
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 park-and-wait primitive or cumulative per-actor budget; the tool loop is still
 bounded by `maxToolLoopIterations=200` (`internal/runtime/toolloop.go:203-209`).
@@ -327,10 +342,12 @@ position / live conjectures / open edges:
   AgentMutation row is now run-liveness/idempotency state rather than the
   per-write terminal gate; stale base revisions still reject duplicate writes,
   while fresh same-run writes can deepen the document.
-- C2 partially repaired on staging: first paint can now be a fast flagged
+- C2 locally repaired further, staging pending: first paint can now be a fast flagged
   model-prior/interim revision in the live product path (`29265cae` diagnostic
   V1 at about +16s), but the formal cadence probe still has a V0-only failed
-  run, and the successful V1 path stops without research, delegation, or V2+.
+  run. The local completion-guard construct now rejects silent completion after a
+  factual/current model-prior V1 unless Texture opens evidence work or records an
+  audit decision; staging has not yet proved this yields V2+.
 - C3 active: "one run per agent" is more minimal as a model but requires a real
   park-and-wait + budget; without them a long run either idles on billed calls or
   hits the 200-iteration ceiling. The park-and-wait must be role-uniform.
@@ -360,16 +377,16 @@ position / live conjectures / open edges:
   results being treated as a satisfied initial write because a duplicate
   same-turn Texture write returned a non-error notice. The `29265cae` repair
   reaches that branch and can produce V1, but stochastic invalid edit arguments
-  can still exhaust/failed-run the first write, and a successful V1 path still
-  ends instead of probing for evidence.
+  can still exhaust/failed-run the first write. The current local completion
+  guard targets the successful-V1/no-Probe sub-branch without forced semantic
+  next-tool enforcement; staging remains the next discriminator.
 
-next move: documentation-first checkpoint for `29265cae`, then repair the
-post-V1 factual-request transition without role-specific choreography: after a
-model-prior/interim V1 for a factual/current prompt, Texture must continue into a
-Probe path (likely via existing prompt/tool-loop required-next-tool machinery or
-a Texture tool result contract) instead of ending. Preserve the fast V1 branch
-and avoid weakening T3/T4: this is still not the final resident park-and-wait
-actor lifecycle.
+next move: commit and push the completion-guard repair, monitor CI and Node B
+deploy identity, then rerun `scripts/texture_revision_cadence_probe.mjs` against
+`https://choir.news`. If staging shows fast V1 plus researcher activity and V2+,
+continue toward T3/T4 park-and-wait/resident lifecycle. If staging still fails,
+classify whether the blocker is no-V1 stochastic edit failure, guard not firing,
+researcher not delivering, or Texture not consuming findings.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
@@ -398,7 +415,11 @@ proved the live failure is inside the write batch: a failed first
 fall through. The `29265cae` repair makes success, not mere tool-call presence,
 the condition for satisfying exact initial `patch_texture`; staging proved it can
 produce fast V1, but also proved V1-only/no-delegation remains and the cadence
-probe can still hit a failed no-V1 run.
+probe can still hit a failed no-V1 run. The current local repair is a bounded
+completion guard rather than a required researcher continuation: it preserves
+Texture agency by allowing Probe, Execute, follow-up, or an audit decision, but
+rejects silent completion while the only canonical appagent revision is still
+model-prior/interim for a factual/current request.
 
 settlement requirement: not yet met. The mission settles only with deployed
 staging proof of a from-weights first paint well under the ~49s baseline and

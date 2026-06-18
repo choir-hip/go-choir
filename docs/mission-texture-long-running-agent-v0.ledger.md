@@ -544,3 +544,62 @@ role-choreography or pretending this is the T3/T4 park-and-wait lifecycle.
 Rollback ref: revert `29265cae` if the first-write retry branch is judged too
 stochastic or disruptive; otherwise keep it as a partial repair and continue from
 the post-V1 no-delegation edge.
+
+## 2026-06-18 - Local completion guard for model-prior V1 (red runtime, staging pending)
+
+Claim under test: the `29265cae` fast-V1/no-delegation branch can be repaired
+without making `edit_texture` force a semantic researcher continuation. A
+model-prior/interim V1 for a factual/current prompt is not completion; Texture
+must either open an evidence path, request execution where appropriate, follow
+up with active workers, or record an audit-worthy decision/blocker before ending.
+
+Move: construct. Added a generic tool-loop completion guard hook and wired a
+Texture-specific guard outside the core loop for initial factual/current
+model-prior heads.
+
+Expected ΔV: local proof that a successful model-prior V1 no longer silently
+ends the run when the owner asked for current/world knowledge, while preserving
+Texture agency and the no-forced-continuation invariant. Actual local ΔV: the
+branch is covered by focused tests and runtime shards; deployed proof remains
+pending.
+
+Repair receipts:
+
+- `internal/runtime/toolloop.go` adds `WithCompletionGuard`, a role-uniform
+  hook that may reject `end_turn`, append an ordinary user reminder, emit
+  `loop.retry` phase `completion_guard`, and retry under a bounded counter. It
+  does not select or force a tool.
+- `internal/runtime/runtime.go` installs `textureModelPriorCompletionGuard` only
+  for Texture revision runs. The guard fires when the current head is an
+  appagent `model_prior_interim` / `revision_grounding=model_prior` revision for
+  an initial factual/current prompt and the run has not opened an evidence path
+  or recorded a Texture decision.
+- `internal/runtime/toolloop_test.go` adds
+  `TestRunToolLoopCompletionGuardRetriesEndTurn`.
+- `internal/runtime/texture_test.go` adds
+  `TestTextureModelPriorCompletionGuardOpensProbePath`, proving the product-path
+  shape: V1 is stored and flagged model-prior/interim; a premature `end_turn`
+  receives the completion-guard reminder; the next unconstrained turn opens a
+  researcher Probe path; Trace has a `completion_guard` retry event.
+
+Verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestTextureModelPriorCompletionGuardOpensProbePath' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopCompletionGuardRetriesEndTurn|TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool|TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool|TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool|TestTextureModelPriorCompletionGuardOpensProbePath|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation|TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase|TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPrompt|TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent|TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit|TestInitialTextureRunWritesBeforeSpawningResearcher|TestTextureModelPriorCompletionGuardOpensProbePath|TestHandlePromptBarOperationalProofInitialRunStartsWithTexture|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestSubmitResearchFindingsWakeUsesSameDebouncedPath|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture|TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite|TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce|TestTexturePromptInitialRevisionUsesSingleWriterLoop|TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent|TestResearcherFailureSynthesizesCheckpointAfterSearch|TestRunSupportsCoagentUpdateInjectionIncludesTexture' -count=1`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestCoagentUpdateTurnInjectorSupportsTexture|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestBuildAppagentRevisionMetadataCarriesForwardDurableKeys|TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards`
+
+Open blockers / remaining error:
+
+- Staging must prove the guard survives live provider behavior. The next product
+  probe must distinguish no-V1 edit failure, guard-not-fired, researcher-not-
+  delivering, and Texture-not-consuming-findings branches.
+- This repair is still not T3/T4: there is no park-and-wait primitive, no
+  cumulative per-actor budget, no one-resident-run lifecycle, no sleep/resume
+  proof, no doc-delete cancellation, and no N:1 verifier settlement.
+
+Rollback ref: revert this completion-guard runtime commit if staging shows
+guard-induced loops, excessive failed trajectories, or a semantic forced-role
+regression. Otherwise keep it as the local repair for the post-V1 no-delegation
+edge and continue toward deployed V2+ proof.

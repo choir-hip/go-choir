@@ -450,6 +450,92 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopCompletionGuardRetriesEndTurn(t *testing.T) {
+	registry := NewToolRegistry()
+	var recorded int
+	if err := registry.Register(Tool{
+		Name:        "record_status",
+		Description: "Record status.",
+		Parameters:  map[string]any{"type": "object"},
+		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
+			recorded++
+			return `{"status":"recorded"}`, nil
+		},
+	}); err != nil {
+		t.Fatalf("register tool: %v", err)
+	}
+
+	var requests []ToolLoopRequest
+	provider := &capturingToolChoiceProvider{responses: []*ToolLoopResponse{
+		{
+			StopReason: "end_turn",
+			Text:       "premature",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+		{
+			StopReason: "tool_use",
+			ToolCalls: []types.ToolCall{{
+				ID:        "call-record",
+				Name:      "record_status",
+				Arguments: json.RawMessage(`{"status":"ok"}`),
+			}},
+			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model: "test-model",
+		},
+		{
+			StopReason: "end_turn",
+			Text:       "done",
+			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Model:      "test-model",
+		},
+	}, requests: &requests}
+
+	var retries int
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "completion_guard" {
+			retries++
+		}
+	}
+	guard := func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error) {
+		if state.Attempts == 0 {
+			return ToolLoopCompletionGuardResult{
+				Continue:    true,
+				Reason:      "status_missing",
+				Instruction: "Record status before ending.",
+			}, nil
+		}
+		return ToolLoopCompletionGuardResult{}, nil
+	}
+
+	text, _, err := RunToolLoop(
+		context.Background(),
+		provider,
+		registry,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record status"}`)},
+		"You are helpful.",
+		0,
+		emit,
+		nil,
+		WithCompletionGuard(guard),
+	)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if text != "done" {
+		t.Fatalf("text = %q, want final text after guarded retry", text)
+	}
+	if recorded != 1 {
+		t.Fatalf("recorded = %d, want 1", recorded)
+	}
+	if retries != 1 {
+		t.Fatalf("completion guard retries = %d, want 1", retries)
+	}
+	if len(requests) < 2 || !strings.Contains(extractLastUserMessage(requests[1].Messages), "Record status before ending.") {
+		t.Fatalf("guard reminder missing from second request; requests=%#v", requests)
+	}
+}
+
 func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testing.T) {
 	registry := NewToolRegistry()
 	var edited, recorded int
