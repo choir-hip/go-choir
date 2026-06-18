@@ -1246,3 +1246,57 @@ Open blockers / remaining error:
 Rollback ref: revert the T3 park-waiter construct commit if deployed evidence
 shows stalled Texture runs, lost `update_coagent` delivery, extra provider calls
 while idle, or broken cadence non-regression.
+
+## 2026-06-18 - Staging proof failure for T3 park primitive deploy (red evidence, green record)
+
+Claim under test: deployed `d7b7ae4929a92623dcdd99e766ffce0c189c0a86`
+preserves the currently supported Texture cadence path while carrying the
+metadata-gated park waiter primitive.
+
+Move: pushed `d7b7ae49`, monitored GitHub Actions, confirmed staging health
+identity, and ran the public product-path cadence probe against
+`https://choir.news`.
+
+Expected ΔV: prove no regression in the staging cadence slice, while keeping
+park-waiter proof local because `actor_park_on_idle` is not product-default.
+Actual ΔV: deploy identity is confirmed and tests passed, but the formal
+deployed cadence probe failed with no appagent revision. This repeats the
+previously named no-V1 live branch and blocks acceptance for this deploy.
+
+Receipts:
+
+- Commit: `d7b7ae4929a92623dcdd99e766ffce0c189c0a86`.
+- GitHub Actions: Docs Truth Check #27738567105 succeeded; FlakeHub
+  #27738567106 succeeded; CI #27738567112 concluded failure only because
+  `Deploy to Staging (Node B)` job #82060956249 failed. CI jobs for TLA+,
+  Go vet/build, deploy-impact detection, docs, runtime shards 0, 1, 2, and 3,
+  non-runtime Go tests, integration smoke, and the aggregate Go vet/test/build
+  job all succeeded.
+- Staging identity: public `/health` reported proxy and sandbox both at
+  `d7b7ae4929a92623dcdd99e766ffce0c189c0a86`,
+  `deployed_at=2026-06-18T05:25:50Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Probe command:
+  `nix shell nixpkgs#nodejs_22 -c env CHOIR_DEPLOYED_BASE_URL=https://choir.news node scripts/texture_revision_cadence_probe.mjs`.
+- Probe submission / trajectory: `a69f85b6-25b4-428e-be8f-63a366480383`.
+- Texture doc: `c4257df0-bd3b-433a-aa1d-1ac3ed775f69`.
+- Revision timing: V0 user at +0.296s, 53 chars; no appagent revisions.
+- Probe counts: `appagent_revision_count=0`, `total_revision_count=1`,
+  `first_paint_ms=null`, `final_head_chars=53`.
+- Research / trajectory: `web_search=0`, `source_search=0`, `spawn_agent=0`,
+  `update_coagent=0`, `moment_count=43`, `agent_count=2`,
+  `delegation_count=0`, final trajectory `state=failed`.
+
+Result: the park-waiter primitive is deployed but not product-path accepted. The
+probe did not enable `actor_park_on_idle`, so it does not directly falsify the
+new park primitive; it does show the deployed product path still hits the no-V1
+Texture branch.
+
+Next move: inspect Trace/run evidence for
+`a69f85b6-25b4-428e-be8f-63a366480383` /
+`c4257df0-bd3b-433a-aa1d-1ac3ed775f69` before any code repair. Preserve this
+docs checkpoint as the first commit after the staging evidence.
+
+Rollback ref: revert `d7b7ae49` if Trace shows the new park waiter or waiter
+signal plumbing caused the no-V1 branch; otherwise treat the failure as the
+pre-existing stochastic no-V1 branch and repair that separately.

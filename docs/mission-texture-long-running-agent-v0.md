@@ -471,6 +471,22 @@ prove runtime owner+agent signaling wakes a parked waiter
 slice of T3 locally; it does not yet settle cross-passivation cumulative budget
 accounting or make every `texture:<docID>` a parked actor by default.
 
+Staging after deploy of `d7b7ae49` proves the park-and-wait primitive was
+deployed but does not provide product-path cadence acceptance. CI test/build
+jobs passed, including runtime shards 0-3, and public `/health` confirmed proxy
+and sandbox both deployed at
+`d7b7ae4929a92623dcdd99e766ffce0c189c0a86` (`deployed_at`
+`2026-06-18T05:25:50Z`); the workflow concluded failure only because the known
+Node B deploy job failed. The formal deployed cadence probe submitted
+`a69f85b6-25b4-428e-be8f-63a366480383` / doc
+`c4257df0-bd3b-433a-aa1d-1ac3ed775f69` and observed only V0 user content:
+`appagent_revision_count=0`, `first_paint_ms=null`, `total_revision_count=1`,
+`web_search=0`, `source_search=0`, `spawn_agent=0`, `update_coagent=0`, and
+trajectory `state=failed`. This repeats the previously named stochastic no-V1
+live branch. It does not falsify the metadata-gated park primitive directly,
+because the probe does not enable `actor_park_on_idle`, but it blocks acceptance
+for the deployed product path.
+
 Remaining audited value: T3-T8 remain open. The runtime still has no
 default parked `texture:<docID>` lifecycle, and the separate cold
 wake/reconcile scaffolding remains (`internal/runtime/texture_controller.go:24-90`),
@@ -592,10 +608,12 @@ position / live conjectures / open edges:
   repeated deployed probes should quantify whether no-V1 is rare stochastic model
   behavior, retry-exhaustion from invalid patches, or a remaining runtime branch.
 
-next move: land and deploy the local T3 park-and-wait primitive, then continue
-T3/T4 by deciding how the metadata-gated waiter becomes the default Texture
-lifecycle and how the budget becomes cumulative across sleep/rewarm. Do not
-claim settlement until T4-T8 are also proven and a RunAcceptanceRecord exists.
+next move: continue from the `d7b7ae49` no-V1 staging branch: inspect Trace/run
+evidence for why the initial Texture activation produced no appagent revision,
+then continue T3/T4 by deciding how the metadata-gated waiter becomes the
+default Texture lifecycle and how the budget becomes cumulative across
+sleep/rewarm. Do not claim settlement until T4-T8 are also proven and a
+RunAcceptanceRecord exists.
 
 ledger file: docs/mission-texture-long-running-agent-v0.ledger.md
 
