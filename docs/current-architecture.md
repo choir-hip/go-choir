@@ -246,9 +246,13 @@ service writes to a separate localhost-only `dolt sql-server` primary and owns
 platform-visible publication, route, artifact manifest/blob, retrieval source/
 span, citation edge, provenance, consent/review, verifier, and rollback rows.
 The browser never talks to Dolt. A signed-in user calls the proxy product API to
-publish a selected private Texture revision; the proxy reads that revision from
-the user's resolved computer and submits only the public projection to
-`platformd`. Public published snapshots now resolve through the Svelte Choir
+publish a Texture; the proxy reads the head revision and the full revision chain
+from the user's resolved computer and submits the public projection plus a
+canonical `version_history` manifest — per-revision content/citations/typed
+provenance and a content-addressed hash chain — to `platformd`. A published
+Texture IS its full versioned history, not only the head projection; the
+manifest is the signable spine a reader/verifier can independently replay and
+check. Public published snapshots now resolve through the Svelte Choir
 shell and Texture app at the current `/pub/texture/...` compatibility route (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
 surface, signed-in users can create private derivatives and proposals, and proxy
 read APIs fetch sanitized publication bundles from internal-only `platformd`
