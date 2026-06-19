@@ -43,6 +43,7 @@
   } from './texture-source-actions';
   import TextureCompareMergePanel from './TextureCompareMergePanel.svelte';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
+  import TextureVersionHistory from './TextureVersionHistory.svelte';
   import TextureSourcePanel from './TextureSourcePanel.svelte';
   import TextureToolbar from './TextureToolbar.svelte';
   import { sourceEntityLaunchPayload } from './texture-source-launcher';
@@ -2229,6 +2230,7 @@
           on:keydown={handleEditorKeydown}
           on:scroll={handleDocumentScroll}
         ></article>
+        <TextureVersionHistory versionHistory={publishedBundle?.version_history} />
       {:else}
         <div
           class="rendered-doc editable-doc"

@@ -261,6 +261,21 @@ test('deployed full-history publish serves the version_history chain', async ({ 
       trajectory_id: body.submission_id,
       published_route: publishResp.route_path,
     }));
+
+    // End-to-end reader proof: navigate to the public /pub route and assert the
+    // version-history disclosure renders the chain (Option A reader UX).
+    const publicURL = publishResp.public_url || `${BASE_URL}${publishResp.route_path}`;
+    await page.goto(publicURL);
+    const publishedReader = page.locator('[data-texture-published-reader]').last();
+    await expect(publishedReader).toBeVisible({ timeout: 30_000 });
+    const versionHistoryPanel = page.locator('[data-texture-version-history]');
+    await expect(versionHistoryPanel).toBeAttached();
+    // Open the disclosure so the lineage is visible.
+    await versionHistoryPanel.locator('summary').click();
+    const lineage = versionHistoryPanel.locator('[data-version-lineage] .vh-rev');
+    await expect(lineage).toHaveCount(history.revision_count);
+    await expect(versionHistoryPanel.locator('[data-chain-verified]')).toBeVisible();
+    console.log('reader version-history panel rendered:', history.revision_count, 'lineage rows at', publishResp.route_path);
   } finally {
     await removeVirtualAuthenticator(client, authenticatorId);
     await context.close();
