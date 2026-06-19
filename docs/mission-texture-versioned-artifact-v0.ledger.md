@@ -274,11 +274,75 @@ inverted tail assertion, and add a router-level dispatch regression test so the
 canonical path is proven to reach the handler. Re-run the deployed spec against
 the fixed staging for product-path proof.
 
+### 2026-06-19 — Publish-route 404 fixed; router-dispatch regression test added
+
+Fix commit `736bdc5c` (problem record `f785bdcf`). Deleted the shadowing
+retired-name 404 clause in `internal/proxy/handlers.go` (the vtext->Texture
+rename had collapsed two distinct cases into one duplicate); the retired name
+now falls through to the generic 404. Dropped the inverted tail assertion in
+`TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection`. Added
+`TestHandleAPIDispatchesTexturePublication`, which routes through `HandleAPI`
+and asserts the canonical publish path reaches the handler (400 on malformed
+policy), not a 404 shadow. Full `internal/proxy` package + vet green locally;
+CI run `27799524770` success; **Deploy to Staging (Node B) green**;
+`choir.news/health` reports `deployed_commit=736bdc5c`. Mutation class orange
+(proxy routing), rollback = revert `736bdc5c`.
+
+### 2026-06-19 — D7 acceptance proof PASSED (deployed product path)
+
+`GO_CHOIR_RUN_DEPLOYED_VERSIONED_PUBLISH=1` ran the full product path on
+`choir.news` at `736bdc5c` and passed:
+
+- Register (fresh passkey) -> prompt bar -> a **3-revision grounded Texture**
+  (V0 = verbatim prompt + 2 appagent revisions consuming researcher evidence;
+  each revision carries `revision_hash` + typed `provenance`).
+- Publish succeeded: route
+  `/pub/texture/create-a-texture-briefing-...-pube60500abe`,
+  `version_count=3`, `version_history_hash=9a6fa81d…`.
+- Resolve served `version_history` with `schema=choir.platform.version_history.v0`,
+  `revision_count=3`, `chain_head_hash=rev1:050dade9…` **== the head revision's
+  `revision_hash`**, `manifest_hash=9a6fa81d…` **== the publish response's
+  `version_history_hash`**, V0 content preserved verbatim, parent-chain causal
+  order holds, head revision provenance present.
+- `RunAcceptanceRecord` synthesized from the real trajectory:
+  `runacc-a5baefc8def0e2af4436`, **`staging-smoke-level`**, state `blocked`,
+  trajectory `53d02fa4-e5c9-4a42-b6c6-632e495e7038`. The `blocked` state is
+  honest: a prompt/Texture/publish-only trajectory reaches staging-smoke
+  evidence but carries no worker-delegation/export/promotion evidence to clear
+  the runtime acceptance state-machine; the spec's own assertions independently
+  prove version_history chain integrity.
+
+**Citation-validation dimension.** The D4 source-type-aware citation/quote gate
+(`texture_citation_validation.go`) and the typed-evidence source collator
+(`texture_evidence_sources.go`) are confirmed present in the deployed SHA
+(`880a6aa8` is an ancestor of `736bdc5f`...736bdc5c). Its reject-and-retry
+behavior (`quote_not_in_source`/`unknown_source`/`missing_source_body`) is
+established by the D3/D4 unit tests (`TestEvidenceDerivedEntityFeedsCitationValidator`
+et al.). Forcing a fabricated citation through the live product path is
+non-deterministic (researchers supply real excerpts), so the deployed proof
+targets version_history serving; the gate's correctness is established at unit
+level and by code-presence in the deployed build.
+
+**Residual risks.** (1) `version_number` uses `omitempty`, so the V0 genesis
+(version 0) drops the field in the published manifest; causal order is still
+encoded in `parent_revision_id` + array order and the `manifest_hash` is over
+deterministic marshaled bytes, so signability is unaffected — a minor
+data-clarity nit, not a correctness defect. (2) D7 reader UX (frontend
+history/diff + source renderer for published version history) is still deferred
+(separate track). (3) `continuation-level` is out of scope (transitional H008
+residue, re-points at M4 trajectory settlement).
+
 ### State
 
-Deploy gate fixed + verified. D1 (`e7967d16`), D2 (`f592052e`), D3+D4
-(`7a2980c8`), D3 completion (`880a6aa8`), D5 (`6cb2fa4f`) deployed green —
-CI run `27798734664` success, staging `/health` reports
-`deployed_commit=6cb2fa4f` for both proxy and sandbox. Next: D7 (reader/verifier
-reconcile + deployed product-path acceptance proof that a multi-revision
-published Texture serves its `version_history` chain + matching manifest hash).
+D1 (`e7967d16`), D2 (`f592052e`), D3+D4 (`7a2980c8`), D3 completion
+(`880a6aa8`), D5 (`6cb2fa4f`) deployed green. Publish-route 404 (found by the
+D7 probe) fixed in `736bdc5c` — CI `27799524770` success, staging
+`deployed_commit=736bdc5c`. **D7 acceptance proof PASSED** at `736bdc5c`: a
+published multi-revision Texture serves its `version_history` chain with a
+matching manifest hash and a `chain_head_hash` equal to the head revision hash;
+`RunAcceptanceRecord runacc-a5baefc8def0e2af4436` at `staging-smoke-level`.
+D6 (signatures) stays out of scope by design. Remaining D7 work: reader UX
+(frontend history/diff + source renderer for published version history) and
+heresy/doctrine/test reconciliation. Settlement for the version-history +
+citation-gate claim is met at staging-smoke-level; promotion-level awaits
+AppChangePackage adoption + owner review.

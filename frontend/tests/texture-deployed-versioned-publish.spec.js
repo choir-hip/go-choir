@@ -209,9 +209,17 @@ test('deployed full-history publish serves the version_history chain', async ({ 
 
     expect(Array.isArray(history.revisions)).toBe(true);
     expect(history.revisions.length).toBe(history.revision_count);
-    // Oldest-first causal order: version numbers strictly non-decreasing.
+    // Oldest-first causal order. version_number uses omitempty so the V0 genesis
+    // (version 0) drops the field; normalize undefined -> 0.
     for (let i = 1; i < history.revisions.length; i += 1) {
-      expect(history.revisions[i].version_number).toBeGreaterThanOrEqual(history.revisions[i - 1].version_number);
+      expect(history.revisions[i].version_number ?? 0).toBeGreaterThanOrEqual(history.revisions[i - 1].version_number ?? 0);
+    }
+    // The authoritative causal-order invariant: each non-genesis revision's
+    // parent links to the previous entry in the chain.
+    for (let i = 1; i < history.revisions.length; i += 1) {
+      if (history.revisions[i].parent_revision_id) {
+        expect(history.revisions[i].parent_revision_id).toBe(history.revisions[i - 1].revision_id);
+      }
     }
     const firstEntry = history.revisions[0];
     const headEntry = history.revisions[history.revisions.length - 1];
@@ -231,6 +239,27 @@ test('deployed full-history publish serves the version_history chain', async ({ 
       manifest_hash: history.manifest_hash,
       first_revision: firstEntry.revision_id,
       head_revision: headEntry.revision_id,
+    }));
+
+    // Synthesize a durable RunAcceptanceRecord from the real trajectory evidence
+    // (the prompt-bar submission_id is the trajectory id). This is the honest
+    // settlement artifact: the runtime derives checkpoints/level from what the
+    // trajectory actually shows, not from this spec's assertions.
+    const acceptance = await sendJSON(page, '/api/run-acceptances/synthesize', {
+      method: 'POST',
+      body: {
+        target_mission_id: 'mission-texture-versioned-artifact-v0',
+        trajectory_id: body.submission_id,
+        source_prompt_or_objective: prompt,
+      },
+    });
+    expect(acceptance.acceptance_id).toBeTruthy();
+    console.log('RunAcceptanceRecord:', JSON.stringify({
+      acceptance_id: acceptance.acceptance_id,
+      acceptance_level: acceptance.acceptance_level,
+      state: acceptance.state,
+      trajectory_id: body.submission_id,
+      published_route: publishResp.route_path,
     }));
   } finally {
     await removeVirtualAuthenticator(client, authenticatorId);
