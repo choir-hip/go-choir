@@ -149,14 +149,6 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	if resp.PublicURL != "https://choir.news/pub/texture/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
 	}
-
-	legacyReq := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-1","revision_id":"rev-2"}`))
-	legacyReq.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
-	legacyW := httptest.NewRecorder()
-	h.HandleAPI(legacyW, legacyReq)
-	if legacyW.Code != http.StatusNotFound {
-		t.Fatalf("legacy platform publish status: got %d body %s, want 404", legacyW.Code, legacyW.Body.String())
-	}
 }
 
 func TestHandleTexturePublicationRejectsMalformedPolicy(t *testing.T) {
@@ -569,5 +561,38 @@ func TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance(t *testing.T
 		Provenance: json.RawMessage(`{"rights_scope":"public_source"}`),
 	}) {
 		t.Fatalf("public_source content item should allow a reader snapshot")
+	}
+}
+// TestHandleAPIDispatchesTexturePublication guards against a regression where a
+// duplicate router case (introduced by the vtext->Texture blind rename) shadowed
+// the canonical publish route, returning 404 for the exact path the frontend
+// posts to. Routing through HandleAPI must reach the handler, not a 404 shadow.
+func TestHandleAPIDispatchesTexturePublication(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("platformd should not be reached for a malformed policy")
+	}))
+	defer platformd.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        "http://127.0.0.1:1",
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-1","access_policy":["public"]}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+	w := httptest.NewRecorder()
+	h.HandleAPI(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("router must dispatch /api/platform/texture/publications to the publish handler: got status %d body %s (want 400 = handler reached; 404 = shadowed)", w.Code, w.Body.String())
 	}
 }

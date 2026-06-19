@@ -439,9 +439,6 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Super Console"})
 		return
 	case path == "/api/platform/texture/publications":
-		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
-		return
-	case path == "/api/platform/texture/publications":
 		h.HandleTexturePublication(w, r)
 		return
 	case path == "/api/platform/publications/resolve":
