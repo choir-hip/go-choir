@@ -332,6 +332,27 @@ history/diff + source renderer for published version history) is still deferred
 (separate track). (3) `continuation-level` is out of scope (transitional H008
 residue, re-points at M4 trajectory settlement).
 
+### 2026-06-19 — D7 reader UX Option A landed (version-history disclosure)
+
+The published `/pub/texture/...` reader rendered only the head. Added
+`TextureVersionHistory.svelte` — a collapsible "Version history" disclosure
+mounted in the published-readonly reader branch (`TextureEditor.svelte`): shows
+`revision_count`, manifest + chain-head hashes, a "chain verified" affordance
+(chain head == head revision hash), and an oldest-first lineage (version,
+author, when, typed-provenance summary, per-revision hash). Read-only; renders
+only when `version_history` is present, so head-only publications are
+unaffected. This is Option A of
+`docs/texture-versioned-reader-ux-options-2026-06-19.md` — the minimal lineage
+disclosure and a strict prerequisite for the revision-browser (B) and diff (C)
+options, both still deferred pending an owner design pick.
+
+**Deployed proof.** Commit `e859ef27`; CI `27800784979` success (incl. Build
+Frontend + Deploy to Staging); staging `deployed_commit=e859ef27`. The deployed
+spec navigated to the published route and asserted the panel renders: 3 lineage
+rows, chain-verified badge visible. `RunAcceptanceRecord
+runacc-12617c0f267b2e67f3b4` at `staging-smoke-level`. Mutation class orange
+(frontend publication reader); rollback = revert + redeploy.
+
 ### State
 
 D1 (`e7967d16`), D2 (`f592052e`), D3+D4 (`7a2980c8`), D3 completion
@@ -341,8 +362,11 @@ D7 probe) fixed in `736bdc5c` — CI `27799524770` success, staging
 published multi-revision Texture serves its `version_history` chain with a
 matching manifest hash and a `chain_head_hash` equal to the head revision hash;
 `RunAcceptanceRecord runacc-a5baefc8def0e2af4436` at `staging-smoke-level`.
-D6 (signatures) stays out of scope by design. Remaining D7 work: reader UX
-(frontend history/diff + source renderer for published version history) and
-heresy/doctrine/test reconciliation. Settlement for the version-history +
-citation-gate claim is met at staging-smoke-level; promotion-level awaits
-AppChangePackage adoption + owner review.
+D6 (signatures) stays out of scope by design. D7 acceptance + doctrine
+reconcile done; **reader UX Option A (version-history disclosure) landed**
+(`e859ef27`, CI `27800784979`, staging deployed, panel rendered end-to-end —
+`runacc-12617c0f267b2e67f3b4`). Settlement for the version-history +
+citation-gate + reader-legibility claim is met at staging-smoke-level;
+promotion-level awaits AppChangePackage adoption + owner review. Open: reader
+UX options B (revision browser) and C (diff + per-revision sources) are
+deferred pending an owner design pick (`docs/texture-versioned-reader-ux-options-2026-06-19.md`).
