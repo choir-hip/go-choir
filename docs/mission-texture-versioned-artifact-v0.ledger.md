@@ -231,7 +231,8 @@ unaffected (history fields are additive/omitempty).
 ### State
 
 Deploy gate fixed + verified. D1 (`e7967d16`), D2 (`f592052e`), D3+D4
-(`7a2980c8`), D3 completion (`880a6aa8`) deployed green. D5 (full-history publish
-manifest) implemented + locally green. Next: commit + push (Landing Loop:
-CI + staging deploy + acceptance), then D7 (reader/verifier reconcile + staging
-acceptance proof of the served version history).
+(`7a2980c8`), D3 completion (`880a6aa8`), D5 (`6cb2fa4f`) deployed green —
+CI run `27798734664` success, staging `/health` reports
+`deployed_commit=6cb2fa4f` for both proxy and sandbox. Next: D7 (reader/verifier
+reconcile + deployed product-path acceptance proof that a multi-revision
+published Texture serves its `version_history` chain + matching manifest hash).
