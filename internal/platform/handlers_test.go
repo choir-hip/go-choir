@@ -11,7 +11,7 @@ import (
 
 func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts")))
+	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts"), ""))
 
 	body, _ := json.Marshal(PublishTextureRequest{
 		OwnerID:          "user-1",

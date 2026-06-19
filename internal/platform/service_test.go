@@ -211,7 +211,7 @@ func TestPublicationFallbackDefaultsUseTextureLabels(t *testing.T) {
 
 func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "owner-defaults",
@@ -390,7 +390,7 @@ type publicationSourceContractCase struct {
 
 func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	createdAt := time.Date(2026, time.June, 10, 11, 0, 0, 0, time.UTC)
 	req := SyncTextureDocumentRequest{
@@ -466,7 +466,7 @@ func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 	metadata, err := json.Marshal(map[string]any{
 		"source_entities": []map[string]any{{
 			"entity_id": "src-export-proof",
@@ -626,7 +626,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 
 func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 	content := strings.Join([]string{
 		"# Legal Cloud",
 		"",
@@ -790,7 +790,7 @@ func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
 
 func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	states := []string{
 		sourcecontract.EvidenceStateCandidate,
@@ -880,7 +880,7 @@ func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 
 func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	cases := []publicationSourceContractCase{
 		{
@@ -1158,7 +1158,7 @@ func TestBuildPublicationSourceMetadataNormalizesOpenSurface(t *testing.T) {
 func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")
-	svc := NewService(store, artifactsRoot)
+	svc := NewService(store, artifactsRoot, "")
 
 	citations, _ := json.Marshal([]map[string]any{{
 		"url":      "https://example.com/source",
@@ -1483,7 +1483,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 
 func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	publishWithVisibility := func(t *testing.T, visibility string) *PublishTextureResponse {
 		t.Helper()

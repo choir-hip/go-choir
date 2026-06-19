@@ -23,6 +23,16 @@
   $: chainVerified =
     !!chainHeadHash && !!headEntry?.revision_hash && chainHeadHash === headEntry.revision_hash;
 
+  // D6: the platform attests each revision with an Ed25519 signature over the
+  // revision hash (which commits to timestamp + model + chain). When the
+  // signing envelope is present, every revision is platform-signed.
+  $: signingPublicKey = versionHistory?.signing_public_key ?? '';
+  $: signingKeyID = versionHistory?.signing_key_id ?? '';
+  $: signedCount = signingPublicKey
+    ? revisions.filter((r) => r.signature).length
+    : 0;
+  $: platformSigned = signedCount > 0 && signingPublicKey !== '';
+
   function shortHash(hash) {
     if (!hash) return '—';
     return hash.length > 14 ? `${hash.slice(0, 12)}…` : hash;
@@ -66,6 +76,9 @@
       {#if chainVerified}
         <span class="vh-verified" title="Chain head hash matches the head revision hash" data-chain-verified>chain verified</span>
       {/if}
+      {#if platformSigned}
+        <span class="vh-signed" title="Every revision is Ed25519-signed by the platform over its revision hash (timestamp + model + chain)" data-platform-signed>platform-signed · {signedCount}</span>
+      {/if}
     </summary>
 
     <dl class="vh-manifest">
@@ -77,6 +90,12 @@
         <dt>Chain head</dt>
         <dd><code>{shortHash(chainHeadHash)}</code></dd>
       </div>
+      {#if platformSigned}
+        <div>
+          <dt>Signing key</dt>
+          <dd><code>{shortHash(signingKeyID)}</code></dd>
+        </div>
+      {/if}
     </dl>
 
     <ol class="vh-lineage" data-version-lineage>
@@ -90,7 +109,12 @@
           {#if rev.provenance}
             <p class="vh-rev-prov">{provenanceSummary(rev.provenance)}</p>
           {/if}
-          <p class="vh-rev-hash"><code>{shortHash(rev.revision_hash)}</code></p>
+          <p class="vh-rev-hash">
+            <code>{shortHash(rev.revision_hash)}</code>
+            {#if rev.signature}
+              <span class="vh-rev-signed" title="Platform Ed25519 signature over this revision's hash" data-revision-signed>signed</span>
+            {/if}
+          </p>
         </li>
       {/each}
     </ol>
@@ -136,6 +160,26 @@
     border: 1px solid var(--choir-ok, #1a7f37);
     border-radius: 999px;
     padding: 0.05rem 0.45rem;
+  }
+
+  .vh-signed {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--choir-text-accent, #1f6feb);
+    border: 1px solid var(--choir-text-accent, #1f6feb);
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+  }
+
+  .vh-rev-signed {
+    margin-left: 0.5rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--choir-text-accent, #1f6feb);
   }
 
   .vh-manifest {

@@ -241,6 +241,38 @@ test('deployed full-history publish serves the version_history chain', async ({ 
       head_revision: headEntry.revision_id,
     }));
 
+    // D6: every published revision is platform Ed25519-signed over its revision
+    // hash (which commits to timestamp + model + chain). Assert the signing
+    // envelope is present and cryptographically verify a signature end to end.
+    expect(history.signing_public_key, 'bundle must carry signing_public_key').toBeTruthy();
+    expect(history.signing_key_id).toBeTruthy();
+    const signedEntries = history.revisions.filter((r) => r.signature);
+    expect(signedEntries.length).toBe(history.revision_count);
+    for (const rev of history.revisions) {
+      expect(rev.signing_key_id).toBe(history.signing_key_id);
+    }
+    // Real ed25519 verification (Node crypto) over the canonical attestation
+    // payload the signer used, reconstructed identically in JS. Proves the
+    // deployed signatures are tamperproof, not just present.
+    const { createPublicKey, verify } = await import('crypto');
+    const pubRaw = Buffer.from(history.signing_public_key, 'base64');
+    // Ed25519 SPKI DER prefix wrapping the raw 32-byte public key.
+    const spki = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), pubRaw]);
+    const platformKey = createPublicKey({ key: spki, format: 'der', type: 'spki' });
+    const verifyRevision = (rev) => {
+      const payload = Buffer.from(JSON.stringify({
+        schema: 'choir.platform.revision_attestation.v0',
+        revision_hash: rev.revision_hash,
+      }));
+      return verify(null, payload, platformKey, Buffer.from(rev.signature, 'base64'));
+    };
+    for (const rev of signedEntries) {
+      expect(verifyRevision(rev), `revision ${rev.revision_id} signature must verify`).toBe(true);
+    }
+    // Tamper-evidence: a different revision hash must NOT verify.
+    expect(verifyRevision({ revision_hash: signedEntries[0].revision_hash + 'x', signature: signedEntries[0].signature })).toBe(false);
+    console.log('D6 signatures verified:', signedEntries.length, 'revisions, key', history.signing_key_id);
+
     // Synthesize a durable RunAcceptanceRecord from the real trajectory evidence
     // (the prompt-bar submission_id is the trajectory id). This is the honest
     // settlement artifact: the runtime derives checkpoints/level from what the
@@ -275,6 +307,8 @@ test('deployed full-history publish serves the version_history chain', async ({ 
     const lineage = versionHistoryPanel.locator('[data-version-lineage] .vh-rev');
     await expect(lineage).toHaveCount(history.revision_count);
     await expect(versionHistoryPanel.locator('[data-chain-verified]')).toBeVisible();
+    await expect(versionHistoryPanel.locator('[data-platform-signed]')).toBeVisible();
+    await expect(versionHistoryPanel.locator('[data-revision-signed]').first()).toBeVisible();
     console.log('reader version-history panel rendered:', history.revision_count, 'lineage rows at', publishResp.route_path);
   } finally {
     await removeVirtualAuthenticator(client, authenticatorId);

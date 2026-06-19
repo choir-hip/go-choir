@@ -196,11 +196,23 @@ type PublicationBundle struct {
 // the tamper-evident hash chain. It is read back from the persisted artifact
 // manifest, not recomputed, so a reader/verifier can replay and check the chain.
 type PublicationVersionHistory struct {
-	Schema        string                           `json:"schema"`
-	RevisionCount int                              `json:"revision_count"`
-	ChainHeadHash string                           `json:"chain_head_hash,omitempty"`
-	ManifestHash  string                           `json:"manifest_hash,omitempty"`
-	Revisions     []PublicationVersionHistoryEntry `json:"revisions"`
+	Schema string `json:"schema"`
+	// RevisionCount is the number of revisions in the chain.
+	RevisionCount int `json:"revision_count"`
+	ChainHeadHash string `json:"chain_head_hash,omitempty"`
+	ManifestHash  string `json:"manifest_hash,omitempty"`
+	// SigningSchema identifies the per-revision attestation payload shape
+	// (choir.platform.revision_attestation.v0). Present only when the chain is
+	// platform-signed.
+	SigningSchema string `json:"signing_schema,omitempty"`
+	// SigningPublicKey is the platform Ed25519 public key (base64) that
+	// attests every revision in this chain. A verifier checks each entry's
+	// Signature against this key over the attestation of entry.RevisionHash.
+	SigningPublicKey string `json:"signing_public_key,omitempty"`
+	// SigningKeyID is a short content-addressed id of SigningPublicKey so
+	// signatures remain identifiable across a future key rotation.
+	SigningKeyID string `json:"signing_key_id,omitempty"`
+	Revisions   []PublicationVersionHistoryEntry `json:"revisions"`
 }
 
 // PublicationVersionHistoryEntry is one revision within a published version
@@ -219,6 +231,11 @@ type PublicationVersionHistoryEntry struct {
 	Provenance       json.RawMessage `json:"provenance,omitempty"`
 	RevisionHash     string          `json:"revision_hash,omitempty"`
 	CreatedAt        string          `json:"created_at,omitempty"`
+	// Signature is the base64 Ed25519 platform signature over the canonical
+	// attestation of RevisionHash. Present only for platform-signed revisions.
+	Signature string `json:"signature,omitempty"`
+	// SigningKeyID identifies which platform key produced Signature.
+	SigningKeyID string `json:"signing_key_id,omitempty"`
 }
 
 type PublicationExport struct {

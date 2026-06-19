@@ -8,7 +8,7 @@ import (
 
 func TestPublishTexturePersistsAndServesVersionHistory(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	history := []PublishTextureRevision{
 		{
@@ -80,7 +80,7 @@ func TestPublishTexturePersistsAndServesVersionHistory(t *testing.T) {
 
 func TestPublishTextureWithoutHistoryOmitsVersionHistory(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"))
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",

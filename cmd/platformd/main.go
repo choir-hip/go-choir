@@ -34,7 +34,7 @@ func main() {
 		_ = store.Close()
 	}()
 
-	svc := platform.NewService(store, cfg.ArtifactsRoot)
+	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
 	handler := platform.NewHandler(svc)
 	s := server.NewServer("platformd", cfg.Port)
 	platform.RegisterRoutes(s, handler)

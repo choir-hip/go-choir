@@ -31,6 +31,7 @@ const (
 type Service struct {
 	store         *Store
 	artifactsRoot string
+	signingKey    *SigningKey
 	writeMu       sync.Mutex
 }
 
@@ -44,11 +45,20 @@ type citationInput struct {
 	State    string          `json:"state"`
 }
 
-func NewService(store *Store, artifactsRoot string) *Service {
-	return &Service{
+// NewService builds a platform Service. signingKeyPath is the platform Ed25519
+// signing key (loaded or auto-created); an empty path disables D6 signing
+// (signatures omitted, publish still works) for callers that opt out.
+func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
+	svc := &Service{
 		store:         store,
 		artifactsRoot: filepath.Clean(artifactsRoot),
 	}
+	if signingKeyPath != "" {
+		if key, err := LoadOrCreateSigningKey(signingKeyPath); err == nil {
+			svc.signingKey = key
+		}
+	}
+	return svc
 }
 
 func (s *Service) Health(ctx context.Context) error {
@@ -205,7 +215,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		return nil, err
 	}
 
-	versionHistory, _, versionHistoryHash := buildVersionHistoryManifest(req.History)
+	versionHistory, _, versionHistoryHash := buildVersionHistoryManifest(req.History, s.signingKey)
 
 	manifest := map[string]any{
 		"schema":                 "choir.platform.artifact_manifest.v0",

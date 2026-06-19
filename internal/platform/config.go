@@ -13,16 +13,18 @@ const (
 )
 
 type Config struct {
-	Port          string
-	DoltDSN       string
-	ArtifactsRoot string
+	Port            string
+	DoltDSN         string
+	ArtifactsRoot   string
+	SigningKeyPath  string
 }
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:          envOr("PLATFORMD_PORT", DefaultPort),
-		DoltDSN:       envOr("PLATFORMD_DOLT_DSN", DefaultDoltDSN),
-		ArtifactsRoot: envOr("PLATFORMD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
+		Port:           envOr("PLATFORMD_PORT", DefaultPort),
+		DoltDSN:        envOr("PLATFORMD_DOLT_DSN", DefaultDoltDSN),
+		ArtifactsRoot:  envOr("PLATFORMD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
+		SigningKeyPath: envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("PLATFORMD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
