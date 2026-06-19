@@ -79,6 +79,10 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 	if err != nil {
 		return nil, err
 	}
+	versionHistory, err := s.publicationVersionHistory(ctx, rec.ArtifactManifestID)
+	if err != nil {
+		return nil, err
+	}
 	return &PublicationBundle{
 		Route: PublicationRoute{Path: routePath, State: rec.RouteState},
 		Publication: PublicationSummary{
@@ -112,8 +116,45 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 			CanSubmit:           true,
 			SourcePublicationID: rec.PublicationID,
 		},
-		Provenance: provenance,
+		Provenance:     provenance,
+		VersionHistory: versionHistory,
 	}, nil
+}
+
+// publicationVersionHistory reads the persisted version-history manifest for a
+// publication from its artifact manifest JSON. A Texture is its full versioned
+// history, so the reader serves the whole chain (with per-revision provenance
+// and the hash chain) rather than only the head projection. Returns nil when no
+// history was persisted (legacy head-only publications) so older publications
+// keep rendering unchanged.
+func (s *Service) publicationVersionHistory(ctx context.Context, manifestID string) (*PublicationVersionHistory, error) {
+	if strings.TrimSpace(manifestID) == "" {
+		return nil, nil
+	}
+	var manifestJSON string
+	err := s.store.db.QueryRowContext(ctx,
+		`SELECT manifest_json FROM artifact_manifests WHERE artifact_manifest_id = ?`, manifestID).
+		Scan(&manifestJSON)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("platform bundle: query artifact manifest: %w", err)
+	}
+	var envelope struct {
+		VersionHistory     *PublicationVersionHistory `json:"version_history"`
+		VersionHistoryHash string                     `json:"version_history_hash"`
+	}
+	if err := json.Unmarshal([]byte(manifestJSON), &envelope); err != nil {
+		return nil, nil
+	}
+	if envelope.VersionHistory == nil || envelope.VersionHistory.RevisionCount == 0 {
+		return nil, nil
+	}
+	if envelope.VersionHistory.ManifestHash == "" {
+		envelope.VersionHistory.ManifestHash = envelope.VersionHistoryHash
+	}
+	return envelope.VersionHistory, nil
 }
 
 func (s *Service) ExportPublicationByRoute(ctx context.Context, routePath, format string) (*PublicationExport, error) {

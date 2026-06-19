@@ -18,6 +18,31 @@ type PublishTextureRequest struct {
 	ExportPolicy     json.RawMessage `json:"export_policy,omitempty"`
 	SourceTraceID    string          `json:"source_trace_id,omitempty"`
 	RequestedBy      string          `json:"requested_by,omitempty"`
+	// History is the full source revision chain (oldest first) for the
+	// published document. A Texture is its versioned history, not just the head
+	// revision, so publish carries every revision's body, citations,
+	// system-attributed provenance, and per-revision hash. The head revision is
+	// still surfaced prominently via Content/SourceRevisionID; History is the
+	// durable spine persisted alongside it.
+	History []PublishTextureRevision `json:"history,omitempty"`
+}
+
+// PublishTextureRevision is one revision in the published version-history chain.
+// It mirrors the runtime-attributed revision record (never model-authored) and
+// carries the per-revision hash so the published artifact remains independently
+// verifiable end to end.
+type PublishTextureRevision struct {
+	RevisionID       string          `json:"revision_id"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	VersionNumber    int             `json:"version_number,omitempty"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	Content          string          `json:"content"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	Provenance       json.RawMessage `json:"provenance,omitempty"`
+	RevisionHash     string          `json:"revision_hash,omitempty"`
+	CreatedAt        string          `json:"created_at,omitempty"`
 }
 
 type PublishTextureResponse struct {
@@ -37,6 +62,8 @@ type PublishTextureResponse struct {
 	ReviewID             string   `json:"review_id"`
 	RollbackID           string   `json:"rollback_id"`
 	State                string   `json:"state"`
+	VersionHistoryHash   string   `json:"version_history_hash,omitempty"`
+	VersionCount         int      `json:"version_count,omitempty"`
 }
 
 type PublicationRoute struct {
@@ -161,6 +188,37 @@ type PublicationBundle struct {
 	Policy         PublicationPolicy             `json:"policy"`
 	Proposals      PublicationProposalCapability `json:"proposals"`
 	Provenance     PublicationProvenanceSummary  `json:"provenance"`
+	VersionHistory *PublicationVersionHistory    `json:"version_history,omitempty"`
+}
+
+// PublicationVersionHistory is the published, self-contained version chain for a
+// Texture: the full ordered list of revisions with per-revision provenance and
+// the tamper-evident hash chain. It is read back from the persisted artifact
+// manifest, not recomputed, so a reader/verifier can replay and check the chain.
+type PublicationVersionHistory struct {
+	Schema        string                           `json:"schema"`
+	RevisionCount int                              `json:"revision_count"`
+	ChainHeadHash string                           `json:"chain_head_hash,omitempty"`
+	ManifestHash  string                           `json:"manifest_hash,omitempty"`
+	Revisions     []PublicationVersionHistoryEntry `json:"revisions"`
+}
+
+// PublicationVersionHistoryEntry is one revision within a published version
+// history. Content/citations/metadata/provenance are carried verbatim from the
+// source revision so the published artifact is self-contained.
+type PublicationVersionHistoryEntry struct {
+	RevisionID       string          `json:"revision_id"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	VersionNumber    int             `json:"version_number,omitempty"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	Content          string          `json:"content"`
+	ContentHash      string          `json:"content_hash"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	Provenance       json.RawMessage `json:"provenance,omitempty"`
+	RevisionHash     string          `json:"revision_hash,omitempty"`
+	CreatedAt        string          `json:"created_at,omitempty"`
 }
 
 type PublicationExport struct {

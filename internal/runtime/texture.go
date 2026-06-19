@@ -221,6 +221,8 @@ type textureRevisionResponse struct {
 	Content          string           `json:"content"`
 	Citations        json.RawMessage  `json:"citations,omitempty"`
 	Metadata         json.RawMessage  `json:"metadata,omitempty"`
+	Provenance       json.RawMessage  `json:"provenance,omitempty"`
+	RevisionHash     string           `json:"revision_hash,omitempty"`
 	ParentRevisionID string           `json:"parent_revision_id,omitempty"`
 	CreatedAt        string           `json:"created_at"`
 }
@@ -944,12 +946,14 @@ func sandboxTextureDocumentResponseFromRecord(doc types.Document) map[string]any
 
 func sandboxTextureRevisionResponseFromRecord(rev types.Revision) map[string]any {
 	return map[string]any{
-		"revision_id": rev.RevisionID,
-		"doc_id":      rev.DocID,
-		"owner_id":    rev.OwnerID,
-		"content":     rev.Content,
-		"citations":   rev.Citations,
-		"metadata":    rev.Metadata,
+		"revision_id":   rev.RevisionID,
+		"doc_id":        rev.DocID,
+		"owner_id":      rev.OwnerID,
+		"content":       rev.Content,
+		"citations":     rev.Citations,
+		"metadata":      rev.Metadata,
+		"provenance":    rev.Provenance,
+		"revision_hash": rev.RevisionHash,
 	}
 }
 
@@ -1396,6 +1400,8 @@ func revisionResponseFromRecord(rev types.Revision) textureRevisionResponse {
 		Content:          rev.Content,
 		Citations:        rev.Citations,
 		Metadata:         rev.Metadata,
+		Provenance:       rev.Provenance,
+		RevisionHash:     rev.RevisionHash,
 		ParentRevisionID: rev.ParentRevisionID,
 		CreatedAt:        rev.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 	}

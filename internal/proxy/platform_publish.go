@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,12 +34,23 @@ type sandboxTextureDocument struct {
 }
 
 type sandboxTextureRevision struct {
-	RevisionID string          `json:"revision_id"`
-	DocID      string          `json:"doc_id"`
-	OwnerID    string          `json:"owner_id"`
-	Content    string          `json:"content"`
-	Citations  json.RawMessage `json:"citations,omitempty"`
-	Metadata   json.RawMessage `json:"metadata,omitempty"`
+	RevisionID       string          `json:"revision_id"`
+	DocID            string          `json:"doc_id"`
+	OwnerID          string          `json:"owner_id"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	VersionNumber    int             `json:"version_number,omitempty"`
+	Content          string          `json:"content"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	Provenance       json.RawMessage `json:"provenance,omitempty"`
+	RevisionHash     string          `json:"revision_hash,omitempty"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	CreatedAt        string          `json:"created_at,omitempty"`
+}
+
+type sandboxTextureRevisionList struct {
+	Revisions []sandboxTextureRevision `json:"revisions"`
 }
 
 type sandboxContentItem struct {
@@ -153,6 +165,13 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		h.lifecycle.record("platform_publish.private_read", "source_metadata_error", time.Since(started))
 		return
 	}
+	history, err := h.gatherTextureRevisionHistory(r, sandboxURL, authResult.UserID, req.DocID)
+	if err != nil {
+		log.Printf("proxy: platform publish gather revision history: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load private texture revision history"})
+		h.lifecycle.record("platform_publish.private_read", "history_error", time.Since(started))
+		return
+	}
 	h.lifecycle.record("platform_publish.private_read", "ok", time.Since(started))
 
 	platformReq := platform.PublishTextureRequest{
@@ -167,6 +186,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		AccessPolicy:     req.AccessPolicy,
 		ExportPolicy:     req.ExportPolicy,
 		RequestedBy:      authResult.UserID,
+		History:          history,
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {
@@ -188,6 +208,46 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, status, platformResp)
 	h.lifecycle.record("platform_publish.platformd", lifecycleHTTPStatus(status), time.Since(started))
 	h.lifecycle.record("platform_publish.total", "published", time.Since(started))
+}
+
+// gatherTextureRevisionHistory loads the full revision chain for a document so
+// publish can persist the whole versioned history (a Texture is its history, not
+// only the head revision). The sandbox list endpoint returns newest-first; the
+// chain is returned oldest-first so the persisted manifest's hash chain reads in
+// causal order. Returns an empty chain (not an error) when no revisions are
+// available so legacy/head-only behavior degrades gracefully.
+func (h *Handler) gatherTextureRevisionHistory(r *http.Request, sandboxURL, userID, docID string) ([]platform.PublishTextureRevision, error) {
+	var list sandboxTextureRevisionList
+	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", userID, &list); err != nil {
+		return nil, err
+	}
+	revs := list.Revisions
+	sort.SliceStable(revs, func(i, j int) bool {
+		if revs[i].VersionNumber != revs[j].VersionNumber {
+			return revs[i].VersionNumber < revs[j].VersionNumber
+		}
+		return revs[i].CreatedAt < revs[j].CreatedAt
+	})
+	history := make([]platform.PublishTextureRevision, 0, len(revs))
+	for _, rev := range revs {
+		if rev.OwnerID != "" && rev.OwnerID != userID {
+			return nil, fmt.Errorf("revision %s does not belong to authenticated user", rev.RevisionID)
+		}
+		history = append(history, platform.PublishTextureRevision{
+			RevisionID:       rev.RevisionID,
+			ParentRevisionID: rev.ParentRevisionID,
+			VersionNumber:    rev.VersionNumber,
+			AuthorKind:       rev.AuthorKind,
+			AuthorLabel:      rev.AuthorLabel,
+			Content:          rev.Content,
+			Citations:        rev.Citations,
+			Metadata:         rev.Metadata,
+			Provenance:       rev.Provenance,
+			RevisionHash:     rev.RevisionHash,
+			CreatedAt:        rev.CreatedAt,
+		})
+	}
+	return history, nil
 }
 
 func validateOptionalJSONObject(raw json.RawMessage, label string) error {

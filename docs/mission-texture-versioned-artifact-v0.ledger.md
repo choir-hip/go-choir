@@ -181,9 +181,57 @@ pass; absent → `quote_not_in_source`). Builder unit tests + full
 `scripts/go-test-runtime-shards` green; build clean. Mutation class red (no new
 store column or tool field — pure reuse of typed evidence).
 
+### 2026-06-18 — D5 full-history publish payload (history manifest)
+
+Decision (cognitive-transform pass, all lenses converged): persist the full
+version history as a **canonical-JSON history manifest embedded in the existing
+artifact manifest**, not a new normalized Dolt table. Rationale: the invariant
+("publish carries the whole chain + per-rev provenance + transclusions") is a
+*containment* truth-condition that a manifest satisfies; normalized tables would
+guess a schema before the deferred reader-UX design pass (premature, on the
+deploy-flaky Dolt surface); a single canonical manifest carrying the D2 hash
+chain is exactly the **signable spine** the mission targets and is independently
+verifiable; and the change is additive (head path byte-identical when no history
+is supplied). Reader UI rendering stays deferred to D7 as the mission flagged.
+
+Layers (each tested):
+
+- **Sandbox API** (`internal/runtime/texture.go`): `textureRevisionResponse` +
+  both record conversions now expose `provenance` and `revision_hash`, so the
+  proxy can read the full per-revision spine (previously head-only fields).
+- **Platform types** (`internal/platform/types.go`): `PublishTextureRequest.History
+  []PublishTextureRevision` (oldest-first chain); response carries
+  `version_history_hash` + `version_count`; `PublicationBundle.VersionHistory`
+  with `PublicationVersionHistory{schema, revision_count, chain_head_hash,
+  manifest_hash, revisions[]}`.
+- **Manifest builder** (`internal/platform/version_history.go`):
+  `buildVersionHistoryManifest` — deterministic struct marshal, per-entry
+  `content_hash`, `chain_head_hash` = head `revision_hash`, manifest hash a pure
+  function of the chain; empty chain → no-op (head-only stays unchanged).
+- **Publish** (`service.go`): embeds `version_history` + `version_history_hash`
+  into the artifact `manifest_json` only when a chain is present.
+- **Reader** (`service_publication_read.go`): `publicationVersionHistory` reads
+  back the manifest JSON and exposes the chain in the bundle; nil for legacy
+  head-only publications.
+- **Proxy** (`platform_publish.go`): `gatherTextureRevisionHistory` loads
+  `/api/texture/documents/{id}/revisions`, sorts newest→oldest into oldest-first
+  causal order, and forwards as `History`.
+
+Tests: `version_history_test.go` (determinism, empty, round-trip),
+`version_history_e2e_test.go` (publish-with-history → bundle serves chain +
+matching manifest hash + oldest-first; head-only omits history), proxy fakes
+extended to serve `/revisions` and assert oldest-first forwarding. Build + vet
+clean across runtime/platform/proxy; focused runtime+platform suites green.
+
+Mutation class orange (product publish payload + reader bundle shape; additive,
+backward-compatible). Protected surface: publication path / reader bundle.
+Rollback: revert the commit; head-only publications and existing manifests are
+unaffected (history fields are additive/omitempty).
+
 ### State
 
 Deploy gate fixed + verified. D1 (`e7967d16`), D2 (`f592052e`), D3+D4
-(`7a2980c8`) deployed green. D3 completion (typed-evidence quote path) implemented
-locally. Next: commit + push (validates deploy gate), then D5 (full-history
-publish), D7 (readers/verifier reconcile + staging acceptance proof).
+(`7a2980c8`), D3 completion (`880a6aa8`) deployed green. D5 (full-history publish
+manifest) implemented + locally green. Next: commit + push (Landing Loop:
+CI + staging deploy + acceptance), then D7 (reader/verifier reconcile + staging
+acceptance proof of the served version history).

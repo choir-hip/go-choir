@@ -205,6 +205,8 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		return nil, err
 	}
 
+	versionHistory, _, versionHistoryHash := buildVersionHistoryManifest(req.History)
+
 	manifest := map[string]any{
 		"schema":                 "choir.platform.artifact_manifest.v0",
 		"subject_kind":           "publication_version",
@@ -223,6 +225,16 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		"transclusions":          sourceMetadata.Transclusions,
 		"access_policy":          json.RawMessage(sourceMetadata.AccessPolicy),
 		"export_policy":          json.RawMessage(sourceMetadata.ExportPolicy),
+	}
+	// A Texture is its full versioned history, not just the head projection.
+	// Persist the canonical version-history manifest (chain + per-revision
+	// provenance + transclusions, with the tamper-evident hash chain) inside the
+	// artifact manifest so the published artifact is self-contained and the
+	// reader can serve every revision. Omitted when no chain is supplied so the
+	// head-only path is byte-identical to before.
+	if versionHistoryHash != "" {
+		manifest["version_history"] = versionHistory
+		manifest["version_history_hash"] = versionHistoryHash
 	}
 	manifestJSON, err := json.Marshal(manifest)
 	if err != nil {
@@ -338,6 +350,8 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		ReviewID:             reviewID,
 		RollbackID:           rollbackID,
 		State:                "published",
+		VersionHistoryHash:   versionHistoryHash,
+		VersionCount:         versionHistory.RevisionCount,
 	}, nil
 }
 

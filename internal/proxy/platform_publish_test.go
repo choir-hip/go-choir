@@ -55,6 +55,11 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 				Title:             "My Note",
 				CurrentRevisionID: "rev-head",
 			})
+		case "/api/texture/documents/doc-1/revisions":
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+				{RevisionID: "rev-2", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 2, Content: "public projection content", RevisionHash: "h2", CreatedAt: "2026-01-02T00:00:00.000Z"},
+				{RevisionID: "rev-1", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 1, Content: "older draft", RevisionHash: "h1", CreatedAt: "2026-01-01T00:00:00.000Z"},
+			}})
 		case "/api/texture/revisions/rev-2":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-2",
@@ -117,6 +122,12 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	}
 	if gotPlatformReq.Content != "public projection content" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
+	}
+	if len(gotPlatformReq.History) != 2 {
+		t.Fatalf("platform history len: got %d, want 2", len(gotPlatformReq.History))
+	}
+	if gotPlatformReq.History[0].RevisionID != "rev-1" || gotPlatformReq.History[1].RevisionID != "rev-2" {
+		t.Fatalf("platform history not oldest-first: %s, %s", gotPlatformReq.History[0].RevisionID, gotPlatformReq.History[1].RevisionID)
 	}
 	if !strings.Contains(string(gotPlatformReq.Metadata), "content-public-1") {
 		t.Fatalf("platform metadata not forwarded: %s", string(gotPlatformReq.Metadata))
@@ -228,6 +239,10 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
+		case "/api/texture/documents/doc-url/revisions":
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1](source:src-url)", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
+			}})
 		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-url",
@@ -360,6 +375,10 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
+		case "/api/texture/documents/doc-url/revisions":
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1](source:src-url)", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
+			}})
 		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-url",
@@ -444,6 +463,10 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 				Title:             "Private Note",
 				CurrentRevisionID: "rev-private",
 			})
+		case "/api/texture/documents/doc-private/revisions":
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
+				{RevisionID: "rev-private", DocID: "doc-private", OwnerID: "user-1", VersionNumber: 1, Content: "private projection", RevisionHash: "hpriv", CreatedAt: "2026-01-01T00:00:00.000Z"},
+			}})
 		case "/api/texture/revisions/rev-private":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
 				RevisionID: "rev-private",
