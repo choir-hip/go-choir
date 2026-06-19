@@ -89,19 +89,23 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	}
 }
 
-func TestFallbackModelPolicyUsesGeneratedMimoDefaults(t *testing.T) {
+func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "deepseek" || conductor.Model != "deepseek-v4-flash" || conductor.ReasoningEffort != "medium" {
+	if conductor.Provider != "chatgpt" || conductor.Model != "gpt-5.4-mini" || conductor.ReasoningEffort != "medium" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
 	super := policy.Resolve(AgentProfileSuper)
-	if super.Provider != "deepseek" || super.Model != "deepseek-v4-flash" || super.ReasoningEffort != "medium" {
+	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" {
 		t.Fatalf("super selection = %+v", super)
 	}
 	texture := policy.Resolve(AgentProfileTexture)
-	if texture.Provider != "xiaomi" || texture.Model != "mimo-v2.5" || texture.ReasoningEffort != "medium" {
+	if texture.Provider != "chatgpt" || texture.Model != "gpt-5.5" || texture.ReasoningEffort != "low" {
 		t.Fatalf("texture selection = %+v", texture)
+	}
+	researcher := policy.Resolve(AgentProfileResearcher)
+	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.4-mini" || researcher.ReasoningEffort != "medium" {
+		t.Fatalf("researcher selection = %+v", researcher)
 	}
 	processor := policy.Resolve(AgentProfileProcessor)
 	if processor.Provider != "xiaomi" || processor.Model != "mimo-v2.5" || processor.ReasoningEffort != "medium" {
@@ -134,13 +138,16 @@ func TestGeneratedModelPolicyUsesTextureRoleKey(t *testing.T) {
 	if !strings.Contains(raw, "[roles.texture]") {
 		t.Fatalf("generated model policy missing [roles.texture]:\n%s", raw)
 	}
+	if strings.Contains(raw, "[roles.vtext]") {
+		t.Fatalf("generated model policy still contains legacy [roles.vtext]:\n%s", raw)
+	}
 	policy, err := parseModelPolicy(raw, "/System/model-policy.toml")
 	if err != nil {
 		t.Fatalf("parse generated model policy: %v", err)
 	}
 	texture := policy.Resolve(AgentProfileTexture)
-	if texture.Provider != "xiaomi" || texture.Model != "mimo-v2.5" {
-		t.Fatalf("texture selection = %+v, want generated Xiaomi default", texture)
+	if texture.Provider != "chatgpt" || texture.Model != "gpt-5.5" || texture.ReasoningEffort != "low" {
+		t.Fatalf("texture selection = %+v, want generated ChatGPT default", texture)
 	}
 }
 
@@ -156,16 +163,29 @@ func TestNormalizeModelPolicyRoleSeparatesVerifierModalities(t *testing.T) {
 	}
 }
 
-func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
+func TestDefaultModelPolicyUsesChatGPTCutover(t *testing.T) {
+	raw := defaultModelPolicyText(Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"})
+	policy, err := parseModelPolicy(raw, "generated")
+	if err != nil {
+		t.Fatalf("parse generated policy: %v", err)
+	}
+	if got := policy.Resolve("unknown-role"); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "medium" {
+		t.Fatalf("generated fallback selection = %+v", got)
+	}
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "medium" {
+		t.Fatalf("generated conductor selection = %+v", got)
+	}
+	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "medium" {
+		t.Fatalf("generated researcher selection = %+v", got)
+	}
+	if got := policy.Resolve(AgentProfileSuper); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "medium" {
+		t.Fatalf("generated super selection = %+v", got)
+	}
+}
+
+func TestEnsureDefaultModelPolicyCreatesCutoverPolicy(t *testing.T) {
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg := Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"}
-	if err := os.WriteFile(policyPath, []byte(legacyGeneratedModelPolicyText(cfg)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, cfg); err != nil {
+	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
 		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
 	}
 	raw, err := os.ReadFile(policyPath)
@@ -174,464 +194,14 @@ func TestEnsureDefaultModelPolicyMigratesLegacyGeneratedPolicy(t *testing.T) {
 	}
 	policy, err := parseModelPolicy(string(raw), policyPath)
 	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "deepseek" || conductor.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated conductor selection = %+v", conductor)
-	}
-}
-
-func TestDefaultModelPolicyIgnoresChatGPTProcessFallback(t *testing.T) {
-	raw := defaultModelPolicyText(Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"})
-	policy, err := parseModelPolicy(raw, "generated")
-	if err != nil {
 		t.Fatalf("parse generated policy: %v", err)
 	}
-	if got := policy.Resolve("unknown-role"); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("generated fallback selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-		t.Fatalf("generated conductor selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-		t.Fatalf("generated super selection = %+v", got)
+	if got := policy.Resolve(AgentProfileTexture); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "low" {
+		t.Fatalf("generated texture selection = %+v", got)
 	}
 }
 
-func TestEnsureDefaultModelPolicyMigratesGeneratedFlashNoneForegroundPolicy(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-# Optional max_tokens requests an explicit per-call budget. Omit it for provider
-# defaults, especially Fireworks chat completions.
-
-[defaults]
-fallback_provider = "fireworks"
-fallback_model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.conductor]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
-
-[roles.super]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-reasoning = "medium"
-
-[roles.vsuper]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-
-[roles.co-super]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-
-[roles.researcher]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
-
-[roles.texture]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
-
-[roles.verifier]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-requires = ["text", "tool_use"]
-
-[roles.verifier_multimodal]
-provider = "fireworks"
-model = "accounts/fireworks/models/kimi-k2p6"
-requires = ["image", "tool_use"]
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	for _, role := range []string{AgentProfileConductor, AgentProfileResearcher} {
-		got := policy.Resolve(role)
-		if got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-			t.Fatalf("migrated %s selection = %+v", role, got)
-		}
-	}
-	got := policy.Resolve(AgentProfileTexture)
-	if got.Provider != "xiaomi" || got.Model != "mimo-v2.5" || got.ReasoningEffort != "medium" {
-		t.Fatalf("migrated texture selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesGeneratedDeepSeekPolicy(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "deepseek"
-fallback_model = "deepseek-v4-flash"
-reasoning = "medium"
-
-[roles.conductor]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-reasoning = "medium"
-
-[roles.super]
-provider = "deepseek"
-model = "deepseek-v4-pro"
-reasoning = "medium"
-
-[roles.vsuper]
-provider = "deepseek"
-model = "deepseek-v4-pro"
-
-[roles.co-super]
-provider = "deepseek"
-model = "deepseek-v4-pro"
-
-[roles.researcher]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-reasoning = "medium"
-
-[roles.texture]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-reasoning = "medium"
-
-[roles.verifier]
-provider = "deepseek"
-model = "deepseek-v4-pro"
-requires = ["text", "tool_use"]
-
-[roles.verifier_multimodal]
-provider = "xiaomi"
-model = "mimo-v2.5"
-requires = ["image", "tool_use"]
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated conductor selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileVSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated vsuper selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated super selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileReconciler); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated reconciler selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesSemanticallyLegacyGeneratedPolicy(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "chatgpt"
-fallback_model = "gpt-5.5"
-
-[roles.conductor]
-provider = "chatgpt"
-model = "gpt-5.5"
-reasoning = "low"
-
-[roles.super]
-provider = "chatgpt"
-model = "gpt-5.5"
-reasoning = "medium"
-
-[roles.researcher]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.texture]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated super selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesPartialDeepSeekPolicy(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "deepseek"
-fallback_model = "deepseek-v4-flash"
-reasoning = "medium"
-
-[roles.researcher]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-reasoning = "medium"
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated researcher selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated super selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesStaleForegroundChatGPTPins(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "fireworks"
-fallback_model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.conductor]
-provider = "chatgpt"
-model = "gpt-5.5"
-
-[roles.super]
-provider = "chatgpt"
-model = "gpt-5.5"
-reasoning = "medium"
-
-[roles.texture]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-		t.Fatalf("migrated conductor selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-		t.Fatalf("migrated super selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesLegacyChatGPTFallback(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "chatgpt"
-fallback_model = "gpt-5.5"
-reasoning = "low"
-
-[roles.texture]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-reasoning = "none"
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-		t.Fatalf("migrated conductor selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" || got.ReasoningEffort != "medium" {
-		t.Fatalf("migrated researcher selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesCustomDeepSeekPolicy(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "fireworks"
-fallback_model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.conductor]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.super]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(migrated) == raw {
-		t.Fatalf("deprecated deepseek policy was not rewritten")
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated conductor selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated super selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyMigratesAllXiaomiPolicy(t *testing.T) {
-	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = "xiaomi"
-fallback_model = "mimo-v2.5"
-reasoning = "medium"
-
-[roles.conductor]
-provider = "xiaomi"
-model = "mimo-v2.5"
-reasoning = "medium"
-
-[roles.super]
-provider = "xiaomi"
-model = "mimo-v2.5-pro"
-reasoning = "medium"
-`
-	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
-		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
-	}
-	migrated, err := os.ReadFile(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := parseModelPolicy(string(migrated), policyPath)
-	if err != nil {
-		t.Fatalf("parse migrated policy: %v", err)
-	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated conductor selection = %+v", got)
-	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "deepseek" || got.Model != "deepseek-v4-flash" {
-		t.Fatalf("migrated super selection = %+v", got)
-	}
-}
-
-func TestEnsureDefaultModelPolicyPreservesIntentionalChatGPTPolicy(t *testing.T) {
+func TestEnsureDefaultModelPolicyDoesNotRewriteExistingPolicy(t *testing.T) {
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
 		t.Fatal(err)
@@ -665,7 +235,7 @@ reasoning = "high"
 		t.Fatal(err)
 	}
 	if string(kept) != raw {
-		t.Fatalf("intentional ChatGPT policy was unexpectedly rewritten")
+		t.Fatalf("existing model policy was unexpectedly rewritten")
 	}
 }
 

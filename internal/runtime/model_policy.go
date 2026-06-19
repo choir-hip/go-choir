@@ -38,6 +38,8 @@ const (
 	defaultVerifierModel             = "deepseek-v4-pro"
 	defaultMultimodalVerifierModel   = "mimo-v2.5"
 	defaultChatGPTProvider           = "chatgpt"
+	defaultChatGPTMiniModel          = "gpt-5.4-mini"
+	defaultChatGPTForegroundModel    = "gpt-5.5"
 	defaultTerminalFallbackModel     = "gpt-5.4-mini"
 	defaultTerminalFallbackReasoning = "low"
 	legacyFireworksFlashModel        = "accounts/fireworks/models/deepseek-v4-flash"
@@ -112,18 +114,23 @@ func defaultModelPolicyText(_ Config) string {
 # defaults, especially OpenAI-compatible chat completions.
 
 [defaults]
-fallback_provider = %q
-fallback_model = %q
+fallback_provider = "chatgpt"
+fallback_model = "gpt-5.4-mini"
 reasoning = "medium"
 
 [roles.conductor]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "chatgpt"
+model = "gpt-5.4-mini"
 reasoning = "medium"
 
+[roles.texture]
+provider = "chatgpt"
+model = "gpt-5.5"
+reasoning = "low"
+
 [roles.super]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "chatgpt"
+model = "gpt-5.5"
 reasoning = "medium"
 
 [roles.vsuper]
@@ -135,13 +142,8 @@ provider = "deepseek"
 model = "deepseek-v4-flash"
 
 [roles.researcher]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-reasoning = "medium"
-
-[roles.texture]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "chatgpt"
+model = "gpt-5.4-mini"
 reasoning = "medium"
 
 [roles.processor]
@@ -163,70 +165,32 @@ requires = ["text", "tool_use"]
 provider = "xiaomi"
 model = "mimo-v2.5"
 requires = ["image", "tool_use"]
-`, defaultDeepSeekProvider, defaultConductorModel)
-}
-
-func legacyGeneratedModelPolicyText(cfg Config) string {
-	fallbackProvider := strings.TrimSpace(cfg.LLMProvider)
-	if fallbackProvider == "" {
-		fallbackProvider = "chatgpt"
-	}
-	fallbackModel := strings.TrimSpace(cfg.LLMModel)
-	if fallbackModel == "" {
-		fallbackModel = "gpt-5.5"
-	}
-	return fmt.Sprintf(`# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
-# Provider secrets stay server-owned; this file names models only.
-
-[defaults]
-fallback_provider = %q
-fallback_model = %q
-reasoning = %q
-
-[roles.conductor]
-provider = "chatgpt"
-model = "gpt-5.5"
-reasoning = "low"
-
-[roles.super]
-provider = "chatgpt"
-model = "gpt-5.5"
-reasoning = "medium"
-
-[roles.vsuper]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-
-[roles.co-super]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-
-[roles.researcher]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.texture]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-
-[roles.verifier]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-pro"
-requires = ["text", "tool_use"]
-
-[roles.verifier_multimodal]
-provider = "fireworks"
-model = "accounts/fireworks/models/kimi-k2p6"
-requires = ["image", "tool_use"]
-`, fallbackProvider, fallbackModel, strings.TrimSpace(cfg.LLMReasoningEffort))
+`)
 }
 
 func fallbackModelPolicy(_ Config) ModelPolicy {
 	defaults := LLMSelection{
-		Provider:        defaultDeepSeekProvider,
-		Model:           defaultConductorModel,
+		Provider:        defaultChatGPTProvider,
+		Model:           defaultChatGPTMiniModel,
 		ReasoningEffort: defaultFlashForegroundReasoning,
+		Source:          "platform_fallback",
+	}
+	chatGPTMini := LLMSelection{
+		Provider:        defaultChatGPTProvider,
+		Model:           defaultChatGPTMiniModel,
+		ReasoningEffort: defaultFlashForegroundReasoning,
+		Source:          "platform_fallback",
+	}
+	chatGPTForeground := LLMSelection{
+		Provider:        defaultChatGPTProvider,
+		Model:           defaultChatGPTForegroundModel,
+		ReasoningEffort: defaultFlashForegroundReasoning,
+		Source:          "platform_fallback",
+	}
+	chatGPTTexture := LLMSelection{
+		Provider:        defaultChatGPTProvider,
+		Model:           defaultChatGPTForegroundModel,
+		ReasoningEffort: "low",
 		Source:          "platform_fallback",
 	}
 	flashDeepSeek := LLMSelection{
@@ -244,12 +208,12 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        flashDeepSeek,
-			AgentProfileSuper:            flashDeepSeek,
+			AgentProfileConductor:        chatGPTMini,
+			AgentProfileSuper:            chatGPTForeground,
 			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       flashDeepSeek,
-			AgentProfileTexture:          flashXiaomi,
+			AgentProfileResearcher:       chatGPTMini,
+			AgentProfileTexture:          chatGPTTexture,
 			AgentProfileProcessor:        flashXiaomi,
 			AgentProfileReconciler:       flashDeepSeek,
 			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
@@ -427,13 +391,6 @@ func isSafeModelPolicyOverlayID(id string) bool {
 
 func ensureDefaultModelPolicyFile(path string, cfg Config) error {
 	if _, err := os.Stat(path); err == nil {
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		if shouldMigrateLegacyGeneratedModelPolicy(string(raw), cfg) {
-			return os.WriteFile(path, []byte(defaultModelPolicyText(cfg)), 0o644)
-		}
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
@@ -551,178 +508,6 @@ func isEmptySelection(sel LLMSelection) bool {
 		strings.TrimSpace(sel.Model) == "" &&
 		strings.TrimSpace(sel.ReasoningEffort) == "" &&
 		sel.MaxTokens <= 0
-}
-
-func shouldMigrateLegacyGeneratedModelPolicy(raw string, cfg Config) bool {
-	if strings.TrimSpace(raw) == strings.TrimSpace(legacyGeneratedModelPolicyText(cfg)) {
-		return true
-	}
-	if !strings.Contains(raw, "# Choir model policy") ||
-		!strings.Contains(raw, "Provider secrets stay server-owned") {
-		return false
-	}
-	policy, err := parseModelPolicy(raw, "legacy-generated-model-policy")
-	if err != nil {
-		return false
-	}
-	if hasLegacyChatGPTFallback(policy) {
-		return true
-	}
-	if hasGeneratedFlashNoneForegroundPolicy(policy) {
-		return true
-	}
-	if hasGeneratedDeepSeekPolicy(policy) {
-		return true
-	}
-	if policyNeedsFlashDualProviderUpgrade(policy) {
-		return true
-	}
-	conductor, ok := policy.Roles[AgentProfileConductor]
-	if !ok || !isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "low") {
-		return hasLegacyChatGPTForegroundPin(policy)
-	}
-	super, ok := policy.Roles[AgentProfileSuper]
-	if !ok || !isModelPolicySelection(super, "chatgpt", "gpt-5.5", "medium") {
-		return hasLegacyChatGPTForegroundPin(policy)
-	}
-	researcher, ok := policy.Roles[AgentProfileResearcher]
-	if !ok || !isModelPolicySelection(researcher, defaultFireworksProvider, legacyFireworksFlashModel, "") {
-		return false
-	}
-	texture, ok := policy.Roles[AgentProfileTexture]
-	if !ok || !isModelPolicySelection(texture, defaultFireworksProvider, legacyFireworksFlashModel, "") {
-		return false
-	}
-	return true
-}
-
-func hasGeneratedDeepSeekPolicy(policy ModelPolicy) bool {
-	if len(policy.Roles) != 8 {
-		return false
-	}
-	if !isModelPolicySelection(policy.Defaults, defaultDeepSeekProvider, defaultResearcherTextureModel, "medium") {
-		return false
-	}
-	expected := map[string]LLMSelection{
-		AgentProfileConductor:        {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, ReasoningEffort: "medium"},
-		AgentProfileSuper:            {Provider: defaultDeepSeekProvider, Model: defaultSuperModel, ReasoningEffort: "medium"},
-		AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultSuperModel},
-		AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultSuperModel},
-		AgentProfileResearcher:       {Provider: defaultDeepSeekProvider, Model: defaultResearcherTextureModel, ReasoningEffort: "medium"},
-		AgentProfileTexture:          {Provider: defaultDeepSeekProvider, Model: defaultResearcherTextureModel, ReasoningEffort: "medium"},
-		modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultVerifierModel},
-		modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel},
-	}
-	for role, want := range expected {
-		got, ok := policy.Roles[role]
-		if !ok {
-			return false
-		}
-		if !isModelPolicySelection(got, want.Provider, want.Model, want.ReasoningEffort) {
-			return false
-		}
-	}
-	return true
-}
-
-func hasGeneratedFlashNoneForegroundPolicy(policy ModelPolicy) bool {
-	if len(policy.Roles) != 8 {
-		return false
-	}
-	if !isModelPolicySelection(policy.Defaults, defaultFireworksProvider, legacyFireworksFlashModel, "") {
-		return false
-	}
-	expected := map[string]LLMSelection{
-		AgentProfileConductor:        {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
-		AgentProfileSuper:            {Provider: defaultFireworksProvider, Model: legacyFireworksProModel, ReasoningEffort: "medium"},
-		AgentProfileVSuper:           {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
-		AgentProfileCoSuper:          {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
-		AgentProfileResearcher:       {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
-		AgentProfileTexture:          {Provider: defaultFireworksProvider, Model: legacyFireworksFlashModel, ReasoningEffort: "none"},
-		modelPolicyRoleVerifier:      {Provider: defaultFireworksProvider, Model: legacyFireworksProModel},
-		modelPolicyRoleVerifierMulti: {Provider: defaultFireworksProvider, Model: legacyFireworksKimiModel},
-	}
-	for role, want := range expected {
-		got, ok := policy.Roles[role]
-		if !ok {
-			return false
-		}
-		if !isExactModelPolicySelection(got, want.Provider, want.Model, want.ReasoningEffort) {
-			return false
-		}
-	}
-	return true
-}
-
-func isExactModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
-	return strings.TrimSpace(sel.Provider) == provider &&
-		strings.TrimSpace(sel.Model) == model &&
-		strings.TrimSpace(sel.ReasoningEffort) == reasoning &&
-		sel.MaxTokens == 0
-}
-
-func hasLegacyChatGPTForegroundPin(policy ModelPolicy) bool {
-	conductor := policy.Roles[AgentProfileConductor]
-	super := policy.Roles[AgentProfileSuper]
-	return isModelPolicySelection(conductor, "chatgpt", "gpt-5.5", "") ||
-		isModelPolicySelection(super, "chatgpt", "gpt-5.5", "")
-}
-
-func hasLegacyChatGPTFallback(policy ModelPolicy) bool {
-	return isModelPolicySelection(policy.Defaults, "chatgpt", "gpt-5.5", "")
-}
-
-func policyNeedsFlashDualProviderUpgrade(policy ModelPolicy) bool {
-	if selectionUsesFireworksRouting(policy.Defaults) || selectionUsesProTierModel(policy.Defaults) {
-		return true
-	}
-	for _, sel := range policy.Roles {
-		if selectionUsesFireworksRouting(sel) || selectionUsesProTierModel(sel) {
-			return true
-		}
-	}
-	return policyUsesSingleFlashProvider(policy)
-}
-
-func policyUsesSingleFlashProvider(policy ModelPolicy) bool {
-	providers := map[string]struct{}{}
-	for _, sel := range policy.Roles {
-		provider := strings.TrimSpace(sel.Provider)
-		if provider == "" {
-			continue
-		}
-		if provider != defaultXiaomiProvider && provider != defaultDeepSeekProvider {
-			return false
-		}
-		providers[provider] = struct{}{}
-	}
-	return len(providers) == 1
-}
-
-func selectionUsesFireworksRouting(sel LLMSelection) bool {
-	provider := strings.ToLower(strings.TrimSpace(sel.Provider))
-	model := strings.ToLower(strings.TrimSpace(sel.Model))
-	return provider == defaultFireworksProvider || strings.Contains(model, "accounts/fireworks/")
-}
-
-func selectionUsesProTierModel(sel LLMSelection) bool {
-	model := strings.ToLower(strings.TrimSpace(sel.Model))
-	switch model {
-	case defaultMimoProModel, defaultSuperModel, legacyFireworksProModel:
-		return true
-	default:
-		return strings.Contains(model, "deepseek-v4-pro")
-	}
-}
-
-func isModelPolicySelection(sel LLMSelection, provider, model, reasoning string) bool {
-	if strings.TrimSpace(sel.Provider) != provider || strings.TrimSpace(sel.Model) != model {
-		return false
-	}
-	if reasoning == "" {
-		return true
-	}
-	return strings.TrimSpace(sel.ReasoningEffort) == reasoning
 }
 
 func parseModelPolicy(raw, source string) (ModelPolicy, error) {

@@ -35,6 +35,9 @@
   export let sourceArtifactPending = false;
   export let sourceArtifactStatus = '';
   export let sourceArtifactError = '';
+  export let modelPolicyRoles = [];
+  export let modelPolicyPending = false;
+  export let modelPolicyError = '';
 
   const dispatch = createEventDispatcher();
 
@@ -57,6 +60,12 @@
   );
   $: canImportSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactURL.trim());
   $: canAttachSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactText.trim());
+
+  function modelPolicyLabel(row) {
+    const model = row?.model || 'unknown';
+    const reasoning = row?.reasoning_effort ? ` / ${row.reasoning_effort}` : '';
+    return `${row?.provider || 'provider'} / ${model}${reasoning}`;
+  }
 </script>
 
 <section class="source-panel" data-texture-source-diagnostics>
@@ -119,6 +128,27 @@
       {/if}
     </div>
   {/if}
+
+  <div class="source-model-policy" data-texture-source-model-policy>
+    <div class="source-artifact-heading">
+      <span class="evidence-label">Models</span>
+      <strong>{modelPolicyPending ? 'Resolving policy' : 'Effective roles'}</strong>
+    </div>
+    {#if modelPolicyError}
+      <p class="source-model-error" role="status">{modelPolicyError}</p>
+    {:else if modelPolicyRoles.length}
+      <dl>
+        {#each modelPolicyRoles as row}
+          <div data-texture-source-model-role={row.role}>
+            <dt>{row.role === 'texture' ? 'Texture' : row.role}</dt>
+            <dd title={row.source || 'model policy'}>{modelPolicyLabel(row)}</dd>
+          </div>
+        {/each}
+      </dl>
+    {:else}
+      <p class="source-model-error" role="status">{modelPolicyPending ? 'Loading model policy...' : 'Model policy not loaded.'}</p>
+    {/if}
+  </div>
 
   {#if sourceStructures.length}
     <div class="source-structure-evidence" data-texture-structure-summary>
@@ -473,6 +503,43 @@
     border-radius: 8px;
     padding: 0.58rem;
     background: rgba(255, 255, 255, 0.045);
+  }
+
+  .source-model-policy {
+    display: grid;
+    gap: 0.46rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    padding: 0.56rem;
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .source-model-policy dl {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 0.36rem;
+    margin: 0;
+  }
+
+  .source-model-policy div {
+    min-width: 0;
+  }
+
+  .source-model-policy dt {
+    color: var(--choir-text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .source-model-policy dd,
+  .source-model-error {
+    margin: 0;
+    min-width: 0;
+    color: var(--choir-text-secondary);
+    font-size: 0.74rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
   }
 
   .source-structure-evidence {

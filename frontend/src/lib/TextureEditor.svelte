@@ -167,6 +167,9 @@
   let sourceArtifactPending = false;
   let sourceArtifactStatus = '';
   let sourceArtifactError = '';
+  let modelPolicyRoles = [];
+  let modelPolicyPending = false;
+  let modelPolicyError = '';
   let sourceOpenPointerHandledAt = 0;
   let sourceOpenPointerHandledEntityID = '';
   let relatedOpenPointerHandledAt = 0;
@@ -182,6 +185,7 @@
   const SOURCE_FLOW_GAP = 24;
   const SOURCE_FLOW_LINE_HEIGHT = 29;
   const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
+  const SOURCE_PANEL_MODEL_ROLES = ['conductor', 'texture', 'researcher', 'super'];
 
   function revisionSourceEntities(revision = currentRevision, bundle = publishedBundle) {
     return deriveRevisionSourceEntities({
@@ -1362,6 +1366,33 @@
     }
     if (sourcePanelOpen) {
       ensureSourceReviewSelection();
+      void loadModelPolicyRoles();
+    }
+  }
+
+  async function loadModelPolicyRoles() {
+    if (!authenticated || modelPolicyPending) return;
+    modelPolicyPending = true;
+    modelPolicyError = '';
+    try {
+      const rows = await Promise.all(SOURCE_PANEL_MODEL_ROLES.map(async (role) => {
+        const res = await fetchWithRenewal(`/api/model-policy/resolve?role=${encodeURIComponent(role)}`, {
+          method: 'GET',
+        });
+        if (!res.ok) {
+          throw new Error(`model policy ${role} failed (${res.status})`);
+        }
+        return res.json();
+      }));
+      modelPolicyRoles = rows;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      modelPolicyError = err?.message || 'Model policy unavailable';
+    } finally {
+      modelPolicyPending = false;
     }
   }
 
@@ -2177,6 +2208,9 @@
           {sourceArtifactPending}
           {sourceArtifactStatus}
           {sourceArtifactError}
+          {modelPolicyRoles}
+          {modelPolicyPending}
+          {modelPolicyError}
           on:diagnosis={handleSourceDiagnosisButton}
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
           on:source-review-marker={(event) => prepareSourceReviewForm(event.detail.marker)}

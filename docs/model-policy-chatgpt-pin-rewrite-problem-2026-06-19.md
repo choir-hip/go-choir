@@ -17,7 +17,8 @@ Observed on Node B on 2026-06-19:
 The root cause is the legacy migration guard in
 `shouldMigrateLegacyGeneratedModelPolicy`: a policy containing explicit ChatGPT
 foreground pins can still match legacy generated-policy heuristics and be
-overwritten by `defaultModelPolicyText`.
+overwritten by `defaultModelPolicyText`. The selected repair is a hard cutover:
+remove implicit legacy migration and make the generated policy current.
 
 ## Impact
 
@@ -36,10 +37,11 @@ Generated policy should use the current ChatGPT foreground defaults:
 - researcher: `chatgpt` / `gpt-5.4-mini` / `medium`
 - super: `chatgpt` / `gpt-5.5` / `medium`
 
-Legacy `roles.vtext` should not be generated. Explicit modern ChatGPT policies
-must be preserved by migration. Texture's Sources panel should show the effective
-model-policy resolution for conductor, Texture, researcher, and super so this
-state is inspectable without SSH.
+Legacy `roles.vtext` should not be generated. Existing model-policy files must
+not be rewritten by runtime migration heuristics; cutover should happen through
+explicit product/operator writes. Texture's Sources panel should show the
+effective model-policy resolution for conductor, Texture, researcher, and super
+so this state is inspectable without SSH.
 
 ## Evidence Class
 
