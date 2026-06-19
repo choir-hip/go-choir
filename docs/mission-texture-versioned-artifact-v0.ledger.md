@@ -228,6 +228,52 @@ backward-compatible). Protected surface: publication path / reader bundle.
 Rollback: revert the commit; head-only publications and existing manifests are
 unaffected (history fields are additive/omitempty).
 
+### 2026-06-19 — D7 acceptance probe discovered a publish-route 404 (problem record)
+
+The first D7 deployed product-path probe surfaced a blocking defect that is
+independent of D1-D5: publishing a Texture through the real product router
+returns **404 not found**, so no Texture can be published at all via the product
+path. This is a problem record; the fix follows in the next commit.
+
+**Evidence.** A new deployed acceptance spec
+(`frontend/tests/texture-deployed-versioned-publish.spec.js`, gated on
+`GO_CHOIR_RUN_DEPLOYED_VERSIONED_PUBLISH=1`) drove the full path on
+`choir.news` at the deployed SHA `6cb2fa4f`: register -> prompt bar ->
+multi-revision grounded Texture (V0 prompt + >=2 appagent revisions with 2026
+research evidence, each already carrying `revision_hash` + typed `provenance`)
+-> publish. Everything up to the publish step succeeded; the publish POST to
+`/api/platform/texture/publications` returned
+`404 {"error":"not found"}`.
+
+**Root cause (read from `git blame`).** The proxy router
+(`internal/proxy/handlers.go` `HandleAPI` switch) has two identical case clauses
+for `/api/platform/texture/publications`. The first returns `404`; the second
+calls `h.HandleTexturePublication`. Go does not flag duplicate boolean case
+expressions (only duplicate constant case values), so this compiles and the
+first match wins at runtime — the 404 shadows the real handler. Pre-cutover the
+two clauses were *distinct paths*: `/api/platform/vtext/publications` (retired
+name -> 404) and `/api/platform/texture/publications` (canonical -> handler).
+The hard vtext->Texture ontology cutover (`051623952`, 2026-06-16) rewrote the
+retired-name string literal too, collapsing the two cases into one duplicate.
+The same rename collapse inverted a tail assertion in
+`TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection`, which now
+expected the *canonical* path to 404 (it was meant to assert the retired name
+404s). D5's publish tests call `HandleTexturePublication` directly, bypassing
+the router, which is why D5 landed green on top of an already-broken route.
+
+**Belief state.** D1-D5 are intact and deployed; the typed-provenance +
+hash-chain + history-manifest work is correct (its unit/e2e tests pass and
+exercise the handler directly). The defect is in the *router dispatch*, not the
+publish/history logic. Publish has been unreachable through the product path
+since `051623952` (2026-06-16).
+
+**Remaining error field.** Publish 404 through the router. Fix = delete the
+shadowing retired-name 404 clause (the retired name is gone from all live
+surfaces by the cutover, so it falls through to the generic 404), drop the
+inverted tail assertion, and add a router-level dispatch regression test so the
+canonical path is proven to reach the handler. Re-run the deployed spec against
+the fixed staging for product-path proof.
+
 ### State
 
 Deploy gate fixed + verified. D1 (`e7967d16`), D2 (`f592052e`), D3+D4
