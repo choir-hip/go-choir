@@ -320,9 +320,6 @@ func TestTextureCreateRevision(t *testing.T) {
 		t.Fatalf("CreateDocument: %v", err)
 	}
 
-	citations, _ := json.Marshal([]types.Citation{
-		{ID: "c1", Type: "url", Value: "https://example.com", Label: "Example"},
-	})
 	metadata, _ := json.Marshal(map[string]any{"tags": []string{"draft"}})
 
 	rev := types.Revision{
@@ -332,7 +329,6 @@ func TestTextureCreateRevision(t *testing.T) {
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
 		Content:     "Hello, world!",
-		Citations:   citations,
 		Metadata:    metadata,
 		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
 	}
@@ -461,6 +457,108 @@ func TestTextureCreateRevisionRejectsConflictingStructuredProjection(t *testing.
 		Content:        "caller supplied conflicting projection",
 		BodyDoc:        bodyDoc,
 		SourceEntities: sourceEntities,
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
+	})
+	if !errors.Is(err, ErrInvalidTextureRevision) {
+		t.Fatalf("CreateRevision error = %v, want ErrInvalidTextureRevision", err)
+	}
+}
+
+func TestTextureCreateRevisionRejectsLegacySourceSidecars(t *testing.T) {
+	tests := []struct {
+		name     string
+		revPatch func(*types.Revision)
+	}{
+		{
+			name: "citations",
+			revPatch: func(rev *types.Revision) {
+				citations, _ := json.Marshal([]types.Citation{{
+					ID:    "c1",
+					Type:  "url",
+					Value: "https://example.com",
+					Label: "Example",
+				}})
+				rev.Citations = citations
+			},
+		},
+		{
+			name: "metadata source_entities",
+			revPatch: func(rev *types.Revision) {
+				metadata, _ := json.Marshal(map[string]any{
+					"source_entities": []map[string]any{{
+						"entity_id": "src-1",
+						"kind":      "web",
+					}},
+				})
+				rev.Metadata = metadata
+			},
+		},
+		{
+			name: "metadata media_source_refs",
+			revPatch: func(rev *types.Revision) {
+				metadata, _ := json.Marshal(map[string]any{
+					"media_source_refs": []map[string]any{{
+						"entity_id": "src-image",
+						"kind":      "image",
+					}},
+				})
+				rev.Metadata = metadata
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := textureTestStore(t)
+			ctx := context.Background()
+			doc := types.Document{DocID: "doc-sidecar", OwnerID: "user-1", Title: "Sidecar"}
+			if err := s.CreateDocument(ctx, doc); err != nil {
+				t.Fatalf("CreateDocument: %v", err)
+			}
+			rev := types.Revision{
+				RevisionID:  "rev-sidecar",
+				DocID:       doc.DocID,
+				OwnerID:     doc.OwnerID,
+				AuthorKind:  types.AuthorUser,
+				AuthorLabel: "alice",
+				Content:     "Plain text body",
+				CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
+			}
+			tt.revPatch(&rev)
+			err := s.CreateRevision(ctx, rev)
+			if !errors.Is(err, ErrInvalidTextureRevision) {
+				t.Fatalf("CreateRevision error = %v, want ErrInvalidTextureRevision", err)
+			}
+		})
+	}
+}
+
+func TestTextureCreateRevisionRejectsLegacySourceMetadataEvenWithStructuredSources(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+	doc := types.Document{DocID: "doc-structured-sidecar", OwnerID: "user-1", Title: "Structured sidecar"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	bodyDoc, sourceEntities := structuredRevisionFixture(t)
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"entity_id": "src-web",
+			"kind":      "web",
+		}},
+		"source_ref_normalization": map[string]any{
+			"legacy_count": 1,
+		},
+	})
+	err := s.CreateRevision(ctx, types.Revision{
+		RevisionID:     "rev-structured-sidecar",
+		DocID:          doc.DocID,
+		OwnerID:        doc.OwnerID,
+		AuthorKind:     types.AuthorUser,
+		AuthorLabel:    "alice",
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+		Metadata:       metadata,
 		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
 	})
 	if !errors.Is(err, ErrInvalidTextureRevision) {
@@ -1387,7 +1485,7 @@ func TestTextureGetBlame(t *testing.T) {
 
 // ----- Citations and Metadata persistence -----
 
-func TestTextureCitationsMetadataRoundTrip(t *testing.T) {
+func TestTextureMetadataRoundTrip(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()
 
@@ -1400,11 +1498,6 @@ func TestTextureCitationsMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("CreateDocument: %v", err)
 	}
 
-	citations := []types.Citation{
-		{ID: "c1", Type: "url", Value: "https://example.com", Label: "Example"},
-		{ID: "c2", Type: "footnote", Value: "See page 5"},
-	}
-	citJSON, _ := json.Marshal(citations)
 	metaJSON, _ := json.Marshal(map[string]any{
 		"tags":    []string{"draft", "important"},
 		"version": 2,
@@ -1416,8 +1509,7 @@ func TestTextureCitationsMetadataRoundTrip(t *testing.T) {
 		OwnerID:     "user-1",
 		AuthorKind:  types.AuthorUser,
 		AuthorLabel: "alice",
-		Content:     "Document with citations",
-		Citations:   citJSON,
+		Content:     "Document with ordinary metadata",
 		Metadata:    metaJSON,
 		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
 	}
@@ -1428,18 +1520,6 @@ func TestTextureCitationsMetadataRoundTrip(t *testing.T) {
 	got, err := s.GetRevision(ctx, "rev-1", "user-1")
 	if err != nil {
 		t.Fatalf("GetRevision: %v", err)
-	}
-
-	// Verify citations round-trip.
-	var gotCitations []types.Citation
-	if err := json.Unmarshal(got.Citations, &gotCitations); err != nil {
-		t.Fatalf("unmarshal citations: %v", err)
-	}
-	if len(gotCitations) != 2 {
-		t.Errorf("len(citations) = %d, want 2", len(gotCitations))
-	}
-	if gotCitations[0].Value != "https://example.com" {
-		t.Errorf("citation[0].Value = %q, want %q", gotCitations[0].Value, "https://example.com")
 	}
 
 	// Verify metadata round-trip.

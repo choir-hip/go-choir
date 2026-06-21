@@ -30,6 +30,9 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		doc = plainTextStructuredTextureDoc(rev.DocID, rev.RevisionID, rev.Content)
 		entities = []texturedoc.SourceEntity{}
 	}
+	if err := rejectLegacySourceSidecars(rev); err != nil {
+		return types.Revision{}, "", "", err
+	}
 
 	projection, err := texturedoc.Project(doc, entities)
 	if err != nil {
@@ -71,6 +74,57 @@ func decodeStructuredTextureRevision(bodyDocRaw, sourceEntitiesRaw json.RawMessa
 		return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("%w: %v", ErrInvalidTextureRevision, err)
 	}
 	return doc, entities, nil
+}
+
+func rejectLegacySourceSidecars(rev types.Revision) error {
+	if rawJSONCarriesData(rev.Citations, "[]") {
+		return fmt.Errorf("%w: citations_json is legacy source identity; use body_doc source_ref/source_embed nodes plus top-level source_entities", ErrInvalidTextureRevision)
+	}
+	metadata := map[string]json.RawMessage{}
+	if len(strings.TrimSpace(string(rev.Metadata))) > 0 {
+		if err := json.Unmarshal(rev.Metadata, &metadata); err != nil {
+			return fmt.Errorf("%w: metadata must be a JSON object: %v", ErrInvalidTextureRevision, err)
+		}
+	}
+	for _, key := range legacySourceSidecarMetadataKeys {
+		raw, ok := metadata[key]
+		if !ok || !rawJSONCarriesData(raw, "{}") {
+			continue
+		}
+		return fmt.Errorf("%w: metadata.%s is legacy source identity; use body_doc source_ref/source_embed nodes plus top-level source_entities", ErrInvalidTextureRevision, key)
+	}
+	return nil
+}
+
+var legacySourceSidecarMetadataKeys = []string{
+	"source_entities",
+	"media_source_refs",
+	"source_gaps",
+	"source_repair_resolutions",
+	"source_attachment_manifest",
+	"source_ref_normalization",
+}
+
+func rawJSONCarriesData(raw json.RawMessage, emptyObjectDefault string) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return false
+	}
+	if trimmed == "[]" || trimmed == "{}" || trimmed == emptyObjectDefault {
+		return false
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return true
+	}
+	switch typed := value.(type) {
+	case []any:
+		return len(typed) > 0
+	case map[string]any:
+		return len(typed) > 0
+	default:
+		return true
+	}
 }
 
 func plainTextStructuredTextureDoc(docID, revisionID, content string) texturedoc.StructuredTextureDoc {

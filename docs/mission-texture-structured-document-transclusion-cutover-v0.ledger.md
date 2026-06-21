@@ -304,3 +304,31 @@ Open edge: independent D2 review, then later D3/D4/D6/D7 cuts for editor
 source-ref atom preservation, Texture agent structured operation tools,
 publication/export structured projection, broad old-path deletion, staging proof,
 and mission settlement.
+
+## 2026-06-21 - Pass 12 - D2 Side-Channel Blocker Decision
+
+Claim: Preliminary D2 review correctly found that the local write-path cutover
+was incomplete because source identity could still enter new revisions through
+legacy sidecars, including sidecars parallel to otherwise structured fields.
+
+Move: probe + construct. Recorded the blocker and repair decision in the paradoc.
+The repair will reject/defer non-empty `citations_json` and metadata source
+sidecars (`source_entities`, `media_source_refs`, `source_gaps`,
+`source_repair_resolutions`, `source_attachment_manifest`,
+`source_ref_normalization`) unconditionally at `Store.CreateRevision`. Source
+identity must live only in `BodyDoc` source nodes plus top-level
+`SourceEntities`; parallel legacy metadata is rejected even when structured
+fields are present. Source repair and source artifact attachment APIs should
+return clear invalid-revision errors rather than persisting legacy sidecar-only
+source state.
+
+Expected delta V: 0 now; the prior local D2 -1 is reopened until the side-channel
+repair and tests land.
+
+Actual delta V: +1 reopen. Current V=8 pending repair. Runtime behavior unchanged
+by this documentation pass.
+
+Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+
+Open edge: implement the side-channel repair in the assigned worktree, add
+focused regressions, rerun focused tests plus `git diff --check`, and commit.

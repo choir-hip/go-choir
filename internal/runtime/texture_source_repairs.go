@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -125,6 +126,10 @@ func (h *APIHandler) HandleTextureSourceGapRepair(w http.ResponseWriter, r *http
 	}
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
 		log.Printf("texture api: repair source gaps: %v", err)
+		if errors.Is(err, store.ErrInvalidTextureRevision) {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to repair source gaps; document head may have changed"})
 		return
 	}
@@ -234,6 +239,10 @@ func (h *APIHandler) HandleTextureSourceArtifactAttachment(w http.ResponseWriter
 	}
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
 		log.Printf("texture api: attach source artifacts: %v", err)
+		if errors.Is(err, store.ErrInvalidTextureRevision) {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "failed to attach source artifacts; document head may have changed"})
 		return
 	}
