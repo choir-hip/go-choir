@@ -1334,3 +1334,51 @@ Receipts:
 
 Open edge: after the owner provides the discharge, resume from the blocked state
 and obtain the independent prover before claiming `settled` or `open_handoff`.
+
+## 2026-06-21 - Native Citation Regression Reopened
+
+Claim: the source-evidence slice still has an open regression against Texture's
+longstanding native source/transclusion contract. This is not a new special-case
+"source this" feature request; owner evidence shows that recent source-backed
+demos rendered ordinary markdown/URL links and "Source handles" prose where
+canonical Texture prose must preserve durable source entities and transclusion
+refs.
+
+Move: record the problem before any runtime fix. The independent prover thread
+`019eea0f-4872-7882-a1ea-f8e356ff40d9` returned `accept_scoped_support`, so the
+previous blocker is discharged for the scoped mission claim. The owner then
+identified that this session's changes regressed a source/transclusion invariant
+that had existed for months: source-backed Texture revisions must preserve the
+native source system, not substitute reader-visible clickable links, "Source:"
+prose, or source-handle inventory sections.
+
+Expected Delta V: 0 for this documentation checkpoint. The next runtime commit
+can reduce V only if it proves the source-backed write path preserves
+`source_entities` and transclusion refs, and no longer treats ordinary clickable
+links/source-handle prose as an acceptable representation, without keying
+behavior to one example prompt.
+
+Actual Delta V: 0. Current exit V is 1: repair or refute the native-citation
+regression.
+
+Evidence:
+- Owner screenshot from 2026-06-21 shows a source-backed Texture note rendering
+  "Source: OpenAI model docs - GPT-5.5", "Source: TechCrunch..." and a
+  "Source handles" section as ordinary visible links. That is not an acceptable
+  Texture source representation; sources are transcluded objects.
+- Current runtime has native citation machinery:
+  `[label](source:ENTITY_ID)` parsing, validation against collated
+  `source_entities`, provenance sourced from revision metadata, and source-panel
+  projection.
+- Current runtime also contains this session's narrow normalizers for wire
+  articles and source-service prose. Those are insufficient as the product
+  contract because the regression is not article-specific and not prompt-specific.
+
+Protected surfaces: Texture canonical writes, revision metadata
+`source_entities`, citation validation, source-panel projection,
+`update_coagent` source/ref delivery, and owner-visible citation behavior.
+
+Open edge: remove the route that admitted ordinary clickable links as source
+evidence. The repair should prove source-backed appagent revisions preserve
+source entities/transclusion refs and should not frame URL links as a supported
+fallback.

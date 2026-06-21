@@ -105,6 +105,13 @@ the spec is a proxy, the domain does not embed, or the observer lacks the
 predicate that would expose the real goal. The next move should update,
 weaken, split, or supersede the conjecture before continuing.
 
+The representation rule is stricter still: if the witness changes the product
+object being proved, the mission has not partially succeeded. It has tested a
+different conjecture. For source-backed Texture artifacts, ordinary clickable
+URLs, markdown web links, source lists, and "Source:" prose are not equivalent
+to source entities or transclusions. A proof that substitutes them must update
+the conjecture or record a falsifier before construction continues.
+
 The retention rule is equally important: every mission must leave its mission
 document as the durable learning artifact on success, failure, handoff, or
 supersession. Promote learning outward only when it changes shared doctrine,

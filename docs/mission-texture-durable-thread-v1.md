@@ -59,7 +59,7 @@ Current code still behaves like a run controller with helpful patches:
 
 ## Parallax State
 
-status: blocked
+status: working
 
 mission conjecture: if Texture document work is represented as one durable
 thread with runtime-owned mailbox identity and owner-visible work-state
@@ -108,16 +108,20 @@ delivery, same-thread passivation/resume, deletion of initial-super/first-paint
 model-prior scaffolds, source entity collation, saved-evidence delivery, and
 passivation stream settlement all have receipts in the ledger.
 
-Current exit V remains the blocked settlement-review obligation:
-1. obtain the handoff-tier independent prover / widest checker required by the
-   Parallax skill before any `settled` or `open_handoff` exit.
+Current exit V counts the newly reopened native-citation regression:
+1. repair or refute the regression where source-backed Texture revisions may
+   render ordinary web/markdown links and source-handle prose instead of using
+   native Texture source entities and transclusion refs.
 
-Current V=1. The automated checker portion is satisfied, but the independent
-prover portion requires authority this authoring context does not have: explicit
-owner authorization to spawn a fresh-context prover subagent, or an equivalent
-non-authoring checker named by the owner. The strict goal blocked audit has now
-repeated this same condition across consecutive continuations without delegated
-prover authorization, so the mission is blocked rather than merely working.
+Current V=1. The independent-prover obligation is discharged for the scoped
+support claim by Codex verifier thread `019eea0f-4872-7882-a1ea-f8e356ff40d9`,
+which returned `accept_scoped_support`. It does not authorize broader settlement
+than the scoped claim and residuals already named here. The current blocker is
+not "source this" as a special feature; it is a regression against the
+longstanding Texture source/citation contract: canonical source-backed prose
+must preserve source object identity through `source_entities` and transclusion
+refs, not reader-visible markdown URLs, "Source:" prose, or "Source handles"
+sections as substitutes.
 
 Last actual Delta V=-1 on 2026-06-21 from accepting the stale
 Comet accessibility/live-region `Continuing...` node as a named polish edge.
@@ -137,8 +141,9 @@ Docs Truth Check, and deploy-impact detection; frontend build and staging deploy
 were skipped because no deployed artifact changed. FlakeHub run `27898525830`
 also passed. Later docs-only commits through
 `2a402f18c783e4f7bacfde0e9e96e6a51839804c` passed Docs Truth Check
-`27898703154`. This satisfies the automated checker portion of the exit
-obligation but not the independent prover requirement.
+`27898703154`. Latest docs-only blocked checkpoint commit
+`d550bee3ffaa56383a846de9d9cda4d76af0f68f` passed Docs Truth Check
+`27898903344`.
 
 Prior actual Delta V=-1 on 2026-06-21 from scope reconciliation:
 the original witness clauses are now separated into supported scoped claims and
@@ -220,11 +225,14 @@ position / live conjectures / open edges:
   initial-super parsing, and Texture-specific model-prior completion guard /
   world-knowledge scanner are deleted; staged proofs show Texture acts first
   with normal tools and can choose researcher without prompt classifiers.
-- C13/C14 supported: typed source refs and saved evidence now reach Texture
-  source entities, and Texture idle passivation emits document-correlated
-  `synth_completed`; the `_005` Comet proof showed source-backed v2, native
-  source chip, idle toolbar settlement, enabled `Sources`, and one represented
-  GPT-5.5 source artifact.
+- C13/C14 partially supported but reopened: typed source refs and saved evidence
+  can reach Texture source entities, and Texture idle passivation emits
+  document-correlated `synth_completed`; the `_005` Comet proof showed
+  source-backed v2, native source chip, idle toolbar settlement, enabled
+  `Sources`, and one represented GPT-5.5 source artifact. However the same
+  session also produced reader-visible markdown links and "Source handles" prose
+  in a source-backed document. That is a regression against Texture source
+  entities/transclusions, not a weaker form of citation success.
 - C2/C3/C4 are reconciled as scoped support plus named residuals: mailbox and
   resume are supported for established Texture revision threads and prompt-bar
   source-evidence slices; always-deep is supported as prompt/obligation-driven
@@ -235,11 +243,11 @@ Receipts for prior steps live in
 `docs/mission-texture-durable-thread-v1.ledger.md`; this state intentionally no
 longer mirrors the pass history.
 
-next move: blocked on owner authority. The smallest discharge is explicit
-authorization to run a fresh-context independent prover subagent over the scoped
-evidence packet, or an owner-named equivalent non-authoring checker. The
-automated checker is recorded. Do not start another runtime fix unless a new
-staging failure is documented first.
+next move: repair the native-citation regression without special-casing a
+"source this" prompt. First prove the current write path can reject or normalize
+source-backed revisions that substitute ordinary URL links / "Source handles"
+sections for native source entities/transclusion refs; then run focused tests
+and staging proof in Comet.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
@@ -253,15 +261,13 @@ wrong pattern. Promote only compact lessons: avoid run-centric reconstruction,
 avoid role choreography, avoid model-invented delivery identity, and keep
 owner-visible work state in Texture.
 
-settlement: blocked, not settled. A future exit may be `open_handoff` or
-`settled` only after an independent prover reviews the scoped evidence packet.
-Automated CI checker receipts are present. The `_005` source-panel proof is
-strong staging smoke evidence, not promotion-level or continuation-level
-acceptance. Smallest discharge: owner authorizes a fresh-context prover subagent
-or names an equivalent non-authoring checker.
+settlement: not settled. Independent prover review accepted the scoped support
+claim, but the native-citation regression is open. The `_005` source-panel proof
+is strong staging smoke evidence, not promotion-level or continuation-level
+acceptance.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status blocked, exit V=1: obtain the independent prover required before any Parallax exit. Automated widest-checker evidence is recorded: CI run `27898525827` passed for `4852cca612e817567f3ee57349d7a2a6504982da`, FlakeHub run `27898525830` passed, and latest docs-only head `2a402f18c783e4f7bacfde0e9e96e6a51839804c` passed Docs Truth Check `27898703154`; the remaining blocker is owner authority to run a fresh-context independent prover subagent or an equivalent non-authoring checker. Scope reconciliation is complete: the durable-thread/source-evidence bridge is supported at focused-test plus staging-smoke scope, with residuals named instead of overclaiming universal prompt/depth/promotion coverage. The stale Comet accessibility `Continuing...` node is accepted as a polish edge unless screen-reader QA, live-region tests, or fresh Comet proof shows it blocks assistive navigation after controls settle. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; protected surfaces remain Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Do not start another runtime fix unless a new staging failure is documented first.
+Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status working, exit V=1: repair the reopened native-citation regression where source-backed Texture revisions can render ordinary markdown/URL links or "Source handles" prose instead of Texture `source_entities` and transclusion refs. Independent prover thread `019eea0f-4872-7882-a1ea-f8e356ff40d9` accepted the scoped support claim but not broader settlement. Automated checker evidence is recorded: CI run `27898525827` passed for `4852cca612e817567f3ee57349d7a2a6504982da`, FlakeHub run `27898525830` passed, Docs Truth Check `27898903344` passed for checkpoint `d550bee3ffaa56383a846de9d9cda4d76af0f68f`. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; protected surfaces remain Texture canonical writes, source/citation metadata, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance.
 ```

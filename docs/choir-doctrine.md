@@ -273,6 +273,13 @@ singleton Super Console/zot as an exceptional repair surface. Manual Browser is
 replaced in the source path by Source Viewer/reader artifacts plus explicit Web
 Lens live/original inspection.
 
+`I14` Source evidence remains object identity, not link-shaped prose. Texture
+and successor artifact surfaces represent sources as durable source entities and
+transclusions. Ordinary clickable URLs, markdown web links, footnote prose,
+source-handle inventories, or "Source:" lines are not acceptable substitutes for
+source-backed claims and must not be accepted as proof that a source/citation
+path works.
+
 ## Proof-Carrying Autonomy
 
 Autonomy increases at the mutation layer only when accountability increases at
@@ -328,7 +335,10 @@ Rules:
 2. `continuation-level` is transitional and should be deleted or re-pointed to
    trajectory/work-item settlement, not preserved as doctrine.
 3. Every acceptance claim must name its evidence class in reports.
-4. A weaker evidence class can falsify a stronger claim, but cannot satisfy it.
+4. A source-evidence acceptance claim must prove source entity / transclusion
+   behavior. A visible web link or source list is negative evidence for that
+   claim unless it is explicitly outside the artifact's source/citation path.
+5. A weaker evidence class can falsify a stronger claim, but cannot satisfy it.
 
 ## Live Heresies
 

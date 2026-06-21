@@ -93,6 +93,14 @@ This gives precise names to the two cardinal sins:
   tolerated contradiction licenses anything downstream; this is why heresy
   sweeps are consistency maintenance, not housekeeping.
 
+Artifact systems add a third failure mode: **representation substitution**. A
+proof of an artifact invariant must preserve the object whose invariant is being
+proved. A lookalike representation is not the same theorem. For source-backed
+Texture work, a clickable URL, markdown web link, footnote, or visible source
+inventory does not prove source/citation behavior. The theorem is about durable
+source entities and transclusion points. Replacing those with link-shaped prose
+changes the witness and must be counted as a falsifier, not partial support.
+
 Each evidence class is a proof system with a characteristic reach, and the
 whole verification program is just refusing to confuse them:
 

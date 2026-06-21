@@ -94,6 +94,24 @@ If unrelated WIP is already present, preserve it explicitly instead of mixing it
 into the current mission commit. Use a named stash or a separate branch/commit,
 and report the recovery handle.
 
+## Independent Review Threads
+
+For second-opinion review, independent prover, or handoff-tier verification,
+prefer Codex thread tools over in-thread subagents when the user authorizes a
+separate thread. Use `list_projects` and `create_thread` to start a fresh
+project-scoped verifier thread with a narrow review prompt, and ask that thread
+to return a verdict with evidence rather than implementation. Keep the verifier
+thread read-only unless it discovers a problem that must be documented under
+Problem Documentation First.
+
+When thread inspection or wakeup tools are available, use them to reconnect the
+review to the spawning thread: `read_thread`/`list_threads` for the verifier
+result, `send_message_to_thread` or the app's wakeup/follow-up mechanism when
+the spawned reviewer needs to notify or continue the spawning thread, and
+`handoff_thread` only when ownership of a checkout/worktree should move. If the
+thread tools are unavailable, record the fallback used and do not treat a
+same-context reread as an independent prover.
+
 ## Problem Documentation First
 
 Every platform behavior-changing mission must observe the following invariant:
