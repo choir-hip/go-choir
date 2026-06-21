@@ -1,7 +1,6 @@
 ---
 name: parallax
 description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant under an explicit budget. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
-version: 1.3.3
 metadata:
   hermes:
     tags: [parallax, conjecture-learning, proof-search, long-running-agents]
@@ -310,10 +309,14 @@ Instruments of displacement, by what they change:
 - **domain** — shrink D until the claim is decidable, then grow it back
   (the resource fix; design-for-decidability);
 - **prover** — hand the claim to an independent agent or checker
-  (a proof checked by its own prover is not checked). Run prover shifts,
-  probes, and repo archaeology in **fresh disposable contexts** (subagents)
-  that return conclusions, not transcripts: the mission context keeps the
-  verdict, never the file dumps;
+  (a proof checked by its own prover is not checked). Prefer a **fresh Codex
+  thread** for clear-context review when Codex app thread tools are available:
+  use `create_thread` for the review task, then have the review thread call
+  back the implementation thread with `send_message_to_thread` when its verdict
+  is ready. Use a disposable subagent only when thread tools are unavailable or
+  the user explicitly wants an in-turn subagent. Review contexts return
+  conclusions, decision-changing evidence, and file/line findings, not
+  transcripts: the mission context keeps the verdict, never the file dumps;
 - **inversion** — stop seeking confirmation; try to refute. Treat uncertain
   claims as unsupported for promotion or settlement until checked.
 
@@ -333,9 +336,11 @@ Checks are tiered by scope, and each boundary pays for the tier it crosses:
   full suite proves the package.
 - **handoff / settlement** — the widest checker the repo has: all build
   tags, vet, every touched package's full suite — and an **independent
-  prover**: a fresh-context agent reviews the accumulated diff for bugs and
-  accretion. The authoring context never grades its own work; a test written
-  by the same hand that wrote the bug will bless the bug.
+  prover**: by default a separate Codex review thread reviews the accumulated
+  diff for bugs and accretion, then sends its verdict back to the implementing
+  thread with `send_message_to_thread`. The authoring context never grades its
+  own work; a test written by the same hand that wrote the bug will bless the
+  bug.
 
 A claim's evidence class is capped by the widest tier actually run. "Focused
 tests passed" is not "the suite is green" — never let the ledger imply
@@ -383,6 +388,36 @@ Exit statuses — say which, plainly:
 Every exit requires the handoff tier of verification: widest checker plus
 independent prover over the accumulated diff. No handoff on focused tests
 alone.
+
+## Codex Thread Review Default
+
+For any nontrivial Parallax construct, D0 architecture decision, batch boundary,
+handoff, or settlement in an environment with Codex app thread tools, default to
+a clear-context review thread rather than reviewing only inside the implementing
+thread.
+
+1. Before requesting review, update the paradoc and ledger so the review thread
+   can read the current state from files rather than chat memory.
+2. Use `create_thread` with the same project/workspace and a prompt containing:
+   the paradoc path, ledger path, current claim, diff or artifact to review,
+   admissible evidence class, protected invariants, and the implementation
+   thread callback target.
+3. Instruct the review thread to report findings first, ordered by severity,
+   with file/line references and a settlement verdict: `accept`,
+   `revise_before_continue`, `blocked`, or `supersede`.
+4. Instruct the review thread to call the implementation thread with
+   `send_message_to_thread` when done. If the current thread id is unavailable
+   to the implementing agent, record the created review thread id in the
+   paradoc/ledger and have the implementing thread use `read_thread` to fetch
+   the verdict before proceeding.
+5. The implementing thread must incorporate the verdict into Parallax State
+   before continuing. If it disagrees, record the disagreement as an open
+   conjecture or blocker; do not silently overrule the independent review.
+
+Thread review is an observer shift, not a bureaucracy gate. Use it when it can
+change the next move, evidence class, route, or settlement claim. Tiny
+docs-only edits may use local validation only unless the user asks for a thread
+review.
 
 ## Via Negativa
 
