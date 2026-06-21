@@ -240,3 +240,28 @@ and `git diff --check HEAD~3..HEAD` passed on the integrated state.
 
 Open edge: D2 must choose/document the exact `TextureRevision v2`
 storage/projection cut before changing canonical Texture writes.
+
+## 2026-06-21 - Pass 10 - D2 Storage/Projection Cut Chosen
+
+Claim: D2 can mutate the first production write boundary only after the paradoc
+names the exact TextureRevision v2 storage/projection cut, protected surfaces,
+evidence class, rollback, and heresy delta.
+
+Move: construct. Added `D2 Storage/Projection Cut - 2026-06-21` to the paradoc
+and rewrote the Parallax State from "choose the DB cut shape" to "implement the
+chosen cut." The chosen slice stores canonical `body_doc_json` and
+`source_entities_json`, keeps `content` as a derived body text projection for
+D2 compatibility, validates new revisions through `internal/texturedoc`, migrates
+existing Dolt workspaces through `bootstrapTexture`, and signs the structured
+substrate in a v2 revision hash payload.
+
+Expected delta V: 0 on product obligations; satisfies the red-surface
+precondition for D2 runtime mutation.
+
+Actual delta V: 0. Current V remains 8. Runtime behavior unchanged by this pass.
+
+Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+
+Open edge: implement the D2 write-path cutover in the assigned worktree only,
+without bundling frontend editor saves, publication/export, staging/deploy, or
+broad old-path deletion.
