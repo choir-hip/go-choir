@@ -241,6 +241,9 @@ func (v *Validator) validateBlock(node Node, path string) error {
 		if !validDisplayMode(displayMode) || displayMode == "numbered_ref" || displayMode == "inline_chip" {
 			return fmt.Errorf("%s.source_embed attrs.display_mode %q is not a block display mode", path, displayMode)
 		}
+		if len(node.Content) != 0 || node.Text != "" || len(node.Marks) != 0 {
+			return fmt.Errorf("%s.source_embed must be a leaf block without text, content, or marks", path)
+		}
 		v.refs[sourceEntityID] = true
 	default:
 		return fmt.Errorf("%s unsupported block node type %q", path, node.Type)

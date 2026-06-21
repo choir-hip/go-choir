@@ -93,6 +93,44 @@ func TestSourceRefsAndEmbedsMustResolveEntities(t *testing.T) {
 	}
 }
 
+func TestSourceEmbedMustBeLeafBlock(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Node)
+	}{
+		{
+			name: "content",
+			mutate: func(node *Node) {
+				node.Content = []Node{{Type: "text", Text: "{{source:hidden}}"}}
+			},
+		},
+		{
+			name: "text",
+			mutate: func(node *Node) {
+				node.Text = "{{source:hidden}}"
+			},
+		},
+		{
+			name: "marks",
+			mutate: func(node *Node) {
+				node.Marks = []Mark{{Type: "strong"}}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := validDoc()
+			embed := &doc.Doc.Content[1]
+			tc.mutate(embed)
+			err := Validate(doc, validEntities())
+			if err == nil || !strings.Contains(err.Error(), "source_embed must be a leaf block") {
+				t.Fatalf("Validate() error = %v, want source_embed leaf rejection", err)
+			}
+		})
+	}
+}
+
 func TestSourceEntityEnumsAreValidated(t *testing.T) {
 	tests := []struct {
 		name   string

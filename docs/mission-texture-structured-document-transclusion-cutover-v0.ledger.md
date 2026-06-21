@@ -187,3 +187,30 @@ and `git diff --check`.
 
 Open edge: independent D1 re-review, then D2 must choose/document the
 TextureRevision v2 storage/projection cut before changing canonical writes.
+
+## 2026-06-21 - Pass 7 - D1 Re-review P1 Source Embed Leaf Repair
+
+Claim: The D1 re-review correctly found that `source_embed` validation accepted
+hidden child content/text/marks after checking source identity and display mode,
+which could let legacy source text bypass the intended text-node syntax
+rejection.
+
+Move: construct + probe. Updated `internal/texturedoc/schema.go` so
+`source_embed` must be a leaf block with empty `Content`, empty `Text`, and no
+`Marks`. Added regression coverage for hidden child content containing
+`{{source:hidden}}`, direct text, and marks on `source_embed`.
+
+Expected delta V: 0 on mission obligations; repair D1 reviewer P1 without
+broadening into D2.
+
+Actual delta V: 0. Current V remains 8. D1 witness is ready for independent
+re-review; production Texture writes remain untouched.
+
+Receipt: `internal/texturedoc/schema.go`,
+`internal/texturedoc/schema_test.go`.
+
+Evidence: `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`
+and `git diff --check`.
+
+Open edge: independent D1 re-review, then D2 must choose/document the
+TextureRevision v2 storage/projection cut before changing canonical writes.
