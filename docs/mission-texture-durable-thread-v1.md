@@ -160,6 +160,21 @@ remaining source-evidence risk is now narrower: typed ref collation is locally
 proved and deployed inline-source behavior improved, but native source-panel
 attachment / clean run settlement is not yet proved.
 
+Passivation stream settlement commit
+`fce827ca2a43994d1d67312f33fe4fef1d97f4d3` adds document-correlated idle
+passivation events for Texture revision actors and maps them to document-stream
+`synth_completed`. CI run `27897682907`, deploy job `82552403986`, and staging
+health all reported the same commit. Deployed Comet proof with marker
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` showed the source-backed v2
+settle out of pending toolbar state after idle passivation, with `Sources`
+enabled and the native Sources panel reporting `1 represented source`,
+`GPT-5.5 Model | OpenAI API`, content-item/source availability, and URL
+`https://developers.openai.com/api/docs/models/gpt-5.5`. Actual Delta V=-1, so
+V is now 0 for this mission variant. Residual risk: the accessibility tree still
+retained a stale `Continuing...` text node below the document after the toolbar
+settled; it no longer blocked revision controls or source inspection, but it is
+worth cleaning up if accessibility/live-region polish becomes the next focus.
+
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
 (`update_id` + work-state revisions) may land first if it reduces risk, but it
 does not settle the mission by itself.
@@ -251,21 +266,24 @@ position / live conjectures / open edges:
   model-prior interim, opening researcher by tool call, incorporating two
   researcher packets into V2 and V3, and carrying no old guard reason,
   instruction, or `completion_guard` retry in Trace.
-- C13 supported at focused-test scope and partially supported at deployed UI
-  scope: researcher/source-service refs in `update_coagent.refs` now collate
+- C13 supported at focused-test scope and deployed source-panel scope:
+  researcher/source-service refs in `update_coagent.refs` now collate
   into Texture source entities for typed `source_service_item`, `content_id`,
   and evidence handles without scraping free-form prose. Deployed Comet proof
   showed researcher `source_search`, `save_evidence`, accepted
   `update_coagent`, and a Texture v2 rewrite with inline clickable sources
-  instead of the prior source-entry caveat. C13 is not settled at native
-  source-panel scope: the v2 window still had disabled `Sources` and visible
-  tool-error / `Revising...` state.
-- C14 supported at focused-test scope, staging pending: Texture idle
+  instead of the prior source-entry caveat. Later deployed Comet proof at
+  `fce827ca2a43994d1d67312f33fe4fef1d97f4d3` showed the native `Sources`
+  panel enabled after idle settlement and reporting one represented GPT-5.5
+  source artifact.
+- C14 supported at focused-test and staging-smoke scope: Texture idle
   passivation now emits a document-correlated stream settlement payload for
   Texture revision actors, and the document stream maps that passivation to
   `synth_completed`. This is a run-lifecycle repair, not a forced semantic
   workflow: it clears owner-visible pending state only when the existing
-  Texture actor actually parks after idle.
+  Texture actor actually parks after idle. Staging proof showed the toolbar
+  leave `Revising...`, `Revise` and `Sources` become enabled, and the Sources
+  panel become inspectable for the source-backed v2.
 
 Native-source entity repair commit
 `043707fd1e1d2a50cc5e4ef7f218077ee04186fe` carries collated source entities
@@ -341,16 +359,29 @@ document-stream `synth_completed`, and makes stream payload decoding tolerate
 mixed metadata such as numeric token counts. Focused comprehensive tests prove
 the stream mapping and emitted passivation payload; adjacent parking/resume and
 source/citation tests plus `nix develop -c scripts/go-test-runtime-shards`
-passed locally. Actual ΔV remains provisional: local evidence supports the
-source-panel settlement hypothesis, but V remains 1 until deployed Comet proof
-shows the source-backed v2 reaches idle UI with the native Sources panel
-inspectable.
+passed locally. CI run `27897682907`, deploy job `82552403986`, FlakeHub run
+`27897682928`, Docs Truth Check run `27897682904`, and staging health all
+reported `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`.
 
-next move: land and deploy the passivation stream settlement repair, then use
-Comet with the logged-in `yusefnathanson@me.com` session to prove that a
-source-backed Texture v2 renders native source handles inline, clears
-`Revising...` / `Continuing...` after passivation, enables the toolbar
-`Sources` control, and exposes represented sources in the idle Sources panel.
+Deployed Comet proof with the logged-in `yusefnathanson@me.com` session used
+marker `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005`. The proof produced v2
+with an inline native source chip `Source: GPT-5.5 Model | OpenAI API`,
+source handle `src_b430c59e225afa4c`, content id
+`67d9c15a-cedb-4b70-a559-b340d29ffc2f`, evidence id
+`2e421b69-fed6-4d99-b2f7-0220831b7d25`, and fetched URL
+`https://developers.openai.com/api/docs/models/gpt-5.5`. After idle settlement,
+the toolbar no longer showed `Revising...`, `Revise` was enabled, `Sources` was
+enabled, and opening `Sources` showed `1 represented source` plus source
+artifact `GPT-5.5 Model | OpenAI API` with `CONTENT ITEM` and
+`AVAILABLE SOURCE`. Actual Delta V=-1, so V=0 for the source-panel settlement
+axis. Residual: Comet's accessibility tree still exposed one stale
+`Continuing...` text node under the document even after the visible toolbar and
+source panel settled; this did not block owner action.
+
+next move: settlement review. Do not start another runtime fix unless a new
+staging failure is documented first. The only known follow-up from this slice is
+accessibility/live-region cleanup for the stale `Continuing...` text node after
+settled passivation.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

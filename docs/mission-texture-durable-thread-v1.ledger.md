@@ -989,3 +989,79 @@ Receipts:
 Open edge: staging must prove the frontend receives the new `synth_completed`
 after idle passivation and that this enables the toolbar `Sources` panel without
 manual cancellation.
+
+## 2026-06-21 - Texture Passivation Stream Settlement Deployed Proof
+
+Claim: commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3` should close the
+source-panel settlement gap discovered in
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_004`: after a source-backed Texture
+actor writes v2 and idles, the document stream should receive a document-scoped
+completion event, clear toolbar pending state, and make native Sources
+inspectable without manual cancellation.
+
+Move: pushed `runtime: settle Texture passivation stream` to `origin/main`,
+monitored CI/deploy, verified staging identity, and used Computer Use against
+the logged-in Comet browser session for `yusefnathanson@me.com` instead of a
+fresh Playwright context. Submitted marker
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` against deployed commit
+`fce827ca2a43994d1d67312f33fe4fef1d97f4d3`.
+
+Expected Delta V: -1 if the deployed product path writes source-backed Texture
+v2, settles out of visible pending state after idle passivation, enables the
+toolbar `Sources` control, and shows represented source artifacts in the native
+Sources panel.
+
+Actual Delta V: -1. V is now 0 for the source-panel settlement axis. The proof
+does not claim export-level, promotion-level, or continuation-level acceptance.
+
+Receipts:
+- Runtime commit:
+  `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`
+  (`runtime: settle Texture passivation stream`), pushed to `origin/main`.
+- GitHub Actions:
+  - CI run `27897682907`: success, including deploy job `82552403986`;
+  - Docs Truth Check run `27897682904`: success;
+  - FlakeHub run `27897682928`: success.
+- Staging identity: `https://choir.news/health` reported `status=ok`, upstream
+  ok, vmctl enabled/ok, proxy commit/deployed commit
+  `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, upstream sandbox
+  commit/deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, and
+  deployed/built time `2026-06-21T07:50:24Z`.
+- Comet UI proof:
+  - marker `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005`;
+  - initial visible run fragment `bdd7b42d-6...936a00`;
+  - researcher run `16eb2f1a-5f53-45a4-b2f1-aa211d896a91`;
+  - Texture loop `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`;
+  - activity showed researcher completion, Texture `patch_texture`, "Texture
+    created a new revision", and tool output receipt;
+  - v2 document carried deployed commit
+    `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`;
+  - v2 rendered inline native source chip
+    `Source: GPT-5.5 Model | OpenAI API`;
+  - evidence ledger preserved source handle `src_b430c59e225afa4c`, content id
+    `67d9c15a-cedb-4b70-a559-b340d29ffc2f`, evidence id
+    `2e421b69-fed6-4d99-b2f7-0220831b7d25`, and fetched URL
+    `https://developers.openai.com/api/docs/models/gpt-5.5`;
+  - after a bounded idle wait, the toolbar no longer showed `Revising...`,
+    `Revise` was enabled, `Sources` was enabled, and `Publish v2` was enabled;
+  - opening `Sources` showed `1 represented source`, source row
+    `GPT-5.5 Model | OpenAI API`, `CONTENT ITEM`, `AVAILABLE SOURCE`, source
+    artifact title `GPT-5.5 Model | OpenAI API`, and URL
+    `https://developers.openai.com/api/docs/models/gpt-5.5`.
+- Residual observation: the Comet accessibility tree still retained one stale
+  `Continuing...` text node below the `_005` document even after visible
+  toolbar state and source-panel controls settled. It did not block owner
+  revision, publish, or source inspection controls. Treat this as
+  accessibility/live-region polish, not as a blocker for the repaired
+  passivation stream settlement.
+
+Rollback: revert `fce827ca2a43994d1d67312f33fe4fef1d97f4d3` if the
+document-stream passivation mapping regresses other Texture lifecycle states.
+The problem checkpoint `a8a62b29` should remain as durable evidence of the
+discovered stream-settlement gap.
+
+Result: source-backed Texture revision settlement now has local tests, runtime
+shards, CI, deploy identity, and deployed Comet proof through the logged-in
+owner browser. Next realism axis is settlement review and optional cleanup of
+the stale accessibility/live-region `Continuing...` node; any new runtime fix
+must begin with a problem checkpoint if staging evidence shows behavior impact.
