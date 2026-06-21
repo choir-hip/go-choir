@@ -237,11 +237,20 @@ position / live conjectures / open edges:
   model-prior interim, opening researcher by tool call, incorporating two
   researcher packets into V2 and V3, and carrying no old guard reason,
   instruction, or `completion_guard` retry in Trace.
+- C13 active: researcher/source-service refs can reach Texture in
+  `update_coagent.refs` without becoming canonical `source_entities`.
+  `evidenceSourceEntitiesFromPendingUpdates` currently collates only
+  `evidence_ids`; the deployed Comet proof for C12 showed grounded V3 prose but
+  also an explicit "durable source-entry retrieval failed" caveat. The repair
+  should turn only typed source refs (`source_service_item:...`,
+  `content_id:...`, and evidence handles) into source entities. It must not
+  scrape researcher prose or force Texture to call a semantic role next.
 
 next move: use the remaining budget on always-deep/source-evidence robustness:
-prove that Texture keeps deepening from researcher evidence beyond this narrow
-current-events V3 path, and repair the durable source-entry retrieval/attachment
-gap exposed by the Comet proof if it blocks owner-visible grounded citations.
+repair the typed-ref source attachment gap, prove that pending researcher refs
+become owner-visible source handles, then re-run deployed Comet/product proof
+that a grounded Texture revision can carry clickable durable sources rather than
+only prose caveats.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

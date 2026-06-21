@@ -822,3 +822,44 @@ incorporate researcher evidence into later canonical revisions. The remaining
 realism axis is always-deep/source-evidence robustness beyond this narrow V3
 current-events path, especially durable source attachment for owner-visible
 grounded citations.
+
+## 2026-06-21 - Source Attachment Gap Documented Before Fix
+
+Claim: the next source-evidence repair must target a typed runtime attachment
+gap, not reintroduce role choreography or prose scraping. The C12 staging proof
+at commit `cd79ed2d6f7ed629328daf658ab988baf42edad7` produced grounded V3
+research synthesis through Texture and researcher, but the Comet-visible V3
+also said durable source-entry retrieval failed and clickable URLs still needed
+attachment for publication-quality citations.
+
+Move: audited the source collation path before code edits. `update_coagent`
+supports inline `evidence`, `evidence_ids`, and `refs`; inline evidence is
+persisted and appended to `EvidenceIDs`, but
+`evidenceSourceEntitiesFromPendingUpdates` currently builds Texture
+`source_entities` only from `EvidenceIDs`. Source-search results and fallback
+researcher checkpoints already use typed `source_service_item:<item_id>` refs,
+and Texture has a first-class `source_service_item` source entity type with
+source-service enrichment. Therefore a researcher packet can carry a durable
+source ref in `refs` while the pending-update collation supplies no source
+entity to the canonical Texture revision.
+
+Expected Delta V: 0 for this documentation checkpoint. The next runtime commit
+can reduce V only if it proves typed refs become source entities without parsing
+free-form findings.
+
+Actual Delta V: 0. V remains 1.
+
+Admissible next evidence: focused runtime tests showing
+`source_service_item:...`, `content_id:...`, and evidence refs in
+`update_coagent.refs` are collated into source entities; a negative test showing
+free-form prose refs are ignored; runtime shards; then deployed Comet/product
+proof that grounded Texture output has durable source handles instead of the
+C12 source-entry caveat.
+
+Protected surfaces: Texture revision metadata `source_entities`,
+`update_coagent` evidence/ref delivery, source-service projection, citation
+validation, and owner-visible grounded citation behavior.
+
+Rollback: revert the runtime source-ref collation commit. This docs checkpoint
+should remain as evidence of the discovered gap unless later proof falsifies the
+diagnosis.
