@@ -1276,3 +1276,34 @@ navigation after visible controls have settled.
 Open edge: independent prover / widest checker remains required before
 `settled` or `open_handoff`; this authoring context must not grade its own
 proof.
+
+## 2026-06-21 - Automated Widest Checker Recorded
+
+Claim: the automated checker portion of the final Parallax exit obligation is
+satisfied for the latest test/code-touching changes, while the independent
+prover portion remains open.
+
+Move: re-queried GitHub Actions for the current pushed commits and recorded the
+successful checker runs in Parallax State. No runtime or test behavior changed
+in this pass.
+
+Expected Delta V: 0 or -1 depending on whether the combined
+independent-prover/widest-checker obligation can be split. Actual Delta V: 0.
+Current exit V remains 1 because Parallax still requires an independent prover
+before any `settled` or `open_handoff` exit.
+
+Receipts:
+- CI run `27898525827` for
+  `4852cca612e817567f3ee57349d7a2a6504982da` completed successfully. Jobs
+  included runtime shards 0-3, integration-tagged smoke, non-runtime Go tests,
+  Go vet/build, TLA+ model check, Docs Truth Check, and deploy-impact detection.
+  Frontend build and staging deploy were skipped because no deployed artifact
+  changed.
+- FlakeHub run `27898525830` for
+  `4852cca612e817567f3ee57349d7a2a6504982da` completed successfully.
+- Latest docs-only head `2a402f18c783e4f7bacfde0e9e96e6a51839804c` completed
+  Docs Truth Check run `27898703154` successfully.
+
+Open edge: independent prover remains unavailable in this authoring context
+unless the owner explicitly authorizes a subagent/delegated prover or another
+non-authoring checker.
