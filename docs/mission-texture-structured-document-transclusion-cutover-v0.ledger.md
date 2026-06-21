@@ -724,3 +724,47 @@ Open edge: D7 deletion and proof preparation. Map remaining old source syntax
 readers/writers, classify historical fallback versus deletion target, delete or
 hard-reject canonical clickable-link/source-token/citation-sidecar paths, then
 run broad tests and the staging landing loop.
+
+## 2026-06-21 - Pass 23 - D7 Old-Syntax Deletion Problem Checkpoint
+
+Claim: D7 should not delete or rewrite old source paths until the mission names
+which remaining `source:`/sidecar affordances are actual canonical-contract
+heresies versus explicitly historical fallback or non-Texture external citation
+data.
+
+Move: probe + construct. Ran a narrowed map over `internal/`, `frontend/src`,
+and `frontend/tests` for markdown source links, bare `[source:id]`, raw
+`{{source:...}}`, `citations_json`, `media_source_refs`,
+`metadata.source_entities`, source-link renderers, and legacy normalizers. Added
+`D7 Old-Syntax Deletion/Proof Problem Checkpoint - 2026-06-21` to the paradoc.
+
+Expected delta V: 0; this is the Problem Documentation First checkpoint before
+runtime/frontend/test deletion.
+
+Actual delta V: 0. Current V remains 3.
+
+Evidence recorded:
+`internal/runtime/textureprompts/overlays/run_system.yaml`;
+`internal/runtime/textureprompts/overlays/revision_source_entities_intro.yaml`;
+`internal/runtime/tools_coagent.go`;
+`internal/runtime/texture_legacy_wire_normalization.go`;
+`internal/runtime/texture_citation_validation.go`;
+`internal/runtime/texture_lineage.go`;
+`internal/runtime/universal_wire.go`;
+`frontend/src/lib/texture-source-renderer.ts`;
+`frontend/src/lib/texture-markdown-serializer.ts`;
+`frontend/src/lib/texture-source-state.ts`;
+`internal/runtime/texture_media_sources.go`;
+`internal/platform/source_metadata.go`;
+`internal/platform/service_test.go`;
+`internal/proxy/platform_publish_test.go`;
+`frontend/tests/texture-markdown-lineage.spec.js`;
+`frontend/tests/texture-source-entities.spec.js`;
+`frontend/tests/texture-source-service-publication.spec.js`;
+`frontend/tests/texture-source-ref-live-agent.spec.js`.
+
+Open edge: implement a bounded D7 deletion slice. Highest-value first move is
+to stop teaching or rendering clickable source-link syntax for new structured
+Texture paths while preserving only named historical fallbacks, then update
+tests to prove current-contract fixtures use `body_doc` plus top-level
+`source_entities`.

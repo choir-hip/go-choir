@@ -949,7 +949,70 @@ and version history should preserve or derive from structured `body_doc`
 markdown links, citations sidecars, or metadata source sidecars.
 
 Cut target: extend platform publication input/types to accept and persist
-structured body/source entity fields, build `PublicationDocument` from the
-structured document projection when present, keep legacy markdown parsing only
-for historical publications without `body_doc`, and update export tests so new
-publication fixtures use `body_doc` + top-level `source_entities`.
+structured `body_doc` and top-level `source_entities`; derive publication
+source metadata from top-level entities first; render publication documents from
+structured nodes when present; carry structured fields through version history
+and wire/proxy publish paths. Keep `parsePublicationInlines` source-link parsing
+only as a historical fallback for artifacts without structured body data.
+
+## D7 Old-Syntax Deletion/Proof Problem Checkpoint - 2026-06-21
+
+Problem: D1-D6 changed the canonical substrate for new Texture revisions, agent
+operations, editor preservation, multimedia source entities, and
+publication/export, but old source syntax still has too many live affordances to
+call the cutover complete. The remaining residue is not one file; it is a set of
+families that can still teach, parse, render, normalize, or test clickable
+source links and sidecar source identity as if they were Texture's native
+contract.
+
+Residue families found by the D7 map:
+
+- Model/prompt text still instructs agents to write or preserve
+  `[label](source:ENTITY_ID)` as canonical inline source syntax:
+  `internal/runtime/textureprompts/overlays/run_system.yaml`,
+  `internal/runtime/textureprompts/overlays/revision_source_entities_intro.yaml`,
+  and `internal/runtime/tools_coagent.go`.
+- Legacy normalizers and validators still interpret markdown source links or
+  bare `[source:id]` markers as the source grammar:
+  `internal/runtime/texture_legacy_wire_normalization.go`,
+  `internal/runtime/texture_citation_validation.go`,
+  `internal/runtime/texture_lineage.go`, and
+  `internal/runtime/universal_wire.go`.
+- Frontend rendering still upgrades raw source-link text into transclusion spans
+  for any rendered markdown-ish content:
+  `frontend/src/lib/texture-source-renderer.ts` and
+  `frontend/src/lib/texture-markdown-serializer.ts`.
+- Legacy media/source entity sidecars remain as fallback/read paths:
+  `frontend/src/lib/texture-source-state.ts`,
+  `internal/runtime/texture_media_sources.go`, and
+  `internal/platform/source_metadata.go`.
+- Publication/proxy/frontend tests still seed or assert `[...](source:...)` plus
+  `metadata.source_entities`, so the old contract remains executable in
+  fixtures even where new structured tests exist:
+  `internal/platform/service_test.go`,
+  `internal/proxy/platform_publish_test.go`,
+  `frontend/tests/texture-markdown-lineage.spec.js`,
+  `frontend/tests/texture-source-entities.spec.js`,
+  `frontend/tests/texture-source-service-publication.spec.js`, and
+  `frontend/tests/texture-source-ref-live-agent.spec.js`.
+- `citations_json` remains a stored Texture column and publication proposal
+  field. D2 already rejects it as canonical Texture source identity on new
+  Texture revisions, but D7 must classify remaining publication/proposal uses as
+  either non-Texture external citation data or deletion targets.
+
+Invariant to repair: no new Texture canonical write, prompt, renderer, or
+acceptance fixture may represent native source identity as a clickable markdown
+link, raw `source:` token, `{{source:...}}`, metadata source sidecar, media
+source sidecar, or offset-only citation record. Historical import/export
+fallbacks may remain only when narrowly named, unreachable from new canonical
+writes, and covered by tests proving they do not teach or reintroduce the old
+contract.
+
+Cut target: delete prompt language that asks the model to author source-link
+syntax; remove frontend source-link upgrade for structured revisions; confine
+legacy publication/renderer parsing to artifacts without `body_doc`; convert
+tests that are meant to prove the current Texture contract to structured
+`body_doc` plus top-level `source_entities`; retain only explicitly labelled
+legacy fallback tests; and prepare the staging acceptance proof for source
+creation, edit preservation/deletion, multimedia expansion, publication/export,
+and source-link/token rejection.
