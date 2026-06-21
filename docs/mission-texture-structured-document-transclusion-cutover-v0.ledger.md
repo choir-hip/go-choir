@@ -831,3 +831,53 @@ Open edge: continue D7 by deleting or explicitly confining
 `universal_wire.go`, and `texture_citation_validation.go`. Do not claim old
 source syntax deletion complete until those paths are repaired or proven to be
 historical-only and unreachable from new canonical Texture writes.
+
+## 2026-06-21 - Pass 25 - D7 Universal Wire/Coagent Source Normalizer Deletion Accepted
+
+Claim: D7 decreases the variant if Universal Wire can no longer mint or discover
+Texture source identity from markdown links, bare source tokens, or
+`metadata.source_entities` sidecars on the article read path, while
+processor/reconciler source context remains available only as run/request context
+until native structured source operations attach it to a revision.
+
+Move: construct + prover shift. Deleted
+`internal/runtime/texture_legacy_wire_normalization.go`, removed Universal Wire
+fallback parsing of inline `(source:)` / `[source:]` prose, made
+`normalizeWireArticleRevisionForRead` a no-op for source syntax, removed
+coagent seed revision `metadata.source_entities`, and added an internal-only
+`textureAgentRevisionRequest.SourceEntities` handoff so the Texture run prompt
+and `patch_texture` source pool retain processor/reconciler sources without
+storing them on the seed revision.
+
+Expected delta V: -1 for deleting the Universal Wire/coagent source-normalizer
+affordance band while leaving markdown lineage import and citation/source repair
+helpers as explicit D7 residue.
+
+Actual delta V: -1. Current V=1. D7 is still not complete; the remaining old
+source paths must be deleted or confined before broad tests/staging proof.
+
+Receipts:
+`internal/runtime/texture_legacy_wire_normalization.go`;
+`internal/runtime/universal_wire.go`;
+`internal/runtime/universal_wire_test.go`;
+`internal/runtime/tools_coagent.go`;
+`internal/runtime/texture_agent_revision.go`;
+`internal/runtime/agent_tools_test.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Evidence:
+`git diff --check`;
+`nix develop -c go test ./internal/runtime -run 'TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks|TestUniversalWire|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestSystemPrompt|TestTexturePromptPreservesInlineSourceRefs' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestProcessorAndReconcilerProfilesDelegateToTextureOnly$|^TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks$' -count=1 -v`;
+`nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevision|TestTexturePatch|TestTexturePromptPreservesInlineSourceRefs|TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities' -count=1`;
+independent fast review verdict: `accept`.
+
+Review note: an earlier broader D7 Universal Wire review stalled and was
+interrupted; the narrowed review checked the current diff and found no blocking
+issues. A leftover child review was also interrupted.
+
+Open edge: delete or confine `internal/runtime/texture_lineage.go`,
+`internal/runtime/texture_citation_validation.go`, source repair helpers that
+still operate on markdown citation syntax, and remaining current-contract tests
+that still teach old source links or `metadata.source_entities`.

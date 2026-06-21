@@ -425,26 +425,7 @@ func wireArticleVisibleSourceEntities(ctx context.Context, rev types.Revision, m
 		enrichSourceServiceEntities(ctx, entities)
 		return entities
 	}
-	entities := decodeTextureSourceEntities(meta["source_entities"])
-	if len(entities) == 0 {
-		return nil
-	}
-	refs := wireArticleInlineSourceRefs(wireArticleArticleProseForSourceRefs(content))
-	if len(refs) == 0 {
-		return nil
-	}
-	out := []textureSourceEntity{}
-	seen := map[string]bool{}
-	for _, entity := range entities {
-		id := strings.TrimSpace(entity.EntityID)
-		if id == "" || !refs[id] || seen[id] {
-			continue
-		}
-		seen[id] = true
-		out = append(out, entity)
-	}
-	enrichSourceServiceEntities(ctx, out)
-	return out
+	return nil
 }
 
 func wireArticleVisibleStructuredSourceEntities(rev types.Revision) []textureSourceEntity {
@@ -506,58 +487,6 @@ func wireArticleStructuredNodeText(node texturedoc.Node) string {
 		b.WriteString(wireArticleStructuredNodeText(child))
 	}
 	return b.String()
-}
-
-func wireArticleArticleProseForSourceRefs(content string) string {
-	var b strings.Builder
-	for _, raw := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(raw)
-		if wireArticleArticleLineStartsInventorySection(line) {
-			break
-		}
-		b.WriteString(raw)
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-func wireArticleInlineSourceRefs(content string) map[string]bool {
-	out := map[string]bool{}
-	rest := content
-	for {
-		idx := strings.Index(rest, "(source:")
-		if idx < 0 {
-			break
-		}
-		rest = rest[idx+len("(source:"):]
-		end := strings.Index(rest, ")")
-		if end < 0 {
-			break
-		}
-		id := strings.TrimSpace(rest[:end])
-		if id != "" {
-			out[id] = true
-		}
-		rest = rest[end+1:]
-	}
-	rest = content
-	for {
-		idx := strings.Index(rest, "[source:")
-		if idx < 0 {
-			break
-		}
-		rest = rest[idx+len("[source:"):]
-		end := strings.Index(rest, "]")
-		if end < 0 {
-			break
-		}
-		id := strings.TrimSpace(rest[:end])
-		if id != "" {
-			out[id] = true
-		}
-		rest = rest[end+1:]
-	}
-	return out
 }
 
 func wireArticleManifestFromSourceEntities(entities []textureSourceEntity) types.WireSourceManifest {
@@ -820,35 +749,10 @@ func normalizeWireStoryPresentation(story types.WireStory) types.WireStory {
 	return story
 }
 
-// normalizeWireArticleRevisionForRead repairs reader-facing source refs in
-// platform wire article revisions without mutating stored revision content.
+// normalizeWireArticleRevisionForRead exists for the cross-owner Universal Wire
+// read path. Source refs are no longer repaired from markdown/source-token
+// syntax here; visible source identity must come from structured body_doc nodes.
 func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
-	meta := decodeRevisionMetadata(rev.Metadata)
-	if !wireRevisionSourceIsTextureEdit(meta) || sourceNetworkCycleID(meta) == "" {
-		return rev
-	}
-	rec := &types.RunRecord{
-		OwnerID: strings.TrimSpace(rev.OwnerID),
-		Metadata: map[string]any{
-			"request_intent":             "integrate_worker_findings",
-			"type":                       textureAgentRevisionTaskType,
-			"ingestion_handoff_cycle_id": sourceNetworkCycleID(meta),
-		},
-	}
-	content := rev.Content
-	if normalized, count := normalizeWireArticleBareSourceRefs(content, rev.Metadata, rec); count > 0 {
-		content = normalized
-	}
-	if normalized, count, entities := normalizeWireArticleSourceServiceProse(content, rev.Metadata, rec); count > 0 {
-		content = normalized
-		if len(entities) > 0 {
-			meta["source_entities"] = entities
-			if patched, err := json.Marshal(meta); err == nil {
-				rev.Metadata = patched
-			}
-		}
-	}
-	rev.Content = content
 	return rev
 }
 

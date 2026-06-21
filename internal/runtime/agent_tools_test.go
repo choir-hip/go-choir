@@ -17,6 +17,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -2069,11 +2070,10 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if _, ok := seedMeta["article_version"]; ok {
 		t.Fatalf("processor seed should not write article_version: %+v", seedMeta)
 	}
-	sourceEntities := decodeTextureSourceEntities(seedMeta["source_entities"])
-	if len(sourceEntities) != 1 || sourceEntities[0].Target.ContentID != sourceItem.ContentID {
-		t.Fatalf("processor seed source_entities = %#v, want content item %q", sourceEntities, sourceItem.ContentID)
+	if _, ok := seedMeta["source_entities"]; ok {
+		t.Fatalf("processor seed retained legacy source_entities metadata: %+v", seedMeta)
 	}
-	if strings.Contains(seedRev.Content, "(source:"+sourceEntities[0].EntityID+")") {
+	if strings.Contains(seedRev.Content, "(source:") || strings.Contains(seedRev.Content, "[source:") {
 		t.Fatalf("processor seed should keep source refs in metadata/prompt, not visible inventory prose: %q", seedRev.Content)
 	}
 	if metadataString(seedMeta, "selected_style_rationale") == "" {
@@ -2140,6 +2140,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if len(runSourceEntities) != 1 || runSourceEntities[0].Target.ContentID != sourceItem.ContentID {
 		t.Fatalf("processor texture run source_entities = %#v", runSourceEntities)
 	}
+	sourceEntities := runSourceEntities
 	if metadataString(textureRun.Metadata, "selected_style_rationale") == "" || !strings.Contains(textureRun.Prompt, "Selected Style.texture source context") || !strings.Contains(textureRun.Prompt, "Style.texture: Market Brief") {
 		t.Fatalf("processor texture run missing Style.texture context: metadata=%+v prompt=%q", textureRun.Metadata, textureRun.Prompt)
 	}
@@ -2158,14 +2159,23 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		!strings.Contains(textureRun.Prompt, "By Choir News") {
 		t.Fatalf("processor texture run missing article-head completion contract: %q", textureRun.Prompt)
 	}
-	articleContent := "# Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures [source:" + sourceEntities[0].EntityID + "].\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained.\n"
+	articleBlockID := "p-" + textureSpawn.DocID + "-" + textureSpawn.SeedRevisionID + "-0"
+	articleContent := "Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures.\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained."
 	editArgs, err := json.Marshal(map[string]any{
 		"doc_id":           textureSpawn.DocID,
 		"base_revision_id": textureSpawn.SeedRevisionID,
-		"edits": []map[string]any{{
-			"op":   "append",
-			"text": articleContent,
-		}},
+		"edits": []map[string]any{
+			{
+				"op":       "update_block_text",
+				"block_id": articleBlockID,
+				"text":     articleContent,
+			},
+			{
+				"op":               "insert_source_ref",
+				"block_id":         articleBlockID,
+				"source_entity_id": sourceEntities[0].EntityID,
+			},
+		},
 		"rationale": "Create the first Universal Wire article revision from the processor brief.",
 	})
 	if err != nil {
@@ -2187,8 +2197,9 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		t.Fatalf("get article revision: %v", err)
 	}
 	if articleRev.ParentRevisionID != textureSpawn.SeedRevisionID ||
-		!strings.Contains(articleRev.Content, "](source:"+sourceEntities[0].EntityID+")") ||
-		strings.Contains(articleRev.Content, "[source:"+sourceEntities[0].EntityID+"]") {
+		!strings.Contains(articleRev.Content, "[1]") ||
+		strings.Contains(articleRev.Content, "](source:") ||
+		strings.Contains(articleRev.Content, "[source:") {
 		t.Fatalf("article revision content/lineage invalid: %+v", articleRev)
 	}
 	articleMeta := decodeRevisionMetadata(articleRev.Metadata)
@@ -2197,14 +2208,23 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		metadataString(articleMeta, "texture_version_stage") != "article_revision" {
 		t.Fatalf("texture-owned article revision metadata invalid: %#v", articleMeta)
 	}
-	if len(decodeTextureSourceEntities(articleMeta["source_entities"])) != 1 ||
-		metadataString(articleMeta, "source_network_cycle_id") != "cycle-test" ||
+	if _, ok := articleMeta["source_entities"]; ok {
+		t.Fatalf("texture-owned article revision retained legacy source_entities metadata: %#v", articleMeta)
+	}
+	var articleStructuredEntities []texturedoc.SourceEntity
+	if err := json.Unmarshal(articleRev.SourceEntities, &articleStructuredEntities); err != nil {
+		t.Fatalf("decode article structured source_entities: %v", err)
+	}
+	if len(articleStructuredEntities) != 1 || articleStructuredEntities[0].SourceEntityID != sourceEntities[0].EntityID {
+		t.Fatalf("article structured source_entities = %#v", articleStructuredEntities)
+	}
+	if metadataString(articleMeta, "source_network_cycle_id") != "cycle-test" ||
 		metadataString(articleMeta, "processor_key") != "processor:global_firehose:global:gdelt" ||
 		metadataString(articleMeta, "selected_style_rationale") == "" {
 		t.Fatalf("texture-owned article revision lost durable source/style metadata: %#v", articleMeta)
 	}
-	if normalization, ok := articleMeta["source_ref_normalization"].(map[string]any); !ok || metadataIntValue(normalization, "normalized_bare_source_refs") != 1 {
-		t.Fatalf("texture-owned article revision did not record bare source ref normalization: %#v", articleMeta)
+	if _, ok := articleMeta["source_ref_normalization"]; ok {
+		t.Fatalf("texture-owned article revision retained legacy source_ref_normalization: %#v", articleMeta)
 	}
 	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",

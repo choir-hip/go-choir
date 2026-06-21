@@ -744,14 +744,11 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 3. Last delta: -1 for accepted D6
-publication/export integration: platform publication now accepts and persists
-structured `body_doc` plus top-level `source_entities`, derives publication
-content from the structured projection when needed, renders publication/export
-source refs from structured nodes, and carries structured fields through version
-history. D5 multimedia reduced the variant locally, but its independent review
-agents stalled; retain that caveat until staging proof or a later reviewer
-checks the accumulated multimedia diff.
+staging acceptance proof. Current value: 1. Last deltas: -1 for accepted D7
+prompt/renderer/current-fixture deletion and -1 for accepted D7 Universal
+Wire/coagent source-normalizer deletion. D5 multimedia reduced the variant
+locally, but its independent review agents stalled; retain that caveat until
+staging proof or a later reviewer checks the accumulated multimedia diff.
 
 budget: Planning budget is one paradoc pass. D1-D4 used bounded passes for
 schema/source-contract, store/API write boundary, editor/user preservation, and
@@ -812,12 +809,15 @@ source links or client-side media-sidecar synthesis are required for new
 revisions. D6 evidence passed after independent review repair: structured
 platform publication/export tests, explicit-empty source entity suppression of
 legacy metadata, publication/wirepublish package tests, proxy/runtime focused
-publish bridge tests, and `git diff --check`. Later cuts still need broad
-old-path deletion, CI, staging deploy identity, Comet/browser staging proof with
-numbered source refs, expanded source window, multimedia source expansion, agent
-edit preserving refs, publication/export structured source proof on staging,
-and attempted markdown link/source token rejection; RunAcceptanceRecord at
-staging-smoke-level or higher if platform behavior changes.
+publish bridge tests, and `git diff --check`. D7 evidence now includes accepted
+prompt/frontend/current-fixture deletion plus accepted Universal Wire/coagent
+normalizer deletion with focused runtime and tagged processor tests. Later cuts
+still need remaining old-path deletion, CI, staging deploy identity,
+Comet/browser staging proof with numbered source refs, expanded source window,
+multimedia source expansion, agent edit preserving refs, publication/export
+structured source proof on staging, and attempted markdown link/source token
+rejection; RunAcceptanceRecord at staging-smoke-level or higher if platform
+behavior changes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -834,8 +834,11 @@ uses source entities without clickable source links. Independent D5 review was
 attempted twice but both review agents stalled and were interrupted; D5 is
 therefore an implementation checkpoint, not an independently accepted
 settlement. D6 repairs the publication/export projection path after focused
-tests, a P1 independent review, repair, and re-review acceptance. Full repair
-still requires old-syntax deletion receipts and staging proof.
+tests, a P1 independent review, repair, and re-review acceptance. D7 repairs the
+prompt/frontend/current-fixture source-link affordance band and the Universal
+Wire/coagent source-normalizer path after focused tests and independent review.
+Full repair still requires remaining old-syntax deletion receipts and staging
+proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -871,19 +874,25 @@ content from structured projection only as a projection, stores structured field
 in artifact manifests and version history, normalizes publication source
 metadata from top-level entities before metadata fallback, carries structured
 fields through wire/proxy publish requests, and renders publication/export
-source refs from structured nodes. D5 checkpoint records the specific
-sidecars/pathways repaired locally: runtime `media_source_refs`, prompt context
-that prefers those refs, and frontend media-ref synthesis/rendering outside
-top-level structured entities. D5 implementation removes the new-write/new-prompt
-path for those sidecars and keeps legacy media-ref synthesis only for revisions
-without structured `body_doc`. Markdown `[label](source:id)` parsing remains
-only as historical fallback for artifacts without structured body data.
+source refs from structured nodes. D7 first removed prompt/frontend/current-test
+affordances that taught clickable source-link syntax. D7 second deleted
+Universal Wire source-link/source-token normalization and stopped coagent seed
+Texture revisions from carrying legacy `metadata.source_entities`; coagent
+source context now enters the Texture revision run through internal request/run
+context until native `patch_texture` source operations attach top-level
+structured `source_entities`. D5 checkpoint records the specific sidecars/pathways
+repaired locally: runtime `media_source_refs`, prompt context that prefers those
+refs, and frontend media-ref synthesis/rendering outside top-level structured
+entities. D5 implementation removes the new-write/new-prompt path for those
+sidecars and keeps legacy media-ref synthesis only for revisions without
+structured `body_doc`. Markdown `[label](source:id)` parsing remains only as
+historical fallback for artifacts without structured body data.
 
-next move: D7 deletion and proof preparation. First map remaining old source
-syntax readers/writers and decide which are historical import/export fallbacks
-versus deletion targets. Then delete or hard-reject canonical write uses of
-clickable source links, `{{source:...}}`, citation/metadata sidecars, and
-offset-only source identity, with focused tests before any deployment step.
+next move: continue D7 by deleting or confining markdown lineage import and
+legacy citation validation/source repair helpers, then run broad tests and the
+landing loop. Do not claim settlement until staging proves source creation,
+agent/human edit preservation, multimedia source expansion, publication/export,
+and markdown-link/source-token rejection from the deployed product path.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -896,8 +905,10 @@ in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
 writes, editor/user preservation, and appagent mutation. D5 locally proves the
 multimedia resolver/rendering cut, with independent review still unavailable due
 stalled review agents. D6 proves publication/export at local/package scope after
-independent review repair. Promote outward only when deletion receipts, staging
-proof, and any missing multimedia independent review close the product contract.
+independent review repair. D7 has accepted deletion receipts for prompt/frontend
+current-contract fixtures and Universal Wire/coagent source-normalization
+residue. Promote outward only when remaining deletion receipts, staging proof,
+and any missing multimedia independent review close the product contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -910,7 +921,7 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion slice is independently accepted; current V=2. Continue D7 by deleting or confining remaining runtime old source syntaxes, especially legacy normalizers, lineage, Universal Wire source-token handling, and citation validation. Do not deploy or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion and Universal Wire/coagent source-normalizer deletion are independently accepted; current V=1. Continue D7 by deleting or confining markdown lineage import, citation validation/source repair helpers, and remaining old-source fixtures, then run broad tests and staging proof. Do not deploy or claim mission settlement unless the paradoc is updated first.
 ```
 
 ## D6 Publication/Export Problem Checkpoint - 2026-06-21
@@ -1053,3 +1064,39 @@ legacy/residue until repaired or explicitly confined:
 `internal/runtime/texture_legacy_wire_normalization.go`,
 `internal/runtime/texture_lineage.go`, `internal/runtime/universal_wire.go`, and
 `internal/runtime/texture_citation_validation.go`.
+
+### D7 Slice 2 Accepted - Universal Wire/Coagent Source Normalizer Deletion
+
+Status: locally implemented and independently accepted on 2026-06-21.
+
+This slice removed the runtime path that minted or discovered Universal Wire
+article source identity from markdown/source-token prose:
+
+- `texture_legacy_wire_normalization.go` was deleted, removing the helpers that
+  rewrote bare `[source:id]` tokens or `Source Service item ...` prose into
+  `[label](source:id)` links.
+- Universal Wire visible-source manifest derivation now reads structured
+  `BodyDoc` source nodes plus top-level `SourceEntities`; it no longer falls
+  back to `metadata.source_entities` plus inline markdown/source-token scanning.
+- Universal Wire read normalization is now a no-op for source syntax. It does
+  not repair reader-facing source refs from old prose.
+- Coagent Texture seed revisions no longer write legacy
+  `metadata.source_entities`. Source context for processor/reconciler handoff
+  remains available to the Texture run through internal request/run metadata, and
+  the first article revision must attach sources through structured
+  `patch_texture` `insert_source_ref` / `insert_source_embed` operations.
+- The processor/reconciler test now proves seed revisions do not carry
+  `metadata.source_entities`, the Texture run still has source context, the
+  article revision stores top-level structured `SourceEntities`, and neither
+  article content nor metadata retains `source_ref_normalization`.
+
+Independent review verdict: `accept`. Evidence:
+`git diff --check`;
+`nix develop -c go test ./internal/runtime -run 'TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks|TestUniversalWire|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestSystemPrompt|TestTexturePromptPreservesInlineSourceRefs' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestProcessorAndReconcilerProfilesDelegateToTextureOnly$|^TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks$' -count=1 -v`;
+`nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevision|TestTexturePatch|TestTexturePromptPreservesInlineSourceRefs|TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities' -count=1`.
+
+Residual D7 deletion targets remain: markdown lineage import/source-link repair,
+citation validation helpers that still parse `[label](source:id)`, and
+historical publication/proxy/frontend fixtures that are not yet classified as
+legacy-only.

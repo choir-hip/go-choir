@@ -430,11 +430,13 @@ func TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc
 	}
 }
 
-func TestNormalizeWireArticleSourceServiceProseRewritesBareLabels(t *testing.T) {
+func TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks(t *testing.T) {
 	itemID := "srcitem_el_nino"
 	entityID := stableSourceEntityID("source_service_item", itemID)
 	content := "Forecasters warned Source Service item " + itemID + " that El Niño odds rose."
 	meta, _ := json.Marshal(map[string]any{
+		"source":                     "patch_texture",
+		"ingestion_handoff_cycle_id": "cycle-el-nino",
 		"source_entities": []map[string]any{{
 			"entity_id": entityID,
 			"kind":      "source_service_item",
@@ -442,23 +444,20 @@ func TestNormalizeWireArticleSourceServiceProseRewritesBareLabels(t *testing.T) 
 			"target":    map[string]any{"target_kind": "source_service_item", "item_id": itemID},
 		}},
 	})
-	rec := &types.RunRecord{
-		OwnerID: "universal-wire-platform",
-		Metadata: map[string]any{
-			"request_intent":             "integrate_worker_findings",
-			"type":                       "texture_agent_revision",
-			"ingestion_handoff_cycle_id": "cycle-el-nino",
-		},
+	rev := types.Revision{
+		RevisionID: "rev-wire-legacy-source-prose",
+		OwnerID:    "universal-wire-platform",
+		Content:    content,
+		Metadata:   meta,
 	}
-	normalized, count, entities := normalizeWireArticleSourceServiceProse(content, meta, rec)
-	if count != 1 {
-		t.Fatalf("normalized count = %d, want 1", count)
+	normalized := normalizeWireArticleRevisionForRead(rev)
+	if normalized.Content != content {
+		t.Fatalf("normalized content = %q, want unchanged %q", normalized.Content, content)
 	}
-	want := "[WMO El Niño bulletin](source:" + entityID + ")"
-	if !strings.Contains(normalized, want) {
-		t.Fatalf("normalized content = %q, want %q", normalized, want)
+	if strings.Contains(normalized.Content, "](source:") || strings.Contains(normalized.Content, "[source:") {
+		t.Fatalf("normalized content minted source syntax: %q", normalized.Content)
 	}
-	if len(entities) != 1 || entities[0].EntityID != entityID {
-		t.Fatalf("entities = %#v, want preserved entity %s", entities, entityID)
+	if string(normalized.Metadata) != string(meta) {
+		t.Fatalf("metadata changed:\n got %s\nwant %s", normalized.Metadata, meta)
 	}
 }

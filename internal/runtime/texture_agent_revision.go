@@ -27,8 +27,9 @@ import (
 // creates a new canonical revision attributable to the appagent
 // (VAL-ETEXT-003).
 type textureAgentRevisionRequest struct {
-	Intent string `json:"intent,omitempty"`
-	Prompt string `json:"prompt,omitempty"`
+	Intent         string                `json:"intent,omitempty"`
+	Prompt         string                `json:"prompt,omitempty"`
+	SourceEntities []textureSourceEntity `json:"-"`
 }
 
 // textureAgentRevisionResponse is the JSON response for agent revision
@@ -373,7 +374,9 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 
 	if currentRevisionLoaded {
 		// Source entities are collated from deterministic media ingestion, the
-		// typed coagent findings already persisted into metadata["source_entities"],
+		// typed coagent findings handed to this revision request or already
+		// persisted into legacy metadata["source_entities"] while D7 residue is
+		// being removed,
 		// and (on worker integration) the typed evidence records attached to pending
 		// researcher update_coagent deliveries. Researcher prose is no longer
 		// regex-scraped into sources; evidence-backed content items become native
@@ -391,6 +394,16 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		if len(sourceEntities) > 0 {
 			metadata["source_entities"] = sourceEntities
 			if changedSourceEntities || addedMediaSourceEntities {
+				delete(metadata, "media_source_refs")
+				delete(metadata, "media_source_research_required")
+			}
+		}
+	}
+	if len(req.SourceEntities) > 0 {
+		sourceEntities, changedSourceEntities := mergeTextureSourceEntities(decodeTextureSourceEntities(metadata["source_entities"]), req.SourceEntities)
+		if len(sourceEntities) > 0 {
+			metadata["source_entities"] = sourceEntities
+			if changedSourceEntities {
 				delete(metadata, "media_source_refs")
 				delete(metadata, "media_source_research_required")
 			}

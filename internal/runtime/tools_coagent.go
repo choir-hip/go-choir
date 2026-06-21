@@ -277,8 +277,9 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 
 	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: "universal_wire_" + callerProfile + "_article_revision",
-		Prompt: prompt,
+		Intent:         "universal_wire_" + callerProfile + "_article_revision",
+		Prompt:         prompt,
+		SourceEntities: sourceEntities,
 	}, 0)
 	if err != nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
@@ -355,9 +356,6 @@ func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *
 		"reconciler_scope":               metadataString(parentRec.Metadata, runMetadataReconcilerScope),
 		"selected_style_sources":         selectedStyles,
 		"selected_style_rationale":       styleRationale,
-	}
-	if len(sourceEntities) > 0 {
-		seedMetaMap["source_entities"] = sourceEntities
 	}
 	seedMeta, _ := json.Marshal(seedMetaMap)
 	seedRev := types.Revision{
