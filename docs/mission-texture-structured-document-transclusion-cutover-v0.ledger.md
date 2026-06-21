@@ -985,3 +985,84 @@ confirmed structured source browsing/transclusion remains present. Remaining
 old-syntax residue is explicitly carried forward for the next D7 slice:
 prompt legacy-ref preservation tests/runtime regex and publication/proxy
 fixtures.
+
+## 2026-06-21 - Pass 28 - D7 Publication/Proxy Source Fixture Cleanup Local
+
+Claim: D7 decreases old-syntax residue if publication and proxy no longer
+treat markdown `source:` links or `metadata.source_entities` as current source
+identity, and current publication fixtures use structured source document nodes.
+
+Move: construct + probe. Removed publication fallback upgrade of markdown
+`source:` links into native source refs; made platform publication reject
+`metadata.source_entities` and process top-level `source_entities` even when
+metadata is empty; changed proxy/wire publication enrichment to mutate
+top-level source entities rather than metadata; extended structured source
+entity validation to retain publication evidence, provenance rights, reader
+snapshot/status, URL/publication-version targets, and `data_vintage` selectors;
+converted platform/proxy/browser publication fixtures and the skipped live
+source-ref proof to structured `body_doc` + top-level `source_entities`.
+
+Expected delta V: no top-level decrement until independent review accepts this
+slice. If accepted, the remaining D7 residue should be confined to explicitly
+historical markdown-lineage import, negative tests, and runtime
+legacy-preservation prompt/regex classification.
+
+Actual delta V: accepted by second repair re-reviews. Independent review found P1
+detached top-level source entities could still be accepted without `body_doc`;
+first repair now rejects that shape in platform structured input, source
+metadata normalization, and wire direct-payload forwarding. Independent
+re-review accepted that repair. Same-thread repair review then found P1
+detached source windows in proxy pre-enrichment and published version history;
+second repair now rejects detached head source entities before proxy enrichment
+and validates every published history revision before the version-history
+manifest is built. Two focused second-repair re-reviews accepted that repair.
+Current V remains 1 pending final runtime historical/prompt classification and
+staging proof.
+
+Receipts:
+`internal/platform/publication_document.go`;
+`internal/platform/publication_structured.go`;
+`internal/platform/source_metadata.go`;
+`internal/platform/service_test.go`;
+`internal/proxy/platform_publish.go`;
+`internal/proxy/wire_platform_publish.go`;
+`internal/proxy/platform_publish_test.go`;
+`internal/texturedoc/schema.go`;
+`frontend/tests/texture-source-service-publication.spec.js`;
+`frontend/tests/texture-source-ref-live-agent.spec.js`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`git diff --check`;
+`nix develop -c go test ./internal/texturedoc ./internal/platform ./internal/proxy ./internal/wirepublish`;
+`nix develop -c go test ./internal/platform ./internal/proxy -run 'SourceEntitiesWithoutBodyDoc|RejectsLegacyMetadata|BuildPublicationSourceMetadata|HandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|HandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrichment|PublishTextureRejectsHistorySourceEntitiesWithoutBodyDoc' -count=1`;
+`npm run build` from `frontend/`;
+`rg -n "\\]\\(source:|\\[source:|\\(source:" internal/platform internal/proxy frontend/tests/texture-source-service-publication.spec.js frontend/tests/texture-source-ref-live-agent.spec.js frontend/src --glob '!dist/**'`.
+
+Independent review finding: P1 at `internal/platform/service.go:181` and
+`internal/platform/source_metadata.go:95`, plus the wire direct payload shape at
+`internal/proxy/wire_platform_publish.go:74`, allowed source rows/transclusions
+from top-level `source_entities` without any structured `source_ref` /
+`source_embed` node. Repair added body_doc requirements and regression coverage.
+
+Independent re-review accepted that first repair. Same-thread repair review then
+found P1 holes where `HandleTexturePublication` could enrich detached
+head-revision `source_entities` before platform rejection and where
+`version_history.revisions[*].source_entities` could persist without structured
+node validation. Second repair adds proxy pre-enrichment rejection, gathered
+history rejection, platform history structured validation, and regressions for
+proxy pre-enrichment and platform history rejection.
+
+Second-repair re-reviews accepted the proxy/history repair. Verified that
+detached top-level source entities are rejected in `PublishTexture`,
+`buildPublicationSourceMetadata`, wire direct payloads, proxy pre-enrichment,
+and version history, while normal structured publication/export and reader
+snapshot enrichment still work. Non-blocking note: regular proxy enriches a
+valid head revision before validating the full history; this does not let
+detached historical source identity trigger enrichment or persist, but can be
+tightened later if the desired invariant becomes "validate all history before
+any source-enrichment side effect."
+
+Open edge: classify remaining runtime historical/prompt legacy refs before
+staging proof.

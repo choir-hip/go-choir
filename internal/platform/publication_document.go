@@ -300,6 +300,14 @@ func sourceEntityDisplayFields(entity PublicationSourceEntity) (title, url, read
 		}
 	}
 	if title == "" {
+		for _, key := range []string{"title", "label", "name"} {
+			if value := strings.TrimSpace(stringField(nestedObject(raw, "display"), key)); value != "" {
+				title = value
+				break
+			}
+		}
+	}
+	if title == "" {
 		title = firstNonEmpty(entity.SourceEntityID, entity.ID)
 	}
 	for _, key := range []string{"url", "source_url", "href"} {
@@ -309,7 +317,7 @@ func sourceEntityDisplayFields(entity PublicationSourceEntity) (title, url, read
 		}
 	}
 	if url == "" {
-		for _, key := range []string{"url", "source_url", "href"} {
+		for _, key := range []string{"uri", "url", "source_url", "href"} {
 			if value := strings.TrimSpace(stringField(nestedObject(raw, "target"), key)); value != "" {
 				url = value
 				break
@@ -325,6 +333,14 @@ func sourceEntityDisplayFields(entity PublicationSourceEntity) (title, url, read
 	if readerState == "" {
 		for _, key := range []string{"reader_artifact_state", "reader_state", "artifact_state"} {
 			if value := strings.TrimSpace(stringField(nestedObject(raw, "display"), key)); value != "" {
+				readerState = value
+				break
+			}
+		}
+	}
+	if readerState == "" {
+		for _, key := range []string{"reader_artifact_state", "reader_state", "artifact_state"} {
+			if value := strings.TrimSpace(stringField(nestedObject(raw, "evidence"), key)); value != "" {
 				readerState = value
 				break
 			}
@@ -464,10 +480,6 @@ func parsePublicationInlines(text string) []publicationInline {
 		label := text[loc[2]:loc[3]]
 		href := text[loc[4]:loc[5]]
 		inline := publicationInline{Kind: "link", Text: label, Href: href}
-		if strings.HasPrefix(href, "source:") {
-			inline.Kind = "source_ref"
-			inline.SourceID = strings.TrimPrefix(href, "source:")
-		}
 		out = append(out, inline)
 		text = text[loc[1]:]
 	}

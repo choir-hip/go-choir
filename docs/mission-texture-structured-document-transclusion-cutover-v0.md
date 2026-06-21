@@ -749,7 +749,11 @@ markdown-lineage import now converts old markers/source links into structured
 `source_ref` nodes, rejects unresolved markers, and retires the legacy
 source-repair/source-attachment metadata endpoints. Accepted D7 fourth slice:
 dead markdown-link citation validation, source-repair frontend affordances, and
-the stale source-attachment frontend affordance are removed. D5
+the stale source-attachment frontend affordance are removed. Local D7 fifth
+slice: publication/proxy current fixtures and source enrichment now use
+structured `body_doc` plus top-level `source_entities`; platform publication
+rejects `metadata.source_entities`; publication fallback no longer upgrades
+markdown `source:` links into source refs. D5
 multimedia reduced the variant locally, but its independent review agents
 stalled; retain that caveat until staging proof or a later reviewer checks the
 accumulated multimedia diff.
@@ -821,12 +825,13 @@ markdown-link citation validator, source-gap repair frontend affordance,
 source-review payload helper, and stale frontend source-attachment affordance;
 browser fixtures now assert that the retired controls are absent while structured
 refs still expand, with independent review accepted. Later cuts still need
-remaining publication/proxy old-fixture classification, CI, staging deploy identity,
-Comet/browser staging proof with numbered source refs, expanded source window,
-multimedia source expansion, agent edit preserving refs,
-publication/export structured source proof on staging, and attempted markdown
-link/source token rejection; RunAcceptanceRecord at staging-smoke-level or
-higher if platform behavior changes.
+independent review of the local publication/proxy fixture/source enrichment
+slice, classification of the remaining runtime historical/prompt legacy refs,
+CI, staging deploy identity, Comet/browser staging proof with numbered source
+refs, expanded source window, multimedia source expansion, agent edit preserving
+refs, publication/export structured source proof on staging, and attempted
+markdown link/source token rejection; RunAcceptanceRecord at staging-smoke-level
+or higher if platform behavior changes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -847,7 +852,9 @@ tests, a P1 independent review, repair, and re-review acceptance. D7 repairs the
 prompt/frontend/current-fixture source-link affordance band, the Universal
 Wire/coagent source-normalizer path, and the markdown-lineage/source-repair
 metadata path after focused tests and independent review. Full repair still
-requires remaining old-fixture classification and staging proof.
+requires independent review of the local publication/proxy source fixture
+cleanup, remaining runtime historical/prompt legacy classification, and staging
+proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -899,7 +906,13 @@ source-review payload helper, removes stale frontend source-attachment controls
 that could only call the retired endpoint, teaches the frontend renderer to read
 structured `text_quote` selector `exact` data, and updates browser fixtures to
 assert import-time unresolved-marker rejection plus absence of the retired repair
-and attachment UI. D5 checkpoint
+and attachment UI. D7 fifth locally removes publication fallback support for
+turning markdown `source:` links into native publication source refs, rejects
+`metadata.source_entities` at platform publication input, enriches proxy/wire
+publication from top-level structured source entities instead of metadata
+sidecars, preserves reader snapshot/status fields in structured source entities,
+and converts publication/proxy/browser publication fixtures to structured source
+refs. D5 checkpoint
 records the specific sidecars/pathways repaired locally: runtime
 `media_source_refs`, prompt context that prefers those refs, and frontend
 media-ref synthesis/rendering outside top-level structured entities. D5
@@ -908,11 +921,12 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`. Markdown `[label](source:id)` parsing remains only as historical
 fallback for artifacts without structured body data.
 
-next move: continue D7 by classifying remaining publication/proxy old-source
-fixtures, then run broad tests and the landing loop. Do not claim settlement
-until staging proves source creation, agent/human edit preservation, multimedia
-source expansion, publication/export, and markdown-link/source-token rejection
-from the deployed product path.
+next move: send the local D7 publication/proxy source fixture cleanup to
+independent review. If accepted, classify the remaining runtime
+historical/prompt legacy refs, then run broad tests and the landing loop. Do
+not claim settlement until staging proves source creation, agent/human edit
+preservation, multimedia source expansion, publication/export, and
+markdown-link/source-token rejection from the deployed product path.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -929,9 +943,10 @@ independent review repair. D7 has accepted deletion receipts for prompt/frontend
 current-contract fixtures, Universal Wire/coagent source-normalization residue,
 and markdown-lineage/source-repair metadata residue. D7
 citation-helper/frontend repair-and-attachment-affordance deletion is also
-independently accepted. Promote outward only when remaining deletion receipts,
-staging proof, and any missing multimedia independent review close the product
-contract.
+independently accepted. D7 publication/proxy source fixture cleanup is locally
+implemented and awaiting review. Promote outward only when remaining deletion
+receipts, staging proof, and any missing multimedia independent review close the
+product contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -944,7 +959,7 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion, Universal Wire/coagent source-normalizer deletion, markdown-lineage/source-repair retirement, and citation-helper/frontend repair-affordance deletion are independently accepted; current V=1. Continue D7 by classifying remaining publication/proxy old-source fixtures, then run broad tests and staging proof. Do not deploy or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion, Universal Wire/coagent source-normalizer deletion, markdown-lineage/source-repair retirement, and citation-helper/frontend repair-affordance deletion are independently accepted; current V=1. Local D7 publication/proxy source fixture cleanup awaits independent review. If accepted, classify remaining runtime historical/prompt legacy refs, then run broad tests and staging proof. Do not deploy or claim mission settlement unless the paradoc is updated first.
 ```
 
 ## D6 Publication/Export Problem Checkpoint - 2026-06-21
@@ -1186,3 +1201,79 @@ confirmed no live frontend imports/calls remain for `texture-source-actions`,
 confirmed structured source browsing/transclusion remains present. Remaining
 old-source work appears concentrated in publication/proxy legacy fixtures and
 explicit negative tests, plus deployed staging proof.
+
+### D7 Slice 5 Local - Publication/Proxy Source Fixture Cleanup
+
+Status: locally implemented and independently accepted on 2026-06-21 after two
+P1 repair rounds. Independent review found detached top-level
+`source_entities` without `body_doc`; first repair was accepted by independent
+re-review. A same-thread repair reviewer then found two additional P1
+detached-source windows in proxy enrichment and published version history;
+second repair was accepted by two focused re-reviews.
+
+This slice removes publication/proxy current-contract reliance on markdown
+source links and Texture metadata source sidecars:
+
+- Publication fallback markdown parsing no longer upgrades `[label](source:id)`
+  links into native publication `source_ref` inlines. Native publication source
+  refs now come from structured `body_doc` source_ref/source_embed nodes.
+- Platform publication rejects `metadata.source_entities` as legacy Texture
+  source identity and reads sources from top-level `source_entities`, including
+  when `metadata` is empty.
+- Platform publication and source metadata normalization reject non-empty
+  top-level `source_entities` unless a structured `body_doc` is present, so a
+  source entity cannot mint publication source rows without a source_ref or
+  source_embed document node.
+- Proxy and wire publication enrich reader snapshots/status on top-level
+  structured source entities, not on `metadata.source_entities`.
+- Proxy publication rejects non-empty head-revision `source_entities` without
+  `body_doc` before reader snapshot enrichment can fetch content items or import
+  URLs.
+- Wire direct-payload publication rejects non-empty `source_entities` without
+  `body_doc` before forwarding to platformd.
+- Published version history validates each revision with the same structured
+  `body_doc`/`source_entities` rule before the manifest can persist
+  source-entity JSON.
+- Structured source entities now retain publication-relevant source evidence,
+  provenance rights, reader snapshots, reader snapshot status, URL and
+  publication-version targets, and `data_vintage` selectors through validation.
+- Platform/proxy/browser publication fixtures now create/publish structured
+  source refs instead of clickable source links or metadata sidecars.
+
+Local evidence:
+`git diff --check`;
+`nix develop -c go test ./internal/texturedoc ./internal/platform ./internal/proxy ./internal/wirepublish`;
+`npm run build` from `frontend/`;
+`rg -n "\\]\\(source:|\\[source:|\\(source:" internal/platform internal/proxy frontend/tests/texture-source-service-publication.spec.js frontend/tests/texture-source-ref-live-agent.spec.js frontend/src --glob '!dist/**'`.
+
+Independent review finding: P1 detached top-level source entities could still be
+published without structured document-node validation because `body_doc` was the
+only trigger for `normalizePublishTextureStructuredInput`, while
+`buildPublicationSourceMetadata` consumed `req.SourceEntities`; the wire
+direct-payload path had the same shape. First repair: `source_entities` now
+require `body_doc` at platform structured input normalization and source
+metadata normalization, and the wire direct payload choke point returns 400
+before forwarding detached source entities to platformd. Regression tests cover
+`PublishTexture`, `buildPublicationSourceMetadata`, and the wire direct-payload
+path. Independent re-review accepted this repair.
+
+Same-thread repair review finding: P1 detached head-revision `source_entities`
+could still be enriched by the proxy before platform rejection, and published
+version history could still carry per-revision `source_entities` without
+structured node validation. Second repair: proxy publication rejects detached
+head source entities before enrichment/history/platform forwarding, gathered
+history rejects detached revision source entities before forwarding, and
+platform structured normalization validates every history revision before
+building the version-history manifest. Regression tests cover pre-enrichment
+proxy rejection and platform history rejection.
+
+Independent second-repair reviews accepted the proxy/history repair. Non-blocking
+ordering note: regular proxy enriches a valid head revision before validating
+full version history; this does not allow detached historical `source_entities`
+to trigger enrichment or persist, but a future hardening pass may validate the
+history before any head-source enrichment side effect.
+
+Open edge: remaining old-source hits are currently expected to be negative
+assertions, markdown-lineage historical import, and runtime legacy-ref
+preservation prompts/regexes; those still need explicit final classification
+before staging proof.

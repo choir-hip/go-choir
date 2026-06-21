@@ -12,6 +12,71 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
+func testProxyTextureBodyDoc(t *testing.T, docID, sourceEntityID, label string) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"schema": "choir.texture_doc.v1",
+		"doc": map[string]any{
+			"type":  "doc",
+			"attrs": map[string]any{"id": docID},
+			"content": []map[string]any{{
+				"type":  "paragraph",
+				"attrs": map[string]any{"id": "p-" + docID},
+				"content": []map[string]any{
+					{"type": "text", "text": "public projection content "},
+					{"type": "source_ref", "attrs": map[string]any{"id": "ref-" + sourceEntityID, "source_entity_id": sourceEntityID, "label": label, "display_mode": "numbered_ref"}},
+				},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal body_doc: %v", err)
+	}
+	return raw
+}
+
+func testProxySourceEntities(t *testing.T, entities ...map[string]any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(entities)
+	if err != nil {
+		t.Fatalf("marshal source_entities: %v", err)
+	}
+	return raw
+}
+
+func testProxySourceEntity(id, targetKind, targetID, title, quote, rightsScope string) map[string]any {
+	target := map[string]any{"kind": targetKind}
+	if strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://") {
+		target["uri"] = targetID
+	} else if targetID != "" {
+		target["id"] = targetID
+	}
+	return map[string]any{
+		"source_entity_id": id,
+		"target":           target,
+		"selectors": []map[string]any{{
+			"kind": "text_quote",
+			"data": map[string]any{
+				"text_quote": quote,
+				"exact":      quote,
+			},
+		}},
+		"display": map[string]any{
+			"mode":  "numbered_ref",
+			"title": title,
+			"label": title,
+		},
+		"evidence": map[string]any{
+			"state":        "available",
+			"open_surface": "source",
+		},
+		"provenance": map[string]any{
+			"created_by":   "proxy-test",
+			"rights_scope": rightsScope,
+		},
+	}
+}
+
 func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -57,17 +122,19 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 			})
 		case "/api/texture/documents/doc-1/revisions":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
-				{RevisionID: "rev-2", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 2, Content: "public projection content", RevisionHash: "h2", CreatedAt: "2026-01-02T00:00:00.000Z"},
+				{RevisionID: "rev-2", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 2, Content: "public projection content [1]", RevisionHash: "h2", CreatedAt: "2026-01-02T00:00:00.000Z"},
 				{RevisionID: "rev-1", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 1, Content: "older draft", RevisionHash: "h1", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-2":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
-				RevisionID: "rev-2",
-				DocID:      "doc-1",
-				OwnerID:    "user-1",
-				Content:    "public projection content",
-				Citations:  json.RawMessage(`[{"url":"https://example.com"}]`),
-				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-1","kind":"legal_source","target":{"target_kind":"content_item","content_id":"content-public-1"},"display":{"inline_mode":"collapsed_citation"},"provenance":{"rights_scope":"public_source"}}]}`),
+				RevisionID:     "rev-2",
+				DocID:          "doc-1",
+				OwnerID:        "user-1",
+				Content:        "public projection content [1]",
+				BodyDoc:        testProxyTextureBodyDoc(t, "doc-1", "src-1", "Public Source"),
+				SourceEntities: testProxySourceEntities(t, testProxySourceEntity("src-1", "content_item", "content-public-1", "Public Source", "Cleaned public source text", "public_source")),
+				Citations:      json.RawMessage(`[{"url":"https://example.com"}]`),
+				Metadata:       json.RawMessage(`{}`),
 			})
 		case "/api/content/items/content-public-1":
 			_ = json.NewEncoder(w).Encode(sandboxContentItem{
@@ -120,7 +187,7 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	if !strings.Contains(string(gotPlatformReq.ExportPolicy), `"download_allowed":false`) || !strings.Contains(string(gotPlatformReq.ExportPolicy), `"formats":["md"]`) {
 		t.Fatalf("platform export policy not forwarded: %s", string(gotPlatformReq.ExportPolicy))
 	}
-	if gotPlatformReq.Content != "public projection content" {
+	if gotPlatformReq.Content != "public projection content [1]" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
 	}
 	if len(gotPlatformReq.History) != 2 {
@@ -129,13 +196,13 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	if gotPlatformReq.History[0].RevisionID != "rev-1" || gotPlatformReq.History[1].RevisionID != "rev-2" {
 		t.Fatalf("platform history not oldest-first: %s, %s", gotPlatformReq.History[0].RevisionID, gotPlatformReq.History[1].RevisionID)
 	}
-	if !strings.Contains(string(gotPlatformReq.Metadata), "content-public-1") {
-		t.Fatalf("platform metadata not forwarded: %s", string(gotPlatformReq.Metadata))
+	if !strings.Contains(string(gotPlatformReq.SourceEntities), "content-public-1") {
+		t.Fatalf("platform source_entities not forwarded: %s", string(gotPlatformReq.SourceEntities))
 	}
-	if !strings.Contains(string(gotPlatformReq.Metadata), "reader_snapshot") || !strings.Contains(string(gotPlatformReq.Metadata), "Cleaned public source text") {
-		t.Fatalf("platform metadata missing public source reader snapshot: %s", string(gotPlatformReq.Metadata))
+	if !strings.Contains(string(gotPlatformReq.SourceEntities), "reader_snapshot") || !strings.Contains(string(gotPlatformReq.SourceEntities), "Cleaned public source text") {
+		t.Fatalf("platform source_entities missing public source reader snapshot: %s", string(gotPlatformReq.SourceEntities))
 	}
-	snapshot := publicationReaderSnapshot(t, gotPlatformReq.Metadata, "src-1")
+	snapshot := publicationReaderSnapshot(t, gotPlatformReq.SourceEntities, "src-1")
 	if snapshot["media_type"] != "text/markdown" {
 		t.Fatalf("reader snapshot media_type = %#v, want text/markdown", snapshot["media_type"])
 	}
@@ -148,6 +215,84 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	}
 	if resp.PublicURL != "https://choir.news/pub/texture/my-note-pub1" {
 		t.Fatalf("public url: got %q", resp.PublicURL)
+	}
+}
+
+func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrichment(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	platformdCalled := false
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		platformdCalled = true
+		t.Fatalf("platformd should not be called for detached source_entities")
+	}))
+	defer platformd.Close()
+
+	contentFetches := 0
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/texture/documents/doc-detached":
+			_ = json.NewEncoder(w).Encode(sandboxTextureDocument{
+				DocID:             "doc-detached",
+				OwnerID:           "user-1",
+				Title:             "Detached Note",
+				CurrentRevisionID: "rev-detached",
+			})
+		case "/api/texture/revisions/rev-detached":
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
+				RevisionID: "rev-detached",
+				DocID:      "doc-detached",
+				OwnerID:    "user-1",
+				Content:    "public projection content with detached source identity.",
+				SourceEntities: testProxySourceEntities(t, testProxySourceEntity(
+					"src-detached",
+					"url",
+					"https://example.com/detached-source",
+					"Detached Source",
+					"Detached source excerpt",
+					"public_url_snapshot",
+				)),
+				Metadata: json.RawMessage(`{}`),
+			})
+		case "/api/content/import-url":
+			contentFetches += 1
+			t.Fatalf("source import should not be called for detached source_entities")
+		default:
+			t.Fatalf("sandbox path: got %s", r.URL.Path)
+		}
+	}))
+	defer sandbox.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(`{"doc_id":"doc-detached","revision_id":"rev-detached"}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+	w := httptest.NewRecorder()
+
+	h.HandleTexturePublication(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "source_entities require body_doc") {
+		t.Fatalf("body = %s, want body_doc requirement", w.Body.String())
+	}
+	if platformdCalled {
+		t.Fatalf("platformd was called for detached source_entities")
+	}
+	if contentFetches != 0 {
+		t.Fatalf("source import was called for detached source_entities: %d", contentFetches)
 	}
 }
 
@@ -233,15 +378,17 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 			})
 		case "/api/texture/documents/doc-url/revisions":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
-				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1](source:src-url)", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
+				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1]", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
-				RevisionID: "rev-url",
-				DocID:      "doc-url",
-				OwnerID:    "user-1",
-				Content:    "public projection content [1](source:src-url)",
-				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-url","kind":"legal_source","target":{"target_kind":"url","url":"https://example.com/source","canonical_url":"https://example.com/source"},"selectors":[{"selector_kind":"text_quote","text_quote":"bounded excerpt"}],"display":{"inline_mode":"embedded_excerpt","open_surface":"source"},"provenance":{"rights_scope":"public_url_snapshot"}}]}`),
+				RevisionID:     "rev-url",
+				DocID:          "doc-url",
+				OwnerID:        "user-1",
+				Content:        "public projection content [1]",
+				BodyDoc:        testProxyTextureBodyDoc(t, "doc-url", "src-url", "URL Source"),
+				SourceEntities: testProxySourceEntities(t, testProxySourceEntity("src-url", "url", "https://example.com/source", "URL Source", "bounded excerpt", "public_url_snapshot")),
+				Metadata:       json.RawMessage(`{}`),
 			})
 		case "/api/content/import-url":
 			importCalled = true
@@ -255,7 +402,7 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 			if body["url"] != "https://example.com/source" {
 				t.Fatalf("import url: got %q", body["url"])
 			}
-			if body["query"] != "src-url" {
+			if body["query"] != "URL Source" {
 				t.Fatalf("import query: got %q", body["query"])
 			}
 			w.WriteHeader(http.StatusCreated)
@@ -301,18 +448,18 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 	if !importCalled {
 		t.Fatalf("expected public URL source import")
 	}
-	metadata := string(gotPlatformReq.Metadata)
-	if !strings.Contains(metadata, "reader_snapshot") || !strings.Contains(metadata, "Cleaned URL source text") {
-		t.Fatalf("platform metadata missing URL reader snapshot: %s", metadata)
+	sourceEntities := string(gotPlatformReq.SourceEntities)
+	if !strings.Contains(sourceEntities, "reader_snapshot") || !strings.Contains(sourceEntities, "Cleaned URL source text") {
+		t.Fatalf("platform source_entities missing URL reader snapshot: %s", sourceEntities)
 	}
-	snapshot := publicationReaderSnapshot(t, gotPlatformReq.Metadata, "src-url")
+	snapshot := publicationReaderSnapshot(t, gotPlatformReq.SourceEntities, "src-url")
 	if snapshot["media_type"] != "text/markdown" {
 		t.Fatalf("reader snapshot media_type = %#v, want text/markdown", snapshot["media_type"])
 	}
 	if snapshot["original_media_type"] != "text/html; charset=utf-8" {
 		t.Fatalf("reader snapshot original_media_type = %#v, want source html type", snapshot["original_media_type"])
 	}
-	status := publicationReaderSnapshotStatus(t, gotPlatformReq.Metadata, "src-url")
+	status := publicationReaderSnapshotStatus(t, gotPlatformReq.SourceEntities, "src-url")
 	if status["state"] != sourcecontract.ReaderArtifactStateReady {
 		t.Fatalf("reader snapshot state = %#v, want %q", status["state"], sourcecontract.ReaderArtifactStateReady)
 	}
@@ -329,8 +476,8 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 	if !ok || len(warnings) != 2 || warnings[0] != "extracted text is low-content" {
 		t.Fatalf("reader snapshot warnings = %#v", status["warnings"])
 	}
-	if !strings.Contains(metadata, "bounded excerpt") {
-		t.Fatalf("platform metadata lost bounded transclusion selector: %s", metadata)
+	if !strings.Contains(sourceEntities, "bounded excerpt") {
+		t.Fatalf("platform source_entities lost bounded transclusion selector: %s", sourceEntities)
 	}
 }
 
@@ -369,15 +516,17 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 			})
 		case "/api/texture/documents/doc-url/revisions":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
-				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1](source:src-url)", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
+				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1]", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
-				RevisionID: "rev-url",
-				DocID:      "doc-url",
-				OwnerID:    "user-1",
-				Content:    "public projection content [1](source:src-url)",
-				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-url","kind":"legal_source","label":"Blocked Source","target":{"target_kind":"url","url":"https://example.com/blocked","canonical_url":"https://example.com/blocked"},"selectors":[{"selector_kind":"text_quote","text_quote":"bounded excerpt"}],"provenance":{"rights_scope":"public_url_snapshot"}}]}`),
+				RevisionID:     "rev-url",
+				DocID:          "doc-url",
+				OwnerID:        "user-1",
+				Content:        "public projection content [1]",
+				BodyDoc:        testProxyTextureBodyDoc(t, "doc-url", "src-url", "Blocked Source"),
+				SourceEntities: testProxySourceEntities(t, testProxySourceEntity("src-url", "url", "https://example.com/blocked", "Blocked Source", "bounded excerpt", "public_url_snapshot")),
+				Metadata:       json.RawMessage(`{}`),
 			})
 		case "/api/content/import-url":
 			http.Error(w, `{"error":"URL import failed: 403 Forbidden"}`, http.StatusBadGateway)
@@ -406,19 +555,19 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status: got %d body %s", w.Code, w.Body.String())
 	}
-	metadata := string(gotPlatformReq.Metadata)
-	status := publicationReaderSnapshotStatus(t, gotPlatformReq.Metadata, "src-url")
+	sourceEntities := string(gotPlatformReq.SourceEntities)
+	status := publicationReaderSnapshotStatus(t, gotPlatformReq.SourceEntities, "src-url")
 	if status["state"] != sourcecontract.ReaderArtifactStateImportFailed {
 		t.Fatalf("reader snapshot state = %#v, want %q", status["state"], sourcecontract.ReaderArtifactStateImportFailed)
 	}
-	if !strings.Contains(metadata, "source_import_failed") || !strings.Contains(metadata, "http_403") || !strings.Contains(metadata, "http_status") {
-		t.Fatalf("platform metadata missing import failure diagnostics: %s", metadata)
+	if !strings.Contains(sourceEntities, "source_import_failed") || !strings.Contains(sourceEntities, "http_403") || !strings.Contains(sourceEntities, "http_status") {
+		t.Fatalf("platform source_entities missing import failure diagnostics: %s", sourceEntities)
 	}
-	if strings.Contains(metadata, "reader_snapshot\":") {
-		t.Fatalf("failed import must not synthesize reader snapshot: %s", metadata)
+	if strings.Contains(sourceEntities, "reader_snapshot\":") {
+		t.Fatalf("failed import must not synthesize reader snapshot: %s", sourceEntities)
 	}
-	if !strings.Contains(metadata, "bounded excerpt") {
-		t.Fatalf("platform metadata lost bounded transclusion selector: %s", metadata)
+	if !strings.Contains(sourceEntities, "bounded excerpt") {
+		t.Fatalf("platform source_entities lost bounded transclusion selector: %s", sourceEntities)
 	}
 }
 
@@ -457,15 +606,17 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 			})
 		case "/api/texture/documents/doc-private/revisions":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionList{Revisions: []sandboxTextureRevision{
-				{RevisionID: "rev-private", DocID: "doc-private", OwnerID: "user-1", VersionNumber: 1, Content: "private projection", RevisionHash: "hpriv", CreatedAt: "2026-01-01T00:00:00.000Z"},
+				{RevisionID: "rev-private", DocID: "doc-private", OwnerID: "user-1", VersionNumber: 1, Content: "public projection with private source excerpt [1]", RevisionHash: "hpriv", CreatedAt: "2026-01-01T00:00:00.000Z"},
 			}})
 		case "/api/texture/revisions/rev-private":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
-				RevisionID: "rev-private",
-				DocID:      "doc-private",
-				OwnerID:    "user-1",
-				Content:    "public projection with private source excerpt",
-				Metadata:   json.RawMessage(`{"source_entities":[{"entity_id":"src-private","kind":"client_note","target":{"target_kind":"content_item","content_id":"content-private-1"},"selectors":[{"selector_kind":"text_quote","text_quote":"bounded excerpt"}],"provenance":{"rights_scope":"private_user_source"}}]}`),
+				RevisionID:     "rev-private",
+				DocID:          "doc-private",
+				OwnerID:        "user-1",
+				Content:        "public projection content [1]",
+				BodyDoc:        testProxyTextureBodyDoc(t, "doc-private", "src-private", "Private Source"),
+				SourceEntities: testProxySourceEntities(t, testProxySourceEntity("src-private", "content_item", "content-private-1", "Private Source", "bounded excerpt", "private_user_source")),
+				Metadata:       json.RawMessage(`{}`),
 			})
 		case "/api/content/items/content-private-1":
 			contentFetches += 1
@@ -502,8 +653,8 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 	if contentFetches != 0 {
 		t.Fatalf("private source content was fetched for publication: %d", contentFetches)
 	}
-	if strings.Contains(string(gotPlatformReq.Metadata), "reader_snapshot") || strings.Contains(string(gotPlatformReq.Metadata), "private full source text") {
-		t.Fatalf("private source snapshot leaked into platform metadata: %s", string(gotPlatformReq.Metadata))
+	if strings.Contains(string(gotPlatformReq.SourceEntities), "reader_snapshot") || strings.Contains(string(gotPlatformReq.SourceEntities), "private full source text") {
+		t.Fatalf("private source snapshot leaked into platform source_entities: %s", string(gotPlatformReq.SourceEntities))
 	}
 }
 
@@ -529,22 +680,18 @@ func publicationReaderSnapshotStatus(t *testing.T, raw json.RawMessage, entityID
 
 func publicationSourceEntity(t *testing.T, raw json.RawMessage, entityID string) map[string]any {
 	t.Helper()
-	var metadata map[string]any
-	if err := json.Unmarshal(raw, &metadata); err != nil {
-		t.Fatalf("decode publication metadata: %v", err)
-	}
-	values, ok := metadata["source_entities"].([]any)
-	if !ok {
-		t.Fatalf("metadata.source_entities = %#v, want array", metadata["source_entities"])
+	var values []any
+	if err := json.Unmarshal(raw, &values); err != nil {
+		t.Fatalf("decode publication source_entities: %v", err)
 	}
 	for _, value := range values {
 		entity, ok := value.(map[string]any)
-		if !ok || entity["entity_id"] != entityID {
+		if !ok || (entity["source_entity_id"] != entityID && entity["entity_id"] != entityID) {
 			continue
 		}
 		return entity
 	}
-	t.Fatalf("source entity %s not found in metadata: %s", entityID, string(raw))
+	t.Fatalf("source entity %s not found in source_entities: %s", entityID, string(raw))
 	return nil
 }
 
@@ -563,6 +710,7 @@ func TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance(t *testing.T
 		t.Fatalf("public_source content item should allow a reader snapshot")
 	}
 }
+
 // TestHandleAPIDispatchesTexturePublication guards against a regression where a
 // duplicate router case (introduced by the vtext->Texture blind rename) shadowed
 // the canonical publish route, returning 404 for the exact path the frontend

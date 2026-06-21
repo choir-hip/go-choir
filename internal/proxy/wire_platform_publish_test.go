@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -111,5 +112,65 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	}
 	if resp.RoutePath != "wire/proxy-story" {
 		t.Fatalf("route_path = %q", resp.RoutePath)
+	}
+}
+
+func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	platformOwner := wirepublish.PlatformOwnerID()
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+	}))
+	defer sandbox.Close()
+
+	platformCalled := false
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		platformCalled = true
+		t.Fatalf("platformd should not be called for detached source_entities")
+	}))
+	defer platformd.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"doc_id":      "doc-wire-direct",
+		"revision_id": "rev-wire-direct",
+		"title":       "Wire Direct",
+		"content":     "This direct payload carries detached source identity.",
+		"source_entities": []map[string]any{{
+			"source_entity_id": "src-detached-wire",
+			"target":           map[string]any{"kind": "url", "uri": "https://example.com/source"},
+			"display":          map[string]any{"mode": "numbered_ref", "title": "Detached source"},
+			"evidence":         map[string]any{"state": "available", "open_surface": "source"},
+			"provenance":       map[string]any{"created_by": "wire-test"},
+		}},
+		"run_id":         "run-wire-direct",
+		"request_intent": "universal_wire_processor_article_revision",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/wire/platform/publications/texture", bytes.NewReader(body))
+	req.Header.Set("X-Internal-Caller", "true")
+	req.Header.Set("X-Authenticated-User", platformOwner)
+	w := httptest.NewRecorder()
+	h.HandleInternalWirePlatformPublish(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "source_entities require body_doc") {
+		t.Fatalf("body = %s, want body_doc requirement", w.Body.String())
+	}
+	if platformCalled {
+		t.Fatalf("platformd was called for detached source_entities")
 	}
 }

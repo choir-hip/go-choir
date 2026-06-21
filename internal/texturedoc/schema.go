@@ -31,12 +31,14 @@ type Mark struct {
 }
 
 type SourceEntity struct {
-	SourceEntityID string                 `json:"source_entity_id"`
-	Target         SourceTarget           `json:"target"`
-	Selectors      []SourceSelector       `json:"selectors,omitempty"`
-	Display        SourceDisplay          `json:"display"`
-	Evidence       SourceEvidence         `json:"evidence"`
-	Provenance     SourceEntityProvenance `json:"provenance"`
+	SourceEntityID       string                 `json:"source_entity_id"`
+	Target               SourceTarget           `json:"target"`
+	Selectors            []SourceSelector       `json:"selectors,omitempty"`
+	Display              SourceDisplay          `json:"display"`
+	Evidence             SourceEvidence         `json:"evidence"`
+	Provenance           SourceEntityProvenance `json:"provenance"`
+	ReaderSnapshot       map[string]any         `json:"reader_snapshot,omitempty"`
+	ReaderSnapshotStatus map[string]any         `json:"reader_snapshot_status,omitempty"`
 }
 
 type SourceTarget struct {
@@ -61,15 +63,20 @@ type SourceDisplay struct {
 type SourceEvidence struct {
 	State               string   `json:"state"`
 	OpenSurface         string   `json:"open_surface"`
+	Relation            string   `json:"relation,omitempty"`
+	ResearchState       string   `json:"research_state,omitempty"`
+	Uncertainty         string   `json:"uncertainty,omitempty"`
 	ReaderArtifactState string   `json:"reader_artifact_state,omitempty"`
 	EvidenceRefs        []string `json:"evidence_refs,omitempty"`
 }
 
 type SourceEntityProvenance struct {
-	CreatedBy      string `json:"created_by"`
-	CreatedAt      string `json:"created_at,omitempty"`
-	SourceSystem   string `json:"source_system,omitempty"`
-	ImportArtifact string `json:"import_artifact,omitempty"`
+	CreatedBy           string `json:"created_by"`
+	CreatedAt           string `json:"created_at,omitempty"`
+	SourceSystem        string `json:"source_system,omitempty"`
+	ImportArtifact      string `json:"import_artifact,omitempty"`
+	RightsScope         string `json:"rights_scope,omitempty"`
+	UntrustedSourceText bool   `json:"untrusted_source_text,omitempty"`
 }
 
 type Validator struct {
@@ -360,9 +367,9 @@ func intAttr(node Node, key string) (int, bool) {
 
 func validSourceTargetKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "web_url", "source_service_item", "content_item", "image", "video", "audio", "pdf",
+	case "web_url", "url", "source_service_item", "content_item", "image", "video", "audio", "pdf",
 		"transcript", "texture_span", "publication_span", "source_viewer_artifact",
-		"reader_artifact", "file_artifact":
+		"reader_artifact", "file_artifact", "publication_version":
 		return true
 	default:
 		return false
@@ -383,6 +390,7 @@ func validSelectorKind(kind string) bool {
 		sourcecontract.SelectorKindTableCell,
 		sourcecontract.SelectorKindImageRegion,
 		sourcecontract.SelectorKindByteRange,
+		sourcecontract.SelectorKindDataVintage,
 		sourcecontract.SelectorKindSelectorSet:
 		return true
 	default:

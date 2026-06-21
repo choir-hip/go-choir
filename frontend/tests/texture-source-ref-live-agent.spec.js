@@ -37,40 +37,62 @@ test('live Texture agent preserves inline source ref anchors', async ({ desktopS
   await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
-      content: `# Source Ref Live Probe\n\nThis sentence cites [the source clip](source:src-live-youtube) and should keep that inline source anchor.`,
-      author_kind: 'user',
-      author_label: 'browser-test',
-      metadata: {
-        source_entities: [
-          {
-            entity_id: 'src-live-youtube',
-            kind: 'youtube_video',
-            label: 'Live YouTube source fixture',
-            target: {
-              target_kind: 'content_item',
+      content: '# Source Ref Live Probe\n\nThis sentence cites [1] and should keep that inline source anchor.',
+      body_doc: {
+        schema: 'choir.texture_doc.v1',
+        doc: {
+          type: 'doc',
+          attrs: { id: 'doc-live-source-ref' },
+          content: [
+            {
+              type: 'heading',
+              attrs: { id: 'h-live-source-ref', level: 1 },
+              content: [{ type: 'text', text: 'Source Ref Live Probe' }],
+            },
+            {
+              type: 'paragraph',
+              attrs: { id: 'p-live-source-ref' },
+              content: [
+                { type: 'text', text: 'This sentence cites ' },
+                { type: 'source_ref', attrs: { id: 'ref-live-youtube', source_entity_id: 'src-live-youtube', display_mode: 'numbered_ref', label: 'the source clip' } },
+                { type: 'text', text: ' and should keep that inline source anchor.' },
+              ],
+            },
+          ],
+        },
+      },
+      source_entities: [
+        {
+          source_entity_id: 'src-live-youtube',
+          target: {
+            kind: 'content_item',
+            id: 'src-live-youtube-content',
+            metadata: {
               url: sourceURL,
               canonical_url: sourceURL,
             },
-            selectors: [{ selector_kind: 'whole_resource' }],
-            display: {
-              inline_mode: 'chip',
-              expanded_mode: 'media_player',
-              open_surface: 'video',
-              default_collapsed: true,
-            },
-            evidence: {
-              state: 'available',
-              research_state: 'pending',
-              transcript_availability: 'unavailable',
-            },
-            provenance: {
-              created_by: 'browser-test',
-              rights_scope: 'private_user_source',
-              untrusted_source_text: true,
-            },
           },
-        ],
-      },
+          selectors: [{ kind: 'whole_resource' }],
+          display: {
+            mode: 'numbered_ref',
+            title: 'Live YouTube source fixture',
+            label: 'Live YouTube source fixture',
+          },
+          evidence: {
+            state: 'available',
+            open_surface: 'video',
+            research_state: 'pending',
+          },
+          provenance: {
+            created_by: 'browser-test',
+            rights_scope: 'private_user_source',
+            untrusted_source_text: true,
+          },
+        },
+      ],
+      author_kind: 'user',
+      author_label: 'browser-test',
+      metadata: {},
     }),
   });
 
@@ -87,7 +109,7 @@ test('live Texture agent preserves inline source ref anchors', async ({ desktopS
     const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`);
     return revisions.revisions.some((revision) =>
       revision.author_kind === 'appagent' &&
-      revision.content?.includes('[the source clip](source:src-live-youtube)')
+      revision.content?.includes('[1]')
     );
   }, { timeout: 180_000, intervals: [3000] }).toBe(true);
 });

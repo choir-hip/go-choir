@@ -56,54 +56,55 @@ func buildPublicationSourceMetadata(req PublishTextureRequest) (publicationSourc
 		}
 		metadata.ExportPolicy = export
 	}
-	if len(req.Metadata) == 0 {
-		metadata.MetadataHash = sha256Hex([]byte("{}"))
-		return metadata, nil
-	}
-	if !json.Valid(req.Metadata) {
-		return metadata, fmt.Errorf("metadata must be valid JSON")
-	}
-	metadata.MetadataHash = sha256Hex(req.Metadata)
-
+	metadata.MetadataHash = sha256Hex([]byte("{}"))
 	var revisionMetadata map[string]any
-	if err := json.Unmarshal(req.Metadata, &revisionMetadata); err != nil {
-		return metadata, fmt.Errorf("metadata must be a JSON object: %w", err)
-	}
-	if value, ok := revisionMetadata["access_policy"]; ok && len(req.AccessPolicy) == 0 {
-		raw, err := marshalJSONObject(value, "metadata.access_policy")
-		if err != nil {
-			return metadata, err
+	if len(req.Metadata) > 0 {
+		if !json.Valid(req.Metadata) {
+			return metadata, fmt.Errorf("metadata must be valid JSON")
 		}
-		metadata.AccessPolicy = raw
-	}
-	if value, ok := revisionMetadata["route_policy"]; ok && len(req.AccessPolicy) == 0 {
-		raw, err := marshalJSONObject(value, "metadata.route_policy")
-		if err != nil {
-			return metadata, err
+		metadata.MetadataHash = sha256Hex(req.Metadata)
+		if err := json.Unmarshal(req.Metadata, &revisionMetadata); err != nil {
+			return metadata, fmt.Errorf("metadata must be a JSON object: %w", err)
 		}
-		metadata.AccessPolicy = raw
-	}
-	if value, ok := revisionMetadata["export_policy"]; ok && len(req.ExportPolicy) == 0 {
-		raw, err := marshalJSONObject(value, "metadata.export_policy")
-		if err != nil {
-			return metadata, err
+		if value, ok := revisionMetadata["access_policy"]; ok && len(req.AccessPolicy) == 0 {
+			raw, err := marshalJSONObject(value, "metadata.access_policy")
+			if err != nil {
+				return metadata, err
+			}
+			metadata.AccessPolicy = raw
 		}
-		metadata.ExportPolicy = raw
+		if value, ok := revisionMetadata["route_policy"]; ok && len(req.AccessPolicy) == 0 {
+			raw, err := marshalJSONObject(value, "metadata.route_policy")
+			if err != nil {
+				return metadata, err
+			}
+			metadata.AccessPolicy = raw
+		}
+		if value, ok := revisionMetadata["export_policy"]; ok && len(req.ExportPolicy) == 0 {
+			raw, err := marshalJSONObject(value, "metadata.export_policy")
+			if err != nil {
+				return metadata, err
+			}
+			metadata.ExportPolicy = raw
+		}
+		if _, ok := revisionMetadata["source_entities"]; ok {
+			return metadata, fmt.Errorf("metadata.source_entities is legacy source identity; use top-level source_entities")
+		}
 	}
 
 	rawEntities, ok, err := publicationSourceEntityValues(req.SourceEntities)
 	if err != nil {
 		return metadata, err
 	}
-	if !ok {
-		rawEntities, ok = revisionMetadata["source_entities"]
-	}
 	if !ok || rawEntities == nil {
 		return metadata, nil
 	}
+	if strings.TrimSpace(string(req.BodyDoc)) == "" {
+		return metadata, fmt.Errorf("source_entities require body_doc source_ref/source_embed nodes")
+	}
 	entityValues, ok := rawEntities.([]any)
 	if !ok {
-		return metadata, fmt.Errorf("metadata.source_entities must be an array")
+		return metadata, fmt.Errorf("source_entities must be an array")
 	}
 	for _, value := range entityValues {
 		entity, transclusion, ok, err := normalizePublicationSourceEntity(value)
@@ -192,7 +193,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	)
 	entity = publicationSourceEntityInput{
 		SourceEntityID: entityID,
-		Kind:           firstString(m, "kind", "source_kind"),
+		Kind:           firstNonEmpty(firstString(m, "kind", "source_kind"), targetKind),
 		TargetKind:     targetKind,
 		TargetID:       targetID,
 		DisplayPolicy:  displayPolicy,
@@ -303,6 +304,11 @@ func normalizePublicationEvidenceState(value string) string {
 func normalizePublicationReaderSnapshotStatus(entity map[string]any) {
 	status := mapValue(entity["reader_snapshot_status"])
 	if len(status) == 0 {
+		if evidence := mapValue(entity["evidence"]); len(evidence) > 0 {
+			if state := sourcecontract.NormalizeReaderArtifactState(firstString(evidence, "reader_artifact_state")); state != "" {
+				entity["reader_snapshot_status"] = map[string]any{"state": state}
+			}
+		}
 		return
 	}
 	normalized := sourcecontract.NormalizeReaderArtifactState(firstString(status, "state"))

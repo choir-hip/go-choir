@@ -94,6 +94,10 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 			return
 		}
 	}
+	if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "source_entities require body_doc source_ref/source_embed nodes"})
+		return
+	}
 
 	recMeta := map[string]any{}
 	if len(req.RunMetadata) > 0 {
@@ -127,14 +131,15 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	enrichedMetadata, err := h.enrichTexturePublicationMetadata(r, sandboxURL, platformOwner, rev.Metadata)
+	enrichedSourceEntities, err := h.enrichTexturePublicationSourceEntities(r, sandboxURL, platformOwner, rev.SourceEntities)
 	if err != nil {
 		log.Printf("proxy: wire publish enrich metadata: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
 		return
 	}
+	revType.SourceEntities = enrichedSourceEntities
 
-	wireReq := wirepublish.BuildAutonomousPublishRequest(docType, revType, rec, enrichedMetadata)
+	wireReq := wirepublish.BuildAutonomousPublishRequest(docType, revType, rec, rev.Metadata)
 	platformReq := platform.PublishTextureRequest{
 		OwnerID:          wireReq.OwnerID,
 		SourceDocID:      wireReq.SourceDocID,
@@ -167,6 +172,14 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	go h.syncTextureToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title)
 
 	writeJSON(w, status, platformResp)
+}
+
+func textureSourceEntitiesRequireBodyDoc(sourceEntities, bodyDoc json.RawMessage) bool {
+	sourceEntitiesText := strings.TrimSpace(string(sourceEntities))
+	if sourceEntitiesText == "" || sourceEntitiesText == "null" || sourceEntitiesText == "[]" {
+		return false
+	}
+	return strings.TrimSpace(string(bodyDoc)) == ""
 }
 
 // sandboxRevisionEntry matches the sandbox /api/texture/revisions list item shape.

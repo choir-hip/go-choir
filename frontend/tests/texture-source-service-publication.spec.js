@@ -28,6 +28,74 @@ async function clearDesktopWindows(page) {
   });
 }
 
+function sourceRefBodyDoc({ docId, title, sourceEntityID, label, before, after = '', tail = '' }) {
+  const content = [
+    {
+      type: 'heading',
+      attrs: { id: `${docId}-h`, level: 1 },
+      content: [{ type: 'text', text: title }],
+    },
+    {
+      type: 'paragraph',
+      attrs: { id: `${docId}-p-source` },
+      content: [
+        { type: 'text', text: before },
+        { type: 'source_ref', attrs: { id: `${docId}-ref`, source_entity_id: sourceEntityID, display_mode: 'numbered_ref', label } },
+        ...(after ? [{ type: 'text', text: after }] : []),
+      ],
+    },
+  ];
+  if (tail) {
+    content.push({
+      type: 'paragraph',
+      attrs: { id: `${docId}-p-tail` },
+      content: [{ type: 'text', text: tail }],
+    });
+  }
+  return {
+    schema: 'choir.texture_doc.v1',
+    doc: {
+      type: 'doc',
+      attrs: { id: docId },
+      content,
+    },
+  };
+}
+
+function sourceEntity({
+  id,
+  title,
+  target,
+  selectors,
+  state = 'available',
+  openSurface = 'source',
+  relation = '',
+  researchState = '',
+  rightsScope = 'public_source',
+}) {
+  return {
+    source_entity_id: id,
+    target,
+    selectors,
+    display: {
+      mode: 'numbered_ref',
+      title,
+      label: title,
+    },
+    evidence: {
+      state,
+      open_surface: openSurface,
+      ...(relation ? { relation } : {}),
+      ...(researchState ? { research_state: researchState } : {}),
+    },
+    provenance: {
+      created_by: 'browser-test',
+      rights_scope: rightsScope,
+      untrusted_source_text: true,
+    },
+  };
+}
+
 test('publishes source-service source entities as expandable transclusions and canonical exports', async ({ desktopSession, browser }) => {
   const { page, baseURL } = desktopSession;
   await clearDesktopWindows(page);
@@ -45,57 +113,61 @@ test('publishes source-service source entities as expandable transclusions and c
   await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
-      content: `# ${title}\n\n${excerpt} [source](source:src-service-economy)\n\nA second sentence keeps the citation marker compact while metadata owns the source identity.`,
-      author_kind: 'user',
-      author_label: 'browser-test',
-      metadata: {
-        source_entities: [
-          {
-            entity_id: 'src-service-economy',
+      content: `# ${title}\n\n${excerpt} [1]\n\nA second sentence keeps the citation marker compact while the structured source entity owns the source identity.`,
+      body_doc: sourceRefBodyDoc({
+        docId: `doc-source-service-${Date.now()}`,
+        title,
+        sourceEntityID: 'src-service-economy',
+        label: sourceLabel,
+        before: `${excerpt} `,
+        tail: 'A second sentence keeps the citation marker compact while the structured source entity owns the source identity.',
+      }),
+      source_entities: [
+        sourceEntity({
+          id: 'src-service-economy',
+          title: sourceLabel,
+          target: {
             kind: 'source_service_item',
-            label: sourceLabel,
-            target: {
-              target_kind: 'source_service_item',
-              item_id: itemID,
+            id: itemID,
+            metadata: {
               source_id: sourceID,
               fetch_id: fetchID,
             },
-            selectors: [
-              {
-                selector_kind: 'text quote',
+          },
+          selectors: [
+            {
+              kind: 'text_quote',
+              data: {
+                exact: excerpt,
                 text_quote: excerpt,
                 content_hash: 'sha256-fixture-source-service-excerpt',
               },
-              {
-                selector_kind: 'table-range',
+            },
+            {
+              kind: 'table_range',
+              data: {
                 table_id: 'source-service-fixture-table',
                 start_row: 1,
                 end_row: 2,
               },
-              {
-                selector_kind: 'page range',
+            },
+            {
+              kind: 'page_range',
+              data: {
                 start_page: 3,
                 end_page: 4,
               },
-            ],
-            display: {
-              inline_mode: 'embedded_excerpt',
-              expanded_mode: 'source_card',
-              open_surface: 'source',
-              default_collapsed: false,
             },
-            evidence: {
-              state: 'confirms',
-              relation: 'confirms',
-              research_state: 'represented',
-            },
-            provenance: {
-              created_by: 'texture',
-              rights_scope: 'source_service_projection',
-              untrusted_source_text: true,
-            },
-          },
-        ],
+          ],
+          state: 'confirms',
+          relation: 'confirms',
+          researchState: 'represented',
+          rightsScope: 'source_service_projection',
+        }),
+      ],
+      author_kind: 'user',
+      author_label: 'browser-test',
+      metadata: {
         export_policy: {
           copy_allowed: true,
           download_allowed: true,
@@ -293,46 +365,43 @@ test('publishes public content-item sources with cleaned reader snapshots', asyn
   await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
-      content: `# ${title}\n\nThe proposal cites ethics guidance as an inspectable source [1](source:src-public-content). A following sentence keeps normal article flow beside the source note.`,
-      author_kind: 'user',
-      author_label: 'browser-test',
-      metadata: {
-        source_entities: [
-          {
-            entity_id: 'src-public-content',
-            kind: 'ethics_opinion',
-            label: 'ABA Formal Opinion 512 cleaned source',
-            target: {
-              target_kind: 'content_item',
-              content_id: contentItem.content_id,
+      content: `# ${title}\n\nThe proposal cites ethics guidance as an inspectable source [1]. A following sentence keeps normal article flow beside the source note.`,
+      body_doc: sourceRefBodyDoc({
+        docId: `doc-public-content-${stamp}`,
+        title,
+        sourceEntityID: 'src-public-content',
+        label: 'ABA Formal Opinion 512 cleaned source',
+        before: 'The proposal cites ethics guidance as an inspectable source ',
+        after: '. A following sentence keeps normal article flow beside the source note.',
+      }),
+      source_entities: [
+        sourceEntity({
+          id: 'src-public-content',
+          title: 'ABA Formal Opinion 512 cleaned source',
+          target: {
+            kind: 'content_item',
+            id: contentItem.content_id,
+            metadata: {
               url: contentItem.source_url,
               canonical_url: contentItem.canonical_url,
             },
-            selectors: [
-              {
-                selector_kind: 'text_quote',
-                text_quote: excerpt,
-                content_hash: contentItem.content_hash,
-              },
-            ],
-            display: {
-              inline_mode: 'embedded_excerpt',
-              expanded_mode: 'source_card',
-              open_surface: 'source',
-              default_collapsed: true,
-            },
-            evidence: {
-              state: 'available',
-              research_state: 'confirmed',
-            },
-            provenance: {
-              created_by: 'browser-test',
-              rights_scope: 'public_source',
-              untrusted_source_text: true,
-            },
           },
-        ],
-      },
+          selectors: [{
+            kind: 'text_quote',
+            data: {
+              exact: excerpt,
+              text_quote: excerpt,
+              content_hash: contentItem.content_hash,
+            },
+          }],
+          state: 'available',
+          researchState: 'confirmed',
+          rightsScope: 'public_source',
+        }),
+      ],
+      author_kind: 'user',
+      author_label: 'browser-test',
+      metadata: {},
     }),
   });
 
@@ -408,44 +477,39 @@ test('publishes public URL-backed sources with reader snapshots for guests', asy
   await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
     method: 'POST',
     body: JSON.stringify({
-      content: `# ${title}\n\nThe publication path imports a public URL-backed source snapshot [1](source:src-public-url).`,
+      content: `# ${title}\n\nThe publication path imports a public URL-backed source snapshot [1].`,
+      body_doc: sourceRefBodyDoc({
+        docId: `doc-public-url-${stamp}`,
+        title,
+        sourceEntityID: 'src-public-url',
+        label: sourceLabel,
+        before: 'The publication path imports a public URL-backed source snapshot ',
+        after: '.',
+      }),
+      source_entities: [
+        sourceEntity({
+          id: 'src-public-url',
+          title: sourceLabel,
+          target: {
+            kind: 'url',
+            uri: sourceURL,
+          },
+          selectors: [{
+            kind: 'text_quote',
+            data: {
+              exact: excerpt,
+              text_quote: excerpt,
+            },
+          }],
+          state: 'confirms',
+          relation: 'confirms',
+          researchState: 'owner_supplied',
+          rightsScope: 'public_url_snapshot',
+        }),
+      ],
       author_kind: 'user',
       author_label: 'browser-test',
       metadata: {
-        source_entities: [
-          {
-            entity_id: 'src-public-url',
-            kind: 'web_source',
-            label: sourceLabel,
-            target: {
-              target_kind: 'url',
-              url: sourceURL,
-              canonical_url: sourceURL,
-            },
-            selectors: [
-              {
-                selector_kind: 'text_quote',
-                text_quote: excerpt,
-              },
-            ],
-            display: {
-              inline_mode: 'embedded_excerpt',
-              expanded_mode: 'source_card',
-              open_surface: 'source',
-              default_collapsed: true,
-            },
-            evidence: {
-              state: 'confirms',
-              relation: 'confirms',
-              research_state: 'owner_supplied',
-            },
-            provenance: {
-              created_by: 'browser-test',
-              rights_scope: 'public_url_snapshot',
-              untrusted_source_text: true,
-            },
-          },
-        ],
         export_policy: {
           copy_allowed: true,
           download_allowed: true,

@@ -160,7 +160,12 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		h.lifecycle.record("platform_publish.private_read", "revision_mismatch", time.Since(started))
 		return
 	}
-	enrichedMetadata, err := h.enrichTexturePublicationMetadata(r, sandboxURL, authResult.UserID, rev.Metadata)
+	if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "source_entities require body_doc source_ref/source_embed nodes"})
+		h.lifecycle.record("platform_publish.private_read", "detached_source_entities", time.Since(started))
+		return
+	}
+	enrichedSourceEntities, err := h.enrichTexturePublicationSourceEntities(r, sandboxURL, authResult.UserID, rev.SourceEntities)
 	if err != nil {
 		log.Printf("proxy: platform publish enrich source metadata: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
@@ -183,9 +188,9 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		Title:            doc.Title,
 		Content:          rev.Content,
 		BodyDoc:          rev.BodyDoc,
-		SourceEntities:   rev.SourceEntities,
+		SourceEntities:   enrichedSourceEntities,
 		Citations:        rev.Citations,
-		Metadata:         enrichedMetadata,
+		Metadata:         rev.Metadata,
 		Slug:             req.Slug,
 		AccessPolicy:     req.AccessPolicy,
 		ExportPolicy:     req.ExportPolicy,
@@ -237,6 +242,9 @@ func (h *Handler) gatherTextureRevisionHistory(r *http.Request, sandboxURL, user
 		if rev.OwnerID != "" && rev.OwnerID != userID {
 			return nil, fmt.Errorf("revision %s does not belong to authenticated user", rev.RevisionID)
 		}
+		if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
+			return nil, fmt.Errorf("revision %s source_entities require body_doc source_ref/source_embed nodes", rev.RevisionID)
+		}
 		history = append(history, platform.PublishTextureRevision{
 			RevisionID:       rev.RevisionID,
 			ParentRevisionID: rev.ParentRevisionID,
@@ -270,16 +278,15 @@ func validateOptionalJSONObject(raw json.RawMessage, label string) error {
 	return nil
 }
 
-func (h *Handler) enrichTexturePublicationMetadata(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
+func (h *Handler) enrichTexturePublicationSourceEntities(r *http.Request, sandboxURL, userID string, raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 {
 		return raw, nil
 	}
-	var metadata map[string]any
-	if err := json.Unmarshal(raw, &metadata); err != nil {
+	var entities []any
+	if err := json.Unmarshal(raw, &entities); err != nil {
 		return raw, nil
 	}
-	entities, ok := metadata["source_entities"].([]any)
-	if !ok || len(entities) == 0 {
+	if len(entities) == 0 {
 		return raw, nil
 	}
 	changed := false
@@ -340,9 +347,9 @@ func (h *Handler) enrichTexturePublicationMetadata(r *http.Request, sandboxURL, 
 	if !changed {
 		return raw, nil
 	}
-	out, err := json.Marshal(metadata)
+	out, err := json.Marshal(entities)
 	if err != nil {
-		return nil, fmt.Errorf("marshal enriched metadata: %w", err)
+		return nil, fmt.Errorf("marshal enriched source_entities: %w", err)
 	}
 	return out, nil
 }
@@ -445,6 +452,11 @@ func contentItemAllowsPublishedSnapshot(item sandboxContentItem) bool {
 
 func sourceEntityContentID(entity map[string]any) string {
 	target := mapValue(entity["target"])
+	if strings.TrimSpace(stringValue(target["kind"])) == "content_item" {
+		if id := strings.TrimSpace(stringValue(target["id"])); id != "" {
+			return id
+		}
+	}
 	return firstNonEmptyString(
 		stringValue(target["content_id"]),
 		stringValue(target["content_item_id"]),
@@ -456,6 +468,7 @@ func sourceEntityContentID(entity map[string]any) string {
 func sourceEntityTargetURL(entity map[string]any) string {
 	target := mapValue(entity["target"])
 	return firstNonEmptyString(
+		stringValue(target["uri"]),
 		stringValue(target["canonical_url"]),
 		stringValue(target["url"]),
 		stringValue(entity["canonical_url"]),
@@ -472,6 +485,7 @@ func sourceEntityImportQuery(entity map[string]any) string {
 		stringValue(display["title"]),
 		stringValue(display["label"]),
 		stringValue(target["title"]),
+		stringValue(entity["source_entity_id"]),
 		stringValue(entity["entity_id"]),
 	)
 }

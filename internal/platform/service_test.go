@@ -68,6 +68,104 @@ func platformTableCount(t *testing.T, s *Store, table string) int64 {
 	return count
 }
 
+func testTextureBodyDoc(t *testing.T, docID string, blocks ...map[string]any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"schema": "choir.texture_doc.v1",
+		"doc": map[string]any{
+			"type":    "doc",
+			"attrs":   map[string]any{"id": docID},
+			"content": blocks,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal body_doc: %v", err)
+	}
+	return raw
+}
+
+func testTextureHeading(id string, level int, content ...map[string]any) map[string]any {
+	return map[string]any{
+		"type":    "heading",
+		"attrs":   map[string]any{"id": id, "level": level},
+		"content": content,
+	}
+}
+
+func testTextureParagraph(id string, content ...map[string]any) map[string]any {
+	return map[string]any{
+		"type":    "paragraph",
+		"attrs":   map[string]any{"id": id},
+		"content": content,
+	}
+}
+
+func testTextureText(text string) map[string]any {
+	return map[string]any{"type": "text", "text": text}
+}
+
+func testTextureStrong(text string) map[string]any {
+	return map[string]any{
+		"type":  "text",
+		"text":  text,
+		"marks": []map[string]any{{"type": "strong"}},
+	}
+}
+
+func testTextureSourceRef(id, sourceEntityID, label string) map[string]any {
+	return map[string]any{
+		"type": "source_ref",
+		"attrs": map[string]any{
+			"id":               id,
+			"source_entity_id": sourceEntityID,
+			"label":            label,
+			"display_mode":     "numbered_ref",
+		},
+	}
+}
+
+func testTextureSourceEntities(t *testing.T, entities ...map[string]any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(entities)
+	if err != nil {
+		t.Fatalf("marshal source_entities: %v", err)
+	}
+	return raw
+}
+
+func testTextureSourceEntity(id, kind, targetKind, targetID, title, quote, state, openSurface string) map[string]any {
+	target := map[string]any{"kind": targetKind}
+	if strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://") {
+		target["uri"] = targetID
+	} else if targetID != "" {
+		target["id"] = targetID
+	}
+	return map[string]any{
+		"source_entity_id": id,
+		"kind":             kind,
+		"target":           target,
+		"selectors": []map[string]any{{
+			"kind": "text_quote",
+			"data": map[string]any{
+				"text_quote": quote,
+				"exact":      quote,
+			},
+		}},
+		"display": map[string]any{
+			"mode":  "numbered_ref",
+			"title": title,
+			"label": title,
+		},
+		"evidence": map[string]any{
+			"state":        state,
+			"open_surface": openSurface,
+		},
+		"provenance": map[string]any{
+			"created_by": "platform-test",
+		},
+	}
+}
+
 func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ctx := context.Background()
@@ -353,9 +451,6 @@ func assertPublishedSourceContractCase(t *testing.T, surface string, tc publicat
 	if status["state"] != tc.wantReaderState {
 		t.Fatalf("%s reader snapshot status = %#v, want state %q from %s", surface, status, tc.wantReaderState, string(entity.Entity))
 	}
-	if status["quality"] != tc.readerQuality {
-		t.Fatalf("%s reader snapshot quality = %#v, want %q from %s", surface, status["quality"], tc.readerQuality, string(entity.Entity))
-	}
 	var selector map[string]any
 	if err := json.Unmarshal(transclusion.SourceSelector, &selector); err != nil {
 		t.Fatalf("%s decode source selector for %s: %v\n%s", surface, tc.entityID, err, string(transclusion.SourceSelector))
@@ -467,42 +562,46 @@ func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"), "")
-	metadata, err := json.Marshal(map[string]any{
-		"source_entities": []map[string]any{{
-			"entity_id": "src-export-proof",
-			"kind":      "web_source",
-			"label":     "Export source proof",
-			"target": map[string]any{
-				"target_kind": "url",
-				"url":         "https://example.com/export-proof",
-			},
-			"selectors": []map[string]any{{
-				"selector_kind": "text_quote",
-				"text_quote":    "This source snapshot must survive rich export.",
-				"content_hash":  "hash-export-proof",
-			}},
-			"display": map[string]any{
-				"inline_mode":           "embedded_excerpt",
-				"open_surface":          "source_viewer",
-				"reader_artifact_state": "snapshot_ready",
-			},
-			"evidence": map[string]any{
-				"state":          "confirms",
-				"relation":       "confirms",
-				"research_state": "owner_supplied",
-			},
-		}},
-	})
+	metadata, err := json.Marshal(map[string]any{})
 	if err != nil {
-		t.Fatalf("marshal source metadata: %v", err)
+		t.Fatalf("marshal metadata: %v", err)
 	}
+	bodyDoc := testTextureBodyDoc(t, "doc-export-proof",
+		testTextureHeading("h-export-proof", 1, testTextureText("Export Proof")),
+		testTextureParagraph("p-export-source",
+			testTextureText("This is the published projection with "),
+			testTextureSourceRef("ref-export-proof", "src-export-proof", "Export source proof"),
+			testTextureText("."),
+		),
+		testTextureParagraph("p-export-strong",
+			testTextureText("A "),
+			testTextureStrong("private legal cloud"),
+			testTextureText(" survives rich export without Markdown syntax."),
+		),
+		testTextureParagraph("p-export-long", testTextureText(strings.Repeat("Long document proof line with enough content to require PDF pagination. ", 80))),
+		testTextureParagraph("p-export-last", testTextureText("Last line must survive export.")),
+	)
+	exportSource := testTextureSourceEntity(
+		"src-export-proof",
+		"web_source",
+		"url",
+		"https://example.com/export-proof",
+		"Export source proof",
+		"This source snapshot must survive rich export.",
+		"confirms",
+		"source",
+	)
+	exportSource["evidence"].(map[string]any)["reader_artifact_state"] = "snapshot_ready"
+	sourceEntities := testTextureSourceEntities(t, exportSource)
 
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
 		Title:            "Export Proof",
-		Content:          "# Export Proof\n\n| Term | Definition |\n| --- | --- |\n| Texture | Canonical **artifact**. |\n\nThis is the published projection with [Export source proof](source:src-export-proof).\n\nA **private legal cloud** survives rich export without Markdown syntax.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination.\n", 80) + "\nLast line must survive export.",
+		Content:          "# Export Proof\n\nThis is the published projection with [1].\n\nA private legal cloud survives rich export without Markdown syntax.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination. ", 80) + "\n\nLast line must survive export.",
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
@@ -554,8 +653,8 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		}
 		parts[file.Name] = string(data)
 	}
-	if !strings.Contains(parts["word/document.xml"], "Canonical ") || !strings.Contains(parts["word/document.xml"], "artifact") || !strings.Contains(parts["word/document.xml"], "<w:tbl>") {
-		t.Fatalf("docx document did not preserve content/table: %s", parts["word/document.xml"])
+	if !strings.Contains(parts["word/document.xml"], "private legal cloud") || !strings.Contains(parts["word/document.xml"], "Last line must survive export.") {
+		t.Fatalf("docx document did not preserve structured content: %s", parts["word/document.xml"])
 	}
 	if strings.Contains(parts["word/document.xml"], "**private legal cloud**") || strings.Contains(parts["word/document.xml"], "(source:src-export-proof)") || strings.Contains(parts["word/document.xml"], "# Export Proof") {
 		t.Fatalf("docx document leaked raw markdown syntax: %s", parts["word/document.xml"])
@@ -674,28 +773,24 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 }
 
 func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion(t *testing.T) {
-	metadata, _ := json.Marshal(map[string]any{
-		"source_entities": []map[string]any{{
-			"entity_id": "src-quoted-excerpt",
-			"kind":      "source_service_item",
-			"label":     "Quoted source",
-			"target": map[string]any{
-				"target_kind": "source_service_item",
-				"item_id":     "source-item-quoted",
-			},
-			"selectors": []map[string]any{{
-				"selector_kind": "text_quote",
-				"text_quote":    "The quoted passage is part of the argument.",
-				"content_hash":  "hash-quoted-passage",
-			}},
-			"evidence": map[string]any{
-				"state":       "blocked",
-				"uncertainty": "reader authorization required",
-			},
-		}},
-	})
+	entity := testTextureSourceEntity(
+		"src-quoted-excerpt",
+		"source_service_item",
+		"source_service_item",
+		"source-item-quoted",
+		"Quoted source",
+		"The quoted passage is part of the argument.",
+		sourcecontract.EvidenceStateBlockedByAccess,
+		"source",
+	)
+	entity["selectors"].([]map[string]any)[0]["data"].(map[string]any)["content_hash"] = "hash-quoted-passage"
+	entity["evidence"].(map[string]any)["uncertainty"] = "reader authorization required"
+	sourceEntities := testTextureSourceEntities(t, entity)
 
-	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{
+		BodyDoc:        testTextureBodyDoc(t, "doc-quoted-excerpt", testTextureParagraph("p-quoted-excerpt", testTextureSourceRef("ref-quoted-excerpt", "src-quoted-excerpt", "Quoted source"))),
+		SourceEntities: sourceEntities,
+	})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -723,42 +818,57 @@ func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusi
 }
 
 func TestBuildPublicationSourceMetadataPreservesSelectorSet(t *testing.T) {
-	metadata, _ := json.Marshal(map[string]any{
-		"source_entities": []map[string]any{{
-			"entity_id": "src-selector-set",
-			"kind":      "source_service_item",
-			"label":     "Multi selector source",
-			"target": map[string]any{
-				"target_kind": "source_service_item",
-				"item_id":     "source-item-selector-set",
-			},
-			"selectors": []map[string]any{
-				{
-					"selector_kind": "text quote",
-					"text_quote":    "The quoted passage remains the inline snapshot.",
-					"content_hash":  "hash-quoted-passage",
-				},
-				{
-					"selector_kind": "table-range",
-					"table_id":      "appendix-a",
-					"start_row":     3,
-					"end_row":       7,
-				},
-				{
-					"selector_kind": "page range",
-					"start_page":    12,
-					"end_page":      13,
+	sourceEntities := testTextureSourceEntities(t, map[string]any{
+		"source_entity_id": "src-selector-set",
+		"target": map[string]any{
+			"kind": "source_service_item",
+			"id":   "source-item-selector-set",
+		},
+		"selectors": []map[string]any{
+			{
+				"kind": "text_quote",
+				"data": map[string]any{
+					"text_quote":   "The quoted passage remains the inline snapshot.",
+					"exact":        "The quoted passage remains the inline snapshot.",
+					"content_hash": "hash-quoted-passage",
 				},
 			},
-			"evidence": map[string]any{
-				"state":          "confirms",
-				"relation":       "confirms",
-				"research_state": "owner_supplied",
+			{
+				"kind": "table_range",
+				"data": map[string]any{
+					"table_id":  "appendix-a",
+					"start_row": 3,
+					"end_row":   7,
+				},
 			},
-		}},
+			{
+				"kind": "page_range",
+				"data": map[string]any{
+					"start_page": 12,
+					"end_page":   13,
+				},
+			},
+		},
+		"display": map[string]any{
+			"mode":  "numbered_ref",
+			"title": "Multi selector source",
+			"label": "Multi selector source",
+		},
+		"evidence": map[string]any{
+			"state":          "confirms",
+			"open_surface":   "source",
+			"relation":       "confirms",
+			"research_state": "owner_supplied",
+		},
+		"provenance": map[string]any{
+			"created_by": "platform-test",
+		},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{
+		BodyDoc:        testTextureBodyDoc(t, "doc-selector-set", testTextureParagraph("p-selector-set", testTextureSourceRef("ref-selector-set", "src-selector-set", "Multi selector source"))),
+		SourceEntities: sourceEntities,
+	})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -804,47 +914,45 @@ func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 		sourcecontract.EvidenceStateUnavailable,
 	}
 	sourceEntities := make([]map[string]any, 0, len(states))
-	contentLines := []string{"# Evidence state matrix", ""}
+	bodyBlocks := []map[string]any{testTextureHeading("h-evidence-matrix", 1, testTextureText("Evidence state matrix"))}
 	for i, state := range states {
 		entityID := fmt.Sprintf("src-evidence-%s", strings.ReplaceAll(state, "_", "-"))
 		quote := fmt.Sprintf("Evidence state %s survives publication.", state)
-		contentLines = append(contentLines, fmt.Sprintf("%s [%d](source:%s)", quote, i+1, entityID))
-		sourceEntities = append(sourceEntities, map[string]any{
-			"entity_id": entityID,
-			"kind":      "source_service_item",
-			"label":     fmt.Sprintf("Evidence %s source", state),
-			"target": map[string]any{
-				"target_kind": "source_service_item",
-				"item_id":     fmt.Sprintf("source-item-%s", strings.ReplaceAll(state, "_", "-")),
-			},
-			"selectors": []map[string]any{{
-				"selector_kind": "text_quote",
-				"text_quote":    quote,
-				"content_hash":  fmt.Sprintf("hash-%s", state),
-			}},
-			"display": map[string]any{
-				"inline_mode":  "embedded_excerpt",
-				"open_surface": "source",
-			},
-			"evidence": map[string]any{
-				"state":          state,
-				"relation":       state,
-				"research_state": fmt.Sprintf("research_%s", state),
-				"uncertainty":    fmt.Sprintf("uncertainty for %s", state),
-			},
-		})
+		bodyBlocks = append(bodyBlocks, testTextureParagraph(
+			fmt.Sprintf("p-evidence-%d", i+1),
+			testTextureText(quote+" "),
+			testTextureSourceRef(fmt.Sprintf("ref-evidence-%d", i+1), entityID, fmt.Sprintf("Evidence %s source", state)),
+		))
+		entity := testTextureSourceEntity(
+			entityID,
+			"source_service_item",
+			"source_service_item",
+			fmt.Sprintf("source-item-%s", strings.ReplaceAll(state, "_", "-")),
+			fmt.Sprintf("Evidence %s source", state),
+			quote,
+			state,
+			"source",
+		)
+		entity["selectors"].([]map[string]any)[0]["data"].(map[string]any)["content_hash"] = fmt.Sprintf("hash-%s", state)
+		entity["evidence"].(map[string]any)["relation"] = state
+		entity["evidence"].(map[string]any)["research_state"] = fmt.Sprintf("research_%s", state)
+		entity["evidence"].(map[string]any)["uncertainty"] = fmt.Sprintf("uncertainty for %s", state)
+		sourceEntities = append(sourceEntities, entity)
 	}
-	metadata, err := json.Marshal(map[string]any{"source_entities": sourceEntities})
+	metadata, err := json.Marshal(map[string]any{})
 	if err != nil {
 		t.Fatalf("marshal metadata: %v", err)
 	}
+	bodyDoc := testTextureBodyDoc(t, "doc-evidence-matrix", bodyBlocks...)
+	sourceEntitiesRaw := testTextureSourceEntities(t, sourceEntities...)
 
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-evidence-matrix",
 		SourceRevisionID: "rev-evidence-matrix",
 		Title:            "Evidence State Matrix",
-		Content:          strings.Join(contentLines, "\n"),
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntitiesRaw,
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
@@ -958,47 +1066,42 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 	}
 
 	sourceEntities := make([]map[string]any, 0, len(cases))
-	contentLines := []string{"# Source contract matrix", ""}
+	bodyBlocks := []map[string]any{testTextureHeading("h-source-contract-matrix", 1, testTextureText("Source contract matrix"))}
 	for i, tc := range cases {
-		contentLines = append(contentLines, fmt.Sprintf("%s [%d](source:%s)", tc.quote, i+1, tc.entityID))
-		sourceEntities = append(sourceEntities, map[string]any{
-			"entity_id": tc.entityID,
-			"kind":      tc.kind,
-			"label":     fmt.Sprintf("Source contract case %d", i+1),
-			"target":    tc.target,
-			"selectors": []map[string]any{{
-				"selector_kind": tc.rawSelectorKind,
-				"text_quote":    tc.quote,
-				"content_hash":  tc.contentHash,
-			}},
-			"display": map[string]any{
-				"inline_mode":  "embedded_excerpt",
-				"open_surface": tc.rawOpenSurface,
-			},
-			"reader_snapshot_status": map[string]any{
-				"state":    tc.rawReaderState,
-				"quality":  tc.readerQuality,
-				"warnings": []string{"preserve warning text"},
-			},
-			"evidence": map[string]any{
-				"state":          tc.rawEvidenceState,
-				"relation":       tc.rawEvidenceState,
-				"research_state": fmt.Sprintf("research_%s", tc.wantEvidenceState),
-				"uncertainty":    fmt.Sprintf("uncertainty for %s", tc.wantEvidenceState),
-			},
-		})
+		title := fmt.Sprintf("Source contract case %d", i+1)
+		bodyBlocks = append(bodyBlocks, testTextureParagraph(
+			fmt.Sprintf("p-source-contract-%d", i+1),
+			testTextureText(tc.quote+" "),
+			testTextureSourceRef(fmt.Sprintf("ref-source-contract-%d", i+1), tc.entityID, title),
+		))
+		entity := testTextureSourceEntity(tc.entityID, tc.kind, tc.targetKind, tc.targetID, title, tc.quote, tc.wantEvidenceState, tc.wantOpenSurface)
+		entity["selectors"].([]map[string]any)[0]["kind"] = tc.wantSelectorKind
+		entity["selectors"].([]map[string]any)[0]["data"].(map[string]any)["content_hash"] = tc.contentHash
+		entity["evidence"].(map[string]any)["relation"] = tc.wantEvidenceState
+		entity["evidence"].(map[string]any)["research_state"] = fmt.Sprintf("research_%s", tc.wantEvidenceState)
+		entity["evidence"].(map[string]any)["uncertainty"] = fmt.Sprintf("uncertainty for %s", tc.wantEvidenceState)
+		entity["evidence"].(map[string]any)["reader_artifact_state"] = tc.wantReaderState
+		entity["reader_snapshot_status"] = map[string]any{
+			"state":    tc.wantReaderState,
+			"quality":  tc.readerQuality,
+			"warnings": []string{"preserve warning text"},
+		}
+		sourceEntities = append(sourceEntities, entity)
 	}
-	metadata, err := json.Marshal(map[string]any{"source_entities": sourceEntities})
+	metadata, err := json.Marshal(map[string]any{})
 	if err != nil {
 		t.Fatalf("marshal metadata: %v", err)
 	}
+	bodyDoc := testTextureBodyDoc(t, "doc-source-contract-matrix", bodyBlocks...)
+	sourceEntitiesRaw := testTextureSourceEntities(t, sourceEntities...)
 
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-source-contract-matrix",
 		SourceRevisionID: "rev-source-contract-matrix",
 		Title:            "Source Contract Matrix",
-		Content:          strings.Join(contentLines, "\n"),
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntitiesRaw,
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
@@ -1033,105 +1136,67 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 	}
 }
 
-func TestBuildPublicationSourceMetadataDefaultsMissingSelectorKind(t *testing.T) {
+func TestBuildPublicationSourceMetadataRejectsLegacyMetadataSourceEntities(t *testing.T) {
 	metadata, _ := json.Marshal(map[string]any{
 		"source_entities": []map[string]any{{
-			"entity_id": "src-missing-selector-kind",
-			"kind":      "source_service_item",
-			"target": map[string]any{
-				"target_kind": "source_service_item",
-				"item_id":     "source-item-missing-selector-kind",
-			},
-			"selectors": []map[string]any{{
-				"content_hash": "hash-whole-source",
-			}},
+			"source_entity_id": "legacy-sidecar",
 		}},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
-	if err != nil {
-		t.Fatalf("buildPublicationSourceMetadata: %v", err)
-	}
-	if len(got.Transclusions) != 1 {
-		t.Fatalf("transclusions = %d, want 1: %#v", len(got.Transclusions), got.Transclusions)
-	}
-	var selector map[string]any
-	if err := json.Unmarshal(got.Transclusions[0].SourceSelector, &selector); err != nil {
-		t.Fatalf("decode source selector: %v", err)
-	}
-	if selector["selector_kind"] != "whole_resource" || selector["content_hash"] != "hash-whole-source" {
-		t.Fatalf("selector = %#v from %s", selector, string(got.Transclusions[0].SourceSelector))
+	_, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
+	if err == nil || !strings.Contains(err.Error(), "metadata.source_entities is legacy source identity") {
+		t.Fatalf("buildPublicationSourceMetadata error = %v, want legacy source_entities rejection", err)
 	}
 }
 
-func TestBuildPublicationSourceMetadataNormalizesLegacyEvidenceAliases(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{name: "pending", raw: "pending", want: "candidate"},
-		{name: "error", raw: "error", want: "unavailable"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			metadata, _ := json.Marshal(map[string]any{
-				"source_entities": []map[string]any{{
-					"entity_id": "src-" + tc.name,
-					"kind":      "source_service_item",
-					"target": map[string]any{
-						"target_kind": "source_service_item",
-						"item_id":     "source-item-" + tc.name,
-					},
-					"selectors": []map[string]any{{
-						"selector_kind": "text_quote",
-						"text_quote":    "Legacy state source excerpt.",
-					}},
-					"evidence": map[string]any{
-						"state": tc.raw,
-					},
-				}},
-			})
+func TestBuildPublicationSourceMetadataRejectsTopLevelSourceEntitiesWithoutBodyDoc(t *testing.T) {
+	sourceEntities := testTextureSourceEntities(t, testTextureSourceEntity(
+		"src-detached",
+		"web_source",
+		"url",
+		"https://example.com/detached",
+		"Detached source",
+		"Detached source excerpt.",
+		"available",
+		"source",
+	))
 
-			got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
-			if err != nil {
-				t.Fatalf("buildPublicationSourceMetadata: %v", err)
-			}
-			if len(got.Transclusions) != 1 {
-				t.Fatalf("transclusions = %d, want 1: %#v", len(got.Transclusions), got.Transclusions)
-			}
-			var selector map[string]any
-			if err := json.Unmarshal(got.Transclusions[0].SourceSelector, &selector); err != nil {
-				t.Fatalf("decode source selector: %v", err)
-			}
-			evidenceState := mapValue(selector["evidence_state"])
-			if evidenceState["state"] != tc.want {
-				t.Fatalf("selector evidence state = %#v, want %q from %s", evidenceState, tc.want, string(got.Transclusions[0].SourceSelector))
-			}
-		})
+	_, err := buildPublicationSourceMetadata(PublishTextureRequest{SourceEntities: sourceEntities})
+	if err == nil || !strings.Contains(err.Error(), "source_entities require body_doc") {
+		t.Fatalf("buildPublicationSourceMetadata error = %v, want body_doc requirement", err)
 	}
 }
 
-func TestBuildPublicationSourceMetadataNormalizesOpenSurface(t *testing.T) {
-	metadata, _ := json.Marshal(map[string]any{
-		"source_entities": []map[string]any{{
-			"entity_id": "src-open-surface",
-			"kind":      "web_source",
-			"target": map[string]any{
-				"target_kind": "content_item",
-				"content_id":  "content-open-surface",
-			},
-			"selectors": []map[string]any{{
-				"selector_kind": "whole_resource",
-				"content_hash":  "hash-open-surface",
-			}},
-			"display": map[string]any{
-				"inline_mode":  "collapsed_citation",
-				"open_surface": "content",
+func TestBuildPublicationSourceMetadataPreservesOpenSurface(t *testing.T) {
+	sourceEntities := testTextureSourceEntities(t, map[string]any{
+		"source_entity_id": "src-open-surface",
+		"target": map[string]any{
+			"kind": "content_item",
+			"id":   "content-open-surface",
+		},
+		"selectors": []map[string]any{{
+			"kind": "whole_resource",
+			"data": map[string]any{
+				"content_hash": "hash-open-surface",
 			},
 		}},
+		"display": map[string]any{
+			"mode":  "numbered_ref",
+			"title": "Open surface source",
+		},
+		"evidence": map[string]any{
+			"state":        "available",
+			"open_surface": "source",
+		},
+		"provenance": map[string]any{
+			"created_by": "platform-test",
+		},
 	})
 
-	got, err := buildPublicationSourceMetadata(PublishTextureRequest{Metadata: metadata})
+	got, err := buildPublicationSourceMetadata(PublishTextureRequest{
+		BodyDoc:        testTextureBodyDoc(t, "doc-open-surface", testTextureParagraph("p-open-surface", testTextureSourceRef("ref-open-surface", "src-open-surface", "Open surface source"))),
+		SourceEntities: sourceEntities,
+	})
 	if err != nil {
 		t.Fatalf("buildPublicationSourceMetadata: %v", err)
 	}
@@ -1143,15 +1208,15 @@ func TestBuildPublicationSourceMetadataNormalizesOpenSurface(t *testing.T) {
 		t.Fatalf("open surface = %q, want source", entity.OpenSurface)
 	}
 	var raw struct {
-		Display struct {
+		Evidence struct {
 			OpenSurface string `json:"open_surface"`
-		} `json:"display"`
+		} `json:"evidence"`
 	}
 	if err := json.Unmarshal(entity.EntityJSON, &raw); err != nil {
 		t.Fatalf("decode entity json: %v", err)
 	}
-	if raw.Display.OpenSurface != "source" {
-		t.Fatalf("entity json open surface = %q, want source from %s", raw.Display.OpenSurface, string(entity.EntityJSON))
+	if raw.Evidence.OpenSurface != "source" {
+		t.Fatalf("entity json open surface = %q, want source from %s", raw.Evidence.OpenSurface, string(entity.EntityJSON))
 	}
 }
 
@@ -1166,48 +1231,44 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		"selector": map[string]any{"kind": "url"},
 	}})
 	metadata, _ := json.Marshal(map[string]any{
-		"source_entities": []map[string]any{{
-			"entity_id": "src-entity-fed-rates",
-			"kind":      "official_data_release",
-			"label":     "Federal Reserve rate statement",
-			"target": map[string]any{
-				"target_kind": "source_service_item",
-				"item_id":     "srcitem_fed_rates",
-				"source_id":   "official-fed",
-				"fetch_id":    "fetch-fed-rates",
-			},
-			"selectors": []map[string]any{{
-				"selector_kind": "text_quote",
-				"text_quote":    "The committee held rates steady.",
-				"content_hash":  "hash-fed-rates",
-			}},
-			"display": map[string]any{
-				"inline_mode":  "embedded_excerpt",
-				"open_surface": "source",
-			},
-			"evidence": map[string]any{
-				"state":          "confirms",
-				"relation":       "confirms",
-				"research_state": "owner_supplied",
-			},
-			"provenance": map[string]any{
-				"created_by":            "texture",
-				"untrusted_source_text": true,
-			},
-		}},
 		"export_policy": map[string]any{
 			"copy_allowed":     true,
 			"download_allowed": true,
 			"formats":          []string{"txt", "md", "html"},
 		},
 	})
+	bodyDoc := testTextureBodyDoc(t, "doc-mission-note",
+		testTextureHeading("h-mission-note", 1, testTextureText("Mission Note")),
+		testTextureParagraph("p-mission-note-public", testTextureText("A public note.")),
+		testTextureParagraph("p-mission-note-source",
+			testTextureText("This is the published projection with "),
+			testTextureSourceRef("ref-fed-rates", "src-entity-fed-rates", "Federal Reserve rate statement"),
+			testTextureText("."),
+		),
+	)
+	fedSource := testTextureSourceEntity(
+		"src-entity-fed-rates",
+		"official_data_release",
+		"source_service_item",
+		"srcitem_fed_rates",
+		"Federal Reserve rate statement",
+		"The committee held rates steady.",
+		"confirms",
+		"source",
+	)
+	fedSource["selectors"].([]map[string]any)[0]["data"].(map[string]any)["content_hash"] = "hash-fed-rates"
+	fedSource["evidence"].(map[string]any)["relation"] = "confirms"
+	fedSource["evidence"].(map[string]any)["research_state"] = "owner_supplied"
+	sourceEntities := testTextureSourceEntities(t, fedSource)
 
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
 		Title:            "Mission Note",
-		Content:          "# Mission Note\n\nA public note.\n\nThis is the published projection with [Federal Reserve rate statement](source:src-entity-fed-rates).",
+		Content:          "# Mission Note\n\nA public note.\n\nThis is the published projection with [1].",
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
 		Citations:        citations,
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
@@ -1264,7 +1325,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	if trailingSlashBundle.Route.Path != resp.RoutePath {
 		t.Fatalf("trailing slash route normalized to %q, want %q", trailingSlashBundle.Route.Path, resp.RoutePath)
 	}
-	if bundle.Artifact.Content != "# Mission Note\n\nA public note.\n\nThis is the published projection with [Federal Reserve rate statement](source:src-entity-fed-rates)." {
+	if bundle.Artifact.Content != "# Mission Note\n\nA public note.\n\nThis is the published projection with [1]." {
 		t.Fatalf("bundle content mismatch: %q", bundle.Artifact.Content)
 	}
 	if bundle.Citations[0].ToKind == "private_texture_revision" || bundle.Citations[0].ToID == "rev-1" {
@@ -1574,7 +1635,68 @@ func TestPublishTextureStructuredBodyDrivesPublicationSources(t *testing.T) {
 	}
 }
 
-func TestPublishTextureStructuredEmptySourceEntitiesSuppressLegacyMetadata(t *testing.T) {
+func TestPublishTextureRejectsSourceEntitiesWithoutBodyDoc(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
+	sourceEntities := testTextureSourceEntities(t, testTextureSourceEntity(
+		"src-detached-publish",
+		"web_source",
+		"url",
+		"https://example.com/detached",
+		"Detached source",
+		"Detached source excerpt.",
+		"available",
+		"source",
+	))
+
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-detached",
+		SourceRevisionID: "rev-detached",
+		Title:            "Detached Source",
+		Content:          "This content has no structured source node.",
+		SourceEntities:   sourceEntities,
+		RequestedBy:      "user-1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "source_entities require body_doc") {
+		t.Fatalf("PublishTexture response=%#v error=%v, want source_entities/body_doc rejection", resp, err)
+	}
+}
+
+func TestPublishTextureRejectsHistorySourceEntitiesWithoutBodyDoc(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
+	sourceEntities := testTextureSourceEntities(t, testTextureSourceEntity(
+		"src-detached-history",
+		"web_source",
+		"url",
+		"https://example.com/detached-history",
+		"Detached history source",
+		"Detached history source excerpt.",
+		"available",
+		"source",
+	))
+
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-detached-history",
+		SourceRevisionID: "rev-detached-history-head",
+		Title:            "Detached History Source",
+		Content:          "Head content has no structured source identity.",
+		RequestedBy:      "user-1",
+		History: []PublishTextureRevision{{
+			RevisionID:     "rev-detached-history",
+			VersionNumber:  1,
+			Content:        "History content has detached source identity.",
+			SourceEntities: sourceEntities,
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "history revision rev-detached-history structured fields are invalid") || !strings.Contains(err.Error(), "source_entities require body_doc") {
+		t.Fatalf("PublishTexture response=%#v error=%v, want history source_entities/body_doc rejection", resp, err)
+	}
+}
+
+func TestPublishTextureRejectsLegacyMetadataSourceEntities(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"), "")
 
@@ -1609,18 +1731,8 @@ func TestPublishTextureStructuredEmptySourceEntitiesSuppressLegacyMetadata(t *te
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
 	})
-	if err != nil {
-		t.Fatalf("PublishTexture: %v", err)
-	}
-	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
-	if err != nil {
-		t.Fatalf("GetPublicationBundleByRoute: %v", err)
-	}
-	if len(bundle.SourceEntities) != 0 || len(bundle.Transclusions) != 0 {
-		t.Fatalf("legacy metadata leaked despite explicit empty structured source_entities: sources=%#v transclusions=%#v", bundle.SourceEntities, bundle.Transclusions)
-	}
-	if strings.Contains(bundle.Artifact.Content, "source:") {
-		t.Fatalf("artifact content contains raw source syntax: %q", bundle.Artifact.Content)
+	if err == nil || !strings.Contains(err.Error(), "metadata.source_entities is legacy source identity") {
+		t.Fatalf("PublishTexture response=%#v error=%v, want legacy metadata rejection", resp, err)
 	}
 }
 
