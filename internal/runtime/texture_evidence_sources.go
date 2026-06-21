@@ -115,6 +115,108 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Runtime, ownerID, 
 	}
 }
 
+func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.WorkerUpdateRecord) []textureSourceEntity {
+	if len(updates) == 0 {
+		return nil
+	}
+	seenEvidence := map[string]bool{}
+	entities := []textureSourceEntity{}
+	seenEntity := map[string]bool{}
+	for _, update := range updates {
+		if ownerID != "" && strings.TrimSpace(update.OwnerID) != strings.TrimSpace(ownerID) {
+			continue
+		}
+		for _, evidenceID := range update.EvidenceIDs {
+			evidenceID = strings.TrimSpace(evidenceID)
+			if evidenceID == "" || seenEvidence[evidenceID] {
+				continue
+			}
+			seenEvidence[evidenceID] = true
+			if rt == nil || rt.store == nil {
+				continue
+			}
+			rec, err := rt.store.GetEvidence(ctx, evidenceID, ownerID)
+			if err != nil {
+				continue
+			}
+			entity := evidenceRecordToSourceEntity(rec)
+			key := sourceEntityKey(entity)
+			if entity.EntityID == "" || key == "" || seenEntity[key] {
+				continue
+			}
+			seenEntity[key] = true
+			entities = append(entities, entity)
+		}
+		for _, ref := range update.Refs {
+			entity := sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, ref)
+			key := sourceEntityKey(entity)
+			if entity.EntityID == "" || key == "" || seenEntity[key] {
+				continue
+			}
+			seenEntity[key] = true
+			entities = append(entities, entity)
+		}
+	}
+	return entities
+}
+
+func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context, ownerID, targetAgentID string, updateIDs []string, limit int) []textureSourceEntity {
+	if rt == nil || rt.store == nil || len(updateIDs) == 0 {
+		return nil
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	if ownerID == "" || targetAgentID == "" {
+		return nil
+	}
+	if limit <= 0 || limit > len(updateIDs) {
+		limit = len(updateIDs)
+	}
+	updates := make([]types.WorkerUpdateRecord, 0, limit)
+	seen := map[string]bool{}
+	for _, updateID := range updateIDs {
+		updateID = strings.TrimSpace(updateID)
+		if updateID == "" || seen[updateID] {
+			continue
+		}
+		seen[updateID] = true
+		update, err := rt.store.GetWorkerUpdate(ctx, ownerID, updateID)
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(update.TargetAgentID) != targetAgentID {
+			continue
+		}
+		updates = append(updates, update)
+		if len(updates) >= limit {
+			break
+		}
+	}
+	return rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
+}
+
+func mergeTextureSourceEntitiesIntoMetadata(metadata map[string]any, incoming []textureSourceEntity) bool {
+	if metadata == nil || len(incoming) == 0 {
+		return false
+	}
+	existing := decodeTextureSourceEntities(metadata["source_entities"])
+	merged, changed := mergeTextureSourceEntities(existing, incoming)
+	if len(merged) > 0 {
+		metadata["source_entities"] = merged
+	}
+	return changed
+}
+
+func mergeTextureSourceEntitiesIntoRunMetadata(rec *types.RunRecord, incoming []textureSourceEntity) bool {
+	if rec == nil || len(incoming) == 0 {
+		return false
+	}
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	return mergeTextureSourceEntitiesIntoMetadata(rec.Metadata, incoming)
+}
+
 func splitTypedWorkerUpdateRef(ref string) (string, string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -169,37 +271,5 @@ func (rt *Runtime) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context,
 	if err != nil || len(updates) == 0 {
 		return nil
 	}
-	seenEvidence := map[string]bool{}
-	entities := []textureSourceEntity{}
-	seenEntity := map[string]bool{}
-	for _, update := range updates {
-		for _, evidenceID := range update.EvidenceIDs {
-			evidenceID = strings.TrimSpace(evidenceID)
-			if evidenceID == "" || seenEvidence[evidenceID] {
-				continue
-			}
-			seenEvidence[evidenceID] = true
-			rec, err := rt.store.GetEvidence(ctx, evidenceID, ownerID)
-			if err != nil {
-				continue
-			}
-			entity := evidenceRecordToSourceEntity(rec)
-			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" || seenEntity[key] {
-				continue
-			}
-			seenEntity[key] = true
-			entities = append(entities, entity)
-		}
-		for _, ref := range update.Refs {
-			entity := sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, ref)
-			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" || seenEntity[key] {
-				continue
-			}
-			seenEntity[key] = true
-			entities = append(entities, entity)
-		}
-	}
-	return entities
+	return rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
 }

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -184,6 +185,133 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 			t.Fatalf("free-form prose ref was scraped into source entity: %#v", entities)
 		}
 	}
+}
+
+func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
+	t.Parallel()
+	rt, _ := testAPISetup(t)
+	s := rt.Store()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-native-sources"
+	docID := "doc-native-sources"
+	targetAgentID := currentTextureAgentID(docID)
+
+	doc := types.Document{
+		DocID:   docID,
+		OwnerID: ownerID,
+		Title:   "Native sources",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	parent := types.Revision{
+		RevisionID: "rev-native-sources-v0",
+		DocID:      docID,
+		OwnerID:    ownerID,
+		AuthorKind: types.AuthorUser,
+		Content:    "Write the sourced update.",
+		Citations:  json.RawMessage("[]"),
+		Metadata:   json.RawMessage("{}"),
+		CreatedAt:  now,
+	}
+	if err := s.CreateRevision(ctx, parent); err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+	doc.CurrentRevisionID = parent.RevisionID
+
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-native-source-refs",
+		OwnerID:       ownerID,
+		AgentID:       "researcher:native-sources",
+		TargetAgentID: targetAgentID,
+		ChannelID:     docID,
+		Role:          AgentProfileResearcher,
+		Kind:          "findings",
+		Summary:       "native source refs ready",
+		Findings:      []string{"The source-backed finding is ready."},
+		Refs:          []string{"source_service_item:srcitem_native_panel"},
+		Content:       "Use the source-backed finding.",
+		CreatedAt:     now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   update.ChannelID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   update.TargetAgentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	stored, _, err := s.DispatchWorkerUpdate(ctx, update, &message)
+	if err != nil {
+		t.Fatalf("DispatchWorkerUpdate: %v", err)
+	}
+
+	rec := &types.RunRecord{
+		RunID:        "run-native-source-refs",
+		OwnerID:      ownerID,
+		AgentID:      targetAgentID,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		ChannelID:    docID,
+		Metadata: map[string]any{
+			"type":           textureAgentRevisionTaskType,
+			"request_source": "update_coagent",
+			"doc_id":         docID,
+		},
+	}
+	inject := rt.coagentUpdateTurnInjector(rec)
+	if inject == nil {
+		t.Fatal("Texture coagent update injector is nil")
+	}
+	msgs, err := inject(false)
+	if err != nil {
+		t.Fatalf("inject coagent update: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("injected messages = %d, want 1", len(msgs))
+	}
+	entityID := stableSourceEntityID("source_service_item", "srcitem_native_panel")
+	if !messageTextContains(t, msgs[0], `"source_entities"`) ||
+		!messageTextContains(t, msgs[0], entityID) ||
+		!messageTextContains(t, msgs[0], "[label](source:ENTITY_ID)") {
+		t.Fatalf("coagent packet missing native source entity fields: %s", string(msgs[0]))
+	}
+	if !hasSourceEntity(decodeTextureSourceEntities(rec.Metadata["source_entities"]), "source_service_item", "srcitem_native_panel", "") {
+		t.Fatalf("run metadata missing injected source_entities: %#v", rec.Metadata["source_entities"])
+	}
+
+	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, []string{stored.UpdateID}, rec.RunID); err != nil {
+		t.Fatalf("MarkWorkerUpdatesDelivered: %v", err)
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("ListCoagentMailboxBacklog: %v", err)
+	}
+	if len(backlog) != 0 {
+		t.Fatalf("backlog after cursor advance = %+v, want none", backlog)
+	}
+
+	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, stored.MessageSeq)
+	meta := decodeRevisionMetadata(result)
+	if !hasSourceEntity(decodeTextureSourceEntities(meta["source_entities"]), "source_service_item", "srcitem_native_panel", "") {
+		t.Fatalf("revision metadata missing delivered source entity: %#v", meta["source_entities"])
+	}
+}
+
+func messageTextContains(t *testing.T, raw json.RawMessage, needle string) bool {
+	t.Helper()
+	var msg map[string]any
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		t.Fatalf("decode message: %v", err)
+	}
+	content, _ := msg["content"].([]any)
+	if len(content) != 1 {
+		t.Fatalf("content blocks = %+v", content)
+	}
+	block, _ := content[0].(map[string]any)
+	text, _ := block["text"].(string)
+	return strings.Contains(text, needle)
 }
 
 func hasSourceEntity(entities []textureSourceEntity, kind, itemID, contentID string) bool {

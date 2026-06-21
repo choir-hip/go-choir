@@ -21,7 +21,16 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 		Content:       "A sourced update arrived.",
 		MessageSeq:    3,
 	}}
-	msgs, ids, err := buildCoagentUpdateUserMessages(updates, coagentPacketDeliveryMid, "texture:doc-1")
+	sourceEntities := []textureSourceEntity{{
+		EntityID: "src-source-service-demo",
+		Kind:     "source_service_item",
+		Label:    "Demo source",
+		Target: textureSourceEntityTarget{
+			TargetKind: "source_service_item",
+			ItemID:     "srcitem_demo",
+		},
+	}}
+	msgs, ids, err := buildCoagentUpdateUserMessages(updates, coagentPacketDeliveryMid, "texture:doc-1", sourceEntities)
 	if err != nil {
 		t.Fatalf("build messages: %v", err)
 	}
@@ -46,6 +55,11 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	}
 	if !strings.Contains(text, "A sourced update arrived.") {
 		t.Fatalf("packet text missing update body: %q", text)
+	}
+	if !strings.Contains(text, `"source_entities"`) ||
+		!strings.Contains(text, "src-source-service-demo") ||
+		!strings.Contains(text, "[label](source:ENTITY_ID)") {
+		t.Fatalf("packet text missing native source entity instruction: %q", text)
 	}
 }
 

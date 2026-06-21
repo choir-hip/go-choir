@@ -17,13 +17,15 @@ const (
 )
 
 type coagentUpdatePacket struct {
-	PacketType    string                    `json:"packet_type"`
-	DeliveryPhase string                    `json:"delivery_phase"`
-	TargetAgentID string                    `json:"target_agent_id,omitempty"`
-	ChannelID     string                    `json:"channel_id,omitempty"`
-	TrajectoryID  string                    `json:"trajectory_id,omitempty"`
-	Updates       []coagentUpdatePacketItem `json:"updates"`
-	Instruction   string                    `json:"instruction,omitempty"`
+	PacketType        string                    `json:"packet_type"`
+	DeliveryPhase     string                    `json:"delivery_phase"`
+	TargetAgentID     string                    `json:"target_agent_id,omitempty"`
+	ChannelID         string                    `json:"channel_id,omitempty"`
+	TrajectoryID      string                    `json:"trajectory_id,omitempty"`
+	Updates           []coagentUpdatePacketItem `json:"updates"`
+	SourceEntities    []textureSourceEntity     `json:"source_entities,omitempty"`
+	SourceInstruction string                    `json:"source_instruction,omitempty"`
+	Instruction       string                    `json:"instruction,omitempty"`
 }
 
 type coagentUpdatePacketItem struct {
@@ -39,16 +41,18 @@ type coagentUpdatePacketItem struct {
 	Content     string   `json:"content"`
 }
 
-func buildCoagentUpdateUserMessages(updates []types.WorkerUpdateRecord, deliveryPhase string, targetAgentID string) ([]json.RawMessage, []string, error) {
+func buildCoagentUpdateUserMessages(updates []types.WorkerUpdateRecord, deliveryPhase string, targetAgentID string, sourceEntities []textureSourceEntity) ([]json.RawMessage, []string, error) {
 	if len(updates) == 0 {
 		return nil, nil, nil
 	}
 	packet := coagentUpdatePacket{
-		PacketType:    coagentPacketTypeUpdate,
-		DeliveryPhase: deliveryPhase,
-		TargetAgentID: strings.TrimSpace(targetAgentID),
-		Instruction:   coagentUpdateInstruction(deliveryPhase),
-		Updates:       make([]coagentUpdatePacketItem, 0, len(updates)),
+		PacketType:        coagentPacketTypeUpdate,
+		DeliveryPhase:     deliveryPhase,
+		TargetAgentID:     strings.TrimSpace(targetAgentID),
+		SourceEntities:    sourceEntities,
+		SourceInstruction: coagentUpdateSourceInstruction(sourceEntities),
+		Instruction:       coagentUpdateInstruction(deliveryPhase),
+		Updates:           make([]coagentUpdatePacketItem, 0, len(updates)),
 	}
 	updateIDs := make([]string, 0, len(updates))
 	for _, update := range updates {
@@ -91,6 +95,13 @@ func buildCoagentUpdateUserMessages(updates []types.WorkerUpdateRecord, delivery
 		return nil, nil, fmt.Errorf("marshal coagent update user message: %w", err)
 	}
 	return []json.RawMessage{msg}, updateIDs, nil
+}
+
+func coagentUpdateSourceInstruction(sourceEntities []textureSourceEntity) string {
+	if len(sourceEntities) == 0 {
+		return ""
+	}
+	return "When writing Texture content from these updates, cite source-backed claims with native [label](source:ENTITY_ID) refs using the listed source_entities entity_id values. Do not replace a listed source entity with a plain URL when that source entity covers the claim."
 }
 
 func coagentUpdatePacketPreamble(deliveryPhase string) string {
