@@ -124,7 +124,12 @@ even when a same-loop mailbox packet is consumed without a canonical write.
 Fresh Texture update wakes still create the first activation only when a
 document has no Texture revision-thread history; after a thread exists,
 addressed backlog must wait for a resident or sleeping actor instead of silently
-creating a second run. The remaining durable-thread risks are the
+creating a second run. Staging proof at
+`1c202e525f77a2a6169c0bf0ac49b986b75047b7` produced V2 in the original Texture
+loop `c3cb6b21-6220-4d6f-a226-641906ea56b9` after researcher
+`update_coagent` evidence, and synthesized blocked staging-smoke
+RunAcceptanceRecord `runacc-26cfe15a6fbd4fd6be6f`. The remaining
+durable-thread risks are the
 classifier/exact-first-tool/model-prior guard residues and proving always-deep
 research beyond the current V2/V3 cadence on staging.
 
@@ -183,11 +188,14 @@ position / live conjectures / open edges:
 - C8 supported at focused-test scope: normal Texture idle quiescence now
   passivates the run as a sleeping actor instead of completing it, keeps the run
   memory intact, and resumes the same `loop_id` when new mailbox input arrives.
-- C9 supported at focused-test scope for semantic delegation with parking:
+- C9 supported at focused-test and staging-smoke scope for semantic delegation with parking:
   `spawn_agent`, `request_super_execution`, and email handoff no longer act as
   terminal shortcuts for parked Texture revision actors. After a work-state
   revision and delegation, the actor parks/sleeps and later researcher evidence
-  can produce V2 in the same `loop_id`.
+  can produce V2 in the same `loop_id`. Staging trajectory
+  `a893f0ca-a8b6-41de-a73b-1e8b05c7c80d` showed `spawn_agent`, park wait,
+  researcher `update_coagent`, V2 `patch_texture`, and final passivation all on
+  Texture loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`.
 
 next move: start deleting the classifier/exact-first-tool/model-prior guard
 residues that still encode semantic choreography. Prefer one deletion with a

@@ -412,3 +412,81 @@ Receipts:
 Open edge: classifier/exact-first-tool/model-prior completion guard residues
 still encode semantic choreography. The next deletion should preserve
 owner-visible work-state and evidence-path behavior without hard role forcing.
+
+## 2026-06-21 - Parked Delegation Same-Thread Slice Deployed and Staging-Proven
+
+Claim: commit `1c202e525f77a2a6169c0bf0ac49b986b75047b7` should preserve the
+Texture durable-thread behavior on staging: semantic delegation must not
+terminal-complete a parked Texture revision actor, researcher findings must wake
+the same Texture `loop_id`, and established document threads must not mint
+replacement wake runs for ordinary addressed update backlog.
+
+Move: pushed the docs checkpoint and runtime repair to `origin/main`, monitored
+CI/deploy, verified `choir.news` build identity, submitted an authenticated
+Comet UI prompt through the logged-in product session, then ran an instrumented
+public-product API probe for structured trajectory, Trace, revision, and
+RunAcceptanceRecord evidence. Computer Use/Comet was used for the account-backed
+browser submission; Playwright was used only for structured public API evidence
+because the Comet accessibility surface exposed revision state but not enough
+Trace/product ids to synthesize acceptance.
+
+Expected ΔV: 0. This is landing proof for the prior ΔV=-1 implementation, not a
+new variant deletion.
+
+Actual ΔV: 0. V remains 4.
+
+Receipts:
+- Commits:
+  - `a78f972a` (`docs: record texture same-thread delegation invariant`);
+  - `1c202e525f77a2a6169c0bf0ac49b986b75047b7`
+    (`runtime: keep parked Texture delegation in one thread`).
+- Push: `origin/main` advanced from `d161c2e4` to `1c202e52`.
+- GitHub Actions:
+  - CI run `27893155637`: success, including `Deploy to Staging (Node B)` job
+    `82540310386`.
+  - Docs Truth Check run `27893155620`: success.
+  - FlakeHub run `27893155633`: success.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `1c202e525f77a2a6169c0bf0ac49b986b75047b7`, deployed at
+  `2026-06-21T04:16:34Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Authenticated Comet UI proof: submitted
+  `CHOIR_DURABLE_THREAD_PROOF_20260621_001` through the logged-in
+  `choir.news` UI. The product opened a Texture document at `v0`, wrote `v1`,
+  and remained in `Revising...`/`Continuing...` state. This proved the logged-in
+  product path was active, but did not expose enough Trace ids for structured
+  acceptance.
+- Structured deployed probe:
+  - prompt: `What's going on with Anthropic and the US government?`;
+  - trajectory/submission: `a893f0ca-a8b6-41de-a73b-1e8b05c7c80d`;
+  - doc: `d296fdfc-98f0-44d6-b984-c0ad7d2098ee`;
+  - initial Texture loop id:
+    `c3cb6b21-6220-4d6f-a226-641906ea56b9`;
+  - revisions: V0 user at +0.258s, V1 appagent at +18.303s
+    (`99ca1f5a-89ae-4ae2-a2b0-4b2ca2080bb5`, 1167 chars), V2 appagent at
+    +88.860s (`29bcfccf-429c-40a6-92bb-55d7e43543ea`, 3514 chars);
+  - Trace counts: `web_search=20`, `spawn_agent=2`, `update_coagent=2`,
+    `moment_count=243`, `agent_count=3`, `delegation_count=1`;
+  - trajectory state: `passivated`.
+- Same-thread Trace evidence: the Texture actor
+  `texture:d296fdfc-98f0-44d6-b984-c0ad7d2098ee` used loop
+  `c3cb6b21-6220-4d6f-a226-641906ea56b9` for `spawn_agent`,
+  `park_wait_started`, `park_wait_finished`, the V2 `patch_texture`,
+  `texture.document_revision.created`, and final `activation.passivated`. The
+  researcher `update_coagent` packet arrived on loop
+  `33779ab4-bfef-4565-b996-a1848acbac50` and woke the same Texture loop rather
+  than causing a replacement Texture activation.
+- RunAcceptanceRecord:
+  `runacc-26cfe15a6fbd4fd6be6f`, target mission
+  `mission-texture-durable-thread-v1`, trajectory
+  `a893f0ca-a8b6-41de-a73b-1e8b05c7c80d`, deployment/health commit
+  `1c202e525f77a2a6169c0bf0ac49b986b75047b7`, CI run `27893155637`, deploy
+  run `27893155637:82540310386`, acceptance level `staging-smoke-level`, state
+  `blocked`. The blocked state is expected because continuation-level evidence
+  and the remaining classifier/exact-first-tool/model-prior deletion are not
+  settled.
+
+Result: the parked-delegation same-thread slice is deployed and supported by
+staging product evidence. It does not settle the mission. The next realism axis
+is still to delete classifier/exact-first-tool/model-prior guard residues while
+preserving owner-visible work state and evidence-path behavior.
