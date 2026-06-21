@@ -729,3 +729,96 @@ Rollback: revert the runtime commit that removes the Texture-specific
 completion guard and classifier. The docs checkpoint may remain as problem
 evidence if deletion shows that prompt obligations alone are not sufficient to
 preserve agentic deepening.
+
+## 2026-06-21 - Model-Prior Completion Guard Deleted and Staging-Proven
+
+Claim: commit `cd79ed2d6f7ed629328daf658ab988baf42edad7` should delete the
+Texture-specific model-prior completion guard and world-knowledge keyword
+classifier while preserving honest model-prior/interim metadata, no-op
+protection, and agentic researcher/super tool affordances.
+
+Move: removed `WithCompletionGuard(rt.textureModelPriorCompletionGuard(rec))`
+from Texture revision runs, deleted `textureModelPriorCompletionGuard`,
+`textureRunOpenedEvidencePath`, and `texturePromptNeedsWorldKnowledge`, updated
+the current-events Texture test to require ordinary `spawn_agent` tool choice
+without the old guard instruction, ran focused tests and runtime shards, pushed
+to `origin/main`, monitored CI/deploy, verified staging build identity, used
+Computer Use with the logged-in Comet session for visible product proof, and
+used authenticated public product APIs for Trace fields not visible in the UI.
+
+Expected Delta V: -1.
+
+Actual Delta V: -1. V is now 1.
+
+Receipts:
+- Commits:
+  - `cc03d089` (`docs: record texture model-prior guard target`);
+  - `cd79ed2d6f7ed629328daf658ab988baf42edad7`
+    (`runtime: remove Texture model-prior completion guard`).
+- Focused tests:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard|TestInitialTextureRunWritesBeforeSpawningResearcher|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestPromptOnlyInitialUserPromptRevisionIsMarkedModelPrior|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticSuper|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture' -count=1`
+  passed.
+- Guard deletion grep:
+  `rg -n "textureModelPriorCompletionGuard|func texturePromptNeedsWorldKnowledge|WithCompletionGuard\\(rt\\.texture" internal/runtime -g '*.go'`
+  returned no matches.
+- Diff hygiene: `git diff --check` passed.
+- Runtime suite: `nix develop -c scripts/go-test-runtime-shards` passed all
+  four sequential shards.
+- GitHub Actions:
+  - CI run `27895027562`: success, including deploy job `82545223168`.
+  - Docs Truth Check run `27895027563`: success.
+  - FlakeHub run `27895027559`: success.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `cd79ed2d6f7ed629328daf658ab988baf42edad7`, deployed at
+  `2026-06-21T05:47:50Z`, with `status=ok`.
+- Authenticated Comet UI proof:
+  - submitted marker
+    `CHOIR_MODEL_PRIOR_GUARD_DELETION_PROOF_20260621_001` through the logged-in
+    `choir.news` session in Comet;
+  - visible Texture run handle prefix/suffix `273cdee7-b...0ff678`;
+  - the marked Texture reached `v3`;
+  - the visible activity stream showed Texture calling `spawn_agent`, receiving
+    tool output, then calling `patch_texture`;
+  - V3 rendered a grounded evidence brief for Anthropic and US government AI
+    procurement, including an explicit note that durable source-entry retrieval
+    failed and clickable URLs still need attachment for publication-quality
+    citations.
+- Structured deployed proof:
+  - prompt marker:
+    `CHOIR_MODEL_PRIOR_GUARD_API_PROOF_20260621_1782021104911`;
+  - trajectory/submission: `780dc749-ab6c-4d4b-9594-721c02b8f60e`;
+  - doc: `fc398877-517c-4eff-9fb4-2a17d8f1f736`;
+  - initial Texture loop id:
+    `0f44a44a-1b0d-4b6e-bdc0-2fdf5c41a42e`;
+  - Trace roles: `conductor + texture + researcher`;
+  - Trace analysis: `spawn_agent_count=4`, `patch_texture_count=12`,
+    `retry_moment_count=0`, `guard_reason_present=false`,
+    `completion_guard_present=false`, and `old_guard_instruction_present=false`;
+  - V1 appagent revision:
+    `fc33eecf-f8dc-404c-ab5a-ce11e7aba928`, 2559 chars, metadata
+    `model_prior_interim=true`, `revision_grounding=model_prior`;
+  - V2 appagent revision:
+    `2ff153df-d469-4e36-8af5-7621b575c1fc`, 5721 chars, consumed researcher
+    worker update seq 1;
+  - V3 appagent revision:
+    `b7f981fa-76fa-44c2-a00c-1dbaef0d055c`, 7159 chars, consumed researcher
+    worker update seq 2;
+  - assertions passed: deployed SHA matched, Texture decision opened, researcher
+    role seen, `spawn_agent` tool result seen, no completion-guard retry, no old
+    guard reason, no old guard instruction, and model-prior metadata present.
+- RunAcceptanceRecord:
+  `runacc-d8bf901c9bbb56c5d583`, target mission
+  `mission-texture-durable-thread-v1`, trajectory
+  `780dc749-ab6c-4d4b-9594-721c02b8f60e`, deployment/health commit
+  `cd79ed2d6f7ed629328daf658ab988baf42edad7`, acceptance level
+  `staging-smoke-level`, state `blocked`. The blocked state is expected for
+  this narrow slice because export-level and continuation-level evidence are
+  intentionally not claimed.
+
+Result: current-events/world-knowledge prompt handling no longer depends on a
+runtime-authored completion-guard retry or keyword classifier. Texture can write
+an honest model-prior interim revision, choose `spawn_agent` normally, and
+incorporate researcher evidence into later canonical revisions. The remaining
+realism axis is always-deep/source-evidence robustness beyond this narrow V3
+current-events path, especially durable source attachment for owner-visible
+grounded citations.

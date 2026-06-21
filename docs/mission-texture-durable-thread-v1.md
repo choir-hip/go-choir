@@ -115,38 +115,36 @@ variant (ranking function) V:
 10. always-deep research prompt/loop behavior proven beyond the current V2 cap;
 11. focused runtime tests and runtime shards pass;
 12. landed to main, CI/deploy identity verified, staging acceptance recorded.
-Current V=2; last ΔV=-1 on 2026-06-21 from deleting deterministic
-initial-super request parsing/recording after the prior prompt-bar first-paint
-exact `patch_texture` forcing deletion. Ordinary prompt-bar Texture starts now
-receive the full Texture tool surface with empty provider `tool_choice`, so
-Texture can record an off-document decision before patching when that is the
-honest first action. Execution-shaped prompt text such as "ask downstream super
-execution to" no longer creates runtime-owned initial super work before Texture
-acts; Texture still has the `request_super_execution` affordance when it chooses
-to delegate. Staging proof for the initial-super deletion at
-`1e0166474e17369828a1e8a7bfd655c34ae1454b` used Comet-visible marker
-`CHOIR_INITIAL_SUPER_DELETION_PROOF_20260621_001` and structured marker
-`CHOIR_INITIAL_SUPER_DELETION_ACCEPT_1782019773071`, trajectory
-`a2e96589-dc7a-4be4-9e5d-556427f5afc2`, doc
-`8789314a-fc2c-498d-9634-f9af72de6f56`, Texture loop
-`ad8443b9-c5a2-4171-b59d-7cc06db91885`, V1
-`652e8729-0172-4420-935d-f747876ba8ea`, first Texture tool event
-`record_texture_decision`, no `super` agent, no `request_super_execution` tool
-call, no `texture_initial_super_request_*` metadata, and blocked
-staging-smoke RunAcceptanceRecord `runacc-db363e8ce03c8e65f0fe`. CI run
-`27894521422`, deploy job `82543893990`, and staging health all reported the
-same commit. Staging proof for prompt-bar first-paint deletion at
-`b4adb70ff4a01ea6be92ce30a062a66a824f89a9` used trajectory
-`20bf8cd1-ff91-4bae-87a0-96d348d7b3ae`, Texture loop
-`c0dfb742-9797-42e7-931f-6951d63cddbc`, first provider-call moment
-`96b5c6e7-a1b9-4c18-965c-bc8cf4ba224c`, V1
-`cb641f7b-c821-43f3-82fe-2c5611479e19`, and blocked staging-smoke
-RunAcceptanceRecord `runacc-73a11f1381124ee76315`. The prior staging proof at
-`1c202e525f77a2a6169c0bf0ac49b986b75047b7` still supports same-thread
-researcher delivery through V2 in loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`
-with RunAcceptanceRecord `runacc-26cfe15a6fbd4fd6be6f`. The remaining
-durable-thread risks are model-prior/world-knowledge guard residues and proving
-always-deep research beyond the current V2/V3 cadence on staging.
+Current V=1; last ΔV=-1 on 2026-06-21 from deleting the
+Texture-specific model-prior completion guard and world-knowledge prompt
+scanner after the prior first-paint and initial-super guard deletions. Ordinary
+prompt-bar Texture starts now receive the full Texture tool surface with empty
+provider `tool_choice`; execution-shaped prompt text no longer creates
+runtime-owned initial super work before Texture acts; and current-events prompts
+no longer get a runtime-authored completion-guard retry after an honest
+model-prior/interim revision. Staging proof for the model-prior guard deletion
+at `cd79ed2d6f7ed629328daf658ab988baf42edad7` used Comet-visible marker
+`CHOIR_MODEL_PRIOR_GUARD_DELETION_PROOF_20260621_001` and structured marker
+`CHOIR_MODEL_PRIOR_GUARD_API_PROOF_20260621_1782021104911`, trajectory
+`780dc749-ab6c-4d4b-9594-721c02b8f60e`, doc
+`fc398877-517c-4eff-9fb4-2a17d8f1f736`, Texture loop
+`0f44a44a-1b0d-4b6e-bdc0-2fdf5c41a42e`, V1
+`fc33eecf-f8dc-404c-ab5a-ce11e7aba928`, V2
+`2ff153df-d469-4e36-8af5-7621b575c1fc`, V3
+`b7f981fa-76fa-44c2-a00c-1dbaef0d055c`, Trace roles
+`conductor + texture + researcher`, `spawn_agent` tool results, no
+`completion_guard`, no `texture_model_prior_interim_needs_evidence_path`, no
+old guard instruction, retained `model_prior_interim` metadata, and blocked
+staging-smoke RunAcceptanceRecord `runacc-d8bf901c9bbb56c5d583`. CI run
+`27895027562`, deploy job `82545223168`, and staging health all reported the
+same commit. The prior staging proofs at
+`1e0166474e17369828a1e8a7bfd655c34ae1454b`,
+`b4adb70ff4a01ea6be92ce30a062a66a824f89a9`, and
+`1c202e525f77a2a6169c0bf0ac49b986b75047b7` still support initial-super
+deletion, first-paint deletion, and same-thread researcher delivery through V2.
+The remaining durable-thread risk is proving always-deep/source-evidence
+robustness beyond this narrow V3 current-events path, including durable source
+attachment when researcher evidence is incorporated.
 
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
 (`update_id` + work-state revisions) may land first if it reduces risk, but it
@@ -229,23 +227,21 @@ position / live conjectures / open edges:
   `a2e96589-dc7a-4be4-9e5d-556427f5afc2` showed `conductor + texture` only,
   no `super` agent, first Texture tool event `record_texture_decision`, then
   `patch_texture` to V1.
-- C12 active: `textureModelPriorCompletionGuard` and
-  `texturePromptNeedsWorldKnowledge` still enforce a deterministic
-  keyword-scanned Probe/Execute path after a model-prior/interim first
-  revision. That guard is less invasive than the deleted initial-super path,
-  but it is still runtime-authored semantic choreography: runtime decides that
-  phrases such as "latest", "news", "today", or "government" require a
-  follow-up worker path and injects a retry instruction after Texture tries to
-  end. The desired shape is prompt/tool agency: Texture may write an honest
-  interim V1, call `spawn_agent` or `request_super_execution`, record a blocker,
-  or end with an audit-worthy decision through its normal tools, without a
-  hard-coded completion guard.
+- C12 supported at focused-test and staging-smoke scope:
+  `textureModelPriorCompletionGuard` and `texturePromptNeedsWorldKnowledge`
+  are deleted. Focused tests prove no Texture-specific completion-guard retry is
+  injected, current-events prompts can still open researcher work by normal
+  `spawn_agent` tool choice, model-prior/interim metadata remains, and no-op
+  protection remains intact. Staging trajectory
+  `780dc749-ab6c-4d4b-9594-721c02b8f60e` showed Texture writing an honest V1
+  model-prior interim, opening researcher by tool call, incorporating two
+  researcher packets into V2 and V3, and carrying no old guard reason,
+  instruction, or `completion_guard` retry in Trace.
 
-next move: delete the Texture-specific model-prior completion guard and its
-world-knowledge keyword classifier while preserving model-prior/interim
-metadata, prompt obligations, no-op protection, and agentic researcher/super
-tool affordances. Then prove a current-events prompt can open a researcher path
-by model/tool choice without a completion-guard retry.
+next move: use the remaining budget on always-deep/source-evidence robustness:
+prove that Texture keeps deepening from researcher evidence beyond this narrow
+current-events V3 path, and repair the durable source-entry retrieval/attachment
+gap exposed by the Comet proof if it blocks owner-visible grounded citations.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
