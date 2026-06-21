@@ -115,11 +115,27 @@ variant (ranking function) V:
 10. always-deep research prompt/loop behavior proven beyond the current V2 cap;
 11. focused runtime tests and runtime shards pass;
 12. landed to main, CI/deploy identity verified, staging acceptance recorded.
-Current V=3; last ΔV=-1 on 2026-06-21 from deleting prompt-bar first-paint
-exact `patch_texture` forcing. Ordinary prompt-bar Texture starts now receive
-the full Texture tool surface with empty provider `tool_choice`, so Texture can
-record an off-document decision before patching when that is the honest first
-action. Staging proof at
+Current V=2; last ΔV=-1 on 2026-06-21 from deleting deterministic
+initial-super request parsing/recording after the prior prompt-bar first-paint
+exact `patch_texture` forcing deletion. Ordinary prompt-bar Texture starts now
+receive the full Texture tool surface with empty provider `tool_choice`, so
+Texture can record an off-document decision before patching when that is the
+honest first action. Execution-shaped prompt text such as "ask downstream super
+execution to" no longer creates runtime-owned initial super work before Texture
+acts; Texture still has the `request_super_execution` affordance when it chooses
+to delegate. Staging proof for the initial-super deletion at
+`1e0166474e17369828a1e8a7bfd655c34ae1454b` used Comet-visible marker
+`CHOIR_INITIAL_SUPER_DELETION_PROOF_20260621_001` and structured marker
+`CHOIR_INITIAL_SUPER_DELETION_ACCEPT_1782019773071`, trajectory
+`a2e96589-dc7a-4be4-9e5d-556427f5afc2`, doc
+`8789314a-fc2c-498d-9634-f9af72de6f56`, Texture loop
+`ad8443b9-c5a2-4171-b59d-7cc06db91885`, V1
+`652e8729-0172-4420-935d-f747876ba8ea`, first Texture tool event
+`record_texture_decision`, no `super` agent, no `request_super_execution` tool
+call, no `texture_initial_super_request_*` metadata, and blocked
+staging-smoke RunAcceptanceRecord `runacc-db363e8ce03c8e65f0fe`. CI run
+`27894521422`, deploy job `82543893990`, and staging health all reported the
+same commit. Staging proof for prompt-bar first-paint deletion at
 `b4adb70ff4a01ea6be92ce30a062a66a824f89a9` used trajectory
 `20bf8cd1-ff91-4bae-87a0-96d348d7b3ae`, Texture loop
 `c0dfb742-9797-42e7-931f-6951d63cddbc`, first provider-call moment
@@ -129,7 +145,7 @@ RunAcceptanceRecord `runacc-73a11f1381124ee76315`. The prior staging proof at
 `1c202e525f77a2a6169c0bf0ac49b986b75047b7` still supports same-thread
 researcher delivery through V2 in loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`
 with RunAcceptanceRecord `runacc-26cfe15a6fbd4fd6be6f`. The remaining
-durable-thread risks are classifier/model-prior guard residues and proving
+durable-thread risks are model-prior/world-knowledge guard residues and proving
 always-deep research beyond the current V2/V3 cadence on staging.
 
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
@@ -204,20 +220,18 @@ position / live conjectures / open edges:
   `tool_choice=""`, eight available tools including `patch_texture`,
   `record_texture_decision`, `spawn_agent`, and `request_super_execution`,
   first tool batch `record_texture_decision`, then `patch_texture` to V1.
-- C11 active: deterministic initial-super request parsing is a remaining
-  classifier/guard residue. `explicitTextureSuperExecutionRequestFromPrompt`
-  recognizes prompt phrases such as "ask downstream super execution to", stores
-  `texture_initial_super_request_required` metadata, and
-  `recordExplicitInitialTextureSuperRequestIfNeeded` creates downstream super
-  work before the Texture provider turn. That is a runtime-created semantic
-  delegation from prompt text, not a Texture-chosen `request_super_execution`
-  tool call.
+- C11 supported at focused-test and staging-smoke scope: deterministic
+  initial-super request parsing/recording is deleted. Execution-shaped prompt
+  text is now preserved as Texture document content and handled by the Texture
+  provider turn first. Focused tests prove the old phrase no longer stamps
+  initial-super metadata or auto-creates super work while manual
+  `request_super_execution` from Texture context still works. Staging trajectory
+  `a2e96589-dc7a-4be4-9e5d-556427f5afc2` showed `conductor + texture` only,
+  no `super` agent, first Texture tool event `record_texture_decision`, then
+  `patch_texture` to V1.
 
-next move: delete deterministic initial-super request parsing/recording while
-preserving the `request_super_execution` affordance and prompt obligation
-language, then prove an execution-shaped prompt opens Texture first without an
-automatic super run. After that, continue to the remaining model-prior/world
-knowledge guards and always-deep staging proof.
+next move: continue to the remaining model-prior/world-knowledge guards and
+always-deep staging proof without reintroducing semantic prompt scanners.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
