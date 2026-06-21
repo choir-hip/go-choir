@@ -195,6 +195,7 @@ func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRo
 		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
 		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,
 		TextureWakeDebounce:             rtRuntimeCfg.TextureWakeDebounce,
+		TextureActorParkIdle:            rtRuntimeCfg.TextureActorParkIdle,
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,
 		MaildURL:                        rtRuntimeCfg.MaildURL,
 		LLMProvider:                     rtRuntimeCfg.LLMProvider,

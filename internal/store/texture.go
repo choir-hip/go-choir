@@ -1709,7 +1709,7 @@ type AgentMutation struct {
 	DocID               string     `json:"doc_id"`
 	RunID               string     `json:"loop_id"`
 	OwnerID             string     `json:"owner_id"`
-	State               string     `json:"state"` // "pending", "completed", "failed", "deferred"
+	State               string     `json:"state"` // "pending", "sleeping", "completed", "failed", "deferred"
 	ScheduledMessageSeq int64      `json:"scheduled_message_seq,omitempty"`
 	RevisionID          string     `json:"revision_id,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -1948,6 +1948,63 @@ func (s *Store) MarkAgentMutationStale(ctx context.Context, runID string) error 
 	)
 	if err != nil {
 		return fmt.Errorf("mark stale texture agent mutation: %w", err)
+	}
+	return nil
+}
+
+// SleepAgentMutation records that a durable Texture actor has quiesced after
+// writing a revision and can be reactivated on later mailbox input.
+func (s *Store) SleepAgentMutation(ctx context.Context, runID string) error {
+	now := time.Now().UTC()
+	result, err := s.textureHandle().ExecContext(ctx,
+		`UPDATE texture_agent_mutations
+		    SET state = 'sleeping',
+		        completed_at = ?
+		  WHERE loop_id = ?
+		    AND state = 'pending'
+		    AND revision_id <> ''`,
+		now.Format(time.RFC3339Nano),
+		runID,
+	)
+	if err != nil {
+		return fmt.Errorf("sleep texture agent mutation: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check sleeping texture mutation rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrMutationAlreadyCompleted
+	}
+	return nil
+}
+
+// ReactivateAgentMutation reopens a stale or sleeping mutation for the same
+// durable Texture actor activation. It intentionally does not revive completed,
+// failed, cancelled, or deferred mutations.
+func (s *Store) ReactivateAgentMutation(ctx context.Context, runID string, scheduledMessageSeq int64) error {
+	now := time.Now().UTC()
+	result, err := s.textureHandle().ExecContext(ctx,
+		`UPDATE texture_agent_mutations
+		    SET state = 'pending',
+		        scheduled_message_seq = ?,
+		        completed_at = NULL,
+		        created_at = ?
+		  WHERE loop_id = ?
+		    AND state IN ('stale_activation', 'sleeping')`,
+		scheduledMessageSeq,
+		now.Format(time.RFC3339Nano),
+		runID,
+	)
+	if err != nil {
+		return fmt.Errorf("reactivate texture agent mutation: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check reactivated texture mutation rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrMutationAlreadyCompleted
 	}
 	return nil
 }

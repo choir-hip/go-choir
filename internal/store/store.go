@@ -374,6 +374,15 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	PRIMARY KEY (owner_id, update_id)
 );
 
+CREATE TABLE IF NOT EXISTS coagent_mailboxes (
+	owner_id              VARCHAR(255) NOT NULL DEFAULT '',
+	agent_id              VARCHAR(255) NOT NULL DEFAULT '',
+	channel_id            VARCHAR(255) NOT NULL DEFAULT '',
+	processed_message_seq BIGINT NOT NULL DEFAULT 0,
+	updated_at            DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, agent_id)
+);
+
 CREATE TABLE IF NOT EXISTS co_super_slots (
 	owner_id       VARCHAR(255) NOT NULL DEFAULT '',
 	trajectory_id  VARCHAR(255) NOT NULL DEFAULT '',
@@ -662,6 +671,9 @@ func (s *Store) bootstrap() error {
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_worker_updates_pending_target ON worker_updates(owner_id, target_agent_id, delivered_at, created_at)`); err != nil {
 		return fmt.Errorf("create idx_worker_updates_pending_target: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_coagent_mailboxes_channel ON coagent_mailboxes(owner_id, channel_id)`); err != nil {
+		return fmt.Errorf("create idx_coagent_mailboxes_channel: %w", err)
 	}
 	return s.backfillDerivedRuntimeState()
 }
@@ -1368,6 +1380,24 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 	return scanRun(row)
 }
 
+// GetLatestPassivatedRunByAgent returns the most recent passivated activation
+// for an actor identity. Durable actor reactivation uses this before minting a
+// replacement run.
+func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
+		   FROM runs
+		  WHERE owner_id = ?
+		    AND agent_id = ?
+		    AND state = 'passivated'
+		  ORDER BY updated_at DESC, created_at DESC
+		  LIMIT 1`,
+		ownerID,
+		agentID,
+	)
+	return scanRun(row)
+}
+
 func (s *Store) listRunsWhere(ctx context.Context, where string, args []any, limit int) ([]types.RunRecord, error) {
 	query := `SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 	            FROM runs`
@@ -1948,6 +1978,88 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 	return updates, nil
 }
 
+// ListCoagentMailboxBacklog returns update_coagent records after the durable
+// actor mailbox cursor. delivered_at is audit compatibility; the contiguous
+// cursor is the actor-facing processing boundary.
+func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.WorkerUpdateRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	if ownerID == "" || targetAgentID == "" {
+		return nil, fmt.Errorf("list coagent mailbox backlog: owner_id and target_agent_id are required")
+	}
+	rows, err := s.db.QueryContext(ctx,
+		workerUpdateSelectSQL()+` WHERE owner_id = ?
+		    AND target_agent_id = ?
+		    AND message_seq > COALESCE((
+		        SELECT processed_message_seq
+		          FROM coagent_mailboxes
+		         WHERE owner_id = ?
+		           AND agent_id = ?
+		    ), 0)
+		  ORDER BY message_seq ASC, created_at ASC, update_id ASC
+		  LIMIT ?`,
+		ownerID,
+		targetAgentID,
+		ownerID,
+		targetAgentID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var updates []types.WorkerUpdateRecord
+	for rows.Next() {
+		rec, err := scanWorkerUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate coagent mailbox backlog: %w", err)
+	}
+	return updates, nil
+}
+
+// ListCoagentMailboxBacklogAll returns actor mailbox backlog rows across
+// targets for boot-time re-warm sweeps.
+func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]types.WorkerUpdateRecord, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx,
+		workerUpdateSelectSQL()+` WHERE message_seq > COALESCE((
+		        SELECT processed_message_seq
+		          FROM coagent_mailboxes
+		         WHERE owner_id = worker_updates.owner_id
+		           AND agent_id = worker_updates.target_agent_id
+		    ), 0)
+		  ORDER BY owner_id ASC, target_agent_id ASC, message_seq ASC, created_at ASC, update_id ASC
+		  LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var updates []types.WorkerUpdateRecord
+	for rows.Next() {
+		rec, err := scanWorkerUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate coagent mailbox backlog: %w", err)
+	}
+	return updates, nil
+}
+
 // CountPendingWorkerUpdatesByTrajectory returns undelivered updates for the
 // silent-stall oracle.
 func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string) (int, error) {
@@ -1977,6 +2089,7 @@ func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID, targetA
 
 type workerUpdateDeliveryExecer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
 func markWorkerUpdatesDeliveredWithExec(ctx context.Context, exec workerUpdateDeliveryExecer, ownerID, targetAgentID string, updateIDs []string, runID string) error {
@@ -2004,6 +2117,86 @@ func markWorkerUpdatesDeliveredWithExec(ctx context.Context, exec workerUpdateDe
 	)
 	if _, err := exec.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("mark worker updates delivered: %w", err)
+	}
+	if err := refreshCoagentMailboxCursorWithExec(ctx, exec, ownerID, targetAgentID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetCoagentMailboxCursor returns the durable contiguous processed cursor for
+// one addressed actor mailbox. It is a projection over update_coagent delivery
+// state and is the substrate for the durable actor mailbox cutover.
+func (s *Store) GetCoagentMailboxCursor(ctx context.Context, ownerID, agentID string) (int64, string, bool, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	if ownerID == "" || agentID == "" {
+		return 0, "", false, fmt.Errorf("get coagent mailbox cursor: owner_id and agent_id are required")
+	}
+	var (
+		channelID string
+		cursor    int64
+	)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT channel_id, processed_message_seq
+		   FROM coagent_mailboxes
+		  WHERE owner_id = ? AND agent_id = ?`,
+		ownerID, agentID,
+	).Scan(&channelID, &cursor)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, "", false, nil
+		}
+		return 0, "", false, fmt.Errorf("get coagent mailbox cursor: %w", err)
+	}
+	return cursor, channelID, true, nil
+}
+
+func refreshCoagentMailboxCursorWithExec(ctx context.Context, exec workerUpdateDeliveryExecer, ownerID, agentID string) error {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	if ownerID == "" || agentID == "" {
+		return fmt.Errorf("refresh coagent mailbox cursor: owner_id and agent_id are required")
+	}
+	var (
+		minPending sql.NullInt64
+		maxSeq     sql.NullInt64
+		channelID  sql.NullString
+	)
+	if err := exec.QueryRowContext(ctx,
+		`SELECT MIN(CASE WHEN delivered_at IS NULL THEN message_seq END),
+		        MAX(message_seq),
+		        MAX(channel_id)
+		   FROM worker_updates
+		  WHERE owner_id = ?
+		    AND target_agent_id = ?
+		    AND message_seq > 0`,
+		ownerID, agentID,
+	).Scan(&minPending, &maxSeq, &channelID); err != nil {
+		return fmt.Errorf("refresh coagent mailbox cursor query: %w", err)
+	}
+	if !maxSeq.Valid || maxSeq.Int64 <= 0 {
+		return nil
+	}
+	cursor := maxSeq.Int64
+	if minPending.Valid && minPending.Int64 > 0 {
+		cursor = minPending.Int64 - 1
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := exec.ExecContext(ctx,
+		`INSERT INTO coagent_mailboxes (owner_id, agent_id, channel_id, processed_message_seq, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   channel_id = VALUES(channel_id),
+		   processed_message_seq = VALUES(processed_message_seq),
+		   updated_at = VALUES(updated_at)`,
+		ownerID,
+		agentID,
+		channelID.String,
+		cursor,
+		now,
+	); err != nil {
+		return fmt.Errorf("refresh coagent mailbox cursor upsert: %w", err)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -105,7 +106,7 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 	} else if found {
 		return nil, nil
 	}
-	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, textureAgentID, 100)
+	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, 100)
 	if err != nil {
 		return nil, fmt.Errorf("list pending texture updates: %w", err)
 	}
@@ -131,6 +132,11 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 			scheduledSeq = update.MessageSeq
 		}
 	}
+	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
+		return nil, err
+	} else if reactivated {
+		return rec, nil
+	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
 	}, scheduledSeq)
@@ -138,6 +144,63 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
 	return rec, nil
+}
+
+func (rt *Runtime) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64) (*types.RunRecord, bool, error) {
+	if rt == nil || rt.store == nil || scheduledSeq <= 0 {
+		return nil, false, nil
+	}
+	ownerID := strings.TrimSpace(doc.OwnerID)
+	docID := strings.TrimSpace(doc.DocID)
+	textureAgentID = strings.TrimSpace(textureAgentID)
+	if ownerID == "" || docID == "" || textureAgentID == "" {
+		return nil, false, nil
+	}
+	rec, err := rt.store.GetLatestPassivatedRunByAgent(ctx, ownerID, textureAgentID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("lookup passivated Texture run: %w", err)
+	}
+	if !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) ||
+		strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id")) != docID {
+		return nil, false, nil
+	}
+	if currentRevisionID := strings.TrimSpace(metadataStringValue(rec.Metadata, "current_revision_id")); currentRevisionID != "" && currentRevisionID != strings.TrimSpace(doc.CurrentRevisionID) {
+		return nil, false, nil
+	}
+	rec.Metadata = cloneMetadata(rec.Metadata)
+	rec.Metadata["request_source"] = "update_coagent"
+	rec.Metadata["request_intent"] = "integrate_worker_findings"
+	rec.Metadata["scheduled_message_seq"] = scheduledSeq
+	rec.Metadata["actor_reactivate_existing_memory"] = true
+	rec.Metadata["actor_reactivated_from_passivated"] = true
+	rec.Metadata["actor_resume_source_loop_id"] = rec.RunID
+	rec.Metadata["current_revision_id"] = strings.TrimSpace(doc.CurrentRevisionID)
+	if spend, ok, err := rt.latestActorToolLoopBudgetSpend(ctx, ownerID, textureAgentID); err != nil {
+		return nil, false, fmt.Errorf("load passivated Texture budget spend: %w", err)
+	} else if ok {
+		rec.Metadata["actor_budget_spent_provider_calls"] = spend.ProviderCalls
+		rec.Metadata["actor_budget_spent_input_tokens"] = spend.InputTokens
+		rec.Metadata["actor_budget_spent_output_tokens"] = spend.OutputTokens
+		if spend.SourceRunID != "" {
+			rec.Metadata["actor_resume_source_loop_id"] = spend.SourceRunID
+		}
+	}
+	rec.State = types.RunPending
+	rec.Error = ""
+	rec.Result = ""
+	rec.FinishedAt = nil
+	rec.UpdatedAt = time.Now().UTC()
+	if err := rt.store.ReactivateAgentMutation(ctx, rec.RunID, scheduledSeq); err != nil && !errors.Is(err, store.ErrMutationAlreadyCompleted) {
+		return nil, false, err
+	}
+	if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		return nil, false, fmt.Errorf("reactivate passivated Texture run: %w", err)
+	}
+	rt.startRunAsync(&rec)
+	return &rec, true, nil
 }
 
 func (rt *Runtime) latestEligibleWorkerMessage(ctx context.Context, ownerID, channelID string, afterSeq int64) (types.ChannelMessage, bool, error) {

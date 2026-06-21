@@ -100,7 +100,7 @@ func (rt *Runtime) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context,
 	if textureAgentID == "" || ownerID == "" {
 		return nil
 	}
-	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, textureAgentID, limit)
+	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, limit)
 	if err != nil || len(updates) == 0 {
 		return nil
 	}

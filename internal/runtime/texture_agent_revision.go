@@ -327,6 +327,10 @@ func (rt *Runtime) deliverOwnerRevisionToTextureActor(ctx context.Context, doc t
 }
 
 func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, scheduledMessageSeq int64) (*types.RunRecord, error) {
+	requestIntent := strings.TrimSpace(req.Intent)
+	if requestIntent == "" {
+		requestIntent = "revise"
+	}
 	// Build the backend-owned Texture revision request from current document state.
 	var currentRevision types.Revision
 	var currentRevisionLoaded bool
@@ -411,7 +415,8 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		"channel_id":           doc.DocID,
 		"doc_id":               doc.DocID,
 		"current_revision_id":  doc.CurrentRevisionID,
-		"request_intent":       strings.TrimSpace(req.Intent),
+		"current_author_kind":  string(currentRevision.AuthorKind),
+		"request_intent":       requestIntent,
 		"original_prompt":      strings.TrimSpace(req.Prompt),
 		"texture_context_mode": contextMode,
 		"texture_prompt_chars": len(agentPrompt),
@@ -444,10 +449,10 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq
 	}
-	// Integrate wakes carry pending coagent findings. Mark the run so the cold
-	// packet prepend fires on the first inference turn (shouldPrependInitialCoagentUpdates),
-	// matching the warm-injection contract instead of relying on a later end_turn
-	// re-injection. See docs/texture-agentic-invariants-2026-06-13.md.
+	// Integrate wakes carry pending coagent findings. Mark the run so runtime
+	// appends those findings as the first durable mailbox turn in run memory,
+	// matching the warm-injection contract instead of relying on prompt-prefix
+	// reconstruction.
 	if workerWake {
 		runMetadata["request_source"] = "update_coagent"
 	}

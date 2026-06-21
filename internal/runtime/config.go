@@ -42,10 +42,9 @@ const (
 	DefaultTextureWakeDebounce = 3 * time.Second
 
 	// DefaultTextureActorParkIdle is how long a Texture revision actor may park
-	// after an idle turn before completing. The parked interval is long enough
-	// to catch live researcher/super packets without a cold wake run, while
-	// still bounding the intermediate T4 lifecycle until passivation-as-sleep
-	// and cumulative cross-activation budgets are complete.
+	// after an idle turn before passivating into a sleeping durable actor. The
+	// parked interval is long enough to catch live researcher/super packets
+	// without a cold wake run while still bounding active provider-loop residency.
 	DefaultTextureActorParkIdle = 2 * time.Minute
 
 	// DefaultRunMemoryContextThresholdTokens is zero so normal runtime

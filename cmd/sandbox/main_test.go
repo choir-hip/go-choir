@@ -14,18 +14,19 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 		StorePath: "/tmp/runtime.db",
 	}
 	loaded := runtime.Config{
-		PromptRoot:          "/prompts",
-		SkillsRoot:          "/skills",
-		ProviderTimeout:     7 * time.Second,
-		SupervisionInterval: 3 * time.Second,
-		ResearcherCount:     2,
-		TextureWakeDebounce: 250 * time.Millisecond,
-		VmctlURL:            "http://10.200.60.1:8083",
-		MaildURL:            "http://10.200.60.1:8087",
-		LLMProvider:         "fireworks",
-		LLMModel:            "model",
-		LLMReasoningEffort:  "low",
-		ModelPolicyPath:     "/policy.toml",
+		PromptRoot:           "/prompts",
+		SkillsRoot:           "/skills",
+		ProviderTimeout:      7 * time.Second,
+		SupervisionInterval:  3 * time.Second,
+		ResearcherCount:      2,
+		TextureWakeDebounce:  250 * time.Millisecond,
+		TextureActorParkIdle: 45 * time.Second,
+		VmctlURL:             "http://10.200.60.1:8083",
+		MaildURL:             "http://10.200.60.1:8087",
+		LLMProvider:          "fireworks",
+		LLMModel:             "model",
+		LLMReasoningEffort:   "low",
+		ModelPolicyPath:      "/policy.toml",
 	}
 
 	got := buildRuntimeConfig(cfg, loaded, "/files")
@@ -37,5 +38,8 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 	}
 	if got.MaildURL != loaded.MaildURL {
 		t.Fatalf("MaildURL = %q, want %q", got.MaildURL, loaded.MaildURL)
+	}
+	if got.TextureActorParkIdle != loaded.TextureActorParkIdle {
+		t.Fatalf("TextureActorParkIdle = %s, want %s", got.TextureActorParkIdle, loaded.TextureActorParkIdle)
 	}
 }

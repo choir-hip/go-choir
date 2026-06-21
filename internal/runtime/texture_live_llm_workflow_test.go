@@ -133,7 +133,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	}
 
 	researchRun, err := rt.StartCoagentRun(context.Background(), initialTextureID,
-		"Live verification: call web_search for cellular automata biological evolution toy model, then call update_coagent with update_id live-research-ca and one concise evidence-backed checkpoint for the parent texture agent.",
+		"Live verification: call web_search for cellular automata biological evolution toy model, then call update_coagent with one concise evidence-backed checkpoint for the parent texture agent. Do not include update_id; runtime derives it.",
 		liveLLMOwnerID,
 		map[string]any{
 			"agent_profile": "researcher",
@@ -166,13 +166,12 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 		t.Fatalf("live researcher finding routed to target=%q channel=%q seq=%d, want texture:%s/%s with message cursor; finding=%+v result=%q", researchFinding.TargetAgentID, researchFinding.ChannelID, researchFinding.MessageSeq, decision.DocID, decision.DocID, researchFinding, researchDone.Result)
 	}
 
-	superUpdateID := "live-super-ca-artifact"
 	textureRegistry := rt.ToolRegistryForProfile(choirruntime.AgentProfileTexture)
 	superRequestRaw, err := textureRegistry.Execute(choirruntime.WithToolExecutionContext(context.Background(), initialTextureRun), "request_super_execution", json.RawMessage(fmt.Sprintf(`{
 		"objective":%q,
 		"channel_id":%q,
 		"model":%q
-	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call update_coagent with update_id "+superUpdateID+", artifacts ['artifacts/live-evolution-ca.txt'], tests ['test -f artifacts/live-evolution-ca.txt && grep -q verified artifacts/live-evolution-ca.txt'], and one proposal for the parent texture agent. Do not finish until update_coagent returns.", decision.DocID, model)))
+	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call update_coagent without update_id, with artifacts ['artifacts/live-evolution-ca.txt'], tests ['test -f artifacts/live-evolution-ca.txt && grep -q verified artifacts/live-evolution-ca.txt'], and one proposal for the parent texture agent. Do not finish until update_coagent returns.", decision.DocID, model)))
 	if err != nil {
 		t.Fatalf("request live super execution: %v", err)
 	}
@@ -192,7 +191,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	}
 	var superUpdate *types.WorkerUpdateRecord
 	for i := range updates {
-		if updates[i].UpdateID == superUpdateID || updates[i].Role == "super" {
+		if updates[i].Role == "super" {
 			superUpdate = &updates[i]
 			break
 		}

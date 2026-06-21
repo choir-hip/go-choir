@@ -13,16 +13,17 @@ const (
 	coagentPacketDeliveryMid    = "mid_activation"
 	coagentPacketDeliveryFinal  = "final_checkpoint"
 	coagentPacketDeliveryCold   = "cold_activation"
+	coagentPacketDeliveryThread = "activation_mailbox_turn"
 )
 
 type coagentUpdatePacket struct {
-	PacketType     string                   `json:"packet_type"`
-	DeliveryPhase  string                   `json:"delivery_phase"`
-	TargetAgentID  string                   `json:"target_agent_id,omitempty"`
-	ChannelID      string                   `json:"channel_id,omitempty"`
-	TrajectoryID   string                   `json:"trajectory_id,omitempty"`
-	Updates        []coagentUpdatePacketItem `json:"updates"`
-	Instruction    string                   `json:"instruction,omitempty"`
+	PacketType    string                    `json:"packet_type"`
+	DeliveryPhase string                    `json:"delivery_phase"`
+	TargetAgentID string                    `json:"target_agent_id,omitempty"`
+	ChannelID     string                    `json:"channel_id,omitempty"`
+	TrajectoryID  string                    `json:"trajectory_id,omitempty"`
+	Updates       []coagentUpdatePacketItem `json:"updates"`
+	Instruction   string                    `json:"instruction,omitempty"`
 }
 
 type coagentUpdatePacketItem struct {
@@ -96,6 +97,8 @@ func coagentUpdatePacketPreamble(deliveryPhase string) string {
 	switch deliveryPhase {
 	case coagentPacketDeliveryFinal:
 		return "Choir coagent update packet (final checkpoint before ending this activation)."
+	case coagentPacketDeliveryThread:
+		return "Choir coagent update packet (activation mailbox turn)."
 	case coagentPacketDeliveryCold:
 		return "Choir coagent update packet (cold activation backlog)."
 	default:
@@ -107,6 +110,8 @@ func coagentUpdateInstruction(deliveryPhase string) string {
 	switch deliveryPhase {
 	case coagentPacketDeliveryFinal:
 		return "New update_coagent records arrived before this activation finished. Process them before ending the turn."
+	case coagentPacketDeliveryThread:
+		return "Pending update_coagent records are appended as the first mailbox turn for this activation. Process them before continuing."
 	case coagentPacketDeliveryCold:
 		return "Pending update_coagent records are being delivered at activation start. Incorporate them before continuing."
 	default:

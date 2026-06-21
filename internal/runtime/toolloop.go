@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -139,11 +140,30 @@ type ToolLoopParkState struct {
 }
 
 type ToolLoopParkResult struct {
-	Continue bool
-	Reason   string
+	Continue  bool
+	Passivate bool
+	Reason    string
 }
 
 type ToolLoopParkWaiterFunc func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error)
+
+var ErrToolLoopPassivated = errors.New("tool loop passivated")
+
+type ToolLoopPassivatedError struct {
+	Reason string
+}
+
+func (e *ToolLoopPassivatedError) Error() string {
+	reason := strings.TrimSpace(e.Reason)
+	if reason == "" {
+		return ErrToolLoopPassivated.Error()
+	}
+	return ErrToolLoopPassivated.Error() + ": " + reason
+}
+
+func (e *ToolLoopPassivatedError) Unwrap() error {
+	return ErrToolLoopPassivated
+}
 
 // ToolLoopBudget is a cumulative kill switch for one tool-loop activation. It is
 // intentionally role-neutral: callers attach policy, while RunToolLoop enforces
@@ -894,6 +914,12 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					}
 					parkAttempts++
 					continue
+				}
+				if parkResult.Passivate {
+					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist passivated assistant message: %w", err)
+					}
+					return combinedFinalText(resp.Text), totalUsage, &ToolLoopPassivatedError{Reason: parkResult.Reason}
 				}
 			}
 			if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {

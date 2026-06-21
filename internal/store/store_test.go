@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -587,7 +588,8 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 		Content:     update.Content,
 		Timestamp:   now,
 	}
-	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+	storedUpdate, _, err := s.DispatchWorkerUpdate(ctx, update, &message)
+	if err != nil {
 		t.Fatalf("dispatch worker update: %v", err)
 	}
 
@@ -612,6 +614,168 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 	}
 	if len(pending) != 0 {
 		t.Fatalf("pending worker updates = %d, want none: %+v", len(pending), pending)
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, rec.OwnerID, rec.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list coagent mailbox backlog: %v", err)
+	}
+	if len(backlog) != 0 {
+		t.Fatalf("mailbox backlog = %d, want none: %+v", len(backlog), backlog)
+	}
+	cursor, channelID, ok, err := s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.AgentID)
+	if err != nil {
+		t.Fatalf("get mailbox cursor: %v", err)
+	}
+	if !ok || cursor != storedUpdate.MessageSeq || channelID != rec.ChannelID {
+		t.Fatalf("mailbox cursor = (%d,%q,%v), want (%d,%q,true)", cursor, channelID, ok, storedUpdate.MessageSeq, rec.ChannelID)
+	}
+}
+
+func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	ownerID := "user-alice"
+	targetAgentID := "texture:doc-mailbox-cursor"
+	channelID := "doc-mailbox-cursor"
+	for _, update := range []types.WorkerUpdateRecord{
+		{
+			UpdateID:      "update-mailbox-1",
+			OwnerID:       ownerID,
+			AgentID:       "researcher:one",
+			TargetAgentID: targetAgentID,
+			ChannelID:     channelID,
+			Role:          "researcher",
+			Kind:          "findings",
+			Summary:       "first finding",
+			Content:       "first finding",
+			CreatedAt:     now,
+		},
+		{
+			UpdateID:      "update-mailbox-2",
+			OwnerID:       ownerID,
+			AgentID:       "researcher:two",
+			TargetAgentID: targetAgentID,
+			ChannelID:     channelID,
+			Role:          "researcher",
+			Kind:          "findings",
+			Summary:       "second finding",
+			Content:       "second finding",
+			CreatedAt:     now.Add(time.Second),
+		},
+	} {
+		message := types.ChannelMessage{
+			ChannelID:   update.ChannelID,
+			FromAgentID: update.AgentID,
+			ToAgentID:   update.TargetAgentID,
+			Role:        update.Role,
+			Content:     update.Content,
+			Timestamp:   update.CreatedAt,
+		}
+		if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+			t.Fatalf("dispatch %s: %v", update.UpdateID, err)
+		}
+	}
+
+	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	if len(pending) != 2 || pending[0].MessageSeq != 1 || pending[1].MessageSeq != 2 {
+		t.Fatalf("pending updates = %+v, want seq 1 then 2", pending)
+	}
+
+	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, []string{"update-mailbox-2"}, "run-out-of-order"); err != nil {
+		t.Fatalf("mark second delivered: %v", err)
+	}
+	cursor, _, ok, err := s.GetCoagentMailboxCursor(ctx, ownerID, targetAgentID)
+	if err != nil {
+		t.Fatalf("get cursor after out-of-order mark: %v", err)
+	}
+	if !ok || cursor != 0 {
+		t.Fatalf("cursor after marking seq 2 first = (%d,%v), want 0/true", cursor, ok)
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list mailbox backlog after out-of-order mark: %v", err)
+	}
+	if len(backlog) != 2 || backlog[0].UpdateID != "update-mailbox-1" || backlog[1].UpdateID != "update-mailbox-2" {
+		t.Fatalf("mailbox backlog after out-of-order mark = %+v, want seq 1 and seq 2 because cursor is still 0", backlog)
+	}
+
+	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, []string{"update-mailbox-1"}, "run-contiguous"); err != nil {
+		t.Fatalf("mark first delivered: %v", err)
+	}
+	cursor, channelID, ok, err = s.GetCoagentMailboxCursor(ctx, ownerID, targetAgentID)
+	if err != nil {
+		t.Fatalf("get cursor after contiguous mark: %v", err)
+	}
+	if !ok || cursor != 2 || channelID != "doc-mailbox-cursor" {
+		t.Fatalf("cursor after contiguous delivery = (%d,%q,%v), want (2,%q,true)", cursor, channelID, ok, "doc-mailbox-cursor")
+	}
+	backlog, err = s.ListCoagentMailboxBacklog(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list mailbox backlog after contiguous mark: %v", err)
+	}
+	if len(backlog) != 0 {
+		t.Fatalf("mailbox backlog after contiguous delivery = %+v, want none", backlog)
+	}
+}
+
+func TestCoagentMailboxBacklogAllUsesActorCursors(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	ownerID := "user-alice"
+	dispatch := func(updateID, targetAgentID, channelID string, at time.Time) {
+		t.Helper()
+		update := types.WorkerUpdateRecord{
+			UpdateID:      updateID,
+			OwnerID:       ownerID,
+			AgentID:       "researcher:mailbox",
+			TargetAgentID: targetAgentID,
+			ChannelID:     channelID,
+			Role:          "researcher",
+			Kind:          "findings",
+			Summary:       updateID,
+			Content:       updateID,
+			CreatedAt:     at,
+		}
+		message := types.ChannelMessage{
+			ChannelID:   update.ChannelID,
+			FromAgentID: update.AgentID,
+			ToAgentID:   update.TargetAgentID,
+			Role:        update.Role,
+			Content:     update.Content,
+			Timestamp:   update.CreatedAt,
+		}
+		if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+			t.Fatalf("dispatch %s: %v", updateID, err)
+		}
+	}
+
+	targetA := "texture:doc-mailbox-all-a"
+	targetB := "texture:doc-mailbox-all-b"
+	dispatch("update-mailbox-all-a1", targetA, "doc-mailbox-all-a", now)
+	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, targetA, []string{"update-mailbox-all-a1"}, "run-a1"); err != nil {
+		t.Fatalf("mark target A first update delivered: %v", err)
+	}
+	dispatch("update-mailbox-all-a2", targetA, "doc-mailbox-all-a", now.Add(time.Second))
+	dispatch("update-mailbox-all-b1", targetB, "doc-mailbox-all-b", now.Add(2*time.Second))
+
+	backlog, err := s.ListCoagentMailboxBacklogAll(ctx, 10)
+	if err != nil {
+		t.Fatalf("list mailbox backlog all: %v", err)
+	}
+	got := make([]string, 0, len(backlog))
+	for _, update := range backlog {
+		got = append(got, update.UpdateID)
+	}
+	want := []string{"update-mailbox-all-a2", "update-mailbox-all-b1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mailbox backlog all = %v, want %v", got, want)
 	}
 }
 

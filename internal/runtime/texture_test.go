@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
@@ -2695,15 +2693,78 @@ func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *test
 	if !foundAppAgent {
 		t.Fatalf("expected appagent revision over user-provided text, got %+v", revs)
 	}
-	if len(provider.choices) == 0 || provider.choices[0] != "function:patch_texture" {
-		t.Fatalf("initial texture tool_choice = %#v, want first choice function:patch_texture", provider.choices)
+	if len(provider.choices) == 0 || provider.choices[0] != "required" {
+		t.Fatalf("initial texture tool_choice = %#v, want generic required durable action for direct revise", provider.choices)
 	}
-	assertInitialTextureWriteOnly(t, provider.firstTools)
 	if len(provider.choices) != 2 {
 		t.Fatalf("texture provider calls = %d choices=%#v, want a write turn plus a non-terminal continuation turn", len(provider.choices), provider.choices)
 	}
 	if provider.choices[1] != "" {
 		t.Fatalf("continuation tool_choice = %q, want unconstrained after the non-terminal write", provider.choices[1])
+	}
+}
+
+func TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch(t *testing.T) {
+	t.Parallel()
+	provider := &textureWriteAndResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	rt.cfg.TextureActorParkIdle = time.Second
+	docID, _ := createDocWithUserRevision(t, h)
+
+	req := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
+		map[string]string{"prompt": "Research the current evidence, keep the owner-visible document honest while evidence is pending, and ask researcher for a grounded packet."})
+	w := httptest.NewRecorder()
+	h.HandleTextureAgentRevision(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("agent revision: status = %d, want %d; body: %s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	var resp textureAgentRevisionResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if state := waitForTaskCompletion(t, h, resp.RunID, 5*time.Second); state != types.RunCompleted {
+		t.Fatalf("run state = %q, want %q", state, types.RunCompleted)
+	}
+	if len(provider.choices) < 2 || provider.choices[0] != "required" || provider.choices[1] != "" {
+		t.Fatalf("texture provider choices = %#v, want generic durable action then unconstrained delegation turn", provider.choices)
+	}
+
+	revs, err := s.ListRevisionsByDoc(context.Background(), docID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	var workStateRevision *types.Revision
+	for i := range revs {
+		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "Working revision while researcher evidence is pending") {
+			workStateRevision = &revs[i]
+			break
+		}
+	}
+	if workStateRevision == nil {
+		t.Fatalf("direct revise did not write owner-visible work-state revision; revisions=%+v", revs)
+	}
+	if !strings.Contains(workStateRevision.Content, "pending") {
+		t.Fatalf("work-state revision content = %q, want explicit pending-work state", workStateRevision.Content)
+	}
+
+	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	var researcher *types.RunRecord
+	for i := range runs {
+		if runs[i].RequestedByRunID == resp.RunID && runs[i].AgentProfile == AgentProfileResearcher {
+			researcher = &runs[i]
+			break
+		}
+	}
+	if researcher == nil {
+		t.Fatalf("direct revise did not delegate researcher after work-state revision; runs=%+v", runs)
+	}
+	if researcher.ChannelID != docID {
+		t.Fatalf("researcher channel = %q, want doc channel %q; run=%+v", researcher.ChannelID, docID, *researcher)
 	}
 }
 
@@ -4211,7 +4272,8 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("update_coagent: %v", err)
 	}
 	var findingResp struct {
-		Status string `json:"status"`
+		UpdateID string `json:"update_id"`
+		Status   string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(raw), &findingResp); err != nil {
 		t.Fatalf("decode update_coagent: %v", err)
@@ -4219,6 +4281,17 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if findingResp.Status != "submitted" {
 		t.Fatalf("update_coagent status = %q, want submitted", findingResp.Status)
 	}
+	if findingResp.UpdateID == "" {
+		t.Fatalf("update_coagent returned empty update_id")
+	}
+	findingUpdate, err := s.GetWorkerUpdate(context.Background(), "user-1", findingResp.UpdateID)
+	if err != nil {
+		t.Fatalf("get coagent update %s: %v", findingResp.UpdateID, err)
+	}
+	if len(findingUpdate.EvidenceIDs) != 1 {
+		t.Fatalf("coagent update evidence_ids = %+v, want one durable evidence handle", findingUpdate.EvidenceIDs)
+	}
+	evidenceID := findingUpdate.EvidenceIDs[0]
 
 	clock.fireAll()
 	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
@@ -4248,20 +4321,59 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if wakeRun == nil {
 		t.Fatalf("expected findings-driven texture wake run on channel %s, got %+v", docID, runs)
 	}
-	// Fix #1: the integrate wake run must be cold-prepend eligible so the
-	// pending coagent findings land in the model's first inference turn.
+	// Fresh Texture update wakes use the same durable mailbox-turn substrate as
+	// resident and sleeping actors. The packet must not be smuggled in by
+	// prepending cold prompt context before run memory initializes.
 	if got := metadataStringValue(wakeRun.Metadata, "request_source"); got != "update_coagent" {
-		t.Fatalf("wake run request_source = %q, want update_coagent (cold-prepend eligibility)", got)
+		t.Fatalf("wake run request_source = %q, want update_coagent", got)
 	}
-	if !shouldPrependInitialCoagentUpdates(wakeRun) {
-		t.Fatalf("wake run should be cold-prepend eligible; metadata=%+v", wakeRun.Metadata)
+	if shouldPrependInitialCoagentUpdates(wakeRun) {
+		t.Fatalf("Texture wake run should not be cold-prepend eligible; metadata=%+v", wakeRun.Metadata)
+	}
+	if !shouldAppendInitialCoagentMailboxTurns(wakeRun) {
+		t.Fatalf("Texture wake run should append initial mailbox turns; metadata=%+v", wakeRun.Metadata)
+	}
+	memoryEntries, err := s.ListRunMemoryEntries(context.Background(), "user-1", wakeRun.RunID)
+	if err != nil {
+		t.Fatalf("list wake run memory: %v", err)
+	}
+	foundActivationMailboxTurn := false
+	activationMailboxText := ""
+	for _, entry := range memoryEntries {
+		if entry.Kind != types.RunMemoryEntryMessage {
+			continue
+		}
+		var msg struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		}
+		if err := json.Unmarshal(entry.Message, &msg); err != nil {
+			continue
+		}
+		for _, part := range msg.Content {
+			if strings.Contains(part.Text, "activation mailbox turn") &&
+				strings.Contains(part.Text, `"delivery_phase":"activation_mailbox_turn"`) {
+				foundActivationMailboxTurn = true
+				activationMailboxText = part.Text
+				break
+			}
+		}
+		if foundActivationMailboxTurn {
+			break
+		}
+	}
+	if !foundActivationMailboxTurn {
+		t.Fatalf("wake run memory missing activation mailbox turn: %+v", memoryEntries)
+	}
+	if !strings.Contains(activationMailboxText, evidenceID) {
+		t.Fatalf("activation mailbox turn missing durable evidence handle %s: %s", evidenceID, activationMailboxText)
 	}
 	// Fix #2: a grounded integrate wake must write a revision before it can end
 	// or take a terminal delegation action.
 	if got := initialTextureToolChoice(wakeRun); got != "function:patch_texture" {
 		t.Fatalf("initialTextureToolChoice(wake run) = %q, want function:patch_texture", got)
 	}
-	evidenceID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("choir:research-finding:finding-stream-001:0")).String()
 	evidence, err := s.GetEvidence(context.Background(), evidenceID, "user-1")
 	if err != nil {
 		t.Fatalf("evidence handle %s in wake prompt does not resolve: %v", evidenceID, err)
@@ -4350,7 +4462,8 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 		t.Fatalf("update_coagent: %v", err)
 	}
 	var updateResp struct {
-		Status string `json:"status"`
+		Status   string `json:"status"`
+		UpdateID string `json:"update_id"`
 	}
 	if err := json.Unmarshal([]byte(raw), &updateResp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
@@ -4358,13 +4471,16 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	if updateResp.Status != "submitted" {
 		t.Fatalf("update_coagent status = %q, want submitted", updateResp.Status)
 	}
+	if !strings.HasPrefix(updateResp.UpdateID, "upd-") {
+		t.Fatalf("update_coagent update_id = %q, want runtime-owned id", updateResp.UpdateID)
+	}
 
 	revs = waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
 	if !revisionContentsContain(revs, "Grounded update from parked resident actor.") {
 		t.Fatalf("missing parked resident V2 revision; revisions=%+v", revs)
 	}
-	if ids := metadataStringSlice(textureRun.Metadata["worker_update_ids"]); !containsString(ids, "parked-finding-001") {
-		t.Fatalf("resident run worker_update_ids = %+v, want parked-finding-001", ids)
+	if ids := metadataStringSlice(textureRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
+		t.Fatalf("resident run worker_update_ids = %+v, want %s", ids, updateResp.UpdateID)
 	}
 	if !metadataBoolValue(textureRun.Metadata, runMetadataWorkerUpdatesInjected) {
 		t.Fatalf("resident run %s missing %s metadata: %+v", textureRun.RunID, runMetadataWorkerUpdatesInjected, textureRun.Metadata)
@@ -4386,6 +4502,139 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	}
 	if len(provider.choices) < 2 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "" {
 		t.Fatalf("provider choices = %#v, want exact first patch then unconstrained parked follow-up", provider.choices)
+	}
+}
+
+func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	provider := &textureParkResidentProvider{Provider: NewStubProvider(time.Millisecond)}
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	rt.cfg.TextureActorParkIdle = time.Second
+	docID, _ := createDocWithUserRevision(t, h)
+	doc, err := s.GetDocument(ctx, docID, "user-1")
+	if err != nil {
+		t.Fatalf("get doc: %v", err)
+	}
+
+	textureRun, err := rt.submitTextureAgentRevisionRun(ctx, doc, "user-1", textureAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "Draft immediately, then sleep until follow-up findings arrive.",
+	}, 0)
+	if err != nil {
+		t.Fatalf("submit texture revision run: %v", err)
+	}
+	revs := waitForRevisionCount(t, s, docID, "user-1", 2, 5*time.Second)
+	if !revisionContentsContain(revs, "Model-prior resident draft before worker evidence.") {
+		t.Fatalf("missing resident V1 revision; revisions=%+v", revs)
+	}
+	sleepingRun := waitForStoredRunState(t, s, textureRun.RunID, types.RunPassivated, 5*time.Second)
+	if got := metadataStringValue(sleepingRun.Metadata, "actor_sleep_state"); got != "idle" {
+		t.Fatalf("actor_sleep_state = %q, want idle; metadata=%+v", got, sleepingRun.Metadata)
+	}
+	mutation, err := s.GetAgentMutationByRun(ctx, textureRun.RunID)
+	if err != nil {
+		t.Fatalf("get sleeping mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "sleeping" {
+		t.Fatalf("sleeping mutation = %+v, want state sleeping", mutation)
+	}
+
+	researcherRun := types.RunRecord{
+		RunID:        "researcher-idle-resume-texture",
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-texture-test",
+		AgentID:      "researcher:idle-resume-texture",
+		AgentProfile: AgentProfileResearcher,
+		AgentRole:    AgentProfileResearcher,
+		ChannelID:    docID,
+		State:        types.RunRunning,
+		Prompt:       "Send one grounded update after Texture slept.",
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+		Metadata: map[string]any{
+			runMetadataAgentID:      "researcher:idle-resume-texture",
+			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataChannelID:    docID,
+			runMetadataTrajectoryID: textureRun.RunID,
+		},
+	}
+	if err := s.CreateRun(ctx, researcherRun); err != nil {
+		t.Fatalf("create researcher run: %v", err)
+	}
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, &researcherRun), "update_coagent", json.RawMessage(`{
+		"agent_id":"texture:`+docID+`",
+		"findings":["A new grounded finding arrived from the parked resident test."],
+		"evidence":[
+			{
+				"kind":"web_page",
+				"source_uri":"https://example.com/idle-resume",
+				"title":"Idle resume evidence",
+				"content":"A new grounded finding arrived."
+			}
+		],
+		"notes":["The sleeping Texture actor should resume the same run and consume this without a cold wake run."]
+	}`))
+	if err != nil {
+		t.Fatalf("update_coagent after sleep: %v", err)
+	}
+	var updateResp struct {
+		Status   string `json:"status"`
+		UpdateID string `json:"update_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &updateResp); err != nil {
+		t.Fatalf("decode update_coagent response: %v", err)
+	}
+	if updateResp.Status != "submitted" || !strings.HasPrefix(updateResp.UpdateID, "upd-") {
+		t.Fatalf("update_coagent response = %+v, want submitted runtime-owned id", updateResp)
+	}
+
+	revs = waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
+	if !revisionContentsContain(revs, "Grounded update from parked resident actor.") {
+		t.Fatalf("missing resumed resident revision; revisions=%+v", revs)
+	}
+	resumedRun := waitForStoredRunState(t, s, textureRun.RunID, types.RunPassivated, 5*time.Second)
+	if ids := metadataStringSlice(resumedRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
+		t.Fatalf("resumed run worker_update_ids = %+v, want %s", ids, updateResp.UpdateID)
+	}
+	if !metadataBoolValue(resumedRun.Metadata, "actor_reactivated_from_passivated") {
+		t.Fatalf("resumed run missing same-run reactivation marker: %+v", resumedRun.Metadata)
+	}
+
+	runs, err := s.ListRunsByChannel(ctx, "user-1", docID, 20)
+	if err != nil {
+		t.Fatalf("list runs by channel: %v", err)
+	}
+	var textureRevisionRuns []types.RunRecord
+	for _, run := range runs {
+		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			textureRevisionRuns = append(textureRevisionRuns, run)
+		}
+	}
+	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != textureRun.RunID {
+		t.Fatalf("texture revision runs = %+v, want only sleeping/resumed run %s", textureRevisionRuns, textureRun.RunID)
+	}
+	memoryEntries, err := s.ListRunMemoryEntries(ctx, "user-1", textureRun.RunID)
+	if err != nil {
+		t.Fatalf("list run memory: %v", err)
+	}
+	foundMailboxTurn := false
+	for _, entry := range memoryEntries {
+		if entry.Kind == types.RunMemoryEntryMessage && strings.Contains(string(entry.Message), "Choir coagent update packet") {
+			foundMailboxTurn = true
+			break
+		}
+	}
+	if !foundMailboxTurn {
+		t.Fatalf("run memory missing resumed mailbox turn: %+v", memoryEntries)
+	}
+	mutation, err = s.GetAgentMutationByRun(ctx, textureRun.RunID)
+	if err != nil {
+		t.Fatalf("get resumed sleeping mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "sleeping" {
+		t.Fatalf("resumed mutation = %+v, want state sleeping", mutation)
 	}
 }
 
@@ -4500,12 +4749,13 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 }
 
-func TestTextureWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testing.T) {
+func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *testing.T) {
 	t.Parallel()
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Integrated content after the run completed."))
 	provider.delay = 300 * time.Millisecond
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	rt.cfg.TextureActorParkIdle = time.Second
 	docID, _ := createDocWithUserRevision(t, h)
 
 	req := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
@@ -4545,85 +4795,82 @@ func TestTextureWorkerMessageDuringActiveRevisionTriggersLaterFollowUp(t *testin
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	lateSeq, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), researchRun), docID, "texture:"+docID, "", "researcher-1", "researcher", "Late finding: a sourced correction arrived while the texture run was already active.")
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(context.Background(), researchRun), "update_coagent", json.RawMessage(`{
+		"agent_id":"texture:`+docID+`",
+		"findings":["Late finding: a sourced correction arrived while the texture run was already active."],
+		"evidence":[
+			{
+				"kind":"web_page",
+				"source_uri":"https://example.com/late",
+				"title":"Late finding evidence",
+				"content":"Late finding: a sourced correction arrived while the texture run was already active."
+			}
+		],
+		"notes":["The active Texture run should append this as a mailbox turn and continue in the same loop."]
+	}`))
 	if err != nil {
-		t.Fatalf("post late worker message: %v", err)
+		t.Fatalf("update_coagent late worker message: %v", err)
+	}
+	var updateResp struct {
+		Status   string `json:"status"`
+		UpdateID string `json:"update_id"`
+		Cursor   int64  `json:"cursor"`
+	}
+	if err := json.Unmarshal([]byte(raw), &updateResp); err != nil {
+		t.Fatalf("decode update_coagent response: %v", err)
+	}
+	if updateResp.Status != "submitted" || !strings.HasPrefix(updateResp.UpdateID, "upd-") || updateResp.Cursor == 0 {
+		t.Fatalf("update_coagent response = %+v, want submitted runtime id and cursor", updateResp)
 	}
 
-	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 8*time.Second)
+	revs := waitForRevisionCount(t, s, docID, "user-1", 2, 8*time.Second)
 	var appAgentContents []string
-	var appAgentRevs []types.Revision
 	for _, rev := range revs {
 		if rev.AuthorKind == types.AuthorAppAgent {
 			appAgentContents = append(appAgentContents, rev.Content)
-			appAgentRevs = append(appAgentRevs, rev)
 		}
 	}
-	if len(appAgentContents) != 2 {
-		t.Fatalf("expected two appagent revisions, got %d: %+v", len(appAgentContents), revs)
+	if len(appAgentContents) == 0 {
+		t.Fatalf("expected at least one appagent revision, got revisions: %+v", revs)
 	}
 	for _, content := range appAgentContents {
 		if !strings.Contains(content, "Integrated content after the run completed.") {
 			t.Fatalf("unexpected appagent revision content: %+v", appAgentContents)
 		}
 	}
-	foundPending := false
-	foundConsumed := false
-	for _, rev := range appAgentRevs {
-		meta := decodeRevisionMetadata(rev.Metadata)
-		if metadataSeqContains(t, meta, "worker_updates_pending", lateSeq) {
-			foundPending = true
-		}
-		if metadataSeqContains(t, meta, "worker_updates_consumed", lateSeq) {
-			foundConsumed = true
-		}
-	}
-	if !foundPending {
-		t.Fatalf("expected one appagent revision to record late worker update %d as pending; revs=%+v", lateSeq, appAgentRevs)
-	}
-	if !foundConsumed {
-		t.Fatalf("expected follow-up appagent revision to record late worker update %d as consumed; revs=%+v", lateSeq, appAgentRevs)
-	}
+	sleepingRun := waitForStoredRunState(t, s, initialResp.RunID, types.RunPassivated, 8*time.Second)
 
-	var wakeRun *types.RunRecord
-	deadline = time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		runs, err := rt.Store().ListRunsByChannel(context.Background(), "user-1", docID, 20)
-		if err != nil {
-			t.Fatalf("list channel runs: %v", err)
-		}
-		for i := range runs {
-			if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researchRun.RunID && runs[i].RunID != initialResp.RunID {
-				wakeRun = &runs[i]
-				break
-			}
-		}
-		if wakeRun != nil && wakeRun.State.Terminal() {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
+	runs, err := rt.Store().ListRunsByChannel(context.Background(), "user-1", docID, 20)
+	if err != nil {
+		t.Fatalf("list channel runs: %v", err)
 	}
-	if wakeRun == nil {
-		t.Fatalf("expected a follow-up texture wake run after the active run completed")
+	var textureRevisionRuns []types.RunRecord
+	for _, run := range runs {
+		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			textureRevisionRuns = append(textureRevisionRuns, run)
+		}
 	}
-	if !strings.Contains(wakeRun.Prompt, "Late finding: a sourced correction arrived while the texture run was already active.") {
-		t.Fatalf("wake run prompt missing late worker message: %q", wakeRun.Prompt)
+	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != initialResp.RunID {
+		t.Fatalf("texture revision runs = %+v, want only active same run %s", textureRevisionRuns, initialResp.RunID)
+	}
+	if ids := metadataStringSlice(sleepingRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
+		t.Fatalf("same-run worker_update_ids = %+v, want %s", ids, updateResp.UpdateID)
 	}
 
 	checkpoint, err := s.GetTextureControllerCheckpoint(context.Background(), docID, "user-1")
 	if err != nil {
 		t.Fatalf("get controller checkpoint: %v", err)
 	}
-	if checkpoint == nil || checkpoint.IntegratedMessageSeq == 0 {
-		t.Fatalf("expected controller checkpoint to advance after follow-up, got %+v", checkpoint)
+	if checkpoint == nil || checkpoint.IntegratedMessageSeq < updateResp.Cursor {
+		t.Fatalf("checkpoint = %+v, want integrated seq >= %d", checkpoint, updateResp.Cursor)
 	}
 
-	pending, err := s.GetPendingAgentMutationByDoc(context.Background(), docID, "user-1")
+	mutation, err := s.GetAgentMutationByRun(context.Background(), initialResp.RunID)
 	if err != nil {
-		t.Fatalf("get pending mutation: %v", err)
+		t.Fatalf("get sleeping mutation: %v", err)
 	}
-	if pending != nil {
-		t.Fatalf("expected no pending mutation after both revisions completed, got %+v", pending)
+	if mutation == nil || mutation.State != "sleeping" {
+		t.Fatalf("mutation = %+v, want sleeping resident mutation", mutation)
 	}
 }
 
@@ -4659,7 +4906,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 	assertNoForcedSemanticDelegation(t, prompt)
 }
 
-func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing.T) {
+func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 	t.Parallel()
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-texture-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -4856,19 +5103,23 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 	if err != nil {
 		t.Fatalf("get interrupted run after restart: %v", err)
 	}
-	if gotInterrupted.State != types.RunPassivated {
-		t.Fatalf("interrupted run state = %q, want %q", gotInterrupted.State, types.RunPassivated)
+	if gotInterrupted.State != types.RunCompleted {
+		t.Fatalf("interrupted run state = %q, want %q", gotInterrupted.State, types.RunCompleted)
 	}
 	if gotInterrupted.Error != "" {
 		t.Fatalf("interrupted run error = %q, want empty", gotInterrupted.Error)
+	}
+	if !metadataBoolValue(gotInterrupted.Metadata, "actor_reactivated_from_passivated") ||
+		!metadataBoolValue(gotInterrupted.Metadata, "actor_reactivate_existing_memory") {
+		t.Fatalf("interrupted run metadata missing same-run reactivation markers: %+v", gotInterrupted.Metadata)
 	}
 
 	mutation, err := s2.GetAgentMutationByRun(ctx, interruptedRun.RunID)
 	if err != nil {
 		t.Fatalf("get interrupted mutation: %v", err)
 	}
-	if mutation == nil || mutation.State != "stale_activation" {
-		t.Fatalf("expected interrupted mutation to be stale after recovery, got %+v", mutation)
+	if mutation == nil || mutation.State != "completed" {
+		t.Fatalf("expected interrupted mutation to complete after same-run recovery, got %+v", mutation)
 	}
 	pending, err := s2.GetPendingAgentMutationByDoc(ctx, doc.DocID, "user-1")
 	if err != nil {
@@ -4882,40 +5133,48 @@ func TestRestartRecoveryClearsInterruptedTextureMutationAndRelaunches(t *testing
 	if err != nil {
 		t.Fatalf("list channel runs after restart: %v", err)
 	}
-	var recoveredRun *types.RunRecord
+	var textureRevisionRuns []types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RunID != interruptedRun.RunID {
-			recoveredRun = &runs[i]
-			break
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+			textureRevisionRuns = append(textureRevisionRuns, runs[i])
 		}
 	}
-	if recoveredRun == nil {
-		t.Fatalf("expected a replacement texture run after restart, got %+v", runs)
+	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != interruptedRun.RunID {
+		t.Fatalf("texture revision runs after restart = %+v, want only same reactivated run %s", textureRevisionRuns, interruptedRun.RunID)
 	}
-	if got := metadataStringValue(recoveredRun.Metadata, "actor_rewarm_source_loop_id"); got != interruptedRun.RunID {
-		t.Fatalf("replacement rewarm source = %q, want %q; metadata=%+v", got, interruptedRun.RunID, recoveredRun.Metadata)
+	recoveredRun := textureRevisionRuns[0]
+	if got := metadataStringValue(recoveredRun.Metadata, "actor_resume_source_loop_id"); got != interruptedRun.RunID {
+		t.Fatalf("same-run resume source = %q, want %q; metadata=%+v", got, interruptedRun.RunID, recoveredRun.Metadata)
 	}
 	if got := metadataIntValue(recoveredRun.Metadata, "actor_budget_spent_provider_calls"); got != 3 {
-		t.Fatalf("replacement spent provider calls = %d, want 3; metadata=%+v", got, recoveredRun.Metadata)
+		t.Fatalf("same-run spent provider calls = %d, want 3; metadata=%+v", got, recoveredRun.Metadata)
 	}
 	if got := metadataIntValue(recoveredRun.Metadata, "actor_budget_spent_input_tokens"); got != 120 {
-		t.Fatalf("replacement spent input tokens = %d, want 120; metadata=%+v", got, recoveredRun.Metadata)
+		t.Fatalf("same-run spent input tokens = %d, want 120; metadata=%+v", got, recoveredRun.Metadata)
 	}
 	if got := metadataIntValue(recoveredRun.Metadata, "actor_budget_spent_output_tokens"); got != 40 {
-		t.Fatalf("replacement spent output tokens = %d, want 40; metadata=%+v", got, recoveredRun.Metadata)
+		t.Fatalf("same-run spent output tokens = %d, want 40; metadata=%+v", got, recoveredRun.Metadata)
 	}
 	memoryEntries, err := s2.ListRunMemoryEntries(ctx, "user-1", recoveredRun.RunID)
 	if err != nil {
 		t.Fatalf("list recovered run memory: %v", err)
 	}
-	if len(memoryEntries) == 0 || memoryEntries[0].Kind != types.RunMemoryEntryCompaction || memoryEntries[0].Reason != "actor_rewarm" {
-		t.Fatalf("recovered memory entries = %+v, want actor_rewarm snapshot first", memoryEntries)
+	if len(memoryEntries) < 2 || memoryEntries[0].Kind != types.RunMemoryEntryMessage ||
+		!strings.Contains(string(memoryEntries[0].Message), "Stored V1 before restart") {
+		t.Fatalf("recovered memory entries = %+v, want prior actor message preserved first", memoryEntries)
 	}
-	if !strings.Contains(memoryEntries[0].Summary, "Stored V1 before restart") {
-		t.Fatalf("actor_rewarm summary missing prior actor context: %q", memoryEntries[0].Summary)
+	foundMailboxTurn := false
+	for _, entry := range memoryEntries {
+		if entry.Kind == types.RunMemoryEntryMessage && strings.Contains(string(entry.Message), "Choir coagent update packet") {
+			foundMailboxTurn = true
+			break
+		}
+	}
+	if !foundMailboxTurn {
+		t.Fatalf("recovered memory entries missing appended mailbox turn: %+v", memoryEntries)
 	}
 	if ids := metadataStringSlice(recoveredRun.Metadata["worker_update_ids"]); !containsString(ids, storedUpdate.UpdateID) {
-		t.Fatalf("replacement worker_update_ids = %+v, want %s", ids, storedUpdate.UpdateID)
+		t.Fatalf("same-run worker_update_ids = %+v, want %s", ids, storedUpdate.UpdateID)
 	}
 	checkpoint, err := s2.GetTextureControllerCheckpoint(ctx, doc.DocID, "user-1")
 	if err != nil {

@@ -478,19 +478,19 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		},
 	}
 	coRun := types.RunRecord{
-		RunID:        "cosuper-skip-level",
-		AgentID:      "agent-cosuper-skip",
-		ChannelID:    "skip-level-channel",
-		RequestedByRunID:  "candidate-world-spawner",
-		TrajectoryID: vsuperRun.TrajectoryID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      "user-alice",
-		SandboxID:    "sandbox-test",
-		State:        types.RunRunning,
-		Prompt:       "Implement under vsuper.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "cosuper-skip-level",
+		AgentID:          "agent-cosuper-skip",
+		ChannelID:        "skip-level-channel",
+		RequestedByRunID: "candidate-world-spawner",
+		TrajectoryID:     vsuperRun.TrajectoryID,
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          "user-alice",
+		SandboxID:        "sandbox-test",
+		State:            types.RunRunning,
+		Prompt:           "Implement under vsuper.",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2409,19 +2409,19 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 
 	children := []types.RunRecord{
 		{
-			RunID:        "vsuper-budget-child-worker",
-			AgentID:      "agent-worker-child",
-			ChannelID:    parent.ChannelID,
-			RequestedByRunID:  "other-spawner",
-			TrajectoryID: parent.TrajectoryID,
-			AgentProfile: AgentProfileCoSuper,
-			AgentRole:    AgentProfileCoSuper,
-			OwnerID:      parent.OwnerID,
-			SandboxID:    parent.SandboxID,
-			State:        types.RunRunning,
-			Prompt:       "Implement candidate change.",
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			RunID:            "vsuper-budget-child-worker",
+			AgentID:          "agent-worker-child",
+			ChannelID:        parent.ChannelID,
+			RequestedByRunID: "other-spawner",
+			TrajectoryID:     parent.TrajectoryID,
+			AgentProfile:     AgentProfileCoSuper,
+			AgentRole:        AgentProfileCoSuper,
+			OwnerID:          parent.OwnerID,
+			SandboxID:        parent.SandboxID,
+			State:            types.RunRunning,
+			Prompt:           "Implement candidate change.",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileCoSuper,
 				runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2430,19 +2430,19 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 			},
 		},
 		{
-			RunID:        "vsuper-budget-child-verifier",
-			AgentID:      "agent-verifier-child",
-			ChannelID:    parent.ChannelID,
-			RequestedByRunID:  "other-spawner",
-			TrajectoryID: parent.TrajectoryID,
-			AgentProfile: AgentProfileCoSuper,
-			AgentRole:    AgentProfileCoSuper,
-			OwnerID:      parent.OwnerID,
-			SandboxID:    parent.SandboxID,
-			State:        types.RunRunning,
-			Prompt:       "Verify candidate change.",
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			RunID:            "vsuper-budget-child-verifier",
+			AgentID:          "agent-verifier-child",
+			ChannelID:        parent.ChannelID,
+			RequestedByRunID: "other-spawner",
+			TrajectoryID:     parent.TrajectoryID,
+			AgentProfile:     AgentProfileCoSuper,
+			AgentRole:        AgentProfileCoSuper,
+			OwnerID:          parent.OwnerID,
+			SandboxID:        parent.SandboxID,
+			State:            types.RunRunning,
+			Prompt:           "Verify candidate change.",
+			CreatedAt:        now,
+			UpdatedAt:        now,
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileCoSuper,
 				runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2513,20 +2513,20 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 
 	otherFinishedAt := now.Add(-time.Second)
 	otherTrajectoryImpl := types.RunRecord{
-		RunID:        "vsuper-sequencing-other-impl",
-		AgentID:      "agent-other-implementation-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  parent.RunID,
-		TrajectoryID: "traj-vsuper-other",
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunCompleted,
-		Prompt:       "Implement another trajectory.",
-		CreatedAt:    otherFinishedAt,
-		UpdatedAt:    otherFinishedAt,
-		FinishedAt:   &otherFinishedAt,
+		RunID:            "vsuper-sequencing-other-impl",
+		AgentID:          "agent-other-implementation-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: parent.RunID,
+		TrajectoryID:     "traj-vsuper-other",
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunCompleted,
+		Prompt:           "Implement another trajectory.",
+		CreatedAt:        otherFinishedAt,
+		UpdatedAt:        otherFinishedAt,
+		FinishedAt:       &otherFinishedAt,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2554,19 +2554,19 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 	}
 
 	impl := types.RunRecord{
-		RunID:        "vsuper-sequencing-impl",
-		AgentID:      "agent-implementation-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  "other-spawner",
-		TrajectoryID: parent.TrajectoryID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Implement candidate change.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "vsuper-sequencing-impl",
+		AgentID:          "agent-implementation-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: "other-spawner",
+		TrajectoryID:     parent.TrajectoryID,
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunRunning,
+		Prompt:           "Implement candidate change.",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2652,19 +2652,19 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 	}
 
 	existing := types.RunRecord{
-		RunID:        "vsuper-slot-child-worker",
-		AgentID:      "agent-worker-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  parent.RunID,
-		TrajectoryID: parent.TrajectoryID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Implement candidate change.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "vsuper-slot-child-worker",
+		AgentID:          "agent-worker-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: parent.RunID,
+		TrajectoryID:     parent.TrajectoryID,
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunRunning,
+		Prompt:           "Implement candidate change.",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2741,19 +2741,19 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		t.Fatalf("create vsuper parent: %v", err)
 	}
 	child := types.RunRecord{
-		RunID:        "vsuper-cancel-child",
-		AgentID:      "agent-exported-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  "candidate-world-spawner",
-		TrajectoryID: parent.TrajectoryID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Implement candidate change and export.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "vsuper-cancel-child",
+		AgentID:          "agent-exported-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: "candidate-world-spawner",
+		TrajectoryID:     parent.TrajectoryID,
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunRunning,
+		Prompt:           "Implement candidate change and export.",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2779,19 +2779,19 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		"ui_source_delta_sha256":      "child-ui-sha",
 	})
 	sameAgentOtherTrajectory := types.RunRecord{
-		RunID:        "vsuper-cancel-same-agent-other-trajectory",
-		AgentID:      child.AgentID,
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  parent.RunID,
-		TrajectoryID: "traj-other-vsuper-cancel-same-agent",
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Same agent id on a newer other trajectory.",
-		CreatedAt:    now.Add(2 * time.Second),
-		UpdatedAt:    now.Add(2 * time.Second),
+		RunID:            "vsuper-cancel-same-agent-other-trajectory",
+		AgentID:          child.AgentID,
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: parent.RunID,
+		TrajectoryID:     "traj-other-vsuper-cancel-same-agent",
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunRunning,
+		Prompt:           "Same agent id on a newer other trajectory.",
+		CreatedAt:        now.Add(2 * time.Second),
+		UpdatedAt:        now.Add(2 * time.Second),
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2842,19 +2842,19 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	}
 
 	cancellableChild := types.RunRecord{
-		RunID:        "vsuper-cancel-cancellable-child",
-		AgentID:      "agent-cancellable-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  "candidate-world-spawner",
-		TrajectoryID: parent.TrajectoryID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Verify candidate change without package evidence.",
-		CreatedAt:    now.Add(3 * time.Second),
-		UpdatedAt:    now.Add(3 * time.Second),
+		RunID:            "vsuper-cancel-cancellable-child",
+		AgentID:          "agent-cancellable-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: "candidate-world-spawner",
+		TrajectoryID:     parent.TrajectoryID,
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunRunning,
+		Prompt:           "Verify candidate change without package evidence.",
+		CreatedAt:        now.Add(3 * time.Second),
+		UpdatedAt:        now.Add(3 * time.Second),
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2896,19 +2896,19 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	}
 
 	otherTrajectoryChild := types.RunRecord{
-		RunID:        "vsuper-cancel-other-trajectory-child",
-		AgentID:      "agent-exported-other-trajectory",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  parent.RunID,
-		TrajectoryID: "traj-other-vsuper-cancel",
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunRunning,
-		Prompt:       "Export from a different trajectory.",
-		CreatedAt:    now.Add(time.Second),
-		UpdatedAt:    now.Add(time.Second),
+		RunID:            "vsuper-cancel-other-trajectory-child",
+		AgentID:          "agent-exported-other-trajectory",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: parent.RunID,
+		TrajectoryID:     "traj-other-vsuper-cancel",
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunRunning,
+		Prompt:           "Export from a different trajectory.",
+		CreatedAt:        now.Add(time.Second),
+		UpdatedAt:        now.Add(time.Second),
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -2979,19 +2979,19 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		t.Fatalf("create vsuper parent: %v", err)
 	}
 	child := types.RunRecord{
-		RunID:        "vsuper-export-child",
-		AgentID:      "agent-export-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  "other-spawner",
-		TrajectoryID: parent.TrajectoryID,
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunCompleted,
-		Prompt:       "Implement candidate change and publish a package.",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RunID:            "vsuper-export-child",
+		AgentID:          "agent-export-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: "other-spawner",
+		TrajectoryID:     parent.TrajectoryID,
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunCompleted,
+		Prompt:           "Implement candidate change and publish a package.",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -3008,19 +3008,19 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		t.Fatalf("claim implementation slot: got claimed=false, want true")
 	}
 	otherTrajectoryChild := types.RunRecord{
-		RunID:        "vsuper-export-wrong-child",
-		AgentID:      "agent-export-wrong-child",
-		ChannelID:    parent.ChannelID,
-		RequestedByRunID:  parent.RunID,
-		TrajectoryID: "trace-other-export",
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
-		OwnerID:      parent.OwnerID,
-		SandboxID:    parent.SandboxID,
-		State:        types.RunCompleted,
-		Prompt:       "Implement another candidate and publish a package.",
-		CreatedAt:    now.Add(time.Second),
-		UpdatedAt:    now.Add(time.Second),
+		RunID:            "vsuper-export-wrong-child",
+		AgentID:          "agent-export-wrong-child",
+		ChannelID:        parent.ChannelID,
+		RequestedByRunID: parent.RunID,
+		TrajectoryID:     "trace-other-export",
+		AgentProfile:     AgentProfileCoSuper,
+		AgentRole:        AgentProfileCoSuper,
+		OwnerID:          parent.OwnerID,
+		SandboxID:        parent.SandboxID,
+		State:            types.RunCompleted,
+		Prompt:           "Implement another candidate and publish a package.",
+		CreatedAt:        now.Add(time.Second),
+		UpdatedAt:        now.Add(time.Second),
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileCoSuper,
 			runMetadataAgentRole:    AgentProfileCoSuper,
@@ -3157,7 +3157,6 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
-		"update_id":"finding-001",
 		"agent_id":"texture:doc-1",
 		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
@@ -3189,11 +3188,14 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	if resp.Status != "submitted" {
 		t.Fatalf("status = %q, want submitted", resp.Status)
 	}
+	if !strings.HasPrefix(resp.UpdateID, "upd-") {
+		t.Fatalf("update_id = %q, want runtime-owned id", resp.UpdateID)
+	}
 	if resp.AgentID != "texture:doc-1" {
 		t.Fatalf("agent_id = %q, want %q", resp.AgentID, "texture:doc-1")
 	}
 
-	finding, err := s.GetWorkerUpdate(context.Background(), "user-alice", "finding-001")
+	finding, err := s.GetWorkerUpdate(context.Background(), "user-alice", resp.UpdateID)
 	if err != nil {
 		t.Fatalf("get coagent update: %v", err)
 	}
@@ -3218,7 +3220,6 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 
 	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
-		"update_id":"finding-001",
 		"agent_id":"texture:doc-1",
 		"kind":"findings",
 		"findings":["Model releases this week improved reasoning and tool use."],
@@ -3237,14 +3238,18 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		t.Fatalf("repeat update_coagent: %v", err)
 	}
 	var respAgain struct {
-		Cursor int64  `json:"cursor"`
-		Status string `json:"status"`
+		UpdateID string `json:"update_id"`
+		Cursor   int64  `json:"cursor"`
+		Status   string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(rawAgain), &respAgain); err != nil {
 		t.Fatalf("decode repeated update_coagent: %v", err)
 	}
 	if respAgain.Status != "existing" {
 		t.Fatalf("repeat status = %q, want existing", respAgain.Status)
+	}
+	if respAgain.UpdateID != resp.UpdateID {
+		t.Fatalf("repeat update_id = %q, want %q", respAgain.UpdateID, resp.UpdateID)
 	}
 	if respAgain.Cursor != resp.Cursor {
 		t.Fatalf("repeat cursor = %d, want %d", respAgain.Cursor, resp.Cursor)
@@ -3476,7 +3481,6 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	rawArgs := json.RawMessage(`{
-		"update_id":"super-update-1",
 		"agent_id":"texture:doc-structured-worker-update",
 		"channel_id":"doc-structured-worker-update",
 		"findings":["A deterministic seed keeps the cellular automata visualization reproducible."],
@@ -3511,14 +3515,14 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
 	}
-	if resp.UpdateID != "super-update-1" || resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
+	if !strings.HasPrefix(resp.UpdateID, "upd-") || resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Cursor == 0 || resp.Status != "submitted" {
 		t.Fatalf("unexpected update_coagent response: %+v", resp)
 	}
 	if resp.TrajectoryID != "traj-structured-worker-update" {
 		t.Fatalf("trajectory_id = %q, want traj-structured-worker-update", resp.TrajectoryID)
 	}
 
-	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-update-1")
+	update, err := s.GetWorkerUpdate(ctx, ownerID, resp.UpdateID)
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
@@ -3564,7 +3568,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list worker updates by trajectory: %v", err)
 	}
-	if len(updates) != 1 || updates[0].UpdateID != "super-update-1" {
+	if len(updates) != 1 || updates[0].UpdateID != resp.UpdateID {
 		t.Fatalf("trajectory updates = %+v", updates)
 	}
 
@@ -3590,13 +3594,23 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("repeat submit should not duplicate messages, got %+v", messages)
 	}
 
-	_, err = superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
-		"update_id":"super-update-1",
+	rawDifferent, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
+		"update_id":"legacy-human-label-is-ignored",
 		"agent_id":"texture:doc-structured-worker-update",
 		"tests":["different test payload"]
 	}`))
-	if err == nil {
-		t.Fatal("same update_id with different payload should fail")
+	if err != nil {
+		t.Fatalf("same human label with different payload should mint distinct runtime update: %v", err)
+	}
+	var different struct {
+		UpdateID string `json:"update_id"`
+		Status   string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(rawDifferent), &different); err != nil {
+		t.Fatalf("decode different response: %v", err)
+	}
+	if different.Status != "submitted" || different.UpdateID == resp.UpdateID {
+		t.Fatalf("different payload response = %+v, original %s", different, resp.UpdateID)
 	}
 }
 

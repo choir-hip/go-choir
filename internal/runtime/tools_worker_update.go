@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -35,9 +37,9 @@ type submitCoagentUpdateArgs struct {
 func newUpdateCoagentTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "update_coagent",
-		Description: "Persist one structured non-canonical coagent update and wake the addressed owning agent. Use this for research findings, execution results, verification results, artifacts, blockers, directives, assignments, questions, proposals, and typed capability_requests. A capability request is a signal to the owner/supervisor, not automatic routing.",
+		Description: "Persist one structured non-canonical coagent update and wake the addressed owning agent. Use this for research findings, execution results, verification results, artifacts, blockers, directives, assignments, questions, proposals, and typed capability_requests. Runtime derives the durable update_id from the delivery envelope and normalized payload; do not invent one. A capability request is a signal to the owner/supervisor, not automatic routing.",
 		Parameters: jsonSchemaObject(map[string]any{
-			"update_id":    map[string]any{"type": "string"},
+			"update_id":    map[string]any{"type": "string", "description": "Deprecated and ignored for durable identity. Runtime derives update_id from the delivery envelope and normalized payload."},
 			"kind":         map[string]any{"type": "string", "enum": []string{"findings", "evidence", "capability_request", "blocker", "proposal", "status", "verification", "artifact", "question", "directive", "assignment"}},
 			"summary":      map[string]any{"type": "string"},
 			"agent_id":     map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
@@ -82,15 +84,11 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 				},
 			},
 			"notes": stringArraySchema(),
-		}, []string{"update_id"}, false),
+		}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in submitCoagentUpdateArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode update_coagent args: %w", err)
-			}
-			updateID := strings.TrimSpace(in.UpdateID)
-			if updateID == "" {
-				return "", fmt.Errorf("update_id must not be empty")
 			}
 			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
 			agentID := stringFromToolContext(ctx, toolCtxAgentID)
@@ -100,24 +98,14 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("update_coagent missing coagent context")
 			}
 
-			evidenceIDs := trimNonEmpty(in.EvidenceIDs)
-			for idx, item := range in.Evidence {
-				rec, err := ensureFindingEvidence(ctx, rt.store, ownerID, agentID, updateID, idx, item)
-				if err != nil {
-					return "", err
-				}
-				evidenceIDs = append(evidenceIDs, rec.EvidenceID)
-			}
-
 			update := types.WorkerUpdateRecord{
-				UpdateID:           updateID,
 				OwnerID:            ownerID,
 				AgentID:            agentID,
 				Role:               nonEmpty(role, configuredAgentProfileForRun(ctxRunRecord(ctx))),
 				Kind:               strings.TrimSpace(in.Kind),
 				Summary:            strings.TrimSpace(in.Summary),
 				Findings:           trimNonEmpty(in.Findings),
-				EvidenceIDs:        evidenceIDs,
+				EvidenceIDs:        trimNonEmpty(in.EvidenceIDs),
 				Artifacts:          trimNonEmpty(in.Artifacts),
 				Refs:               trimNonEmpty(in.Refs),
 				Tests:              trimNonEmpty(in.Tests),
@@ -164,6 +152,17 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			update.TargetAgentID = targetAgentID
 			update.ChannelID = channelID
 			update.TrajectoryID = trajectoryID
+			update.UpdateID = deriveWorkerUpdateID(update, in.Evidence)
+
+			evidenceIDs := append([]string(nil), update.EvidenceIDs...)
+			for idx, item := range in.Evidence {
+				rec, err := ensureFindingEvidence(ctx, rt.store, ownerID, agentID, update.UpdateID, idx, item)
+				if err != nil {
+					return "", err
+				}
+				evidenceIDs = append(evidenceIDs, rec.EvidenceID)
+			}
+			update.EvidenceIDs = evidenceIDs
 			update.Content = buildWorkerUpdateMessage(update)
 
 			message := &types.ChannelMessage{
@@ -330,6 +329,66 @@ func appendCapabilityRequestSection(b *strings.Builder, requests []types.Capabil
 		}
 		b.WriteString("\n")
 	}
+}
+
+func deriveWorkerUpdateID(update types.WorkerUpdateRecord, evidence []researchFindingEvidenceInput) string {
+	type normalizedEvidence struct {
+		Kind      string `json:"kind,omitempty"`
+		SourceURI string `json:"source_uri,omitempty"`
+		Title     string `json:"title,omitempty"`
+		Content   string `json:"content,omitempty"`
+		Metadata  string `json:"metadata,omitempty"`
+	}
+	payload := struct {
+		OwnerID            string                    `json:"owner_id"`
+		AgentID            string                    `json:"agent_id"`
+		TargetAgentID      string                    `json:"target_agent_id"`
+		ChannelID          string                    `json:"channel_id"`
+		TrajectoryID       string                    `json:"trajectory_id,omitempty"`
+		Role               string                    `json:"role,omitempty"`
+		Kind               string                    `json:"kind,omitempty"`
+		Summary            string                    `json:"summary,omitempty"`
+		Findings           []string                  `json:"findings,omitempty"`
+		EvidenceIDs        []string                  `json:"evidence_ids,omitempty"`
+		Evidence           []normalizedEvidence      `json:"evidence,omitempty"`
+		Artifacts          []string                  `json:"artifacts,omitempty"`
+		Refs               []string                  `json:"refs,omitempty"`
+		Tests              []string                  `json:"tests,omitempty"`
+		Questions          []string                  `json:"questions,omitempty"`
+		Proposals          []string                  `json:"proposals,omitempty"`
+		CapabilityRequests []types.CapabilityRequest `json:"capability_requests,omitempty"`
+		Notes              []string                  `json:"notes,omitempty"`
+	}{
+		OwnerID:            strings.TrimSpace(update.OwnerID),
+		AgentID:            strings.TrimSpace(update.AgentID),
+		TargetAgentID:      strings.TrimSpace(update.TargetAgentID),
+		ChannelID:          strings.TrimSpace(update.ChannelID),
+		TrajectoryID:       strings.TrimSpace(update.TrajectoryID),
+		Role:               strings.TrimSpace(update.Role),
+		Kind:               strings.TrimSpace(update.Kind),
+		Summary:            strings.TrimSpace(update.Summary),
+		Findings:           append([]string(nil), update.Findings...),
+		EvidenceIDs:        append([]string(nil), update.EvidenceIDs...),
+		Artifacts:          append([]string(nil), update.Artifacts...),
+		Refs:               append([]string(nil), update.Refs...),
+		Tests:              append([]string(nil), update.Tests...),
+		Questions:          append([]string(nil), update.Questions...),
+		Proposals:          append([]string(nil), update.Proposals...),
+		CapabilityRequests: append([]types.CapabilityRequest(nil), update.CapabilityRequests...),
+		Notes:              append([]string(nil), update.Notes...),
+	}
+	for _, item := range evidence {
+		payload.Evidence = append(payload.Evidence, normalizedEvidence{
+			Kind:      strings.TrimSpace(item.Kind),
+			SourceURI: strings.TrimSpace(item.SourceURI),
+			Title:     strings.TrimSpace(item.Title),
+			Content:   strings.TrimSpace(item.Content),
+			Metadata:  rawJSONText(item.Metadata),
+		})
+	}
+	raw, _ := json.Marshal(payload)
+	sum := sha256.Sum256(raw)
+	return "upd-" + hex.EncodeToString(sum[:])[:32]
 }
 
 func validateExistingWorkerUpdate(existing, want types.WorkerUpdateRecord) error {

@@ -517,6 +517,16 @@ func TestInitialTextureToolChoiceRequiresPatchBeforeContinuation(t *testing.T) {
 			want: "function:patch_texture",
 		},
 		{
+			name: "direct user-authored revise requires durable action but not exact patch",
+			metadata: map[string]any{
+				"type":                "texture_agent_revision",
+				"request_intent":      "revise",
+				"current_author_kind": string(types.AuthorUser),
+				"original_prompt":     "Research this and show visible work state while evidence is pending.",
+			},
+			want: "required",
+		},
+		{
 			name: "scheduled non-coagent run leaves texture free to choose",
 			metadata: map[string]any{
 				"type":                  "texture_agent_revision",

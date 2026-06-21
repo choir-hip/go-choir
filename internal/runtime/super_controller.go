@@ -42,7 +42,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		return nil, fmt.Errorf("check blocked super run: %w", err)
 	}
 
-	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, agentID, 100)
+	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 	if err != nil {
 		return nil, fmt.Errorf("list super pending updates: %w", err)
 	}
@@ -163,6 +163,9 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			return err
 		}
+		if err := rt.markTextureRevisionRunUpdatesDelivered(ctx, rec); err != nil {
+			return err
+		}
 		return rt.completeSuccessfulRunWorkItems(ctx, rec)
 	}
 	if len(updateIDs) == 0 || rec.State != types.RunCompleted {
@@ -276,7 +279,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
-	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, agentID, 100)
+	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 	if err != nil {
 		return nil, fmt.Errorf("list coagent pending updates: %w", err)
 	}
@@ -422,6 +425,10 @@ func buildCoagentUpdatePrompt(updates []types.WorkerUpdateRecord) string {
 }
 
 func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTurnsFunc {
+	return rt.coagentUpdateTurnInjectorWithInitialPhase(rec, "")
+}
+
+func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecord, initialPhase string) InjectUserTurnsFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
@@ -434,6 +441,7 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTur
 	if ownerID == "" || agentID == "" {
 		return nil
 	}
+	initialPhase = strings.TrimSpace(initialPhase)
 	seen := map[string]bool{}
 	for _, id := range coagentUpdateIDsForRun(rec) {
 		id = strings.TrimSpace(id)
@@ -442,7 +450,7 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTur
 		}
 	}
 	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
-		updates, err := rt.store.ListPendingWorkerUpdates(context.Background(), ownerID, agentID, 100)
+		updates, err := rt.store.ListCoagentMailboxBacklog(context.Background(), ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
 		}
@@ -464,6 +472,9 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTur
 		phase := coagentPacketDeliveryMid
 		if finalCheckpoint {
 			phase = coagentPacketDeliveryFinal
+		} else if initialPhase != "" {
+			phase = initialPhase
+			initialPhase = ""
 		}
 		msgs, _, err := buildCoagentUpdateUserMessages(fresh, phase, agentID)
 		if err != nil {
@@ -471,6 +482,16 @@ func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTur
 		}
 		return msgs, nil
 	}
+}
+
+func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
+	if rec == nil || agentProfileForRun(rec) != AgentProfileTexture {
+		return false
+	}
+	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
+		return true
+	}
+	return len(coagentUpdateIDsForRun(rec)) > 0
 }
 
 func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFunc {
@@ -488,7 +509,7 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 	maxWait := time.Duration(metadataIntValue(rec.Metadata, "actor_park_idle_seconds")) * time.Second
 	return func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error) {
 		ready := func() (bool, error) {
-			updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, agentID, 100)
+			updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 			if err != nil {
 				return false, fmt.Errorf("list pending update_coagent records for park wait: %w", err)
 			}
@@ -514,7 +535,7 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 		if ok {
 			return ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
 		}
-		return ToolLoopParkResult{Continue: false, Reason: "idle_deadline"}, nil
+		return ToolLoopParkResult{Continue: false, Passivate: agentProfileForRun(rec) == AgentProfileTexture, Reason: "idle_deadline"}, nil
 	}
 }
 
@@ -549,7 +570,7 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 			seen[id] = true
 		}
 	}
-	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, agentID, 100)
+	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 	if err != nil {
 		return messages, fmt.Errorf("list pending coagent updates for cold delivery: %w", err)
 	}
@@ -577,6 +598,9 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 
 func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	if rec == nil {
+		return false
+	}
+	if agentProfileForRun(rec) == AgentProfileTexture {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {

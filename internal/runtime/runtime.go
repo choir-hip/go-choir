@@ -1317,7 +1317,7 @@ func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
-	updates, err := rt.store.ListPendingWorkerUpdatesAll(ctx, 1000)
+	updates, err := rt.store.ListCoagentMailboxBacklogAll(ctx, 1000)
 	if err != nil {
 		log.Printf("runtime: boot update sweep: %v", err)
 		return
@@ -1576,10 +1576,14 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = WithToolExecutionContext(ctx, rec)
-	initialMessages, err = rt.prependInitialCoagentUpdatePackets(ctx, rec, initialMessages)
-	if err != nil {
-		rt.handleExecutionError(ctx, rec, fmt.Errorf("prepend coagent update packets: %w", err))
-		return
+	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")
+	appendInitialMailboxTurns := shouldAppendInitialCoagentMailboxTurns(rec)
+	if !reactivateExistingMemory && !appendInitialMailboxTurns {
+		initialMessages, err = rt.prependInitialCoagentUpdatePackets(ctx, rec, initialMessages)
+		if err != nil {
+			rt.handleExecutionError(ctx, rec, fmt.Errorf("prepend coagent update packets: %w", err))
+			return
+		}
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -1596,10 +1600,36 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
 		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt))
+	initialMailboxPhase := ""
+	if appendInitialMailboxTurns {
+		initialMailboxPhase = coagentPacketDeliveryThread
+	}
+	injectUserTurns := rt.coagentUpdateTurnInjectorWithInitialPhase(rec, initialMailboxPhase)
 	initialMessages, err = memory.initialize(ctx, initialMessages)
 	if err != nil {
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
 		return
+	}
+	if appendInitialMailboxTurns && injectUserTurns != nil {
+		injected, err := injectUserTurns(false)
+		if err != nil {
+			rt.handleExecutionError(ctx, rec, fmt.Errorf("inject initial mailbox turns for actor: %w", err))
+			return
+		}
+		for _, msg := range injected {
+			if err := memory.afterAppendMessage(ctx, "user", msg); err != nil {
+				rt.handleExecutionError(ctx, rec, fmt.Errorf("persist initial mailbox turn: %w", err))
+				return
+			}
+		}
+		if len(injected) > 0 {
+			initialMessages = append(initialMessages, injected...)
+			rec.UpdatedAt = time.Now().UTC()
+			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+				rt.handleExecutionError(ctx, rec, fmt.Errorf("persist actor initial mailbox metadata: %w", err))
+				return
+			}
+		}
 	}
 	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
 	terminalFallback := terminalProviderFallbackSelection()
@@ -1622,7 +1652,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		WithToolLoopLLMConfig(llmConfig),
 		WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
-	injectUserTurns := rt.coagentUpdateTurnInjector(rec)
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, WithParkWaiter(waiter))
 	}
@@ -1643,6 +1672,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
+		if errors.Is(err, ErrToolLoopPassivated) {
+			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
+			return
+		}
 		if ctx.Err() != nil {
 			rt.handleExecutionError(ctx, rec, ctx.Err())
 		} else {
@@ -1700,6 +1733,98 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 
 	rt.maybeStartConfiguredContinuation(persistCtx, rec)
+}
+
+func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage TokenUsage, passivationErr error) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	reason := "idle_deadline"
+	var passivatedErr *ToolLoopPassivatedError
+	if errors.As(passivationErr, &passivatedErr) && strings.TrimSpace(passivatedErr.Reason) != "" {
+		reason = strings.TrimSpace(passivatedErr.Reason)
+	}
+	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+		if err := rt.sleepTextureMutationAfterIdle(ctx, rec); err != nil {
+			rt.handleExecutionError(ctx, rec, err)
+			return
+		}
+		if err := rt.markTextureRevisionRunUpdatesDelivered(ctx, rec); err != nil {
+			rt.handleExecutionError(ctx, rec, err)
+			return
+		}
+	}
+	now := time.Now().UTC()
+	rec.State = types.RunPassivated
+	rec.Result = text
+	rec.Error = ""
+	rec.UpdatedAt = now
+	rec.FinishedAt = nil
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	rec.Metadata["input_tokens"] = usage.InputTokens
+	rec.Metadata["output_tokens"] = usage.OutputTokens
+	rec.Metadata["passivated_reason"] = reason
+	rec.Metadata["actor_sleep_state"] = "idle"
+	rec.Metadata["actor_sleep_at"] = now.Format(time.RFC3339Nano)
+
+	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		log.Printf("runtime: passivate idle run %s: %v", rec.RunID, err)
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"reason":        reason,
+		"result_length": len(text),
+		"input_tokens":  usage.InputTokens,
+		"output_tokens": usage.OutputTokens,
+	})
+	rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payload)
+	if shouldLogWireLifecycle(rec) {
+		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
+	}
+}
+
+func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	mutation, err := rt.store.GetAgentMutationByRun(ctx, rec.RunID)
+	if err != nil {
+		return fmt.Errorf("get texture mutation for idle passivation: %w", err)
+	}
+	if mutation == nil {
+		return nil
+	}
+	switch mutation.State {
+	case "pending":
+		if revisionID := strings.TrimSpace(mutation.RevisionID); revisionID != "" {
+			if rec.Metadata == nil {
+				rec.Metadata = map[string]any{}
+			}
+			rec.Metadata["current_revision_id"] = revisionID
+			if err := rt.store.SleepAgentMutation(ctx, rec.RunID); err != nil && err != store.ErrMutationAlreadyCompleted {
+				return err
+			}
+			return nil
+		}
+		if rt.textureRunRequestedWorkers(ctx, rec) {
+			if err := rt.store.DeferAgentMutation(ctx, rec.RunID); err != nil {
+				return err
+			}
+			return nil
+		}
+		_ = rt.store.FailAgentMutation(ctx, rec.RunID)
+		if rec.Metadata == nil {
+			rec.Metadata = map[string]any{}
+		}
+		rec.Metadata["texture_revision_failed_no_write"] = true
+		return fmt.Errorf("Texture run passivated without storing a Texture revision")
+	case "sleeping", "completed", "deferred":
+		return nil
+	default:
+		return nil
+	}
 }
 
 // CompactRunMemory forces a durable run-memory checkpoint for an existing run.
@@ -2219,11 +2344,11 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 	}
 }
 
-// initialTextureToolChoice requires the first Texture turn to publish a
-// canonical revision before it can delegate, request execution, record a
-// decision, hand off email, or end. The exact tool obligation is mechanical
-// revision-cadence policy, not semantic role choreography: Texture still decides
-// the revision content and any later action after the first write.
+// initialTextureToolChoice keeps first-paint prompt-bar and grounded integration
+// runs from silently ending without durable Texture state. Direct user-authored
+// revise requests use a generic durable-action requirement instead of an exact
+// patch_texture requirement so Texture can choose an honest work-state revision,
+// delegation, blocker, or decision without a trivial cleanup patch.
 func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
@@ -2233,6 +2358,10 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 	}
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""
+	}
+	if metadataStringValue(rec.Metadata, "request_intent") == "revise" &&
+		metadataStringValue(rec.Metadata, "current_author_kind") == string(types.AuthorUser) {
+		return "required"
 	}
 	return "function:patch_texture"
 }
@@ -3408,7 +3537,7 @@ func (rt *Runtime) markTextureWorkerUpdatesDelivered(ctx context.Context, rec *t
 		if targetAgentID == "" {
 			continue
 		}
-		targetUpdates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 500)
+		targetUpdates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, targetAgentID, 500)
 		if err != nil {
 			return err
 		}
@@ -3436,7 +3565,49 @@ func (rt *Runtime) markTextureWorkerUpdatesDelivered(ctx context.Context, rec *t
 			return err
 		}
 	}
+	if err := rt.advanceTextureControllerCheckpoint(ctx, ownerID, docID, maxSeq); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (rt *Runtime) markTextureRevisionRunUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+		return nil
+	}
+	docID := firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID)
+	if strings.TrimSpace(docID) == "" {
+		return nil
+	}
+	consumedThroughSeq := rt.textureWorkerUpdateCommitSeq(ctx, rec, docID, nil)
+	if consumedThroughSeq <= 0 {
+		return nil
+	}
+	return rt.markTextureWorkerUpdatesDelivered(ctx, rec, docID, consumedThroughSeq)
+}
+
+func (rt *Runtime) advanceTextureControllerCheckpoint(ctx context.Context, ownerID, docID string, seq int64) error {
+	if rt == nil || rt.store == nil || seq <= 0 {
+		return nil
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	docID = strings.TrimSpace(docID)
+	if ownerID == "" || docID == "" {
+		return nil
+	}
+	checkpoint, err := rt.store.GetTextureControllerCheckpoint(ctx, docID, ownerID)
+	if err != nil {
+		return fmt.Errorf("load texture controller checkpoint: %w", err)
+	}
+	if checkpoint != nil && checkpoint.IntegratedMessageSeq >= seq {
+		return nil
+	}
+	return rt.store.UpsertTextureControllerCheckpoint(ctx, store.TextureControllerCheckpoint{
+		DocID:                docID,
+		OwnerID:              ownerID,
+		IntegratedMessageSeq: seq,
+		UpdatedAt:            time.Now().UTC(),
+	})
 }
 
 // handleExecutionError transitions a run to failed/blocked and emits the
