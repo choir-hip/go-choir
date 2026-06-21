@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -49,8 +50,8 @@ var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 // nodes rather than markdown source links.
 var textureRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
 
-func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, metadata map[string]any) ([]textureSourceEntity, bool) {
-	entities := decodeTextureSourceEntities(metadata["source_entities"])
+func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, metadata map[string]any, existing []textureSourceEntity) ([]textureSourceEntity, bool) {
+	entities := append([]textureSourceEntity{}, existing...)
 	if legacyMediaEntities := sourceEntitiesFromMediaRefs(decodeTextureMediaSourceRefs(metadata["media_source_refs"])); len(legacyMediaEntities) > 0 {
 		entities, _ = mergeTextureSourceEntities(entities, legacyMediaEntities)
 	}
@@ -208,7 +209,7 @@ func normalizeTextureSourceEntities(metadata map[string]any, incoming []textureS
 	if metadata == nil {
 		return nil, false
 	}
-	entities := decodeTextureSourceEntities(metadata["source_entities"])
+	entities := decodeAvailableTextureSourceEntities(metadata)
 	return mergeTextureSourceEntities(entities, incoming)
 }
 
@@ -414,19 +415,126 @@ func decodeTextureSourceEntities(value any) []textureSourceEntity {
 		return nil
 	}
 	var entities []textureSourceEntity
+	var raw []byte
 	switch typed := value.(type) {
 	case []textureSourceEntity:
 		return typed
 	case []any:
-		data, _ := json.Marshal(typed)
-		_ = json.Unmarshal(data, &entities)
+		raw, _ = json.Marshal(typed)
+		_ = json.Unmarshal(raw, &entities)
 	case json.RawMessage:
-		_ = json.Unmarshal(typed, &entities)
+		raw = typed
+		_ = json.Unmarshal(raw, &entities)
 	default:
-		data, _ := json.Marshal(typed)
-		_ = json.Unmarshal(data, &entities)
+		raw, _ = json.Marshal(typed)
+		_ = json.Unmarshal(raw, &entities)
 	}
-	return entities
+	if len(entities) > 0 {
+		for _, entity := range entities {
+			if strings.TrimSpace(entity.EntityID) != "" {
+				return entities
+			}
+		}
+	}
+	var structured []texturedoc.SourceEntity
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &structured)
+	}
+	if len(structured) == 0 {
+		return entities
+	}
+	out := make([]textureSourceEntity, 0, len(structured))
+	for _, entity := range structured {
+		runtimeEntity := runtimeSourceEntityFromStructured(entity)
+		if strings.TrimSpace(runtimeEntity.EntityID) != "" {
+			out = append(out, runtimeEntity)
+		}
+	}
+	return out
+}
+
+func runtimeSourceEntityFromStructured(entity texturedoc.SourceEntity) textureSourceEntity {
+	id := strings.TrimSpace(entity.SourceEntityID)
+	if id == "" {
+		return textureSourceEntity{}
+	}
+	targetKind := strings.TrimSpace(entity.Target.Kind)
+	targetID := strings.TrimSpace(entity.Target.ID)
+	targetURI := strings.TrimSpace(entity.Target.URI)
+	runtimeEntity := textureSourceEntity{
+		EntityID: id,
+		Kind:     firstNonEmpty(targetKind, "content_item"),
+		Label:    strings.TrimSpace(firstNonEmpty(entity.Display.Title, entity.Display.Label, id)),
+		Target: textureSourceEntityTarget{
+			TargetKind:   targetKind,
+			URL:          targetURI,
+			CanonicalURL: targetURI,
+		},
+		Selectors:  runtimeSourceSelectorsFromStructured(entity.Selectors),
+		Display:    runtimeSourceDisplayFromStructured(entity.Display, entity.Evidence),
+		Evidence:   runtimeSourceEvidenceFromStructured(entity.Evidence),
+		Provenance: runtimeSourceProvenanceFromStructured(entity.Provenance),
+	}
+	switch targetKind {
+	case "source_service_item":
+		runtimeEntity.Kind = "source_service_item"
+		runtimeEntity.Target.ItemID = targetID
+	case "content_item", "reader_artifact", "source_viewer_artifact", "file_artifact":
+		runtimeEntity.Target.ContentID = targetID
+	case "texture", "texture_revision", "texture_span":
+		runtimeEntity.Target.DocID = targetID
+	case "publication_version", "publication_span":
+		runtimeEntity.Target.RevisionID = targetID
+	case "web_url", "url":
+		runtimeEntity.Kind = "web_source"
+	default:
+		if targetID != "" {
+			runtimeEntity.Target.ContentID = targetID
+		}
+	}
+	return runtimeEntity
+}
+
+func runtimeSourceSelectorsFromStructured(selectors []texturedoc.SourceSelector) []textureSourceEntitySelector {
+	if len(selectors) == 0 {
+		return []textureSourceEntitySelector{{SelectorKind: sourcecontract.SelectorKindWholeResource}}
+	}
+	out := make([]textureSourceEntitySelector, 0, len(selectors))
+	for _, selector := range selectors {
+		data := selector.Data
+		out = append(out, textureSourceEntitySelector{
+			SelectorKind: strings.TrimSpace(selector.Kind),
+			TextQuote:    firstNonEmpty(metadataString(data, "exact"), metadataString(data, "text_quote")),
+			ContentHash:  metadataString(data, "content_hash"),
+		})
+	}
+	return out
+}
+
+func runtimeSourceDisplayFromStructured(display texturedoc.SourceDisplay, evidence texturedoc.SourceEvidence) textureSourceEntityDisplay {
+	mode := strings.TrimSpace(display.Mode)
+	return textureSourceEntityDisplay{
+		InlineMode:       mode,
+		ExpandedMode:     mode,
+		OpenSurface:      strings.TrimSpace(evidence.OpenSurface),
+		DefaultCollapsed: mode == "" || mode == "numbered_ref",
+	}
+}
+
+func runtimeSourceEvidenceFromStructured(evidence texturedoc.SourceEvidence) textureSourceEntityEvidence {
+	return textureSourceEntityEvidence{
+		State:         strings.TrimSpace(evidence.State),
+		ResearchState: strings.TrimSpace(evidence.ResearchState),
+		Uncertainty:   strings.TrimSpace(evidence.Uncertainty),
+	}
+}
+
+func runtimeSourceProvenanceFromStructured(provenance texturedoc.SourceEntityProvenance) textureSourceEntityProvenance {
+	return textureSourceEntityProvenance{
+		CreatedBy:           strings.TrimSpace(provenance.CreatedBy),
+		RightsScope:         strings.TrimSpace(provenance.RightsScope),
+		UntrustedSourceText: provenance.UntrustedSourceText,
+	}
 }
 
 func mediaSourceRefToSourceEntity(ref textureMediaSourceRef) textureSourceEntity {
@@ -637,7 +745,7 @@ func markTextureMediaSourceRefsResearchState(metadata map[string]any, state stri
 		return
 	}
 	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
-	entities := decodeTextureSourceEntities(metadata["source_entities"])
+	entities := decodeAvailableTextureSourceEntities(metadata)
 	if len(refs) > 0 {
 		legacyEntities := sourceEntitiesFromMediaRefs(refs)
 		for i := range legacyEntities {
@@ -655,7 +763,7 @@ func markTextureMediaSourceRefsResearchState(metadata map[string]any, state stri
 		}
 	}
 	if changedEntities || len(refs) > 0 {
-		metadata["source_entities"] = entities
+		metadata[textureAvailableSourceEntitiesKey] = entities
 	}
 }
 

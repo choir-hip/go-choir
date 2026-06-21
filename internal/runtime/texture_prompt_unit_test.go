@@ -1,11 +1,13 @@
 package runtime
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -340,38 +342,39 @@ func TestTexturePromptPreservesExplicitHardConstraints(t *testing.T) {
 }
 
 func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
-	current := types.Revision{
-		DocID:      "doc-source-ref",
-		RevisionID: "rev-source-ref",
-		Content:    "# Source Review\n\nThis claim cites [the clip](source:src-youtube-demo).",
-		AuthorKind: types.AuthorUser,
-	}
-	request := buildAgentRevisionRequest(current, nil, map[string]any{
-		"source_entities": []textureSourceEntity{
-			{
-				EntityID: "src-youtube-demo",
-				Kind:     "youtube_video",
-				Label:    "Demo clip",
-				Target: textureSourceEntityTarget{
-					CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-				},
-				Display: textureSourceEntityDisplay{
-					OpenSurface: "video",
-				},
-				Evidence: textureSourceEntityEvidence{
-					TranscriptAvailability: "unavailable",
-					ResearchState:          "pending",
-				},
-			},
+	sourceEntities, err := json.Marshal([]texturedoc.SourceEntity{{
+		SourceEntityID: "src-youtube-demo",
+		Target: texturedoc.SourceTarget{
+			Kind: "video",
+			URI:  "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 		},
-	}, textureAgentRevisionRequest{
+		Display: texturedoc.SourceDisplay{
+			Mode:  "numbered_ref",
+			Title: "Demo clip",
+		},
+		Evidence: texturedoc.SourceEvidence{
+			ResearchState: "pending",
+			OpenSurface:   "video",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("marshal source entities: %v", err)
+	}
+	current := types.Revision{
+		DocID:          "doc-source-ref",
+		RevisionID:     "rev-source-ref",
+		Content:        "# Source Review\n\nThis claim cites [the clip](source:src-youtube-demo).",
+		SourceEntities: sourceEntities,
+		AuthorKind:     types.AuthorUser,
+	}
+	request := buildAgentRevisionRequest(current, nil, nil, textureAgentRevisionRequest{
 		Intent: "revise",
 		Prompt: "Keep the citation attached while making the wording clearer.",
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
 		"Detected Texture source entities:",
-		"youtube_video Demo clip entity_id=src-youtube-demo",
+		"video Demo clip entity_id=src-youtube-demo",
 		"Do not write markdown source links such as [label](source:ENTITY_ID)",
 		"Preserve existing source_entity_id values exactly",
 		"Preserve source entity identity from legacy inline source ref: source_entity_id=src-youtube-demo",

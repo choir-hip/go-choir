@@ -1319,3 +1319,47 @@ adapter that emits structured `body_doc` / top-level `source_entities`.
 Open edge: implement the runtime context-key repair, convert tests that expect
 run metadata source pools, and independently review that no canonical revision
 write path requires `metadata.source_entities`.
+
+### D7 Slice 6 Local - Runtime Source Context Key Split
+
+Status: locally implemented and independently accepted on 2026-06-21.
+
+Repair:
+
+- Introduced run-scoped `texture_available_source_entities` for transient
+  Texture source context used by prompts and `patch_texture` source-pool
+  validation.
+- Removed `source_entities` from `durableMetadataKeys`, so generic appagent
+  revision metadata carry-forward no longer treats source identity as durable
+  metadata.
+- Stopped `buildAppagentRevisionMetadata` from merging worker-update source
+  entities into revision metadata. Appagent revision provenance now reads the
+  materialized top-level structured `SourceEntities`, not metadata sidecars.
+- `buildAgentRevisionRequest` derives the prompt source inventory from the
+  current revision's top-level `SourceEntities` plus run-scoped available source
+  context.
+- `patch_texture` reads available source context from
+  `texture_available_source_entities`; the canonical revision still writes
+  `BodyDoc` plus top-level `SourceEntities` and sanitizes source sidecars from
+  metadata.
+- Runtime conversion helpers now accept D1 structured `SourceEntity` JSON
+  (`source_entity_id`, `target.kind`, `target.id`/`uri`) when building prompt
+  and tool source pools.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestPendingUpdateRefsBecomeSourceEntities|TestTexturePromptPreservesInlineSourceRefs|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestUniversalWire|TestBuildStructuredAppagentRevisionProvenance|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureTool|Test.*SourceEntities|Test.*source_entities|TestMarkTextureMediaSourceRefsResearchState|TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation' -count=1`;
+`nix develop -c go test ./internal/store ./internal/texturedoc`;
+`git diff --check`;
+`rg -n 'metadata\["source_entities"\]|rec\.Metadata\["source_entities"\]|run\.Metadata\["source_entities"\]|textureRun\.Metadata\["source_entities"\]|"source_entities": sourceEntities|source_entities metadata|metadata source_entities' internal/runtime -g '*.go'`.
+
+Independent review verdict: accepted. The reviewer found no blocking issue for
+the narrow invariant: live run context reads/writes
+`texture_available_source_entities`, appagent revision metadata no longer carries
+legacy `metadata["source_entities"]`, prompt context merges top-level revision
+`SourceEntities` with run-scoped available entities, and `patch_texture` source
+availability starts from current structured sources plus run-scoped available
+entities.
+
+Open edge: remaining D7 classification should now focus on negative assertions,
+historical markdown-lineage import, prompt warnings that ban markdown source
+links, and top-level API fields named `source_entities`.

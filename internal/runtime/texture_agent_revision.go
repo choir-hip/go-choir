@@ -373,16 +373,16 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	if currentRevisionLoaded {
-		// Source entities are collated from deterministic media ingestion, the
-		// typed coagent findings handed to this revision request or already
-		// persisted into legacy metadata["source_entities"] while D7 residue is
-		// being removed,
-		// and (on worker integration) the typed evidence records attached to pending
-		// researcher update_coagent deliveries. Researcher prose is no longer
-		// regex-scraped into sources; evidence-backed content items become native
-		// source entities, and only explicit quote selectors become text_quote
-		// bindings that the citation/quote validator checks at write time.
-		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, metadata)
+		// Source entities are collated from the current revision's top-level
+		// structured source_entities, deterministic media ingestion, typed
+		// coagent findings handed to this revision request, and (on worker
+		// integration) typed evidence records attached to pending researcher
+		// update_coagent deliveries. Researcher prose is no longer regex-scraped
+		// into sources; evidence-backed content items become native source
+		// entities, and only explicit quote selectors become text_quote bindings
+		// that the citation/quote validator checks at write time.
+		currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
+		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, metadata, currentSources)
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
 		if workerWake {
 			if evidenceEntities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(evidenceEntities) > 0 {
@@ -392,7 +392,7 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 			}
 		}
 		if len(sourceEntities) > 0 {
-			metadata["source_entities"] = sourceEntities
+			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
 			if changedSourceEntities || addedMediaSourceEntities {
 				delete(metadata, "media_source_refs")
 				delete(metadata, "media_source_research_required")
@@ -400,9 +400,9 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 	}
 	if len(req.SourceEntities) > 0 {
-		sourceEntities, changedSourceEntities := mergeTextureSourceEntities(decodeTextureSourceEntities(metadata["source_entities"]), req.SourceEntities)
+		sourceEntities, changedSourceEntities := mergeTextureSourceEntities(decodeAvailableTextureSourceEntities(metadata), req.SourceEntities)
 		if len(sourceEntities) > 0 {
-			metadata["source_entities"] = sourceEntities
+			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
 			if changedSourceEntities {
 				delete(metadata, "media_source_refs")
 				delete(metadata, "media_source_research_required")
@@ -626,7 +626,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString(conductorLoopID)
 		b.WriteString(".")
 	}
-	sourceEntities := decodeTextureSourceEntities(metadata["source_entities"])
+	sourceEntities := decodeTextureSourceEntities(current.SourceEntities)
+	sourceEntities, _ = mergeTextureSourceEntities(sourceEntities, decodeAvailableTextureSourceEntities(metadata))
 	if formattedEntities := formatTextureSourceEntitiesForPrompt(sourceEntities); formattedEntities != "" {
 		b.WriteString("\n\nDetected Texture source entities:\n")
 		b.WriteString(formattedEntities)

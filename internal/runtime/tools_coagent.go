@@ -517,7 +517,7 @@ func (rt *Runtime) coagentTextureSourceEntities(ctx context.Context, parentRec *
 	if parentRec == nil {
 		return nil
 	}
-	entities := decodeTextureSourceEntities(parentRec.Metadata["source_entities"])
+	entities := decodeAvailableTextureSourceEntities(parentRec.Metadata)
 
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	if rt == nil || rt.store == nil || ownerID == "" {

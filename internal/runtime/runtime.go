@@ -2982,6 +2982,7 @@ func (rt *Runtime) maybeWakeTextureOnWorkerMessage(ctx context.Context, ownerID 
 
 const (
 	canonicalTextureSourcePathMetadataKey = "canonical_texture_source_path"
+	textureAvailableSourceEntitiesKey     = "texture_available_source_entities"
 )
 
 // durableMetadataKeys lists the revision metadata keys that must survive
@@ -2996,7 +2997,6 @@ var durableMetadataKeys = []string{
 	"migration_manifest",
 	"conductor_loop_id",
 	runMetadataTrajectoryID,
-	"source_entities",
 	"artifact_kind",
 	"revision_role",
 	"input_origin",
@@ -3070,19 +3070,8 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 			meta["revision_role"] = textureRevisionRoleInput
 		}
 	}
-	if textureWorkerUpdateMetadataHasRole(workerUpdateMeta["worker_updates_consumed"], AgentProfileResearcher) {
-		markTextureMediaSourceRefsResearchState(meta, "represented")
-	}
 	for key, value := range workerUpdateMeta {
 		meta[key] = value
-	}
-	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
-		targetAgentID := currentTextureAgentID(doc.DocID)
-		sourceEntities := rt.evidenceSourceEntitiesFromWorkerUpdateIDs(ctx, ownerID, targetAgentID, coagentUpdateIDsForRun(rec), 12)
-		if len(sourceEntities) == 0 && consumedThroughSeq > 0 {
-			sourceEntities = rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, targetAgentID, 12)
-		}
-		mergeTextureSourceEntitiesIntoMetadata(meta, sourceEntities)
 	}
 
 	data, err := json.Marshal(meta)

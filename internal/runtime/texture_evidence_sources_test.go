@@ -283,8 +283,8 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 		!messageTextContains(t, msgs[0], "Do not write ordinary URL links") {
 		t.Fatalf("coagent packet missing native source entity fields: %s", string(msgs[0]))
 	}
-	if !hasSourceEntity(decodeTextureSourceEntities(rec.Metadata["source_entities"]), "source_service_item", "srcitem_native_panel", "") {
-		t.Fatalf("run metadata missing injected source_entities: %#v", rec.Metadata["source_entities"])
+	if !hasSourceEntity(decodeAvailableTextureSourceEntities(rec.Metadata), "source_service_item", "srcitem_native_panel", "") {
+		t.Fatalf("run metadata missing injected available source entities: %#v", rec.Metadata[textureAvailableSourceEntitiesKey])
 	}
 
 	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, []string{stored.UpdateID}, rec.RunID); err != nil {
@@ -300,8 +300,11 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 
 	result := rt.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, stored.MessageSeq)
 	meta := decodeRevisionMetadata(result)
-	if !hasSourceEntity(decodeTextureSourceEntities(meta["source_entities"]), "source_service_item", "srcitem_native_panel", "") {
-		t.Fatalf("revision metadata missing delivered source entity: %#v", meta["source_entities"])
+	if _, ok := meta["source_entities"]; ok {
+		t.Fatalf("revision metadata retained legacy source_entities: %#v", meta["source_entities"])
+	}
+	if _, ok := meta[textureAvailableSourceEntitiesKey]; ok {
+		t.Fatalf("revision metadata retained run source context: %#v", meta[textureAvailableSourceEntitiesKey])
 	}
 }
 
@@ -424,7 +427,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 		t.Fatalf("inject coagent update: %v", err)
 	}
 	rt.createAgentMutationForRun(ctx, rec)
-	sourceEntities := decodeTextureSourceEntities(rec.Metadata["source_entities"])
+	sourceEntities := decodeAvailableTextureSourceEntities(rec.Metadata)
 	entityID := stableSourceEntityID("content_item", contentID)
 	if !hasSourceEntity(sourceEntities, "content_item", "", contentID) {
 		t.Fatalf("run metadata missing evidence-derived content source: %#v", sourceEntities)

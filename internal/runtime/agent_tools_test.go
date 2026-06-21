@@ -2136,7 +2136,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if metadataString(textureRun.Metadata, "request_intent") != "universal_wire_processor_article_revision" {
 		t.Fatalf("processor texture run request_intent = %q", metadataString(textureRun.Metadata, "request_intent"))
 	}
-	runSourceEntities := decodeTextureSourceEntities(textureRun.Metadata["source_entities"])
+	runSourceEntities := decodeAvailableTextureSourceEntities(textureRun.Metadata)
 	if len(runSourceEntities) != 1 || runSourceEntities[0].Target.ContentID != sourceItem.ContentID {
 		t.Fatalf("processor texture run source_entities = %#v", runSourceEntities)
 	}

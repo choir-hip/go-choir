@@ -216,14 +216,21 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context
 	return rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
 }
 
-func mergeTextureSourceEntitiesIntoMetadata(metadata map[string]any, incoming []textureSourceEntity) bool {
+func decodeAvailableTextureSourceEntities(metadata map[string]any) []textureSourceEntity {
+	if metadata == nil {
+		return nil
+	}
+	return decodeTextureSourceEntities(metadata[textureAvailableSourceEntitiesKey])
+}
+
+func mergeTextureSourceEntitiesIntoAvailableContext(metadata map[string]any, incoming []textureSourceEntity) bool {
 	if metadata == nil || len(incoming) == 0 {
 		return false
 	}
-	existing := decodeTextureSourceEntities(metadata["source_entities"])
+	existing := decodeAvailableTextureSourceEntities(metadata)
 	merged, changed := mergeTextureSourceEntities(existing, incoming)
 	if len(merged) > 0 {
-		metadata["source_entities"] = merged
+		metadata[textureAvailableSourceEntitiesKey] = merged
 	}
 	return changed
 }
@@ -235,7 +242,7 @@ func mergeTextureSourceEntitiesIntoRunMetadata(rec *types.RunRecord, incoming []
 	if rec.Metadata == nil {
 		rec.Metadata = map[string]any{}
 	}
-	return mergeTextureSourceEntitiesIntoMetadata(rec.Metadata, incoming)
+	return mergeTextureSourceEntitiesIntoAvailableContext(rec.Metadata, incoming)
 }
 
 func splitTypedWorkerUpdateRef(ref string) (string, string) {

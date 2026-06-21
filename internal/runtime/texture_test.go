@@ -9665,7 +9665,7 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 	if _, ok := run.Metadata["media_source_research_required"]; ok {
 		t.Fatalf("media_source_research_required should not be exposed in new run metadata: %#v", run.Metadata)
 	}
-	sourceEntities := decodeTextureSourceEntities(run.Metadata["source_entities"])
+	sourceEntities := decodeAvailableTextureSourceEntities(run.Metadata)
 	if len(sourceEntities) != 2 {
 		t.Fatalf("source_entities len = %d, want 2: %#v", len(sourceEntities), sourceEntities)
 	}
@@ -9691,9 +9691,7 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 		entitiesByKind["image"].Evidence.State != "available" {
 		t.Fatalf("image source entity = %#v", entitiesByKind["image"])
 	}
-	dedupedEntities, added := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, map[string]any{
-		"source_entities": sourceEntities,
-	})
+	dedupedEntities, added := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, map[string]any{}, sourceEntities)
 	if added || len(dedupedEntities) != 2 {
 		t.Fatalf("re-register added=%v len=%d, want no new entities and len 2: %#v", added, len(dedupedEntities), dedupedEntities)
 	}
@@ -9781,7 +9779,7 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 	if err != nil {
 		t.Fatalf("get run: %v", err)
 	}
-	sourceEntities := decodeTextureSourceEntities(run.Metadata["source_entities"])
+	sourceEntities := decodeAvailableTextureSourceEntities(run.Metadata)
 	if len(sourceEntities) != 1 {
 		t.Fatalf("source_entities len = %d, want 1: %#v", len(sourceEntities), sourceEntities)
 	}
@@ -9811,9 +9809,9 @@ func TestMarkTextureMediaSourceRefsResearchState(t *testing.T) {
 		{Kind: "image", CanonicalURL: "https://example.com/image.jpg", ResearchState: "pending"},
 	}
 	metadata := map[string]any{
-		"media_source_research_required": true,
-		"media_source_refs":              refs,
-		"source_entities":                sourceEntitiesFromMediaRefs(refs),
+		"media_source_research_required":  true,
+		"media_source_refs":               refs,
+		textureAvailableSourceEntitiesKey: sourceEntitiesFromMediaRefs(refs),
 	}
 	markTextureMediaSourceRefsResearchState(metadata, "represented")
 	if _, ok := metadata["media_source_refs"]; ok {
@@ -9822,7 +9820,7 @@ func TestMarkTextureMediaSourceRefsResearchState(t *testing.T) {
 	if _, ok := metadata["media_source_research_required"]; ok {
 		t.Fatalf("media_source_research_required should be removed after representation: %#v", metadata)
 	}
-	sourceEntities := decodeTextureSourceEntities(metadata["source_entities"])
+	sourceEntities := decodeAvailableTextureSourceEntities(metadata)
 	if len(sourceEntities) != 2 {
 		t.Fatalf("source entities len = %d, want 2", len(sourceEntities))
 	}

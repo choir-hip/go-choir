@@ -5,24 +5,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestBuildAppagentRevisionProvenanceSystemAttributed(t *testing.T) {
+func TestBuildStructuredAppagentRevisionProvenanceSystemAttributed(t *testing.T) {
 	now := time.Date(2026, 6, 18, 15, 0, 0, 0, time.UTC)
-	revMeta, err := json.Marshal(map[string]any{
-		"source": "patch_texture",
-		"source_entities": []types.SourceEntity{
-			{EntityID: "src_aaaa", Kind: "content_item", Target: types.SourceEntityTarget{TargetKind: "content_item", ContentID: "ci-1"}},
-			{EntityID: "src_bbbb", Kind: "youtube_video", Target: types.SourceEntityTarget{TargetKind: "content_item", ContentID: "ci-2"}},
-		},
+	sourceEntities, err := json.Marshal([]texturedoc.SourceEntity{
+		{SourceEntityID: "src_aaaa", Target: texturedoc.SourceTarget{Kind: "content_item", ID: "ci-1"}},
+		{SourceEntityID: "src_bbbb", Target: texturedoc.SourceTarget{Kind: "video", ID: "ci-2"}},
 	})
 	if err != nil {
-		t.Fatalf("marshal revMeta: %v", err)
+		t.Fatalf("marshal source entities: %v", err)
 	}
 	rec := &types.RunRecord{Metadata: map[string]any{"model": "test-model", "provider": "fireworks"}}
 
-	raw := buildAppagentRevisionProvenance(rec, revMeta, now)
+	raw := buildStructuredAppagentRevisionProvenance(rec, sourceEntities, now)
 	if len(raw) == 0 {
 		t.Fatalf("expected non-empty provenance")
 	}
@@ -49,10 +47,9 @@ func TestBuildAppagentRevisionProvenanceSystemAttributed(t *testing.T) {
 	}
 }
 
-func TestBuildAppagentRevisionProvenanceNoSources(t *testing.T) {
+func TestBuildStructuredAppagentRevisionProvenanceNoSources(t *testing.T) {
 	now := time.Date(2026, 6, 18, 15, 0, 0, 0, time.UTC)
-	revMeta := json.RawMessage(`{"source":"patch_texture"}`)
-	raw := buildAppagentRevisionProvenance(&types.RunRecord{}, revMeta, now)
+	raw := buildStructuredAppagentRevisionProvenance(&types.RunRecord{}, json.RawMessage(`[]`), now)
 	if len(raw) == 0 {
 		t.Fatalf("expected non-empty provenance even with no sources")
 	}

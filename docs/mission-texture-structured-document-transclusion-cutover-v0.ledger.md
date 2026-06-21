@@ -1102,3 +1102,58 @@ sources from canonical revision metadata, removing `source_entities` from
 durable revision metadata carry-forward, and keeping historical import as a
 labelled adapter that emits structured `body_doc` / top-level
 `source_entities`.
+
+## 2026-06-21 - Pass 30 - D7 Runtime Source Context Key Split Local
+
+Claim: D7 decreases the last runtime sidecar residue if live runtime source
+availability stops using the `metadata.source_entities` key while preserving
+prompt/tool access to structured top-level revision sources.
+
+Move: construct + probe. Added run-scoped `texture_available_source_entities`;
+removed `source_entities` from `durableMetadataKeys`; stopped
+`buildAppagentRevisionMetadata` from merging evidence/media sources into
+revision metadata; made Texture revision prompts derive source inventory from
+current revision top-level `SourceEntities` plus run-scoped available source
+context; made `patch_texture` read the run-scoped source pool; deleted the old
+metadata-source provenance helper in favor of structured top-level
+SourceEntities; taught runtime source decoding to consume D1 structured
+SourceEntity JSON for prompt/tool source pools.
+
+Expected delta V: no top-level decrement until independent review accepts this
+slice. If accepted, remaining D7 runtime old-source hits should be negative
+assertions, historical markdown-lineage import, prompt warnings that ban
+markdown source links, and top-level API fields named `source_entities`.
+
+Actual delta V: accepted by independent micro-review. Current V remains 1
+pending final old-source classification, broad tests, and staging proof.
+
+Receipts:
+`internal/runtime/runtime.go`;
+`internal/runtime/texture_agent_revision.go`;
+`internal/runtime/texture_evidence_sources.go`;
+`internal/runtime/texture_media_sources.go`;
+`internal/runtime/tools_texture.go`;
+`internal/runtime/tools_coagent.go`;
+`internal/runtime/tools_texture_provenance_test.go`;
+`internal/runtime/texture_prompt_unit_test.go`;
+`internal/runtime/texture_evidence_sources_test.go`;
+`internal/runtime/agent_tools_test.go`;
+`internal/runtime/texture_test.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestPendingUpdateRefsBecomeSourceEntities|TestTexturePromptPreservesInlineSourceRefs|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestUniversalWire|TestBuildStructuredAppagentRevisionProvenance|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureTool|Test.*SourceEntities|Test.*source_entities|TestMarkTextureMediaSourceRefsResearchState|TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation' -count=1`;
+`nix develop -c go test ./internal/store ./internal/texturedoc`;
+`git diff --check`;
+`rg -n 'metadata\["source_entities"\]|rec\.Metadata\["source_entities"\]|run\.Metadata\["source_entities"\]|textureRun\.Metadata\["source_entities"\]|"source_entities": sourceEntities|source_entities metadata|metadata source_entities' internal/runtime -g '*.go'`.
+
+Independent review verdict: accepted. The reviewer found no blocking issue for
+the narrow invariant: live run context now uses
+`texture_available_source_entities`; appagent revision metadata no longer
+carries legacy `metadata["source_entities"]`; prompt context merges top-level
+revision `SourceEntities` with run-scoped available source context; and
+`patch_texture` starts from current structured `SourceEntities` plus run-scoped
+available entities before validation/materialization.
+
+Open edge: final old-source classification, broad tests, and staging proof.
