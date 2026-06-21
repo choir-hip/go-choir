@@ -261,10 +261,28 @@ position / live conjectures / open edges:
   source-panel scope: the v2 window still had disabled `Sources` and visible
   tool-error / `Revising...` state.
 
+Native-source entity repair commit
+`043707fd1e1d2a50cc5e4ef7f218077ee04186fe` carries collated source entities
+through fresh `update_coagent` injection, the typed packet, run metadata, and
+revision metadata; focused tests and runtime shards passed. Deployed Comet proof
+with marker `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_001` on trajectory
+`5f900cc2-1b14-4919-88b2-f3b20597699d` showed researcher/source-search evidence
+collection, `save_evidence`, Texture loop activity, and a v2 rewrite on staging
+that preserved source handles such as `src_b430c59e225afa4c`,
+`src_dae54bf2e10e21eb`, and `src_8595fa59f68412e3` with content ids. Actual
+ΔV=0, so V remains 1: the v2 document reported that native inline Texture source
+citations were attempted but citation validation rejected the collated quote
+bindings; the native `Sources` control was still disabled and the run remained
+visibly `Revising...` after `patch_texture` tool-error activity. The newly
+documented problem is now quote-binding validation / source-panel activation
+after source entities reach the live Texture turn, not source-entity delivery
+into the turn.
+
 next move: use the remaining budget on always-deep/source-evidence robustness:
-diagnose why the deployed v2 source-backed rewrite still leaves native
-`Sources` disabled and the run unsettled, then prove that typed researcher refs
-become owner-visible native source handles as well as inline links.
+diagnose why deployed source entities that reach the live Texture turn still
+fail native citation validation and leave `Sources` disabled, then prove that
+typed researcher refs become owner-visible native source handles as well as
+inline text handles.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
