@@ -1,5 +1,12 @@
 # Mission: Texture As One Durable Deep-Research Thread v0
 
+> Superseded on 2026-06-20 by
+> [mission-texture-durable-thread-v1.md](mission-texture-durable-thread-v1.md).
+> This document and its very long ledger are cautionary evidence, not the current
+> source program. Use v1 for execution. Read this file only to audit why
+> run-centric park/rewarm, semantic role choreography, prompt classifiers, and
+> exact-first-tool scaffolding were rejected.
+
 > Hard-cutover rewrite (2026-06-18). This supersedes the earlier framing of this
 > same mission (a wake-driven, one-write-per-run actor patched with park/rewarm
 > and per-prompt classifiers). The full overnight construct/falsification trail
@@ -67,6 +74,17 @@ first paint, a cheap park primitive, a per-actor budget) but built them on the
    busy-poll loop (good — `waitForAgentSignal` is channel-based and the
    all-docs reconcile is boot-only), but results are discovered by querying the
    store rather than delivered directly into the thread.
+5. **Owner-visible work state can be hidden.** A direct Texture owner request can
+   still be converted into a trivial first `patch_texture` revision that removes
+   an instruction-bearing annotation or makes tiny prose edits while background
+   research/execution happens only in Trace. The problem is not that Texture
+   writes before research completes; quick revisions are good. The problem is
+   that the canonical artifact does not honestly say work is underway.
+6. **Coagent update identity is still model-invented.** `update_coagent` still
+   requires the model to provide `update_id`, even though the store treats
+   `(owner_id, update_id)` as a durable idempotency key. A researcher using a
+   natural local label such as `checkpoint-1` can collide owner-wide and drop
+   otherwise valid findings.
 
 ## Owner direction (authoritative constraints)
 
@@ -87,6 +105,13 @@ first paint, a cheap park primitive, a per-actor budget) but built them on the
 - **Hard cutover, maximize deletion.** No migration, no dual-path, no
   compatibility shims. There are no real users yet; prefer deleting code over
   preserving the old run-centric scaffolding. Less code is the win.
+- **Owner-visible work state.** Texture should update promptly, but when work is
+  delegated, pending, or incomplete, the next canonical revision should be an
+  honest work-state / acknowledgement revision rather than a fake final edit or
+  instruction cleanup.
+- **Runtime-owned update identity.** `update_id` remains an internal
+  idempotency/delivery handle, but the LLM must not have to invent it. Runtime
+  mints or derives it from the delivery envelope and normalized payload.
 
 ## Scope / Domain Ramp (deletion-oriented)
 
@@ -108,6 +133,18 @@ Roughly in dependency order. Each item should *remove* more than it adds.
   This thread mission **depends on** that schema: the durable thread (R1-R6 below)
   writes provenance-bearing, hash-chained revisions into it. Do that mission
   first or in lockstep; do not re-specify the schema here.
+- **R0a Work-state and update identity repair — folded into this mission, not a
+  side mission.** The 2026-06-20 direct-Texture investigation showed two
+  symptoms of the same run-centric/control-state leak: first revisions can hide
+  background work, and researcher delivery can fail because `update_id` is
+  model-authored. Implement these as the first narrow ramp of the durable-thread
+  rewrite: model-facing `update_coagent` calls do not require `update_id`;
+  runtime mints/derives collision-resistant ids while preserving retry
+  idempotency; direct owner-triggered Texture work that cannot finish
+  immediately writes an honest work-state revision before or alongside
+  delegation. This does not authorize a fixed Texture->researcher workflow. It
+  makes the artifact and mailbox truthful while R1/R2 delete the deeper
+  run-centric spine.
 - **R1 Collapse to one durable thread (a real run-lifecycle change, not just a
   deletion).** Make `texture:<docID>` a single persistent agent whose message
   history accumulates; V0 is the first user turn, each canonical revision is an
@@ -301,10 +338,12 @@ shrinks. Current value after the 2026-06-18 owner-side review and revert:
   `dfc78fcd`/`667c70d2`.
 - Still present and to be deleted by this rewrite: run-centric cold rewarm, the
   keyword classifiers, the model-prior completion guard, the no-op/prompt-copy
-  guards, the exact-first-tool retry machinery, the 2-min idle death, and the
-  AgentMutation one-write scaffolding.
+  guards, the exact-first-tool retry machinery, the model-facing `update_id`
+  requirement, the trivial-first-patch hidden-work-state failure, the 2-min idle
+  death, and the AgentMutation one-write scaffolding.
 - Not yet built: the durable accumulating thread, prompt-only active deepening,
-  true sleep/resume, budget-bounded lifetime, deep-research depth beyond V2.
+  true sleep/resume, budget-bounded lifetime, runtime-owned coagent update
+  identity, honest work-state first revisions, deep-research depth beyond V2.
 
 ## Budget / authority / mutation class
 
@@ -314,10 +353,10 @@ the correct durable-thread architecture over incremental compatibility.
 
 Execution mutation class **red**. Protected surfaces: Texture canonical writes,
 the run lifecycle / tool loop, the park/suspend and budget primitives,
-passivation/rewarm, worker-update consumption bookkeeping, the Texture workflow
-verifier, Trace/evidence, and deployment routing. Before touching orange/red
-surfaces, name the conjecture delta, protected surfaces, admissible evidence
-class, rollback path, and heresy delta.
+passivation/rewarm, `update_coagent` schema and worker-update identity/delivery
+bookkeeping, the Texture workflow verifier, Trace/evidence, and deployment
+routing. Before touching orange/red surfaces, name the conjecture delta,
+protected surfaces, admissible evidence class, rollback path, and heresy delta.
 
 ## Evidence packet (settlement)
 
@@ -325,7 +364,11 @@ Focused local tests for: single durable thread with accumulating turns and
 N revisions; event-driven delivery + wake without polling; prompt-only active
 deepening; sleep/resume of the literal thread across passivation; budget
 exhaustion quiesces (does not terminate) and a new owner intent re-authorizes
-spend; doc-delete cancellation; verifier N:1 within one thread.
+spend; model-facing `update_coagent` without model-invented `update_id`;
+runtime retry idempotency without human-label collisions; owner-triggered
+work-state revisions that honestly show pending delegation/research/execution
+instead of trivial instruction cleanup; doc-delete cancellation; verifier N:1
+within one thread.
 Then `go-test-runtime-shards`; CI; Node B deploy identity; deployed cadence/depth
 probe (a deep-research prompt produces many grounded revisions over time from one
 thread, fast interim first paint, resume across a vmctl refresh, bounded cost);
@@ -333,10 +376,10 @@ prompt-bar submission id, conductor run id, doc id, Texture thread id;
 RunAcceptanceRecord at staging-smoke-level; net-lines-deleted figure; residual
 risk note. Rollback = revert the mission commits.
 
-## Suggested goal string
+## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-long-running-agent-v0.md (read it and its ledger first; the ledger trail is historical, the doc body is the current target). Make each Texture document ONE durable agent thread whose message history accumulates across the doc's life: V0 = first user turn, each canonical revision = an assistant turn calling a texture write tool, inbound findings and owner follow-ups = appended turns on the same thread. It is ALWAYS deep research (not a mode): after each revision the thread actively requests more research/execution and deepens; it never stops, it QUIESCES on diminishing returns or budget exhaustion (suspend cheaply, no billed calls, no polling) and resumes the SAME thread (never reconstructed) when new owner input/findings arrive; budget bounds autonomous spend between owner interactions and a new owner intent re-authorizes it; the thread ends only on doc delete/cancel. Hard cutover, maximize deletion: remove cold rewarm (reconcileTextureAgentWake-as-new-run, scheduleTextureWorkerWake debounce, actor_rewarm summary), the keyword classifiers (texturePromptNeedsSuperExecution/NeedsWorldKnowledge/explicit*FromPrompt), textureModelPriorCompletionGuard, the no-op/prompt-copy content guards, the exact-first-tool retry machinery, the AgentMutation one-write scaffolding, and the 2-min idle-death/16-resume gates. No parent/child semantics; Super is a per-owner singleton addressed by request; actors are uniform peers. Enforce grounding honesty and active deepening via prompt, not runtime classifiers. Work R1-R7 in order; land what you can safely prove and leave precise file-cited blockers. Verify with focused internal/runtime tests + scripts/go-test-runtime-shards, then commit -> push origin main -> CI -> Node B deploy identity -> deployed proof on https://choir.news (deep-research prompt yields many grounded revisions over time from one thread; resume across a vmctl refresh; bounded cost); record a RunAcceptanceRecord at staging-smoke-level. Mutation class red. Rollback = revert mission commits.
+Superseded. Do not resume from this document. Use Parallax on docs/mission-texture-durable-thread-v1.md instead. Read this v0 document or its ledger only as cautionary evidence for why run-centric park/rewarm, semantic role choreography, prompt classifiers, and exact-first-tool scaffolding were rejected.
 ```
 
 ## Lineage
@@ -348,11 +391,14 @@ per-prompt classifiers) and folds in
 R0/R0b on 2026-06-18): that mission owns the document schema, typed
 system-attributed provenance, per-revision hash chain, source chain-of-custody
 validation, and versioned-history publish; this thread mission writes
-provenance-bearing, hash-chained revisions into it. Sits on the portfolio spine
-after the Texture product-loop work and before continuation deletion (M4); the
-sleep/resume work here should be reconciled with M4 and the durable-actors
-rearchitecture (`docs/choir-rearchitecture-durable-actors-2026-06-11.md`), which
-this thread model is an instance of.
+provenance-bearing, hash-chained revisions into it. Also folds in and deletes
+the short-lived `docs/mission-texture-workstate-update-id-v0.md` paradoc created
+from the 2026-06-20 direct-Texture investigation; its useful content is now R0a
+here, not a separate mission source. Sits on the portfolio spine after the
+Texture product-loop work and before continuation deletion (M4); the sleep/resume
+work here should be reconciled with M4 and the durable-actors rearchitecture
+(`docs/choir-rearchitecture-durable-actors-2026-06-11.md`), which this thread
+model is an instance of.
 
 ## Settlement requirement
 

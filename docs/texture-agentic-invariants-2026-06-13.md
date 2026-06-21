@@ -54,6 +54,11 @@ ordinary ingress target for user or source prompts.
    the product display mechanism or the agent's substitute for the canonical
    starting version.
 
+   `V1` is Texture's first response to prompt-bar `V0`. It may be a draft, a
+   seed, an acknowledgement, or a work-state revision, depending on what the
+   prompt requires. Conductor may create or open the Texture shell and preserve
+   the prompt, but it must not author the first appagent document body.
+
 2. **Texture is the control plane for document and artifact work.** Conductor may
    classify exogenous input and create or open the target Texture/context, but it
    must not send ordinary prompt-bar, sourcecycled/news, article, mission, or
@@ -84,13 +89,21 @@ ordinary ingress target for user or source prompts.
    decision, requesting an email handoff, parking for later updates, or ending
    intentionally.
 
-5. **Required tool choice is not policy.** Exact next-tool enforcement is
+5. **Owner-visible work state is canonical.** Texture should not wait silently
+   when an owner-triggered request requires research, execution, verification,
+   long reasoning, or delegation. A quick Texture-authored revision may honestly
+   acknowledge the request, preserve the obligation, and name the active work
+   underway. That revision is useful artifact state. What is forbidden is a
+   mechanically forced trivial patch that removes the owner's instruction or
+   makes tiny prose edits while hiding the background work in Trace.
+
+6. **Required tool choice is not policy.** Exact next-tool enforcement is
    allowed only for mechanical tool protocols whose second call is part of the
    same protocol state, for example a worker allocation followed by a
    worker-start handshake. It must not be used to steer Texture's semantic
    choices.
 
-6. **Prompts and metadata do not replace agency.** Prompt flags, revision
+7. **Prompts and metadata do not replace agency.** Prompt flags, revision
    metadata, and route hints may inform Texture. They must not become hidden
    workflow edges. If the product needs explicit commands, create a visible
    command grammar and still record the resulting obligation as state Texture can
@@ -103,30 +116,30 @@ ordinary ingress target for user or source prompts.
    prompts and revision builders may describe obligations and affordances, but
    must not mandate "call spawn_agent now" or similar semantic role sequences.
 
-7. **Trace and Texture have different jobs.** Trace is the causal ledger for tool
+8. **Trace and Texture have different jobs.** Trace is the causal ledger for tool
    calls, LLM content, events, and agent messages. Texture is the owner-readable
    narrative and canonical document surface. Do not turn Texture into a Trace-like
    topology/status dump, and do not use Trace role sequences as a substitute for
    Texture semantics.
 
-8. **Acceptance verifies outcomes, not role choreography.** A test may require
+9. **Acceptance verifies outcomes, not role choreography.** A test may require
    researcher participation only when the product behavior under test is
    researcher participation. Lifecycle missions must verify lifecycle evidence:
    open obligations, passivation, rewarm, delivered updates, settlement, and no
    stranded work. They must not force a particular Texture delegation sequence as a
    proxy.
 
-9. **Harness minimalism protects Texture.** Do not add Texture-specific branches to
+10. **Harness minimalism protects Texture.** Do not add Texture-specific branches to
    the core tool loop, provider loop, continuation machinery, or run acceptance
    unless there is a documented invariant, a simpler prompt/policy/tool
    alternative has been rejected, focused regression tests exist, and a human has
    explicitly approved the divergence.
 
-10. **Structured edits are the default for long documents.** Whole-document
+11. **Structured edits are the default for long documents.** Whole-document
    rewrites are exceptional and require rationale. Texture must preserve document
    structure, provenance, revision history, and source/citation semantics.
 
-11. **Texture regressions are architecture regressions.** Treat unexplained Texture
+12. **Texture regressions are architecture regressions.** Treat unexplained Texture
     failures as mission-level blockers. Do not patch around them with one-off
     workflow enforcement unless the invariant being protected is explicitly
     named and reviewed.
@@ -141,6 +154,7 @@ Runtime may:
   evidence durably;
 - wake Texture from pending coagent updates or assigned work items;
 - debounce/coalesce updates before waking Texture;
+- mint or derive coagent update identities before persistence;
 - surface pending obligations and missing evidence in prompts;
 - prevent duplicate revision writes and protect owner approval boundaries;
 - reject invalid edits or unsafe operations.
@@ -174,12 +188,13 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 
 - Every delivered update becomes a **typed user turn** in the target activation's
   context window: a `coagent_update` JSON packet with `packet_type`,
-  `delivery_phase` (`cold_activation`, `mid_activation`, `final_checkpoint`),
-  and structured update records.
+  `delivery_phase` (`activation_mailbox_turn`, `cold_activation`,
+  `mid_activation`, `final_checkpoint`), and structured update records.
 - **Warm activations** inject pending updates between tool-loop iterations.
-- **Cold activations** prepend pending updates at activation start when the run
-  was opened from an `update_coagent` wake (`request_source=update_coagent` or
-  seeded `worker_update_ids` metadata).
+- **Texture activation wakes** append pending updates as the first durable
+  mailbox turn in run memory, not as prompt-prefix reconstruction.
+- **Cold activation** packet prepending is compatibility behavior for
+  non-Texture actors that do not yet have the durable thread substrate.
 - **Parked resident activations** wait without provider calls until runtime
   injects a typed update turn or an idle/budget boundary fires. Park-and-wait is
   a role-uniform tool-loop primitive, not a Texture-only semantic branch.
@@ -187,6 +202,9 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
   after process refresh/passivation. Provider-call and token spend carry forward
   across the replacement activation; elapsed wall-clock budget across sleeps is
   still an explicit open edge until separately proven.
+- `update_id` is a runtime-owned delivery/idempotency handle. Models may see it
+  after persistence for traceability, but model-authored deliveries must not
+  depend on the LLM inventing a globally unique or reusable key.
 - Runtime must **not** traverse spawned-by / parent-run edges to decide who
   receives an update. Provenance fields (`RequestedByRunID`, `requested_by_run_id`)
   are audit-only.
@@ -217,13 +235,33 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 - Failed Texture integrate runs must **not** advance the worker-update
   checkpoint or mark updates delivered without a canonical revision.
 
+### Owner-triggered revision cadence
+
+- For prompt-bar creation, `V0` is the owner prompt and `V1` is Texture's first
+  response to that prompt.
+- For direct Texture editing, the user-authored current revision is already
+  canonical artifact state. A later revise request should not be interpreted as a
+  requirement to clean up the document before Texture can think, delegate, or
+  wait.
+- Every owner-triggered request should produce owner-visible artifact state
+  promptly when it cannot complete immediately. That state may be an
+  acknowledgement, an active-work note, a short plan, or a precise blocker.
+- Background work must be represented in Texture as owner-readable state, not
+  only in Trace or Chyron. Later revisions should consume durable
+  `update_coagent` packets and source entities when they arrive.
+
 ### Required tests for this contract
 
 - researcher `update_coagent` rejects missing or non-texture `agent_id`;
+- model-facing `update_coagent` does not require a model-invented `update_id`;
+- runtime retries of the same coagent delivery remain idempotent while distinct
+  payloads cannot collide on a human checkpoint label;
 - typed packet builder and Texture warm/cold injection paths;
 - coagent rewarm and resident-activation injection behavior;
 - Texture wake after researcher delivery produces a revision when the model
   patches.
+- owner-triggered Texture work that delegates or waits writes an honest
+  work-state revision instead of a trivial instruction-removal patch;
 - document deletion cancels the pending or parked Texture actor before deleting
   the document;
 - workflow verification accepts many appagent revisions from one Texture loop
@@ -307,9 +345,15 @@ Any behavior-changing Texture coordination change should include tests proving:
 
 - prompt-bar and source/article ingestion enter Texture-owned artifact state
   before any super execution;
+- prompt-bar `V0` preserves the owner prompt and `V1` is Texture's first response
+  to that prompt;
+- direct user-authored Texture documents can receive work-state revisions without
+  a forced trivial cleanup patch;
 - `edit_texture` does not emit semantic `next_required_tool` values;
 - prompts mentioning researcher or super do not force a delegation;
 - Texture still has access to researcher/super affordances and can choose them;
+- owner-visible Texture state names active background work when delegation,
+  research, execution, or verification is underway;
 - researcher findings remain non-canonical until Texture incorporates them;
 - public/product acceptance observes outcomes and obligations, not hidden role
   sequence;
@@ -325,6 +369,8 @@ Tests to invert or delete when M3.1 repairs H010/H024/H026:
   delegation oracle;
 - tests that require Texture's first tool to be `request_super_execution` because
   a prompt matched super keywords;
+- tests that require Texture's first tool to be `patch_texture` for every
+  owner-triggered revision regardless of request origin and work state;
 - prompt-default assertions that encode a fixed Texture -> researcher -> super
   role sequence instead of obligations and evidence.
 

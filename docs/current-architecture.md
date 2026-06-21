@@ -407,22 +407,30 @@ Humans should not be expected to browse a Trace app to debug Choir.
 
 A `texture` version is a canonical document state:
 
-- `v0` is the initial user input or prompt seed.
-- `v1` is the first canonical Texture-authored document version, created through
-  the Texture edit path.
+- `v0` is the initial user input. For prompt-bar flow this is the raw owner
+  prompt; for direct Texture editing this is the user-authored document body.
+- `v1` is Texture's first response to `v0`, created through the Texture edit
+  path. It may be a draft/seed, an acknowledgement, a work-state revision, a
+  blocker, or a substantive edit depending on the request.
 - `v2+` are user edits and later Texture-authored revisions.
 
 The conductor must not write the first appagent document version. It routes the
 prompt, creates or opens the Texture document shell, preserves the user's seed,
-and starts Texture. Texture writes the first canonical artifact version. The prior
+and starts Texture. Texture writes the first response version. The prior
 "conductor creates an initial seed" policy is superseded because it blurred the
-single-writer boundary and created a fake version advance before Texture had done
-the work.
+single-writer boundary. Conductor may materialize the `v0` owner prompt as
+canonical input, but Texture owns `v1`.
+
+For existing user-authored Texture documents, the current user revision is
+already canonical document state. A follow-up owner request should not force a
+trivial cleanup patch before Texture can delegate, wait, or reason. If Texture
+needs background work, the next revision should honestly represent that work
+state instead of hiding it in Trace.
 
 The target Texture loop is deliberately small:
 
 ```text
-prompt -> conductor route -> Texture writes v1
+prompt -> conductor route -> v0 owner input -> Texture writes v1 response
   -> Texture sends durable co-agent messages when needed
   -> workers reply with durable updates/evidence
   -> Texture wakes and writes the next version
@@ -461,10 +469,12 @@ testable without real providers, browsers, or timing luck.
 
 Required deterministic tests:
 
-- Prompt creation produces one document with `v0` user input and a started Texture
-  writer run.
+- Prompt creation produces one document with `v0` owner prompt/user input and a
+  started Texture writer run.
 - Texture creates `v1` through the same Texture edit path used for later appagent
   revisions; conductor cannot create appagent-authored document text.
+- Owner-triggered work that cannot complete immediately produces an honest
+  acknowledgement/work-state revision instead of a trivial instruction cleanup.
 - User edits always create user-authored versions.
 - Worker updates are durably attached to the document trajectory.
 - A `texture` revision records which worker updates it consumed, skipped, or left

@@ -58,12 +58,17 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 
 - Every delivered update becomes a **typed user turn** in the target activation's
   context window: a `coagent_update` JSON packet with `packet_type`,
-  `delivery_phase` (`cold_activation`, `mid_activation`, `final_checkpoint`),
-  and structured update records.
+  `delivery_phase` (`activation_mailbox_turn`, `cold_activation`,
+  `mid_activation`, `final_checkpoint`), and structured update records.
 - **Warm activations** inject pending updates between tool-loop iterations.
-- **Cold activations** prepend pending updates at activation start when the run
-  was opened from an `update_coagent` wake (`request_source=update_coagent` or
-  seeded `worker_update_ids` metadata).
+- **Texture activation wakes** append pending updates as the first durable
+  mailbox turn in run memory, not as prompt-prefix reconstruction.
+- **Cold activation** packet prepending is compatibility behavior for
+  non-Texture actors that do not yet have the durable thread substrate.
+- `update_id` is a runtime-owned idempotency and delivery handle. Model-facing
+  prompts and tool schemas should not require an LLM to invent a globally unique
+  checkpoint key. The runtime may return `update_id` after persistence for Trace,
+  delivery accounting, and debugging.
 - Runtime must **not** traverse spawned-by / parent-run edges to decide who
   receives an update. Provenance fields (`RequestedByRunID`, `requested_by_run_id`)
   are audit-only.
@@ -93,6 +98,11 @@ uniform across Texture, super, researcher, vsuper, and co-super activations.
 ### Required tests
 
 - researcher `update_coagent` rejects missing or non-texture `agent_id`;
+- model-facing `update_coagent` can be called without a model-invented
+  `update_id`;
+- retries of one delivery dedupe by runtime-derived identity, while distinct
+  deliveries cannot collide because the model reused a local label such as
+  `checkpoint-1`;
 - typed packet builder and Texture warm/cold injection paths;
 - coagent rewarm and resident-activation injection behavior;
 - Texture wake after researcher delivery produces a revision when the model

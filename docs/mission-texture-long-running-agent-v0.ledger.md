@@ -2625,3 +2625,43 @@ still out of scope); split the schema/provenance/publish concern into its own
 paradoc. Result: R0/R0b moved to
 `docs/mission-texture-versioned-artifact-v0.md`; this mission now depends on it
 and consumes the schema (R1-R7 unchanged). No code authored.
+
+### 2026-06-20 - Folded Work-State / Update-ID Paradoc Into This Mission
+
+Cognitive transform pass before merge:
+
+- **Object transform:** the real object is the Texture durable-thread source
+  program, not a family of small symptom paradocs.
+- **Boundary transform:** owner-visible work state and coagent update identity
+  are not side missions; they are boundary conditions for the same durable
+  thread/mailbox contract.
+- **Primitive transform:** `update_id` is an internal idempotency/delivery
+  primitive, while work-state revisions are the artifact-visible control plane.
+- **Deletion-first transform:** delete the separate paradoc/node and fold the
+  live obligations into this mission as R0a so a future agent cannot land a
+  narrow symptom patch while leaving the wrong run-centric spine in place.
+
+Move: merged the short-lived
+`docs/mission-texture-workstate-update-id-v0.md` plan into this paradoc as R0a,
+updated the variant/evidence/suggested goal string, and removed the separate
+mission graph node and standalone paradoc/ledger files.
+
+Expected ΔV: 0 for implementation; this is source-program consolidation, not a
+code repair.
+
+Actual ΔV: 0. The implementation obligations remain open: runtime-owned
+`update_coagent` ids; honest owner-visible work-state revisions; one durable
+Texture thread; same-thread resume; event-driven delivery; classifier/guard
+deletion; deep-research proof.
+
+Receipts:
+- `docs/mission-texture-long-running-agent-v0.md`
+- `docs/mission-texture-long-running-agent-v0.ledger.md`
+- `docs/mission-graph.yaml`
+- deleted `docs/mission-texture-workstate-update-id-v0.md`
+- deleted `docs/mission-texture-workstate-update-id-v0.ledger.md`
+
+Open edge: R0a can likely be implemented before the full R1 thread-lifecycle
+rewrite, but settlement must not present that narrow repair as the durable-thread
+architecture. If R0a lands first, keep the mission status open until R1-R7 are
+settled or explicitly split with owner approval.

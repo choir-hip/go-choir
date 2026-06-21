@@ -353,6 +353,43 @@ rows, chain-verified badge visible. `RunAcceptanceRecord
 runacc-12617c0f267b2e67f3b4` at `staging-smoke-level`. Mutation class orange
 (frontend publication reader); rollback = revert + redeploy.
 
+### 2026-06-19 — D6 landed: every published revision is platform Ed25519-signed
+
+Owner prompt: "every version to include signed metadata — timestamp, model used,
+and the hash chain so the record is tamperproof." The hash chain (D2) already
+made the published manifest internally consistent; D6 adds the missing
+authenticity/attestation layer so a reader knows the platform — not a third
+party — produced the record.
+
+platformd signs each revision at publish time:
+`signature = ed25519.Sign(platformKey, canonical_attestation(revision_hash))`.
+Because `revision_hash` commits to body + citations + provenance (timestamp +
+authoring model) + parent hash, signing it attests exactly the owner's spec.
+The signed envelope (`signing_public_key`, `signing_key_id`, `signing_schema`)
+is embedded in the published manifest; per-revision `signature` +
+`signing_key_id` ride each entry.
+
+- `internal/platform/signing.go`: `LoadOrCreateSigningKey` (auto-generates if
+  missing; `PLATFORM_SIGNING_KEY_PATH`, overridable for a provisioned prod key),
+  `signRevision`, `VerifyRevisionSignature`.
+- `buildVersionHistoryManifest` signs each entry; config + `NewService` carry the
+  key; reader shows a "platform-signed" badge + per-revision marks.
+
+**Deployed proof.** Commit `f59ea7ff`; CI `27829854717` success (incl. Build
+Frontend + Deploy to Staging); staging `deployed_commit=f59ea7ff`. The deployed
+spec did a REAL end-to-end ed25519 verify (Node crypto over the canonical
+attestation payload): all 3 published signatures verified against the manifest
+public key, and a tampered hash correctly failed — "D6 signatures verified: 3
+revisions, key 868f96cca8726f99". `RunAcceptanceRecord
+runacc-af500de1688d059ca513` at `staging-smoke-level`. Mutation class red
+(signing keys + canonical writes); rollback = revert (publish degrades to
+unsigned D5 behavior). Heresy delta: none introduced.
+
+**Residual.** Staging key auto-generated + persistent on disk; production should
+override `PLATFORM_SIGNING_KEY_PATH` with a provisioned, backed-up key. Public
+key rotation needs key-id multi-key verification (out of scope; key-id field is
+in place for it).
+
 ### State
 
 D1 (`e7967d16`), D2 (`f592052e`), D3+D4 (`7a2980c8`), D3 completion
@@ -362,11 +399,14 @@ D7 probe) fixed in `736bdc5c` — CI `27799524770` success, staging
 published multi-revision Texture serves its `version_history` chain with a
 matching manifest hash and a `chain_head_hash` equal to the head revision hash;
 `RunAcceptanceRecord runacc-a5baefc8def0e2af4436` at `staging-smoke-level`.
-D6 (signatures) stays out of scope by design. D7 acceptance + doctrine
-reconcile done; **reader UX Option A (version-history disclosure) landed**
-(`e859ef27`, CI `27800784979`, staging deployed, panel rendered end-to-end —
+**D6 (per-revision platform Ed25519 signatures) landed** (`f59ea7ff`, CI
+`27829854717`, staging deployed — signatures cryptographically verified
+end-to-end, `runacc-af500de1688d059ca513`). D7 acceptance + doctrine reconcile
+done; reader UX Option A (version-history disclosure) landed (`e859ef27`,
 `runacc-12617c0f267b2e67f3b4`). Settlement for the version-history +
-citation-gate + reader-legibility claim is met at staging-smoke-level;
-promotion-level awaits AppChangePackage adoption + owner review. Open: reader
-UX options B (revision browser) and C (diff + per-revision sources) are
-deferred pending an owner design pick (`docs/texture-versioned-reader-ux-options-2026-06-19.md`).
+citation-gate + reader-legibility + tamperproof-signature claim is met at
+staging-smoke-level; promotion-level awaits AppChangePackage adoption + owner
+review. Open: reader UX options B (revision browser) and C (diff + per-revision
+sources) deferred pending an owner design pick
+(`docs/texture-versioned-reader-ux-options-2026-06-19.md`); prod signing-key
+provisioning via `PLATFORM_SIGNING_KEY_PATH`.

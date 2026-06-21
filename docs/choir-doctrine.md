@@ -214,6 +214,22 @@ to super. Super is downstream execution authority invoked from Texture when the
 artifact needs coding, privileged execution, candidate work, generation,
 verification, or other supervision.
 
+`I2b` Texture must make owner-triggered work visible as artifact state. For
+prompt-bar input, `V0` is the owner prompt and `V1` is Texture's first response to
+that prompt. For an existing user-authored Texture, the current user revision is
+already canonical; the next Texture-authored revision may be a substantive edit,
+draft, acknowledgement, work-state note, blocker, or research/execution plan.
+What is forbidden is a mechanically forced trivial patch that hides ongoing
+delegation or background work from the owner-readable artifact.
+
+`I2c` Agent-to-agent update identity is runtime-owned. `update_coagent` records
+need stable internal identity for idempotency, wake delivery, delivery marking,
+Trace joins, and recovery, but an LLM must not have to invent that identity.
+Model-visible update payloads may describe kind, target, findings, evidence,
+refs, blockers, and questions; the durable `update_id` is minted or
+deterministically derived by the runtime from the delivery envelope and
+normalized payload.
+
 `I3` Parent/child is not a control ontology. Provenance-only spawned-by edges
 may remain temporarily, but control, liveness, settlement, cancellation,
 budgeting, and recovery must not depend on parent/child semantics.
@@ -848,6 +864,62 @@ still replace Texture agency with a hidden workflow edge.
 chooses the next semantic move.
 
 `deletion gate:` M3.1.
+
+#### H024a - Trivial First Patch As Hidden Work-State
+
+`bad pattern:` Texture is forced to call `patch_texture` before it can delegate or
+wait, and the first write removes or normalizes the owner's instruction without
+recording that research, execution, verification, or other background work is
+underway.
+
+`detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`, first-revision
+metadata with tiny `delta_chars` after an owner work request, revision rationale
+that "consumes" an instruction-bearing annotation, Trace showing later
+`spawn_agent`/`update_coagent` activity while the Texture revision has no
+owner-visible work-state.
+
+`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+[internal/runtime/texture_agent_revision.go](../internal/runtime/texture_agent_revision.go),
+[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
+
+`why it violates the spec:` it satisfies a mechanical cadence rule while making
+the owner-visible artifact less truthful. The bug is not that Texture writes
+before research completes; the bug is that the write does not honestly represent
+the work Texture has begun or the evidence it is waiting on.
+
+`successor pattern:` Texture's first response to an owner-triggered request is an
+honest canonical artifact revision: substantive output when available, or an
+acknowledgement/work-state revision that preserves the obligation and names the
+active background work. Delegation may follow or happen in the same activation,
+but the artifact must not imply the request was merely cleaned up.
+
+`deletion gate:` M3.2 / Texture prompt register and decision notes.
+
+#### H024b - Model-Invented Coagent Update IDs
+
+`bad pattern:` model-authored `update_coagent` calls must provide globally
+idempotent `update_id` strings, so natural local labels such as `checkpoint-1`
+can collide owner-wide and drop otherwise valid findings.
+
+`detectors:` `update_id` required in the model-facing tool schema,
+`update_id ... already exists with different payload`, prompt text asking
+researchers or workers to choose checkpoint ids, tests that depend on
+model-authored human-readable update ids.
+
+`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
+[internal/store/store.go](../internal/store/store.go),
+[docs/choir-prompting-invariants.md](./choir-prompting-invariants.md).
+
+`why it violates the spec:` the runtime treats `update_id` as an idempotency and
+delivery primitive, but exposes it as if it were semantic content the model can
+name correctly. That makes delivery correctness depend on prompt compliance
+instead of the durable actor substrate.
+
+`successor pattern:` runtime mints or derives `update_id` from the delivery
+envelope plus normalized payload. Explicit IDs are reserved for trusted internal
+deterministic paths and tests that assert idempotency directly.
+
+`deletion gate:` M2/M3 messaging cutover repair.
 
 #### H025 - Dead Parent/Child Result-Channel API
 
