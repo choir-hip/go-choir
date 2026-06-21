@@ -21,7 +21,6 @@ import {
   textureRelatedMarkdownTarget,
 } from '../src/lib/texture-source-renderer.ts';
 import { revisionSourceEntities } from '../src/lib/texture-source-state.ts';
-import { buildSourceReviewPayload } from '../src/lib/texture-source-review.js';
 import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
 
 const sourceContractMatrix = JSON.parse(readFileSync(fileURLToPath(
@@ -44,29 +43,6 @@ test('frontend source contract stays aligned with shared matrix', () => {
   for (const item of sourceContractMatrix.frontend_open_plans) {
     expect(sourceOpenPlan(item.input), item.name).toMatchObject(item.want);
   }
-});
-
-test('source review URL repairs default to Source Viewer open surface', () => {
-  const payload = buildSourceReviewPayload({
-    marker: '[1]',
-    title: 'Source review URL fixture',
-    excerpt: 'The cited source confirms the claim.',
-    url: 'https://example.com/source-review-url-fixture',
-    revisionID: 'rev-url-source-viewer',
-    relation: 'confirms',
-  });
-
-  expect(payload.source_entities).toHaveLength(1);
-  expect(payload.source_entities[0]).toMatchObject({
-    kind: 'web_source',
-    target: {
-      target_kind: 'url',
-      url: 'https://example.com/source-review-url-fixture',
-    },
-    display: {
-      open_surface: 'source',
-    },
-  });
 });
 
 test('source reader exposes only web-safe original links to the browser', () => {
@@ -531,7 +507,6 @@ test('Texture opens content-item text sources as reader-mode markdown', async ({
   });
   await page.reload();
   await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('[data-window]')).toHaveCount(0);
 
   const created = await page.evaluate(async () => {
     const title = `Content Source Reader Fixture ${Date.now()}`;
@@ -924,7 +899,7 @@ test('published source readers prefer publication snapshots over loaded content 
   await expect(reader).not.toContainText(created.contentID);
 });
 
-test('Texture source panel attaches readable text to an existing source entity', async ({ desktopSession }) => {
+test('Texture source panel omits retired artifact attachment UI while structured sources still expand', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.evaluate(async () => {
     await fetch('/api/desktop/state', {
@@ -1001,38 +976,19 @@ test('Texture source panel attaches readable text to an existing source entity',
   await textureWindow.locator('[data-texture-source-panel]').click();
   const sourcePanel = textureWindow.locator('[data-texture-source-diagnostics]');
   await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-  await sourcePanel.locator('[data-texture-source-artifact-text]').fill([
-    '# Attached readable source',
-    '',
-    'Readable attachment confirms the cited claim.',
-    '',
-    '- The attachment is a reader artifact.',
-  ].join('\n'));
-
-  const createRequest = page.waitForRequest((request) => request.url().includes('/api/content/items'));
-  const createResponse = page.waitForResponse((response) => response.url().includes('/api/content/items'));
-  const attachRequest = page.waitForRequest((request) => request.url().includes('/source-attachments'));
-  const attachResponse = page.waitForResponse((response) => response.url().includes('/source-attachments'));
-  await sourcePanel.locator('[data-texture-attach-source-artifact]').click();
-  expect((await createRequest).method()).toBe('POST');
-  const contentResponse = await createResponse;
-  expect(contentResponse.status()).toBe(201);
-  const attachment = await attachRequest;
-  expect(attachment.method()).toBe('POST');
-  const attachmentPayload = JSON.parse(attachment.postData() || '{}');
-  expect(attachmentPayload.attachments?.[0]?.entity_id).toBe('src-attach-text');
-  const sourceAttachmentResponse = await attachResponse;
-  expect(sourceAttachmentResponse.status()).toBe(201);
+  await expect(sourcePanel.locator('[data-texture-source-artifact-panel]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-source-artifact-text]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-attach-source-artifact]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-import-source-artifact]')).toHaveCount(0);
+  await expect(sourcePanel.locator('[data-texture-source-entity-chip]').filter({ hasText: 'Attachable source fixture' })).toBeVisible();
 
   const rendered = textureWindow.locator('[data-texture-rendered]');
   const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-attach-text"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]').click();
-  const sourceWindow = page.locator('[data-content-viewer]').last();
-  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
-  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Attached readable source');
-  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Readable attachment confirms the cited claim.');
+  await expect(citation).toHaveAttribute('data-expanded', 'true');
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('Attachable source fixture');
+  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('Readable attachment confirms the cited claim.');
 });
 
 test('Texture lays out expanded text sources as noncanonical journal flow', async ({ desktopSession }) => {

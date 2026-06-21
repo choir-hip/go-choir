@@ -383,18 +383,18 @@ func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
 		ChannelID:        rec.ChannelID,
 		RequestedByRunID: rec.RequestedByRunID,
 		AgentProfile:     rec.AgentProfile,
-		AgentRole:       rec.AgentRole,
-		OwnerID:         rec.OwnerID,
-		SandboxID:       rec.SandboxID,
-		State:           rec.State,
-		Prompt:          rec.Prompt,
-		Result:          rec.Result,
-		Error:           rec.Error,
-		CreatedAt:       rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:       rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		FinishedAt:      finishedAt,
-		ActiveChildRuns: 0,
-		Metadata:        rec.Metadata,
+		AgentRole:        rec.AgentRole,
+		OwnerID:          rec.OwnerID,
+		SandboxID:        rec.SandboxID,
+		State:            rec.State,
+		Prompt:           rec.Prompt,
+		Result:           rec.Result,
+		Error:            rec.Error,
+		CreatedAt:        rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:        rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		FinishedAt:       finishedAt,
+		ActiveChildRuns:  0,
+		Metadata:         rec.Metadata,
 	}
 }
 
@@ -1384,17 +1384,17 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 			ChannelID:        rec.ChannelID,
 			RequestedByRunID: rec.RequestedByRunID,
 			AgentProfile:     rec.AgentProfile,
-			AgentRole:    rec.AgentRole,
-			OwnerID:      rec.OwnerID,
-			SandboxID:    rec.SandboxID,
-			State:        rec.State,
-			Prompt:       rec.Prompt,
-			Result:       rec.Result,
-			Error:        rec.Error,
-			CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			UpdatedAt:    rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-			FinishedAt:   finishedAt,
-			Metadata:     rec.Metadata,
+			AgentRole:        rec.AgentRole,
+			OwnerID:          rec.OwnerID,
+			SandboxID:        rec.SandboxID,
+			State:            rec.State,
+			Prompt:           rec.Prompt,
+			Result:           rec.Result,
+			Error:            rec.Error,
+			CreatedAt:        rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			UpdatedAt:        rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+			FinishedAt:       finishedAt,
+			Metadata:         rec.Metadata,
 		})
 	}
 
@@ -1820,8 +1820,8 @@ const (
 //	GET    /api/texture/documents/{id}/compare   → semantic compare
 //	POST   /api/texture/documents/{id}/merge-preview → preview concept merge
 //	POST   /api/texture/documents/{id}/accept-merge → accept merge preview
-//	POST   /api/texture/documents/{id}/source-repairs → repair unresolved source gaps
-//	POST   /api/texture/documents/{id}/source-attachments → attach source artifacts to existing source entities
+//	POST   /api/texture/documents/{id}/source-repairs → retired source-gap repair tombstone
+//	POST   /api/texture/documents/{id}/source-attachments → retired source-attachment tombstone
 //	POST   /api/texture/documents/{id}/restore   → restore historical revision as latest
 //	GET    /api/texture/documents/{id}/diagnosis → owner-scoped diagnosis bundle
 //	GET    /api/texture/documents/{id}/export    → export current Texture revision

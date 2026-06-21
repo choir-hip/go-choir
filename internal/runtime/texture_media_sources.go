@@ -43,10 +43,10 @@ type textureSourceEntityProvenance = types.SourceEntityProvenance
 var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 
 // textureRawSourceServiceItemIDRE matches bare source-service item ids in the
-// authoring model's own body prose (used by the body-ref normalizer to rewrite
-// "srcitem_..." mentions into native [label](source:id) refs). It is NOT used to
-// scrape researcher findings into sources; those arrive via the typed coagent
-// findings path.
+// authoring model's own body prose while building runtime source context. It is
+// NOT used to scrape researcher findings into sources; those arrive via the
+// typed coagent findings path, and document output uses structured source_ref
+// nodes rather than markdown source links.
 var textureRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
 
 func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, metadata map[string]any) ([]textureSourceEntity, bool) {

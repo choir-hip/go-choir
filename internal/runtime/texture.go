@@ -1345,10 +1345,6 @@ func extractJSONObject(text string) (string, error) {
 	return text[start : end+1], nil
 }
 
-func countTextureCitationMarkers(content string) int {
-	return strings.Count(content, "](source:") + len(regexp.MustCompile(`\[[0-9]{1,3}\]`).FindAllString(content, -1))
-}
-
 func countRawJSONItems(raw json.RawMessage) int {
 	if len(raw) == 0 {
 		return 0

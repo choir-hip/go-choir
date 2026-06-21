@@ -120,8 +120,6 @@ test('Markdown lineage import resolves known citation markers into expandable so
             '# Legal Cloud Sourced Lineage',
             '',
             'Confidentiality matters for private legal-cloud work [1].',
-            '',
-            'One claim still needs source repair [2].',
           ].join('\n'),
           citation_resolutions: [
             {
@@ -140,12 +138,11 @@ test('Markdown lineage import resolves known citation markers into expandable so
   const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
   expect(revisions.revisions).toHaveLength(1);
   const revision = revisions.revisions[0];
-  expect(revision.content).toContain(`[1](source:${sourceEntityID})`);
-  expect(revision.content).toContain('One claim still needs source repair [2].');
-  expect(revision.content).not.toContain('Confidentiality matters for private legal-cloud work [1].');
-  expect(revision.metadata?.source_entities).toHaveLength(1);
-  expect(revision.metadata?.source_gaps).toHaveLength(1);
-  expect(revision.metadata?.source_gaps?.[0]?.marker).toBe('[2]');
+  expect(revision.content).toContain('[1]');
+  expect(revision.content).not.toContain('(source:');
+  expect(revision.source_entities).toHaveLength(1);
+  expect(revision.metadata?.source_entities).toBeUndefined();
+  expect(revision.metadata?.source_gaps).toBeUndefined();
   expect(revision.metadata?.migration_manifest?.citation_resolutions).toEqual([
     { marker: '[1]', action: 'link_source', entity_id: sourceEntityID },
   ]);
@@ -169,7 +166,6 @@ test('Markdown lineage import resolves known citation markers into expandable so
   await expect(sourceWindow).toContainText(sourceLabel);
   await expect(sourceWindow).toContainText(excerpt);
   await expect(sourceWindow.locator('[data-source-entity]')).toContainText(sourceEntityID);
-  await expect(rendered).toContainText('One claim still needs source repair [2].');
 });
 
 test('Imported Markdown advances from v0 source artifact to canonical .texture with Markdown export', async ({ desktopSession }) => {
@@ -460,7 +456,10 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   expect(revisions.revisions).toHaveLength(2);
   const historical = revisions.revisions.find((revision) => revision.version_number === 0);
   const latest = revisions.revisions.find((revision) => revision.version_number === 1);
-  expect(historical.content).toContain(`[1](source:${sourceEntityID})`);
+  expect(historical.content).toContain('[1]');
+  expect(historical.content).not.toContain('(source:');
+  expect(historical.source_entities).toHaveLength(1);
+  expect(historical.metadata?.source_entities).toBeUndefined();
   expect(latest.content).toContain('| Work product | Durable professional output |');
   expect(historical.metadata?.migration_manifest?.original_content_id).toBe(oldItem.content_id);
   expect(historical.metadata?.migration_manifest?.source_content_item_id).toBe(oldItem.content_id);
@@ -489,276 +488,33 @@ test('Markdown lineage import can migrate from stored ContentItem versions', asy
   await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
 });
 
-test('Migrated source gaps can be repaired as canonical Texture revisions', async ({ desktopSession }) => {
+test('Markdown lineage import rejects unresolved source markers', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
-  const sourceEntityID = `src-repaired-gap-${stamp}`;
-  const sourceLabel = 'Repaired Legal Source';
-  const excerpt = 'Repaired source evidence supports the migrated citation.';
 
-  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
-    method: 'POST',
-    body: JSON.stringify({
-      source_path: `proposals/source-gap-repair-${stamp}.md`,
-      title: `Source Gap Repair ${stamp}`,
-      versions: [
-        {
-          label: 'v44',
-          source_revision_id: `legacy-gap-v44-${stamp}`,
-          content: [
-            '# Source Gap Repair',
-            '',
-            'This migrated claim starts with a repairable citation gap [2].',
-          ].join('\n'),
-        },
-      ],
-    }),
-  });
-
-  const revisionsBefore = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
-  expect(revisionsBefore.revisions).toHaveLength(1);
-  expect(revisionsBefore.revisions[0].metadata?.source_gaps?.[0]?.marker).toBe('[2]');
-
-  const repaired = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/source-repairs`, {
-    method: 'POST',
-    body: JSON.stringify({
-      base_revision_id: imported.current_revision_id,
-      source_entities: [
-        {
-          entity_id: sourceEntityID,
-          kind: 'source_service_item',
-          label: sourceLabel,
-          target: {
-            target_kind: 'source_service_item',
-            item_id: `srcitem-repaired-gap-${stamp}`,
+  await expect(async () => {
+    await fetchJSON(page, '/api/texture/markdown-lineage/import', {
+      method: 'POST',
+      body: JSON.stringify({
+        source_path: `proposals/unresolved-source-marker-${stamp}.md`,
+        title: `Unresolved Source Marker ${stamp}`,
+        versions: [
+          {
+            label: 'v44',
+            source_revision_id: `legacy-gap-v44-${stamp}`,
+            content: [
+              '# Unresolved Source Marker',
+              '',
+              'This migrated claim has no source resolution [2].',
+            ].join('\n'),
           },
-          selectors: [
-            {
-              selector_kind: 'text_quote',
-              text_quote: excerpt,
-              content_hash: `sha256-repaired-gap-${stamp}`,
-            },
-          ],
-          display: {
-            inline_mode: 'embedded_excerpt',
-            expanded_mode: 'source_card',
-            open_surface: 'source',
-            default_collapsed: true,
-          },
-          evidence: {
-            state: 'available',
-            research_state: 'represented',
-          },
-          provenance: {
-            created_by: 'source_gap_repair',
-            rights_scope: 'source_service_projection',
-            untrusted_source_text: true,
-          },
-        },
-      ],
-      citation_resolutions: [
-        {
-          marker: '[2]',
-          entity_id: sourceEntityID,
-        },
-      ],
-    }),
-  });
-
-  expect(repaired.version_number).toBe(1);
-  expect(repaired.parent_revision_id).toBe(imported.current_revision_id);
-  expect(repaired.content).toContain(`[2](source:${sourceEntityID})`);
-  expect(repaired.content).not.toContain(`[2](source:${sourceEntityID})(source:`);
-  expect(repaired.metadata?.source).toBe('texture_source_gap_repair');
-  expect(repaired.metadata?.source_gaps).toBeUndefined();
-  expect(repaired.metadata?.source_entities).toHaveLength(1);
-  expect(repaired.metadata?.source_entities?.[0]?.evidence?.state).toBe('confirms');
-  expect(repaired.metadata?.source_entities?.[0]?.evidence?.relation).toBe('confirms');
-  expect(repaired.metadata?.source_repair_resolutions).toEqual([{
-    marker: '[2]',
-    action: 'link_source',
-    entity_id: sourceEntityID,
-    evidence_state: {
-      state: 'confirms',
-      target_id: sourceEntityID,
-    },
-  }]);
-
-  const textureWindow = await openRecentTextureDocument(page, `Source Gap Repair ${stamp}`);
-
-  const rendered = textureWindow.locator('[data-texture-rendered]');
-  const citation = rendered.locator('[data-texture-source-ref]').first();
-  await expect(citation).toBeVisible({ timeout: 10000 });
-  await expect(citation).toHaveAttribute('data-source-label', '2');
-  await citation.click();
-  await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
-  await expect(rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]')).toBeVisible();
+        ],
+      }),
+    });
+  }).rejects.toThrow('unresolved markdown citation marker [2]');
 });
 
-test('Texture Sources panel applies source-gap repair and opens repaired source window', async ({ desktopSession }) => {
-  const { page } = desktopSession;
-  const stamp = Date.now();
-  const sourceLabel = 'Panel Repair Source';
-  const excerpt = 'Panel repair source evidence supports the citation.';
-
-  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
-    method: 'POST',
-    body: JSON.stringify({
-      source_path: `proposals/panel-source-gap-repair-${stamp}.md`,
-      title: `Panel Source Repair ${stamp}`,
-      versions: [
-        {
-          label: 'v44',
-          source_revision_id: `legacy-panel-gap-v44-${stamp}`,
-          content: [
-            '# Panel Source Repair',
-            '',
-            'This owner-visible source panel claim starts with a citation gap [2].',
-          ].join('\n'),
-        },
-      ],
-    }),
-  });
-
-  const textureWindow = await openRecentTextureDocument(page, `Panel Source Repair ${stamp}`);
-
-  await textureWindow.locator('[data-texture-source-panel]').click();
-  const sourcePanel = textureWindow.locator('[data-texture-source-diagnostics]');
-  await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-  await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
-  await expect(sourcePanel.locator('[data-texture-source-review-marker].selected')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-texture-source-repair-payload]')).toHaveCount(0);
-  await sourcePanel.locator('[data-texture-source-review-title]').fill(sourceLabel);
-  await sourcePanel.locator('[data-texture-source-review-excerpt]').fill(excerpt);
-  const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));
-  const repairResponsePromise = page.waitForResponse((response) => response.url().includes('/source-repairs'));
-  await sourcePanel.locator('[data-texture-apply-source-review]').click();
-  const repairRequest = await repairRequestPromise;
-  expect(repairRequest.method()).toBe('POST');
-  const repairPayload = JSON.parse(repairRequest.postData() || '{}');
-  expect(repairPayload.source_entities?.[0]?.evidence?.state).toBe('confirms');
-  expect(repairPayload.source_entities?.[0]?.evidence?.research_state).toBe('owner_supplied');
-  expect(repairPayload.source_entities?.[0]?.evidence?.relation).toBe('confirms');
-  expect(repairPayload.citation_resolutions?.[0]?.action).toBe('link_source');
-  const repairResponse = await repairResponsePromise;
-  expect(repairResponse.status()).toBe(201);
-
-  const rendered = textureWindow.locator('[data-texture-rendered]');
-  const citation = rendered.locator('[data-texture-source-ref]').first();
-  await expect(citation).toBeVisible({ timeout: 15000 });
-  await expect(citation).toHaveAttribute('data-texture-citation-transclusion', '');
-  await citation.click();
-  await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(sourceLabel);
-  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText(excerpt);
-
-  const initialSourceWindows = await page.locator('[data-content-viewer]').count();
-  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]').click();
-  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
-  const sourceWindow = page.locator('[data-content-viewer]').last();
-  await expect(sourceWindow).toContainText(sourceLabel);
-  await expect(sourceWindow).toContainText(excerpt);
-  await expect(sourceWindow.locator('[data-source-entity]')).toContainText('Confirms claim / Owner supplied');
-  await expect(sourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
-  await page.locator('[data-window-app-id="content"]').last().locator('[data-window-close]').click();
-  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows, { timeout: 10000 });
-
-  await expect(sourcePanel.locator('[data-texture-source-entities]')).toContainText(sourceLabel);
-  await expect(sourcePanel.locator('[data-texture-source-entity-chip]').filter({ hasText: sourceLabel })).toContainText('Confirms claim');
-  await sourcePanel.locator('[data-texture-source-entity-chip]').filter({ hasText: sourceLabel }).click();
-  await expect(page.locator('[data-content-viewer]')).toHaveCount(initialSourceWindows + 1, { timeout: 10000 });
-  const panelSourceWindow = page.locator('[data-content-viewer]').last();
-  await expect(panelSourceWindow).toContainText(sourceLabel);
-  await expect(panelSourceWindow).toContainText(excerpt);
-  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText('Confirms claim / Owner supplied');
-  await expect(panelSourceWindow.locator('[data-source-entity]')).toContainText(/src_review_2_panel_repair_source/);
-});
-
-test('Texture Sources panel can mark a citation gap as no source needed', async ({ desktopSession }) => {
-  const { page } = desktopSession;
-  const stamp = Date.now();
-  const reason = 'This is a framing sentence rather than a factual claim requiring citation.';
-
-  const imported = await fetchJSON(page, '/api/texture/markdown-lineage/import', {
-    method: 'POST',
-    body: JSON.stringify({
-      source_path: `proposals/panel-no-source-needed-${stamp}.md`,
-      title: `Panel No Source Needed ${stamp}`,
-      versions: [
-        {
-          label: 'v44',
-          source_revision_id: `legacy-panel-no-source-v44-${stamp}`,
-          content: [
-            '# Panel No Source Needed',
-            '',
-            'This ordinary framing sentence should not keep a citation marker [2].',
-          ].join('\n'),
-        },
-      ],
-    }),
-  });
-
-  const textureWindow = await openRecentTextureDocument(page, `Panel No Source Needed ${stamp}`);
-
-  await textureWindow.locator('[data-texture-source-panel]').click();
-  const sourcePanel = textureWindow.locator('[data-texture-source-diagnostics]');
-  await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-  await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
-  await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
-  await expect(sourcePanel.locator('[data-texture-source-review-marker].selected')).toContainText('[2]');
-
-  await sourcePanel.locator('[data-texture-source-review-relation]').selectOption('no_source_needed');
-  await expect(sourcePanel.locator('[data-texture-source-review-title]')).toHaveCount(0);
-  await expect(sourcePanel.locator('[data-texture-source-review-excerpt]')).toHaveCount(0);
-  await expect(sourcePanel.locator('[data-texture-apply-source-review]')).toBeDisabled();
-  await sourcePanel.locator('[data-texture-source-review-reason]').fill(reason);
-
-  const repairRequestPromise = page.waitForRequest((request) => request.url().includes('/source-repairs'));
-  const repairResponsePromise = page.waitForResponse((response) => response.url().includes('/source-repairs'));
-  await sourcePanel.locator('[data-texture-apply-source-review]').click();
-  const repairRequest = await repairRequestPromise;
-  expect(repairRequest.method()).toBe('POST');
-  const repairPayload = JSON.parse(repairRequest.postData() || '{}');
-  expect(repairPayload.source_entities || []).toHaveLength(0);
-  expect(repairPayload.citation_resolutions).toEqual([
-    {
-      marker: '[2]',
-      action: 'no_source_needed',
-      reason,
-    },
-  ]);
-  const repairResponse = await repairResponsePromise;
-  expect(repairResponse.status()).toBe(201);
-
-  const revisions = await fetchJSON(page, `/api/texture/documents/${encodeURIComponent(imported.doc_id)}/revisions?limit=10000`);
-  const latest = revisions.revisions.find((revision) => revision.version_number === 1);
-  expect(latest.content).toContain('This ordinary framing sentence should not keep a citation marker.');
-  expect(latest.content).not.toContain('[2]');
-  expect(latest.metadata?.source_entities).toBeUndefined();
-  expect(latest.metadata?.source_gaps).toBeUndefined();
-  expect(latest.metadata?.source_repair_resolutions).toEqual([
-    {
-      marker: '[2]',
-      action: 'no_source_needed',
-      reason,
-      evidence_state: {
-        state: 'no_source_needed',
-        reason,
-      },
-    },
-  ]);
-
-  const rendered = textureWindow.locator('[data-texture-rendered]');
-  await expect(rendered).toContainText('This ordinary framing sentence should not keep a citation marker.');
-  await expect(rendered).not.toContainText('[2]');
-  await expect(rendered.locator('[data-texture-source-ref]')).toHaveCount(0);
-  await expect(sourcePanel.locator('[data-texture-source-gaps]')).toHaveCount(0, { timeout: 15000 });
-});
-
-test('Texture Sources panel can cancel diagnosis without blocking source review', async ({ desktopSession }) => {
+test('Texture Sources panel can cancel diagnosis without exposing source repair', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const stamp = Date.now();
   let releaseDiagnosis = null;
@@ -776,7 +532,7 @@ test('Texture Sources panel can cancel diagnosis without blocking source review'
           content: [
             '# Cancel Source Diagnosis',
             '',
-            'This claim keeps source review available while diagnosis is pending [2].',
+            'This claim keeps the source panel available while diagnosis is pending.',
           ].join('\n'),
         },
       ],
@@ -801,20 +557,20 @@ test('Texture Sources panel can cancel diagnosis without blocking source review'
     const sourcePanel = textureWindow.locator('[data-texture-source-diagnostics]');
     const diagnosisButton = sourcePanel.locator('[data-texture-load-diagnosis]');
     await expect(sourcePanel).toBeVisible({ timeout: 10000 });
-    await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
-    await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
+    await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toHaveCount(0);
+    await expect(sourcePanel.locator('[data-texture-source-gaps]')).toHaveCount(0);
 
     const diagnosisRequest = page.waitForRequest((request) => request.url().includes('/diagnosis'));
     await diagnosisButton.click();
     await diagnosisRequest;
     await expect(diagnosisButton).toHaveText('Cancel diagnosis');
-    await expect(sourcePanel.locator('[data-texture-apply-source-review]')).toBeDisabled();
+    await expect(sourcePanel.locator('[data-texture-apply-source-review]')).toHaveCount(0);
 
     await diagnosisButton.click();
     await expect(diagnosisButton).toHaveText('Diagnosis', { timeout: 5000 });
     await expect(textureWindow.locator('[data-texture-save-status]')).toContainText('Source diagnosis cancelled');
-    await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toBeVisible();
-    await expect(sourcePanel.locator('[data-texture-source-gaps]')).toContainText('[2]');
+    await expect(sourcePanel.locator('[data-texture-source-review-panel]')).toHaveCount(0);
+    await expect(sourcePanel.locator('[data-texture-source-gaps]')).toHaveCount(0);
   } finally {
     if (releaseDiagnosis) releaseDiagnosis();
     await page.unroute(diagnosisRoute);
@@ -885,7 +641,7 @@ test('Texture Sources panel shows bounded revision structure without body text',
         '',
         '| Term | Meaning |',
         '| --- | --- |',
-        '| Work product | Durable output [source](source:src-structure-evidence) |',
+        '| Work product | Durable output [1] |',
         '',
       ].join('\n'),
       metadata: {

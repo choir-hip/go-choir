@@ -3,63 +3,27 @@
   import {
     sourceEntityID,
     sourceEntityKindLabel,
-    sourceEntityTargetURL,
     sourceEntityTitle,
     sourceEvidenceState,
     sourceEvidenceStateLabel,
   } from './texture-source-renderer';
 
   export let currentDoc = null;
-  export let currentRevision = null;
   export let isPublishedReadOnly = false;
-  export let sourceCandidates = [];
   export let sourceEntities = [];
   export let sourceSummary = null;
   export let sourceStructures = [];
   export let sourceDecisions = [];
   export let editEvidence = null;
   export let sourceDiagnosisPending = false;
-  export let sourceRepairPending = false;
-  export let sourceRepairError = '';
-  export let sourceReviewMarker = '';
-  export let sourceReviewTitle = '';
-  export let sourceReviewURL = '';
-  export let sourceReviewExcerpt = '';
-  export let sourceReviewRelation = 'confirms';
-  export let sourceReviewReason = '';
-  export let sourceReviewStatus = '';
-  export let selectedSourceEntityID = '';
-  export let sourceArtifactTitle = '';
-  export let sourceArtifactURL = '';
-  export let sourceArtifactText = '';
-  export let sourceArtifactPending = false;
-  export let sourceArtifactStatus = '';
-  export let sourceArtifactError = '';
+  export let sourcePanelError = '';
   export let modelPolicyRoles = [];
   export let modelPolicyPending = false;
   export let modelPolicyError = '';
 
   const dispatch = createEventDispatcher();
 
-  $: selectedSourceEntity = sourceEntities.find((entity) => sourceEntityID(entity) === selectedSourceEntityID)
-    || sourceEntities[0]
-    || null;
-  $: heading = sourceCandidates.length
-    ? `${sourceCandidates.length} source review marker${sourceCandidates.length === 1 ? '' : 's'}`
-    : `${sourceEntities.length} represented source${sourceEntities.length === 1 ? '' : 's'}`;
-  $: sourceReviewOmitsMarker = sourceReviewRelation === 'no_source_needed';
-  $: canApplySourceReview = Boolean(
-    currentDoc
-    && currentRevision
-    && sourceReviewMarker
-    && (
-      sourceReviewOmitsMarker
-        ? sourceReviewReason.trim()
-        : sourceReviewTitle.trim() && sourceReviewExcerpt.trim()
-    ),
-  );
-  $: canImportSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactURL.trim());
-  $: canAttachSourceArtifact = Boolean(currentDoc && currentRevision && sourceArtifactText.trim());
+  $: heading = `${sourceEntities.length} represented source${sourceEntities.length === 1 ? '' : 's'}`;
 
   function modelPolicyLabel(row) {
     const model = row?.model || 'unknown';
@@ -85,12 +49,8 @@
     </button>
   </div>
 
-  {#if sourceCandidates.length}
-    <div class="source-marker-list" data-texture-source-gaps aria-label="Claims needing source review">
-      {#each sourceCandidates as marker}
-        <span>{marker}</span>
-      {/each}
-    </div>
+  {#if sourcePanelError}
+    <span class="source-panel-error" role="alert">{sourcePanelError}</span>
   {/if}
 
   {#if sourceEntities.length}
@@ -290,156 +250,6 @@
     </div>
   {/if}
 
-  {#if !isPublishedReadOnly}
-    {#if sourceCandidates.length}
-      <div class="source-review-panel" data-texture-source-review-panel>
-        <div class="source-artifact-heading">
-          <span class="evidence-label">Source review</span>
-          <strong>{sourceReviewMarker ? `Repair ${sourceReviewMarker}` : 'Choose marker'}</strong>
-        </div>
-        <div class="source-review-marker-picker" role="listbox" aria-label="Citation marker to repair">
-          {#each sourceCandidates as marker}
-            <button
-              type="button"
-              class:selected={marker === sourceReviewMarker}
-              data-texture-source-review-marker
-              data-source-marker={marker}
-              on:click={() => dispatch('source-review-marker', { marker })}
-            >
-              {marker}
-            </button>
-          {/each}
-        </div>
-        <label class="source-artifact-field">
-          <span>Review outcome</span>
-          <select data-texture-source-review-relation bind:value={sourceReviewRelation}>
-            <option value="confirms">Source confirms claim</option>
-            <option value="qualifies">Source qualifies claim</option>
-            <option value="refutes">Source refutes claim</option>
-            <option value="no_source_needed">No source needed</option>
-          </select>
-        </label>
-        {#if sourceReviewOmitsMarker}
-          <label class="source-artifact-field">
-            <span>Reason</span>
-            <textarea
-              data-texture-source-review-reason
-              bind:value={sourceReviewReason}
-              spellcheck="true"
-              rows="3"
-              placeholder="Explain why this marker should be removed instead of sourced"
-            ></textarea>
-          </label>
-        {:else}
-          <label class="source-artifact-field">
-            <span>Source title</span>
-            <input data-texture-source-review-title bind:value={sourceReviewTitle} placeholder="Name the confirming, qualifying, or refuting source" />
-          </label>
-          <label class="source-artifact-field">
-            <span>Source URL</span>
-            <input data-texture-source-review-url bind:value={sourceReviewURL} placeholder="Optional public source URL" />
-          </label>
-          <label class="source-artifact-field">
-            <span>Source excerpt</span>
-            <textarea
-              data-texture-source-review-excerpt
-              bind:value={sourceReviewExcerpt}
-              spellcheck="true"
-              rows="5"
-              placeholder="Paste the exact source text or concise reader-mode evidence for this marker"
-            ></textarea>
-          </label>
-        {/if}
-        <div class="source-panel-actions">
-          <button
-            type="button"
-            class="primary-action"
-            data-texture-apply-source-review
-            on:click={() => dispatch('apply-source-review')}
-            disabled={sourceRepairPending || !canApplySourceReview}
-          >
-            {sourceRepairPending ? 'Applying...' : 'Apply source review'}
-          </button>
-          {#if sourceReviewStatus}
-            <span class="source-artifact-status" role="status">{sourceReviewStatus}</span>
-          {/if}
-          {#if sourceRepairError}
-            <span class="source-repair-error" role="alert">{sourceRepairError}</span>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
-    <div class="source-artifact-panel" data-texture-source-artifact-panel>
-      <div class="source-artifact-heading">
-        <span class="evidence-label">Source artifact</span>
-        <strong>{selectedSourceEntity ? sourceEntityTitle(selectedSourceEntity) : 'Choose a source'}</strong>
-      </div>
-      {#if sourceEntities.length > 0}
-        <div class="source-artifact-picker" role="listbox" aria-label="Source artifact target">
-          {#each sourceEntities as entity}
-            <button
-              type="button"
-              class:selected={sourceEntityID(entity) === selectedSourceEntityID}
-              data-texture-source-artifact-target
-              data-source-entity-id={sourceEntityID(entity)}
-              on:click={() => dispatch('source-artifact-target', { entity })}
-            >
-              {sourceEntityTitle(entity)}
-            </button>
-          {/each}
-        </div>
-        <label class="source-artifact-field">
-          <span>Title</span>
-          <input data-texture-source-artifact-title bind:value={sourceArtifactTitle} />
-        </label>
-        <label class="source-artifact-field">
-          <span>URL</span>
-          <input data-texture-source-artifact-url bind:value={sourceArtifactURL} />
-        </label>
-        <div class="source-panel-actions">
-          <button
-            type="button"
-            class="secondary-action"
-            data-texture-import-source-artifact
-            on:click={() => dispatch('import-source-artifact')}
-            disabled={sourceArtifactPending || !canImportSourceArtifact}
-          >
-            {sourceArtifactPending ? 'Working...' : 'Import URL'}
-          </button>
-        </div>
-        <label class="source-artifact-field">
-          <span>Readable source text</span>
-          <textarea
-            data-texture-source-artifact-text
-            bind:value={sourceArtifactText}
-            spellcheck="true"
-            rows="7"
-          ></textarea>
-        </label>
-        <div class="source-panel-actions">
-          <button
-            type="button"
-            class="primary-action"
-            data-texture-attach-source-artifact
-            on:click={() => dispatch('attach-source-artifact')}
-            disabled={sourceArtifactPending || !canAttachSourceArtifact}
-          >
-            {sourceArtifactPending ? 'Attaching...' : 'Attach text'}
-          </button>
-          {#if sourceArtifactStatus}
-            <span class="source-artifact-status" role="status">{sourceArtifactStatus}</span>
-          {/if}
-          {#if sourceArtifactError}
-            <span class="source-repair-error" role="alert">{sourceArtifactError}</span>
-          {/if}
-        </div>
-      {:else}
-        <p class="source-artifact-empty">No source entities are available in this revision.</p>
-      {/if}
-    </div>
-
-  {/if}
 </section>
 
 <style>
@@ -453,8 +263,7 @@
     color: var(--choir-text-primary);
   }
 
-  .source-panel-heading,
-  .source-panel-actions {
+  .source-panel-heading {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -478,14 +287,12 @@
     text-transform: uppercase;
   }
 
-  .source-marker-list,
   .source-diagnosis-facts {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
   }
 
-  .source-marker-list span,
   .source-diagnosis-facts span {
     border: 1px solid var(--choir-border-strong);
     border-radius: 999px;
@@ -756,14 +563,6 @@
     color: var(--choir-text-accent);
   }
 
-  .source-review-panel,
-  .source-artifact-panel {
-    display: grid;
-    gap: 0.55rem;
-    border-left: 2px solid var(--choir-border-strong);
-    padding-left: 0.7rem;
-  }
-
   .source-artifact-heading {
     display: flex;
     flex-wrap: wrap;
@@ -781,73 +580,7 @@
     white-space: nowrap;
   }
 
-  .source-review-marker-picker,
-  .source-artifact-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.32rem;
-  }
-
-  .source-review-marker-picker button,
-  .source-artifact-picker button {
-    border: 1px solid var(--choir-border-subtle);
-    border-radius: 999px;
-    padding: 0.24rem 0.52rem;
-    color: var(--choir-text-secondary);
-    background: transparent;
-    font-size: 0.68rem;
-    font-weight: 720;
-    cursor: pointer;
-  }
-
-  .source-review-marker-picker button.selected,
-  .source-artifact-picker button.selected {
-    border-color: var(--choir-border-strong);
-    color: var(--choir-text-primary);
-    background: var(--choir-state-selected);
-  }
-
-  .source-artifact-field {
-    display: grid;
-    gap: 0.26rem;
-    color: var(--choir-text-secondary);
-    font-size: 0.7rem;
-    font-weight: 720;
-  }
-
-  .source-artifact-field input,
-  .source-artifact-field select,
-  .source-artifact-field textarea {
-    width: 100%;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 6px;
-    padding: 0.48rem 0.54rem;
-    color: var(--choir-text-primary);
-    background: var(--choir-state-selected);
-    font: inherit;
-    line-height: 1.35;
-  }
-
-  .source-artifact-field textarea {
-    min-height: 7rem;
-    resize: vertical;
-  }
-
-  .source-artifact-status {
-    flex: 1 1 auto;
-    min-width: 0;
-    color: var(--choir-text-secondary);
-    font-size: 0.74rem;
-    line-height: 1.35;
-  }
-
-  .source-artifact-empty {
-    margin: 0;
-    color: var(--choir-text-secondary);
-    font-size: 0.76rem;
-  }
-
-  .source-repair-error {
+  .source-panel-error {
     flex: 1 1 auto;
     min-width: 0;
     color: var(--choir-status-danger);
@@ -855,8 +588,7 @@
     line-height: 1.35;
   }
 
-  .secondary-action,
-  .primary-action {
+  .secondary-action {
     border: 1px solid var(--choir-border-strong);
     background: var(--choir-state-selected);
     color: var(--choir-text-accent);
@@ -873,21 +605,13 @@
     color: var(--choir-text-accent);
   }
 
-  .primary-action {
-    border-radius: 999px;
-    padding: 0.62rem 0.9rem;
-    font-weight: 750;
-  }
-
-  .secondary-action:hover:enabled,
-  .primary-action:hover:enabled {
+  .secondary-action:hover:enabled {
     transform: translateY(-1px);
     background: var(--choir-state-selected);
     border-color: var(--choir-border-strong);
   }
 
-  .secondary-action:disabled,
-  .primary-action:disabled {
+  .secondary-action:disabled {
     opacity: 0.46;
     cursor: not-allowed;
   }

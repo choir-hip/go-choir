@@ -747,9 +747,12 @@ multimedia resolver, publication/export projection, old-syntax deletion,
 staging acceptance proof. Current value: 1. Last accepted D7 residue deletion:
 markdown-lineage import now converts old markers/source links into structured
 `source_ref` nodes, rejects unresolved markers, and retires the legacy
-source-repair/source-attachment metadata endpoints. D5 multimedia reduced the
-variant locally, but its independent review agents stalled; retain that caveat
-until staging proof or a later reviewer checks the accumulated multimedia diff.
+source-repair/source-attachment metadata endpoints. Accepted D7 fourth slice:
+dead markdown-link citation validation, source-repair frontend affordances, and
+the stale source-attachment frontend affordance are removed. D5
+multimedia reduced the variant locally, but its independent review agents
+stalled; retain that caveat until staging proof or a later reviewer checks the
+accumulated multimedia diff.
 
 budget: Planning budget is one paradoc pass. D1-D4 used bounded passes for
 schema/source-contract, store/API write boundary, editor/user preservation, and
@@ -813,13 +816,17 @@ legacy metadata, publication/wirepublish package tests, proxy/runtime focused
 publish bridge tests, and `git diff --check`. D7 evidence now includes accepted
 prompt/frontend/current-fixture deletion, Universal Wire/coagent normalizer
 deletion, and markdown-lineage/source-repair retirement with focused runtime and
-tagged processor tests. Later cuts still need citation-validation/helper cleanup,
-remaining old-fixture classification, CI, staging deploy identity, Comet/browser
-staging proof with numbered source refs, expanded source window, multimedia
-source expansion, agent edit preserving refs, publication/export structured
-source proof on staging, and attempted markdown link/source token rejection;
-RunAcceptanceRecord at staging-smoke-level or higher if platform behavior
-changes.
+tagged processor tests. D7 fourth evidence also removes the dead
+markdown-link citation validator, source-gap repair frontend affordance,
+source-review payload helper, and stale frontend source-attachment affordance;
+browser fixtures now assert that the retired controls are absent while structured
+refs still expand, with independent review accepted. Later cuts still need
+remaining publication/proxy old-fixture classification, CI, staging deploy identity,
+Comet/browser staging proof with numbered source refs, expanded source window,
+multimedia source expansion, agent edit preserving refs,
+publication/export structured source proof on staging, and attempted markdown
+link/source token rejection; RunAcceptanceRecord at staging-smoke-level or
+higher if platform behavior changes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -840,7 +847,7 @@ tests, a P1 independent review, repair, and re-review acceptance. D7 repairs the
 prompt/frontend/current-fixture source-link affordance band, the Universal
 Wire/coagent source-normalizer path, and the markdown-lineage/source-repair
 metadata path after focused tests and independent review. Full repair still
-requires remaining old-syntax deletion receipts and staging proof.
+requires remaining old-fixture classification and staging proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -885,7 +892,14 @@ context until native `patch_texture` source operations attach top-level
 structured `source_entities`. D7 third converted markdown-lineage import into a
 historical conversion path that stores structured `body_doc`/top-level
 `source_entities`, rejects unresolved markers, and retires legacy source repair
-and source attachment metadata endpoints with 410 responses. D5 checkpoint
+and source attachment metadata endpoints with 410 responses. D7 fourth
+deletes the dead markdown-link citation validator, removes frontend source-gap
+repair candidate scanning and source-review panel/actions, deletes the
+source-review payload helper, removes stale frontend source-attachment controls
+that could only call the retired endpoint, teaches the frontend renderer to read
+structured `text_quote` selector `exact` data, and updates browser fixtures to
+assert import-time unresolved-marker rejection plus absence of the retired repair
+and attachment UI. D5 checkpoint
 records the specific sidecars/pathways repaired locally: runtime
 `media_source_refs`, prompt context that prefers those refs, and frontend
 media-ref synthesis/rendering outside top-level structured entities. D5
@@ -894,11 +908,11 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`. Markdown `[label](source:id)` parsing remains only as historical
 fallback for artifacts without structured body data.
 
-next move: continue D7 by deleting or confining legacy citation validation
-helpers and remaining old-source fixtures, then run broad tests and the landing
-loop. Do not claim settlement until staging proves source creation, agent/human
-edit preservation, multimedia source expansion, publication/export, and
-markdown-link/source-token rejection from the deployed product path.
+next move: continue D7 by classifying remaining publication/proxy old-source
+fixtures, then run broad tests and the landing loop. Do not claim settlement
+until staging proves source creation, agent/human edit preservation, multimedia
+source expansion, publication/export, and markdown-link/source-token rejection
+from the deployed product path.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -913,9 +927,11 @@ multimedia resolver/rendering cut, with independent review still unavailable due
 stalled review agents. D6 proves publication/export at local/package scope after
 independent review repair. D7 has accepted deletion receipts for prompt/frontend
 current-contract fixtures, Universal Wire/coagent source-normalization residue,
-and markdown-lineage/source-repair metadata residue. Promote outward only when
-remaining deletion receipts, staging proof, and any missing multimedia
-independent review close the product contract.
+and markdown-lineage/source-repair metadata residue. D7
+citation-helper/frontend repair-and-attachment-affordance deletion is also
+independently accepted. Promote outward only when remaining deletion receipts,
+staging proof, and any missing multimedia independent review close the product
+contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -928,7 +944,7 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion, Universal Wire/coagent source-normalizer deletion, and markdown-lineage/source-repair retirement are independently accepted; current V=1. Continue D7 by deleting or confining citation validation helpers and remaining old-source fixtures, then run broad tests and staging proof. Do not deploy or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion, Universal Wire/coagent source-normalizer deletion, markdown-lineage/source-repair retirement, and citation-helper/frontend repair-affordance deletion are independently accepted; current V=1. Continue D7 by classifying remaining publication/proxy old-source fixtures, then run broad tests and staging proof. Do not deploy or claim mission settlement unless the paradoc is updated first.
 ```
 
 ## D6 Publication/Export Problem Checkpoint - 2026-06-21
@@ -1131,3 +1147,42 @@ Evidence:
 `git diff --check`;
 `nix develop -c go test -tags comprehensive ./internal/runtime -run 'MarkdownLineage|SourceGapRepair|SourceArtifactAttachment' -count=1`;
 `nix develop -c go test ./internal/runtime -run 'TestTextureStructured|TestTexturePatch|TestTextureAgentRevision|TestTexturePromptPreservesInlineSourceRefs|TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks' -count=1`.
+
+### D7 Slice 4 Local - Citation Helper/Repair UI Deletion
+
+Status: locally implemented and independently accepted on 2026-06-21.
+
+This slice removes remaining noncanonical source-repair/citation affordances
+that were no longer part of the structured write path:
+
+- Deleted the dead markdown-link citation validator and its tests; production
+  code no longer had callers, and the helper described `[label](source:id)` as
+  native citation syntax.
+- Changed diagnosis source-marker counting to prefer structured
+  `source_ref`/`source_embed` nodes and fall back only to projected numbered
+  refs.
+- Removed frontend source-gap candidate scanning, source-review payload
+  construction, source-repair API calls, source-review panel/actions, and stale
+  source-attachment controls/client helpers that could only call the retired
+  endpoint.
+- Taught the frontend source renderer to display structured `text_quote`
+  selector `exact` data in inline transclusions.
+- Updated markdown-lineage browser fixtures so unresolved markers are rejected
+  at import time, resolved imports assert projected `[1]` plus top-level
+  `source_entities`, and the old repair UI is asserted absent. Updated the
+  source-entity browser fixture to assert the retired attachment UI is absent
+  while native structured source refs still expand.
+
+Local evidence:
+`npm run build` from `frontend/`;
+`git diff --check`;
+`nix develop -c go test ./internal/runtime -run 'TestTextureDiagnosisReportsCurrentRevisionVersion|TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTexturePromptPreservesInlineSourceRefs|TestPendingUpdateRefsBecomeSourceEntities' -count=1`;
+`npx playwright test tests/texture-markdown-lineage.spec.js tests/texture-source-entities.spec.js --grep "Markdown lineage import resolves known citation markers|Markdown lineage import rejects unresolved source markers|Texture source panel omits retired artifact attachment UI" --workers=1` from `frontend/`;
+`npx playwright test tests/texture-markdown-lineage.spec.js --grep "Texture Sources panel can cancel diagnosis without exposing source repair" --workers=1` from `frontend/`.
+
+Independent review verdict: accepted. The reviewer found no blocking issues,
+confirmed no live frontend imports/calls remain for `texture-source-actions`,
+`texture-source-review`, `/source-repairs`, or `/source-attachments`, and
+confirmed structured source browsing/transclusion remains present. Remaining
+old-source work appears concentrated in publication/proxy legacy fixtures and
+explicit negative tests, plus deployed staging proof.

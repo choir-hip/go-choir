@@ -6760,7 +6760,11 @@ func TestTextureSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T
 		SourceEntities: []textureSourceEntity{entity},
 		Versions: []textureMarkdownLineageVersion{{
 			Label:   "v1",
-			Content: "A cited sentence [1](source:src-public-rule).\n\n| Term | Definition |\n| --- | --- |\n| Work product | Durable output |",
+			Content: "A cited sentence [1].\n\n| Term | Definition |\n| --- | --- |\n| Work product | Durable output |",
+			CitationResolutions: []textureCitationMarkerResolution{{
+				Marker:   "[1]",
+				EntityID: "src-public-rule",
+			}},
 		}},
 	})
 	importW := httptest.NewRecorder()
@@ -6839,7 +6843,11 @@ func TestTextureSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
 		SourceEntities: []textureSourceEntity{entity},
 		Versions: []textureMarkdownLineageVersion{{
 			Label:   "v1",
-			Content: "A cited sentence [1](source:src-empty).",
+			Content: "A cited sentence [1].",
+			CitationResolutions: []textureCitationMarkerResolution{{
+				Marker:   "[1]",
+				EntityID: "src-empty",
+			}},
 		}},
 	})
 	importW := httptest.NewRecorder()
@@ -7678,7 +7686,7 @@ func TestTextureDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 		OwnerID:          "user-1",
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
-		Content:          "## Appendix\n\n| Owner | State |\n| --- | --- |\n| Legal cloud | Preserved [source](source:src-legal-cloud) |\n",
+		Content:          "## Appendix\n\n| Owner | State |\n| --- | --- |\n| Legal cloud | Preserved |\n",
 		Citations:        json.RawMessage("[]"),
 		Metadata:         json.RawMessage(`{"source":"edit_texture"}`),
 		ParentRevisionID: baseRevisionID,
@@ -7710,7 +7718,7 @@ func TestTextureDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 		t.Fatalf("diagnosis revision structures = %+v, want latest v1 first", resp.RevisionStructures)
 	}
 	structure := resp.RevisionStructures[0]
-	if structure.ContentHash == "" || structure.HeadingCount != 1 || structure.SourceMarkerCount != 1 {
+	if structure.ContentHash == "" || structure.HeadingCount != 1 || structure.SourceMarkerCount != 0 {
 		t.Fatalf("diagnosis structure counts/hash = %+v", structure)
 	}
 	if structure.TableCount != 1 || structure.TableRowCount != 3 || len(structure.Tables) != 1 {

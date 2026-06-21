@@ -65,7 +65,7 @@ export function selectorTextQuote(entity: any): string {
     ...sourceSelectorList(transclusion?.source_selector),
   ];
   for (const selector of selectors) {
-    const text = String(selector?.text_quote || '').trim();
+    const text = String(selector?.text_quote || selector?.exact || '').trim();
     if (text) return text;
   }
   return '';

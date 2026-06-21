@@ -35,12 +35,6 @@
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import { previewTextureDocument } from './public-preview-data';
-  import {
-    applySourceReview,
-    attachSourceContentItem,
-    createSourceContentItem,
-    importSourceContentItem,
-  } from './texture-source-actions';
   import TextureCompareMergePanel from './TextureCompareMergePanel.svelte';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
   import TextureVersionHistory from './TextureVersionHistory.svelte';
@@ -50,8 +44,6 @@
   import {
     parseTextureRelatedRef,
     sourceEntityID,
-    sourceEntityTargetURL,
-    sourceEntityTitle,
     textureEntityPinnedRevisionID,
   } from './texture-source-renderer';
   import { renderMarkdownBlocks } from './texture-markdown-renderer';
@@ -70,11 +62,6 @@
   } from './texture-source-diagnosis';
   import {
     revisionSourceEntities as deriveRevisionSourceEntities,
-    revisionSourceGaps,
-    selectedSourceEntity as deriveSelectedSourceEntity,
-    sourceArtifactFormState,
-    sourceRepairCandidates,
-    sourceReviewFormState,
   } from './texture-source-state';
   import {
     draftStorageKey as buildDraftStorageKey,
@@ -157,22 +144,7 @@
   let sourceDiagnosisPending = false;
   let sourceDiagnosisAbortController = null;
   let sourceDiagnosisAbortReason = '';
-  let sourceRepairPending = false;
-  let sourceRepairError = '';
-  let sourceReviewMarker = '';
-  let sourceReviewTitle = '';
-  let sourceReviewURL = '';
-  let sourceReviewExcerpt = '';
-  let sourceReviewRelation = 'confirms';
-  let sourceReviewReason = '';
-  let sourceReviewStatus = '';
-  let selectedSourceEntityID = '';
-  let sourceArtifactTitle = '';
-  let sourceArtifactURL = '';
-  let sourceArtifactText = '';
-  let sourceArtifactPending = false;
-  let sourceArtifactStatus = '';
-  let sourceArtifactError = '';
+  let sourcePanelError = '';
   let modelPolicyRoles = [];
   let modelPolicyPending = false;
   let modelPolicyError = '';
@@ -232,49 +204,6 @@
     const normalized = parseTextureRelatedRef(docID).docID;
     if (!normalized) return null;
     return revisionRelatedTextures().find((entity) => relatedTextureDocID(entity) === normalized) || null;
-  }
-
-  function currentSourceRepairCandidates(content = editorValue, gaps = revisionSourceGaps(currentRevision)) {
-    return sourceRepairCandidates(content, gaps);
-  }
-
-  function prepareSourceReviewForm(marker = currentSourceRepairCandidates()[0] || sourceReviewMarker) {
-    const state = sourceReviewFormState(marker);
-    sourceReviewMarker = state.marker;
-    sourceReviewTitle = state.title;
-    sourceReviewURL = state.url;
-    sourceReviewExcerpt = state.excerpt;
-    sourceReviewRelation = state.relation;
-    sourceReviewReason = state.reason;
-    sourceReviewStatus = state.status;
-    sourceRepairError = state.error;
-  }
-
-  function ensureSourceReviewSelection(candidates = currentSourceRepairCandidates()) {
-    if (sourceReviewMarker && candidates.includes(sourceReviewMarker)) return;
-    sourceReviewMarker = candidates[0] || '';
-  }
-
-  function selectedSourceEntity() {
-    return deriveSelectedSourceEntity(sourceEntities, selectedSourceEntityID);
-  }
-
-  function prepareSourceArtifactForm(entity = selectedSourceEntity()) {
-    if (!entity) return;
-    const state = sourceArtifactFormState(entity);
-    selectedSourceEntityID = state.selectedSourceEntityID;
-    sourceArtifactTitle = state.title;
-    sourceArtifactURL = state.url;
-    sourceArtifactText = state.text;
-    sourceArtifactStatus = state.status;
-    sourceArtifactError = state.error;
-  }
-
-  function ensureSourceArtifactSelection() {
-    if (selectedSourceEntityID && sourceEntities.some((entity) => sourceEntityID(entity) === selectedSourceEntityID)) return;
-    if (sourceEntities.length > 0) {
-      prepareSourceArtifactForm(sourceEntities[0]);
-    }
   }
 
   function renderDocumentHTML(value = editorValue, bodyDoc = editorBodyDoc) {
@@ -644,16 +573,7 @@
   async function loadRevisionAt(index) {
     if (index < 0 || index >= revisions.length) return;
     resetCompareMergeState();
-    sourceRepairError = '';
-    sourceReviewMarker = '';
-    sourceReviewTitle = '';
-    sourceReviewURL = '';
-    sourceReviewExcerpt = '';
-    sourceReviewRelation = 'confirms';
-    sourceReviewReason = '';
-    sourceReviewStatus = '';
-    sourceArtifactError = '';
-    sourceArtifactStatus = '';
+    sourcePanelError = '';
     const summary = revisions[index];
     const revision = await getRevision(summary.revision_id);
     currentRevision = revision;
@@ -662,9 +582,6 @@
     const knownHeadId = latestHeadRevisionId || currentDoc?.current_revision_id || '';
     if (summary.revision_id === knownHeadId) {
       clearNewVersionIndicator();
-    }
-    if (sourcePanelOpen) {
-      ensureSourceArtifactSelection();
     }
   }
 
@@ -910,22 +827,7 @@
     sourceDiagnosis = null;
     sourceDiagnosisPending = false;
     cancelSourceDiagnosis();
-    sourceRepairPending = false;
-    sourceRepairError = '';
-    sourceReviewMarker = '';
-    sourceReviewTitle = '';
-    sourceReviewURL = '';
-    sourceReviewExcerpt = '';
-    sourceReviewRelation = 'confirms';
-    sourceReviewReason = '';
-    sourceReviewStatus = '';
-    selectedSourceEntityID = '';
-    sourceArtifactTitle = '';
-    sourceArtifactURL = '';
-    sourceArtifactText = '';
-    sourceArtifactPending = false;
-    sourceArtifactStatus = '';
-    sourceArtifactError = '';
+    sourcePanelError = '';
     resetCompareMergeState();
     clearAutosaveTimer();
     clearNewVersionIndicator();
@@ -1392,13 +1294,12 @@
 
   async function handleOpenSourcePanel() {
     sourcePanelOpen = !sourcePanelOpen;
-    sourceRepairError = '';
+    sourcePanelError = '';
     if (!sourcePanelOpen) {
       cancelSourceDiagnosis();
       return;
     }
     if (sourcePanelOpen) {
-      ensureSourceReviewSelection();
       void loadModelPolicyRoles();
     }
   }
@@ -1460,7 +1361,7 @@
     sourceDiagnosisAbortController = controller;
     sourceDiagnosisAbortReason = '';
     sourceDiagnosisPending = true;
-    sourceRepairError = '';
+    sourcePanelError = '';
     try {
       timeout = window.setTimeout(() => {
         if (sourceDiagnosisAbortController === controller) {
@@ -1477,15 +1378,15 @@
       }
       if (err?.name === 'AbortError') {
         if (sourceDiagnosisAbortReason === 'timeout') {
-          sourceRepairError = 'Source diagnosis timed out; source review remains available';
+          sourcePanelError = 'Source diagnosis timed out';
           saveStatus = 'Source diagnosis timed out';
         } else {
-          sourceRepairError = '';
+          sourcePanelError = '';
           saveStatus = 'Source diagnosis cancelled';
         }
         return;
       }
-      sourceRepairError = err.message || 'Could not load source diagnosis';
+      sourcePanelError = err.message || 'Could not load source diagnosis';
       saveStatus = 'Source diagnosis failed';
     } finally {
       if (timeout) window.clearTimeout(timeout);
@@ -1494,172 +1395,6 @@
       }
       sourceDiagnosisAbortReason = '';
       sourceDiagnosisPending = false;
-    }
-  }
-
-  async function handleApplySourceReview() {
-    if (!currentDoc?.doc_id || !currentRevision?.revision_id || sourceRepairPending) return;
-    if (!authenticated) {
-      dispatch('authrequired', { kind: 'texture_source_repair', appId: 'texture', appName: 'Texture', title: currentDoc.title });
-      return;
-    }
-    ensureSourceReviewSelection();
-    const marker = String(sourceReviewMarker || '').trim();
-    const title = String(sourceReviewTitle || '').trim();
-    const excerpt = String(sourceReviewExcerpt || '').trim();
-    const relation = String(sourceReviewRelation || 'confirms').trim() || 'confirms';
-    const reason = String(sourceReviewReason || '').trim();
-    const omitsMarker = relation === 'no_source_needed';
-    if (!marker) {
-      sourceRepairError = 'Choose a citation marker to repair';
-      return;
-    }
-    if (omitsMarker && !reason) {
-      sourceRepairError = 'Reason is required when no source is needed';
-      return;
-    }
-    if (!omitsMarker && !title) {
-      sourceRepairError = 'Source title is required';
-      return;
-    }
-    if (!omitsMarker && !excerpt) {
-      sourceRepairError = 'Source excerpt is required';
-      return;
-    }
-    sourceRepairPending = true;
-    sourceRepairError = '';
-    sourceReviewStatus = 'Applying source review...';
-    saveStatus = 'Repairing sources...';
-    try {
-      sourceReviewStatus = 'Sending source review...';
-      const revision = await applySourceReview({
-        docId: currentDoc.doc_id,
-        revisionID: currentRevision.revision_id,
-        authorLabel: getAuthorLabel(),
-        marker,
-        title,
-        excerpt,
-        url: sourceReviewURL,
-        relation,
-        reason,
-      });
-      sourceDiagnosis = null;
-      sourceReviewStatus = `Applied source review for ${marker}`;
-      sourceReviewTitle = '';
-      sourceReviewURL = '';
-      sourceReviewExcerpt = '';
-      sourceReviewRelation = 'confirms';
-      sourceReviewReason = '';
-      saveStatus = 'Loading repaired source revision...';
-      await reloadDocument(revision.revision_id);
-      ensureSourceReviewSelection();
-      saveStatus = `Repaired sources in ${versionLabel}`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      sourceRepairError = err.message || 'Source review failed';
-      sourceReviewStatus = '';
-      saveStatus = 'Source repair failed';
-    } finally {
-      sourceRepairPending = false;
-    }
-  }
-
-  async function handleImportAndAttachSourceArtifact() {
-    const entity = selectedSourceEntity();
-    if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
-    if (!authenticated) {
-      dispatch('authrequired', { kind: 'texture_source_artifact', appId: 'texture', appName: 'Texture', title: currentDoc.title });
-      return;
-    }
-    const sourceURL = sourceArtifactURL.trim() || sourceEntityTargetURL(entity);
-    if (!sourceURL) {
-      sourceArtifactError = 'Source URL is required for URL import';
-      return;
-    }
-    sourceArtifactPending = true;
-    sourceArtifactError = '';
-    sourceArtifactStatus = 'Importing source URL...';
-    saveStatus = 'Importing source artifact...';
-    try {
-      const item = await importSourceContentItem({
-        entity,
-        title: sourceArtifactTitle,
-        sourceURL,
-      });
-      sourceArtifactStatus = 'Attaching imported source...';
-      const revision = await attachSourceContentItem({
-        docId: currentDoc.doc_id,
-        revisionID: currentRevision.revision_id,
-        authorLabel: getAuthorLabel(),
-        entity,
-        contentItem: item,
-      });
-      sourceDiagnosis = null;
-      await reloadDocument(revision.revision_id);
-      sourceArtifactStatus = `Attached imported source to ${sourceEntityTitle(entity)}`;
-      saveStatus = `Attached source artifact in ${versionLabel}`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      sourceArtifactError = err.message || 'Source import failed';
-      sourceArtifactStatus = '';
-      saveStatus = 'Source attachment failed';
-    } finally {
-      sourceArtifactPending = false;
-    }
-  }
-
-  async function handleCreateAndAttachSourceArtifact() {
-    const entity = selectedSourceEntity();
-    if (!currentDoc?.doc_id || !currentRevision?.revision_id || !entity || sourceArtifactPending) return;
-    if (!authenticated) {
-      dispatch('authrequired', { kind: 'texture_source_artifact', appId: 'texture', appName: 'Texture', title: currentDoc.title });
-      return;
-    }
-    const text = sourceArtifactText.trim();
-    if (!text) {
-      sourceArtifactError = 'Readable source text is required';
-      return;
-    }
-    sourceArtifactPending = true;
-    sourceArtifactError = '';
-    sourceArtifactStatus = 'Creating source artifact...';
-    saveStatus = 'Creating source artifact...';
-    try {
-      const item = await createSourceContentItem({
-        entity,
-        title: sourceArtifactTitle,
-        sourceURL: sourceArtifactURL,
-        text,
-      });
-      sourceArtifactStatus = 'Attaching source artifact...';
-      const revision = await attachSourceContentItem({
-        docId: currentDoc.doc_id,
-        revisionID: currentRevision.revision_id,
-        authorLabel: getAuthorLabel(),
-        entity,
-        contentItem: item,
-      });
-      sourceDiagnosis = null;
-      await reloadDocument(revision.revision_id);
-      sourceArtifactText = '';
-      sourceArtifactStatus = `Attached source artifact to ${sourceEntityTitle(entity)}`;
-      saveStatus = `Attached source artifact in ${versionLabel}`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      sourceArtifactError = err.message || 'Source attachment failed';
-      sourceArtifactStatus = '';
-      saveStatus = 'Source attachment failed';
-    } finally {
-      sourceArtifactPending = false;
     }
   }
 
@@ -2067,15 +1802,11 @@
                   ? synthStatusLabel()
                   : 'Latest';
   $: if (publishMenuOpen && (!currentDoc || isPublishedMode || loading || submitting || agentPending || !!mergePreview)) publishMenuOpen = false;
-  $: sourceGaps = revisionSourceGaps(currentRevision);
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
-  $: sourceCandidates = sourceRepairCandidates(editorValue, sourceGaps);
-  $: if (sourcePanelOpen) ensureSourceReviewSelection(sourceCandidates);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: sourceStructures = sourceStructureEvidence(sourceDiagnosis);
   $: sourceDecisions = sourceDecisionEvidence(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
-  $: if (sourcePanelOpen) ensureSourceArtifactSelection();
   $: renderedMarkdown = renderDocumentHTML(editorValue);
   $: syncEditorSurface(renderedMarkdown);
 
@@ -2174,7 +1905,7 @@
       {publishedActionPending}
       {publishMenuOpen}
       {promptLabel}
-      sourceCandidateCount={sourceCandidates.length}
+      sourceCandidateCount={sourceEntities.length}
       selectedMergeSuggestionCount={selectedMergeSuggestionIds.length}
       hasCurrentDoc={!!currentDoc}
       hasCurrentRevision={!!currentRevision}
@@ -2219,39 +1950,18 @@
           {currentDoc}
           {currentRevision}
           {isPublishedReadOnly}
-          {sourceCandidates}
           {sourceEntities}
           {sourceSummary}
           {sourceStructures}
           {sourceDecisions}
           {editEvidence}
           {sourceDiagnosisPending}
-          {sourceRepairPending}
-          {sourceRepairError}
-          bind:sourceReviewMarker
-          bind:sourceReviewTitle
-          bind:sourceReviewURL
-          bind:sourceReviewExcerpt
-          bind:sourceReviewRelation
-          bind:sourceReviewReason
-          {sourceReviewStatus}
-          bind:selectedSourceEntityID
-          bind:sourceArtifactTitle
-          bind:sourceArtifactURL
-          bind:sourceArtifactText
-          {sourceArtifactPending}
-          {sourceArtifactStatus}
-          {sourceArtifactError}
+          {sourcePanelError}
           {modelPolicyRoles}
           {modelPolicyPending}
           {modelPolicyError}
           on:diagnosis={handleSourceDiagnosisButton}
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
-          on:source-review-marker={(event) => prepareSourceReviewForm(event.detail.marker)}
-          on:apply-source-review={handleApplySourceReview}
-          on:source-artifact-target={(event) => prepareSourceArtifactForm(event.detail.entity)}
-          on:import-source-artifact={handleImportAndAttachSourceArtifact}
-          on:attach-source-artifact={handleCreateAndAttachSourceArtifact}
         />
       {/if}
 

@@ -1,10 +1,13 @@
 package runtime
 
 import (
+	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -70,7 +73,7 @@ func revisionStructureSummaryFromRecord(rev types.Revision) textureRevisionStruc
 		CreatedAt:         rev.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		ContentHash:       "sha256:" + contentHash(rev.Content),
 		LineCount:         len(lines),
-		SourceMarkerCount: len(textureInlineSourceRefRE.FindAllString(rev.Content, -1)),
+		SourceMarkerCount: textureRevisionSourceMarkerCount(rev),
 	}
 	if rev.Content == "" {
 		summary.LineCount = 0
@@ -91,6 +94,29 @@ func revisionStructureSummaryFromRecord(rev types.Revision) textureRevisionStruc
 	}
 	summary.TableCount = len(summary.Tables)
 	return summary
+}
+
+var projectedTextureSourceRefRE = regexp.MustCompile(`\[[0-9]{1,3}\]`)
+
+func textureRevisionSourceMarkerCount(rev types.Revision) int {
+	if len(strings.TrimSpace(string(rev.BodyDoc))) > 0 {
+		var doc texturedoc.StructuredTextureDoc
+		if err := json.Unmarshal(rev.BodyDoc, &doc); err == nil {
+			return countStructuredTextureSourceNodes(doc.Doc)
+		}
+	}
+	return len(projectedTextureSourceRefRE.FindAllString(rev.Content, -1))
+}
+
+func countStructuredTextureSourceNodes(node texturedoc.Node) int {
+	count := 0
+	if node.Type == "source_ref" || node.Type == "source_embed" {
+		count++
+	}
+	for _, child := range node.Content {
+		count += countStructuredTextureSourceNodes(child)
+	}
+	return count
 }
 
 func textureTableStructureSummaries(lines []string) []textureTableStructureSummary {

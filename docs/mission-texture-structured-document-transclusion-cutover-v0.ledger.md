@@ -926,3 +926,62 @@ Open edge: continue D7 by deleting or strictly confining
 helpers that are no longer reachable from canonical writes, and remaining
 current-contract fixtures that still teach `[label](source:id)` or
 `metadata.source_entities`.
+
+## 2026-06-21 - Pass 27 - D7 Citation Helper/Frontend Repair Affordance Deletion Local
+
+Claim: D7 decreases the remaining old-syntax residue if the dead markdown-link
+citation validator is deleted and the frontend no longer surfaces source-gap
+repair or source-attachment controls that post source identity through retired
+metadata-sidecar endpoints.
+
+Move: construct + observer shift. Deleted the unused markdown-link citation
+validator and test file, removed frontend source-gap candidate scanning,
+source-review payload construction, source-repair API calls, and source-review
+panel controls, removed stale frontend source-attachment controls/client helpers,
+changed diagnosis source-marker counting to structured source nodes with
+projected numbered refs as fallback, taught the frontend renderer to display
+structured `text_quote` selector `exact` data, and converted browser fixtures to
+assert unresolved-marker rejection plus absence of the old repair/attachment UI
+while native structured refs still expand.
+
+Expected delta V: no top-level decrement until independent review accepts the
+slice. It should reduce the D7 subvariant by deleting the citation-helper and
+frontend source-repair/source-attachment affordance residue named after Pass 26.
+
+Actual delta V: accepted by independent review. Current V remains 1 because D7
+still needs remaining publication/proxy old-fixture classification and staging
+proof before the deletion obligation reaches zero.
+
+Receipts:
+`internal/runtime/texture_citation_validation.go`;
+`internal/runtime/texture_citation_validation_test.go`;
+`internal/runtime/texture_diagnosis.go`;
+`internal/runtime/texture_evidence_sources_test.go`;
+`internal/runtime/texture_media_sources.go`;
+`internal/runtime/texture_test.go`;
+`frontend/src/lib/TextureEditor.svelte`;
+`frontend/src/lib/TextureSourcePanel.svelte`;
+`frontend/src/lib/texture-source-actions.ts`;
+`frontend/src/lib/texture-source-review.js`;
+`frontend/src/lib/texture-source-renderer.ts`;
+`frontend/src/lib/texture-source-state.ts`;
+`frontend/src/lib/texture.js`;
+`frontend/tests/texture-markdown-lineage.spec.js`;
+`frontend/tests/texture-source-entities.spec.js`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`npm run build` from `frontend/`;
+`git diff --check`;
+`nix develop -c go test ./internal/runtime -run 'TestTextureDiagnosisReportsCurrentRevisionVersion|TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTexturePromptPreservesInlineSourceRefs|TestPendingUpdateRefsBecomeSourceEntities' -count=1`;
+`npx playwright test tests/texture-markdown-lineage.spec.js tests/texture-source-entities.spec.js --grep "Markdown lineage import resolves known citation markers|Markdown lineage import rejects unresolved source markers|Texture source panel omits retired artifact attachment UI" --workers=1` from `frontend/`;
+`npx playwright test tests/texture-markdown-lineage.spec.js --grep "Texture Sources panel can cancel diagnosis without exposing source repair" --workers=1` from `frontend/`.
+
+Independent review verdict: accepted. The reviewer found no blocking issues,
+confirmed no live frontend imports/calls remain for `texture-source-actions`,
+`texture-source-review`, `/source-repairs`, or `/source-attachments`, and
+confirmed structured source browsing/transclusion remains present. Remaining
+old-syntax residue is explicitly carried forward for the next D7 slice:
+prompt legacy-ref preservation tests/runtime regex and publication/proxy
+fixtures.

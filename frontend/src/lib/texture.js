@@ -17,7 +17,6 @@
  *   GET    /api/texture/revisions/{id}/blame        — blame revision
  *   GET    /api/texture/documents/{id}/stream       — document-scoped stream
  *   POST   /api/texture/documents/{id}/revise        — request a Texture revision
- *   POST   /api/texture/documents/{id}/source-attachments — attach readable source artifacts
  *   POST   /api/content/items                      — create owner-scoped content item
  *   POST   /api/content/import-url                 — import readable URL content
  *   POST   /api/content/import-file                — import an existing user-computer file
@@ -342,34 +341,6 @@ export async function getTextureDiagnosis(docId, limit = 50, options = {}) {
 
   if (!res.ok) {
     await decodeError(res, `Get Texture diagnosis failed (${res.status})`);
-  }
-
-  return res.json();
-}
-
-export async function repairTextureSourceGaps(docId, payload = {}) {
-  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/source-repairs`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    await decodeError(res, `Repair Texture sources failed (${res.status})`);
-  }
-
-  return res.json();
-}
-
-export async function attachTextureSourceArtifacts(docId, payload = {}) {
-  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/source-attachments`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    await decodeError(res, `Attach Texture source artifacts failed (${res.status})`);
   }
 
   return res.json();

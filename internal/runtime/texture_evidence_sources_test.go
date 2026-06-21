@@ -89,32 +89,6 @@ func TestEvidenceRecordToSourceEntity_ContentIDWithoutExcerptIsWholeResource(t *
 	}
 }
 
-// TestEvidenceDerivedEntityFeedsCitationValidator proves the previously-dormant
-// quote-match branch is now driven by typed researcher evidence: an evidence
-// excerpt becomes a text_quote selector, and a body citing that entity is gated
-// on the excerpt appearing in the retrieved source body.
-func TestEvidenceDerivedEntityFeedsCitationValidator(t *testing.T) {
-	rec := types.EvidenceRecord{
-		EvidenceID: "ev-5",
-		Title:      "Audit source",
-		Content:    "Cloud providers should preserve auditability",
-		Metadata:   json.RawMessage(`{"content_id":"content-audit","text_quote":"Cloud providers should preserve auditability"}`),
-	}
-	entity := evidenceRecordToSourceEntity(rec)
-	entities := []textureSourceEntity{entity}
-	body := "As established, [audit](source:" + entity.EntityID + ")."
-
-	good := map[string]string{entity.EntityID: "The report: Cloud providers should preserve auditability across regions."}
-	if issues := validateTextureCitations(body, entities, good); len(issues) != 0 {
-		t.Fatalf("expected grounded excerpt citation to pass, got %v", issues)
-	}
-
-	bad := map[string]string{entity.EntityID: "An unrelated paragraph with no matching excerpt."}
-	if got := reasonsByID(validateTextureCitations(body, entities, bad))[entity.EntityID]; got != citationQuoteNotInSource {
-		t.Fatalf("expected quote_not_in_source, got %q", got)
-	}
-}
-
 func TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch(t *testing.T) {
 	rec := types.EvidenceRecord{
 		EvidenceID: "ev-summary",
@@ -125,11 +99,6 @@ func TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch(t *testing.T
 	entity := evidenceRecordToSourceEntity(rec)
 	if len(entity.Selectors) != 1 || entity.Selectors[0].SelectorKind != "whole_resource" {
 		t.Fatalf("summary evidence should cite as whole_resource, got %#v", entity.Selectors)
-	}
-	body := "OpenAI documentation supports the release [OpenAI docs](source:" + entity.EntityID + ")."
-	sourceBodies := map[string]string{entity.EntityID: "Different source body text without the researcher synthesis."}
-	if issues := validateTextureCitations(body, []textureSourceEntity{entity}, sourceBodies); len(issues) != 0 {
-		t.Fatalf("whole_resource evidence citation should not require quote match, got %v", issues)
 	}
 }
 
@@ -464,8 +433,8 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 		if entity.EntityID != entityID {
 			continue
 		}
-		if textQuote, requiresQuote := textQuoteSelector(entity); requiresQuote {
-			t.Fatalf("summary evidence source should not require quote validation, quote=%q", textQuote)
+		if len(entity.Selectors) != 1 || entity.Selectors[0].SelectorKind != "whole_resource" {
+			t.Fatalf("summary evidence source should use whole_resource selector: %#v", entity)
 		}
 	}
 
