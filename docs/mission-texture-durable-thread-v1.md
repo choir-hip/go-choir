@@ -278,11 +278,33 @@ documented problem is now quote-binding validation / source-panel activation
 after source entities reach the live Texture turn, not source-entity delivery
 into the turn.
 
+Summarized-evidence selector repair commit
+`efb3e1e4903935796d764f6e4304f1a85e21ecea`, after problem checkpoint
+`eacba57d`, stops treating generic saved evidence content as an exact quote
+selector unless the evidence metadata explicitly names quote text; generic
+content-item evidence now becomes a `whole_resource` source entity. Focused
+tests, broader source/citation runtime tests, runtime shards, CI run
+`27896507589`, deploy job `82549210404`, and staging health all reported this
+commit. Deployed Comet retest
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_002` produced v2 and enabled the
+Sources control only after cancellation, but the Sources panel reported
+`0 represented sources`; researcher packet
+`upd-717e2897dde829779ca78f6b301e4799` also reported source-ledger/source-search
+timeouts, so this did not prove native source attachment. Narrow retest
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_003` on visible run fragment
+`5d2340fe-4...8975f6` showed researcher run
+`5418d36c-fb47-4bcc-a6cd-fe263be36212` call `read_content_item`, call
+`save_evidence`, and complete, but foreground Texture stayed at v0 / first-draft
+state until cancellation and never incorporated the saved evidence into a
+revision. Actual ΔV=0. The newly documented problem is now saved-evidence
+delivery / first-draft settlement: a researcher can save source-backed evidence
+without the foreground Texture actor producing a revision that carries native
+source entities.
+
 next move: use the remaining budget on always-deep/source-evidence robustness:
-diagnose why deployed source entities that reach the live Texture turn still
-fail native citation validation and leave `Sources` disabled, then prove that
-typed researcher refs become owner-visible native source handles as well as
-inline text handles.
+diagnose why deployed saved evidence can fail to reach or settle the foreground
+Texture revision, then prove that typed researcher refs become owner-visible
+native source handles as well as inline text handles.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
