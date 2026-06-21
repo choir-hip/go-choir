@@ -1277,3 +1277,45 @@ Open edge: remaining old-source hits are currently expected to be negative
 assertions, markdown-lineage historical import, and runtime legacy-ref
 preservation prompts/regexes; those still need explicit final classification
 before staging proof.
+
+### D7 Slice 6 Problem Checkpoint - Runtime Source Context Still Uses Metadata Key
+
+Status: problem documented on 2026-06-21 before runtime repair.
+
+Observed behavior: the store and publication paths now reject
+`metadata.source_entities` as canonical Texture source identity, but runtime
+source-context plumbing still uses `metadata["source_entities"]` as an
+intermediate/durable key in several live paths:
+
+- `internal/runtime/runtime.go` keeps `source_entities` in
+  `durableMetadataKeys`, so generic appagent metadata carry-forward still treats
+  it as durable revision metadata even though `store.CreateRevision` rejects
+  that key on canonical writes.
+- `internal/runtime/texture_agent_revision.go` collates source entities into
+  `metadata["source_entities"]` before building the Texture revision prompt and
+  starting the run.
+- `internal/runtime/texture_media_sources.go` and
+  `internal/runtime/texture_evidence_sources.go` read/write the same metadata
+  key while normalizing media/evidence source context.
+- `internal/runtime/tools_texture.go` reads `rec.Metadata["source_entities"]`
+  as the source pool for structured `patch_texture` operations, while the
+  canonical revision it writes stores source entities in top-level
+  `Revision.SourceEntities` and strips metadata sidecars.
+
+Problem: this is no longer a canonical write bypass because the store rejects
+legacy sidecars and appagent writes sanitize revision metadata. It is still a
+contract leak: a key whose name now means "legacy revision sidecar" is also used
+as live runtime source context. That makes prompts/tests/docs ambiguous and risks
+future agents reintroducing `metadata.source_entities` as a write surface.
+
+Desired repair: split runtime source context from revision metadata identity.
+Use an explicitly run-scoped key or typed field for available source context,
+derive the prompt/source pool from current revision top-level
+`SourceEntities` plus incoming typed evidence/media entities, and keep
+`source_entities` out of durable revision metadata carry-forward. Existing
+historical import may continue to read old artifacts only as a labelled import
+adapter that emits structured `body_doc` / top-level `source_entities`.
+
+Open edge: implement the runtime context-key repair, convert tests that expect
+run metadata source pools, and independently review that no canonical revision
+write path requires `metadata.source_entities`.

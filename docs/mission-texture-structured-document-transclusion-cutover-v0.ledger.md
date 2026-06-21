@@ -1066,3 +1066,39 @@ any source-enrichment side effect."
 
 Open edge: classify remaining runtime historical/prompt legacy refs before
 staging proof.
+
+## 2026-06-21 - Pass 29 - D7 Runtime Source Context Problem Checkpoint
+
+Claim: before changing runtime source-context behavior, D7 must name the
+remaining behavior problem separately from the fix. This follows the Problem
+Documentation First invariant because runtime source context and Texture
+revision writes are protected surfaces.
+
+Move: observe + document. After committing the publication/proxy source cleanup,
+scanned remaining old-source hits. Store/publication now reject
+`metadata.source_entities` and old markdown source syntaxes for canonical
+Texture writes, but runtime context plumbing still uses
+`metadata["source_entities"]` as the source pool for prompts and tool
+availability.
+
+Evidence:
+`internal/store/texture_structured_revision.go` rejects
+`metadata.source_entities`, `media_source_refs`, citations, and source repair
+sidecars at canonical revision write time;
+`internal/runtime/runtime.go` still includes `source_entities` in
+`durableMetadataKeys`;
+`internal/runtime/texture_agent_revision.go` collates source entities into
+`metadata["source_entities"]` before building revision prompts;
+`internal/runtime/texture_media_sources.go` and
+`internal/runtime/texture_evidence_sources.go` read/write the same key for
+media/evidence context;
+`internal/runtime/tools_texture.go` reads `rec.Metadata["source_entities"]` as
+available source context for structured Texture tool operations.
+
+Actual delta V: no behavior delta. Problem checkpoint only.
+
+Next move: repair runtime source context by separating run-scoped available
+sources from canonical revision metadata, removing `source_entities` from
+durable revision metadata carry-forward, and keeping historical import as a
+labelled adapter that emits structured `body_doc` / top-level
+`source_entities`.
