@@ -2,7 +2,6 @@ import { test, expect } from './helpers/fixtures.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  mediaRefToSourceEntity,
   normalizeReaderArtifactState,
   normalizeSourceSelectorKind,
   normalizeSourceEvidenceState,
@@ -160,14 +159,11 @@ test('source evidence states normalize to typed reader labels', () => {
   expect(normalizeReaderArtifactState('reader_snapshot_ready')).toBe('reader_snapshot_ready');
   expect(readerArtifactStateLabel('reader_snapshot_ready')).toBe('Reader snapshot ready');
   expect(readerArtifactStateLabel('bounded_excerpt_only')).toBe('Bounded excerpt only');
-
-  const mediaEntity = mediaRefToSourceEntity({ kind: 'image', url: 'https://example.com/source.png' });
-  expect(mediaEntity?.evidence?.state).toBe('candidate');
 });
 
-test('structured revisions do not synthesize source entities from legacy media refs', () => {
+test('revisions do not synthesize source entities from legacy media refs', () => {
   const legacyRef = { kind: 'image', url: 'https://example.com/source.png' };
-  expect(revisionSourceEntities({ revision: { metadata: { media_source_refs: [legacyRef] } } })).toHaveLength(1);
+  expect(revisionSourceEntities({ revision: { metadata: { media_source_refs: [legacyRef] } } })).toEqual([]);
   expect(revisionSourceEntities({
     revision: {
       body_doc: { schema: 'choir.texture.doc.v1', doc: { type: 'doc', content: [] } },

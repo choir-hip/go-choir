@@ -383,7 +383,7 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		// entities, and only explicit quote selectors become text_quote bindings
 		// that the citation/quote validator checks at write time.
 		currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
-		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, metadata, currentSources)
+		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
 		if workerWake {
 			if evidenceEntities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(evidenceEntities) > 0 {
@@ -395,7 +395,6 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		if len(sourceEntities) > 0 {
 			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
 			if changedSourceEntities || addedMediaSourceEntities {
-				delete(metadata, "media_source_refs")
 				delete(metadata, "media_source_research_required")
 			}
 		}
@@ -405,7 +404,6 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		if len(sourceEntities) > 0 {
 			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
 			if changedSourceEntities {
-				delete(metadata, "media_source_refs")
 				delete(metadata, "media_source_research_required")
 			}
 		}

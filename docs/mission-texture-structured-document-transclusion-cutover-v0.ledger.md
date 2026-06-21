@@ -1286,3 +1286,52 @@ structured path, and focused normal/comprehensive tests pass.
 
 Open edge: commit this accepted deletion slice, then continue D7 classification
 and broad proof.
+
+## 2026-06-21 - Pass 34 - D7 Media Source Ref Fallback Deletion Local
+
+Claim: D7 decreases old source-sidecar residue if neither frontend nor runtime
+constructs source entities from `metadata.media_source_refs` or
+`metadata.source_entities`; source availability must come from top-level
+structured source entities or deterministic media discovery that emits source
+entities directly.
+
+Move: construct + probe. Removed frontend revision fallback from
+`metadata.media_source_refs` / `metadata.source_entities`; deleted
+`mediaRefToSourceEntity`; removed runtime media-ref metadata merge and migration
+helpers; deleted the unused media-source-ref prompt overlay; updated tests to
+assert hard-cut behavior.
+
+Expected delta V: no top-level decrement until focused review accepts the
+slice.
+
+Actual delta V: accepted by focused review. Frontend/runtime source
+construction from `metadata.media_source_refs` and `metadata.source_entities`
+is deleted; remaining hits are negative tests, publication metadata tests, or
+canonical write guard lists.
+
+Receipts:
+`frontend/src/lib/texture-source-state.ts`;
+`frontend/src/lib/texture-source-renderer.ts`;
+`frontend/tests/texture-source-entities.spec.js`;
+`internal/runtime/texture_agent_revision.go`;
+`internal/runtime/texture_media_sources.go`;
+`internal/runtime/texture_test.go`;
+`internal/runtime/textureprompts/prompts.go`;
+`internal/runtime/textureprompts/overlays/revision_media_source_refs_intro.yaml`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates|TestTextureToolRejectsLegacyEditsAndSourceSyntax' -count=1`;
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js --grep 'source evidence states|revisions do not synthesize source entities from legacy media refs|multimedia source entities' --workers=1`;
+`rg -n 'media_source_refs|RevisionMediaSourceRefsIntro|revision_media_source_refs_intro|decodeTextureMediaSourceRefs|markTextureMediaSourceRefsResearchState|sourceEntitiesFromMediaRefs|revisionMediaSourceRefs|mediaRefToSourceEntity|metadata\.source_entities|metadata\["source_entities"\]' internal/runtime frontend/src frontend/tests -g '*.go' -g '*.ts' -g '*.svelte' -g '*.js' --glob '!frontend/dist/**'`;
+`git diff --check`.
+
+Independent review verdict: accepted. No findings. The reviewer confirmed
+frontend source derivation uses publication bundle entities or top-level
+`revision.source_entities`, runtime construction uses current top-level
+`SourceEntities` plus deterministic discovery, the media-source-ref prompt
+overlay is gone, and focused Go/frontend tests pass.
+
+Open edge: commit this accepted media-ref fallback deletion, then continue D7
+classification and broad proof.

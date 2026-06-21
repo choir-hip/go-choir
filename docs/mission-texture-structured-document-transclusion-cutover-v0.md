@@ -1483,3 +1483,40 @@ Independent review verdict: accepted. The reviewer confirmed the hidden legacy
 structured operation enum values, old `append` / `replace` attempts are rejected
 as bad structured ops, active prompt/reminder scans no longer teach old
 operation names, and focused normal/comprehensive tests pass.
+
+### D7 Slice 9 Local - Media Source Ref Fallback Deletion
+
+Status: implemented and independently accepted on 2026-06-21.
+
+Repair:
+
+- Frontend `revisionSourceEntities` no longer synthesizes source entities from
+  `revision.metadata.media_source_refs` and no longer reads
+  `metadata.source_entities`; current Texture revisions must provide top-level
+  `source_entities`.
+- Removed the frontend `mediaRefToSourceEntity` fallback helper.
+- Runtime media registration no longer merges `metadata["media_source_refs"]`
+  into the source pool. It starts from current structured source entities and
+  deterministic URL/media discovery only.
+- Removed the runtime `decodeTextureMediaSourceRefs`,
+  `sourceEntitiesFromMediaRefs`, and `markTextureMediaSourceRefsResearchState`
+  migration helpers, plus the unused `revision_media_source_refs_intro` prompt
+  overlay.
+- Tests now assert that legacy media-ref metadata does not synthesize source
+  entities.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestMediaSourceRefToSourceEntityUsesTypedEvidenceStates|TestTextureToolRejectsLegacyEditsAndSourceSyntax' -count=1`;
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js --grep 'source evidence states|revisions do not synthesize source entities from legacy media refs|multimedia source entities' --workers=1`;
+`rg -n 'media_source_refs|RevisionMediaSourceRefsIntro|revision_media_source_refs_intro|decodeTextureMediaSourceRefs|markTextureMediaSourceRefsResearchState|sourceEntitiesFromMediaRefs|revisionMediaSourceRefs|mediaRefToSourceEntity|metadata\.source_entities|metadata\["source_entities"\]' internal/runtime frontend/src frontend/tests -g '*.go' -g '*.ts' -g '*.svelte' -g '*.js' --glob '!frontend/dist/**'`;
+`git diff --check`.
+
+Open edge: focused review should verify remaining `media_source_refs` /
+`metadata.source_entities` hits are negative tests, publication metadata tests,
+or canonical write guard lists, not source construction paths.
+
+Independent review verdict: accepted. The reviewer confirmed frontend source
+derivation now returns publication bundle entities or top-level
+`revision.source_entities`, runtime source construction starts from current
+top-level revision `SourceEntities` plus deterministic media discovery, the
+media-source-ref prompt overlay is gone, and focused Go/frontend tests pass.

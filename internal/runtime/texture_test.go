@@ -9704,7 +9704,7 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 		entitiesByKind["image"].Evidence.State != "available" {
 		t.Fatalf("image source entity = %#v", entitiesByKind["image"])
 	}
-	dedupedEntities, added := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, map[string]any{}, sourceEntities)
+	dedupedEntities, added := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, sourceEntities)
 	if added || len(dedupedEntities) != 2 {
 		t.Fatalf("re-register added=%v len=%d, want no new entities and len 2: %#v", added, len(dedupedEntities), dedupedEntities)
 	}
@@ -9812,35 +9812,6 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 		!strings.Contains(run.Prompt, "insert_source_ref or insert_source_embed operations") ||
 		strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
 		t.Fatalf("compiled prompt missing content source entity contract: %q", run.Prompt)
-	}
-}
-
-func TestMarkTextureMediaSourceRefsResearchState(t *testing.T) {
-	t.Parallel()
-	refs := []textureMediaSourceRef{
-		{Kind: "youtube", CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", ResearchState: "pending"},
-		{Kind: "image", CanonicalURL: "https://example.com/image.jpg", ResearchState: "pending"},
-	}
-	metadata := map[string]any{
-		"media_source_research_required":  true,
-		"media_source_refs":               refs,
-		textureAvailableSourceEntitiesKey: sourceEntitiesFromMediaRefs(refs),
-	}
-	markTextureMediaSourceRefsResearchState(metadata, "represented")
-	if _, ok := metadata["media_source_refs"]; ok {
-		t.Fatalf("media_source_refs should be removed after representation: %#v", metadata)
-	}
-	if _, ok := metadata["media_source_research_required"]; ok {
-		t.Fatalf("media_source_research_required should be removed after representation: %#v", metadata)
-	}
-	sourceEntities := decodeAvailableTextureSourceEntities(metadata)
-	if len(sourceEntities) != 2 {
-		t.Fatalf("source entities len = %d, want 2", len(sourceEntities))
-	}
-	for _, entity := range sourceEntities {
-		if entity.Evidence.ResearchState != "represented" {
-			t.Fatalf("source entity research state = %q, want represented in %#v", entity.Evidence.ResearchState, sourceEntities)
-		}
 	}
 }
 

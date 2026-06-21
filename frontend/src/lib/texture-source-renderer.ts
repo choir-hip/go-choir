@@ -287,41 +287,6 @@ export function publicationBundleSourceEntities(bundle: any = null, routePath = 
     .filter(Boolean);
 }
 
-export function mediaRefToSourceEntity(ref: any): any | null {
-  const kind = String(ref?.kind || '').toLowerCase();
-  if (!kind) return null;
-  const entityKind = kind === 'youtube' ? 'youtube_video' : kind;
-  const canonical = ref?.canonical_url || ref?.url || '';
-  return {
-    entity_id: `${entityKind}:${canonical || ref?.content_id || ''}`,
-    kind: entityKind,
-    label: ref?.title || (kind === 'youtube' ? 'YouTube source' : 'Image source'),
-    target: {
-      target_kind: 'content_item',
-      content_id: ref?.content_id || '',
-      url: ref?.url || canonical,
-      canonical_url: canonical,
-    },
-    display: {
-      inline_mode: kind === 'youtube' || kind === 'image' ? 'embedded_preview' : 'collapsed_citation',
-      expanded_mode: kind === 'youtube' ? 'media_player' : 'source_card',
-      open_surface: normalizeSourceOpenSurface(ref?.app_hint || (kind === 'youtube' ? 'video' : kind)),
-      default_collapsed: true,
-    },
-    evidence: {
-      state: ref?.content_id ? 'available' : 'candidate',
-      research_state: ref?.research_state || 'pending',
-      transcript_content_id: ref?.transcript_content_id || '',
-      transcript_availability: ref?.transcript_availability || '',
-    },
-    provenance: {
-      created_by: 'importer',
-      rights_scope: 'private_user_source',
-      untrusted_source_text: true,
-    },
-  };
-}
-
 export function sourceEntityMedia(entity: any, { inline = false } = {}): string {
   const record = sourceEntityRecord(entity);
   const kind = String(entity?.kind || record?.kind || entity?.target?.kind || record?.target?.kind || '').toLowerCase();

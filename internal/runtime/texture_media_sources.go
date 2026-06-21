@@ -50,11 +50,8 @@ var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 // nodes rather than markdown source links.
 var textureRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
 
-func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, metadata map[string]any, existing []textureSourceEntity) ([]textureSourceEntity, bool) {
+func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, existing []textureSourceEntity) ([]textureSourceEntity, bool) {
 	entities := append([]textureSourceEntity{}, existing...)
-	if legacyMediaEntities := sourceEntitiesFromMediaRefs(decodeTextureMediaSourceRefs(metadata["media_source_refs"])); len(legacyMediaEntities) > 0 {
-		entities, _ = mergeTextureSourceEntities(entities, legacyMediaEntities)
-	}
 	seen := make(map[string]bool, len(entities))
 	for _, entity := range entities {
 		if key := sourceEntityKey(entity); key != "" {
@@ -185,43 +182,12 @@ func contentItemTextureMediaSourceRef(item types.ContentItem) textureMediaSource
 	return ref
 }
 
-func decodeTextureMediaSourceRefs(value any) []textureMediaSourceRef {
-	if value == nil {
-		return nil
-	}
-	var refs []textureMediaSourceRef
-	switch typed := value.(type) {
-	case []textureMediaSourceRef:
-		return typed
-	case []any:
-		data, _ := json.Marshal(typed)
-		_ = json.Unmarshal(data, &refs)
-	case json.RawMessage:
-		_ = json.Unmarshal(typed, &refs)
-	default:
-		data, _ := json.Marshal(typed)
-		_ = json.Unmarshal(data, &refs)
-	}
-	return refs
-}
-
 func normalizeTextureSourceEntities(metadata map[string]any, incoming []textureSourceEntity) ([]textureSourceEntity, bool) {
 	if metadata == nil {
 		return nil, false
 	}
 	entities := decodeAvailableTextureSourceEntities(metadata)
 	return mergeTextureSourceEntities(entities, incoming)
-}
-
-func sourceEntitiesFromMediaRefs(refs []textureMediaSourceRef) []textureSourceEntity {
-	entities := make([]textureSourceEntity, 0, len(refs))
-	for _, ref := range refs {
-		entity := mediaSourceRefToSourceEntity(ref)
-		if entity.EntityID != "" {
-			entities = append(entities, entity)
-		}
-	}
-	return entities
 }
 
 func mergeTextureSourceEntities(entities []textureSourceEntity, incoming []textureSourceEntity) ([]textureSourceEntity, bool) {
@@ -734,37 +700,6 @@ func sourceEntityKey(entity textureSourceEntity) string {
 func sourceEntityJSONKey(entity textureSourceEntity) string {
 	data, _ := json.Marshal(entity)
 	return string(data)
-}
-
-func markTextureMediaSourceRefsResearchState(metadata map[string]any, state string) {
-	if metadata == nil {
-		return
-	}
-	state = strings.TrimSpace(state)
-	if state == "" {
-		return
-	}
-	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
-	entities := decodeAvailableTextureSourceEntities(metadata)
-	if len(refs) > 0 {
-		legacyEntities := sourceEntitiesFromMediaRefs(refs)
-		for i := range legacyEntities {
-			legacyEntities[i].Evidence.ResearchState = state
-		}
-		entities, _ = mergeTextureSourceEntities(entities, legacyEntities)
-		delete(metadata, "media_source_refs")
-		delete(metadata, "media_source_research_required")
-	}
-	changedEntities := false
-	for i := range entities {
-		if entities[i].Evidence.ResearchState != state {
-			entities[i].Evidence.ResearchState = state
-			changedEntities = true
-		}
-	}
-	if changedEntities || len(refs) > 0 {
-		metadata[textureAvailableSourceEntitiesKey] = entities
-	}
 }
 
 func mediaSourceRefKey(ref textureMediaSourceRef) string {
