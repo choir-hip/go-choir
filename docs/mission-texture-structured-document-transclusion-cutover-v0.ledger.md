@@ -127,3 +127,32 @@ Receipt: pending worktree id `local:d0c0fc69-81ca-4489-83ba-a7146b0c2de8`.
 
 Open edge: wait for the worktree thread result, then spawn independent review
 before integrating D1.
+
+## 2026-06-21 - Pass 6 - D1 Internal Structured Doc Spike
+
+Claim: D1 can decrease the mission variant without production write-path risk by
+building a Choir-owned, Go-validated in-memory StructuredTextureDoc/SourceEntity
+schema and projection package that makes source refs/entities first-class nodes.
+
+Move: construct + probe. Added `internal/texturedoc` with StructuredTextureDoc
+v1 and SourceEntity v1 structs, validators for the D0 node/mark vocabulary,
+strict source target/selector/display/evidence/open-surface validation using the
+existing source contract package where appropriate, legacy source syntax
+rejection, source node/entity resolution, and a numbered projection renderer for
+`source_ref` and `source_embed`.
+
+Expected delta V: -1 for D1 internal parser/renderer spike; no D2 write-path,
+editor, publication, deploy, or old-path deletion obligations discharged.
+
+Actual delta V: -1. Current V=8. D1 is implemented additively and not wired into
+production Texture writes.
+
+Receipt: `internal/texturedoc/schema.go`, `internal/texturedoc/projection.go`,
+`internal/texturedoc/schema_test.go`.
+
+Evidence: `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`
+passed.
+
+Open edge: independent D1 review, then D2 must choose and document the exact
+TextureRevision v2 storage/projection cut before changing canonical Texture
+writes.
