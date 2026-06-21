@@ -44,6 +44,7 @@ func TestSourceContractSchemaMatchesGoConstants(t *testing.T) {
 		SelectorKindTranscriptSegment,
 		SelectorKindTableRange,
 		SelectorKindTableCell,
+		SelectorKindImageRegion,
 		SelectorKindDataVintage,
 		SelectorKindSelectorSet,
 	)

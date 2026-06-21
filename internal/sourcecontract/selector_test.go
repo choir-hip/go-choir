@@ -15,6 +15,8 @@ func TestNormalizeSelectorKind(t *testing.T) {
 		{name: "page range space", raw: "page range", want: SelectorKindPageRange},
 		{name: "timestamp", raw: "timestamp", want: SelectorKindTimestampRange},
 		{name: "table cell", raw: "table cell", want: SelectorKindTableCell},
+		{name: "image region", raw: "image region", want: SelectorKindImageRegion},
+		{name: "image area alias", raw: "image-area", want: SelectorKindImageRegion},
 		{name: "custom", raw: "custom selector", want: "custom_selector"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

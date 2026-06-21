@@ -378,6 +378,7 @@ func validSelectorKind(kind string) bool {
 		sourcecontract.SelectorKindTranscriptSegment,
 		sourcecontract.SelectorKindTableRange,
 		sourcecontract.SelectorKindTableCell,
+		sourcecontract.SelectorKindImageRegion,
 		sourcecontract.SelectorKindByteRange,
 		sourcecontract.SelectorKindSelectorSet:
 		return true

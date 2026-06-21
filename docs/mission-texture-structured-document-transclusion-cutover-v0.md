@@ -430,14 +430,15 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 8. Last delta: D1 added an internal
-Go-validated StructuredTextureDoc/SourceEntity spike with projection and focused
-tests; production write/editor/publication obligations remain open.
+staging acceptance proof. Current value: 8. Last delta: D1 review returned
+`revise_before_integrate`; the P1 missing `image_region` selector enum was
+repaired in the source contract schema/constants and texturedoc validator/tests.
+Production write/editor/publication obligations remain open.
 
-budget: Planning budget is one paradoc pass. D1 implementation budget was one
-isolated additive code pass with focused tests. Solvency verdict: D1 is solvent
-and complete; D2 requires a fresh implementation pass and should not be bundled
-with this spike.
+budget: Planning budget is one paradoc pass. D1 implementation plus review-fix
+budget was isolated additive code with focused tests. Solvency verdict: D1 is
+ready for independent re-review; D2 requires a fresh implementation pass and
+should not be bundled with this spike.
 
 authority / bounds: D1 was authorized as an additive internal schema/parser/
 renderer spike only. It does not authorize production Texture write behavior,
@@ -453,15 +454,16 @@ Texture agent tools and prompts, publication/export, Source Viewer/reader
 integration, source-opening behavior, and run acceptance involving Texture.
 
 evidence packet: D0 design receipts plus a clear-context Codex thread review
-verdict; D1 focused Go tests for schema/source entity validation, numbered
-source-ref/source-embed projection, old-syntax rejection, source resolution, and
-multimedia target entities; later focused unit/component tests for transaction/
-source-ref preservation, publication/export serialization, and write-path
-rejection; frontend build; runtime shards where runtime is touched; CI; staging
-deploy identity; Comet/browser staging proof with numbered source refs, expanded
-source window, multimedia source expansion, agent edit preserving refs, and
-attempted markdown link/source token rejection; RunAcceptanceRecord at
-staging-smoke-level or higher if platform behavior changes.
+verdict; D1 focused Go tests for schema/source entity validation, including
+`image_region`, numbered source-ref/source-embed projection, old-syntax
+rejection, source resolution, and multimedia target entities; later focused
+unit/component tests for transaction/source-ref preservation, publication/export
+serialization, and write-path rejection; frontend build; runtime shards where
+runtime is touched; CI; staging deploy identity; Comet/browser staging proof
+with numbered source refs, expanded source window, multimedia source expansion,
+agent edit preserving refs, and attempted markdown link/source token rejection;
+RunAcceptanceRecord at staging-smoke-level or higher if platform behavior
+changes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -477,7 +479,9 @@ model-facing operations must be block/node/source commands, not document JSON.
 D1 implemented the first in-memory witness in `internal/texturedoc`: supported
 node/mark vocabulary, strict source entity enum validation, legacy source text
 syntax rejection, source-node/entity resolution, and projection with numbered
-refs/source embeds. It is not wired to canonical Texture writes.
+refs/source embeds. D1 review found P1 missing `image_region`; the source
+contract enum and texturedoc validator now include it. It is not wired to
+canonical Texture writes.
 Open edge E1: implementation must choose the exact DB cut shape
 (`body_doc_json` alongside a derived projection vs replacing `content` outright)
 with the first behavior-problem checkpoint before runtime mutation. E2: source
@@ -485,10 +489,10 @@ contract enum validation must be promoted from publication normalization into
 Texture revision writes. E3: diff/blame/search need structured projections that
 do not become a second canonical body.
 
-next move: Independent review of D1, then D2 as a separate write-path cutover:
-choose and document the exact `TextureRevision v2` storage/projection shape,
-wire new Texture revisions to structured body/source entities, and reject old
-markdown/source-token/link citation syntaxes at write time.
+next move: Independent re-review of D1, then D2 as a separate write-path
+cutover: choose and document the exact `TextureRevision v2` storage/projection
+shape, wire new Texture revisions to structured body/source entities, and reject
+old markdown/source-token/link citation syntaxes at write time.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -511,5 +515,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1 is implemented as an additive internal Go spike in internal/texturedoc: StructuredTextureDoc v1 and SourceEntity v1 structs/validators, paragraph/heading/list/quote/code/hr/source_ref/source_embed support, strict source target/selector/display/evidence validation, numbered source-ref/source-embed projection, old markdown/source-token/link citation rejection, source node/entity resolution, and multimedia target coverage through SourceEntity rather than separate body syntaxes. Run or review focused tests with `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`. Next implement D2 only after independent D1 review: choose/document the exact TextureRevision v2 storage/projection cut, wire new Texture writes to structured body/source entities, and reject old source syntaxes at write time. Do not bundle frontend editor saves, publication export, staging/deploy, or broad old-path deletion unless the paradoc is updated first. Mutation class becomes red when production writes change; protected surfaces include Texture canonical writes, revision schema, source entities/provenance, editor/renderer, agent tools/prompts, multimedia resolver, publication/export, and run acceptance.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1 is implemented as an additive internal Go spike in internal/texturedoc and the D1 review P1 is repaired: SourceEntity selectors now include `image_region` in internal/sourcecontract schema/constants/generated frontend mirror and texturedoc validation/tests. Run or review focused tests with `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`. Next implement D2 only after independent D1 re-review: choose/document the exact TextureRevision v2 storage/projection cut, wire new Texture writes to structured body/source entities, and reject old source syntaxes at write time. Do not bundle frontend editor saves, publication export, staging/deploy, or broad old-path deletion unless the paradoc is updated first. Mutation class becomes red when production writes change; protected surfaces include Texture canonical writes, revision schema, source entities/provenance, editor/renderer, agent tools/prompts, multimedia resolver, publication/export, and run acceptance.
 ```

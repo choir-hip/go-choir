@@ -11,6 +11,7 @@ const (
 	SelectorKindTranscriptSegment = "transcript_segment"
 	SelectorKindTableRange        = "table_range"
 	SelectorKindTableCell         = "table_cell"
+	SelectorKindImageRegion       = "image_region"
 	SelectorKindDataVintage       = "data_vintage"
 	SelectorKindSelectorSet       = "selector_set"
 )

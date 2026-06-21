@@ -155,6 +155,24 @@ func TestSourceEntityEnumsAreValidated(t *testing.T) {
 	}
 }
 
+func TestImageRegionSelectorIsAccepted(t *testing.T) {
+	doc := validDoc()
+	entities := validEntities()
+	entities[1].Selectors = []SourceSelector{{
+		Kind: sourcecontract.SelectorKindImageRegion,
+		Data: map[string]any{
+			"x":      10,
+			"y":      20,
+			"width":  300,
+			"height": 200,
+		},
+	}}
+
+	if err := Validate(doc, entities); err != nil {
+		t.Fatalf("Validate() rejected image_region selector: %v", err)
+	}
+}
+
 func TestMultimediaTargetsUseSourceEntitiesNotBodySyntaxes(t *testing.T) {
 	entities := validEntities()
 	entities = append(entities,

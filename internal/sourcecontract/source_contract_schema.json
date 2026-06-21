@@ -95,6 +95,9 @@
     "table_cell": {
       "aliases": ["cell", "table_cells"]
     },
+    "image_region": {
+      "aliases": ["region", "image_selector", "image_area"]
+    },
     "data_vintage": {
       "aliases": ["vintage", "data_release_vintage"]
     },

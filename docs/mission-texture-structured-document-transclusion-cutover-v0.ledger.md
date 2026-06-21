@@ -156,3 +156,34 @@ passed.
 Open edge: independent D1 review, then D2 must choose and document the exact
 TextureRevision v2 storage/projection cut before changing canonical Texture
 writes.
+
+## 2026-06-21 - Pass 6 - D1 Review P1 Image Region Repair
+
+Claim: The D1 reviewer correctly found that the internal structured-doc witness
+did not admit the paradoc-promised `image_region` selector kind, so D1 was not
+ready to integrate until the shared enum source and texturedoc validator
+accepted image-region source entities.
+
+Move: construct + probe. Added `image_region` to
+`internal/sourcecontract/source_contract_schema.json`, Go selector constants,
+sourcecontract normalization tests and matrix data, regenerated
+`frontend/src/lib/source-contract.generated.ts`, and added texturedoc validation
+coverage proving an image source entity with an `image_region` selector is
+accepted.
+
+Expected delta V: 0 on mission obligations; repair D1 reviewer P1 without
+broadening into D2.
+
+Actual delta V: 0. Current V remains 8. D1 witness is ready for independent
+re-review; production Texture writes remain untouched.
+
+Receipt: `internal/sourcecontract/source_contract_schema.json`,
+`internal/sourcecontract/selector.go`, `internal/texturedoc/schema.go`,
+`internal/texturedoc/schema_test.go`, and
+`frontend/src/lib/source-contract.generated.ts`.
+
+Evidence: `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`
+and `git diff --check`.
+
+Open edge: independent D1 re-review, then D2 must choose/document the
+TextureRevision v2 storage/projection cut before changing canonical writes.

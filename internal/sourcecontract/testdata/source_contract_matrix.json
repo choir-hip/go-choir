@@ -26,6 +26,7 @@
     { "raw": "transcript segments", "want": "transcript_segment" },
     { "raw": "table-range", "want": "table_range" },
     { "raw": "table cell", "want": "table_cell" },
+    { "raw": "image-area", "want": "image_region" },
     { "raw": "data release vintage", "want": "data_vintage" },
     { "raw": "selector-set", "want": "selector_set" }
   ],
