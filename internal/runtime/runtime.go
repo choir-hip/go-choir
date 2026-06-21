@@ -2346,11 +2346,10 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 	}
 }
 
-// initialTextureToolChoice keeps first-paint prompt-bar and grounded integration
-// runs from silently ending without durable Texture state. Direct user-authored
-// revise requests use a generic durable-action requirement instead of an exact
-// patch_texture requirement so Texture can choose an honest work-state revision,
-// delegation, blocker, or decision without a trivial cleanup patch.
+// initialTextureToolChoice is reserved for narrow mechanical continuation
+// protocols. Ordinary first-paint Texture work must see the full Texture tool
+// surface so the actor can choose an honest revision, decision, delegation, or
+// blocker without hidden exact-tool choreography.
 func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
@@ -2365,7 +2364,7 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 		metadataStringValue(rec.Metadata, "current_author_kind") == string(types.AuthorUser) {
 		return "required"
 	}
-	return "function:patch_texture"
+	return ""
 }
 
 const (

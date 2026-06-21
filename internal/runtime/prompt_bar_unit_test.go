@@ -155,8 +155,8 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	if !metadataBoolValue(initialRun.Metadata, "texture_initial_decision_required") {
 		t.Fatalf("initial run missing deterministic decision metadata: %+v", initialRun.Metadata)
 	}
-	if got := initialTextureToolChoice(initialRun); got != "function:patch_texture" {
-		t.Fatalf("initial tool choice = %q, want function:patch_texture so the first Texture turn writes before delegating", got)
+	if got := initialTextureToolChoice(initialRun); got != "" {
+		t.Fatalf("initial tool choice = %q, want unconstrained first Texture turn", got)
 	}
 	done := waitForPromptBarUnitRunTerminal(t, rt, decision.InitialLoopID, "user-alice", 5*time.Second)
 	if done.State != types.RunCompleted {

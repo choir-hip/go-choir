@@ -389,10 +389,15 @@ func toolDefinitionsContain(defs []ToolDefinition, name string) bool {
 	return false
 }
 
-func assertInitialTextureWriteOnly(t *testing.T, defs []ToolDefinition) {
+func assertInitialTextureAutonomousSurface(t *testing.T, defs []ToolDefinition) {
 	t.Helper()
-	if len(defs) != 1 || defs[0].Name != "patch_texture" {
-		t.Fatalf("initial Texture tool definitions = %+v, want only patch_texture", defs)
+	if len(defs) <= 1 {
+		t.Fatalf("initial Texture tool definitions = %+v, want full Texture affordance surface", defs)
+	}
+	for _, name := range []string{"patch_texture", "record_texture_decision", "spawn_agent", "request_super_execution"} {
+		if !toolDefinitionsContain(defs, name) {
+			t.Fatalf("initial Texture tool definitions = %+v, missing %s", defs, name)
+		}
 	}
 }
 
@@ -2284,10 +2289,10 @@ func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req 
 
 type textureInitialNoOpThenDraftProvider struct {
 	Provider
-	choices                 []string
-	attempts                int
-	sawNoOpError            bool
-	sawInitialPatchGuidance bool
+	choices                      []string
+	attempts                     int
+	sawNoOpError                 bool
+	sawExactInitialPatchGuidance bool
 }
 
 func (p *textureInitialNoOpThenDraftProvider) ProviderName() string {
@@ -2305,7 +2310,7 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 			p.sawNoOpError = true
 		}
 		if strings.Contains(string(msg), "Use an append edit with substantive draft content") {
-			p.sawInitialPatchGuidance = true
+			p.sawExactInitialPatchGuidance = true
 		}
 	}
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") || p.attempts >= 3 {
@@ -2885,10 +2890,10 @@ func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if len(provider.choices) < 2 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "" {
-		t.Fatalf("initial texture tool choices = %#v, want write-only first choice then unconstrained continuation", provider.choices)
+	if len(provider.choices) < 2 || provider.choices[0] != "" || provider.choices[1] != "" {
+		t.Fatalf("initial texture tool choices = %#v, want unconstrained first paint and continuation", provider.choices)
 	}
-	assertInitialTextureWriteOnly(t, provider.firstTools)
+	assertInitialTextureAutonomousSurface(t, provider.firstTools)
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
@@ -2956,8 +2961,8 @@ func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
 	if !provider.sawGuard {
 		t.Fatalf("provider never saw model-prior completion guard; choices=%#v", provider.choices)
 	}
-	if len(provider.choices) < 3 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "" || provider.choices[2] != "" {
-		t.Fatalf("texture choices = %#v, want exact write then unconstrained completion guard retry", provider.choices)
+	if len(provider.choices) < 3 || provider.choices[0] != "" || provider.choices[1] != "" || provider.choices[2] != "" {
+		t.Fatalf("texture choices = %#v, want unconstrained first paint and completion guard retry", provider.choices)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
@@ -3028,7 +3033,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 		t.Fatalf("conductor did not create texture route: %+v", decision)
 	}
 	_ = waitForRevisionCount(t, s, decision.DocID, "user-1", 2, 5*time.Second)
-	assertInitialTextureWriteOnly(t, provider.firstTools)
+	assertInitialTextureAutonomousSurface(t, provider.firstTools)
 
 	var researcherRun *types.RunRecord
 	deadline := time.Now().Add(5 * time.Second)
@@ -3156,7 +3161,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	assertInitialTextureWriteOnly(t, provider.firstTools)
+	assertInitialTextureAutonomousSurface(t, provider.firstTools)
 
 	var superRun *types.RunRecord
 	deadline := time.Now().Add(5 * time.Second)
@@ -3270,13 +3275,13 @@ func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T)
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if len(provider.choices) != 2 || provider.choices[0] != "function:patch_texture" {
-		t.Fatalf("texture provider choices = %#v, want a write-only turn plus a non-terminal continuation turn", provider.choices)
+	if len(provider.choices) != 2 || provider.choices[0] != "" {
+		t.Fatalf("texture provider choices = %#v, want unconstrained first paint plus a non-terminal continuation turn", provider.choices)
 	}
 	if provider.choices[1] != "" {
 		t.Fatalf("continuation tool_choice = %q, want unconstrained after the non-terminal write", provider.choices[1])
 	}
-	assertInitialTextureWriteOnly(t, provider.firstTools)
+	assertInitialTextureAutonomousSurface(t, provider.firstTools)
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
@@ -3371,11 +3376,11 @@ func TestInitialTextureDecisionPromptRejectsPrematureEditBeforeDecision(t *testi
 		t.Fatalf("appagent revision leaked private decision rationale: %q", appContent)
 	}
 	if len(provider.choices) < 2 ||
-		provider.choices[0] != "function:patch_texture" ||
+		provider.choices[0] != "" ||
 		provider.choices[1] != "" {
-		t.Fatalf("tool choices = %#v, want write-only first turn and free follow-up after decision record", provider.choices)
+		t.Fatalf("tool choices = %#v, want unconstrained first turn and free follow-up after decision record", provider.choices)
 	}
-	assertInitialTextureWriteOnly(t, provider.firstTools)
+	assertInitialTextureAutonomousSurface(t, provider.firstTools)
 }
 
 func TestTexturePromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
@@ -4527,8 +4532,8 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != textureRun.RunID {
 		t.Fatalf("texture revision runs = %+v, want only resident run %s", textureRevisionRuns, textureRun.RunID)
 	}
-	if len(provider.choices) < 2 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "" {
-		t.Fatalf("provider choices = %#v, want exact first patch then unconstrained parked follow-up", provider.choices)
+	if len(provider.choices) < 2 || provider.choices[0] != "" || provider.choices[1] != "" {
+		t.Fatalf("provider choices = %#v, want unconstrained first patch and parked follow-up", provider.choices)
 	}
 }
 
@@ -9037,15 +9042,15 @@ func TestInitialTextureNoOpPatchRetriesIntoUsefulDraft(t *testing.T) {
 	if !provider.sawNoOpError {
 		t.Fatalf("provider never saw initial no-op guard error; choices=%#v", provider.choices)
 	}
-	if !provider.sawInitialPatchGuidance {
-		t.Fatalf("provider never saw initial patch failure guidance; choices=%#v", provider.choices)
+	if provider.sawExactInitialPatchGuidance {
+		t.Fatalf("provider saw exact initial patch failure guidance after unconstrained first paint; choices=%#v", provider.choices)
 	}
 	if len(provider.choices) < 4 ||
-		provider.choices[0] != "function:patch_texture" ||
-		provider.choices[1] != "function:patch_texture" ||
-		provider.choices[2] != "function:patch_texture" ||
+		provider.choices[0] != "" ||
+		provider.choices[1] != "" ||
+		provider.choices[2] != "" ||
 		provider.choices[3] != "" {
-		t.Fatalf("initial texture choices = %#v, want exact retries then unconstrained completion", provider.choices)
+		t.Fatalf("initial texture choices = %#v, want unconstrained retries and completion", provider.choices)
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {

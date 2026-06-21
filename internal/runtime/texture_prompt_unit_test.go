@@ -470,51 +470,51 @@ func TestTexturePromptPrioritizesSuperAfterResearchForMixedObligation(t *testing
 	assertNoForcedSemanticDelegation(t, request)
 }
 
-func TestInitialTextureToolChoiceRequiresPatchBeforeContinuation(t *testing.T) {
+func TestInitialTextureToolChoiceOnlyConstrainsMechanicalContinuations(t *testing.T) {
 	tests := []struct {
 		name     string
 		metadata map[string]any
 		want     string
 	}{
 		{
-			name: "current factual work starts with texture edit",
+			name: "current factual work starts unconstrained",
 			metadata: map[string]any{
 				"type":            "texture_agent_revision",
 				"original_prompt": "what is the weather in boston now",
 			},
-			want: "function:patch_texture",
+			want: "",
 		},
 		{
-			name: "mutable product work does not force super request",
+			name: "mutable product work starts unconstrained",
 			metadata: map[string]any{
 				"type":            "texture_agent_revision",
 				"original_prompt": "debug and fix the runtime gateway",
 			},
-			want: "function:patch_texture",
+			want: "",
 		},
 		{
-			name: "community wire operational proof does not force super request",
+			name: "community wire operational proof starts unconstrained",
 			metadata: map[string]any{
 				"type":        "texture_agent_revision",
 				"seed_prompt": "Universal Wire staging proof request: run the existing source-refresh/research/projection/publication flow, create or approve an Article Texture, update universal-wire/Wire.texture, then leave evidence ids and verifier proof.",
 			},
-			want: "function:patch_texture",
+			want: "",
 		},
 		{
-			name: "creative direct document work edits texture",
+			name: "creative direct document work starts unconstrained",
 			metadata: map[string]any{
 				"type":            "texture_agent_revision",
 				"original_prompt": "tell me a story about computers",
 			},
-			want: "function:patch_texture",
+			want: "",
 		},
 		{
-			name: "explicit decision note still writes first",
+			name: "explicit decision note starts unconstrained",
 			metadata: map[string]any{
 				"type":            "texture_agent_revision",
 				"original_prompt": "Create a short Texture document. Record an off-document Texture decision note with decision_kind no_worker_needed first.",
 			},
-			want: "function:patch_texture",
+			want: "",
 		},
 		{
 			name: "direct user-authored revise requires durable action but not exact patch",
