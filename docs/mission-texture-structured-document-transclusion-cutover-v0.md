@@ -492,16 +492,16 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 8. Last delta: D1 final re-review
-accepted the additive structured-doc witness after the `image_region` and
-`source_embed` leaf repairs. D2 storage/projection cut is documented; production
-write behavior is the active open obligation.
+staging acceptance proof. Current value: 7. Last delta: D2 locally implemented
+the first production write-path cutover and is ready for independent review;
+review may still force repair or reverse the decrease.
 
 budget: Planning budget is one paradoc pass. D1 implementation plus review-fix
 budget was isolated additive code with focused tests and accepted independent
 review. Solvency verdict: proceed to D2 as a fresh implementation pass; do not
 bundle frontend editor saves, publication export, staging/deploy, or broad
-old-path deletion unless the paradoc is updated first.
+old-path deletion unless the paradoc is updated first. D2 used the budget for a
+store/API write-boundary cut plus focused tests only.
 
 authority / bounds: D1 was authorized as an additive internal schema/parser/
 renderer spike only. It does not authorize production Texture write behavior,
@@ -525,7 +525,11 @@ projection, old-syntax rejection, source resolution, and multimedia target
 entities; D2 focused store/API tests for structured revision persistence,
 existing-workspace column migration, projection derivation, hash inclusion of
 `body_doc_json` and `source_entities_json`, and rejection of old source syntaxes
-at the write boundary. Later cuts still need focused unit/component tests for
+at the write boundary. D2 evidence: `nix develop -c go test ./internal/types
+./internal/texturedoc ./internal/store`; `nix develop -c go test
+./internal/runtime -run
+TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`;
+`git diff --check`. Later cuts still need focused unit/component tests for
 transaction/source-ref preservation, publication/export serialization, frontend
 build, runtime shards where runtime is touched, CI, staging deploy identity,
 Comet/browser staging proof with numbered source refs, expanded source window,
@@ -536,9 +540,9 @@ if platform behavior changes.
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
 by this paradoc. repaired by D2 only for new server-side Texture revision writes
-after the store/API cut lands; full repair still requires frontend editor,
-Texture agent operation tools, publication/export, old-syntax deletion receipts,
-and staging proof.
+at the store/API boundary; full repair still requires independent review,
+frontend editor, Texture agent operation tools, publication/export, old-syntax
+deletion receipts, and staging proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -552,21 +556,24 @@ syntax rejection, source-node/entity resolution, and projection with numbered
 refs/source embeds. D1 review found P1 missing `image_region`; the source
 contract enum and texturedoc validator now include it. D1 re-review found P1
 missing `source_embed` leaf enforcement; source_embed now rejects hidden content,
-text, and marks. Final D1 re-review accepted the additive witness. It is not
-wired to canonical Texture writes. D2 storage/projection cut is now chosen:
-`body_doc_json` plus `source_entities_json` are canonical, `content` is a derived
-body text projection for compatibility, and the v2 hash signs the structured
-substrate. Open edge E1: implement and test the write boundary without widening
-into editor, publication, staging/deploy, or broad old-path deletion. E2:
-source contract enum validation must be promoted from publication normalization
-into Texture revision writes. E3: diff/blame/search need structured projections
-that do not become a second canonical body.
+text, and marks. Final D1 re-review accepted the additive witness. D2 now wires
+the first production write boundary: `Store.CreateRevision` validates/projects
+new revisions through `internal/texturedoc`, persists `body_doc_json` and
+`source_entities_json`, migrates existing workspaces through `bootstrapTexture`,
+exposes structured fields in public/internal revision responses, rejects legacy
+source syntaxes, and signs a `rev2` hash over the structured substrate plus
+projection/provenance. E1 is ready for independent review, not settled. E2:
+frontend/editor saves still produce plain text that the store converts to a
+simple structured doc; preserving source refs as editor atoms remains open. E3:
+Texture agent tools still use string patch/rewrite surfaces and must move to
+structured operations. E4: publication/export/diff/search still consume the
+projection and must not be treated as proof of structured transclusion behavior.
 
-next move: Implement D2 in the assigned worktree only: migrate/store
-`body_doc_json` and `source_entities_json`, validate/project through
-`internal/texturedoc`, sign structured fields in the revision hash, expose
-structured fields in revision responses, and add focused tests for persistence,
-migration, hash coverage, and old-syntax rejection.
+next move: independent D2 review of the local commit range, focused on whether
+the store/API write boundary truly makes `body_doc_json` plus
+`source_entities_json` canonical without smuggling old source identity through
+`content`, `citations_json`, or metadata sidecars. Do not push or claim mission
+settlement before review and the later D3/D4/D6/D7 cuts.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -589,5 +596,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1 is implemented, integrated on main, focused tests pass, and independent final re-review accepted the additive internal Go spike in internal/texturedoc after the P1 repairs. D2 storage/projection cut is now documented: `body_doc_json` plus `source_entities_json` are canonical, `content` remains a derived projection for D2 compatibility, existing workspaces need `bootstrapTexture` migration coverage, and the v2 revision hash signs the structured substrate. Next implement D2 in the assigned worktree only: wire new Texture writes to structured body/source entities through `internal/texturedoc`, expose the structured fields in revision responses, and reject old source syntaxes at write time. Do not bundle frontend editor saves, publication export, staging/deploy, or broad old-path deletion unless the paradoc is updated first. Mutation class is red when production writes change; protected surfaces include Texture canonical writes, revision schema/storage, source entities/provenance, public Texture revision API, revision hash chain, editor/renderer, agent tools/prompts, multimedia resolver, publication/export, and run acceptance.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1 is integrated and accepted. D2 is locally implemented in the assigned worktree: `Store.CreateRevision` validates/projects every new revision through `internal/texturedoc`, stores canonical `body_doc_json` plus `source_entities_json`, keeps `content` as a derived projection for D2 compatibility, migrates existing workspaces via `bootstrapTexture`, exposes structured fields in revision responses, rejects old source syntaxes, and signs a `rev2` hash over the structured substrate. Focused tests passed: `nix develop -c go test ./internal/types ./internal/texturedoc ./internal/store`, `nix develop -c go test ./internal/runtime -run TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`, and `git diff --check`. Next move is independent D2 review only; do not push, deploy, bundle frontend editor saves, publication export, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
 ```

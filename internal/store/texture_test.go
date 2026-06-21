@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -356,6 +359,231 @@ func TestTextureCreateRevision(t *testing.T) {
 	if got.VersionNumber != 0 {
 		t.Errorf("VersionNumber = %d, want 0", got.VersionNumber)
 	}
+	if len(got.BodyDoc) == 0 {
+		t.Fatalf("BodyDoc not persisted for plain text revision")
+	}
+	if len(got.SourceEntities) != 0 {
+		t.Fatalf("SourceEntities = %s, want empty legacy-compatible response", got.SourceEntities)
+	}
+}
+
+func TestTextureCreateRevisionStoresStructuredBodyAndSourceEntities(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{DocID: "doc-structured", OwnerID: "user-1", Title: "Structured"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	bodyDoc, sourceEntities := structuredRevisionFixture(t)
+	rev := types.Revision{
+		RevisionID:     "rev-structured",
+		DocID:          doc.DocID,
+		OwnerID:        doc.OwnerID,
+		AuthorKind:     types.AuthorUser,
+		AuthorLabel:    "alice",
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := s.CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("CreateRevision structured: %v", err)
+	}
+
+	got, err := s.GetRevision(ctx, rev.RevisionID, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("GetRevision: %v", err)
+	}
+	if got.Content != "Grounded[1]." {
+		t.Fatalf("Content projection = %q, want derived numbered projection", got.Content)
+	}
+	if len(got.BodyDoc) == 0 {
+		t.Fatalf("BodyDoc not persisted")
+	}
+	if string(got.SourceEntities) == "" || string(got.SourceEntities) == "[]" {
+		t.Fatalf("SourceEntities not persisted: %s", got.SourceEntities)
+	}
+	if !strings.HasPrefix(got.RevisionHash, types.StructuredRevisionHashScheme+":") {
+		t.Fatalf("RevisionHash = %q, want %s prefix", got.RevisionHash, types.StructuredRevisionHashScheme)
+	}
+	wantHash := types.ComputeStructuredRevisionHash("", got.Content, got.BodyDoc, got.SourceEntities, []byte("{}"))
+	if got.RevisionHash != wantHash {
+		t.Fatalf("RevisionHash = %q, want structured hash %q", got.RevisionHash, wantHash)
+	}
+}
+
+func TestTextureCreateRevisionRejectsLegacySourceSyntaxes(t *testing.T) {
+	cases := []string{
+		"raw {{source:abc}} token",
+		"[Story](source:abc)",
+		"[source:abc]",
+		"Source: https://example.com",
+		"Unresolved citation [1]",
+	}
+	for _, content := range cases {
+		t.Run(content, func(t *testing.T) {
+			s := textureTestStore(t)
+			ctx := context.Background()
+			doc := types.Document{DocID: "doc-legacy", OwnerID: "user-1", Title: "Legacy"}
+			if err := s.CreateDocument(ctx, doc); err != nil {
+				t.Fatalf("CreateDocument: %v", err)
+			}
+			err := s.CreateRevision(ctx, types.Revision{
+				RevisionID:  "rev-legacy",
+				DocID:       doc.DocID,
+				OwnerID:     doc.OwnerID,
+				AuthorKind:  types.AuthorUser,
+				AuthorLabel: "alice",
+				Content:     content,
+				CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
+			})
+			if !errors.Is(err, ErrInvalidTextureRevision) {
+				t.Fatalf("CreateRevision error = %v, want ErrInvalidTextureRevision", err)
+			}
+		})
+	}
+}
+
+func TestTextureCreateRevisionRejectsConflictingStructuredProjection(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+	doc := types.Document{DocID: "doc-conflict", OwnerID: "user-1", Title: "Conflict"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	bodyDoc, sourceEntities := structuredRevisionFixture(t)
+	err := s.CreateRevision(ctx, types.Revision{
+		RevisionID:     "rev-conflict",
+		DocID:          doc.DocID,
+		OwnerID:        doc.OwnerID,
+		AuthorKind:     types.AuthorUser,
+		AuthorLabel:    "alice",
+		Content:        "caller supplied conflicting projection",
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
+	})
+	if !errors.Is(err, ErrInvalidTextureRevision) {
+		t.Fatalf("CreateRevision error = %v, want ErrInvalidTextureRevision", err)
+	}
+}
+
+func TestTextureBootstrapMigratesStructuredRevisionColumns(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "old-texture.db")
+	db, workspacePath, connector, err := openTextureWorkspaceDB(dbPath)
+	if err != nil {
+		t.Fatalf("open old texture workspace: %v", err)
+	}
+	s := &Store{path: dbPath, textureDB: db, texturePath: workspacePath, doltConnector: connector}
+	t.Cleanup(func() { _ = s.Close() })
+
+	_, err = s.textureHandle().Exec(`
+CREATE TABLE texture_documents (
+	doc_id              VARCHAR(255) PRIMARY KEY,
+	owner_id            VARCHAR(255) NOT NULL,
+	title               VARCHAR(1024) NOT NULL DEFAULT '',
+	current_revision_id VARCHAR(255) NOT NULL DEFAULT '',
+	created_at          DATETIME NOT NULL,
+	updated_at          DATETIME NOT NULL
+);
+CREATE TABLE texture_revisions (
+	revision_id         VARCHAR(255) PRIMARY KEY,
+	doc_id              VARCHAR(255) NOT NULL,
+	owner_id            VARCHAR(255) NOT NULL,
+	author_kind         VARCHAR(64) NOT NULL,
+	author_label        VARCHAR(255) NOT NULL DEFAULT '',
+	version_number      BIGINT NOT NULL DEFAULT 0,
+	content             LONGTEXT NOT NULL,
+	citations_json      LONGTEXT NOT NULL,
+	metadata_json       LONGTEXT NOT NULL,
+	provenance_json     LONGTEXT NOT NULL DEFAULT '{}',
+	revision_hash       VARCHAR(255) NOT NULL DEFAULT '',
+	parent_revision_id  VARCHAR(255) NOT NULL DEFAULT '',
+	created_at          DATETIME NOT NULL
+);`)
+	if err != nil {
+		t.Fatalf("create old texture schema: %v", err)
+	}
+	if err := s.bootstrapTexture(); err != nil {
+		t.Fatalf("bootstrapTexture: %v", err)
+	}
+	assertTextureColumnExists(t, s, "body_doc_json")
+	assertTextureColumnExists(t, s, "source_entities_json")
+}
+
+func structuredRevisionFixture(t *testing.T) (json.RawMessage, json.RawMessage) {
+	t.Helper()
+	doc := texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-node"},
+			Content: []texturedoc.Node{{
+				Type:  "paragraph",
+				Attrs: map[string]any{"id": "p-1"},
+				Content: []texturedoc.Node{
+					{Type: "text", Text: "Grounded"},
+					{
+						Type: "source_ref",
+						Attrs: map[string]any{
+							"id":               "ref-1",
+							"source_entity_id": "src-web",
+							"display_mode":     "numbered_ref",
+						},
+					},
+					{Type: "text", Text: "."},
+				},
+			}},
+		},
+	}
+	entities := []texturedoc.SourceEntity{{
+		SourceEntityID: "src-web",
+		Target: texturedoc.SourceTarget{
+			Kind: "web_url",
+			URI:  "https://example.com/story",
+		},
+		Selectors: []texturedoc.SourceSelector{{
+			Kind: sourcecontract.SelectorKindTextQuote,
+			Data: map[string]any{"exact": "Grounded"},
+		}},
+		Display: texturedoc.SourceDisplay{
+			Mode:  "numbered_ref",
+			Title: "Example story",
+		},
+		Evidence: texturedoc.SourceEvidence{
+			State:       sourcecontract.EvidenceStateConfirms,
+			OpenSurface: sourcecontract.OpenSurfaceSource,
+		},
+		Provenance: texturedoc.SourceEntityProvenance{
+			CreatedBy:    "runtime",
+			SourceSystem: "test",
+		},
+	}}
+	bodyDocJSON, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal body doc: %v", err)
+	}
+	sourceEntitiesJSON, err := json.Marshal(entities)
+	if err != nil {
+		t.Fatalf("marshal source entities: %v", err)
+	}
+	return bodyDocJSON, sourceEntitiesJSON
+}
+
+func assertTextureColumnExists(t *testing.T, s *Store, name string) {
+	t.Helper()
+	var count int
+	if err := s.textureHandle().QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'texture_revisions'
+  AND column_name = ?`, name).Scan(&count); err != nil {
+		t.Fatalf("query column %s: %v", name, err)
+	}
+	if count != 1 {
+		t.Fatalf("column %s count = %d, want 1", name, count)
+	}
 }
 
 func TestTextureRevisionProvenanceRoundTrip(t *testing.T) {
@@ -450,7 +678,7 @@ func TestTextureRevisionHashChain(t *testing.T) {
 	if got0.RevisionHash == "" {
 		t.Fatalf("genesis revision hash empty")
 	}
-	wantGenesis := types.ComputeRevisionHash("", got0.Content, []byte("[]"), []byte("{}"))
+	wantGenesis := types.ComputeStructuredRevisionHash("", got0.Content, got0.BodyDoc, got0.SourceEntities, []byte("{}"))
 	if got0.RevisionHash != wantGenesis {
 		t.Errorf("genesis hash = %q, want %q", got0.RevisionHash, wantGenesis)
 	}
@@ -468,7 +696,7 @@ func TestTextureRevisionHashChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRevision v1: %v", err)
 	}
-	wantV1 := types.ComputeRevisionHash(got0.RevisionHash, got1.Content, []byte("[]"), []byte("{}"))
+	wantV1 := types.ComputeStructuredRevisionHash(got0.RevisionHash, got1.Content, got1.BodyDoc, got1.SourceEntities, []byte("{}"))
 	if got1.RevisionHash != wantV1 {
 		t.Errorf("v1 hash = %q, want chained %q", got1.RevisionHash, wantV1)
 	}

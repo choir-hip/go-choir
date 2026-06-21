@@ -202,6 +202,8 @@ type textureListDocsResponse struct {
 // older clients and are not authority-bearing.
 type textureCreateRevisionRequest struct {
 	Content          string           `json:"content"`
+	BodyDoc          json.RawMessage  `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage  `json:"source_entities,omitempty"`
 	AuthorKind       types.AuthorKind `json:"author_kind"`
 	AuthorLabel      string           `json:"author_label"`
 	Citations        json.RawMessage  `json:"citations,omitempty"`
@@ -219,6 +221,8 @@ type textureRevisionResponse struct {
 	AuthorLabel      string           `json:"author_label"`
 	VersionNumber    int              `json:"version_number"`
 	Content          string           `json:"content"`
+	BodyDoc          json.RawMessage  `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage  `json:"source_entities,omitempty"`
 	Citations        json.RawMessage  `json:"citations,omitempty"`
 	Metadata         json.RawMessage  `json:"metadata,omitempty"`
 	Provenance       json.RawMessage  `json:"provenance,omitempty"`
@@ -946,14 +950,16 @@ func sandboxTextureDocumentResponseFromRecord(doc types.Document) map[string]any
 
 func sandboxTextureRevisionResponseFromRecord(rev types.Revision) map[string]any {
 	return map[string]any{
-		"revision_id":   rev.RevisionID,
-		"doc_id":        rev.DocID,
-		"owner_id":      rev.OwnerID,
-		"content":       rev.Content,
-		"citations":     rev.Citations,
-		"metadata":      rev.Metadata,
-		"provenance":    rev.Provenance,
-		"revision_hash": rev.RevisionHash,
+		"revision_id":     rev.RevisionID,
+		"doc_id":          rev.DocID,
+		"owner_id":        rev.OwnerID,
+		"content":         rev.Content,
+		"body_doc":        rev.BodyDoc,
+		"source_entities": rev.SourceEntities,
+		"citations":       rev.Citations,
+		"metadata":        rev.Metadata,
+		"provenance":      rev.Provenance,
+		"revision_hash":   rev.RevisionHash,
 	}
 }
 
@@ -1187,6 +1193,8 @@ func (h *APIHandler) handleTextureCreateRevision(w http.ResponseWriter, r *http.
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
 		Content:          content,
+		BodyDoc:          req.BodyDoc,
+		SourceEntities:   req.SourceEntities,
 		Citations:        citations,
 		Metadata:         metadata,
 		ParentRevisionID: parentID,
@@ -1196,7 +1204,7 @@ func (h *APIHandler) handleTextureCreateRevision(w http.ResponseWriter, r *http.
 	if err := h.rt.Store().CreateRevision(r.Context(), rev); err != nil {
 		log.Printf("texture api: create revision: %v", err)
 		if errors.Is(err, store.ErrStaleDocumentHead) {
-			if req.AllowRebase && parentID != "" {
+			if req.AllowRebase && parentID != "" && len(strings.TrimSpace(string(req.BodyDoc))) == 0 {
 				req.Content = content
 				rebased, rebaseErr := h.createRebasedUserRevision(r.Context(), docID, ownerID, req, parentID, citations, metadata, now)
 				if rebaseErr == nil {
@@ -1207,6 +1215,10 @@ func (h *APIHandler) handleTextureCreateRevision(w http.ResponseWriter, r *http.
 				log.Printf("texture api: rebase stale user revision: %v", rebaseErr)
 			}
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before saving"})
+			return
+		}
+		if errors.Is(err, store.ErrInvalidTextureRevision) {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
 		}
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create revision"})
@@ -1398,6 +1410,8 @@ func revisionResponseFromRecord(rev types.Revision) textureRevisionResponse {
 		AuthorLabel:      rev.AuthorLabel,
 		VersionNumber:    rev.VersionNumber,
 		Content:          rev.Content,
+		BodyDoc:          rev.BodyDoc,
+		SourceEntities:   rev.SourceEntities,
 		Citations:        rev.Citations,
 		Metadata:         rev.Metadata,
 		Provenance:       rev.Provenance,

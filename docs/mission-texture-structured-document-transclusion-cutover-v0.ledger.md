@@ -265,3 +265,42 @@ Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
 Open edge: implement the D2 write-path cutover in the assigned worktree only,
 without bundling frontend editor saves, publication/export, staging/deploy, or
 broad old-path deletion.
+
+## 2026-06-21 - Pass 11 - D2 Local Write-Path Cutover
+
+Claim: The first production write boundary can be cut over without bundling
+frontend editor saves, publication/export, staging/deploy, or broad old-path
+deletion by making `Store.CreateRevision` the uniform structured validation and
+projection gate.
+
+Move: construct + probe. Added TextureRevision v2 fields to `types.Revision`,
+fresh DDL, existing-workspace `bootstrapTexture` migrations, store-side
+canonicalization from plain text to a simple structured doc, explicit
+`body_doc`/`source_entities` validation through `internal/texturedoc`, public and
+internal revision response fields, and a `rev2` hash payload that signs
+`body_doc_json`, `source_entities_json`, derived projection, provenance, and the
+parent hash. Added focused store/type/runtime tests for persistence, migration,
+hash coverage, API round trip, and legacy syntax rejection.
+
+Expected delta V: -1 for the D2 write-path obligation, provided independent
+review accepts that the cut does not smuggle source identity through projection,
+citations, or metadata sidecars.
+
+Actual delta V: -1 locally. Current V=7. D2 is ready for independent review but
+not mission settlement.
+
+Receipt: `internal/types/texture.go`, `internal/types/texture_revision_hash.go`,
+`internal/store/texture.go`, `internal/store/texture_structured_revision.go`,
+`internal/runtime/texture.go`, `internal/store/texture_test.go`,
+`internal/runtime/texture_structured_revision_test.go`, and
+`internal/types/texture_revision_hash_test.go`.
+
+Evidence:
+`nix develop -c go test ./internal/types ./internal/texturedoc ./internal/store`;
+`nix develop -c go test ./internal/runtime -run TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`;
+`git diff --check`.
+
+Open edge: independent D2 review, then later D3/D4/D6/D7 cuts for editor
+source-ref atom preservation, Texture agent structured operation tools,
+publication/export structured projection, broad old-path deletion, staging proof,
+and mission settlement.

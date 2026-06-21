@@ -77,8 +77,9 @@ type Document struct {
 }
 
 // Revision represents an immutable snapshot of document content at a point
-// in time. Each revision carries the full document text, citations, and
-// metadata, plus authorship attribution.
+// in time. New revisions carry a structured body document plus source entities
+// as canonical state; Content remains the derived text projection used by older
+// search, diff, publication, and editor readers during the cutover.
 //
 // Revisions are never modified after creation. This makes history,
 // snapshot, diff, and blame straightforward: compare any two revisions
@@ -107,8 +108,19 @@ type Revision struct {
 	// not derived from a paginated revision list.
 	VersionNumber int `json:"version_number"`
 
-	// Content is the full document text at this revision.
+	// Content is the derived text projection at this revision. For structured
+	// TextureRevision v2 writes, the store derives this from BodyDoc and
+	// SourceEntities rather than accepting it as canonical source identity.
 	Content string `json:"content"`
+
+	// BodyDoc is the canonical StructuredTextureDoc JSON for TextureRevision v2.
+	// Empty on legacy revisions created before the structured-body cutover.
+	BodyDoc json.RawMessage `json:"body_doc,omitempty"`
+
+	// SourceEntities is the canonical SourceEntity array JSON referenced by
+	// BodyDoc source_ref/source_embed nodes. Empty on legacy revisions created
+	// before the structured-body cutover.
+	SourceEntities json.RawMessage `json:"source_entities,omitempty"`
 
 	// Citations is the JSON-encoded citations array at this revision.
 	// Citations persist with document history and remain available when
@@ -132,10 +144,10 @@ type Revision struct {
 	ParentRevisionID string `json:"parent_revision_id,omitempty"`
 
 	// RevisionHash is the tamper-evident hash for this revision, chaining its
-	// body+citations+provenance to the parent revision's hash (see
-	// ComputeRevisionHash). It is assigned by the store at creation and is the
-	// signable spine of the versioned document history. Empty on legacy revisions
-	// created before hashing existed.
+	// canonical body/source/provenance substrate to the parent revision's hash
+	// (see ComputeStructuredRevisionHash for v2 writes). It is assigned by the
+	// store at creation and is the signable spine of the versioned document
+	// history. Empty on legacy revisions created before hashing existed.
 	RevisionHash string `json:"revision_hash,omitempty"`
 
 	// CreatedAt is when this revision was created.

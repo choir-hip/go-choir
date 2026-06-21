@@ -51,3 +51,27 @@ func TestComputeRevisionHashChainsToParent(t *testing.T) {
 		t.Fatalf("distinct revisions produced identical hashes")
 	}
 }
+
+func TestComputeStructuredRevisionHashSignsBodyDocAndSourceEntities(t *testing.T) {
+	bodyDoc := []byte(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","attrs":{"id":"doc"},"content":[{"type":"paragraph","attrs":{"id":"p"},"content":[{"type":"text","text":"body"}]}]}}`)
+	otherBodyDoc := []byte(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","attrs":{"id":"doc"},"content":[{"type":"paragraph","attrs":{"id":"p"},"content":[{"type":"text","text":"changed"}]}]}}`)
+	sourceEntities := []byte(`[]`)
+	otherSourceEntities := []byte(`[{"source_entity_id":"src-1"}]`)
+
+	base := ComputeStructuredRevisionHash("", "body", bodyDoc, sourceEntities, []byte("{}"))
+	if !strings.HasPrefix(base, StructuredRevisionHashScheme+":") {
+		t.Fatalf("structured hash missing scheme prefix: %q", base)
+	}
+	if base != ComputeStructuredRevisionHash("", "body", bodyDoc, sourceEntities, []byte("{}")) {
+		t.Fatalf("structured hash not deterministic")
+	}
+	if base == ComputeStructuredRevisionHash("", "body", otherBodyDoc, sourceEntities, []byte("{}")) {
+		t.Fatalf("body_doc change did not change structured hash")
+	}
+	if base == ComputeStructuredRevisionHash("", "body", bodyDoc, otherSourceEntities, []byte("{}")) {
+		t.Fatalf("source_entities change did not change structured hash")
+	}
+	if base == ComputeStructuredRevisionHash("parent", "body", bodyDoc, sourceEntities, []byte("{}")) {
+		t.Fatalf("parent hash change did not change structured hash")
+	}
+}

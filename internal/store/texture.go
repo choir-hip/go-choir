@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS texture_revisions (
 	author_label        VARCHAR(255) NOT NULL DEFAULT '',
 	version_number      BIGINT NOT NULL DEFAULT 0,
 	content             LONGTEXT NOT NULL,
+	body_doc_json       LONGTEXT NOT NULL DEFAULT '',
+	source_entities_json LONGTEXT NOT NULL DEFAULT '[]',
 	citations_json      LONGTEXT NOT NULL,
 	metadata_json       LONGTEXT NOT NULL,
 	provenance_json     LONGTEXT NOT NULL DEFAULT '{}',
@@ -364,6 +366,12 @@ func (s *Store) bootstrapTexture() error {
 		return err
 	}
 	if err := s.ensureTextureColumn("texture_revisions", "version_number", "BIGINT NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureTextureColumn("texture_revisions", "body_doc_json", "LONGTEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureTextureColumn("texture_revisions", "source_entities_json", "LONGTEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
 	if err := s.ensureTextureColumn("texture_revisions", "provenance_json", "LONGTEXT NOT NULL DEFAULT '{}'"); err != nil {
@@ -834,6 +842,11 @@ func (s *Store) DeleteTextureAliasesByOwner(ctx context.Context, ownerID string)
 // CreateRevision inserts a new revision record and updates the document's
 // current_revision_id if this is the latest revision.
 func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
+	preparedRev, bodyDocJSON, sourceEntitiesJSON, err := prepareTextureRevisionV2(rev)
+	if err != nil {
+		return err
+	}
+	rev = preparedRev
 	citations := string(rev.Citations)
 	if citations == "" {
 		citations = "[]"
@@ -899,11 +912,11 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 			return fmt.Errorf("query parent revision hash: %w", err)
 		}
 	}
-	rev.RevisionHash = types.ComputeRevisionHash(parentHash, rev.Content, []byte(citations), []byte(provenance))
+	rev.RevisionHash = types.ComputeStructuredRevisionHash(parentHash, rev.Content, []byte(bodyDocJSON), []byte(sourceEntitiesJSON), []byte(provenance))
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO texture_revisions (revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO texture_revisions (revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rev.RevisionID,
 		rev.DocID,
 		rev.OwnerID,
@@ -911,6 +924,8 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 		rev.AuthorLabel,
 		rev.VersionNumber,
 		rev.Content,
+		bodyDocJSON,
+		sourceEntitiesJSON,
 		citations,
 		metadata,
 		provenance,
@@ -1009,7 +1024,7 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 // the given owner.
 func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (types.Revision, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
 		   FROM texture_revisions
 		  WHERE revision_id = ? AND owner_id = ?`,
 		revisionID, ownerID,
@@ -1022,7 +1037,7 @@ func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (ty
 // is already known to belong to the same owner.
 func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (types.Revision, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
 		   FROM texture_revisions
 		  WHERE revision_id = ?`,
 		revisionID,
@@ -1038,7 +1053,7 @@ func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, l
 		limit = 50
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
+		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
 		   FROM texture_revisions
 		  WHERE doc_id = ? AND owner_id = ?
 		  ORDER BY version_number DESC, created_at DESC
@@ -1652,7 +1667,7 @@ func scanDocument(row interface{ Scan(...any) error }) (types.Document, error) {
 func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 	var rev types.Revision
 	var authorKind, createdAt string
-	var citationsJSON, metadataJSON, provenanceJSON, revisionHash string
+	var bodyDocJSON, sourceEntitiesJSON, citationsJSON, metadataJSON, provenanceJSON, revisionHash string
 	var parentRevID string
 
 	err := row.Scan(
@@ -1663,6 +1678,8 @@ func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 		&rev.AuthorLabel,
 		&rev.VersionNumber,
 		&rev.Content,
+		&bodyDocJSON,
+		&sourceEntitiesJSON,
 		&citationsJSON,
 		&metadataJSON,
 		&provenanceJSON,
@@ -1688,6 +1705,12 @@ func scanRevision(row interface{ Scan(...any) error }) (types.Revision, error) {
 
 	if citationsJSON != "" && citationsJSON != "[]" {
 		rev.Citations = json.RawMessage(citationsJSON)
+	}
+	if strings.TrimSpace(bodyDocJSON) != "" {
+		rev.BodyDoc = json.RawMessage(bodyDocJSON)
+	}
+	if sourceEntitiesJSON != "" && sourceEntitiesJSON != "[]" {
+		rev.SourceEntities = json.RawMessage(sourceEntitiesJSON)
 	}
 	if metadataJSON != "" && metadataJSON != "{}" {
 		rev.Metadata = json.RawMessage(metadataJSON)

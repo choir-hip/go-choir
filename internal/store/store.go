@@ -39,6 +39,10 @@ var ErrNotFound = errors.New("record not found")
 // against an older parent while the document head has already moved on.
 var ErrStaleDocumentHead = errors.New("stale document head")
 
+// ErrInvalidTextureRevision is returned when a Texture revision write fails
+// structured body/source validation before persistence.
+var ErrInvalidTextureRevision = errors.New("invalid texture revision")
+
 func sanitizeStoreText(value string) string {
 	return strings.ToValidUTF8(value, "\uFFFD")
 }

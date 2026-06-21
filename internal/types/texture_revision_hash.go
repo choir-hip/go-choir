@@ -11,6 +11,11 @@ import (
 // versioned. Bump it if the canonical payload below ever changes.
 const RevisionHashScheme = "rev1"
 
+// StructuredRevisionHashScheme prefixes hashes for TextureRevision v2 writes.
+// These hashes sign the structured body/source substrate instead of the legacy
+// content+citations payload.
+const StructuredRevisionHashScheme = "rev2"
+
 // ComputeRevisionHash returns the tamper-evident hash for a revision, chaining
 // it to its parent. The hash is taken over a canonical payload of the parent
 // hash plus the revision's body, citations, and provenance. Determinism comes
@@ -52,4 +57,46 @@ func ComputeRevisionHash(parentHash, body string, citations, provenance []byte) 
 	}
 	sum := sha256.Sum256(data)
 	return RevisionHashScheme + ":" + hex.EncodeToString(sum[:])
+}
+
+// ComputeStructuredRevisionHash returns the tamper-evident hash for a
+// TextureRevision v2 revision. It chains to the parent hash and signs the
+// canonical structured body document, canonical source entities, derived text
+// projection, and provenance. Empty source/provenance inputs normalize to stable
+// JSON defaults.
+func ComputeStructuredRevisionHash(parentHash, projection string, bodyDoc, sourceEntities, provenance []byte) string {
+	bodyDocJSON := json.RawMessage(bodyDoc)
+	if len(strings.TrimSpace(string(bodyDoc))) == 0 {
+		bodyDocJSON = json.RawMessage("{}")
+	}
+	sourceEntitiesJSON := json.RawMessage(sourceEntities)
+	if len(strings.TrimSpace(string(sourceEntities))) == 0 {
+		sourceEntitiesJSON = json.RawMessage("[]")
+	}
+	provenanceJSON := json.RawMessage(provenance)
+	if len(strings.TrimSpace(string(provenance))) == 0 {
+		provenanceJSON = json.RawMessage("{}")
+	}
+	payload := struct {
+		Scheme         string          `json:"scheme"`
+		ParentHash     string          `json:"parent_hash"`
+		Projection     string          `json:"projection"`
+		BodyDoc        json.RawMessage `json:"body_doc"`
+		SourceEntities json.RawMessage `json:"source_entities"`
+		Provenance     json.RawMessage `json:"provenance"`
+	}{
+		Scheme:         StructuredRevisionHashScheme,
+		ParentHash:     parentHash,
+		Projection:     projection,
+		BodyDoc:        bodyDocJSON,
+		SourceEntities: sourceEntitiesJSON,
+		Provenance:     provenanceJSON,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		sum := sha256.Sum256([]byte(projection))
+		return StructuredRevisionHashScheme + ":" + hex.EncodeToString(sum[:])
+	}
+	sum := sha256.Sum256(data)
+	return StructuredRevisionHashScheme + ":" + hex.EncodeToString(sum[:])
 }
