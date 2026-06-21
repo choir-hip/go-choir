@@ -1207,3 +1207,45 @@ Receipts:
 
 Open edge: this is still not handoff-tier settlement. The mission still needs a
 scope reconciliation and an independent prover / widest checker before exit.
+
+## 2026-06-21 - Scope Reconciliation
+
+Claim: the original mission claim can now be reconciled without new runtime
+construction by separating supported scoped evidence from residual edges. The
+mission should not require impossible universal proof before it can hand off,
+but it also must not overclaim promotion/continuation or every possible Texture
+entry path.
+
+Move: reconciled the original witness clauses against current receipts in the
+mission state and ledger. The result is scoped support rather than blanket
+settlement: runtime-owned `update_id`, owner-visible work-state revisions,
+durable mailbox delivery, same-run passivation/resume for established Texture
+documents, event-driven `update_coagent` delivery, deletion of the named
+first-paint/initial-super/model-prior scaffolds, and source-backed researcher
+evidence incorporation all have focused-test plus staged proof receipts.
+
+Expected Delta V: -1 if the audit can name the supported scope and residual
+edges clearly enough that the next pass no longer needs to re-litigate the
+original witness clauses.
+
+Actual Delta V: -1. Current exit V is 2: obtain the independent
+prover/widest checker required before any Parallax exit, and decide the stale
+Comet accessibility/live-region `Continuing...` residual.
+
+Receipts:
+- Current Parallax State now names supported scope and residual edges instead
+  of treating the original mission wording as either fully settled or fully
+  open.
+- Product acceptance remains `runacc-21e9c87d45c3965bba1d`,
+  `staging-smoke-level` / `blocked`, tied to deployed commit
+  `fce827ca2a43994d1d67312f33fe4fef1d97f4d3` and trajectory
+  `c3e06265-48a7-4f00-91d1-068c3706ff58`.
+- Residuals explicitly named: no universal proof over every possible Texture
+  document entry path; always-deep means obligation/prompt-driven
+  probe-and-incorporate loops with receipts, not exhaustive research for all
+  prompts; and no promotion-level or continuation-level acceptance is claimed.
+
+Open edge: Parallax still forbids self-checked exit. Under the current
+no-subagent operating constraint, the independent prover obligation remains
+open unless the owner explicitly authorizes a separate prover or an equivalent
+non-authoring checker.

@@ -109,16 +109,28 @@ model-prior scaffolds, source entity collation, saved-evidence delivery, and
 passivation stream settlement all have receipts in the ledger.
 
 Current exit V counts only remaining settlement-review obligations:
-1. reconcile the whole mission claim against original witness clauses and name
-   any unsupported edge instead of calling it repaired;
-2. obtain the handoff-tier independent prover / widest checker required by the
+1. obtain the handoff-tier independent prover / widest checker required by the
    Parallax skill before any `settled` or `open_handoff` exit;
-3. decide the stale accessibility/live-region `Continuing...` residual:
+2. decide the stale accessibility/live-region `Continuing...` residual:
    accepted polish edge with a next discriminator, or a new documented runtime
    problem before code changes.
 
-Current V=3. Last actual Delta V=-1 on 2026-06-21 from repairing the local
-same-thread researcher verifier drift. `TestTextureCreatedResearcherEvidenceWakesTextureV2`
+Current V=2. Last actual Delta V=-1 on 2026-06-21 from scope reconciliation:
+the original witness clauses are now separated into supported scoped claims and
+accepted residual edges. Supported at current evidence scope: runtime-owned
+`update_id`; owner-visible work-state revisions before delegation; durable
+mailbox cursor delivery; same-run passivation/resume for established Texture
+documents; event-driven `update_coagent` delivery into the Texture thread;
+deletion of the named prompt-bar first-paint, initial-super, and model-prior
+guard scaffolds; and source-backed researcher evidence incorporation through
+native inline chips plus the Sources panel. Accepted residual edges: proof is
+not universal over every possible Texture document entry path; always-deep means
+obligation/prompt-driven probe-and-incorporate loops with staged/source-panel
+receipts, not exhaustive research for all prompts; and product acceptance remains
+`staging-smoke-level` / `blocked`, not promotion or continuation acceptance.
+
+Prior actual Delta V=-1 on 2026-06-21 from repairing the local same-thread
+researcher verifier drift. `TestTextureCreatedResearcherEvidenceWakesTextureV2`
 now opens researcher through the ordinary post-write `spawn_agent` path instead
 of waiting for the deleted `model_prior_interim` completion-guard reminder, and
 `TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard` no longer
@@ -188,20 +200,21 @@ position / live conjectures / open edges:
   `synth_completed`; the `_005` Comet proof showed source-backed v2, native
   source chip, idle toolbar settlement, enabled `Sources`, and one represented
   GPT-5.5 source artifact.
-- C2/C3/C4 remain settlement-review claims rather than new construction work:
-  the audit must decide whether the accumulated receipts are enough to call the
-  mailbox/resume/deepening bridge supported, or name the exact unsupported edge.
+- C2/C3/C4 are reconciled as scoped support plus named residuals: mailbox and
+  resume are supported for established Texture revision threads and prompt-bar
+  source-evidence slices; always-deep is supported as prompt/obligation-driven
+  repeated probe incorporation, not as a universal guarantee of exhaustive
+  research depth. These residuals do not currently demand runtime construction.
 
 Receipts for prior steps live in
 `docs/mission-texture-durable-thread-v1.ledger.md`; this state intentionally no
 longer mirrors the pass history.
 
-next move: settlement review. Reconcile original scope against the current
-evidence packet, then request or run an independent prover/widest checker if the
-human wants an exit. Do not start another runtime fix unless a new staging
-failure is documented first. The only known product follow-up from the latest
-proof is accessibility/live-region cleanup for the stale `Continuing...` node
-after settled passivation.
+next move: settlement review. Either obtain the independent prover/widest
+checker required before any Parallax exit, or decide the stale
+accessibility/live-region `Continuing...` residual as an accepted polish edge
+with a discriminator. Do not start another runtime fix unless a new staging
+failure is documented first.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
@@ -215,15 +228,13 @@ wrong pattern. Promote only compact lessons: avoid run-centric reconstruction,
 avoid role choreography, avoid model-invented delivery identity, and keep
 owner-visible work state in Texture.
 
-settlement: settled only when landed and deployed proof shows runtime-owned
-coagent update identity, direct Texture work-state visibility, durable same-thread
-resume, event-driven delivery, deepening beyond V2, deletion of old scaffolding,
-no stranded source/evidence updates, and the Parallax exit checker has accepted
-the evidence packet. The `_005` source-panel proof is strong staging smoke
-evidence, not final mission settlement.
+settlement: not settled. A future exit may be `open_handoff` or `settled` only
+after a handoff-tier checker reviews the scoped evidence packet. The `_005`
+source-panel proof is strong staging smoke evidence, not promotion-level or
+continuation-level acceptance.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status working, exit V=3: reconcile the original witness clauses against the accumulated evidence, obtain the independent prover / widest checker required before any Parallax exit, and decide whether the stale Comet accessibility `Continuing...` node is an accepted polish edge or a new documented runtime problem. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; test-only verifier repair is yellow and already locally verified. Protected surfaces remain Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Do not start another runtime fix unless a new staging failure is documented first.
+Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status working, exit V=2: obtain the independent prover / widest checker required before any Parallax exit, and decide whether the stale Comet accessibility `Continuing...` node is an accepted polish edge or a new documented runtime problem. Scope reconciliation is complete: the durable-thread/source-evidence bridge is supported at focused-test plus staging-smoke scope, with residuals named instead of overclaiming universal prompt/depth/promotion coverage. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; protected surfaces remain Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Do not start another runtime fix unless a new staging failure is documented first.
 ```
