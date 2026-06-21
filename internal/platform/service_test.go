@@ -1481,6 +1481,149 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 }
 
+func TestPublishTextureStructuredBodyDrivesPublicationSources(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	artifactsRoot := filepath.Join(root, "artifacts")
+	svc := NewService(store, artifactsRoot, "")
+
+	bodyDoc := json.RawMessage(`{
+		"schema":"choir.texture_doc.v1",
+		"doc":{
+			"type":"doc",
+			"attrs":{"id":"doc-structured-pub"},
+			"content":[{
+				"type":"paragraph",
+				"attrs":{"id":"p-structured-pub"},
+				"content":[
+					{"type":"text","text":"This structured publication cites "},
+					{"type":"source_ref","attrs":{"id":"ref-fed","source_entity_id":"src-structured-fed","display_mode":"numbered_ref"}},
+					{"type":"text","text":"."}
+				]
+			}]
+		}
+	}`)
+	sourceEntities := json.RawMessage(`[
+		{
+			"source_entity_id":"src-structured-fed",
+			"target":{"kind":"source_service_item","id":"srcitem_fed_rates"},
+			"selectors":[{"kind":"text_quote","data":{"text_quote":"The committee held rates steady.","content_hash":"hash-fed-rates"}}],
+			"display":{"mode":"numbered_ref","title":"Federal Reserve statement"},
+			"evidence":{"state":"confirms","open_surface":"source"},
+			"provenance":{"created_by":"texture","source_system":"test"}
+		}
+	]`)
+	metadata, _ := json.Marshal(map[string]any{
+		"export_policy": map[string]any{
+			"copy_allowed":     true,
+			"download_allowed": true,
+			"formats":          []string{"txt", "md", "html"},
+		},
+	})
+
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-structured",
+		SourceRevisionID: "rev-structured",
+		Title:            "Structured Publication",
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
+		Metadata:         metadata,
+		RequestedBy:      "user-1",
+		History: []PublishTextureRevision{{
+			RevisionID:     "rev-structured",
+			Content:        "This structured publication cites [1].",
+			BodyDoc:        bodyDoc,
+			SourceEntities: sourceEntities,
+			RevisionHash:   "revhash-structured",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PublishTexture: %v", err)
+	}
+	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute: %v", err)
+	}
+	if bundle.Artifact.Content != "This structured publication cites [1]." || strings.Contains(bundle.Artifact.Content, "(source:") {
+		t.Fatalf("artifact content = %q, want structured projection without markdown source links", bundle.Artifact.Content)
+	}
+	if len(bundle.Artifact.BodyDoc) == 0 || len(bundle.Artifact.SourceEntities) == 0 {
+		t.Fatalf("bundle missing structured artifact fields: body_doc=%s source_entities=%s", bundle.Artifact.BodyDoc, bundle.Artifact.SourceEntities)
+	}
+	if len(bundle.SourceEntities) != 1 || bundle.SourceEntities[0].SourceEntityID != "src-structured-fed" {
+		t.Fatalf("bundle source entities = %#v", bundle.SourceEntities)
+	}
+	doc := buildPublicationDocument(bundle)
+	if len(doc.Blocks) != 1 || len(doc.Blocks[0].Inlines) != 3 || doc.Blocks[0].Inlines[1].Kind != "source_ref" {
+		t.Fatalf("publication doc did not preserve structured source_ref inline: %#v", doc.Blocks)
+	}
+	if doc.Blocks[0].Inlines[1].Text != "Federal Reserve statement" {
+		t.Fatalf("unlabeled source_ref text = %q, want source entity title", doc.Blocks[0].Inlines[1].Text)
+	}
+	htmlExport, err := svc.ExportPublicationByRoute(context.Background(), resp.RoutePath, "html")
+	if err != nil {
+		t.Fatalf("ExportPublicationByRoute html: %v", err)
+	}
+	if !strings.Contains(htmlExport.Content, `data-source-id="src-structured-fed"`) || strings.Contains(htmlExport.Content, "(source:src-structured-fed)") {
+		t.Fatalf("html export did not use structured source ref rendering: %s", htmlExport.Content)
+	}
+	if bundle.VersionHistory == nil || len(bundle.VersionHistory.Revisions) != 1 ||
+		len(bundle.VersionHistory.Revisions[0].BodyDoc) == 0 ||
+		len(bundle.VersionHistory.Revisions[0].SourceEntities) == 0 {
+		t.Fatalf("version history missing structured fields: %#v", bundle.VersionHistory)
+	}
+}
+
+func TestPublishTextureStructuredEmptySourceEntitiesSuppressLegacyMetadata(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	svc := NewService(store, filepath.Join(root, "artifacts"), "")
+
+	bodyDoc := json.RawMessage(`{
+		"schema":"choir.texture_doc.v1",
+		"doc":{
+			"type":"doc",
+			"attrs":{"id":"doc-empty-sources"},
+			"content":[{
+				"type":"paragraph",
+				"attrs":{"id":"p-empty-sources"},
+				"content":[{"type":"text","text":"No structured citations here."}]
+			}]
+		}
+	}`)
+	metadata, _ := json.Marshal(map[string]any{
+		"source_entities": []map[string]any{{
+			"source_entity_id": "legacy-stale-source",
+			"target_kind":      "url",
+			"target_id":        "https://example.com/stale",
+			"title":            "Stale legacy source",
+		}},
+	})
+
+	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
+		OwnerID:          "user-1",
+		SourceDocID:      "doc-empty-sources",
+		SourceRevisionID: "rev-empty-sources",
+		Title:            "Structured Empty Sources",
+		BodyDoc:          bodyDoc,
+		SourceEntities:   json.RawMessage(`[]`),
+		Metadata:         metadata,
+		RequestedBy:      "user-1",
+	})
+	if err != nil {
+		t.Fatalf("PublishTexture: %v", err)
+	}
+	bundle, err := svc.GetPublicationBundleByRoute(context.Background(), resp.RoutePath)
+	if err != nil {
+		t.Fatalf("GetPublicationBundleByRoute: %v", err)
+	}
+	if len(bundle.SourceEntities) != 0 || len(bundle.Transclusions) != 0 {
+		t.Fatalf("legacy metadata leaked despite explicit empty structured source_entities: sources=%#v transclusions=%#v", bundle.SourceEntities, bundle.Transclusions)
+	}
+	if strings.Contains(bundle.Artifact.Content, "source:") {
+		t.Fatalf("artifact content contains raw source syntax: %q", bundle.Artifact.Content)
+	}
+}
+
 func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"), "")

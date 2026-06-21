@@ -91,7 +91,13 @@ func buildPublicationSourceMetadata(req PublishTextureRequest) (publicationSourc
 		metadata.ExportPolicy = raw
 	}
 
-	rawEntities, ok := revisionMetadata["source_entities"]
+	rawEntities, ok, err := publicationSourceEntityValues(req.SourceEntities)
+	if err != nil {
+		return metadata, err
+	}
+	if !ok {
+		rawEntities, ok = revisionMetadata["source_entities"]
+	}
 	if !ok || rawEntities == nil {
 		return metadata, nil
 	}
@@ -113,6 +119,18 @@ func buildPublicationSourceMetadata(req PublishTextureRequest) (publicationSourc
 	return metadata, nil
 }
 
+func publicationSourceEntityValues(raw json.RawMessage) (any, bool, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil, false, nil
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, false, fmt.Errorf("source_entities must be valid JSON: %w", err)
+	}
+	return value, true, nil
+}
+
 func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, publicationTransclusionInput, bool, error) {
 	var entity publicationSourceEntityInput
 	var transclusion publicationTransclusionInput
@@ -124,7 +142,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return entity, transclusion, false, fmt.Errorf("source entity must be an object: %w", err)
 	}
-	entityID := firstString(m, "entity_id", "id")
+	entityID := firstString(m, "source_entity_id", "entity_id", "id")
 	if entityID == "" {
 		return entity, transclusion, false, nil
 	}
@@ -134,7 +152,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	normalizedSelectors := normalizePublicationSourceSelectors(selectors)
 	firstSelector := sourcecontract.NormalizeSelector(map[string]any{"selector_kind": "whole_resource"})
 	if len(selectors) > 0 {
-		if selectorMap := mapValue(selectors[0]); len(selectorMap) > 0 {
+		if selectorMap := publicationSelectorMap(selectors[0]); len(selectorMap) > 0 {
 			firstSelector = sourcecontract.NormalizeSelector(selectorMap)
 		}
 	}
@@ -148,7 +166,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		"source_entity_id": entityID,
 	})
 	displayPolicy := normalizePublicationDisplayPolicy(firstString(m, "display_policy", "inline_mode"), display, firstSelector)
-	openSurface := sourcecontract.NormalizeOpenSurface(firstString(display, "open_surface"))
+	openSurface := sourcecontract.NormalizeOpenSurface(firstNonEmpty(firstString(display, "open_surface"), firstString(mapValue(m["evidence"]), "open_surface")))
 	if openSurface != "" {
 		if display == nil {
 			display = map[string]any{}
@@ -158,7 +176,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	}
 	normalizePublicationReaderSnapshotStatus(m)
 	raw = mustJSONRaw(m)
-	targetKind := firstNonEmpty(firstString(target, "target_kind"), firstString(m, "target_kind"))
+	targetKind := firstNonEmpty(firstString(target, "target_kind", "kind"), firstString(m, "target_kind"))
 	targetID := firstNonEmpty(
 		firstString(target, "item_id"),
 		firstString(target, "content_id"),
@@ -166,6 +184,8 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		firstString(target, "publication_version_id"),
 		firstString(target, "revision_id"),
 		firstString(target, "doc_id"),
+		firstString(target, "id"),
+		firstString(target, "uri"),
 		firstString(target, "canonical_url"),
 		firstString(target, "url"),
 		firstString(m, "target_id"),
@@ -216,11 +236,32 @@ func normalizePublicationSourceSelectors(selectors []any) []map[string]any {
 	}
 	out := make([]map[string]any, 0, len(selectors))
 	for _, selector := range selectors {
-		selectorMap := mapValue(selector)
+		selectorMap := publicationSelectorMap(selector)
 		if len(selectorMap) == 0 {
 			continue
 		}
 		out = append(out, sourcecontract.NormalizeSelector(selectorMap))
+	}
+	return out
+}
+
+func publicationSelectorMap(selector any) map[string]any {
+	selectorMap := mapValue(selector)
+	if len(selectorMap) == 0 {
+		return nil
+	}
+	out := copyStringAnyMap(selectorMap)
+	if kind := firstString(out, "selector_kind"); kind == "" {
+		if d1Kind := firstString(out, "kind"); d1Kind != "" {
+			out["selector_kind"] = d1Kind
+		}
+	}
+	if data := mapValue(out["data"]); len(data) > 0 {
+		for key, value := range data {
+			if _, exists := out[key]; !exists {
+				out[key] = value
+			}
+		}
 	}
 	return out
 }

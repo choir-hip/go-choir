@@ -38,6 +38,8 @@ func buildVersionHistoryManifest(history []PublishTextureRevision, signer *Signi
 			AuthorKind:       rev.AuthorKind,
 			AuthorLabel:      rev.AuthorLabel,
 			Content:          rev.Content,
+			BodyDoc:          rev.BodyDoc,
+			SourceEntities:   rev.SourceEntities,
 			ContentHash:      sha256Hex([]byte(rev.Content)),
 			Citations:        rev.Citations,
 			Metadata:         rev.Metadata,

@@ -11,6 +11,8 @@ type PublishTextureRequest struct {
 	SourceRevisionID string          `json:"source_revision_id"`
 	Title            string          `json:"title"`
 	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
 	Citations        json.RawMessage `json:"citations,omitempty"`
 	Metadata         json.RawMessage `json:"metadata,omitempty"`
 	Slug             string          `json:"slug,omitempty"`

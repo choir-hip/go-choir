@@ -41,6 +41,8 @@ func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *
 		SourceRevisionID: rev.RevisionID,
 		Title:            doc.Title,
 		Content:          rev.Content,
+		BodyDoc:          rev.BodyDoc,
+		SourceEntities:   rev.SourceEntities,
 		Citations:        rev.Citations,
 		Metadata:         merged,
 		AccessPolicy:     defaultWireAccessPolicy(),

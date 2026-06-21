@@ -41,6 +41,8 @@ type sandboxTextureRevision struct {
 	AuthorLabel      string          `json:"author_label,omitempty"`
 	VersionNumber    int             `json:"version_number,omitempty"`
 	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
 	Citations        json.RawMessage `json:"citations,omitempty"`
 	Metadata         json.RawMessage `json:"metadata,omitempty"`
 	Provenance       json.RawMessage `json:"provenance,omitempty"`
@@ -180,6 +182,8 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		SourceRevisionID: rev.RevisionID,
 		Title:            doc.Title,
 		Content:          rev.Content,
+		BodyDoc:          rev.BodyDoc,
+		SourceEntities:   rev.SourceEntities,
 		Citations:        rev.Citations,
 		Metadata:         enrichedMetadata,
 		Slug:             req.Slug,
@@ -240,6 +244,8 @@ func (h *Handler) gatherTextureRevisionHistory(r *http.Request, sandboxURL, user
 			AuthorKind:       rev.AuthorKind,
 			AuthorLabel:      rev.AuthorLabel,
 			Content:          rev.Content,
+			BodyDoc:          rev.BodyDoc,
+			SourceEntities:   rev.SourceEntities,
 			Citations:        rev.Citations,
 			Metadata:         rev.Metadata,
 			Provenance:       rev.Provenance,

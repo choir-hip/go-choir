@@ -11,6 +11,8 @@ type PublishTextureRequest struct {
 	SourceRevisionID string          `json:"source_revision_id"`
 	Title            string          `json:"title"`
 	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
 	Citations        json.RawMessage `json:"citations,omitempty"`
 	Metadata         json.RawMessage `json:"metadata,omitempty"`
 	Slug             string          `json:"slug,omitempty"`
@@ -38,6 +40,8 @@ type PublishTextureRevision struct {
 	AuthorKind       string          `json:"author_kind,omitempty"`
 	AuthorLabel      string          `json:"author_label,omitempty"`
 	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
 	Citations        json.RawMessage `json:"citations,omitempty"`
 	Metadata         json.RawMessage `json:"metadata,omitempty"`
 	Provenance       json.RawMessage `json:"provenance,omitempty"`
@@ -87,10 +91,12 @@ type PublicationVersionSummary struct {
 }
 
 type PublicationArtifact struct {
-	ManifestID  string        `json:"manifest_id"`
-	MediaType   string        `json:"media_type"`
-	Content     string        `json:"content"`
-	RenderModel []RenderBlock `json:"render_model"`
+	ManifestID     string          `json:"manifest_id"`
+	MediaType      string          `json:"media_type"`
+	Content        string          `json:"content"`
+	BodyDoc        json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities json.RawMessage `json:"source_entities,omitempty"`
+	RenderModel    []RenderBlock   `json:"render_model"`
 }
 
 type PublicationSourceEntity struct {
@@ -198,7 +204,7 @@ type PublicationBundle struct {
 type PublicationVersionHistory struct {
 	Schema string `json:"schema"`
 	// RevisionCount is the number of revisions in the chain.
-	RevisionCount int `json:"revision_count"`
+	RevisionCount int    `json:"revision_count"`
 	ChainHeadHash string `json:"chain_head_hash,omitempty"`
 	ManifestHash  string `json:"manifest_hash,omitempty"`
 	// SigningSchema identifies the per-revision attestation payload shape
@@ -211,8 +217,8 @@ type PublicationVersionHistory struct {
 	SigningPublicKey string `json:"signing_public_key,omitempty"`
 	// SigningKeyID is a short content-addressed id of SigningPublicKey so
 	// signatures remain identifiable across a future key rotation.
-	SigningKeyID string `json:"signing_key_id,omitempty"`
-	Revisions   []PublicationVersionHistoryEntry `json:"revisions"`
+	SigningKeyID string                           `json:"signing_key_id,omitempty"`
+	Revisions    []PublicationVersionHistoryEntry `json:"revisions"`
 }
 
 // PublicationVersionHistoryEntry is one revision within a published version
@@ -225,6 +231,8 @@ type PublicationVersionHistoryEntry struct {
 	AuthorKind       string          `json:"author_kind,omitempty"`
 	AuthorLabel      string          `json:"author_label,omitempty"`
 	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
 	ContentHash      string          `json:"content_hash"`
 	Citations        json.RawMessage `json:"citations,omitempty"`
 	Metadata         json.RawMessage `json:"metadata,omitempty"`

@@ -16,15 +16,17 @@ import (
 )
 
 type wirePlatformPublishRequest struct {
-	DocID         string          `json:"doc_id"`
-	RevisionID    string          `json:"revision_id"`
-	Title         string          `json:"title,omitempty"`
-	Content       string          `json:"content,omitempty"`
-	Citations     json.RawMessage `json:"citations,omitempty"`
-	Metadata      json.RawMessage `json:"metadata,omitempty"`
-	RunID         string          `json:"run_id,omitempty"`
-	RequestIntent string          `json:"request_intent,omitempty"`
-	RunMetadata   json.RawMessage `json:"run_metadata,omitempty"`
+	DocID          string          `json:"doc_id"`
+	RevisionID     string          `json:"revision_id"`
+	Title          string          `json:"title,omitempty"`
+	Content        string          `json:"content,omitempty"`
+	BodyDoc        json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities json.RawMessage `json:"source_entities,omitempty"`
+	Citations      json.RawMessage `json:"citations,omitempty"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
+	RunID          string          `json:"run_id,omitempty"`
+	RequestIntent  string          `json:"request_intent,omitempty"`
+	RunMetadata    json.RawMessage `json:"run_metadata,omitempty"`
 }
 
 func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
@@ -95,12 +97,14 @@ func fallbackWirePublishURLFromBases(bases []string) string {
 
 func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
 	payload := wirePlatformPublishRequest{
-		DocID:      doc.DocID,
-		RevisionID: rev.RevisionID,
-		Title:      doc.Title,
-		Content:    rev.Content,
-		Citations:  rev.Citations,
-		Metadata:   rev.Metadata,
+		DocID:          doc.DocID,
+		RevisionID:     rev.RevisionID,
+		Title:          doc.Title,
+		Content:        rev.Content,
+		BodyDoc:        rev.BodyDoc,
+		SourceEntities: rev.SourceEntities,
+		Citations:      rev.Citations,
+		Metadata:       rev.Metadata,
 	}
 	if rec != nil {
 		payload.RunID = strings.TrimSpace(rec.RunID)

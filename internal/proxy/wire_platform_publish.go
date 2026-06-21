@@ -15,15 +15,17 @@ import (
 )
 
 type wirePlatformPublishRequest struct {
-	DocID         string          `json:"doc_id"`
-	RevisionID    string          `json:"revision_id"`
-	Title         string          `json:"title,omitempty"`
-	Content       string          `json:"content,omitempty"`
-	Citations     json.RawMessage `json:"citations,omitempty"`
-	Metadata      json.RawMessage `json:"metadata,omitempty"`
-	RunID         string          `json:"run_id,omitempty"`
-	RequestIntent string          `json:"request_intent,omitempty"`
-	RunMetadata   json.RawMessage `json:"run_metadata,omitempty"`
+	DocID          string          `json:"doc_id"`
+	RevisionID     string          `json:"revision_id"`
+	Title          string          `json:"title,omitempty"`
+	Content        string          `json:"content,omitempty"`
+	BodyDoc        json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities json.RawMessage `json:"source_entities,omitempty"`
+	Citations      json.RawMessage `json:"citations,omitempty"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
+	RunID          string          `json:"run_id,omitempty"`
+	RequestIntent  string          `json:"request_intent,omitempty"`
+	RunMetadata    json.RawMessage `json:"run_metadata,omitempty"`
 }
 
 // HandleInternalWirePlatformPublish is the host-mediated choke point for autonomous
@@ -69,9 +71,9 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 
 	var doc sandboxTextureDocument
 	var rev sandboxTextureRevision
-	if strings.TrimSpace(req.Title) != "" || strings.TrimSpace(req.Content) != "" || len(req.Metadata) > 0 || len(req.Citations) > 0 {
+	if strings.TrimSpace(req.Title) != "" || strings.TrimSpace(req.Content) != "" || len(req.BodyDoc) > 0 || len(req.SourceEntities) > 0 || len(req.Metadata) > 0 || len(req.Citations) > 0 {
 		doc = sandboxTextureDocument{DocID: req.DocID, OwnerID: platformOwner, Title: strings.TrimSpace(req.Title)}
-		rev = sandboxTextureRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, Citations: req.Citations, Metadata: req.Metadata}
+		rev = sandboxTextureRevision{RevisionID: req.RevisionID, DocID: req.DocID, OwnerID: platformOwner, Content: req.Content, BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities, Citations: req.Citations, Metadata: req.Metadata}
 	} else {
 		if err := h.fetchSandboxJSON(r, sandboxURL, "/internal/texture/documents/"+url.PathEscape(req.DocID), platformOwner, &doc); err != nil {
 			log.Printf("proxy: wire publish fetch document: %v", err)
@@ -111,12 +113,14 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		Title:   doc.Title,
 	}
 	revType := types.Revision{
-		RevisionID: rev.RevisionID,
-		DocID:      rev.DocID,
-		OwnerID:    rev.OwnerID,
-		Content:    rev.Content,
-		Citations:  rev.Citations,
-		Metadata:   rev.Metadata,
+		RevisionID:     rev.RevisionID,
+		DocID:          rev.DocID,
+		OwnerID:        rev.OwnerID,
+		Content:        rev.Content,
+		BodyDoc:        rev.BodyDoc,
+		SourceEntities: rev.SourceEntities,
+		Citations:      rev.Citations,
+		Metadata:       rev.Metadata,
 	}
 	if !wirepublish.EligibleForAutonomousPublish(docType, revType, rec, platformOwner) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "revision is not eligible for autonomous wire publish"})
@@ -137,6 +141,8 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		SourceRevisionID: wireReq.SourceRevisionID,
 		Title:            wireReq.Title,
 		Content:          wireReq.Content,
+		BodyDoc:          wireReq.BodyDoc,
+		SourceEntities:   wireReq.SourceEntities,
 		Citations:        wireReq.Citations,
 		Metadata:         wireReq.Metadata,
 		Slug:             wireReq.Slug,

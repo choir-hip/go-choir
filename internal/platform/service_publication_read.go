@@ -83,6 +83,10 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 	if err != nil {
 		return nil, err
 	}
+	bodyDoc, structuredSourceEntities, err := s.publicationArtifactStructuredFields(ctx, rec.ArtifactManifestID)
+	if err != nil {
+		return nil, err
+	}
 	return &PublicationBundle{
 		Route: PublicationRoute{Path: routePath, State: rec.RouteState},
 		Publication: PublicationSummary{
@@ -99,10 +103,12 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 			PublishedAt:        rec.PublishedAt,
 		},
 		Artifact: PublicationArtifact{
-			ManifestID:  rec.ArtifactManifestID,
-			MediaType:   textMediaType,
-			Content:     string(content),
-			RenderModel: renderBlocks(string(content), spans),
+			ManifestID:     rec.ArtifactManifestID,
+			MediaType:      textMediaType,
+			Content:        string(content),
+			BodyDoc:        bodyDoc,
+			SourceEntities: structuredSourceEntities,
+			RenderModel:    renderBlocks(string(content), spans),
 		},
 		Retrieval: RetrievalBundle{
 			SourceID: sourceID,
@@ -119,6 +125,24 @@ WHERE pr.route_path = ? AND pr.state = 'active' AND p.state = 'published'`, rout
 		Provenance:     provenance,
 		VersionHistory: versionHistory,
 	}, nil
+}
+
+func (s *Service) publicationArtifactStructuredFields(ctx context.Context, manifestID string) (json.RawMessage, json.RawMessage, error) {
+	if strings.TrimSpace(manifestID) == "" {
+		return nil, nil, nil
+	}
+	var manifestJSON string
+	err := s.store.db.QueryRowContext(ctx,
+		`SELECT manifest_json FROM artifact_manifests WHERE artifact_manifest_id = ?`, manifestID).
+		Scan(&manifestJSON)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("platform bundle: query artifact manifest: %w", err)
+	}
+	bodyDoc, sourceEntities := structuredArtifactFieldsFromManifest(manifestJSON)
+	return bodyDoc, sourceEntities, nil
 }
 
 // publicationVersionHistory reads the persisted version-history manifest for a

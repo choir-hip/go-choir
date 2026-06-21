@@ -744,28 +744,24 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 5. Last delta: -1 for accepted D4
-agent path integration: appagent Texture writes now use structured operations
-and top-level structured source entities instead of string patch/source-sidecar
-canonical writes. D5 multimedia problem checkpoint is documented; it does not
-reduce V until implementation and review repair the multimedia path.
+staging acceptance proof. Current value: 3. Last delta: -1 for accepted D6
+publication/export integration: platform publication now accepts and persists
+structured `body_doc` plus top-level `source_entities`, derives publication
+content from the structured projection when needed, renders publication/export
+source refs from structured nodes, and carries structured fields through version
+history. D5 multimedia reduced the variant locally, but its independent review
+agents stalled; retain that caveat until staging proof or a later reviewer
+checks the accumulated multimedia diff.
 
-budget: Planning budget is one paradoc pass. D1 implementation plus review-fix
-budget was isolated additive code with focused tests and accepted independent
-review. Solvency verdict: proceed to D2 as a fresh implementation pass; do not
-bundle frontend editor saves, publication export, staging/deploy, or broad
-old-path deletion unless the paradoc is updated first. D2 used the budget for a
-store/API write-boundary cut plus focused tests only. D3 used the budget for a
-bounded editor/user path preservation cut plus focused frontend tests and the
-D2 API regression; it did not bundle agent tools, publication/export,
-multimedia embedding, staging/deploy, or broad old-path deletion. D4 budget is a
-bounded runtime/tool implementation pass with focused runtime tests; do not
-bundle multimedia resolver, publication/export, deployment, or broad old-path
-deletion unless this paradoc is updated first. D4 used that budget for the
-bounded runtime/tool cut plus Universal Wire structured source-manifest repair
-and did not bundle D5/D6/D7. Next budget is D5 multimedia problem checkpoint
-first, then a bounded resolver/rendering cut. The D5 checkpoint is now recorded;
-the next pass may touch the protected multimedia resolver/rendering surface.
+budget: Planning budget is one paradoc pass. D1-D4 used bounded passes for
+schema/source-contract, store/API write boundary, editor/user preservation, and
+agent operations. D5 used a bounded multimedia resolver/rendering cut with
+focused tests, but independent review stalled. D6 used a bounded
+publication/export cut after a Problem Documentation First checkpoint, repaired
+two P1 review findings, and obtained re-review acceptance. Solvency verdict:
+proceed to D7 deletion receipts and acceptance-proof preparation as a fresh
+pass; do not deploy or claim settlement until old-path deletion, broad tests,
+CI/deploy identity, and staging product proof are recorded.
 
 authority / bounds: D1 was authorized as an additive internal schema/parser/
 renderer spike only. It does not authorize production Texture write behavior,
@@ -783,12 +779,14 @@ structured source-ref rendering, and the revision API request contract for
 Texture agent tool schemas/prompts, `commitTextureToolEdit`, appagent revision
 metadata/provenance, source entity carry-forward, mutation completion, and
 Universal Wire source manifest derivation. Protected surfaces explicitly left
-for later cuts remain multimedia/source resolver rendering, publication/export,
-Source Viewer/reader integration beyond existing open-source affordances,
-deployment routing, and run acceptance involving Texture. D5 will be red/orange
+for later cuts remain Source Viewer/reader integration beyond existing
+open-source affordances, deployment routing, and run acceptance involving
+Texture. D5 will be red/orange
 depending on final slice because it touches deterministic media ingestion,
 Texture agent prompt context, structured source validation, and frontend media
-transclusion rendering.
+transclusion rendering. D6 is red/orange because it touches publication/export
+input, artifact manifests, source metadata normalization, version history,
+wire/proxy publish request contracts, and publication document rendering.
 
 evidence packet: D0 design receipts plus a clear-context Codex thread review
 verdict; D1 focused Go tests for schema/source entity validation, including
@@ -806,17 +804,20 @@ regression. D4 evidence passed after independent acceptance and root integration
 structured Texture agent operations, source-ref preservation/deletion/insertion,
 legacy source syntax rejection, stale-base rejection, no legacy metadata/citation
 sidecar appagent writes, structured Universal Wire visible-source manifest
-derivation, runtime shards, and `git diff --check`. Later cuts still need
-multimedia resolver and renderer proof, publication/export serialization, broad
+derivation, runtime shards, and `git diff --check`. D5 evidence proves locally
+that new media discoveries do not write `metadata.media_source_refs`,
+multimedia structured source entities validate and render from top-level
+`SourceEntities` plus `source_ref` / `source_embed` nodes, and no clickable
+source links or client-side media-sidecar synthesis are required for new
+revisions. D6 evidence passed after independent review repair: structured
+platform publication/export tests, explicit-empty source entity suppression of
+legacy metadata, publication/wirepublish package tests, proxy/runtime focused
+publish bridge tests, and `git diff --check`. Later cuts still need broad
 old-path deletion, CI, staging deploy identity, Comet/browser staging proof with
 numbered source refs, expanded source window, multimedia source expansion, agent
-edit preserving refs, and attempted markdown link/source token rejection;
-RunAcceptanceRecord at staging-smoke-level or higher if platform behavior
-changes. D5 evidence target is focused Go/frontend tests proving new media
-discoveries do not write `metadata.media_source_refs`, multimedia structured
-source entities validate and render from top-level `SourceEntities` plus
-`source_ref` / `source_embed` nodes, and no clickable source links or client-side
-media-sidecar synthesis are required for new revisions.
+edit preserving refs, publication/export structured source proof on staging,
+and attempted markdown link/source token rejection; RunAcceptanceRecord at
+staging-smoke-level or higher if platform behavior changes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -832,8 +833,9 @@ revisions no longer synthesize media sidecars; audio/PDF/video/image rendering
 uses source entities without clickable source links. Independent D5 review was
 attempted twice but both review agents stalled and were interrupted; D5 is
 therefore an implementation checkpoint, not an independently accepted
-settlement. Full repair still requires publication/export, old-syntax deletion
-receipts, and staging proof.
+settlement. D6 repairs the publication/export projection path after focused
+tests, a P1 independent review, repair, and re-review acceptance. Full repair
+still requires old-syntax deletion receipts and staging proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -858,25 +860,30 @@ block/node/source operations and appagent revisions now carry top-level
 structured source entities instead of metadata sidecars. E1: human insertion
 affordance for new source refs is still thinner than preservation/removal
 coverage; D3 proves preservation/removal through editor atom round-trip. E2:
-multimedia source entities exist in schema, but resolver/rendering paths still
-now have local D5 proof that image/video/audio/PDF/transcript/file open surfaces
+multimedia source entities now have local D5 proof that
+image/video/audio/PDF/transcript/file open surfaces
 validate through the shared source contract and that image/video/audio/PDF
 rendering is driven by source entities rather than media sidecars. Texture-span
 publication/export proof remains open. E3: publication/export/diff/search
-still consume the projection and must not be treated as proof of structured
-transclusion behavior. D5 checkpoint records the specific sidecars/pathways to
-repair: runtime `media_source_refs`, prompt context that prefers those refs, and
-frontend media-ref synthesis/rendering outside top-level structured entities.
-D5 implementation removes the new-write/new-prompt path for those sidecars and
-keeps legacy media-ref synthesis only for revisions without structured
-`body_doc`.
+now has local/package D6 support for the publication/export path: publication
+accepts structured `body_doc` and top-level `source_entities`, derives flattened
+content from structured projection only as a projection, stores structured fields
+in artifact manifests and version history, normalizes publication source
+metadata from top-level entities before metadata fallback, carries structured
+fields through wire/proxy publish requests, and renders publication/export
+source refs from structured nodes. D5 checkpoint records the specific
+sidecars/pathways repaired locally: runtime `media_source_refs`, prompt context
+that prefers those refs, and frontend media-ref synthesis/rendering outside
+top-level structured entities. D5 implementation removes the new-write/new-prompt
+path for those sidecars and keeps legacy media-ref synthesis only for revisions
+without structured `body_doc`. Markdown `[label](source:id)` parsing remains
+only as historical fallback for artifacts without structured body data.
 
-next move: record an independent review receipt if a reviewer becomes available;
-otherwise continue to D6 publication/export projection cut. D6 checkpoint has
-now recorded the publication/export problem: publication still derives source
-refs from markdown projection links and version history still carries flattened
-content/citations/metadata without structured body/source fields. Do not bundle
-deployment or broad old-path deletion unless this paradoc is updated first.
+next move: D7 deletion and proof preparation. First map remaining old source
+syntax readers/writers and decide which are historical import/export fallbacks
+versus deletion targets. Then delete or hard-reject canonical write uses of
+clickable source links, `{{source:...}}`, citation/metadata sidecars, and
+offset-only source identity, with focused tests before any deployment step.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -888,10 +895,9 @@ learning state: D0 schema/API decision retained here. D1 code witness now lives
 in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
 writes, editor/user preservation, and appagent mutation. D5 locally proves the
 multimedia resolver/rendering cut, with independent review still unavailable due
-stalled review agents. D6 checkpoint names the publication/export residue but
-does not repair it yet. Promote outward only when publication/export, deletion
-receipts, staging proof, and any missing independent review close the product
-contract.
+stalled review agents. D6 proves publication/export at local/package scope after
+independent review repair. Promote outward only when deletion receipts, staging
+proof, and any missing multimedia independent review close the product contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -904,7 +910,7 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; current V=4. Continue with D6 publication/export projection cut so structured source_ref/source_embed + SourceEntity transclusions survive publication/export. Do not deploy, bundle broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; current V=3. Continue with D7 deletion/proof preparation: map remaining old source syntaxes, delete or hard-reject canonical clickable-link/source-token/citation-sidecar paths, and prepare staging acceptance. Do not deploy or claim mission settlement unless the paradoc is updated first.
 ```
 
 ## D6 Publication/Export Problem Checkpoint - 2026-06-21

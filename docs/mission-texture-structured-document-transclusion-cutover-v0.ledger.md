@@ -671,3 +671,56 @@ Evidence recorded:
 Open edge: implement the D6 publication/export projection cut. Keep legacy
 markdown publication parsing only as historical fallback and do not bundle broad
 old-path deletion or deployment in the same move.
+
+## 2026-06-21 - Pass 22 - D6 Publication/Export Implementation Accepted
+
+Claim: D6 decreases the variant if publication/export consumes structured
+Texture documents and top-level source entities as canonical input while keeping
+markdown `source:` parsing only as a historical fallback for artifacts without
+structured body data.
+
+Move: construct + prover shift. Added structured publication request fields,
+artifact manifest persistence, bundle readback, version history preservation,
+wire/proxy publish propagation, top-level SourceEntity metadata normalization,
+and structured publication document rendering for `source_ref` / `source_embed`
+nodes. The independent D6 review returned `revise_before_continue` with two P1
+findings: unlabeled structured `source_ref` could render `<nil>`, and explicit
+top-level `source_entities: []` could fall back to stale
+`metadata.source_entities`. Both were repaired and the same review thread
+returned `accept`.
+
+Expected delta V: -1 for publication/export projection.
+
+Actual delta V: -1. Current V=3. D6 is independently accepted at local/package
+scope after P1 repair.
+
+Receipts:
+`internal/platform/types.go`;
+`internal/platform/publication_structured.go`;
+`internal/platform/publication_document.go`;
+`internal/platform/source_metadata.go`;
+`internal/platform/service.go`;
+`internal/platform/service_publication_read.go`;
+`internal/platform/version_history.go`;
+`internal/platform/service_test.go`;
+`internal/wirepublish/types.go`;
+`internal/wirepublish/request.go`;
+`internal/runtime/wire_platform_publish.go`;
+`internal/proxy/wire_platform_publish.go`;
+`internal/proxy/platform_publish.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Evidence:
+`nix develop -c go test ./internal/platform -run 'TestPublishTextureStructuredBodyDrivesPublicationSources|TestPublishTextureStructuredEmptySourceEntitiesSuppressLegacyMetadata' -count=1`;
+`nix develop -c go test ./internal/platform ./internal/wirepublish`;
+`nix develop -c go test ./internal/proxy -run 'WirePlatformPublish|PlatformPublish'`;
+`nix develop -c go test ./internal/runtime -run 'Wire.*Publish|UniversalWire.*Source|SourceEntities'`;
+`git diff --check`;
+D6 re-review focused test:
+`nix develop -c go test ./internal/platform -run 'TestPublishTextureStructured(BodyDrivesPublicationSources|EmptySourceEntitiesSuppressLegacyMetadata)' -count=1`.
+
+Open edge: D7 deletion and proof preparation. Map remaining old source syntax
+readers/writers, classify historical fallback versus deletion target, delete or
+hard-reject canonical clickable-link/source-token/citation-sidecar paths, then
+run broad tests and the staging landing loop.

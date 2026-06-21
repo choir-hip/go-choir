@@ -169,9 +169,6 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	if req.Title == "" {
 		req.Title = defaultUntitledTextureTitle
 	}
-	if req.Content == "" {
-		return nil, fmt.Errorf("content is required")
-	}
 	if req.Citations == nil {
 		req.Citations = json.RawMessage("[]")
 	}
@@ -180,6 +177,12 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	}
 	if req.Metadata == nil {
 		req.Metadata = json.RawMessage("{}")
+	}
+	if err := normalizePublishTextureStructuredInput(&req); err != nil {
+		return nil, err
+	}
+	if req.Content == "" {
+		return nil, fmt.Errorf("content is required")
 	}
 	sourceMetadata, err := buildPublicationSourceMetadata(req)
 	if err != nil {
@@ -208,7 +211,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 
 	contentHash := sha256Hex([]byte(req.Content))
 	projectionHash := contentHash
-	sourceRevisionHash := sha256Hex([]byte(req.SourceDocID + "\n" + req.SourceRevisionID + "\n" + req.Content + "\n" + string(req.Citations) + "\n" + string(req.Metadata)))
+	sourceRevisionHash := sha256Hex([]byte(req.SourceDocID + "\n" + req.SourceRevisionID + "\n" + req.Content + "\n" + string(req.BodyDoc) + "\n" + string(req.SourceEntities) + "\n" + string(req.Citations) + "\n" + string(req.Metadata)))
 	routePath := publicTexturePrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(publicationID)
 	storageRef := filepath.Join("sha256", contentHash+".txt")
 	if err := s.writeBlob(storageRef, []byte(req.Content)); err != nil {
@@ -218,23 +221,25 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	versionHistory, _, versionHistoryHash := buildVersionHistoryManifest(req.History, s.signingKey)
 
 	manifest := map[string]any{
-		"schema":                 "choir.platform.artifact_manifest.v0",
-		"subject_kind":           "publication_version",
-		"subject_id":             versionID,
-		"media_type":             textMediaType,
-		"content_hash":           contentHash,
-		"source_revision_hash":   sourceRevisionHash,
-		"projection_hash":        projectionHash,
-		"storage_ref":            storageRef,
-		"byte_size":              len([]byte(req.Content)),
-		"publication_id":         publicationID,
-		"publication_version_id": versionID,
-		"route_path":             routePath,
-		"source_metadata_hash":   sourceMetadata.MetadataHash,
-		"source_entities":        sourceMetadata.SourceEntities,
-		"transclusions":          sourceMetadata.Transclusions,
-		"access_policy":          json.RawMessage(sourceMetadata.AccessPolicy),
-		"export_policy":          json.RawMessage(sourceMetadata.ExportPolicy),
+		"schema":                     "choir.platform.artifact_manifest.v0",
+		"subject_kind":               "publication_version",
+		"subject_id":                 versionID,
+		"media_type":                 textMediaType,
+		"content_hash":               contentHash,
+		"source_revision_hash":       sourceRevisionHash,
+		"projection_hash":            projectionHash,
+		"storage_ref":                storageRef,
+		"byte_size":                  len([]byte(req.Content)),
+		"publication_id":             publicationID,
+		"publication_version_id":     versionID,
+		"route_path":                 routePath,
+		"source_metadata_hash":       sourceMetadata.MetadataHash,
+		"body_doc":                   json.RawMessage(req.BodyDoc),
+		"structured_source_entities": json.RawMessage(req.SourceEntities),
+		"source_entities":            sourceMetadata.SourceEntities,
+		"transclusions":              sourceMetadata.Transclusions,
+		"access_policy":              json.RawMessage(sourceMetadata.AccessPolicy),
+		"export_policy":              json.RawMessage(sourceMetadata.ExportPolicy),
 	}
 	// A Texture is its full versioned history, not just the head projection.
 	// Persist the canonical version-history manifest (chain + per-revision

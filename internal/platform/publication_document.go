@@ -4,10 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 )
 
 type PublicationDocument struct {
@@ -73,7 +76,179 @@ func buildPublicationDocument(bundle *PublicationBundle) PublicationDocument {
 		Blocks:   publicationDocumentBlocks(bundle.Artifact.Content),
 		Manifest: buildPublicationSourceManifest(bundle),
 	}
+	if blocks, ok := publicationDocumentBlocksFromStructured(bundle.Artifact.BodyDoc, bundle.Artifact.SourceEntities); ok {
+		doc.Blocks = blocks
+	}
 	return doc
+}
+
+func publicationDocumentBlocksFromStructured(bodyDocRaw, sourceEntitiesRaw json.RawMessage) ([]publicationDocumentBlock, bool) {
+	if strings.TrimSpace(string(bodyDocRaw)) == "" {
+		return nil, false
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(bodyDocRaw, &doc); err != nil {
+		return nil, false
+	}
+	var entities []texturedoc.SourceEntity
+	if trimmed := strings.TrimSpace(string(sourceEntitiesRaw)); trimmed != "" && trimmed != "null" {
+		if err := json.Unmarshal(sourceEntitiesRaw, &entities); err != nil {
+			return nil, false
+		}
+	}
+	if err := texturedoc.Validate(doc, entities); err != nil {
+		return nil, false
+	}
+	entityTitles := make(map[string]string, len(entities))
+	for _, entity := range entities {
+		entityTitles[entity.SourceEntityID] = firstNonEmpty(entity.Display.Label, entity.Display.Title, entity.Target.ID, entity.Target.URI, entity.SourceEntityID)
+	}
+	var blocks []publicationDocumentBlock
+	for _, node := range doc.Doc.Content {
+		blocks = append(blocks, publicationBlocksFromStructuredNode(node, entityTitles)...)
+	}
+	return blocks, true
+}
+
+func publicationBlocksFromStructuredNode(node texturedoc.Node, entityTitles map[string]string) []publicationDocumentBlock {
+	switch node.Type {
+	case "heading":
+		return []publicationDocumentBlock{{
+			Kind:    "heading",
+			Level:   clampInt(publicationNodeIntAttr(node, "level", 1), 1, 6),
+			Inlines: publicationStructuredInlines(node.Content, entityTitles),
+		}}
+	case "paragraph":
+		return []publicationDocumentBlock{{Kind: "paragraph", Inlines: publicationStructuredInlines(node.Content, entityTitles)}}
+	case "bullet_list", "ordered_list":
+		var blocks []publicationDocumentBlock
+		for _, item := range node.Content {
+			blocks = append(blocks, publicationBlocksFromStructuredListItem(item, entityTitles)...)
+		}
+		return blocks
+	case "blockquote":
+		var blocks []publicationDocumentBlock
+		for _, child := range node.Content {
+			for _, block := range publicationBlocksFromStructuredNode(child, entityTitles) {
+				if len(block.Inlines) > 0 {
+					block.Inlines = append([]publicationInline{{Kind: "text", Text: "> "}}, block.Inlines...)
+				}
+				blocks = append(blocks, block)
+			}
+		}
+		return blocks
+	case "code_block":
+		return []publicationDocumentBlock{{Kind: "paragraph", Inlines: []publicationInline{{Kind: "text", Text: publicationCodeBlockText(node)}}}}
+	case "horizontal_rule":
+		return []publicationDocumentBlock{{Kind: "rule"}}
+	case "source_embed":
+		return []publicationDocumentBlock{{Kind: "paragraph", Inlines: []publicationInline{publicationStructuredSourceInline(node, entityTitles)}}}
+	default:
+		return nil
+	}
+}
+
+func publicationBlocksFromStructuredListItem(node texturedoc.Node, entityTitles map[string]string) []publicationDocumentBlock {
+	if node.Type != "list_item" {
+		return publicationBlocksFromStructuredNode(node, entityTitles)
+	}
+	var blocks []publicationDocumentBlock
+	for _, child := range node.Content {
+		inlines := publicationStructuredBlockInlines(child, entityTitles)
+		if len(inlines) > 0 {
+			blocks = append(blocks, publicationDocumentBlock{Kind: "list_item", Inlines: inlines})
+		}
+	}
+	return blocks
+}
+
+func publicationStructuredBlockInlines(node texturedoc.Node, entityTitles map[string]string) []publicationInline {
+	switch node.Type {
+	case "paragraph", "heading":
+		return publicationStructuredInlines(node.Content, entityTitles)
+	case "source_embed":
+		return []publicationInline{publicationStructuredSourceInline(node, entityTitles)}
+	default:
+		var inlines []publicationInline
+		for _, child := range node.Content {
+			inlines = append(inlines, publicationStructuredBlockInlines(child, entityTitles)...)
+		}
+		return inlines
+	}
+}
+
+func publicationStructuredInlines(nodes []texturedoc.Node, entityTitles map[string]string) []publicationInline {
+	var out []publicationInline
+	for _, node := range nodes {
+		switch node.Type {
+		case "text":
+			out = append(out, publicationInline{Kind: publicationInlineKindForMarks(node.Marks), Text: node.Text})
+		case "hard_break":
+			out = append(out, publicationInline{Kind: "text", Text: "\n"})
+		case "source_ref":
+			out = append(out, publicationStructuredSourceInline(node, entityTitles))
+		}
+	}
+	return mergeAdjacentTextInlines(out)
+}
+
+func publicationStructuredSourceInline(node texturedoc.Node, entityTitles map[string]string) publicationInline {
+	sourceEntityID := strings.TrimSpace(publicationNodeStringAttr(node, "source_entity_id"))
+	label := strings.TrimSpace(publicationNodeStringAttr(node, "label"))
+	if label == "" {
+		label = entityTitles[sourceEntityID]
+	}
+	return publicationInline{Kind: "source_ref", Text: firstNonEmpty(label, sourceEntityID), SourceID: sourceEntityID}
+}
+
+func publicationInlineKindForMarks(marks []texturedoc.Mark) string {
+	for _, mark := range marks {
+		switch mark.Type {
+		case "strong":
+			return "strong"
+		case "emphasis":
+			return "em"
+		case "code":
+			return "code"
+		}
+	}
+	return "text"
+}
+
+func publicationCodeBlockText(node texturedoc.Node) string {
+	lines := make([]string, 0, len(node.Content))
+	for _, child := range node.Content {
+		lines = append(lines, child.Text)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func publicationNodeStringAttr(node texturedoc.Node, key string) string {
+	if node.Attrs == nil {
+		return ""
+	}
+	value, ok := node.Attrs[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func publicationNodeIntAttr(node texturedoc.Node, key string, fallback int) int {
+	if node.Attrs == nil {
+		return fallback
+	}
+	switch value := node.Attrs[key].(type) {
+	case int:
+		return value
+	case float64:
+		return int(value)
+	case json.Number:
+		if parsed, err := value.Int64(); err == nil {
+			return int(parsed)
+		}
+	}
+	return fallback
 }
 
 func buildPublicationSourceManifest(bundle *PublicationBundle) publicationSourceManifest {
