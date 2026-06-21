@@ -1358,7 +1358,7 @@ func requiredInitialToolChoiceReminderText(requiredName, reason string) string {
 	requiredName = strings.TrimSpace(requiredName)
 	reason = strings.TrimSpace(reason)
 	if requiredName == "patch_texture" && reason == "required_initial_tool_failed" {
-		return "The previous required initial patch_texture call failed. Call patch_texture again now, and do not write prose or call any other tool. For an initial first-paint draft from a user prompt, do not try to replace prompt text and do not copy the prompt unchanged. Use an append edit with substantive draft content that changes the document. If you use a replace edit, its find text must exactly match text currently in the document."
+		return "The previous required initial patch_texture call failed. Call patch_texture again now, and do not write prose or call any other tool. For an initial first-paint draft from a user prompt, do not copy the prompt unchanged. Use a structured append_block edit with substantive draft content that changes the document. Use update_block_text only when the structured outline gives the exact block_id to update."
 	}
 	return fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
 }

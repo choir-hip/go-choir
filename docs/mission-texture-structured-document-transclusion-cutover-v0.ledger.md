@@ -1184,3 +1184,65 @@ Actual delta V: no behavior delta. Problem checkpoint only.
 Next move: repair the revision policy overlay and active prompt tests so the
 prompt contract matches the structured tool contract and no longer teaches old
 string-edit operations.
+
+## 2026-06-21 - Pass 32 - D7 Structured Prompt Operation Contract Local
+
+Claim: D7 decreases the prompt-contract residue if active Texture revision
+prompts teach only the structured operation vocabulary and expose the block/node
+ids needed to use that vocabulary, without asking the model to author canonical
+document JSON.
+
+Move: construct + probe. Replaced old `replace` / `append` JSON examples in
+`revision_policy.yaml` with `update_block_text` / `append_block` examples and
+source-node instructions. Updated `run_system.yaml` to describe structured
+block/node/source operations. Added a compact body-doc outline to revision
+prompts so block/node/source ids are visible when `body_doc` is present. Added
+focused prompt tests for structured operation examples and old-operation
+absence.
+
+Expected delta V: no top-level decrement until independent review accepts this
+slice. If accepted, remaining D7 prompt old-syntax hits should be negative
+assertions only.
+
+Actual delta V: independent review returned `revise_before_continue`; repair
+applied and independent re-review accepted. `toolloop.go` retry guidance now
+uses structured operation language, comprehensive retry/provider fixtures use
+`append_block` / `update_block_text`, and legacy replace fixtures assert
+rejection. Remaining D7 prompt-contract old-operation hits are negative
+assertions, explicit bad-call fixtures, or rejection code.
+
+Receipts:
+`internal/runtime/toolloop.go`;
+`internal/runtime/texture_agent_revision.go`;
+`internal/runtime/texture_prompt_unit_test.go`;
+`internal/runtime/texture_test.go`;
+`internal/runtime/textureprompts/overlays/revision_policy.yaml`;
+`internal/runtime/textureprompts/overlays/run_system.yaml`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTexturePrompt(FocusesLongDirectUserEdits|UsesStructuredPatchTextureOperationContract|PreservesInlineSourceRefs|InitialRevisionUsesSingleWriterLoop|ForFactualFirstRevisionForbidsUngroundedContent)' -count=1`;
+`nix develop -c go test ./internal/runtime -run 'TestTexturePrompt|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureToolStructured' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureAgentRevisionAppliesStructuredEdit|TestTextureAgentRevisionRejectsMalformedEditTextureToolCall|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestTextureApplyEditsRejectsLegacyReplace|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy' -count=1`;
+`rg -n '"op":"replace"|"find":"exact previous text"|"op":"append","text":"section text"|replace_all|Canonical inline Source Entity syntax|Preserve inline source ref exactly' internal/runtime/textureprompts internal/runtime/texture_agent_revision.go internal/runtime/texture_prompt_unit_test.go`;
+`git diff --check`.
+
+Review findings:
+P1 active required-initial retry reminder still taught old append/replace/find
+guidance; P2 adjacent comprehensive retry fixtures still encoded old operations
+and the cited comprehensive tests failed. Both were repaired locally. A broader
+comprehensive run including
+`TestTextureUserSaveAndAgentRevisePreserveSourcesAndTableShape` still fails
+because that stale source/table fixture creates unresolved `[1]` in a user
+revision, which D2 now rejects before this prompt path. Track that as a
+separate D7 comprehensive source-fixture cleanup edge.
+
+Independent re-review verdict: accepted. No blocking findings. The reviewer
+confirmed the active retry reminder now names `append_block` and
+`update_block_text`, active prompt/reminder scans no longer teach old operation
+names, and focused normal/comprehensive tests pass.
+
+Open edge: commit the accepted prompt-contract repair, then continue D7
+classification and broad proof.

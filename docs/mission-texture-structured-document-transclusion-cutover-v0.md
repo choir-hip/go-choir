@@ -1398,3 +1398,56 @@ structured operation contract is present.
 Open edge: implement the prompt repair, run focused prompt/tool tests, and
 obtain independent review that no active Texture prompt teaches markdown source
 links or old string-edit operation JSON as the canonical edit path.
+
+### D7 Slice 7 Local - Structured Prompt Operation Contract
+
+Status: implemented and independently accepted on 2026-06-21 after one repair
+round.
+
+Repair:
+
+- `revision_policy.yaml` no longer teaches `patch_texture` calls with old
+  `replace` / `append` operation JSON. It now names the structured operation
+  vocabulary: `update_block_text`, `insert_block`, `append_block`,
+  `delete_node`, `insert_source_ref`, and `insert_source_embed`.
+- `run_system.yaml` describes Texture writes as structured block/node/source
+  operations, with `append_block` for first-draft material when no target block
+  id is available.
+- Revision prompts now include a compact structured document outline when the
+  current revision has `body_doc`, exposing block/node/source ids needed by
+  `patch_texture` without asking the model to author canonical document JSON.
+- Required-initial retry reminders in the tool loop now instruct structured
+  `append_block` / `update_block_text`, not old append/replace/find-text edits.
+- Focused prompt tests assert that structured operation examples and body-doc
+  ids are present, and that old `replace` / `append` examples and retired
+  canonical markdown source-link language are absent.
+- Comprehensive retry/provider fixtures adjacent to this prompt path now use
+  structured `append_block` / `update_block_text` payloads, while explicit
+  legacy replace tests assert rejection.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTexturePrompt(FocusesLongDirectUserEdits|UsesStructuredPatchTextureOperationContract|PreservesInlineSourceRefs|InitialRevisionUsesSingleWriterLoop|ForFactualFirstRevisionForbidsUngroundedContent)' -count=1`;
+`nix develop -c go test ./internal/runtime -run 'TestTexturePrompt|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureToolStructured' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureAgentRevisionAppliesStructuredEdit|TestTextureAgentRevisionRejectsMalformedEditTextureToolCall|TestTextureAgentRevisionMutationCompletedOnlyOnce|TestTextureApplyEditsRejectsLegacyReplace|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy' -count=1`;
+`rg -n '"op":"replace"|"find":"exact previous text"|"op":"append","text":"section text"|replace_all|Canonical inline Source Entity syntax|Preserve inline source ref exactly' internal/runtime/textureprompts internal/runtime/texture_agent_revision.go internal/runtime/texture_prompt_unit_test.go`;
+`git diff --check`.
+
+Independent review finding: P1 `internal/runtime/toolloop.go` still taught old
+append/replace/find-text retry guidance after a failed required initial
+`patch_texture`; P2 adjacent comprehensive retry fixtures still encoded old
+patch operations and the cited comprehensive tests failed. Repair: the active
+retry reminder now names structured operations, the retry provider extracts
+block ids from the structured prompt outline, useful drafts use `append_block`,
+no-op checks use `update_block_text`, and legacy replace tests assert rejection.
+Independent re-review accepted the repair.
+
+Open edge: independent review should verify that the outline does not re-create
+a model-authored JSON contract, that active prompts no longer teach invalid old
+operation names, and that the remaining old syntax strings are negative test
+assertions only.
+
+Residual outside this slice: one older comprehensive source/table fixture still
+creates a user revision containing unresolved `[1]`, which the D2 store guard
+now rejects before the prompt path under test. That is D7 comprehensive
+source-fixture cleanup, not prompt-contract residue.

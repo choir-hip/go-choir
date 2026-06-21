@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -690,7 +691,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n\nFocused current-head context for this long user-authored draft:\n---\n")
 		b.WriteString(summarizeFocusedUserEditContext(current, previous))
 		b.WriteString("\n---\n")
-		b.WriteString("\nThe complete current document is intentionally not preloaded in this ordinary long-document revise turn. Use the exact changed regions above and the user edit diff to call apply_edits against the current base revision. Retrieve prior versions, metadata, or broader document context only when the edit cannot be safely resolved from the changed regions.")
+		b.WriteString("\nThe complete current document is intentionally not preloaded in this ordinary long-document revise turn. Use the exact changed regions above and the user edit diff to call patch_texture with structured operations against the current base revision. Retrieve prior versions, source context, or broader document context only when the edit cannot be safely resolved from the changed regions.")
 	} else {
 		b.WriteString("\n\nCurrent canonical document content:\n---\n")
 		if current.Content != "" {
@@ -699,6 +700,10 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("(empty document)")
 		}
 		b.WriteString("\n---\n")
+	}
+	if outline := formatTextureBodyDocOutlineForPrompt(current.BodyDoc); outline != "" {
+		b.WriteString("\n\nStructured document outline for patch_texture block/node ids:\n")
+		b.WriteString(outline)
 	}
 	hardRequirements := textureHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
 	hasSuperDelivery := textureWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper)
@@ -726,6 +731,99 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		RevisionID:                 current.RevisionID,
 	}))
 	return b.String()
+}
+
+func formatTextureBodyDocOutlineForPrompt(raw json.RawMessage) string {
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return ""
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	var b strings.Builder
+	count := 0
+	appendNodeOutline(&b, doc.Doc, 0, &count)
+	out := strings.TrimSpace(b.String())
+	if len(out) > 4000 {
+		out = out[:4000] + "\n- ... outline truncated"
+	}
+	return out
+}
+
+func appendNodeOutline(b *strings.Builder, node texturedoc.Node, depth int, count *int) {
+	if *count >= 64 {
+		return
+	}
+	if node.Type != "doc" {
+		*count++
+		id := textureNodeStringAttr(node, "id")
+		sourceEntityID := textureNodeStringAttr(node, "source_entity_id")
+		displayMode := textureNodeStringAttr(node, "display_mode")
+		indent := strings.Repeat("  ", depth)
+		b.WriteString(indent)
+		b.WriteString("- ")
+		b.WriteString(node.Type)
+		if id != "" {
+			b.WriteString(" id=")
+			b.WriteString(id)
+		}
+		if sourceEntityID != "" {
+			b.WriteString(" source_entity_id=")
+			b.WriteString(sourceEntityID)
+		}
+		if displayMode != "" {
+			b.WriteString(" display_mode=")
+			b.WriteString(displayMode)
+		}
+		if node.Type == "heading" {
+			if level, ok := node.Attrs["level"]; ok {
+				b.WriteString(" level=")
+				b.WriteString(fmt.Sprint(level))
+			}
+		}
+		if preview := textureNodeTextPreview(node, 120); preview != "" {
+			b.WriteString(" text=")
+			b.WriteString(strconvQuotePrompt(preview))
+		}
+		b.WriteString("\n")
+	}
+	for _, child := range node.Content {
+		appendNodeOutline(b, child, depth+1, count)
+		if *count >= 64 {
+			return
+		}
+	}
+}
+
+func textureNodeTextPreview(node texturedoc.Node, max int) string {
+	var b strings.Builder
+	collectTextureNodeText(&b, node)
+	text := strings.Join(strings.Fields(b.String()), " ")
+	if len(text) > max {
+		text = strings.TrimSpace(text[:max]) + "..."
+	}
+	return text
+}
+
+func collectTextureNodeText(b *strings.Builder, node texturedoc.Node) {
+	if node.Type == "text" && node.Text != "" {
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(node.Text)
+	}
+	for _, child := range node.Content {
+		collectTextureNodeText(b, child)
+	}
+}
+
+func strconvQuotePrompt(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%q", value)
+	}
+	return string(encoded)
 }
 
 func textureFilterFinalCommandEvidenceRequirements(requirements []string) []string {

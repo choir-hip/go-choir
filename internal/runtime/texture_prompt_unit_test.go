@@ -251,11 +251,20 @@ func TestTexturePromptFocusesLongDirectUserEdits(t *testing.T) {
 		"User note: replace the stale paragraph above with the cleaner appendix table wording.",
 		"Cleaner appendix table wording.",
 		"call patch_texture",
-		"\"edits\":[{\"op\":\"replace\"",
+		"structured operations against the current base revision",
 		"complete current document is intentionally not preloaded",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("focused long-edit prompt missing %q:\n%s", want, request)
+		}
+	}
+	for _, forbidden := range []string{
+		`"op":"replace"`,
+		`"find":"exact previous text"`,
+		`"op":"append","text":"section text"`,
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("focused long-edit prompt retained old operation example %q:\n%s", forbidden, request)
 		}
 	}
 	if strings.Contains(request, "Current canonical document content:") {
@@ -269,6 +278,79 @@ func TestTexturePromptFocusesLongDirectUserEdits(t *testing.T) {
 	}
 	if got := textureAgentRevisionContextMode(current, previous); got != "focused_user_edit_diff" {
 		t.Fatalf("context mode = %q, want focused_user_edit_diff", got)
+	}
+}
+
+func TestTexturePromptUsesStructuredPatchTextureOperationContract(t *testing.T) {
+	bodyDoc, err := json.Marshal(texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-structured"},
+			Content: []texturedoc.Node{{
+				Type:  "heading",
+				Attrs: map[string]any{"id": "heading-brief", "level": 2},
+				Content: []texturedoc.Node{{
+					Type: "text",
+					Text: "Brief",
+				}},
+			}, {
+				Type:  "paragraph",
+				Attrs: map[string]any{"id": "paragraph-claim"},
+				Content: []texturedoc.Node{{
+					Type: "text",
+					Text: "The claim needs source-backed revision.",
+				}, {
+					Type: "source_ref",
+					Attrs: map[string]any{
+						"id":               "ref-claim",
+						"source_entity_id": "src-claim",
+						"display_mode":     "numbered_ref",
+					},
+				}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal body doc: %v", err)
+	}
+	current := types.Revision{
+		DocID:      "doc-structured",
+		RevisionID: "rev-structured",
+		Content:    "## Brief\n\nThe claim needs source-backed revision. [1]",
+		BodyDoc:    bodyDoc,
+		AuthorKind: types.AuthorAppAgent,
+	}
+	request := buildAgentRevisionRequest(current, nil, nil, textureAgentRevisionRequest{
+		Intent: "revise",
+		Prompt: "Tighten the sourced claim.",
+	}, "", false, nil, nil)
+
+	for _, want := range []string{
+		"Structured document outline for patch_texture block/node ids:",
+		"- heading id=heading-brief level=2 text=\"Brief\"",
+		"- paragraph id=paragraph-claim text=\"The claim needs source-backed revision.\"",
+		"- source_ref id=ref-claim source_entity_id=src-claim display_mode=numbered_ref",
+		"patch_texture accepts structured document operations only: update_block_text, insert_block, append_block, delete_node, insert_source_ref, and insert_source_embed",
+		`"op":"update_block_text"`,
+		`"block_id":"block id from the structured outline"`,
+		`"op":"append_block"`,
+		"To attach evidence from a listed source entity, use insert_source_ref or insert_source_embed with the exact source_entity_id value",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("structured patch prompt missing %q:\n%s", want, request)
+		}
+	}
+	for _, forbidden := range []string{
+		`"op":"replace"`,
+		`"find":"exact previous text"`,
+		`"op":"append","text":"section text"`,
+		"replace_all",
+		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("structured patch prompt retained old operation/source contract %q:\n%s", forbidden, request)
+		}
 	}
 }
 

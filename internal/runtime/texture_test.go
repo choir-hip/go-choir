@@ -77,7 +77,7 @@ func textureReplaceAllResult(content string, baseRevisionIDs ...string) string {
 	return string(data)
 }
 
-func textureApplyEditsResult(edits []textureTextEdit, baseRevisionIDs ...string) string {
+func textureStructuredApplyEditsResult(edits []textureStructuredEdit, baseRevisionIDs ...string) string {
 	env := map[string]any{
 		"kind":      "texture_edit",
 		"operation": "apply_edits",
@@ -403,11 +403,11 @@ func assertInitialTextureAutonomousSurface(t *testing.T, defs []ToolDefinition) 
 
 func editTextureToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, error) {
 	var env struct {
-		Kind           string            `json:"kind"`
-		BaseRevisionID string            `json:"base_revision_id,omitempty"`
-		Operation      string            `json:"operation"`
-		Content        string            `json:"content,omitempty"`
-		Edits          []textureTextEdit `json:"edits,omitempty"`
+		Kind           string                  `json:"kind"`
+		BaseRevisionID string                  `json:"base_revision_id,omitempty"`
+		Operation      string                  `json:"operation"`
+		Content        string                  `json:"content,omitempty"`
+		Edits          []textureStructuredEdit `json:"edits,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return types.ToolCall{}, err
@@ -430,14 +430,12 @@ func editTextureToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, er
 	toolName := "patch_texture"
 	switch strings.TrimSpace(env.Operation) {
 	case "apply_edits":
-		args.Edits = env.Edits
+		args.StructuredEdits = env.Edits
 	default:
-		currentContent := extractCurrentCanonicalContentFromPrompt(prompt)
-		if currentContent == "" || currentContent == "(empty document)" {
-			args.Edits = []textureTextEdit{{Op: "append", Text: env.Content}}
-		} else {
-			args.Edits = []textureTextEdit{{Op: "replace", Find: currentContent, Replace: env.Content}}
-		}
+		toolName = "rewrite_texture"
+		args.Operation = "replace_all"
+		args.Content = env.Content
+		args.Rationale = "test whole-document replacement"
 	}
 	data, err := json.Marshal(args)
 	if err != nil {
@@ -2157,7 +2155,7 @@ func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req Tool
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-minimal-edit",
 			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"M34_MINIMAL_EDIT_DEFAULTS\n\nThe Texture activation wrote a first visible revision from runtime-owned context."}]}`),
+			Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"M34_MINIMAL_EDIT_DEFAULTS\n\nThe Texture activation wrote a first visible revision from runtime-owned context."}]}`),
 		}},
 		Model: "test-model",
 	}, nil
@@ -2221,7 +2219,7 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-write-working-revision",
 			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"FIRST_TURN_WRITE_AND_RESEARCH\n\nWorking revision while researcher evidence is pending."}]}`),
+			Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"FIRST_TURN_WRITE_AND_RESEARCH\n\nWorking revision while researcher evidence is pending."}]}`),
 		}},
 		Model: "test-model",
 	}, nil
@@ -2289,7 +2287,7 @@ func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req 
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-write-agentic-working-revision",
 			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"AGENTIC_MODEL_PRIOR_V1\n\nThis is an interim model-prior question map. Current evidence is still unresolved."}]}`),
+			Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"AGENTIC_MODEL_PRIOR_V1\n\nThis is an interim model-prior question map. Current evidence is still unresolved."}]}`),
 		}},
 		Model: "test-model",
 	}, nil
@@ -2301,6 +2299,7 @@ type textureInitialNoOpThenDraftProvider struct {
 	attempts                     int
 	sawNoOpError                 bool
 	sawExactInitialPatchGuidance bool
+	initialBlockID               string
 }
 
 func (p *textureInitialNoOpThenDraftProvider) ProviderName() string {
@@ -2313,11 +2312,14 @@ func (p *textureInitialNoOpThenDraftProvider) Execute(ctx context.Context, task 
 
 func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
+	if p.initialBlockID == "" {
+		p.initialBlockID = firstPromptOutlineParagraphID(req.System + "\n" + extractLastUserMessage(req.Messages))
+	}
 	for _, msg := range req.Messages {
 		if strings.Contains(string(msg), "initial model-prior Texture revision must change prompt content") {
 			p.sawNoOpError = true
 		}
-		if strings.Contains(string(msg), "Use an append edit with substantive draft content") {
+		if strings.Contains(string(msg), "Use a structured append_block edit with substantive draft content") {
 			p.sawExactInitialPatchGuidance = true
 		}
 	}
@@ -2343,18 +2345,22 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 		}, nil
 	}
 	if p.attempts == 2 {
+		blockID := p.initialBlockID
+		if blockID == "" {
+			blockID = "p-doc-initial-noop-retry-rev-doc-initial-noop-retry-v0-0"
+		}
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-initial-noop",
 				Name: "patch_texture",
-				Arguments: json.RawMessage(`{
+				Arguments: json.RawMessage(fmt.Sprintf(`{
 					"edits":[{
-						"op":"replace",
-						"find":"Draft a short private note.",
-						"replace":"Draft a short private note."
+						"op":"update_block_text",
+						"block_id":%q,
+						"text":"Draft a short private note."
 					}]
-				}`),
+				}`, blockID)),
 			}},
 			Model: "test-model",
 		}, nil
@@ -2364,10 +2370,26 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-initial-useful-draft",
 			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"USEFUL_MODEL_PRIOR_V1\n\nA short private note should name the audience, the decision to make, and the next concrete follow-up."}]}`),
+			Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"USEFUL_MODEL_PRIOR_V1\n\nA short private note should name the audience, the decision to make, and the next concrete follow-up."}]}`),
 		}},
 		Model: "test-model",
 	}, nil
+}
+
+func firstPromptOutlineParagraphID(text string) string {
+	text = strings.ReplaceAll(text, `\n`, "\n")
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- paragraph id=") {
+			continue
+		}
+		rest := strings.TrimPrefix(line, "- paragraph id=")
+		if idx := strings.IndexAny(rest, " \t"); idx >= 0 {
+			rest = rest[:idx]
+		}
+		return strings.TrimSpace(rest)
+	}
+	return ""
 }
 
 func textureAgentIDFromSystemPrompt(system string) string {
@@ -2497,7 +2519,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-initial-working-revision",
 				Name:      "patch_texture",
-				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_WORKING_REVISION\n\nResearcher evidence has been requested and is pending."}]}`),
+				Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"TEXTURE_INITIAL_WORKING_REVISION\n\nResearcher evidence has been requested and is pending."}]}`),
 			}},
 			Model: "test-model",
 		}, nil
@@ -2508,7 +2530,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-evidence-backed-revision",
 				Name:      "patch_texture",
-				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_V2_FROM_RESEARCH_EVIDENCE\n\nThe later revision incorporates TEXTURE_CREATED_RESEARCH_EVIDENCE and keeps current claims scoped to the worker packet."}]}`),
+				Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"TEXTURE_V2_FROM_RESEARCH_EVIDENCE\n\nThe later revision incorporates TEXTURE_CREATED_RESEARCH_EVIDENCE and keeps current claims scoped to the worker packet."}]}`),
 			}},
 			Model: "test-model",
 		}, nil
@@ -2642,7 +2664,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-initial-execution-revision",
 				Name:      "patch_texture",
-				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_INITIAL_EXECUTION_REVISION\n\nSuper execution evidence has been requested and is pending."}]}`),
+				Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"TEXTURE_INITIAL_EXECUTION_REVISION\n\nSuper execution evidence has been requested and is pending."}]}`),
 			}},
 			Model: "test-model",
 		}, nil
@@ -2653,7 +2675,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-super-evidence-backed-revision",
 				Name:      "patch_texture",
-				Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"TEXTURE_V2_FROM_SUPER_EVIDENCE\n\nThe later revision incorporates TEXTURE_CREATED_SUPER_EVIDENCE and names the execution artifact as pending owner review."}]}`),
+				Arguments: json.RawMessage(`{"edits":[{"op":"append_block","block_type":"paragraph","text":"TEXTURE_V2_FROM_SUPER_EVIDENCE\n\nThe later revision incorporates TEXTURE_CREATED_SUPER_EVIDENCE and names the execution artifact as pending owner review."}]}`),
 			}},
 			Model: "test-model",
 		}, nil
@@ -3470,10 +3492,19 @@ func TestTexturePromptExplicitResearcherExposesAffordanceWithoutForcing(t *testi
 
 func TestTextureAgentRevisionAppliesStructuredEdit(t *testing.T) {
 	t.Parallel()
-	provider := newTextureEditToolProvider(textureApplyEditsResult([]textureTextEdit{
-		{Op: "replace", Find: "Hello, world!", Replace: "Hello, edited document."},
-		{Op: "append", Text: "Evidence: structured worker update integrated."},
-	}))
+	provider := newTextureEditToolProvider("")
+	provider.resultFunc = func(prompt string) string {
+		blockID := firstPromptOutlineParagraphID(prompt)
+		return textureStructuredApplyEditsResult([]textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: blockID,
+			Text:    "Hello, edited document.",
+		}, {
+			Op:        "append_block",
+			BlockType: "paragraph",
+			Text:      "Evidence: structured worker update integrated.",
+		}})
+	}
 
 	h, s, _ := textureAPISetupWithProvider(t, provider, true)
 	docID, _ := createDocWithUserRevision(t, h)
@@ -3579,8 +3610,8 @@ func TestTextureAgentRevisionIgnoresProviderFinalJSONEdit(t *testing.T) {
 
 func TestTextureAgentRevisionRejectsMalformedEditTextureToolCall(t *testing.T) {
 	t.Parallel()
-	provider := newTextureEditToolProvider(textureApplyEditsResult([]textureTextEdit{
-		{Op: "replace", Find: "text that is not in the current document", Replace: "replacement"},
+	provider := newTextureEditToolProvider(textureStructuredApplyEditsResult([]textureStructuredEdit{
+		{Op: "update_block_text", BlockID: "missing-block-id", Text: "replacement"},
 	}))
 	h, s, _ := textureAPISetupWithProvider(t, provider, true)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
@@ -6378,11 +6409,11 @@ func TestTextureImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 func TestTextureUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T) {
 	t.Parallel()
 	provider := newTextureEditToolProvider("")
-	provider.resultFunc = func(string) string {
-		return textureApplyEditsResult([]textureTextEdit{{
-			Op:      "replace",
-			Find:    "A private legal cloud addresses this.",
-			Replace: "A private legal cloud addresses this clearly.",
+	provider.resultFunc = func(prompt string) string {
+		return textureStructuredApplyEditsResult([]textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: firstPromptOutlineParagraphID(prompt),
+			Text:    "A private legal cloud addresses this clearly.",
 		}})
 	}
 	h, s, _ := textureAPISetupWithProvider(t, provider, true)
@@ -8388,10 +8419,10 @@ func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 		DocID:          doc.DocID,
 		BaseRevisionID: base.RevisionID,
 		Operation:      "apply_edits",
-		Edits: []textureTextEdit{{
-			Op:      "replace",
-			Find:    "Imported Markdown body.",
-			Replace: "Imported Markdown body revised as canonical Texture.",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-" + doc.DocID + "-" + base.RevisionID + "-0",
+			Text:    "# Legacy Proposal\n\nImported Markdown body revised as canonical Texture.",
 		}},
 	})
 	if err != nil {
@@ -8536,10 +8567,10 @@ func TestTextureAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 		DocID:          "doc-mutation-test",
 		BaseRevisionID: afterFirst.CurrentRevisionID,
 		Operation:      "apply_edits",
-		Edits: []textureTextEdit{{
-			Op:      "append",
-			Text:    "\n\nSecond same-run revision from later evidence.",
-			Replace: "",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:        "append_block",
+			BlockType: "paragraph",
+			Text:      "Second same-run revision from later evidence.",
 		}},
 	})
 	if err != nil {
@@ -8778,10 +8809,10 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 		DocID:          docID,
 		BaseRevisionID: base.RevisionID,
 		Operation:      "apply_edits",
-		Edits: []textureTextEdit{{
-			Op:      "replace",
-			Find:    baseContent,
-			Replace: baseContent,
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-" + docID + "-" + base.RevisionID + "-0",
+			Text:    baseContent,
 		}},
 		Rationale: "No substantive content change intended.",
 	})
@@ -8896,10 +8927,10 @@ func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
 		DocID:          docID,
 		BaseRevisionID: base.RevisionID,
 		Operation:      "apply_edits",
-		Edits: []textureTextEdit{{
-			Op:      "replace",
-			Find:    promptContent,
-			Replace: promptContent,
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-" + docID + "-" + base.RevisionID + "-0",
+			Text:    promptContent,
 		}},
 		Rationale: "Store the initial draft.",
 	})
@@ -9434,7 +9465,7 @@ func TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher(t *test
 	}
 }
 
-func TestTextureApplyEditsRejectsAmbiguousReplace(t *testing.T) {
+func TestTextureApplyEditsRejectsLegacyReplace(t *testing.T) {
 	t.Parallel()
 	current := types.Revision{
 		RevisionID: "rev-1",
@@ -9449,25 +9480,8 @@ func TestTextureApplyEditsRejectsAmbiguousReplace(t *testing.T) {
 			Replace: "changed",
 		}},
 	}, current)
-	if err == nil || !strings.Contains(err.Error(), "matched 2 times") {
-		t.Fatalf("ambiguous replace err = %v, want duplicate-match rejection", err)
-	}
-
-	got, err := materializeTextureToolEdit(editTextureArgs{
-		BaseRevisionID: "rev-1",
-		Operation:      "apply_edits",
-		Edits: []textureTextEdit{{
-			Op:         "replace",
-			Find:       "repeat",
-			Replace:    "changed",
-			ReplaceAll: true,
-		}},
-	}, current)
-	if err != nil {
-		t.Fatalf("replace_all edit: %v", err)
-	}
-	if got.Content != "changed\nkeep\nchanged" {
-		t.Fatalf("content = %q, want all matches replaced", got.Content)
+	if err == nil || !strings.Contains(err.Error(), "legacy find/replace Texture edits are not accepted") {
+		t.Fatalf("legacy replace err = %v, want structured-operation rejection", err)
 	}
 }
 

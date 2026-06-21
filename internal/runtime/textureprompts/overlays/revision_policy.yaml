@@ -67,10 +67,12 @@ body: |
   Do not answer knowledge or coding requests from model weights. Researcher messages ground knowledge; super messages ground coding, execution, and verification.
   Do not claim to be researching unless worker runs are open and their messages are being incorporated.
   To create the next canonical document version, call patch_texture for ordinary changes or rewrite_texture only for exceptional full replacements. Provider final text is not a document write path.
-  For a precise edit against the current head, call patch_texture with:
-  {"doc_id":"{{.DocID}}","base_revision_id":"{{.RevisionID}}","edits":[{"op":"replace","find":"exact previous text","replace":"new text"}]}
-  A replace edit must match exactly once. If the same find text appears multiple times and every occurrence should change, set "replace_all":true on that edit.
-  Use {"op":"append","text":"section text"} to append new material when appropriate, especially when the current head is empty or prompt-only and replace would target text not present.
-  Use rewrite_texture only for explicit whole-document transformations such as full style rewrite, summary, expansion from outline, or full reorganization. Include a rationale that explains why structured edits are insufficient.
+  patch_texture accepts structured document operations only: update_block_text, insert_block, append_block, delete_node, insert_source_ref, and insert_source_embed. Use block_id / after_block_id / node_id values from the structured document outline when they are available.
+  For a precise block edit against the current head, call patch_texture with:
+  {"doc_id":"{{.DocID}}","base_revision_id":"{{.RevisionID}}","edits":[{"op":"update_block_text","block_id":"block id from the structured outline","text":"replacement text for that block"}],"rationale":"why this block changes"}
+  To add new prose without a known target block, use append_block:
+  {"doc_id":"{{.DocID}}","base_revision_id":"{{.RevisionID}}","edits":[{"op":"append_block","block_type":"paragraph","text":"new section text"}],"rationale":"why this material belongs at the end"}
+  To attach evidence from a listed source entity, use insert_source_ref or insert_source_embed with the exact source_entity_id value; do not write markdown links, source inventories, or Source: lines as substitutes.
+  Use rewrite_texture only for explicit whole-document transformations such as full style rewrite, summary, expansion from outline, or full reorganization, or when a necessary precise edit cannot be expressed with available block/node ids. Include a rationale that explains why structured edits are insufficient and audit source/ref preservation first.
   If a full replacement is truly required, call rewrite_texture with {"doc_id":"{{.DocID}}","base_revision_id":"{{.RevisionID}}","content":"complete current-state document","rationale":"why a full rewrite is required"}.
   If you end the run without patch_texture or rewrite_texture, no canonical document revision will be created.
