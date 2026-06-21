@@ -1658,15 +1658,17 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithToolLoopBudget(textureActorToolLoopBudget(rec)))
-		// A canonical write (patch_texture/rewrite_texture) must not terminate the
-		// Texture run. The same logical Texture actor may write an immediate draft,
-		// receive warm coagent packets, and write deeper revisions before it ends or
-		// delegates. Only genuine delegation/handoff successes are terminal.
-		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
-			"spawn_agent",
-			"request_super_execution",
-			"request_email_draft",
-		))
+		// A parked Texture actor stays resident after semantic delegation so later
+		// researcher/super packets enter the same run-memory thread. When parking is
+		// disabled, retain the legacy terminal handoff behavior used by tests and
+		// explicit diagnostic runs.
+		if !metadataBoolValue(rec.Metadata, "actor_park_on_idle") {
+			toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
+				"spawn_agent",
+				"request_super_execution",
+				"request_email_draft",
+			))
+		}
 		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.textureModelPriorCompletionGuard(rec)))
 	}
 

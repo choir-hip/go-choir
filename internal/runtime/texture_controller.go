@@ -137,6 +137,13 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 	} else if reactivated {
 		return rec, nil
 	}
+	hasThreadHistory, err := rt.textureDocumentHasThreadHistory(ctx, ownerID, docID, textureAgentID)
+	if err != nil {
+		return nil, err
+	}
+	if hasThreadHistory {
+		return nil, nil
+	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent: "integrate_worker_findings",
 	}, scheduledSeq)
@@ -144,6 +151,32 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
 	return rec, nil
+}
+
+func (rt *Runtime) textureDocumentHasThreadHistory(ctx context.Context, ownerID, docID, textureAgentID string) (bool, error) {
+	if rt == nil || rt.store == nil {
+		return false, nil
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	docID = strings.TrimSpace(docID)
+	textureAgentID = strings.TrimSpace(textureAgentID)
+	if ownerID == "" || docID == "" || textureAgentID == "" {
+		return false, nil
+	}
+	runs, err := rt.store.ListRunsByChannel(ctx, ownerID, docID, 200)
+	if err != nil {
+		return false, fmt.Errorf("list Texture thread history: %w", err)
+	}
+	for i := range runs {
+		run := &runs[i]
+		if strings.TrimSpace(run.AgentID) != textureAgentID || agentProfileForRun(run) != AgentProfileTexture {
+			continue
+		}
+		if isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (rt *Runtime) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64) (*types.RunRecord, bool, error) {

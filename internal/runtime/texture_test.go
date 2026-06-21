@@ -2724,17 +2724,8 @@ func TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch(t *testing.T
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if state := waitForTaskCompletion(t, h, resp.RunID, 5*time.Second); state != types.RunCompleted {
-		t.Fatalf("run state = %q, want %q", state, types.RunCompleted)
-	}
-	if len(provider.choices) < 2 || provider.choices[0] != "required" || provider.choices[1] != "" {
-		t.Fatalf("texture provider choices = %#v, want generic durable action then unconstrained delegation turn", provider.choices)
-	}
 
-	revs, err := s.ListRevisionsByDoc(context.Background(), docID, "user-1", 10)
-	if err != nil {
-		t.Fatalf("list revisions: %v", err)
-	}
+	revs := waitForRevisionCount(t, s, docID, "user-1", 2, 5*time.Second)
 	var workStateRevision *types.Revision
 	for i := range revs {
 		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "Working revision while researcher evidence is pending") {
@@ -2748,23 +2739,43 @@ func TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch(t *testing.T
 	if !strings.Contains(workStateRevision.Content, "pending") {
 		t.Fatalf("work-state revision content = %q, want explicit pending-work state", workStateRevision.Content)
 	}
-
-	runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
-	if err != nil {
-		t.Fatalf("list runs: %v", err)
-	}
 	var researcher *types.RunRecord
-	for i := range runs {
-		if runs[i].RequestedByRunID == resp.RunID && runs[i].AgentProfile == AgentProfileResearcher {
-			researcher = &runs[i]
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-1", 100)
+		if err != nil {
+			t.Fatalf("list runs: %v", err)
+		}
+		for i := range runs {
+			if runs[i].RequestedByRunID == resp.RunID && runs[i].AgentProfile == AgentProfileResearcher {
+				researcher = &runs[i]
+				break
+			}
+		}
+		if researcher != nil {
 			break
 		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if researcher == nil {
-		t.Fatalf("direct revise did not delegate researcher after work-state revision; runs=%+v", runs)
+		t.Fatalf("direct revise did not delegate researcher after work-state revision")
+	}
+	if len(provider.choices) < 2 || provider.choices[0] != "required" || provider.choices[1] != "" {
+		t.Fatalf("texture provider choices = %#v, want generic durable action then unconstrained delegation turn", provider.choices)
 	}
 	if researcher.ChannelID != docID {
 		t.Fatalf("researcher channel = %q, want doc channel %q; run=%+v", researcher.ChannelID, docID, *researcher)
+	}
+	sleepingRun := waitForStoredRunState(t, s, resp.RunID, types.RunPassivated, 5*time.Second)
+	if got := metadataStringValue(sleepingRun.Metadata, "actor_sleep_state"); got != "idle" {
+		t.Fatalf("texture run sleep state = %q, want idle; metadata=%+v", got, sleepingRun.Metadata)
+	}
+	mutation, err := s.GetAgentMutationByRun(context.Background(), resp.RunID)
+	if err != nil {
+		t.Fatalf("get sleeping texture mutation: %v", err)
+	}
+	if mutation == nil || mutation.State != "sleeping" {
+		t.Fatalf("texture mutation = %+v, want sleeping after delegation", mutation)
 	}
 }
 
@@ -2991,6 +3002,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 	clock := &fakeTextureWakeClock{}
 
 	h, s, rt := textureAPISetupWithProviderAndOptions(t, provider, true, withTextureWakeAfterFuncForTest(clock.afterFunc))
+	rt.cfg.TextureActorParkIdle = time.Second
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's new in current infrastructure signals? Write a cautious working Texture and ask researcher for evidence."}`, "user-1")
 	w := httptest.NewRecorder()
 	h.HandlePromptBar(w, req)
@@ -3015,9 +3027,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 	if decision.DocID == "" || decision.InitialLoopID == "" {
 		t.Fatalf("conductor did not create texture route: %+v", decision)
 	}
-	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
-		t.Fatalf("initial texture state = %q, want completed", state)
-	}
+	_ = waitForRevisionCount(t, s, decision.DocID, "user-1", 2, 5*time.Second)
 	assertInitialTextureWriteOnly(t, provider.firstTools)
 
 	var researcherRun *types.RunRecord
@@ -3094,6 +3104,23 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 	}
 	if doc.CurrentRevisionID != evidenceRev.RevisionID {
 		t.Fatalf("document head = %q, want evidence revision %q", doc.CurrentRevisionID, evidenceRev.RevisionID)
+	}
+	sleepingRun := waitForStoredRunState(t, s, decision.InitialLoopID, types.RunPassivated, 5*time.Second)
+	if ids := metadataStringSlice(sleepingRun.Metadata["worker_update_ids"]); !containsString(ids, update.UpdateID) {
+		t.Fatalf("same Texture run worker_update_ids = %+v, want %s", ids, update.UpdateID)
+	}
+	runs, err := s.ListRunsByChannel(context.Background(), "user-1", decision.DocID, 20)
+	if err != nil {
+		t.Fatalf("list channel runs: %v", err)
+	}
+	var textureRevisionRuns []types.RunRecord
+	for _, run := range runs {
+		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			textureRevisionRuns = append(textureRevisionRuns, run)
+		}
+	}
+	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != decision.InitialLoopID {
+		t.Fatalf("texture revision runs = %+v, want only original durable thread %s", textureRevisionRuns, decision.InitialLoopID)
 	}
 }
 
@@ -4635,6 +4662,100 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 	}
 	if mutation == nil || mutation.State != "sleeping" {
 		t.Fatalf("resumed mutation = %+v, want state sleeping", mutation)
+	}
+}
+
+func TestTextureWakeDoesNotMintReplacementForExistingThreadHistory(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	provider := newTextureEditToolProvider(textureReplaceAllResult("replacement should not run"))
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	docID, _ := createDocWithUserRevision(t, h)
+	doc, err := s.GetDocument(ctx, docID, "user-1")
+	if err != nil {
+		t.Fatalf("get doc: %v", err)
+	}
+
+	now := time.Now().UTC()
+	completed := types.RunRecord{
+		RunID:        "texture-existing-thread-history",
+		OwnerID:      "user-1",
+		SandboxID:    "sandbox-texture-test",
+		AgentID:      "texture:" + docID,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		ChannelID:    docID,
+		State:        types.RunCompleted,
+		Prompt:       "historical Texture thread activation",
+		Result:       "delegated and ended before durable parking existed",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		FinishedAt:   &now,
+		Metadata: map[string]any{
+			"type":                    textureAgentRevisionTaskType,
+			runMetadataAgentID:        "texture:" + docID,
+			runMetadataAgentProfile:   AgentProfileTexture,
+			runMetadataAgentRole:      AgentProfileTexture,
+			runMetadataChannelID:      docID,
+			"doc_id":                  docID,
+			"current_revision_id":     doc.CurrentRevisionID,
+			"replacement_wake_legacy": true,
+		},
+	}
+	if err := s.CreateRun(ctx, completed); err != nil {
+		t.Fatalf("create completed texture thread: %v", err)
+	}
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-existing-thread-history",
+		OwnerID:       "user-1",
+		AgentID:       "researcher:existing-thread",
+		TargetAgentID: "texture:" + docID,
+		ChannelID:     docID,
+		TrajectoryID:  completed.RunID,
+		Role:          AgentProfileResearcher,
+		Kind:          "findings",
+		Summary:       "existing thread update should not create a replacement run",
+		Content:       "Existing thread update should wait for a resident or sleeping Texture actor.",
+		CreatedAt:     now.Add(time.Millisecond),
+	}
+	message := types.ChannelMessage{
+		ChannelID:    update.ChannelID,
+		FromAgentID:  update.AgentID,
+		ToAgentID:    update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID,
+		Role:         update.Role,
+		Content:      update.Content,
+		Timestamp:    update.CreatedAt,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	rec, err := rt.reconcileTextureAgentWake(ctx, "user-1", docID)
+	if err != nil {
+		t.Fatalf("reconcile texture wake: %v", err)
+	}
+	if rec != nil {
+		t.Fatalf("reconcile returned replacement run %+v, want no new activation for existing thread history", rec)
+	}
+	runs, err := s.ListRunsByChannel(ctx, "user-1", docID, 20)
+	if err != nil {
+		t.Fatalf("list channel runs: %v", err)
+	}
+	var textureRevisionRuns []types.RunRecord
+	for _, run := range runs {
+		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			textureRevisionRuns = append(textureRevisionRuns, run)
+		}
+	}
+	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != completed.RunID {
+		t.Fatalf("texture revision runs = %+v, want only historical thread %s", textureRevisionRuns, completed.RunID)
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, "user-1", "texture:"+docID, 10)
+	if err != nil {
+		t.Fatalf("list coagent backlog: %v", err)
+	}
+	if len(backlog) != 1 || backlog[0].UpdateID != update.UpdateID {
+		t.Fatalf("backlog = %+v, want pending update %s retained", backlog, update.UpdateID)
 	}
 }
 
