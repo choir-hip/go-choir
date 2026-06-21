@@ -157,7 +157,7 @@ Open edge: independent D1 review, then D2 must choose and document the exact
 TextureRevision v2 storage/projection cut before changing canonical Texture
 writes.
 
-## 2026-06-21 - Pass 6 - D1 Review P1 Image Region Repair
+## 2026-06-21 - Pass 7 - D1 Review P1 Image Region Repair
 
 Claim: The D1 reviewer correctly found that the internal structured-doc witness
 did not admit the paradoc-promised `image_region` selector kind, so D1 was not
@@ -188,7 +188,7 @@ and `git diff --check`.
 Open edge: independent D1 re-review, then D2 must choose/document the
 TextureRevision v2 storage/projection cut before changing canonical writes.
 
-## 2026-06-21 - Pass 7 - D1 Re-review P1 Source Embed Leaf Repair
+## 2026-06-21 - Pass 8 - D1 Re-review P1 Source Embed Leaf Repair
 
 Claim: The D1 re-review correctly found that `source_embed` validation accepted
 hidden child content/text/marks after checking source identity and display mode,
@@ -214,3 +214,29 @@ and `git diff --check`.
 
 Open edge: independent D1 re-review, then D2 must choose/document the
 TextureRevision v2 storage/projection cut before changing canonical writes.
+
+## 2026-06-21 - Pass 9 - D1 Final Re-review Accepted And Integrated
+
+Claim: D1 is acceptable as an additive internal witness after the image-region
+and source-embed leaf repairs, but it does not yet repair production Texture
+canonical write behavior.
+
+Move: probe + construct. Integrated the accepted D1 commit range into `main`
+and reran focused tests on the integrated state. The final independent D1
+re-review returned `accept`, with no findings, and explicitly authorized
+integration through the source-embed leaf repair commit.
+
+Expected delta V: 0; D1 already accounted for the -1 variant decrease, and this
+pass only raises the evidence class for the integrated branch state.
+
+Actual delta V: 0. Current V remains 8. D2 is now the active next write-path
+cutover obligation.
+
+Receipt: commits `9b2b7dff`, `32a238c2`, and `d730b06f` on `main`;
+final D1 review thread `019eeb4f-09ef-7543-8297-b30d9679d9a1`.
+
+Evidence: `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`
+and `git diff --check HEAD~3..HEAD` passed on the integrated state.
+
+Open edge: D2 must choose/document the exact `TextureRevision v2`
+storage/projection cut before changing canonical Texture writes.
