@@ -180,7 +180,13 @@ export function sourceEntityKindLabel(kind: unknown): string {
 
 export function sourceEntityTitle(entity: any): string {
   const record = sourceEntityRecord(entity);
-  return entity?.label || record?.label || sourceEntityKindLabel(entity?.kind || record?.kind);
+  return entity?.display?.title ||
+    entity?.display?.label ||
+    record?.display?.title ||
+    record?.display?.label ||
+    entity?.label ||
+    record?.label ||
+    sourceEntityKindLabel(entity?.kind || record?.kind || entity?.target?.kind || record?.target?.kind);
 }
 
 export function sourceEntityTargetURL(entity: any): string {
@@ -188,12 +194,16 @@ export function sourceEntityTargetURL(entity: any): string {
   return (
     entity?.target?.canonical_url ||
     entity?.target?.url ||
+    entity?.target?.uri ||
     entity?.canonical_url ||
     entity?.url ||
+    entity?.uri ||
     record?.target?.canonical_url ||
     record?.target?.url ||
+    record?.target?.uri ||
     record?.canonical_url ||
     record?.url ||
+    record?.uri ||
     ''
   );
 }
@@ -202,8 +212,10 @@ export function sourceEntityTargetKind(entity: any): string {
   const record = sourceEntityRecord(entity);
   return String(
     entity?.target?.target_kind ||
+    entity?.target?.kind ||
     entity?.target_kind ||
     record?.target?.target_kind ||
+    record?.target?.kind ||
     record?.target_kind ||
     ''
   ).trim();
@@ -211,7 +223,7 @@ export function sourceEntityTargetKind(entity: any): string {
 
 function sourceEntityRequestedOpenSurface(entity: any): string {
   const record = sourceEntityRecord(entity);
-  return normalizeSourceOpenSurface(entity?.display?.open_surface || record?.display?.open_surface || '');
+  return normalizeSourceOpenSurface(entity?.display?.open_surface || record?.display?.open_surface || entity?.evidence?.open_surface || record?.evidence?.open_surface || '');
 }
 
 export function sourceEntityOpenPlan(entity: any): any {

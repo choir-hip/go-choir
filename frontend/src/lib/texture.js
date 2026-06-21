@@ -174,12 +174,18 @@ export async function deleteDocument(docId) {
   return res.json();
 }
 
-export async function createRevision(docId, { content, authorKind, authorLabel, citations, metadata, parentRevisionId, allowRebase = false }) {
+export async function createRevision(docId, { content, bodyDoc, sourceEntities, authorKind, authorLabel, citations, metadata, parentRevisionId, allowRebase = false }) {
   const body = {
     content,
     author_kind: authorKind,
     author_label: authorLabel,
   };
+  if (bodyDoc !== undefined) {
+    body.body_doc = bodyDoc;
+  }
+  if (sourceEntities !== undefined) {
+    body.source_entities = sourceEntities;
+  }
   if (citations !== undefined) {
     body.citations = citations;
   }

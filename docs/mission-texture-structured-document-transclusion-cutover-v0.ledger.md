@@ -363,3 +363,109 @@ from structured `BodyDoc` / `SourceEntities` without clickable-link source
 syntax. Later D4/D5/D6/D7 cuts still need Texture agent operations, multimedia
 resolver, publication/export, old-path deletion, staging deploy, and Comet
 product proof.
+
+## 2026-06-21 - Pass 14 - D3 Editor/User Path Cut Documented
+
+Claim: D3 can mutate the protected human editor path only after the paradoc
+names the behavior problem, exact editor/user cut, protected surfaces,
+admissible evidence, rollback path, and heresy delta.
+
+Move: construct. Added `D3 Editor/User Path Cut - 2026-06-21` to the paradoc and
+rewrote the Parallax State from "D3 next move" to "implement the bounded D3
+editor/user path." The documented problem is that D2 made server writes
+structured, but the editor still loads, edits, renders, and saves through
+markdown-ish DOM/projection paths that can serialize source refs as clickable
+`[label](source:id)` links or drop refs during ordinary text edits. The D3 slice
+must read/render `body_doc` plus top-level `source_entities`, save structured
+`BodyDoc` source_ref atom nodes, allow intentional source-ref insertion/removal,
+and preserve existing source-opening affordances without clickable source-link
+syntax.
+
+Expected delta V: 0 on product obligations; satisfies the red-surface
+precondition for D3 frontend/editor mutation.
+
+Actual delta V: 0. Current V remains 7. Runtime and frontend behavior unchanged
+by this pass.
+
+Receipt:
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+
+Open edge: inspect the current frontend editor/source renderer and API contract,
+then implement the smallest D3 editor/user path without bundling Texture agent
+operation tools, publication/export, staging/deploy, or broad old-path deletion.
+
+## 2026-06-21 - Pass 15 - D3 Editor/User Path Implementation Candidate
+
+Claim: The bounded D3 editor/user path can preserve structured source identity
+without reintroducing clickable source links if the editor renders `body_doc`
+source refs as native citation atoms, serializes DOM atoms back to
+StructuredTextureDoc `source_ref` nodes, and writes top-level `source_entities`
+instead of metadata sidecars.
+
+Move: construct. Added a frontend structured editor document codec, taught the
+Texture editor to prefer revision `body_doc` for rendering/loading, serialize
+editor DOM back to `body_doc` on input/save, project content from that structured
+doc, send top-level `source_entities` through the revision API, and remove new
+editor writes of `metadata.source_entities`. Updated source-state/rendering
+helpers to prefer top-level revision source entities and understand D1-shaped
+`display`, `target.kind`, `target.uri`, and `evidence.open_surface` fields.
+
+Expected delta V: 0 until independent D3 review and root integration; then -1
+for the human editor path if accepted.
+
+Actual delta V: 0. Current V remains 7 pending review. This is not mission
+settlement and does not cover Texture agent operation tools, publication/export,
+multimedia embedding, broad legacy deletion, or staging proof.
+
+Receipt:
+`frontend/src/lib/texture-structured-editor-doc.ts`;
+`frontend/src/lib/TextureEditor.svelte`;
+`frontend/src/lib/texture.js`;
+`frontend/src/lib/texture-source-state.ts`;
+`frontend/src/lib/texture-source-renderer.ts`;
+`frontend/tests/texture-structured-editor-doc.spec.js`.
+
+Evidence:
+`cd frontend && npx playwright test tests/texture-structured-editor-doc.spec.js`;
+`cd frontend && npm run build`;
+`nix develop -c go test ./internal/runtime -run TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`;
+`git diff --check`.
+
+Open edge: independent D3 review should check that source refs cannot round-trip
+as `[label](source:id)` links, that `source_entities` are attached only to
+document source nodes, that stale structured saves correctly conflict rather
+than silently rebasing, and that remaining legacy read fallbacks are not new
+write paths. If accepted, integrate into root and proceed to D4 Texture agent
+structured operation tools.
+
+## 2026-06-21 - Pass 16 - D3 Accepted And Integrated
+
+Claim: The D3 editor/user path candidate is acceptable if independent review
+finds no path where source refs round-trip back to clickable links or legacy
+source sidecars, and root reruns the focused evidence after integration.
+
+Move: probe + construct. Independent D3 review returned `accept` with no
+blocking findings. Root integrated the accepted D3 commit, resolving only
+paradoc/ledger drift from the D2 accepted-state commit, and will rerun focused
+frontend/backend checks on the integrated branch.
+
+Expected delta V: -1 for the human editor path obligation.
+
+Actual delta V: -1. Current V=6. D3 is integrated and accepted, but this is not
+mission settlement.
+
+Receipt: commit `3e390b76` integrated on root; D3 review thread
+`019eeb8d-7523-79e1-8f3f-342172784ee7`.
+
+Evidence target after integration:
+`cd frontend && npx playwright test tests/texture-structured-editor-doc.spec.js`;
+`cd frontend && npm run build`;
+`nix develop -c go test ./internal/runtime -run TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`;
+`git diff --check HEAD~1..HEAD`.
+
+Open edge: D4 Texture agent structured operation tools. Before runtime mutation,
+record the Problem Documentation First checkpoint naming that Texture agents
+still edit canonical text through string rewrite/patch surfaces rather than
+validated block/node/source operations. Later cuts still need multimedia
+embedding/resolution, publication/export, broad legacy deletion, deployment, and
+Comet product proof.

@@ -55,7 +55,12 @@
     textureEntityPinnedRevisionID,
   } from './texture-source-renderer';
   import { renderMarkdownBlocks } from './texture-markdown-renderer';
-  import { serializeEditorMarkdown } from './texture-markdown-serializer';
+  import {
+    projectStructuredTextureDocText,
+    renderStructuredTextureDocHTML,
+    serializeEditorStructuredDoc,
+    sourceEntitiesForStructuredDoc,
+  } from './texture-structured-editor-doc';
   import { clearSourceJournalFlows, mountSourceJournalFlow } from './texture-source-flow';
   import {
     sourceDecisionEvidence,
@@ -111,6 +116,7 @@
   let revisions = [];
   let activeRevisionIndex = -1;
   let editorValue = '';
+  let editorBodyDoc = null;
   let initializedKey = '';
   let latestHeadRevisionId = '';
   let pendingHeadRevisionId = '';
@@ -196,6 +202,19 @@
     });
   }
 
+  function topLevelRevisionSourceEntities(revision = currentRevision) {
+    return Array.isArray(revision?.source_entities) ? revision.source_entities : [];
+  }
+
+  function setEditorFromRevision(revision, fallbackContent = '') {
+    editorBodyDoc = revision?.body_doc || null;
+    editorValue = revision?.content || fallbackContent || '';
+    if (editorBodyDoc && !editorValue) {
+      editorValue = projectStructuredTextureDocText(editorBodyDoc);
+    }
+    lastAutosavedContent = editorValue;
+  }
+
   function revisionRelatedTextures(revision = currentRevision) {
     const metadata = revision?.metadata || {};
     if (Array.isArray(metadata.related_textures)) return metadata.related_textures;
@@ -258,8 +277,12 @@
     }
   }
 
-  function renderDocumentHTML(value = editorValue) {
+  function renderDocumentHTML(value = editorValue, bodyDoc = editorBodyDoc) {
     const entities = revisionSourceEntities();
+    if (bodyDoc) {
+      const structuredHTML = renderStructuredTextureDocHTML(bodyDoc, entities);
+      if (structuredHTML) return structuredHTML;
+    }
     return renderMarkdownBlocks(value, entities, {
       emptyHTML: '<p class="empty-doc">Blank document.</p>',
       relatedTextures: revisionRelatedTextures(),
@@ -317,7 +340,7 @@
     return buildDraftStorageKey(owner, docId || '');
   }
 
-  function persistLocalDraft(content, parentRevisionId = currentRevision?.revision_id || '') {
+  function persistLocalDraft(content, parentRevisionId = currentRevision?.revision_id || '', bodyDoc = editorBodyDoc) {
     const key = draftStorageKey();
     if (!key || typeof localStorage === 'undefined') return;
     try {
@@ -325,6 +348,7 @@
         doc_id: currentDoc?.doc_id || '',
         parent_revision_id: parentRevisionId,
         content,
+        body_doc: bodyDoc || null,
         updated_at: new Date().toISOString(),
       }));
     } catch (_err) {
@@ -378,6 +402,7 @@
       return false;
     }
     editorValue = draft.content;
+    editorBodyDoc = draft.body_doc || null;
     lastAutosavedContent = draft.content;
     saveStatus = 'Autosaved draft restored';
     tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
@@ -454,9 +479,6 @@
     if (appContext.sourceContentId) metadata.source_content_id = appContext.sourceContentId;
     if (appContext.appHint) metadata.app_hint = appContext.appHint;
     if (appContext.createdFrom) metadata.created_from = appContext.createdFrom;
-    if (Array.isArray(appContext.sourceEntities) && appContext.sourceEntities.length) {
-      metadata.source_entities = appContext.sourceEntities;
-    }
     const relatedTextures = Array.isArray(appContext.relatedTextures) && appContext.relatedTextures.length
       ? appContext.relatedTextures
       : (Array.isArray(appContext.relatedTextures) ? appContext.relatedTextures : []);
@@ -508,8 +530,7 @@
     mergePreview = null;
     selectedMergeSuggestionIds = [];
     if (!keepEditor && currentRevision) {
-      editorValue = currentRevision.content || '';
-      lastAutosavedContent = editorValue;
+      setEditorFromRevision(currentRevision);
       tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
     }
   }
@@ -605,6 +626,7 @@
     if (ordered.length === 0) {
       activeRevisionIndex = -1;
       currentRevision = null;
+      editorBodyDoc = null;
       return;
     }
 
@@ -636,8 +658,7 @@
     const revision = await getRevision(summary.revision_id);
     currentRevision = revision;
     activeRevisionIndex = index;
-    editorValue = revision.content || '';
-    lastAutosavedContent = editorValue;
+    setEditorFromRevision(revision);
     const knownHeadId = latestHeadRevisionId || currentDoc?.current_revision_id || '';
     if (summary.revision_id === knownHeadId) {
       clearNewVersionIndicator();
@@ -690,13 +711,18 @@
   }
 
   async function saveUserVersion() {
+    const bodyDoc = editorBodyDoc || serializeEditorStructuredDoc(editorSurface, { existingDoc: editorBodyDoc });
+    const structuredContent = projectStructuredTextureDocText(bodyDoc);
+    const structuredSourceEntities = sourceEntitiesForStructuredDoc(bodyDoc, topLevelRevisionSourceEntities());
     const revision = await createRevision(currentDoc.doc_id, {
-      content: editorValue,
+      content: structuredContent,
+      bodyDoc,
+      sourceEntities: structuredSourceEntities,
       authorKind: 'user',
       authorLabel: getAuthorLabel(),
       metadata: buildRevisionMetadata(),
       parentRevisionId: currentRevision?.revision_id || '',
-      allowRebase: true,
+      allowRebase: false,
     });
 
     clearLocalDraft();
@@ -872,6 +898,7 @@
     revisions = [];
     activeRevisionIndex = -1;
     editorValue = '';
+    editorBodyDoc = null;
     lastAutosavedContent = '';
     latestHeadRevisionId = '';
     showRecent = false;
@@ -944,6 +971,7 @@
         applyDocumentWorkState(currentDoc);
         if (revisions.length === 0) {
           editorValue = initialValue || '';
+          editorBodyDoc = null;
           if (!agentPending) {
             saveStatus = initialValue ? 'Loaded document content' : 'Blank document ready';
           }
@@ -953,6 +981,7 @@
       } else {
         currentDoc = await createDocument(normalizeTitle(appContext));
         editorValue = initialValue || '';
+        editorBodyDoc = null;
 
         if (appContext.createInitialVersion && initialValue) {
           const initialRevision = await createRevision(currentDoc.doc_id, {
@@ -1007,6 +1036,7 @@
     }));
     activeRevisionIndex = revisions.length - 1;
     currentRevision = revisions[activeRevisionIndex];
+    editorBodyDoc = currentRevision.body_doc || null;
     editorValue = currentRevision.content || content;
     latestHeadRevisionId = currentRevision.revision_id;
     lastAutosavedContent = editorValue;
@@ -1065,6 +1095,7 @@
       const title = `My version of ${titleForPublishedBundle()}`;
       currentDoc = await createDocument(title);
       editorValue = derivativeContentForPublished(publishedBundle);
+      editorBodyDoc = null;
       const revision = await createRevision(currentDoc.doc_id, {
         content: editorValue,
         authorKind: 'user',
@@ -1125,6 +1156,7 @@
       activeRevisionIndex = -1;
       currentRevision = null;
       editorValue = '';
+      editorBodyDoc = null;
       lastAutosavedContent = '';
       saveStatus = 'Blank document ready';
       await ensureFileManifest();
@@ -1285,6 +1317,7 @@
         target_version_label: compareTargetVersionLabel(),
       });
       editorValue = mergePreview.content || editorValue;
+      editorBodyDoc = null;
       lastAutosavedContent = editorValue;
       await tick();
       syncEditorSurface(renderDocumentHTML(editorValue), { force: true });
@@ -1779,7 +1812,8 @@
   }
 
   function handleEditorInput() {
-    editorValue = serializeEditorMarkdown(editorSurface);
+    editorBodyDoc = serializeEditorStructuredDoc(editorSurface, { existingDoc: editorBodyDoc });
+    editorValue = projectStructuredTextureDocText(editorBodyDoc);
     scheduleAutosave();
   }
 

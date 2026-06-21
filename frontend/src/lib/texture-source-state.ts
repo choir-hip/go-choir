@@ -19,6 +19,7 @@ export function revisionSourceEntities({
 }: any = {}) {
   const publishedEntities = publicationBundleSourceEntities(bundle, publishedRoutePath, appContext);
   if (publishedEntities.length > 0) return publishedEntities;
+  if (Array.isArray(revision?.source_entities) && revision.source_entities.length > 0) return revision.source_entities;
   const entities = revision?.metadata?.source_entities;
   if (Array.isArray(entities) && entities.length > 0) return entities;
   return revisionMediaSourceRefs(revision).map(mediaRefToSourceEntity).filter(Boolean);
