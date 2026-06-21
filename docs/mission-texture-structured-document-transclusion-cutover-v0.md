@@ -1,0 +1,509 @@
+# Mission: Texture Structured Document And Transclusion Cutover v0
+
+## Summary
+
+Texture must hard-cut from markdown-ish body text plus source/media sidecars to
+a typed structured document whose citation, source, media, and transclusion
+objects are first-class document nodes. The product contract is not "links in
+markdown"; it is Texture-native source/transclusion state. Clickable markdown
+links, prose "Source:" labels, offset-only citation records, and metadata-only
+media cards are all insufficient as canonical source representation.
+
+This mission treats ProseMirror/Tiptap-style structured editing as the working
+prior art: a schema-governed document tree, immutable transaction updates,
+inline atom nodes for source points, block nodes for embedded/transcluded
+sources, and model-facing edit tools that apply validated operations rather than
+asking the model to author editor JSON.
+
+## Source Documents And Prior Art
+
+- [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
+- [mission-texture-hard-cutover-v0.md](./mission-texture-hard-cutover-v0.md)
+- [mission-texture-versioned-artifact-v0.md](./mission-texture-versioned-artifact-v0.md)
+- Historical evidence / retired-name predecessor:
+  [mission-vtext-source-entities-multimedia-transclusion-v0.md](./mission-vtext-source-entities-multimedia-transclusion-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+- [ProseMirror guide](https://prosemirror.net/docs/guide/) for schema-governed
+  document trees, immutable state, transactions, inline leaf nodes, and
+  position mapping.
+- [Tiptap overview](https://tiptap.dev/docs/editor/getting-started/overview)
+  and [Tiptap node views](https://tiptap.dev/docs/editor/extensions/custom-extensions/node-views)
+  for the extension/node-view layer over ProseMirror.
+- [Tiptap Content AI](https://tiptap.dev/docs/content-ai/getting-started/overview)
+  for prior art on LLM agents editing rich documents through a server-side API
+  instead of emitting raw editor JSON.
+- [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling)
+  and [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview)
+  for schema-defined tool calls as the LLM integration boundary.
+- [Lexical nodes](https://lexical.dev/docs/concepts/nodes) and
+  [Slate elements](https://docs.slatejs.org/api/nodes/element) as comparison
+  points for typed editor trees, decorator/void nodes, and rich document APIs.
+
+## Owner Direction
+
+- This is before launch; do a hard cutover. Do not design a compatibility migration
+  plan except when a concrete production obligation appears later.
+- Remove old ways first. Bring back only what is proven required.
+- Texture sources are transcluded. Do not support clickable links as the source
+  contract.
+- Preserve the existing numbered source-point UX: inline numbered points open to
+  transcluded source sections, and those source sections can open their own
+  source windows.
+- Source/media/transclusion must cover text, web, image, video, audio, PDF,
+  transcript spans, publication spans, Texture spans, and future source-service
+  artifacts.
+- The model should not write canonical JSON. It should use a transparent,
+  validated edit API that constructs canonical document nodes.
+- Editing a paragraph, whether by a human or Texture agent, must not orphan,
+  shift incorrectly, or silently delete citation/source points.
+
+## Problem
+
+Texture currently has several partially overlapping source representations:
+inline textual syntax, markdown links, `citations_json`, revision metadata,
+`media_source_refs`, publication transclusions, source-card rendering, and
+source entity experiments. The recent staging proof showed the failure mode
+directly: a source entity could exist while the body still rendered a raw
+`{{source:...}}` token, because canonical content and source rendering were not
+one schema-governed object.
+
+This is not just a renderer bug. It is a substrate bug. As long as canonical
+Texture content is plain text/markdown with sidecar metadata, every writer,
+renderer, publication path, source panel, and agent prompt can invent or preserve
+a parallel citation syntax. That breaks the Texture contract and makes later
+multimedia transclusion harder: a video citation, image embed, transcript span,
+and web source should differ by source entity target and display policy, not by
+four unrelated body syntaxes.
+
+## Target Model
+
+Texture canonical body becomes a typed document tree with one source/transclusion
+mechanism:
+
+```text
+TextureRevision
+  body_doc: StructuredTextureDoc
+  source_entities: SourceEntity[]
+  provenance: system-attributed revision provenance
+  hash_chain: defined by mission-texture-versioned-artifact-v0
+
+StructuredTextureDoc
+  block nodes: paragraph, heading, list, quote, code_block, horizontal_rule,
+               source_embed, media_embed if separate display is required
+  inline nodes: text, hard_break, source_ref, texture_ref
+  marks: emphasis/style marks only; ordinary markdown links are not source refs
+
+source_ref/source_embed
+  id: document-node id
+  source_entity_id: runtime-minted source entity id
+  display_mode: numbered_ref | inline_chip | block_embed | excerpt | player
+```
+
+`source_ref` is the numbered inline point. It is an atom/leaf node, so editor
+transactions move it as a unit. `source_embed` is the expanded transclusion block.
+Both point to the same `SourceEntity` object. The source entity owns target type,
+selectors, media metadata, transcript ranges, evidence state, provenance, and
+open-surface behavior.
+
+There should not be one canonical syntax per medium. A YouTube video, an image,
+an article snapshot, a PDF page range, an audio clip, a transcript segment, and
+another Texture span all become source entities with different target/selectors
+and renderer node views.
+
+## Model-Facing Edit API
+
+The Texture agent should edit through operations like these, not by producing
+raw ProseMirror/Tiptap JSON:
+
+```text
+read_texture_outline(doc_id)
+read_block(doc_id, block_id)
+replace_block_text(doc_id, block_id, text)
+rewrite_block_with_refs(doc_id, block_id, text_with_markers, refs)
+insert_block(doc_id, after_block_id, block_type, text)
+insert_source_ref(doc_id, block_id, anchor_or_marker, source_entity_id)
+insert_source_embed(doc_id, after_block_id, source_entity_id, display_mode)
+attach_source_entity(doc_id, target, selectors, display, evidence)
+move_node(doc_id, node_id, before_or_after_node_id)
+delete_node(doc_id, node_id, allow_source_ref_removal=false)
+suggest_edit(doc_id, target_node_id, operation, rationale)
+apply_suggestion(doc_id, suggestion_id)
+```
+
+Tool calls are schema-validated. Runtime constructs document nodes, maps editor
+positions through transactions, validates source ids, rejects invalid transforms,
+and refuses accidental source deletion except when the tool call explicitly declares
+that deletion and the UI/agent context makes it admissible.
+
+## D0 Architecture Decision - 2026-06-21
+
+Verdict: `revise_before_continue`. The hard cutover should proceed, but D1/D2
+must first document the behavior problem as a checkpoint and then replace the
+canonical body substrate in one direction only. The current system still accepts
+plain `content` strings plus `citations_json` and metadata source sidecars
+(`internal/store/texture.go:52`, `internal/runtime/texture.go:199`), agent
+tools still materialize string patches (`internal/runtime/tools_texture.go:73`),
+the editor still renders/serializes markdown-ish DOM (`frontend/src/lib/texture-markdown-serializer.ts:10`),
+and publication still parses `[label](source:id)` links by regex
+(`internal/platform/publication_document.go:276`). Those are not implementation
+details; they are the old canonical substrate.
+
+Decision: use a **raw ProseMirror-compatible canonical document shape owned and
+validated by Choir**, not Tiptap-owned canonical JSON. ProseMirror's schema/tree
+and transaction concepts are the right model; Tiptap is an optional later editor
+adapter for Svelte node views, not the server source of truth. The current
+frontend has no ProseMirror/Tiptap dependency, and the red surface is the Go
+write path, hash chain, source provenance, publication/export, and agent edit
+API. Canonical validation must therefore live in Go structs and validators first.
+
+Canonical revision shape for D1/D2:
+
+```text
+TextureRevision v2
+  body_doc_json: StructuredTextureDoc v1       # canonical body, hash input
+  body_text_projection: string                 # derived/search/export fallback only
+  source_entities_json: SourceEntity[] v1      # runtime-minted, hash input
+  provenance_json: Provenance v2               # system-attributed, hash input
+  revision_hash: H(parent_hash, canonical(body_doc, source_entities, provenance))
+
+StructuredTextureDoc v1
+  schema: "choir.texture_doc.v1"
+  doc: {type:"doc", attrs:{id}, content:block[]}
+
+block nodes:
+  paragraph{id} inline*
+  heading{id,level:1..6} inline*
+  bullet_list{id} list_item+
+  ordered_list{id,start?} list_item+
+  list_item{id} block+
+  blockquote{id} block+
+  code_block{id,language?} text*
+  horizontal_rule{id}
+  source_embed{id,source_entity_id,display_mode,caption?}
+
+inline nodes:
+  text
+  hard_break
+  source_ref{id,source_entity_id,display_mode:"numbered_ref",label?}
+
+marks:
+  strong, emphasis, code. Do not make links a source mechanism. If ordinary
+  outbound links are reintroduced, they are non-evidentiary marks and must be
+  rejected when they use `source:` or claim source/proof semantics.
+```
+
+`media_embed` is not a separate canonical node in v1. Image, video, audio, PDF,
+web, transcript, Texture, publication, and Source Viewer/reader artifacts all
+use `source_ref` or `source_embed` pointing to a `SourceEntity`; display policy
+chooses player, image preview, excerpt, PDF page view, transcript snippet, or
+source window. This keeps media differences in target/selectors/display rather
+than inventing body syntaxes per medium.
+
+Source entity schema for D1/D2:
+
+```text
+SourceEntity v1
+  source_entity_id: string        # runtime minted
+  target: SourceTarget
+  selectors: SourceSelector[]
+  display: SourceDisplay
+  evidence: SourceEvidence
+  provenance: SourceEntityProvenance
+
+SourceTarget.kind enum:
+  web_url | source_service_item | content_item | image | video | audio | pdf |
+  transcript | texture_span | publication_span | source_viewer_artifact |
+  reader_artifact | file_artifact
+
+SourceSelector.kind enum:
+  whole_resource | text_quote | text_position | paragraph_heading | page_range |
+  timestamp_range | transcript_segment | table_range | table_cell |
+  image_region | byte_range | selector_set
+
+SourceDisplay.mode enum:
+  numbered_ref | inline_chip | block_embed | excerpt | player | image_preview |
+  pdf_pages | transcript | source_window
+
+SourceEvidence.state/open_surface/reader_artifact_state:
+  use `internal/sourcecontract/source_contract_schema.json` as the enum source,
+  and reject unknown values at write/publication boundaries.
+```
+
+Agent edit API for D2/D4:
+
+```text
+read_texture_outline(doc_id)
+read_block(doc_id, node_id)
+replace_text(node_id, text, preserve_source_refs:[node_id])
+rewrite_block_with_markers(node_id, text_with_markers, marker_bindings)
+insert_block(after_node_id, block)
+attach_source_entity(target, selectors, display, evidence)
+insert_source_ref(block_id, marker_or_offset, source_entity_id)
+insert_source_embed(after_node_id, source_entity_id, display_mode)
+move_node(node_id, before_or_after_node_id)
+delete_node(node_id, deletion_intent, allow_source_ref_removal:false)
+suggest_edit(target_node_id, operation, rationale)
+apply_suggestion(suggestion_id)
+```
+
+The model never sends editor JSON. It sends typed operations; runtime validates
+the operation, constructs nodes, preserves or explicitly deletes source refs,
+then stores the next canonical revision.
+
+D1/D2 deletion targets:
+
+- `texture_revisions.content` as canonical body; keep only a derived projection
+  or remove after readers switch.
+- `citations_json` as canonical citation/source identity.
+- `metadata.source_entities` and `metadata.media_source_refs` as canonical
+  source sidecars.
+- `[label](source:id)`, `[source:id]`, `{{source:...}}`, prose `Source:` handles,
+  and unresolved `[1]` citation markers as accepted write syntax.
+- Regex source discovery/render paths over body text, including publication
+  source parsing from markdown links.
+- Agent string patch/rewrite tools as the primary edit surface.
+- DOM-to-markdown editor serialization as canonical save path.
+- Publication/export history entries that carry only flattened `content` rather
+  than `body_doc` plus `source_entities`.
+
+## Problem Checkpoint - Canonical Body Is Still Markdown-ish - 2026-06-21
+
+Mutation class: `green` documentation checkpoint only. No runtime behavior,
+schema, API, prompt, editor, publication, or source resolver code changes in
+this checkpoint.
+
+Reliable D0 review evidence shows the first behavior problem to fix:
+
+> Texture canonical writes still accept markdown-ish content strings and sidecar
+> source metadata, so source entities can exist without being document nodes.
+
+This violates the intended Texture source/transclusion invariant. A source
+entity that lives only in `citations_json`, revision metadata, `media_source_refs`,
+or publication-parsed markdown links is not the same product object as an inline
+or block source node in canonical Texture body state. It can render as a raw
+token, be dropped by a string rewrite, or be flattened during publication even
+when the source entity itself exists.
+
+Evidence from the D0 review:
+
+- `internal/store/texture.go:52` and `internal/store/texture.go:836` keep
+  `content` as the canonical revision body with `citations_json` beside it.
+- `internal/runtime/texture.go:199` and `internal/runtime/texture.go:1112`
+  still pass string content through Texture write paths.
+- `internal/runtime/tools_texture.go:73`, `internal/runtime/tools_texture.go:576`,
+  `internal/runtime/tools_texture.go:672`, and
+  `internal/runtime/tools_texture.go:758` expose string patch/rewrite edit
+  surfaces instead of validated block/node/source operations.
+- `frontend/src/lib/texture-markdown-serializer.ts:10`,
+  `frontend/src/lib/texture-source-renderer.ts:486`, and
+  `frontend/src/lib/TextureEditor.svelte:1782` preserve a markdown-ish
+  editor round trip where source refs can serialize as links.
+- `internal/platform/publication_document.go:276`,
+  `internal/platform/types.go:218`, and `internal/platform/service.go:220`
+  keep publication/export tied to flattened content and parsed source links.
+- `internal/runtime/texture_media_sources.go:52` and
+  `internal/runtime/texture_agent_revision.go:374` still feed media/source
+  ingestion into sidecars.
+
+Conjecture delta: D1/D2 must replace the canonical body substrate, not merely
+add a renderer guard or prompt instruction. The first behavior slice should
+introduce a Go-validated structured document and source entity validator in an
+internal parser/renderer spike, then cut the canonical write path to reject old
+source syntaxes at write time.
+
+Rollback path for the later behavior slice: revert the structured-body/write-path
+commit(s) to restore the current string body and sidecar behavior. This
+checkpoint itself is documentation only.
+
+Heresy delta: discovered. No repair claimed until runtime writes, editor round
+trip, agent edits, and publication/export all use document-node source refs.
+
+## Editing And Citation Integrity
+
+Offsets are implementation details, not canonical citation identity. Structured
+editor transactions may use positions internally, but durable references are
+node ids plus source entity ids. A source point is a node in the paragraph, not a
+number stored beside the paragraph.
+
+Rules:
+
+- Human editing moves `source_ref` atoms with surrounding text.
+- Human deletion of a source point is an explicit source deletion event, not a
+  silent offset drift.
+- Agent paragraph rewrites must preserve existing refs with explicit markers
+  or declare intentional removal.
+- Whole-document rewrites are exceptional and must run through a source-ref
+  preservation validator.
+- Publication/export derives source lists from document nodes plus
+  `source_entities`; it must not scrape markdown links or prose labels.
+
+## Multimedia And Transclusion Requirements
+
+The cutover must support at least these target classes in the same source entity
+model:
+
+- web/document snapshot with exact text selectors;
+- image source with thumbnail, dimensions, alt/display metadata, and original
+  open surface;
+- video source with player display, transcript availability, timestamp ranges,
+  and clip selectors;
+- audio/podcast source with episode metadata, transcript ranges, and clip
+  selectors;
+- PDF source with page/range selectors and extracted text selectors when
+  available;
+- Texture/document span source, including private Texture revisions and
+  published Texture/publication spans;
+- source-service item or future Source Viewer/reader artifact with stable
+  resolver identity.
+
+Existing YouTube/image detection and frontend media rendering are useful
+implementation evidence, but they are not canonical as-is. They should collapse
+into source entities plus structured document nodes.
+
+## Via Negativa
+
+Delete or demote these as canonical mechanisms:
+
+- markdown links as citations or source proof;
+- prose "Source:" handles as source proof;
+- raw `{{source:...}}` body tokens rendered to users;
+- numbered citation offsets stored outside the body tree;
+- regex scraping of body/prose to discover source ids;
+- separate canonical syntaxes for image, video, web, and Texture references;
+- model-authored provenance or source identity;
+- source lists that do not correspond to document nodes;
+- renderer-only media cards that are not represented in canonical Texture state.
+
+## Domain Ramp
+
+- **D0 Documentation and schema decision.** Settle the structured document
+  schema, source node vocabulary, media target vocabulary, and edit API. Record
+  deletion targets for old syntaxes.
+- **D1 Internal parser/renderer spike.** Convert a small in-memory Texture doc
+  with paragraphs, numbered `source_ref`, `source_embed`, YouTube/image/web
+  source entities, and source panel rendering. No production write path yet.
+- **D2 Canonical revision write path.** Store the structured body as the only
+  canonical body for new Texture revisions. Reject raw source tokens and
+  markdown-link citation attempts at write time.
+- **D3 Editor/user path.** Human editing preserves source refs as atom nodes,
+  supports inserting/removing source refs intentionally, and renders numbered
+  source points with expandable transclusion.
+- **D4 Agent API path.** Texture agent tools perform block edits, source attach,
+  source ref insertion, source embed insertion, and source-preserving rewrites.
+  Prompts describe obligations and tools, not JSON authoring.
+- **D5 Multimedia path.** Image/video/audio/PDF/transcript/Texture-span source
+  entities render as inline refs, block embeds, source windows, and source panel
+  entries from the same resolver.
+- **D6 Publication/export path.** Published Texture exports structured body,
+  source entities, transclusions, provenance, and version chain without
+  flattening sources into clickable links or markdown source lists.
+- **D7 Deletion and proof.** Delete old canonical source syntaxes and tests,
+  update docs/checkers, deploy, and prove staging source creation, editing,
+  multimedia expansion, publication/export, and accidental source-deletion
+  rejection.
+
+## Parallax State
+
+status: working
+
+mission conjecture: If Texture hard-cuts to a ProseMirror/Tiptap-style
+structured document with source/media/transclusion nodes and a validated
+operation API under the invariants below, then Texture becomes a trustworthy
+versioned, transclusive artifact core rather than a markdown document with
+fragile sidecars.
+
+deeper goal (G): Texture is Choir's canonical artifact control plane: a document
+where writing, research, source identity, multimedia evidence, publication, and
+agent collaboration survive revision instead of flattening into prose.
+
+witness/spec (A/S): A deployed Texture v2 body schema, source entity schema,
+renderer/editor, agent edit API, multimedia resolver, publication projection,
+tests, docs, and deletion receipts that make structured source/transclusion
+nodes the only canonical source mechanism.
+
+invariants / qualities / domain ramp (I/Q/D): no clickable-link source contract;
+no model-authored canonical JSON; no offset-only durable citations; source refs
+are document nodes; source entities are runtime-minted and system-provenanced;
+multimedia uses the same source entity model; Texture remains agentic, not a
+forced workflow; staging proof is required for behavior settlement. Domain ramp
+D0-D7 above.
+
+variant (ranking function) V: 10 open obligations: schema decision, source
+entity target vocabulary, edit API, write path, human editor path, agent path,
+multimedia resolver, publication/export projection, old-syntax deletion,
+staging acceptance proof. Current value: 9. Last delta: D0 settled the schema
+decision/source target/edit API direction, while implementation obligations
+remain open.
+
+budget: Planning budget is one paradoc pass. Execution budget must be declared
+before D1/D2. Solvency verdict: current pass is solvent for documentation only;
+runtime execution is red-class and requires a fresh problem checkpoint before
+code changes.
+
+authority / bounds: This paradoc authorizes documentation of the mission and
+future execution plan. It does not authorize runtime/schema changes by itself.
+Before implementation, read this document, its sources, `AGENTS.md`, and the
+Texture invariants; document the first behavior problem before fixing it.
+
+mutation class / protected surfaces: Current document creation is green.
+Execution is red. Protected surfaces: Texture canonical writes, revision schema,
+source entity/provenance records, Texture editor/renderer, Texture agent tools
+and prompts, publication/export, Source Viewer/reader integration,
+source-opening behavior, and run acceptance involving Texture.
+
+evidence packet: D0 design receipts plus a clear-context Codex thread review
+verdict; focused unit/component tests for schema, transaction/source-ref
+preservation, source entity validation, multimedia resolver rendering,
+publication/export serialization, and old-syntax rejection; frontend build;
+runtime shards where runtime is touched; CI; staging deploy identity;
+Comet/browser staging proof with numbered source refs, expanded source window,
+multimedia source expansion, agent edit preserving refs, and attempted markdown
+link/source token rejection; RunAcceptanceRecord at staging-smoke-level or
+higher if platform behavior changes.
+
+heresy delta: discovered: Texture currently permits or preserves multiple
+source-shaped syntaxes that are not canonical transclusions. introduced: none
+by this paradoc. repaired: not yet; future repair requires deletion receipts and
+staging proof.
+
+position / live conjectures / open edges: C1 supported for D1/D2: use a
+Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
+make Tiptap canonical. Tiptap remains optional for the later Svelte editor layer.
+C2 supported: one `source_ref` / `source_embed` body vocabulary plus typed
+`SourceEntity` targets is simpler than per-medium body syntaxes. C3 supported:
+model-facing operations must be block/node/source commands, not document JSON.
+Open edge E1: implementation must choose the exact DB cut shape
+(`body_doc_json` alongside a derived projection vs replacing `content` outright)
+with the first behavior-problem checkpoint before runtime mutation. E2: source
+contract enum validation must be promoted from publication normalization into
+Texture revision writes. E3: diff/blame/search need structured projections that
+do not become a second canonical body.
+
+next move: Before runtime mutation, commit a problem checkpoint naming the
+behavior problem: Texture canonical writes still accept markdown-ish body strings
+and sidecar source metadata, so source entities can exist without being document
+nodes. Then implement D1 as an internal schema/parser/renderer spike using the
+D0 schema above, followed by D2 write-path cutover that rejects old source
+syntaxes at write time.
+
+ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
+
+version / lineage: v0. Created 2026-06-21 as a successor/specialization of
+`mission-texture-hard-cutover-v0`, `mission-texture-versioned-artifact-v0`, and
+`mission-vtext-source-entities-multimedia-transclusion-v0`. <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+
+learning state: D0 schema/API decision retained here. Promote outward only when
+the schema/API becomes doctrine or code.
+
+settlement: Not met. Settlement requires deployed staging proof that structured
+source/transclusion nodes are the only canonical source path, numbered refs
+expand through Texture source entities, image/video/audio/PDF/transcript/Texture
+sources render through the same resolver, human and agent edits preserve or
+explicitly delete source refs, publication/export carries structured
+transclusions, and old markdown/source-token/offset sidecar paths are deleted or
+classified as noncanonical historical import only.
+
+## Suggested Goal String
+
+```text
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D0 returned verdict revise_before_continue and chose a Choir-owned, Go-validated, raw ProseMirror-compatible canonical document shape, with Tiptap optional only for the later Svelte editor layer. Before runtime changes, ensure the Problem Checkpoint - Canonical Body Is Still Markdown-ish section is committed. Then implement D1 as an internal schema/parser/renderer spike: define StructuredTextureDoc v1 and SourceEntity v1 Go structs/validators, support paragraph/heading/list/quote/code/hr/source_ref/source_embed, validate source target/selector/display/evidence enums, render an in-memory doc with numbered source refs and source embeds, and prove old markdown/source-token/link citation syntaxes are rejected by the validator. Do not change production write behavior in D1 unless the paradoc is updated first. Execution mutation class is red once runtime writes change; protected surfaces include Texture canonical writes, revision schema, source entities/provenance, editor/renderer, agent tools/prompts, multimedia resolver, publication/export, and run acceptance. Settlement requires CI, staging deploy identity, Comet/browser proof on https://choir.news, and evidence that old markdown/source-token/offset sidecar paths are gone or noncanonical historical import only.
+```

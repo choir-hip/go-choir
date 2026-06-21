@@ -217,6 +217,7 @@ nodes:
   depends_on: []
   enables:
   - texture-durable-thread-v1
+  - texture-structured-document-transclusion-cutover-v0
   sources:
   - docs/mission-texture-hard-cutover-v0.md
   - docs/mission-portfolio-2026-06-11.md
@@ -231,12 +232,31 @@ nodes:
   depends_on:
   - texture-product-loop-recovery-v0
   enables:
+  - texture-structured-document-transclusion-cutover-v0
   - m3-lifecycle-cutover
   sources:
   - docs/why-texture-2026-06-15.md
   - docs/why-texture-background-2026-06-15.md
   - docs/choir-doctrine.md
   - docs/mission-portfolio-2026-06-11.md
+- id: texture-structured-document-transclusion-cutover-v0
+  title: Texture Structured Document And Transclusion Cutover v0
+  path: docs/mission-texture-structured-document-transclusion-cutover-v0.md
+  ledger: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
+  status: working
+  kind: spine
+  depends_on:
+  - texture-hard-cutover-v0
+  - texture-versioned-artifact-v0
+  enables:
+  - texture-durable-thread-v1
+  sources:
+  - docs/texture-agentic-invariants-2026-06-13.md
+  - docs/mission-texture-hard-cutover-v0.md
+  - docs/mission-texture-versioned-artifact-v0.md
+  - docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission evidence path; delete-by texture-hard-cutover-v0
+  - docs/choir-doctrine.md
+  - AGENTS.md
 - id: m3-lifecycle-cutover
   title: M3 Lifecycle Cutover
   path: docs/mission-lifecycle-cutover-v0.md

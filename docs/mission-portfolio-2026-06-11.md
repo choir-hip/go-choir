@@ -94,8 +94,16 @@ now carries the H029 Conductor URL repair plus the broader owner workflow:
 URLs/files become durable source artifacts transcluded into Texture, with
 YouTube transcript import as the first personal-use slice and podcasts/PDFs/
 EPUBs/uploads staged after that. This is a side product wedge and future
-product falsifier, not architecture-spine descent, unless it removes a concrete
+product falsifier, not architecture-spine descent, except when it removes a concrete
 Browser-as-source blocker for M3-M5.
+
+**Texture structured-document substrate:** `docs/mission-texture-structured-document-transclusion-cutover-v0.md`
+now carries the planned hard cutover from markdown-ish Texture bodies plus
+source/media sidecars to a ProseMirror/Tiptap-style structured document with
+Texture-native source/transclusion nodes and multimedia source entities. This
+is a Texture substrate mission, not a change to the current architecture-spine
+variant, except when it removes a concrete blocker for M3-M5 or successor
+missions.
 
 ## Dependency graph
 
