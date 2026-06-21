@@ -1052,6 +1052,114 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 	}
 }
 
+func TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	if err := rt.InstallDefaultAgentTools(""); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	ownerID := "owner-research-completion-fallback"
+	docID := "doc-research-completion-fallback"
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "research completion fallback",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	contentID := "content-openai-docs"
+	if err := s.CreateEvidence(ctx, types.EvidenceRecord{
+		EvidenceID: "ev-openai-docs",
+		OwnerID:    ownerID,
+		AgentID:    "researcher:completion-fallback",
+		Kind:       "source_excerpt",
+		SourceURI:  "https://developers.openai.com/api/docs/models/gpt-5.5",
+		Title:      "OpenAI GPT-5.5 API docs",
+		Content:    "OpenAI GPT-5.5 API docs excerpt.",
+		Metadata:   json.RawMessage(`{"content_id":"` + contentID + `"}`),
+		CreatedAt:  now,
+	}); err != nil {
+		t.Fatalf("create evidence: %v", err)
+	}
+	researcher := &types.RunRecord{
+		RunID:            "run-researcher-completed",
+		AgentID:          "researcher:completion-fallback",
+		ChannelID:        docID,
+		RequestedByRunID: "run-texture-parent",
+		OwnerID:          ownerID,
+		AgentProfile:     AgentProfileResearcher,
+		AgentRole:        AgentProfileResearcher,
+		State:            types.RunCompleted,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentID:      "researcher:completion-fallback",
+			runMetadataChannelID:    docID,
+			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_agent_id": "texture:" + docID,
+		},
+	}
+	if err := s.CreateRun(ctx, *researcher); err != nil {
+		t.Fatalf("create researcher run: %v", err)
+	}
+	output := `{"evidence_id":"ev-openai-docs","owner_id":"owner-research-completion-fallback","agent_id":"researcher:completion-fallback","kind":"source_excerpt","source_uri":"https://developers.openai.com/api/docs/models/gpt-5.5","title":"OpenAI GPT-5.5 API docs"}`
+	payload, _ := json.Marshal(map[string]any{
+		"tool":     "save_evidence",
+		"call_id":  "call-save-evidence",
+		"is_error": false,
+		"output":   output,
+	})
+	if err := s.AppendEvent(ctx, &types.EventRecord{
+		EventID:   "event-save-evidence",
+		RunID:     researcher.RunID,
+		AgentID:   researcher.AgentID,
+		OwnerID:   ownerID,
+		ChannelID: docID,
+		Timestamp: now,
+		Kind:      types.EventToolResult,
+		Phase:     "tool_call",
+		Payload:   payload,
+	}); err != nil {
+		t.Fatalf("append save evidence event: %v", err)
+	}
+
+	if err := rt.synthesizeResearcherUpdateOnCompletion(ctx, researcher); err != nil {
+		t.Fatalf("synthesize completion update: %v", err)
+	}
+	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
+	if err != nil {
+		t.Fatalf("list deliveries: %v", err)
+	}
+	if len(deliveries) != 1 {
+		t.Fatalf("deliveries len = %d, want 1: %+v", len(deliveries), deliveries)
+	}
+	if !strings.Contains(deliveries[0].Content, "Runtime fallback") || !strings.Contains(deliveries[0].Content, "save_evidence") {
+		t.Fatalf("delivery content = %q, want save_evidence fallback", deliveries[0].Content)
+	}
+	if len(deliveries[0].EvidenceIDs) != 1 || deliveries[0].EvidenceIDs[0] != "ev-openai-docs" {
+		t.Fatalf("delivery evidence ids = %+v, want saved evidence id", deliveries[0].EvidenceIDs)
+	}
+	sourceEntities := rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, deliveries)
+	if len(sourceEntities) != 1 {
+		t.Fatalf("source entities len = %d, want 1: %+v", len(sourceEntities), sourceEntities)
+	}
+	if sourceEntities[0].Target.ContentID != contentID {
+		t.Fatalf("source entity content_id = %q, want %q", sourceEntities[0].Target.ContentID, contentID)
+	}
+	events, err := s.ListEvents(ctx, researcher.RunID, 20)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	if !hasSuccessfulToolResult(events, "update_coagent") {
+		t.Fatalf("expected synthetic update_coagent tool result")
+	}
+}
+
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := NewToolRegistry()
 

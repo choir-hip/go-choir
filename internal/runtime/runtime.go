@@ -1702,6 +1702,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
+	if synthErr := rt.synthesizeResearcherUpdateOnCompletion(persistCtx, rec); synthErr != nil {
+		log.Printf("runtime: synthesize researcher completion update for run %s: %v", rec.RunID, synthErr)
+	}
+
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
@@ -1887,6 +1891,10 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	// shutdown or cancellation after the provider returns cannot drop the
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
+
+	if synthErr := rt.synthesizeResearcherUpdateOnCompletion(persistCtx, rec); synthErr != nil {
+		log.Printf("runtime: synthesize researcher completion update for run %s: %v", rec.RunID, synthErr)
+	}
 
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)

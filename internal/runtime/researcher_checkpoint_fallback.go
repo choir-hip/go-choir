@@ -13,6 +13,14 @@ import (
 )
 
 func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec *types.RunRecord, runErr error) error {
+	return rt.synthesizeResearcherUpdateIfMissing(ctx, rec, runErr)
+}
+
+func (rt *Runtime) synthesizeResearcherUpdateOnCompletion(ctx context.Context, rec *types.RunRecord) error {
+	return rt.synthesizeResearcherUpdateIfMissing(ctx, rec, nil)
+}
+
+func (rt *Runtime) synthesizeResearcherUpdateIfMissing(ctx context.Context, rec *types.RunRecord, runErr error) error {
 	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileResearcher {
 		return nil
 	}
@@ -20,11 +28,12 @@ func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec 
 	if err != nil {
 		return err
 	}
-	if hasSuccessfulToolResult(eventsForRun, "update_coagent") {
-		return nil
-	}
 	toolEvent, toolName, output, ok := latestSuccessfulResearchToolResultOutput(eventsForRun)
 	if !ok {
+		return nil
+	}
+	latestSubmit := latestSuccessfulResearchToolSeq(eventsForRun, "update_coagent")
+	if latestSubmit > 0 && latestSubmit >= toolEvent.Seq {
 		return nil
 	}
 	registry := rt.toolRegistryForRun(rec)
@@ -55,10 +64,14 @@ func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec 
 
 func latestSuccessfulResearchToolResultOutput(eventsForRun []types.EventRecord) (types.EventRecord, string, map[string]any, bool) {
 	wanted := map[string]bool{
-		"web_search":         true,
-		"source_search":      true,
-		"fetch_url":          true,
-		"import_url_content": true,
+		"web_search":                 true,
+		"source_search":              true,
+		"fetch_url":                  true,
+		"import_url_content":         true,
+		"import_document_content":    true,
+		"read_content_item":          true,
+		"read_content_item_selector": true,
+		"save_evidence":              true,
 	}
 	var latest types.EventRecord
 	var latestTool string
@@ -89,14 +102,19 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 	if updateID == "runtime-research-checkpoint-" {
 		updateID = "runtime-research-checkpoint-" + uuid.NewString()
 	}
-	summary := fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run failed.", toolName)
-	findings := []string{researcherFallbackFinding(toolName, output)}
+	summary := fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run completed.", toolName)
+	kind := "evidence"
+	if runErr != nil {
+		summary = fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run failed.", toolName)
+		kind = "blocker"
+	}
+	findings := []string{researcherFallbackFinding(toolName, output, runErr != nil)}
 	refs := []string{
 		"trace:event:" + strings.TrimSpace(toolEvent.EventID),
 		"tool:" + strings.TrimSpace(toolName),
 	}
 	refs = append(refs, researcherFallbackRefs(output)...)
-	notes := []string{"This is a runtime-synthesized blocker/update so Texture can wake and honestly revise from available evidence instead of waiting indefinitely."}
+	notes := []string{"This is a runtime-synthesized checkpoint/update so Texture can wake and honestly revise from available evidence instead of waiting indefinitely."}
 	if runErr != nil && strings.TrimSpace(runErr.Error()) != "" {
 		notes = append(notes, "Run error: "+strings.TrimSpace(runErr.Error()))
 	}
@@ -104,12 +122,13 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 		notes = append(notes, "Researcher loop: "+strings.TrimSpace(rec.RunID))
 	}
 	args := map[string]any{
-		"update_id": updateID,
-		"kind":      "blocker",
-		"summary":   summary,
-		"findings":  findings,
-		"refs":      trimDedupeNonEmpty(refs),
-		"notes":     trimDedupeNonEmpty(notes),
+		"update_id":    updateID,
+		"kind":         kind,
+		"summary":      summary,
+		"findings":     findings,
+		"evidence_ids": researcherFallbackEvidenceIDs(output),
+		"refs":         trimDedupeNonEmpty(refs),
+		"notes":        trimDedupeNonEmpty(notes),
 	}
 	if rec != nil {
 		if textureAgentID := strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by_agent_id")); isTextureAgentID(textureAgentID) {
@@ -121,7 +140,11 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 	return args, nil
 }
 
-func researcherFallbackFinding(toolName string, output map[string]any) string {
+func researcherFallbackFinding(toolName string, output map[string]any, failed bool) string {
+	missingCheckpoint := "before completing."
+	if failed {
+		missingCheckpoint = "before the runtime deadline/failure."
+	}
 	switch toolName {
 	case "web_search":
 		query := stringMapValue(output, "query")
@@ -140,7 +163,7 @@ func researcherFallbackFinding(toolName string, output map[string]any) string {
 		if provider != "" {
 			parts = append(parts, "via "+provider)
 		}
-		parts = append(parts, "but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.")
+		parts = append(parts, "but the researcher did not convert it into a structured checkpoint "+missingCheckpoint)
 		return strings.Join(parts, " ")
 	case "source_search":
 		query := stringMapValue(output, "query")
@@ -155,26 +178,48 @@ func researcherFallbackFinding(toolName string, output map[string]any) string {
 		if resultCount > 0 {
 			parts = append(parts, fmt.Sprintf("with %d visible source-service item(s)", resultCount))
 		}
-		parts = append(parts, "but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.")
+		parts = append(parts, "but the researcher did not convert it into a structured checkpoint "+missingCheckpoint)
 		return strings.Join(parts, " ")
 	case "fetch_url":
 		url := stringMapValue(output, "url")
 		status := intMapValue(output, "status_code")
 		if url != "" && status > 0 {
-			return fmt.Sprintf("A fetch_url result returned HTTP %d for %s, but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.", status, url)
+			return fmt.Sprintf("A fetch_url result returned HTTP %d for %s, but the researcher did not convert it into a structured checkpoint %s", status, url, missingCheckpoint)
 		}
 	case "import_url_content":
 		title := stringMapValue(output, "title")
 		source := stringMapValue(output, "source_url")
 		if title != "" || source != "" {
-			return fmt.Sprintf("An import_url_content result returned source material (%s %s), but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.", title, source)
+			return fmt.Sprintf("An import_url_content result returned source material (%s %s), but the researcher did not convert it into a structured checkpoint %s", title, source, missingCheckpoint)
+		}
+	case "import_document_content", "read_content_item", "read_content_item_selector":
+		contentID := stringMapValue(output, "content_id")
+		title := firstNonEmpty(stringMapValue(output, "title"), stringMapValue(output, "selector_id"), contentID)
+		if title != "" || contentID != "" {
+			return fmt.Sprintf("A %s result returned source material (%s %s), but the researcher did not convert it into a structured checkpoint %s", toolName, title, contentID, missingCheckpoint)
+		}
+	case "save_evidence":
+		evidenceID := stringMapValue(output, "evidence_id")
+		title := stringMapValue(output, "title")
+		if evidenceID != "" || title != "" {
+			return fmt.Sprintf("A save_evidence result persisted evidence (%s %s), but the researcher did not deliver its evidence_id through update_coagent %s", title, evidenceID, missingCheckpoint)
 		}
 	}
-	return fmt.Sprintf("A %s result returned, but the researcher did not convert it into a structured checkpoint before the runtime deadline/failure.", toolName)
+	return fmt.Sprintf("A %s result returned, but the researcher did not convert it into a structured checkpoint %s", toolName, missingCheckpoint)
+}
+
+func researcherFallbackEvidenceIDs(output map[string]any) []string {
+	if evidenceID := stringMapValue(output, "evidence_id"); evidenceID != "" {
+		return []string{evidenceID}
+	}
+	return nil
 }
 
 func researcherFallbackRefs(output map[string]any) []string {
 	var refs []string
+	if contentID := stringMapValue(output, "content_id"); contentID != "" {
+		refs = append(refs, "content_id:"+contentID)
+	}
 	if url := stringMapValue(output, "url"); url != "" {
 		refs = append(refs, url)
 	}
