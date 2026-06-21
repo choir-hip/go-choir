@@ -1307,3 +1307,30 @@ Receipts:
 Open edge: independent prover remains unavailable in this authoring context
 unless the owner explicitly authorizes a subagent/delegated prover or another
 non-authoring checker.
+
+## 2026-06-21 - Mission Blocked On Independent Prover Authority
+
+Claim: the remaining Parallax exit obligation is not executable by this
+authoring context under the current operating constraints.
+
+Move: mark the paradoc `blocked` instead of continuing to loop on the same
+non-authoring prover requirement. The automated widest checker is recorded, but
+Parallax requires an independent fresh-context prover before any `settled` or
+`open_handoff` exit, and this session forbids subagents unless the owner
+explicitly authorizes them.
+
+Expected Delta V: 0. Blocking records the authority boundary; it does not
+discharge the independent-prover obligation.
+
+Actual Delta V: 0. Current exit V remains 1: owner authority for an independent
+prover or an equivalent non-authoring checker.
+
+Receipts:
+- Current Parallax State now has `status: blocked`.
+- The smallest discharge is explicit owner authorization to run a fresh-context
+  independent prover subagent over the scoped evidence packet, or an owner-named
+  equivalent non-authoring checker.
+- No runtime, prompt, or product behavior changed in this pass.
+
+Open edge: after the owner provides the discharge, resume from the blocked state
+and obtain the independent prover before claiming `settled` or `open_handoff`.
