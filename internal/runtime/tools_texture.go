@@ -31,14 +31,6 @@ func RegisterTextureTools(registry *ToolRegistry, rt *Runtime) error {
 	return nil
 }
 
-type textureTextEdit struct {
-	Op         string `json:"op"`
-	Find       string `json:"find,omitempty"`
-	Replace    string `json:"replace,omitempty"`
-	Text       string `json:"text,omitempty"`
-	ReplaceAll bool   `json:"replace_all,omitempty"`
-}
-
 type textureStructuredEdit struct {
 	Op             string                   `json:"op"`
 	BlockID        string                   `json:"block_id,omitempty"`
@@ -58,7 +50,6 @@ type editTextureArgs struct {
 	BaseRevisionID   string                    `json:"base_revision_id"`
 	Operation        string                    `json:"operation"`
 	Content          string                    `json:"content,omitempty"`
-	Edits            []textureTextEdit         `json:"-"`
 	StructuredEdits  []textureStructuredEdit   `json:"edits,omitempty"`
 	AvailableSources []texturedoc.SourceEntity `json:"-"`
 	Rationale        string                    `json:"rationale,omitempty"`
@@ -153,7 +144,6 @@ func newRewriteTextureTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("rewrite_texture requires rationale")
 			}
 			in.Operation = "replace_all"
-			in.Edits = nil
 			in.SourceTool = "rewrite_texture"
 			return rt.executeTextureEditTool(ctx, "rewrite_texture", in)
 		},
@@ -851,9 +841,6 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 		entities = nil
 		editCount = 1
 	case "apply_edits":
-		if len(edit.Edits) > 0 {
-			return materializedTextureEdit{}, fmt.Errorf("legacy find/replace Texture edits are not accepted; use structured BodyDoc operations")
-		}
 		if len(edit.StructuredEdits) == 0 {
 			return materializedTextureEdit{}, fmt.Errorf("apply_edits requires at least one edit")
 		}
@@ -1403,41 +1390,6 @@ func trimTrailingClosingMarkupFragment(content string) string {
 		return cleaned
 	}
 	return strings.TrimSpace(cleaned[:idx])
-}
-
-func applyTextureTextEdit(content string, edit textureTextEdit) (string, error) {
-	switch strings.TrimSpace(edit.Op) {
-	case "replace":
-		find := edit.Find
-		if find == "" {
-			return "", fmt.Errorf("replace edit requires find")
-		}
-		matches := strings.Count(content, find)
-		if matches == 0 {
-			return "", fmt.Errorf("find text not present")
-		}
-		if !edit.ReplaceAll && matches != 1 {
-			return "", fmt.Errorf("find text matched %d times; set replace_all true to replace every match", matches)
-		}
-		if edit.ReplaceAll {
-			return strings.ReplaceAll(content, find, edit.Replace), nil
-		}
-		return strings.Replace(content, find, edit.Replace, 1), nil
-	case "append":
-		text := strings.TrimSpace(edit.Text)
-		if text == "" {
-			return "", fmt.Errorf("append edit requires text")
-		}
-		if strings.TrimSpace(content) == "" {
-			return text, nil
-		}
-		if strings.HasSuffix(content, "\n") || strings.HasPrefix(edit.Text, "\n") {
-			return content + edit.Text, nil
-		}
-		return content + "\n" + edit.Text, nil
-	default:
-		return "", fmt.Errorf("op = %q, want replace or append", edit.Op)
-	}
 }
 
 func addTextureEditRevisionMetadata(raw json.RawMessage, edit materializedTextureEdit, rec *types.RunRecord) json.RawMessage {

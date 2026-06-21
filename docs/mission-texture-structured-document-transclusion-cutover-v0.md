@@ -1451,3 +1451,35 @@ Residual outside this slice: one older comprehensive source/table fixture still
 creates a user revision containing unresolved `[1]`, which the D2 store guard
 now rejects before the prompt path under test. That is D7 comprehensive
 source-fixture cleanup, not prompt-contract residue.
+
+### D7 Slice 8 Local - Dead Legacy Text Edit Helper Deletion
+
+Status: implemented and independently accepted on 2026-06-21.
+
+Repair:
+
+- Removed the dead Go-only `textureTextEdit` type and `applyTextureTextEdit`
+  helper from `tools_texture.go`.
+- Removed the hidden `editTextureArgs.Edits` field and the associated
+  "legacy find/replace" rejection branch. Public `patch_texture` calls already
+  enter through the structured `edits` array and reject old operation names
+  through `applyStructuredTextureEdit`.
+- Updated focused and comprehensive tests so legacy `append` / `replace`
+  attempts are represented as bad public structured operations, not as a
+  hidden Go-only field.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureToolStructured|TestTexturePrompt' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureApplyEditsRejectsLegacyReplace|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy' -count=1`;
+`rg -n 'textureTextEdit|applyTextureTextEdit|\bEdits: \[\]textureTextEdit|legacy find/replace|replace edit|append edit|find text|"op":"replace"|"op":"append"' internal/runtime/tools_texture.go internal/runtime/texture_tool_unit_test.go internal/runtime/texture_test.go internal/runtime/toolloop.go internal/runtime/textureprompts internal/runtime/texture_agent_revision.go internal/runtime/texture_prompt_unit_test.go`;
+`git diff --check`.
+
+Open edge: focused review should verify no active code path or prompt still
+teaches old text edit operations and that remaining `"op":"replace"` hits are
+negative assertions or simulated bad model calls only.
+
+Independent review verdict: accepted. The reviewer confirmed the hidden legacy
+`Edits` field and text-edit helper are gone, public `patch_texture` exposes only
+structured operation enum values, old `append` / `replace` attempts are rejected
+as bad structured ops, active prompt/reminder scans no longer teach old
+operation names, and focused normal/comprehensive tests pass.

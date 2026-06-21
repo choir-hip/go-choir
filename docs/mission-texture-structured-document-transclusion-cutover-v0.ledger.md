@@ -1246,3 +1246,43 @@ names, and focused normal/comprehensive tests pass.
 
 Open edge: commit the accepted prompt-contract repair, then continue D7
 classification and broad proof.
+
+## 2026-06-21 - Pass 33 - D7 Dead Legacy Text Edit Helper Deletion Local
+
+Claim: D7 decreases old operation residue if the runtime no longer carries a
+Go-only `textureTextEdit` / `applyTextureTextEdit` path after public
+`patch_texture` has hard-cut to structured operations.
+
+Move: construct + probe. Deleted `textureTextEdit`, hidden
+`editTextureArgs.Edits`, the dead `applyTextureTextEdit` helper, and the
+associated legacy find/replace rejection branch. Updated focused and
+comprehensive tests so bad old operation names are represented in the public
+structured `edits` array and rejected by `applyStructuredTextureEdit`.
+
+Expected delta V: no top-level decrement until focused review accepts this
+small deletion slice.
+
+Actual delta V: accepted by focused review. Remaining old operation strings in
+runtime scope are negative prompt assertions, explicit bad model-call fixtures,
+or historical/problem documentation, not active prompt/runtime guidance.
+
+Receipts:
+`internal/runtime/tools_texture.go`;
+`internal/runtime/texture_tool_unit_test.go`;
+`internal/runtime/texture_test.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`nix develop -c go test ./internal/runtime -run 'TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureToolStructured|TestTexturePrompt' -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureApplyEditsRejectsLegacyReplace|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft|TestInitialTextureRevisionRejectsNoOpPromptCopy' -count=1`;
+`rg -n 'textureTextEdit|applyTextureTextEdit|\bEdits: \[\]textureTextEdit|legacy find/replace|replace edit|append edit|find text|"op":"replace"|"op":"append"' internal/runtime/tools_texture.go internal/runtime/texture_tool_unit_test.go internal/runtime/texture_test.go internal/runtime/toolloop.go internal/runtime/textureprompts internal/runtime/texture_agent_revision.go internal/runtime/texture_prompt_unit_test.go`;
+`git diff --check`.
+
+Independent review verdict: accepted. No findings. The reviewer confirmed the
+hidden legacy `Edits` field and helper are gone, `patch_texture` exposes only
+structured operation enum values, old operation names are rejected through the
+structured path, and focused normal/comprehensive tests pass.
+
+Open edge: commit this accepted deletion slice, then continue D7 classification
+and broad proof.

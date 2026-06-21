@@ -9474,13 +9474,12 @@ func TestTextureApplyEditsRejectsLegacyReplace(t *testing.T) {
 	_, err := materializeTextureToolEdit(editTextureArgs{
 		BaseRevisionID: "rev-1",
 		Operation:      "apply_edits",
-		Edits: []textureTextEdit{{
-			Op:      "replace",
-			Find:    "repeat",
-			Replace: "changed",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:   "replace",
+			Text: "changed",
 		}},
 	}, current)
-	if err == nil || !strings.Contains(err.Error(), "legacy find/replace Texture edits are not accepted") {
+	if err == nil || !strings.Contains(err.Error(), `op = "replace", want update_block_text`) {
 		t.Fatalf("legacy replace err = %v, want structured-operation rejection", err)
 	}
 }

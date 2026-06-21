@@ -210,8 +210,11 @@ func TestTextureToolRejectsLegacyEditsAndSourceSyntax(t *testing.T) {
 		DocID:          current.DocID,
 		BaseRevisionID: current.RevisionID,
 		Operation:      "apply_edits",
-		Edits:          []textureTextEdit{{Op: "append", Text: "legacy"}},
-	}, current); err == nil || !strings.Contains(err.Error(), "legacy find/replace") {
+		StructuredEdits: []textureStructuredEdit{{
+			Op:   "append",
+			Text: "legacy",
+		}},
+	}, current); err == nil || !strings.Contains(err.Error(), `op = "append", want update_block_text`) {
 		t.Fatalf("legacy edit err = %v, want rejection", err)
 	}
 	if _, err := materializeTextureToolEdit(editTextureArgs{
