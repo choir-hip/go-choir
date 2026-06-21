@@ -863,3 +863,88 @@ validation, and owner-visible grounded citation behavior.
 Rollback: revert the runtime source-ref collation commit. This docs checkpoint
 should remain as evidence of the discovered gap unless later proof falsifies the
 diagnosis.
+
+## 2026-06-21 - Source Ref Collation Landed With Partial Staging Proof
+
+Claim: commit `06e729734cfff7a6ee33715ea5fde2e6bf7e05e5` should let typed
+researcher/source refs carried in `update_coagent.refs` become Texture source
+entities without returning to regex prose scraping or semantic role
+choreography.
+
+Move: added runtime collation for typed worker-update refs:
+`source_service_item:...` / `source_service_item=...`, `content_id:...`, and
+evidence refs. Unsupported or free-form prose refs are ignored. Added a focused
+test that creates source-service, content-item, and evidence handles, sends them
+through a pending worker update, and verifies source entities are produced while
+free-form prose is not scraped.
+
+Expected Delta V: -1 only if deployed proof shows native durable source handles
+attached cleanly. Otherwise the change narrows the source-evidence risk but does
+not settle the last variant.
+
+Actual Delta V: 0. V remains 1.
+
+Receipts:
+- Problem checkpoint commit:
+  `7a817c9d14803916352e9752ec78f2780878cf74`
+  (`docs: record Texture source attachment gap`), pushed to `origin/main`;
+  Docs Truth Check run `27895441834` succeeded.
+- Runtime commit:
+  `06e729734cfff7a6ee33715ea5fde2e6bf7e05e5`
+  (`runtime: attach Texture source refs from coagent updates`), pushed to
+  `origin/main`.
+- Focused tests:
+  `nix develop -c go test ./internal/runtime -run 'TestPendingUpdateRefsBecomeSourceEntities|TestEvidenceRecordToSourceEntity|TestEvidenceDerivedEntityFeedsCitationValidator' -count=1`
+  passed.
+- Runtime coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed, and explicit shard 3
+  confirmation with
+  `nix develop -c env SHARD_INDEX=3 TOTAL_SHARDS=4 scripts/go-test-runtime-shards`
+  passed.
+- Diff hygiene: `git diff --check` passed before commit.
+- GitHub Actions for runtime commit:
+  - CI run `27895604243`: success, including deploy job `82546715436`;
+  - FlakeHub run `27895604242`: success.
+- Staging identity: `/health` reported proxy build, proxy deployed commit, and
+  upstream sandbox commit all at
+  `06e729734cfff7a6ee33715ea5fde2e6bf7e05e5`, with deployed/built time
+  `2026-06-21T06:14:52Z`, `status=ok`, and vmctl enabled/ok.
+- Comet UI proof using the logged-in `yusefnathanson@me.com` session:
+  - submitted marker
+    `CHOIR_SOURCE_REF_ATTACHMENT_PROOF_20260621_001`;
+  - visible initial draft refused model-prior-only claims and asked for
+    researcher/source-search evidence;
+  - activity stream showed Texture run
+    `96289132-1911-4917-ba6e-2229b2ed3c22` spawning researcher worker
+    `02d2624e-fc28-418f-a787-4beb4e63b43b`;
+  - worker activity showed `web_search`, `source_search`, `save_evidence`, and
+    `update_coagent`;
+  - UI reported `Coagent update ready. Role: researcher. Kind: findings.
+    Summary: Grounded evidence for a current public AI model release`;
+  - Texture then called `rewrite_texture` and created `v2`;
+  - v2 title was `Concise evidence note: OpenAI GPT-5.5 public model release`;
+  - v2 carried the deployed commit under test, said it used
+    researcher/source-search evidence only, and rendered inline clickable links
+    for OpenAI model docs, TechCrunch coverage, and the surfaced OpenAI
+    announcement handle;
+  - v2 did not contain the old "durable source-entry retrieval failed" caveat.
+- Negative deployed observations:
+  - the native Texture `Sources` button remained disabled on v2;
+  - the window still showed `Revising...` and disabled publish/revise controls
+    after extended polling;
+  - the activity stream showed tool-error entries around the worker and parent
+    run despite the accepted `update_coagent` and created v2;
+  - opening `/api/trace/trajectories/96289132-1911-4917-ba6e-2229b2ed3c22/logs`
+    in a raw Comet tab returned `{"error":"authentication required"}`, so the
+    run error was not inspected through raw public API without exposing browser
+    tokens.
+
+Result: typed source refs are covered by local runtime tests, landed, deployed,
+and the staging product path now reaches researcher source-search evidence,
+accepted `update_coagent` delivery, and a source-linked Texture v2 without the
+prior retrieval-failed caveat. The slice is not settled because native
+source-panel attachment and clean run settlement were not proven on staging.
+
+Next realism axis: diagnose the disabled native Sources state and visible
+tool-error / `Revising...` residue after source-backed rewrite. The next fix
+must again document the problem first if it changes runtime behavior.

@@ -146,6 +146,20 @@ The remaining durable-thread risk is proving always-deep/source-evidence
 robustness beyond this narrow V3 current-events path, including durable source
 attachment when researcher evidence is incorporated.
 
+Source-ref collation commit `06e729734cfff7a6ee33715ea5fde2e6bf7e05e5`
+adds typed `update_coagent.refs` ingestion for `source_service_item`,
+`content_id`, and evidence refs, and focused tests plus runtime shards passed.
+Deployed Comet proof with marker
+`CHOIR_SOURCE_REF_ATTACHMENT_PROOF_20260621_001` showed researcher
+`source_search`, `save_evidence`, and `update_coagent` delivery followed by a
+Texture `v2` rewrite containing grounded inline source links and no old
+"durable source-entry retrieval failed" caveat. Actual ΔV=0, so V remains 1:
+the native Texture `Sources` control was still disabled and the visible run
+remained in `Revising...` with tool-error activity after the v2 rewrite. The
+remaining source-evidence risk is now narrower: typed ref collation is locally
+proved and deployed inline-source behavior improved, but native source-panel
+attachment / clean run settlement is not yet proved.
+
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
 (`update_id` + work-state revisions) may land first if it reduces risk, but it
 does not settle the mission by itself.
@@ -237,20 +251,20 @@ position / live conjectures / open edges:
   model-prior interim, opening researcher by tool call, incorporating two
   researcher packets into V2 and V3, and carrying no old guard reason,
   instruction, or `completion_guard` retry in Trace.
-- C13 active: researcher/source-service refs can reach Texture in
-  `update_coagent.refs` without becoming canonical `source_entities`.
-  `evidenceSourceEntitiesFromPendingUpdates` currently collates only
-  `evidence_ids`; the deployed Comet proof for C12 showed grounded V3 prose but
-  also an explicit "durable source-entry retrieval failed" caveat. The repair
-  should turn only typed source refs (`source_service_item:...`,
-  `content_id:...`, and evidence handles) into source entities. It must not
-  scrape researcher prose or force Texture to call a semantic role next.
+- C13 supported at focused-test scope and partially supported at deployed UI
+  scope: researcher/source-service refs in `update_coagent.refs` now collate
+  into Texture source entities for typed `source_service_item`, `content_id`,
+  and evidence handles without scraping free-form prose. Deployed Comet proof
+  showed researcher `source_search`, `save_evidence`, accepted
+  `update_coagent`, and a Texture v2 rewrite with inline clickable sources
+  instead of the prior source-entry caveat. C13 is not settled at native
+  source-panel scope: the v2 window still had disabled `Sources` and visible
+  tool-error / `Revising...` state.
 
 next move: use the remaining budget on always-deep/source-evidence robustness:
-repair the typed-ref source attachment gap, prove that pending researcher refs
-become owner-visible source handles, then re-run deployed Comet/product proof
-that a grounded Texture revision can carry clickable durable sources rather than
-only prose caveats.
+diagnose why the deployed v2 source-backed rewrite still leaves native
+`Sources` disabled and the run unsettled, then prove that typed researcher refs
+become owner-visible native source handles as well as inline links.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
