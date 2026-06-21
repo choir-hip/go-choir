@@ -585,3 +585,60 @@ new `metadata.media_source_refs` writes; focused frontend tests proving
 structured multimedia entities render from top-level `SourceEntities` plus
 document source nodes without client-side media sidecar synthesis or clickable
 source links.
+
+## 2026-06-21 - Pass 20 - D5 Multimedia Implementation Checkpoint
+
+Claim: D5 decreases the variant if new deterministic media discovery and
+frontend rendering use the structured Texture source model instead of introducing
+or preserving a second media sidecar contract.
+
+Move: construct + attempted observer shift. Runtime media URL discovery now
+collates media as Texture source entities and removes `media_source_refs` /
+`media_source_research_required` from new agent revision metadata and prompts.
+Durable appagent metadata no longer carries those keys forward. The source
+contract now names image/video/audio/PDF/transcript/file/source-window open
+surfaces, and the texturedoc validator accepts them for structured source
+entities. Frontend source state keeps `media_source_refs` synthesis only for
+legacy revisions without `body_doc`, and the renderer embeds video/image/audio
+and PDF media from source entities without clickable source links.
+
+Expected delta V: -1 for the multimedia resolver/rendering path.
+
+Actual delta V: -1 locally. Current V=4. Independent review was attempted with
+two read-only Codex review agents (`/root/d5_multimedia_review` and
+`/root/d5_quick_review`), but both stalled without returning findings and were
+interrupted. This pass is therefore a local implementation checkpoint, not an
+independently accepted D5 settlement.
+
+Receipts:
+`internal/runtime/texture_agent_revision.go`;
+`internal/runtime/texture_media_sources.go`;
+`internal/runtime/runtime.go`;
+`internal/runtime/texture_test.go`;
+`internal/sourcecontract/source_contract_schema.json`;
+`internal/sourcecontract/open_surface.go`;
+`internal/sourcecontract/testdata/source_contract_matrix.json`;
+`internal/texturedoc/schema.go`;
+`internal/texturedoc/schema_test.go`;
+`frontend/src/lib/source-contract.ts`;
+`frontend/src/lib/source-contract.generated.ts`;
+`frontend/src/lib/texture-source-state.ts`;
+`frontend/src/lib/texture-source-renderer.ts`;
+`frontend/tests/texture-source-entities.spec.js`.
+
+Evidence:
+`nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run TestTextureAgentRevisionRegistersMediaSourceEntities -count=1`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run TestMarkTextureMediaSourceRefsResearchState -count=1`;
+`nix develop -c go test ./internal/sourcecontract ./internal/texturedoc ./internal/store`;
+`nix develop -c go test ./internal/runtime -run 'Texture.*Media|SourceEntities|MarkTextureMedia'`;
+`nix develop -c scripts/go-test-runtime-shards`;
+`node scripts/generate-source-contract.mjs --check` from `frontend/`;
+`npx playwright test tests/texture-source-entities.spec.js --grep "frontend source contract|structured revisions|multimedia source entities"` from `frontend/`;
+`npm run build` from `frontend/`;
+`git diff --check`.
+
+Open edge: D6 publication/export projection. Publication/export/diff/search
+must consume structured body/source entity projections without reviving markdown
+links or source metadata sidecars. Record independent review when available and
+do not treat D5 as staging/product proof until the landing loop runs.

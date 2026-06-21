@@ -9814,7 +9814,7 @@ func TestTextureDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
 	t.Fatalf("diagnosis omitted document run %s; runs=%+v", docRun.RunID, resp.Runs)
 }
 
-func TestTextureAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
+func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 	t.Setenv("CHOIR_DISABLE_YOUTUBE_TRANSCRIPT_FETCH", "1")
 	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
 	t.Cleanup(func() {
@@ -9857,35 +9857,23 @@ func TestTextureAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get run: %v", err)
 	}
-	refs := decodeTextureMediaSourceRefs(run.Metadata["media_source_refs"])
-	if len(refs) != 2 {
-		t.Fatalf("media_source_refs len = %d, want 2: %#v", len(refs), refs)
+	if _, ok := run.Metadata["media_source_refs"]; ok {
+		t.Fatalf("media_source_refs should not be exposed in new run metadata: %#v", run.Metadata)
+	}
+	if _, ok := run.Metadata["media_source_research_required"]; ok {
+		t.Fatalf("media_source_research_required should not be exposed in new run metadata: %#v", run.Metadata)
 	}
 	sourceEntities := decodeTextureSourceEntities(run.Metadata["source_entities"])
 	if len(sourceEntities) != 2 {
 		t.Fatalf("source_entities len = %d, want 2: %#v", len(sourceEntities), sourceEntities)
 	}
-	if !metadataBoolValue(run.Metadata, "media_source_research_required") {
-		t.Fatalf("media_source_research_required not set: %#v", run.Metadata)
-	}
-	if !strings.Contains(run.Prompt, "Detected durable media source refs") ||
+	if strings.Contains(run.Prompt, "Detected durable media source refs") ||
+		strings.Contains(run.Prompt, "Media source refs") ||
 		!strings.Contains(run.Prompt, "Detected Texture source entities") ||
-		!strings.Contains(run.Prompt, "source claims need represented evidence") ||
-		!strings.Contains(run.Prompt, "Probe (researcher) is the morphism class for that evidence gap") ||
-		!strings.Contains(buildTextureMediaSourceResearchObjective(refs, ""), "first call read_content_item") {
+		!strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
 	}
 	assertNoForcedSemanticDelegation(t, run.Prompt)
-	byKind := map[string]textureMediaSourceRef{}
-	for _, ref := range refs {
-		byKind[ref.Kind] = ref
-	}
-	if byKind["youtube"].VideoID != "dQw4w9WgXcQ" || byKind["youtube"].TranscriptAvailability != "unavailable" {
-		t.Fatalf("youtube ref = %#v", byKind["youtube"])
-	}
-	if byKind["image"].MediaType != "image/png" || byKind["image"].ContentID == "" {
-		t.Fatalf("image ref = %#v", byKind["image"])
-	}
 	entitiesByKind := map[string]textureSourceEntity{}
 	for _, entity := range sourceEntities {
 		entitiesByKind[entity.Kind] = entity
@@ -9900,11 +9888,11 @@ func TestTextureAgentRevisionRegistersMediaSourceRefs(t *testing.T) {
 		entitiesByKind["image"].Evidence.State != "available" {
 		t.Fatalf("image source entity = %#v", entitiesByKind["image"])
 	}
-	dedupedRefs, added := rt.registerTextureMediaSourceRefs(context.Background(), "user-1", content, map[string]any{
-		"media_source_refs": refs,
+	dedupedEntities, added := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, map[string]any{
+		"source_entities": sourceEntities,
 	})
-	if added || len(dedupedRefs) != 2 {
-		t.Fatalf("re-register added=%v len=%d, want no new refs and len 2: %#v", added, len(dedupedRefs), dedupedRefs)
+	if added || len(dedupedEntities) != 2 {
+		t.Fatalf("re-register added=%v len=%d, want no new entities and len 2: %#v", added, len(dedupedEntities), dedupedEntities)
 	}
 	items, err := s.ListContentItems(context.Background(), "user-1", 20)
 	if err != nil {
@@ -10014,29 +10002,21 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 
 func TestMarkTextureMediaSourceRefsResearchState(t *testing.T) {
 	t.Parallel()
+	refs := []textureMediaSourceRef{
+		{Kind: "youtube", CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", ResearchState: "pending"},
+		{Kind: "image", CanonicalURL: "https://example.com/image.jpg", ResearchState: "pending"},
+	}
 	metadata := map[string]any{
 		"media_source_research_required": true,
-		"media_source_refs": []textureMediaSourceRef{
-			{Kind: "youtube", CanonicalURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", ResearchState: "pending"},
-			{Kind: "image", CanonicalURL: "https://example.com/image.jpg", ResearchState: "pending"},
-		},
-		"source_entities": []textureSourceEntity{
-			{Kind: "youtube_video", EntityID: "src-one", Evidence: textureSourceEntityEvidence{ResearchState: "pending"}},
-			{Kind: "image", EntityID: "src-two", Evidence: textureSourceEntityEvidence{ResearchState: "pending"}},
-		},
+		"media_source_refs":              refs,
+		"source_entities":                sourceEntitiesFromMediaRefs(refs),
 	}
 	markTextureMediaSourceRefsResearchState(metadata, "represented")
-	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
-	if len(refs) != 2 {
-		t.Fatalf("refs len = %d, want 2", len(refs))
+	if _, ok := metadata["media_source_refs"]; ok {
+		t.Fatalf("media_source_refs should be removed after representation: %#v", metadata)
 	}
-	for _, ref := range refs {
-		if ref.ResearchState != "represented" {
-			t.Fatalf("research state = %q, want represented in %#v", ref.ResearchState, refs)
-		}
-	}
-	if metadataBoolValue(metadata, "media_source_research_required") {
-		t.Fatalf("media_source_research_required should be false after representation: %#v", metadata)
+	if _, ok := metadata["media_source_research_required"]; ok {
+		t.Fatalf("media_source_research_required should be removed after representation: %#v", metadata)
 	}
 	sourceEntities := decodeTextureSourceEntities(metadata["source_entities"])
 	if len(sourceEntities) != 2 {

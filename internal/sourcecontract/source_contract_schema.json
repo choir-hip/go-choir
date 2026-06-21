@@ -120,6 +120,21 @@
     },
     "image": {
       "aliases": []
+    },
+    "audio": {
+      "aliases": ["podcast"]
+    },
+    "pdf": {
+      "aliases": ["document_pdf"]
+    },
+    "transcript": {
+      "aliases": ["captions"]
+    },
+    "file": {
+      "aliases": ["file_artifact", "attachment"]
+    },
+    "source_window": {
+      "aliases": ["source_panel", "source_popover"]
     }
   }
 }

@@ -372,11 +372,6 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	if currentRevisionLoaded {
-		mediaSourceRefs, addedMediaSourceRefs := rt.registerTextureMediaSourceRefs(ctx, ownerID, currentRevision.Content, metadata)
-		if len(mediaSourceRefs) > 0 {
-			metadata["media_source_refs"] = mediaSourceRefs
-			metadata["media_source_research_required"] = addedMediaSourceRefs
-		}
 		// Source entities are collated from deterministic media ingestion, the
 		// typed coagent findings already persisted into metadata["source_entities"],
 		// and (on worker integration) the typed evidence records attached to pending
@@ -384,7 +379,8 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		// regex-scraped into sources; evidence-backed content items become native
 		// source entities, and only explicit quote selectors become text_quote
 		// bindings that the citation/quote validator checks at write time.
-		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceRefs)
+		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, metadata)
+		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
 		if workerWake {
 			if evidenceEntities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(evidenceEntities) > 0 {
 				var changedEvidenceEntities bool
@@ -394,10 +390,9 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 		if len(sourceEntities) > 0 {
 			metadata["source_entities"] = sourceEntities
-			if changedSourceEntities {
-				if _, ok := metadata["media_source_research_required"]; !ok {
-					metadata["media_source_research_required"] = addedMediaSourceRefs
-				}
+			if changedSourceEntities || addedMediaSourceEntities {
+				delete(metadata, "media_source_refs")
+				delete(metadata, "media_source_research_required")
 			}
 		}
 	}
@@ -602,15 +597,6 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\nConductor loop: ")
 		b.WriteString(conductorLoopID)
 		b.WriteString(".")
-	}
-	mediaSourceRefs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
-	if formattedRefs := formatTextureMediaSourceRefsForPrompt(mediaSourceRefs); formattedRefs != "" {
-		b.WriteString("\n\nDetected durable media source refs:\n")
-		b.WriteString(formattedRefs)
-		b.WriteString(textureprompts.RevisionMediaSourceRefsIntro())
-		if metadataBoolValue(metadata, "media_source_research_required") {
-			b.WriteString(textureprompts.RevisionMediaSourceResearchRequired())
-		}
 	}
 	sourceEntities := decodeTextureSourceEntities(metadata["source_entities"])
 	if formattedEntities := formatTextureSourceEntitiesForPrompt(sourceEntities); formattedEntities != "" {

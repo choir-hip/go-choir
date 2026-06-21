@@ -49,18 +49,25 @@ var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 // findings path.
 var textureRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
 
-func (rt *Runtime) registerTextureMediaSourceRefs(ctx context.Context, ownerID, content string, metadata map[string]any) ([]textureMediaSourceRef, bool) {
-	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
-	seen := make(map[string]bool, len(refs))
-	for _, ref := range refs {
-		if key := mediaSourceRefKey(ref); key != "" {
+func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, metadata map[string]any) ([]textureSourceEntity, bool) {
+	entities := decodeTextureSourceEntities(metadata["source_entities"])
+	if legacyMediaEntities := sourceEntitiesFromMediaRefs(decodeTextureMediaSourceRefs(metadata["media_source_refs"])); len(legacyMediaEntities) > 0 {
+		entities, _ = mergeTextureSourceEntities(entities, legacyMediaEntities)
+	}
+	seen := make(map[string]bool, len(entities))
+	for _, entity := range entities {
+		if key := sourceEntityKey(entity); key != "" {
 			seen[key] = true
 		}
 	}
 	added := false
 	for _, rawURL := range extractTextureMediaSourceURLs(content) {
 		kind, canonicalURL, videoID := classifyTextureMediaSourceURL(rawURL)
-		if kind == "" || canonicalURL == "" || seen[kind+"|"+canonicalURL] {
+		if kind == "" || canonicalURL == "" {
+			continue
+		}
+		entityKind := sourceEntityKindForMediaRef(textureMediaSourceRef{Kind: kind, CanonicalURL: canonicalURL})
+		if entityKind == "" || seen[entityKind+"|"+canonicalURL] {
 			continue
 		}
 		item, err := rt.ImportURLContent(ctx, ownerID, rawURL, "")
@@ -80,13 +87,14 @@ func (rt *Runtime) registerTextureMediaSourceRefs(ctx context.Context, ownerID, 
 		if ref.ResearchState == "" {
 			ref.ResearchState = "pending"
 		}
-		if key := mediaSourceRefKey(ref); key != "" && !seen[key] {
-			refs = append(refs, ref)
+		entity := mediaSourceRefToSourceEntity(ref)
+		if key := sourceEntityKey(entity); key != "" && !seen[key] {
+			entities = append(entities, entity)
 			seen[key] = true
 			added = true
 		}
 	}
-	return refs, added
+	return entities, added
 }
 
 func extractTextureMediaSourceURLs(content string) []string {
@@ -196,12 +204,12 @@ func decodeTextureMediaSourceRefs(value any) []textureMediaSourceRef {
 	return refs
 }
 
-func normalizeTextureSourceEntities(metadata map[string]any, refs []textureMediaSourceRef) ([]textureSourceEntity, bool) {
+func normalizeTextureSourceEntities(metadata map[string]any, incoming []textureSourceEntity) ([]textureSourceEntity, bool) {
 	if metadata == nil {
 		return nil, false
 	}
 	entities := decodeTextureSourceEntities(metadata["source_entities"])
-	return mergeTextureSourceEntities(entities, sourceEntitiesFromMediaRefs(refs))
+	return mergeTextureSourceEntities(entities, incoming)
 }
 
 func sourceEntitiesFromMediaRefs(refs []textureMediaSourceRef) []textureSourceEntity {
@@ -624,26 +632,21 @@ func markTextureMediaSourceRefsResearchState(metadata map[string]any, state stri
 	if metadata == nil {
 		return
 	}
-	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
-	if len(refs) == 0 {
-		return
-	}
 	state = strings.TrimSpace(state)
 	if state == "" {
 		return
 	}
-	changed := false
-	for i := range refs {
-		if refs[i].ResearchState != state {
-			refs[i].ResearchState = state
-			changed = true
-		}
-	}
-	if changed {
-		metadata["media_source_refs"] = refs
-		metadata["media_source_research_required"] = false
-	}
+	refs := decodeTextureMediaSourceRefs(metadata["media_source_refs"])
 	entities := decodeTextureSourceEntities(metadata["source_entities"])
+	if len(refs) > 0 {
+		legacyEntities := sourceEntitiesFromMediaRefs(refs)
+		for i := range legacyEntities {
+			legacyEntities[i].Evidence.ResearchState = state
+		}
+		entities, _ = mergeTextureSourceEntities(entities, legacyEntities)
+		delete(metadata, "media_source_refs")
+		delete(metadata, "media_source_research_required")
+	}
 	changedEntities := false
 	for i := range entities {
 		if entities[i].Evidence.ResearchState != state {
@@ -651,7 +654,7 @@ func markTextureMediaSourceRefsResearchState(metadata map[string]any, state stri
 			changedEntities = true
 		}
 	}
-	if changedEntities {
+	if changedEntities || len(refs) > 0 {
 		metadata["source_entities"] = entities
 	}
 }

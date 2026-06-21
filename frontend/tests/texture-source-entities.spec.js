@@ -11,6 +11,7 @@ import {
   sourceOpenPlan,
   sourceEntityInlineExcerptText,
   sourceEntityOpenPlan,
+  renderSourceTransclusionBody,
   renderInlineMarkdown,
   publicationSourceEntityToLocal,
   parseTextureRelatedRef,
@@ -19,6 +20,7 @@ import {
   sourceEvidenceStateLabel,
   textureRelatedMarkdownTarget,
 } from '../src/lib/texture-source-renderer.ts';
+import { revisionSourceEntities } from '../src/lib/texture-source-state.ts';
 import { buildSourceReviewPayload } from '../src/lib/texture-source-review.js';
 import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
 
@@ -174,6 +176,39 @@ test('source evidence states normalize to typed reader labels', () => {
 
   const mediaEntity = mediaRefToSourceEntity({ kind: 'image', url: 'https://example.com/source.png' });
   expect(mediaEntity?.evidence?.state).toBe('candidate');
+});
+
+test('structured revisions do not synthesize source entities from legacy media refs', () => {
+  const legacyRef = { kind: 'image', url: 'https://example.com/source.png' };
+  expect(revisionSourceEntities({ revision: { metadata: { media_source_refs: [legacyRef] } } })).toHaveLength(1);
+  expect(revisionSourceEntities({
+    revision: {
+      body_doc: { schema: 'choir.texture.doc.v1', doc: { type: 'doc', content: [] } },
+      metadata: { media_source_refs: [legacyRef] },
+    },
+  })).toEqual([]);
+});
+
+test('multimedia source entities render transcluded media without clickable links', () => {
+  const audioHTML = renderSourceTransclusionBody({
+    entity_id: 'src-audio',
+    kind: 'audio',
+    label: 'Audio clip',
+    target: { target_kind: 'content_item', canonical_url: 'https://example.com/clip.mp3' },
+    evidence: { state: 'available' },
+  });
+  expect(audioHTML).toContain('<audio');
+  expect(audioHTML).not.toContain('<a ');
+
+  const pdfHTML = renderSourceTransclusionBody({
+    entity_id: 'src-pdf',
+    kind: 'pdf',
+    label: 'Report PDF',
+    target: { target_kind: 'content_item', canonical_url: 'https://example.com/report.pdf' },
+    evidence: { state: 'available' },
+  });
+  expect(pdfHTML).toContain('type="application/pdf"');
+  expect(pdfHTML).not.toContain('<a ');
 });
 
 test('source selectors normalize and flatten selector sets', () => {

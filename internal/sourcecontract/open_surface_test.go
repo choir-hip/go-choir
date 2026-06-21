@@ -21,6 +21,11 @@ func TestNormalizeOpenSurface(t *testing.T) {
 		{raw: "published-texture-span", want: OpenSurfaceTexture},
 		{raw: "youtube_video", want: OpenSurfaceVideo},
 		{raw: "image", want: OpenSurfaceImage},
+		{raw: "podcast", want: OpenSurfaceAudio},
+		{raw: "document-pdf", want: OpenSurfacePDF},
+		{raw: "captions", want: OpenSurfaceTranscript},
+		{raw: "attachment", want: OpenSurfaceFile},
+		{raw: "source-panel", want: OpenSurfaceSourceWindow},
 		{raw: "custom-app", want: "custom_app"},
 	} {
 		t.Run(tc.raw, func(t *testing.T) {

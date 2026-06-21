@@ -322,7 +322,7 @@ export function sourceEntityMedia(entity: any, { inline = false } = {}): string 
   const kind = String(entity?.kind || '').toLowerCase();
   const sourceURL = sourceEntityTargetURL(entity);
   const title = escapeHTML(sourceEntityTitle(entity));
-  if (kind === 'youtube_video') {
+  if (kind === 'youtube_video' || kind === 'youtube' || kind === 'video') {
     const embed = youtubeEmbedURL(sourceURL);
     if (embed) {
       if (inline) {
@@ -330,12 +330,30 @@ export function sourceEntityMedia(entity: any, { inline = false } = {}): string 
       }
       return `<div class="texture-source-video"><iframe src="${escapeHTML(embed)}" title="${title}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
     }
+    if (kind === 'video' && sourceURL) {
+      if (inline) {
+        return `<span class="texture-source-video texture-source-video--inline"><video src="${escapeHTML(sourceURL)}" title="${title}" controls preload="metadata"></video></span>`;
+      }
+      return `<div class="texture-source-video"><video src="${escapeHTML(sourceURL)}" title="${title}" controls preload="metadata"></video></div>`;
+    }
   }
   if (kind === 'image' && sourceURL) {
     if (inline) {
       return `<span class="texture-source-image texture-source-image--inline"><img src="${escapeHTML(sourceURL)}" alt="${title}" loading="lazy"></span>`;
     }
     return `<div class="texture-source-image"><img src="${escapeHTML(sourceURL)}" alt="${title}" loading="lazy"></div>`;
+  }
+  if (kind === 'audio' && sourceURL) {
+    if (inline) {
+      return `<span class="texture-source-audio texture-source-audio--inline"><audio src="${escapeHTML(sourceURL)}" title="${title}" controls preload="metadata"></audio></span>`;
+    }
+    return `<div class="texture-source-audio"><audio src="${escapeHTML(sourceURL)}" title="${title}" controls preload="metadata"></audio></div>`;
+  }
+  if (kind === 'pdf' && sourceURL) {
+    if (inline) {
+      return `<span class="texture-source-pdf texture-source-pdf--inline" data-texture-source-pdf>${title}</span>`;
+    }
+    return `<div class="texture-source-pdf" data-texture-source-pdf><object data="${escapeHTML(sourceURL)}" type="application/pdf" aria-label="${title}"></object></div>`;
   }
   return '';
 }

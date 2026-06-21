@@ -406,7 +406,12 @@ func validOpenSurface(openSurface string) bool {
 		sourcecontract.OpenSurfaceWebLens,
 		sourcecontract.OpenSurfaceTexture,
 		sourcecontract.OpenSurfaceVideo,
-		sourcecontract.OpenSurfaceImage:
+		sourcecontract.OpenSurfaceImage,
+		sourcecontract.OpenSurfaceAudio,
+		sourcecontract.OpenSurfacePDF,
+		sourcecontract.OpenSurfaceTranscript,
+		sourcecontract.OpenSurfaceFile,
+		sourcecontract.OpenSurfaceSourceWindow:
 		return true
 	default:
 		return false

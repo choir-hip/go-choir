@@ -1,11 +1,16 @@
 package sourcecontract
 
 const (
-	OpenSurfaceSource  = "source"
-	OpenSurfaceWebLens = "web_lens"
-	OpenSurfaceTexture = "texture"
-	OpenSurfaceVideo   = "video"
-	OpenSurfaceImage   = "image"
+	OpenSurfaceSource       = "source"
+	OpenSurfaceWebLens      = "web_lens"
+	OpenSurfaceTexture      = "texture"
+	OpenSurfaceVideo        = "video"
+	OpenSurfaceImage        = "image"
+	OpenSurfaceAudio        = "audio"
+	OpenSurfacePDF          = "pdf"
+	OpenSurfaceTranscript   = "transcript"
+	OpenSurfaceFile         = "file"
+	OpenSurfaceSourceWindow = "source_window"
 )
 
 func NormalizeOpenSurface(value string) string {

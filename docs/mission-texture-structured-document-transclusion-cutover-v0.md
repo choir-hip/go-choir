@@ -825,10 +825,15 @@ the store/API boundary after side-channel rejection, focused tests, independent
 review, and root integration. D3 repairs the owner/editor-authored preservation
 path after focused tests, independent review, and root integration. D4 repairs
 the appagent-authored Texture mutation path after focused tests, independent
-review, and root integration. Full repair still requires multimedia resolver,
-publication/export, old-syntax deletion receipts, and staging proof. D5
-checkpoint discovers the multimedia sidecar/rendering heresy; implementation has
-not repaired it yet.
+review, and root integration. D5 repairs the newly discovered multimedia
+sidecar/rendering path locally: new deterministic media discovery surfaces
+Texture source entities, not `metadata.media_source_refs`; structured frontend
+revisions no longer synthesize media sidecars; audio/PDF/video/image rendering
+uses source entities without clickable source links. Independent D5 review was
+attempted twice but both review agents stalled and were interrupted; D5 is
+therefore an implementation checkpoint, not an independently accepted
+settlement. Full repair still requires publication/export, old-syntax deletion
+receipts, and staging proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -854,16 +859,21 @@ structured source entities instead of metadata sidecars. E1: human insertion
 affordance for new source refs is still thinner than preservation/removal
 coverage; D3 proves preservation/removal through editor atom round-trip. E2:
 multimedia source entities exist in schema, but resolver/rendering paths still
-need proof that image/video/audio/PDF/transcript/Texture-span targets open and
-render through the same source entity model. E3: publication/export/diff/search
+now have local D5 proof that image/video/audio/PDF/transcript/file open surfaces
+validate through the shared source contract and that image/video/audio/PDF
+rendering is driven by source entities rather than media sidecars. Texture-span
+publication/export proof remains open. E3: publication/export/diff/search
 still consume the projection and must not be treated as proof of structured
 transclusion behavior. D5 checkpoint records the specific sidecars/pathways to
 repair: runtime `media_source_refs`, prompt context that prefers those refs, and
 frontend media-ref synthesis/rendering outside top-level structured entities.
+D5 implementation removes the new-write/new-prompt path for those sidecars and
+keeps legacy media-ref synthesis only for revisions without structured
+`body_doc`.
 
-next move: implement the bounded D5 multimedia resolver/rendering cut. Do not
-bundle publication/export, deployment, or broad old-path deletion unless this
-paradoc is updated first.
+next move: record an independent review receipt if a reviewer becomes available;
+otherwise continue to D6 publication/export projection cut. Do not bundle
+deployment or broad old-path deletion unless this paradoc is updated first.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -873,9 +883,11 @@ version / lineage: v0. Created 2026-06-21 as a successor/specialization of
 
 learning state: D0 schema/API decision retained here. D1 code witness now lives
 in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
-writes, editor/user preservation, and appagent mutation. D5 checkpoint names the
-multimedia residue. Promote outward only when multimedia, publication/export,
-deletion receipts, and staging proof close the product contract.
+writes, editor/user preservation, and appagent mutation. D5 locally proves the
+multimedia resolver/rendering cut, with independent review still unavailable due
+stalled review agents. Promote outward only when publication/export, deletion
+receipts, staging proof, and any missing independent review close the product
+contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -888,5 +900,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; the D5 multimedia path Problem Documentation First checkpoint is recorded; current V=5. Implement a bounded multimedia source resolver/rendering cut for image/video/audio/PDF/transcript/Texture-span source entities using the same source_ref/source_embed + SourceEntity model. Do not push, deploy, bundle publication export, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; current V=4. Continue with D6 publication/export projection cut so structured source_ref/source_embed + SourceEntity transclusions survive publication/export. Do not deploy, bundle broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
 ```

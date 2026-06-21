@@ -2996,8 +2996,6 @@ var durableMetadataKeys = []string{
 	"migration_manifest",
 	"conductor_loop_id",
 	runMetadataTrajectoryID,
-	"media_source_refs",
-	"media_source_research_required",
 	"source_entities",
 	"artifact_kind",
 	"revision_role",

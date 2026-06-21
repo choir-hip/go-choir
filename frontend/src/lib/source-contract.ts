@@ -128,6 +128,22 @@ export function sourceOpenPlan(input: SourceOpenPlanInput = {}): SourceOpenPlan 
       readerMode: false,
     };
   }
+  if (
+    requested === SOURCE_OPEN_SURFACES.image ||
+    requested === SOURCE_OPEN_SURFACES.audio ||
+    requested === SOURCE_OPEN_SURFACES.pdf ||
+    requested === SOURCE_OPEN_SURFACES.transcript ||
+    requested === SOURCE_OPEN_SURFACES.file ||
+    requested === SOURCE_OPEN_SURFACES.sourceWindow
+  ) {
+    return {
+      appId: requested,
+      openSurface: requested,
+      mode: requested === SOURCE_OPEN_SURFACES.sourceWindow ? 'source_window' : 'media',
+      liveOriginal: false,
+      readerMode: false,
+    };
+  }
   if (requested === SOURCE_OPEN_SURFACES.source || durableReaderTarget) {
     return {
       appId: 'content',

@@ -215,26 +215,30 @@ func TestMultimediaTargetsUseSourceEntitiesNotBodySyntaxes(t *testing.T) {
 	entities := validEntities()
 	entities = append(entities,
 		sourceEntity("src-video", "video", "Demo video", "player", sourcecontract.OpenSurfaceVideo),
-		sourceEntity("src-audio", "audio", "Podcast clip", "player", sourcecontract.OpenSurfaceSource),
-		sourceEntity("src-pdf", "pdf", "Report PDF", "pdf_pages", sourcecontract.OpenSurfaceSource),
+		sourceEntity("src-audio", "audio", "Podcast clip", "player", sourcecontract.OpenSurfaceAudio),
+		sourceEntity("src-pdf", "pdf", "Report PDF", "pdf_pages", sourcecontract.OpenSurfacePDF),
+		sourceEntity("src-transcript", "transcript", "Transcript", "transcript", sourcecontract.OpenSurfaceTranscript),
+		sourceEntity("src-file", "file_artifact", "Attachment", "source_window", sourcecontract.OpenSurfaceFile),
 	)
 	doc := validDoc()
 	doc.Doc.Content = append(doc.Doc.Content,
 		sourceEmbed("embed-video", "src-video", "player"),
 		sourceEmbed("embed-audio", "src-audio", "player"),
 		sourceEmbed("embed-pdf", "src-pdf", "pdf_pages"),
+		sourceEmbed("embed-transcript", "src-transcript", "transcript"),
+		sourceEmbed("embed-file", "src-file", "source_window"),
 	)
 
 	projection, err := Project(doc, entities)
 	if err != nil {
 		t.Fatalf("Project() error = %v", err)
 	}
-	if len(projection.SourceEmbeds) != 4 {
+	if len(projection.SourceEmbeds) != 6 {
 		t.Fatalf("source embeds = %#v", projection.SourceEmbeds)
 	}
 	for _, embed := range projection.SourceEmbeds {
 		switch embed.TargetKind {
-		case "image", "video", "audio", "pdf":
+		case "image", "video", "audio", "pdf", "transcript", "file_artifact":
 		default:
 			t.Fatalf("unexpected multimedia embed target kind %q in %#v", embed.TargetKind, projection.SourceEmbeds)
 		}
