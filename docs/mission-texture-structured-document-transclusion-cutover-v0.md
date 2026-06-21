@@ -457,6 +457,62 @@ D2 does not claim mission settlement. The editor, Texture agent operation API,
 multimedia resolver, publication/export, old-path deletion, staging deploy, and
 Comet/browser product proof remain open cuts.
 
+## D4 Agent Operation Problem Checkpoint - 2026-06-21
+
+Problem: D2 and D3 make structured revisions and editor/user saves viable, but
+Texture agent mutation tools still expose canonical editing as string
+replacement surfaces. `patch_texture` accepts `find` / `replace` / `append`
+operations over `current.Content`; `rewrite_texture` accepts a full plain
+`content` replacement. The commit path then materializes plain text, normalizes
+wire article source prose into `[label](source:id)` syntax, and attempts to
+carry source identity through `metadata.source_entities` /
+`source_ref_normalization` sidecars. After D2, those sidecars are invalid for
+new canonical source writes, so the D4 path is both semantically stale and
+operationally brittle.
+
+Exact D4 cut:
+
+- Replace model-facing canonical Texture mutation with validated
+  block/node/source operations over the current structured `BodyDoc`, not raw
+  canonical JSON and not ad hoc string replacement.
+- Supported operation vocabulary for D4 should be small: update text in a block,
+  append/insert a block, delete a block or source node, insert `source_ref`,
+  insert `source_embed`, and whole-document recovery rewrite only through a
+  server-owned conversion/validation path.
+- Runtime, not the model, mints node ids, source entity ids, provenance, and any
+  source entities derived from existing typed evidence packets.
+- D4 must write `BodyDoc` plus top-level `SourceEntities`; it must not write
+  `metadata.source_entities`, `media_source_refs`, `source_ref_normalization`,
+  markdown source links, or `[source:id]` tokens as canonical source identity.
+- The existing `patch_texture` / `rewrite_texture` names may remain as aliases
+  only if their schemas no longer permit legacy string/source-sidecar canonical
+  writes. Otherwise add new explicit structured tools and remove the old write
+  tools from Texture agent capability.
+
+Conjecture delta: D4 tests whether the same canonical structured substrate used
+by server writes and the frontend editor can also be the agent editing
+substrate. If not, the architecture still has a split brain: human edits
+preserve transclusions while agent edits flatten them.
+
+Protected surfaces: Texture agent tools/prompts, `commitTextureToolEdit`,
+appagent revision metadata/provenance, source entity carry-forward, mutation
+state completion, wire article source handling, and all runtime paths that
+create appagent-authored Texture revisions.
+
+Admissible evidence class: focused runtime tests proving structured tool edits
+preserve existing `source_ref` nodes, can explicitly delete a source node, can
+insert source refs/embeds backed by top-level source entities, reject legacy
+source link/token/string sidecar attempts, and keep stale-base protection. D4
+does not require staging proof until the later landing/proof cut.
+
+Rollback path: revert D4 runtime/tool commits to return to the D3 accepted
+state. The D2 store guard remains the safety floor and will continue rejecting
+legacy sidecar writes.
+
+Heresy delta: discovered: appagent write tools still operate on string content
+and source metadata sidecars. introduced: none by this documentation checkpoint.
+repaired: not yet; D4 implementation must repair it.
+
 ## Editing And Citation Integrity
 
 Offsets are implementation details, not canonical citation identity. Structured
@@ -570,9 +626,9 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 6. Last delta: independent D3 review
-accepted the frontend editor/user path preservation cut, and root integrated the
-accepted commit after focused tests passed.
+staging acceptance proof. Current value: 6. Last delta: D4 agent operation
+problem and exact cut documented as the protected-surface precondition for code;
+no product obligation reduced yet.
 
 budget: Planning budget is one paradoc pass. D1 implementation plus review-fix
 budget was isolated additive code with focused tests and accepted independent
@@ -582,7 +638,10 @@ old-path deletion unless the paradoc is updated first. D2 used the budget for a
 store/API write-boundary cut plus focused tests only. D3 used the budget for a
 bounded editor/user path preservation cut plus focused frontend tests and the
 D2 API regression; it did not bundle agent tools, publication/export,
-multimedia embedding, staging/deploy, or broad old-path deletion.
+multimedia embedding, staging/deploy, or broad old-path deletion. D4 budget is a
+bounded runtime/tool implementation pass with focused runtime tests; do not
+bundle multimedia resolver, publication/export, deployment, or broad old-path
+deletion unless this paradoc is updated first.
 
 authority / bounds: D1 was authorized as an additive internal schema/parser/
 renderer spike only. It does not authorize production Texture write behavior,
@@ -620,7 +679,9 @@ shards where runtime is touched, CI, staging deploy identity, Comet/browser
 staging proof with numbered source refs, expanded source window, multimedia
 source expansion, agent edit preserving refs, and attempted markdown link/source
 token rejection; RunAcceptanceRecord at staging-smoke-level or higher if
-platform behavior changes.
+platform behavior changes. D4 evidence target is focused runtime tests for
+structured Texture agent operations, source-ref preservation/deletion/insertion,
+legacy source syntax rejection, stale-base rejection, and `git diff --check`.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -651,15 +712,15 @@ structured `body_doc` source refs as native atom spans, serialize those atoms
 back to `source_ref` nodes, and send top-level `source_entities` instead of
 source metadata sidecars. E1: insertion affordance for new source refs is still
 not the primary proven path; D3 proves preservation/removal through editor atom
-round-trip. E2: Texture agent tools still use string patch/rewrite surfaces and
-must move to structured operations. E3:
+round-trip. E2: D4 documentation records that Texture agent tools still use
+string patch/rewrite surfaces plus legacy source metadata sidecar normalization;
+implementation remains open. E3:
 publication/export/diff/search still consume the projection and must not be
 treated as proof of structured transclusion behavior.
 
-next move: D4 Texture agent structured operation tools. Before runtime mutation,
-write the Problem Documentation First checkpoint naming the agent-tool behavior
-problem: Texture agents still edit canonical text through string rewrite/patch
-surfaces instead of validated block/node/source operations.
+next move: implement D4 Texture agent structured operation tools. Keep the cut
+bounded to runtime tool schemas/materialization/write-path tests; do not bundle
+multimedia resolver, publication/export, deployment, or broad old-path deletion.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -682,5 +743,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1, D2, and D3 are integrated and accepted. D3 preserves structured `body_doc` source refs through the frontend editor/user path and saves top-level `source_entities` without clickable source links or legacy source sidecars. Next implement D4 Texture agent structured operation tools: replace string rewrite/patch canonical edits with validated block/node/source operations. Do not push, deploy, bundle publication export, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1, D2, and D3 are integrated and accepted. D4 is documented but not implemented: Texture agent write tools still edit canonical text through string rewrite/patch surfaces and legacy source sidecar normalization. Implement D4 Texture agent structured operation tools with focused runtime tests. Do not push, deploy, bundle publication export, multimedia resolver, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
 ```

@@ -469,3 +469,32 @@ still edit canonical text through string rewrite/patch surfaces rather than
 validated block/node/source operations. Later cuts still need multimedia
 embedding/resolution, publication/export, broad legacy deletion, deployment, and
 Comet product proof.
+
+## 2026-06-21 - Pass 17 - D4 Agent Operation Problem Checkpoint
+
+Claim: D4 cannot safely mutate Texture agent tools until the behavior problem is
+documented separately from the fix: appagent canonical writes still use string
+patch/rewrite surfaces and source metadata sidecar normalization even though D2
+made those sidecars invalid as canonical source identity.
+
+Move: construct. Added `D4 Agent Operation Problem Checkpoint - 2026-06-21` to
+the paradoc. The documented problem is that `patch_texture` edits
+`current.Content` through `find` / `replace` / `append`, `rewrite_texture`
+accepts full plain `content`, and `commitTextureToolEdit` still normalizes wire
+article source prose into `[label](source:id)` while carrying source identity
+through `metadata.source_entities` / `source_ref_normalization`. D4 must replace
+that with validated block/node/source operations over the structured body, with
+runtime-owned ids/provenance and top-level `SourceEntities`.
+
+Expected delta V: 0 on product obligations; satisfies the red-surface
+precondition for D4 runtime/tool mutation.
+
+Actual delta V: 0. Current V remains 6. Runtime behavior unchanged by this pass.
+
+Receipt:
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+
+Open edge: implement the bounded D4 runtime/tool cut with focused tests for
+source-ref preservation, explicit source deletion, source ref/embed insertion,
+legacy syntax rejection, stale-base protection, and no metadata/citation source
+sidecar writes.
