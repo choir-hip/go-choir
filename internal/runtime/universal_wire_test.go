@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -262,6 +263,63 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
 		t.Fatalf("create platform source-network doc: %v", err)
 	}
+	sourceEntities := []texturedoc.SourceEntity{
+		{
+			SourceEntityID: "src_cited_one",
+			Target:         texturedoc.SourceTarget{Kind: "source_service_item", ID: "srcitem_cited_one"},
+			Selectors:      []texturedoc.SourceSelector{{Kind: "whole_resource"}},
+			Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Source Service item srcitem_cited_one"},
+			Evidence:       texturedoc.SourceEvidence{State: "available", OpenSurface: "source"},
+			Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "test"},
+		},
+		{
+			SourceEntityID: "src_cited_two",
+			Target:         texturedoc.SourceTarget{Kind: "content_item", ID: "content-cited-two"},
+			Selectors:      []texturedoc.SourceSelector{{Kind: "whole_resource"}},
+			Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Local emergency notice"},
+			Evidence:       texturedoc.SourceEvidence{State: "available", OpenSurface: "source"},
+			Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "test"},
+		},
+		{
+			SourceEntityID: "src_uncited",
+			Target:         texturedoc.SourceTarget{Kind: "source_service_item", ID: "srcitem_uncited"},
+			Selectors:      []texturedoc.SourceSelector{{Kind: "whole_resource"}},
+			Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Uncited cycle context"},
+			Evidence:       texturedoc.SourceEvidence{State: "available", OpenSurface: "source"},
+			Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "test"},
+		},
+	}
+	bodyDoc, _ := json.Marshal(texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-source-network-scoped-sources-root"},
+			Content: []texturedoc.Node{
+				{Type: "heading", Attrs: map[string]any{"id": "h-scoped-sources", "level": 1}, Content: []texturedoc.Node{{Type: "text", Text: "Scoped sources"}}},
+				{Type: "paragraph", Attrs: map[string]any{"id": "p-scoped-meta"}, Content: []texturedoc.Node{{Type: "text", Text: "Published: Date TBD | Source: internal handoff"}}},
+				{Type: "paragraph", Attrs: map[string]any{"id": "p-scoped-lead"}, Content: []texturedoc.Node{
+					{Type: "text", Text: "PARIS -- Emergency crews reopened the rail corridor after overnight flooding, with regional authorities saying inspections will continue through the afternoon "},
+					{Type: "source_ref", Attrs: map[string]any{"id": "ref-cited-one", "source_entity_id": "src_cited_one", "display_mode": "numbered_ref"}},
+					{Type: "text", Text: "."},
+				}},
+				{Type: "paragraph", Attrs: map[string]any{"id": "p-scoped-delay"}, Content: []texturedoc.Node{
+					{Type: "text", Text: "Local notices still warn commuters to expect rolling delays while crews clear debris from the lowest platforms "},
+					{Type: "source_ref", Attrs: map[string]any{"id": "ref-cited-two", "source_entity_id": "src_cited_two", "display_mode": "numbered_ref"}},
+					{Type: "text", Text: "."},
+				}},
+				{Type: "heading", Attrs: map[string]any{"id": "h-source-handles", "level": 2}, Content: []texturedoc.Node{{Type: "text", Text: "Source Handles"}}},
+				{Type: "paragraph", Attrs: map[string]any{"id": "p-source-handles"}, Content: []texturedoc.Node{
+					{Type: "text", Text: "Uncited cycle context "},
+					{Type: "source_ref", Attrs: map[string]any{"id": "ref-uncited", "source_entity_id": "src_uncited", "display_mode": "numbered_ref"}},
+				}},
+				{Type: "heading", Attrs: map[string]any{"id": "h-style-source", "level": 2}, Content: []texturedoc.Node{{Type: "text", Text: "Style.texture Source"}}},
+				{Type: "paragraph", Attrs: map[string]any{"id": "p-style-source"}, Content: []texturedoc.Node{{Type: "text", Text: "Selection rationale: Universal Wire style."}}},
+				{Type: "heading", Attrs: map[string]any{"id": "h-style-source-legacy", "level": 2}, Content: []texturedoc.Node{{Type: "text", Text: "Style.texture Source"}}},
+				{Type: "paragraph", Attrs: map[string]any{"id": "p-style-source-legacy"}, Content: []texturedoc.Node{{Type: "text", Text: "Legacy selection rationale that should still be stripped."}}},
+			},
+		},
+	})
+	sourceEntitiesRaw, _ := json.Marshal(sourceEntities)
 	meta, _ := json.Marshal(map[string]any{
 		"source":                         "edit_texture",
 		"revision_role":                  textureRevisionRoleCanonical,
@@ -271,57 +329,18 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		"selected_style_sources":         []map[string]any{{"title": "Style.texture: Universal Wire"}},
 		"platformd_route_path":           "/pub/texture/scoped-sources",
 		"source_item_ids":                []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
-		"source_entities": []map[string]any{
-			{
-				"entity_id": "src_cited_one",
-				"kind":      "source_service_item",
-				"label":     "Source Service item srcitem_cited_one",
-				"target":    map[string]any{"target_kind": "source_service_item", "item_id": "srcitem_cited_one"},
-			},
-			{
-				"entity_id": "src_cited_two",
-				"kind":      "content_item",
-				"label":     "Local emergency notice",
-				"target":    map[string]any{"target_kind": "content_item", "content_id": "content-cited-two"},
-			},
-			{
-				"entity_id": "src_uncited",
-				"kind":      "source_service_item",
-				"label":     "Uncited cycle context",
-				"target":    map[string]any{"target_kind": "source_service_item", "item_id": "srcitem_uncited"},
-			},
-		},
 	})
 	rev := types.Revision{
-		RevisionID:  "rev-source-network-scoped-sources",
-		DocID:       doc.DocID,
-		OwnerID:     doc.OwnerID,
-		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "texture:doc-source-network-scoped-sources",
-		Content: strings.Join([]string{
-			"# Scoped sources",
-			"",
-			"**Published:** [Date TBD] | **Source:** internal handoff",
-			"",
-			"PARIS -- Emergency crews reopened the rail corridor after overnight flooding, with regional authorities saying inspections will continue through the afternoon [wire](source:src_cited_one).",
-			"",
-			"Local notices still warn commuters to expect rolling delays while crews clear debris from the lowest platforms [source:src_cited_two].",
-			"",
-			"## Source Handles",
-			"",
-			"- [Uncited cycle context](source:src_uncited)",
-			"",
-			"## Style.texture Source",
-			"",
-			"Selection rationale: Universal Wire style.",
-			"",
-			"## Style.texture Source",
-			"",
-			"Legacy selection rationale that should still be stripped.",
-		}, "\n"),
-		Citations: json.RawMessage("[]"),
-		Metadata:  meta,
-		CreatedAt: now,
+		RevisionID:     "rev-source-network-scoped-sources",
+		DocID:          doc.DocID,
+		OwnerID:        doc.OwnerID,
+		AuthorKind:     types.AuthorAppAgent,
+		AuthorLabel:    "texture:doc-source-network-scoped-sources",
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntitiesRaw,
+		Citations:      json.RawMessage("[]"),
+		Metadata:       meta,
+		CreatedAt:      now,
 	}
 	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
 		t.Fatalf("create platform source-network revision: %v", err)

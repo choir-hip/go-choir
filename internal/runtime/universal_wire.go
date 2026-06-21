@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -323,7 +324,7 @@ func wireArticleTextureStoryFromCurrentRevision(ctx context.Context, doc types.D
 	headline := wireArticleArticleHeadline(doc.Title, content)
 	dek := wireArticleArticleDek(content)
 	projection := wireArticleArticleProjection(content)
-	manifest := wireArticleManifestFromRevision(ctx, meta, content, headline)
+	manifest := wireArticleManifestFromRevision(ctx, rev, meta, content, headline)
 	if len(manifest.Lead) == 0 &&
 		len(manifest.Supporting) == 0 &&
 		len(manifest.Contrary) == 0 &&
@@ -411,15 +412,19 @@ func wireArticleMetadataStringSlice(value any) []string {
 	return out
 }
 
-func wireArticleManifestFromRevision(ctx context.Context, meta map[string]any, content, headline string) types.WireSourceManifest {
-	entities := wireArticleVisibleSourceEntities(ctx, meta, content)
+func wireArticleManifestFromRevision(ctx context.Context, rev types.Revision, meta map[string]any, content, headline string) types.WireSourceManifest {
+	entities := wireArticleVisibleSourceEntities(ctx, rev, meta, content)
 	if len(entities) > 0 {
 		return wireArticleManifestFromSourceEntities(entities)
 	}
 	return wireArticleManifestFromCycleProvenance(meta, headline)
 }
 
-func wireArticleVisibleSourceEntities(ctx context.Context, meta map[string]any, content string) []textureSourceEntity {
+func wireArticleVisibleSourceEntities(ctx context.Context, rev types.Revision, meta map[string]any, content string) []textureSourceEntity {
+	if entities := wireArticleVisibleStructuredSourceEntities(rev); len(entities) > 0 {
+		enrichSourceServiceEntities(ctx, entities)
+		return entities
+	}
 	entities := decodeTextureSourceEntities(meta["source_entities"])
 	if len(entities) == 0 {
 		return nil
@@ -440,6 +445,67 @@ func wireArticleVisibleSourceEntities(ctx context.Context, meta map[string]any, 
 	}
 	enrichSourceServiceEntities(ctx, out)
 	return out
+}
+
+func wireArticleVisibleStructuredSourceEntities(rev types.Revision) []textureSourceEntity {
+	if len(strings.TrimSpace(string(rev.BodyDoc))) == 0 || len(strings.TrimSpace(string(rev.SourceEntities))) == 0 {
+		return nil
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(rev.BodyDoc, &doc); err != nil {
+		return nil
+	}
+	var structured []texturedoc.SourceEntity
+	if err := json.Unmarshal(rev.SourceEntities, &structured); err != nil {
+		return nil
+	}
+	if len(structured) == 0 {
+		return nil
+	}
+	refs := map[string]bool{}
+	wireArticleCollectVisibleStructuredSourceRefs(doc.Doc, refs)
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]textureSourceEntity, 0, len(structured))
+	seen := map[string]bool{}
+	for _, entity := range structured {
+		id := strings.TrimSpace(entity.SourceEntityID)
+		if id == "" || !refs[id] || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, provenanceSourceEntityFromStructured(entity))
+	}
+	return out
+}
+
+func wireArticleCollectVisibleStructuredSourceRefs(node texturedoc.Node, refs map[string]bool) bool {
+	for _, child := range node.Content {
+		if wireArticleArticleLineStartsInventorySection(wireArticleStructuredNodeText(child)) {
+			return true
+		}
+		if child.Type == "source_ref" || child.Type == "source_embed" {
+			if id := textureNodeStringAttr(child, "source_entity_id"); id != "" {
+				refs[id] = true
+			}
+		}
+		if wireArticleCollectVisibleStructuredSourceRefs(child, refs) {
+			return true
+		}
+	}
+	return false
+}
+
+func wireArticleStructuredNodeText(node texturedoc.Node) string {
+	if node.Type == "text" {
+		return node.Text
+	}
+	var b strings.Builder
+	for _, child := range node.Content {
+		b.WriteString(wireArticleStructuredNodeText(child))
+	}
+	return b.String()
 }
 
 func wireArticleArticleProseForSourceRefs(content string) string {
