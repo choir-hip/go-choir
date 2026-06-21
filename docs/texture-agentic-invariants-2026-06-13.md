@@ -89,6 +89,12 @@ ordinary ingress target for user or source prompts.
    decision, requesting an email handoff, parking for later updates, or ending
    intentionally.
 
+   Semantic delegation tools are not terminal shortcuts for a parked Texture
+   actor. If Texture writes an owner-visible work-state revision and then opens
+   researcher, super, or email handoff work, the actor should reach its normal
+   park/passivation path so later addressed `update_coagent` packets enter the
+   same document thread.
+
 5. **Owner-visible work state is canonical.** Texture should not wait silently
    when an owner-triggered request requires research, execution, verification,
    long reasoning, or delegation. A quick Texture-authored revision may honestly

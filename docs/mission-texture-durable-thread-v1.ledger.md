@@ -375,3 +375,40 @@ Open edge: delete replacement wake behavior for ordinary document-owned Texture
 threads. A document with an existing Texture thread should receive addressed
 updates through the resident or sleeping actor; a document without a thread
 needs an explicit thread creation path, not an implicit run reconstruction path.
+
+## 2026-06-21 - Parked Texture Delegation Stays In Same Thread
+
+Claim: replacement wake runs persist because a Texture actor can treat semantic
+delegation (`spawn_agent`, `request_super_execution`, email handoff) as a
+terminal tool success, completing the document thread before researcher/super
+evidence returns. Once a document has Texture revision-thread history, ordinary
+addressed `update_coagent` backlog should enter a resident or sleeping actor;
+it should not mint a second Texture run.
+
+Move: for Texture revision actors with idle parking enabled, removed the
+semantic delegation tools from terminal-tool exits so the tool loop reaches the
+park/passivate path after delegation. Tightened `reconcileTextureAgentWake` so
+the fresh integrate-run creation path is legal only when the document has no
+prior Texture revision-thread history. Added focused tests that direct revise
+writes work-state before delegation then sleeps, researcher evidence writes V2
+in the same Texture `loop_id`, and completed historical thread records do not
+spawn replacement wake runs.
+
+Expected ΔV: -1. This should close the named replacement-wake edge for
+established Texture threads while keeping explicit first activation for documents
+without a thread.
+
+Actual ΔV: -1. V is now 4.
+
+Receipts:
+- `internal/runtime/runtime.go`
+- `internal/runtime/texture_controller.go`
+- `internal/runtime/texture_test.go`
+- `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureWakeDoesNotMintReplacementForExistingThreadHistory|TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake|TestTextureIdlePassivatesAndResumesSameRun|TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp|TestSubmitResearchFindingsWakeUsesSameDebouncedPath' -count=1`
+- `nix develop -c go test ./internal/runtime -run 'TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn|TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn|TestUpdateCoagent|TestUpdateCoagentWarmActivationInjectsPendingTurn|TestCoagentRewarmUsesResidentActivationNotActiveRunProxy|TestCoagentRewarmIgnoresBlockedHistoricalActivation|TestUpdateCoagentDeliveryRequiresSuccessfulActivation' -count=1`
+- `nix develop -c scripts/go-test-runtime-shards` (all four shards sequential, pass)
+- `git diff --check`
+
+Open edge: classifier/exact-first-tool/model-prior completion guard residues
+still encode semantic choreography. The next deletion should preserve
+owner-visible work-state and evidence-path behavior without hard role forcing.

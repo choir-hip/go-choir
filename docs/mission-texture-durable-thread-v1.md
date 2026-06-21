@@ -115,16 +115,18 @@ variant (ranking function) V:
 10. always-deep research prompt/loop behavior proven beyond the current V2 cap;
 11. focused runtime tests and runtime shards pass;
 12. landed to main, CI/deploy identity verified, staging acceptance recorded.
-Current V=5; last ΔV=0 on 2026-06-21 from moving Texture update wakes off
-cold prompt-prefix packet delivery and onto durable activation mailbox turns. A
-parked Texture actor keeps the same `loop_id` and run memory across idle, can
-resume that same loop for later `update_coagent` input, and advances the
-Texture controller checkpoint even when a same-loop mailbox packet is consumed
-without a canonical write. Fresh Texture update wakes now append pending packets
-as the first run-memory mailbox turn instead of cold-prepending prompt context.
-The remaining durable thread risk is replacement wake scaffolding for documents
-without a resident/sleeping Texture actor and the classifier/exact-first-tool
-residues.
+Current V=4; last ΔV=-1 on 2026-06-21 from preventing established Texture
+document threads from minting replacement wake runs and from letting parked
+Texture delegation tools bypass idle passivation. A parked Texture actor keeps
+the same `loop_id` and run memory across idle, can resume that same loop for
+later `update_coagent` input, and advances the Texture controller checkpoint
+even when a same-loop mailbox packet is consumed without a canonical write.
+Fresh Texture update wakes still create the first activation only when a
+document has no Texture revision-thread history; after a thread exists,
+addressed backlog must wait for a resident or sleeping actor instead of silently
+creating a second run. The remaining durable-thread risks are the
+classifier/exact-first-tool/model-prior guard residues and proving always-deep
+research beyond the current V2/V3 cadence on staging.
 
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
 (`update_id` + work-state revisions) may land first if it reduces risk, but it
@@ -172,22 +174,25 @@ position / live conjectures / open edges:
   contiguous processed cursor per addressed actor, and actor backlog reads no
   longer filter on `delivered_at`; delivered markers are audit compatibility,
   not the actor-facing cursor authority.
-- C7 supported for fresh, resident, restart-reactivated, and idle-resumed
-  Texture update delivery: new `update_coagent` packets are appended as durable
-  run-memory user turns, including first-turn `activation_mailbox_turn` delivery
-  for fresh wakes. Texture no longer uses cold initial packet prep. This still
-  does not settle the full event-driven cutover because replacement wake
-  scaffolding remains when no resident or sleeping Texture actor exists.
+- C7 supported at focused-test scope for established Texture documents:
+  resident, sleeping, restart-reactivated, and already-threaded documents no
+  longer mint replacement wake runs for ordinary addressed `update_coagent`
+  backlog. New `update_coagent` packets are appended as durable run-memory user
+  turns, including first-turn `activation_mailbox_turn` delivery only for
+  explicit first activation when no Texture revision-thread history exists.
 - C8 supported at focused-test scope: normal Texture idle quiescence now
   passivates the run as a sleeping actor instead of completing it, keeps the run
   memory intact, and resumes the same `loop_id` when new mailbox input arrives.
+- C9 supported at focused-test scope for semantic delegation with parking:
+  `spawn_agent`, `request_super_execution`, and email handoff no longer act as
+  terminal shortcuts for parked Texture revision actors. After a work-state
+  revision and delegation, the actor parks/sleeps and later researcher evidence
+  can produce V2 in the same `loop_id`.
 
-next move: remove the remaining replacement wake scaffolding for Texture
-delivery: require ordinary addressed `update_coagent` input to land in a
-resident or sleeping Texture thread when a document already has a Texture
-thread, define the explicit creation path for documents without one, and then
-begin deleting the classifier/exact-first-tool residues that still encode
-semantic choreography.
+next move: start deleting the classifier/exact-first-tool/model-prior guard
+residues that still encode semantic choreography. Prefer one deletion with a
+focused inversion test proving Texture keeps agency while still writing
+owner-visible work state and opening evidence paths when needed.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
