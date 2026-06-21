@@ -68,9 +68,11 @@ export function normalizeSourceSelectorKind(value: unknown): string {
 
 export function normalizeSourceSelector(selector: any): any | null {
   if (!selector || typeof selector !== 'object') return null;
+  const data = selector.data && typeof selector.data === 'object' ? selector.data : {};
   return {
+    ...data,
     ...selector,
-    selector_kind: normalizeSourceSelectorKind(selector.selector_kind),
+    selector_kind: normalizeSourceSelectorKind(selector.selector_kind || selector.kind),
   };
 }
 

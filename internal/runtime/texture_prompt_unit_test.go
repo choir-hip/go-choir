@@ -372,12 +372,21 @@ func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
 	for _, want := range []string{
 		"Detected Texture source entities:",
 		"youtube_video Demo clip entity_id=src-youtube-demo",
-		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
-		"Preserve existing source: entity ids exactly",
-		"Preserve inline source ref exactly: [the clip](source:src-youtube-demo)",
+		"Do not write markdown source links such as [label](source:ENTITY_ID)",
+		"Preserve existing source_entity_id values exactly",
+		"Preserve source entity identity from legacy inline source ref: source_entity_id=src-youtube-demo",
+		"structured source_ref/source_embed, not markdown source syntax",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("source-ref prompt missing %q:\n%s", want, request)
+		}
+	}
+	for _, forbidden := range []string{
+		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
+		"Preserve inline source ref exactly: [the clip](source:src-youtube-demo)",
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("source-ref prompt retained forbidden old source-link instruction %q:\n%s", forbidden, request)
 		}
 	}
 }

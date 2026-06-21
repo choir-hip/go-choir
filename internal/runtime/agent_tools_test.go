@@ -2145,10 +2145,10 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	}
 	if !strings.Contains(textureRun.Prompt, "must be a publishable article or correction/update draft") ||
 		!strings.Contains(textureRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
-		!strings.Contains(textureRun.Prompt, "(source:"+sourceEntities[0].EntityID+")") ||
+		!strings.Contains(textureRun.Prompt, "source_entity_id="+sourceEntities[0].EntityID) ||
 		!strings.Contains(textureRun.Prompt, "reference at least 1 distinct listed source entity") ||
-		!strings.Contains(textureRun.Prompt, "reader-facing article prose through native Texture transclusion refs like [label](source:entity_id)") ||
-		!strings.Contains(textureRun.Prompt, "Source refs that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement") ||
+		!strings.Contains(textureRun.Prompt, "reader-facing article prose through structured patch_texture insert_source_ref or insert_source_embed operations") ||
+		!strings.Contains(textureRun.Prompt, "Source ids that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement") ||
 		!strings.Contains(textureRun.Prompt, "do not replace them with ordinary clickable links") ||
 		!strings.Contains(textureRun.Prompt, "Use the selected Style.texture sources to shape voice, structure, and editorial judgment") ||
 		!strings.Contains(textureRun.Prompt, "do not name the selected Style.texture or style rationale in reader-facing prose") ||

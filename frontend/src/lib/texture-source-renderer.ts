@@ -195,12 +195,16 @@ export function sourceEntityTargetURL(entity: any): string {
     entity?.target?.canonical_url ||
     entity?.target?.url ||
     entity?.target?.uri ||
+    entity?.target?.metadata?.canonical_url ||
+    entity?.target?.metadata?.url ||
     entity?.canonical_url ||
     entity?.url ||
     entity?.uri ||
     record?.target?.canonical_url ||
     record?.target?.url ||
     record?.target?.uri ||
+    record?.target?.metadata?.canonical_url ||
+    record?.target?.metadata?.url ||
     record?.canonical_url ||
     record?.url ||
     record?.uri ||
@@ -319,7 +323,8 @@ export function mediaRefToSourceEntity(ref: any): any | null {
 }
 
 export function sourceEntityMedia(entity: any, { inline = false } = {}): string {
-  const kind = String(entity?.kind || '').toLowerCase();
+  const record = sourceEntityRecord(entity);
+  const kind = String(entity?.kind || record?.kind || entity?.target?.kind || record?.target?.kind || '').toLowerCase();
   const sourceURL = sourceEntityTargetURL(entity);
   const title = escapeHTML(sourceEntityTitle(entity));
   if (kind === 'youtube_video' || kind === 'youtube' || kind === 'video') {
@@ -508,20 +513,8 @@ export function renderInlineTextureRef(label: string, docRef: string, relatedTex
   </span>`;
 }
 
-function sourceEntityInlineLabel(entity: any, fallback = 'source'): string {
-  const title = entity ? sourceEntityTitle(entity) : '';
-  return String(entity?.label || title || fallback || 'source').trim();
-}
-
 export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedTextures: any[] = []): string {
   let html = escapeHTML(value);
-  html = html.replace(/\[([^\]]+)\]\(source:([^)]+)\)/g, (_match, label, entityID) =>
-    renderInlineSourceRef(label, entityID, sourceEntities)
-  );
-  html = html.replace(/\[source:([A-Za-z0-9_.:-]{1,160})\]/g, (_match, entityID) => {
-    const entity = findSourceEntity(sourceEntities, entityID);
-    return renderInlineSourceRef(sourceEntityInlineLabel(entity), entityID, sourceEntities);
-  });
   html = html.replace(/\[([^\]]+)\]\(texture:([^)]+)\)/g, (_match, label, docID) =>
     renderInlineTextureRef(label, docID, relatedTextures)
   );

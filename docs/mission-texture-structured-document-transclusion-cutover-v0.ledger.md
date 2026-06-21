@@ -768,3 +768,66 @@ to stop teaching or rendering clickable source-link syntax for new structured
 Texture paths while preserving only named historical fallbacks, then update
 tests to prove current-contract fixtures use `body_doc` plus top-level
 `source_entities`.
+
+## 2026-06-21 - Pass 24 - D7 Prompt/Renderer/Fixture Deletion Slice Accepted
+
+Claim: D7 decreases the variant if the most user/model-facing old source-link
+affordances stop teaching or rendering clickable markdown source syntax as
+native Texture citations, while known runtime legacy generators remain named
+residue for later slices.
+
+Move: construct + prover shift. Removed prompt/coagent language that presented
+`[label](source:ENTITY_ID)` as native source syntax, changed preservation
+requirements to name durable `source_entity_id` handles and structured
+`source_ref`/`source_embed` operations, removed frontend markdown source-link
+upgrading, deleted the unused markdown serializer helper, and converted
+current-contract `texture-source-entities` fixtures to structured `body_doc`
+plus top-level `source_entities`. The first D7 review returned
+`revise_before_continue` because several frontend fixtures still depended on
+markdown-only content plus `metadata.source_entities`; those fixtures were
+repaired and re-review returned `accept`.
+
+Expected delta V: -1 for deleting the prompt/render/test affordance band while
+leaving deeper runtime legacy normalizers/validators as explicit residue.
+
+Actual delta V: -1. Current V=2. D7 is not complete; the next D7 slice must
+target or confine the remaining runtime old-syntax behavior.
+
+Receipts:
+`internal/runtime/textureprompts/overlays/run_system.yaml`;
+`internal/runtime/textureprompts/overlays/revision_source_entities_intro.yaml`;
+`internal/runtime/tools_coagent.go`;
+`internal/runtime/texture_agent_revision.go`;
+`internal/runtime/texture_prompt_unit_test.go`;
+`internal/runtime/texture_test.go`;
+`internal/runtime/runtime_test.go`;
+`internal/runtime/agent_tools_test.go`;
+`frontend/src/lib/texture-source-renderer.ts`;
+`frontend/src/lib/texture-source-launcher.ts`;
+`frontend/src/lib/source-contract.ts`;
+`frontend/src/lib/texture-markdown-serializer.ts`;
+`frontend/tests/texture-source-entities.spec.js`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Evidence:
+`npm run build`;
+`git diff --check`;
+`nix develop -c go test ./internal/runtime -run 'TestSystemPrompt|TestTexturePromptPreservesInlineSourceRefs|TestTextureAgentRevisionRegistersMediaSourceEntities|TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestUniversalWire' -count=1`;
+`npx playwright test tests/texture-source-entities.spec.js --grep "frontend source contract|source review URL|source reader exposes|source inline excerpts|related Texture|legacy texture|raw markdown|source evidence states|structured revisions|multimedia source entities|source selectors|published source entity quote|source open plans"`;
+D7 re-review duplicate checks:
+`git grep -n "texture-markdown-serializer\|serializeEditorMarkdown" -- frontend/src frontend/tests internal -- ':!frontend/dist'`;
+`rg -n "\]\(source:|\[source:|metadata:\s*\{|source_entities:|body_doc:" frontend/tests/texture-source-entities.spec.js`;
+focused runtime command above.
+
+Local browser limitation: full authenticated `texture-source-entities` did not
+complete locally because local auth service `127.0.0.1:8081` stopped listening
+after `start-services.sh`; Vite then logged `ECONNREFUSED` for `/auth/session`
+and `/auth/register/begin`. This is not settlement evidence. Staging/Comet
+proof remains required.
+
+Open edge: continue D7 by deleting or explicitly confining
+`texture_legacy_wire_normalization.go`, `texture_lineage.go`,
+`universal_wire.go`, and `texture_citation_validation.go`. Do not claim old
+source syntax deletion complete until those paths are repaired or proven to be
+historical-only and unreachable from new canonical Texture writes.

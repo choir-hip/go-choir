@@ -9870,7 +9870,8 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 	if strings.Contains(run.Prompt, "Detected durable media source refs") ||
 		strings.Contains(run.Prompt, "Media source refs") ||
 		!strings.Contains(run.Prompt, "Detected Texture source entities") ||
-		!strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
+		!strings.Contains(run.Prompt, "insert_source_ref or insert_source_embed operations") ||
+		strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
 	}
 	assertNoForcedSemanticDelegation(t, run.Prompt)
@@ -9995,7 +9996,8 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 	}
 	if !strings.Contains(run.Prompt, "Detected Texture source entities") ||
 		!strings.Contains(run.Prompt, "content_id=content-cloud-audit") ||
-		!strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
+		!strings.Contains(run.Prompt, "insert_source_ref or insert_source_embed operations") ||
+		strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
 		t.Fatalf("compiled prompt missing content source entity contract: %q", run.Prompt)
 	}
 }

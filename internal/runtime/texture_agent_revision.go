@@ -529,7 +529,7 @@ func textureHardRequirementHints(parts ...string) []string {
 			add("Required hash/value: " + match)
 		}
 		for _, match := range textureInlineSourceRefRE.FindAllString(text, -1) {
-			add("Preserve inline source ref exactly: " + truncatePromptSnippet(match, 180))
+			add("Preserve source entity identity from legacy inline source ref: " + legacyInlineSourceRefRequirement(match))
 		}
 		for _, label := range []string{"[S1]", "[S2]", "[S3]"} {
 			if strings.Contains(text, label) {
@@ -544,6 +544,21 @@ func textureHardRequirementHints(parts ...string) []string {
 		return out[:32]
 	}
 	return out
+}
+
+func legacyInlineSourceRefRequirement(match string) string {
+	label := strings.TrimSpace(match)
+	entityID := ""
+	if start := strings.LastIndex(match, "(source:"); start >= 0 {
+		entityID = strings.TrimSpace(strings.TrimSuffix(match[start+len("(source:"):], ")"))
+		label = strings.TrimSpace(match[:start])
+		label = strings.TrimPrefix(label, "[")
+		label = strings.TrimSuffix(label, "]")
+	}
+	if entityID == "" {
+		return truncatePromptSnippet(match, 180)
+	}
+	return fmt.Sprintf("source_entity_id=%s label=%q; keep it as a structured source_ref/source_embed, not markdown source syntax", entityID, label)
 }
 
 func textureAgentRevisionContextMode(current types.Revision, previous *types.Revision) string {

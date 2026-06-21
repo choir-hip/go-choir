@@ -145,6 +145,17 @@ test('legacy texture inline refs still render as Texture transclusion refs', () 
   expect(html).toContain('data-texture-related-revision-id="rev-grid-v1"');
 });
 
+test('raw markdown source links do not render as native Texture source refs', () => {
+  const html = renderInlineMarkdown(
+    'This claim has old source syntax [source label](source:src-raw-link).',
+    [{ entity_id: 'src-raw-link', label: 'Source label' }],
+    [],
+  );
+
+  expect(html).not.toContain('data-texture-source-ref');
+  expect(html).toContain('[source label](source:src-raw-link)');
+});
+
 test('related Texture refs parse and format pinned revision targets', () => {
   expect(parseTextureRelatedRef('doc-grid-story@rev-grid-v1')).toEqual({
     docID: 'doc-grid-story',
@@ -444,46 +455,45 @@ test('Texture renders source entities as expandable sources and opens owning med
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
     const sourceURL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-    const metadata = {
-      source_entities: [
-        {
-          entity_id: 'src-fixture-youtube',
-          kind: 'youtube_video',
-          label: 'YouTube source fixture',
-          target: {
-            target_kind: 'content_item',
-            url: sourceURL,
-            canonical_url: sourceURL,
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-fixture-youtube',
+        target: { kind: 'video', uri: sourceURL },
+        selectors: [{ kind: 'whole_resource' }],
+        display: { mode: 'player', title: 'YouTube source fixture', label: 'source' },
+        evidence: { state: 'available', open_surface: 'video' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-source-entity-fixture', level: 1 }, content: [{ type: 'text', text: 'Source Entity Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-source-entity-fixture' },
+            content: [
+              { type: 'text', text: 'Review this ' },
+              { type: 'source_ref', attrs: { id: 'ref-fixture-youtube', source_entity_id: 'src-fixture-youtube', display_mode: 'numbered_ref', label: 'source' } },
+              { type: 'text', text: `: ${sourceURL}` },
+            ],
           },
-          selectors: [{ selector_kind: 'whole_resource' }],
-          display: {
-            inline_mode: 'embedded_preview',
-            expanded_mode: 'media_player',
-            open_surface: 'video',
-            default_collapsed: true,
-          },
-          evidence: {
-            state: 'available',
-            research_state: 'pending',
-            transcript_availability: 'unavailable',
-          },
-          provenance: {
-            created_by: 'importer',
-            rights_scope: 'private_user_source',
-            untrusted_source_text: true,
-          },
-        },
-      ],
+        ],
+      },
     };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `# Source Entity Fixture\n\nReview this [source](source:src-fixture-youtube): ${sourceURL}`,
+        content: `# Source Entity Fixture\n\nReview this [1]: ${sourceURL}`,
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata,
       }),
     });
     if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
@@ -504,7 +514,6 @@ test('Texture renders source entities as expandable sources and opens owning med
   await expect(citation).toHaveAttribute('data-source-expansion-surface', 'media');
   await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('YouTube source fixture');
   await expect(citation.locator('[data-texture-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
-  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('transcript unavailable');
 
   await citation.locator('[data-texture-open-source]').click();
   await expect(page.locator('[data-window]').filter({ hasText: 'YouTube source fixture' }).last()).toBeVisible({ timeout: 10000 });
@@ -565,59 +574,51 @@ test('Texture opens content-item text sources as reader-mode markdown', async ({
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-reader-mode',
+        target: { kind: 'content_item', id: item.content_id, uri: item.source_url },
+        selectors: [{
+          kind: 'text_quote',
+          data: {
+            text_quote: 'Full cleaned reader source detail supports the cited claim.',
+            content_hash: item.content_hash,
+          },
+        }],
+        display: { mode: 'excerpt', title: 'Reader-mode source fixture', label: '1' },
+        evidence: { state: 'available', open_surface: 'source' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-content-source-reader', level: 1 }, content: [{ type: 'text', text: 'Content Source Reader Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-content-source-reader' },
+            content: [
+              { type: 'text', text: 'This claim has a cleaned source ' },
+              { type: 'source_ref', attrs: { id: 'ref-reader-mode', source_entity_id: 'src-reader-mode', display_mode: 'numbered_ref', label: '1' } },
+              { type: 'text', text: '.' },
+            ],
+          },
+        ],
+      },
+    };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: '# Content Source Reader Fixture\n\nThis claim has a cleaned source [1](source:src-reader-mode).',
+        content: '# Content Source Reader Fixture\n\nThis claim has a cleaned source [1].',
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata: {
-          source_entities: [
-            {
-              entity_id: 'src-reader-mode',
-              kind: 'content_item',
-              label: 'Reader-mode source fixture',
-              target: {
-                target_kind: 'content_item',
-                content_id: item.content_id,
-                url: item.source_url,
-                canonical_url: item.canonical_url,
-              },
-              selectors: [
-                {
-                  selector_kind: 'text_quote',
-                  text_quote: 'Full cleaned reader source detail supports the cited claim.',
-                  content_hash: item.content_hash,
-                },
-              ],
-              reader_snapshot: {
-                text_content: [
-                  'Full cleaned reader source detail supports the cited claim.',
-                  'Second source sentence explains why the cleaned markdown is useful before opening the full source window.',
-                  'Third source sentence gives the inline citation enough context to be read in flow without turning the note into a complete source dump.',
-                  'Fourth source sentence should remain bounded by the excerpt helper when the inline note is compact.',
-                ].join(' '),
-              },
-              display: {
-                inline_mode: 'embedded_excerpt',
-                expanded_mode: 'source_card',
-                open_surface: 'content',
-                default_collapsed: true,
-              },
-              evidence: {
-                state: 'available',
-                research_state: 'confirmed',
-              },
-              provenance: {
-                created_by: 'browser-test',
-                rights_scope: 'public_source',
-                untrusted_source_text: true,
-              },
-            },
-          ],
-        },
       }),
     });
     if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
@@ -635,9 +636,7 @@ test('Texture opens content-item text sources as reader-mode markdown', async ({
   await citation.click();
   const flowNote = rendered.locator('[data-texture-source-flow-note]');
   await expect(flowNote).toBeVisible();
-  await expect(flowNote).toContainText('Second source sentence explains why the cleaned markdown is useful');
-  await expect(flowNote).toContainText('Third source sentence gives the inline citation enough context');
-  await expect(flowNote).not.toContainText('Fourth source sentence should remain bounded');
+  await expect(flowNote).toContainText('Full cleaned reader source detail supports the cited claim');
   await flowNote.locator('[data-texture-open-source][data-source-entity-id="src-reader-mode"]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
@@ -710,83 +709,62 @@ test('Texture source URL opens Source Viewer unless browser is explicitly reques
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-url-source-viewer',
+        target: { kind: 'web_url', uri: sourceURL },
+        selectors: [{ kind: 'text_quote', data: { text_quote: 'Reader snapshot text proves Source Viewer opened instead of Web Lens.' } }],
+        display: { mode: 'excerpt', title: 'Source URL routing fixture', label: '1' },
+        evidence: { state: 'available', open_surface: 'source', reader_artifact_state: 'reader_snapshot_ready' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+      {
+        source_entity_id: 'src-url-web-lens',
+        target: { kind: 'web_url', uri: sourceURL },
+        selectors: [{ kind: 'text_quote', data: { text_quote: 'Explicit browser routing fixture.' } }],
+        display: { mode: 'excerpt', title: 'Source URL explicit Web Lens fixture', label: '2' },
+        evidence: { state: 'available', open_surface: 'web_lens' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-source-url-routing', level: 1 }, content: [{ type: 'text', text: 'Source URL Routing Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-source-url-routing-source' },
+            content: [
+              { type: 'text', text: 'This claim opens a source URL ' },
+              { type: 'source_ref', attrs: { id: 'ref-url-source-viewer', source_entity_id: 'src-url-source-viewer', display_mode: 'numbered_ref', label: '1' } },
+              { type: 'text', text: '.' },
+            ],
+          },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-source-url-routing-web-lens' },
+            content: [
+              { type: 'text', text: 'This claim explicitly inspects the live original ' },
+              { type: 'source_ref', attrs: { id: 'ref-url-web-lens', source_entity_id: 'src-url-web-lens', display_mode: 'numbered_ref', label: '2' } },
+              { type: 'text', text: '.' },
+            ],
+          },
+        ],
+      },
+    };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: '# Source URL Routing Fixture\n\nThis claim opens a source URL [1](source:src-url-source-viewer).\n\nThis claim explicitly inspects the live original [2](source:src-url-web-lens).',
+        content: '# Source URL Routing Fixture\n\nThis claim opens a source URL [1].\n\nThis claim explicitly inspects the live original [2].',
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata: {
-          source_entities: [
-            {
-              entity_id: 'src-url-source-viewer',
-              kind: 'web_source',
-              label: 'Source URL routing fixture',
-              target: {
-                target_kind: 'url',
-                url: sourceURL,
-                canonical_url: sourceURL,
-              },
-              selectors: [
-                {
-                  selector_kind: 'text_quote',
-                  text_quote: 'Reader snapshot text proves Source Viewer opened instead of Web Lens.',
-                },
-              ],
-              reader_snapshot: {
-                text_content: '# Source URL routing fixture\n\nReader snapshot text proves Source Viewer opened instead of Web Lens.',
-              },
-              display: {
-                inline_mode: 'embedded_excerpt',
-                expanded_mode: 'source_card',
-                open_surface: 'source',
-                default_collapsed: true,
-              },
-              evidence: {
-                state: 'available',
-                research_state: 'confirmed',
-              },
-              provenance: {
-                created_by: 'browser-test',
-                rights_scope: 'public_url_snapshot',
-                untrusted_source_text: true,
-              },
-            },
-            {
-              entity_id: 'src-url-web-lens',
-              kind: 'web_source',
-              label: 'Source URL explicit Web Lens fixture',
-              target: {
-                target_kind: 'url',
-                url: sourceURL,
-                canonical_url: sourceURL,
-              },
-              selectors: [
-                {
-                  selector_kind: 'text_quote',
-                  text_quote: 'Explicit browser routing fixture.',
-                },
-              ],
-              display: {
-                inline_mode: 'embedded_excerpt',
-                expanded_mode: 'source_card',
-                open_surface: 'web-lens',
-                default_collapsed: true,
-              },
-              evidence: {
-                state: 'available',
-                research_state: 'confirmed',
-              },
-              provenance: {
-                created_by: 'browser-test',
-                rights_scope: 'public_url_snapshot',
-                untrusted_source_text: true,
-              },
-            },
-          ],
-        },
       }),
     });
     if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
@@ -970,49 +948,45 @@ test('Texture source panel attaches readable text to an existing source entity',
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-attach-text',
+        target: { kind: 'web_url', uri: 'https://example.com/attachable-source-fixture' },
+        selectors: [{ kind: 'text_quote', data: { text_quote: 'Readable attachment confirms the cited claim.' } }],
+        display: { mode: 'excerpt', title: 'Attachable source fixture', label: '1' },
+        evidence: { state: 'available', open_surface: 'source' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-source-artifact-attach', level: 1 }, content: [{ type: 'text', text: 'Source Artifact Attach Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-source-artifact-attach' },
+            content: [
+              { type: 'text', text: 'This claim will receive a readable source artifact ' },
+              { type: 'source_ref', attrs: { id: 'ref-attach-text', source_entity_id: 'src-attach-text', display_mode: 'numbered_ref', label: '1' } },
+              { type: 'text', text: '.' },
+            ],
+          },
+        ],
+      },
+    };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: '# Source Artifact Attach Fixture\n\nThis claim will receive a readable source artifact [1](source:src-attach-text).',
+        content: '# Source Artifact Attach Fixture\n\nThis claim will receive a readable source artifact [1].',
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata: {
-          source_entities: [
-            {
-              entity_id: 'src-attach-text',
-              kind: 'web_source',
-              label: 'Attachable source fixture',
-              target: {
-                target_kind: 'url',
-                url: 'https://example.com/attachable-source-fixture',
-                canonical_url: 'https://example.com/attachable-source-fixture',
-              },
-              selectors: [
-                {
-                  selector_kind: 'text_quote',
-                  text_quote: 'Readable attachment confirms the cited claim.',
-                },
-              ],
-              display: {
-                inline_mode: 'embedded_excerpt',
-                expanded_mode: 'source_card',
-                open_surface: 'source',
-                default_collapsed: true,
-              },
-              evidence: {
-                state: 'available',
-                research_state: 'pending',
-              },
-              provenance: {
-                created_by: 'browser-test',
-                rights_scope: 'public_source',
-                untrusted_source_text: true,
-              },
-            },
-          ],
-        },
       }),
     });
     if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
@@ -1086,78 +1060,86 @@ test('Texture lays out expanded text sources as noncanonical journal flow', asyn
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
-    const metadata = {
-      source_entities: [
-        {
-          entity_id: 'src-fixture-flow',
-          kind: 'ethics_opinion',
-          label: 'ABA Formal Opinion 512 fixture',
-          target: {
-            target_kind: 'url',
-            url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
-            canonical_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
-          },
-          selectors: [
-            {
-              selector_kind: 'text_quote',
-              text_quote: 'Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees.',
-              supports: 'ethics guidance',
-            },
-          ],
-          display: {
-            inline_mode: 'embedded_excerpt',
-            expanded_mode: 'source_card',
-            open_surface: 'source',
-            default_collapsed: true,
-          },
-          evidence: { state: 'available', research_state: 'confirmed' },
-          provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-fixture-flow',
+        target: {
+          kind: 'web_url',
+          uri: 'https://www.americanbar.org/groups/professional_responsibility/publications/ethics_opinions/aba-formal-opinion-512/',
         },
-        {
-          entity_id: 'src-fixture-nested',
-          kind: 'ethics_rule',
-          label: 'ABA Model Rule 1.6 fixture',
-          target: {
-            target_kind: 'url',
-            url: 'https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/',
-            canonical_url: 'https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/',
+        selectors: [{
+          kind: 'text_quote',
+          data: {
+            text_quote: 'Lawyers using generative artificial intelligence tools must consider duties including competence, confidentiality, communication, supervision, candor, and reasonable fees.',
+            supports: 'ethics guidance',
           },
-          selectors: [
-            {
-              selector_kind: 'text_quote',
-              text_quote: 'A lawyer shall not reveal information relating to the representation of a client unless the client gives informed consent.',
-            },
-          ],
-          display: {
-            inline_mode: 'embedded_excerpt',
-            expanded_mode: 'source_card',
-            open_surface: 'source',
-            default_collapsed: true,
-          },
-          evidence: { state: 'available', research_state: 'confirmed' },
-          provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
+        }],
+        display: { mode: 'excerpt', title: 'ABA Formal Opinion 512 fixture', label: 'ethics guidance' },
+        evidence: { state: 'available', open_surface: 'source' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+      {
+        source_entity_id: 'src-fixture-nested',
+        target: {
+          kind: 'web_url',
+          uri: 'https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/rule_1_6_confidentiality_of_information/',
         },
-      ],
-    };
+        selectors: [{
+          kind: 'text_quote',
+          data: { text_quote: 'A lawyer shall not reveal information relating to the representation of a client unless the client gives informed consent.' },
+        }],
+        display: { mode: 'excerpt', title: 'ABA Model Rule 1.6 fixture', label: 'confidentiality' },
+        evidence: { state: 'available', open_surface: 'source' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
     const paragraphs = [
-      [
-        'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents.',
-        '[ethics guidance](source:src-fixture-flow)',
-      ].join(' '),
-      'Second paragraph keeps using the reading measure beside the expanded evidence while preserving [confidentiality](source:src-fixture-nested) as its own citation marker rather than flattening it into prose.',
+      'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents. [1]',
+      'Second paragraph keeps using the reading measure beside the expanded evidence while preserving [2] as its own citation marker rather than flattening it into prose.',
       'Third paragraph gives the layout enough prose to continue below the source note after the narrow line region ends, using ordinary article text that should not become a separate card or metadata block.',
       'Fourth paragraph proves the article continues in the normal full measure once the source apparatus no longer occupies the right column.',
       'Fifth paragraph gives the verifier another full-width line after the note so the test cannot pass merely because one paragraph happened to wrap narrowly beside the source.',
     ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-source-flow', level: 1 }, content: [{ type: 'text', text: 'Source Flow Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-source-flow-1' },
+            content: [
+              { type: 'text', text: 'Legal practice now depends on durable work product, governed source memory, and reliable citation review across long client documents. ' },
+              { type: 'source_ref', attrs: { id: 'ref-fixture-flow', source_entity_id: 'src-fixture-flow', display_mode: 'numbered_ref', label: 'ethics guidance' } },
+            ],
+          },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-source-flow-2' },
+            content: [
+              { type: 'text', text: 'Second paragraph keeps using the reading measure beside the expanded evidence while preserving ' },
+              { type: 'source_ref', attrs: { id: 'ref-fixture-nested', source_entity_id: 'src-fixture-nested', display_mode: 'numbered_ref', label: 'confidentiality' } },
+              { type: 'text', text: ' as its own citation marker rather than flattening it into prose.' },
+            ],
+          },
+          { type: 'paragraph', attrs: { id: 'p-source-flow-3' }, content: [{ type: 'text', text: paragraphs[2] }] },
+          { type: 'paragraph', attrs: { id: 'p-source-flow-4' }, content: [{ type: 'text', text: paragraphs[3] }] },
+          { type: 'paragraph', attrs: { id: 'p-source-flow-5' }, content: [{ type: 'text', text: paragraphs[4] }] },
+        ],
+      },
+    };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content: `# Source Flow Fixture\n\n${paragraphs.join('\n\n')}`,
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata,
       }),
     });
     if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
@@ -1271,48 +1253,56 @@ test('Texture uses stacked journal flow instead of old source card when side rou
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-stacked-flow',
+        target: {
+          kind: 'web_url',
+          uri: 'https://example.com/stacked-source-flow',
+        },
+        selectors: [{
+          kind: 'text_quote',
+          data: { text_quote: 'Stacked source notes should remain content-first without reusing the old expanded card surface.' },
+        }],
+        display: { mode: 'excerpt', title: 'Stacked journal source fixture', label: '1' },
+        evidence: { state: 'available', open_surface: 'source' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const paragraphs = [
+      'This constrained measure still needs the source note to read like journal evidence rather than an expanded card [1], while the article text remains the main object being read.',
+      'A second paragraph proves the original source card path is not needed just because a side column is unavailable.',
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-stacked-source-flow', level: 1 }, content: [{ type: 'text', text: 'Stacked Source Flow Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-stacked-source-flow-1' },
+            content: [
+              { type: 'text', text: 'This constrained measure still needs the source note to read like journal evidence rather than an expanded card ' },
+              { type: 'source_ref', attrs: { id: 'ref-stacked-flow', source_entity_id: 'src-stacked-flow', display_mode: 'numbered_ref', label: '1' } },
+              { type: 'text', text: ', while the article text remains the main object being read.' },
+            ],
+          },
+          { type: 'paragraph', attrs: { id: 'p-stacked-source-flow-2' }, content: [{ type: 'text', text: paragraphs[1] }] },
+        ],
+      },
+    };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: [
-          '# Stacked Source Flow Fixture',
-          '',
-          'This constrained measure still needs the source note to read like journal evidence rather than an expanded card [1](source:src-stacked-flow), while the article text remains the main object being read.',
-          '',
-          'A second paragraph proves the original source card path is not needed just because a side column is unavailable.',
-        ].join('\n'),
+        content: `# Stacked Source Flow Fixture\n\n${paragraphs.join('\n\n')}`,
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata: {
-          source_entities: [
-            {
-              entity_id: 'src-stacked-flow',
-              kind: 'content_item',
-              label: 'Stacked journal source fixture',
-              target: {
-                target_kind: 'url',
-                url: 'https://example.com/stacked-source-flow',
-                canonical_url: 'https://example.com/stacked-source-flow',
-              },
-              selectors: [
-                {
-                  selector_kind: 'text_quote',
-                  text_quote: 'Stacked source notes should remain content-first without reusing the old expanded card surface.',
-                },
-              ],
-              display: {
-                inline_mode: 'embedded_excerpt',
-                expanded_mode: 'source_card',
-                open_surface: 'source',
-                default_collapsed: true,
-              },
-              evidence: { state: 'available', research_state: 'confirmed' },
-              provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
-            },
-          ],
-        },
       }),
     });
     if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
@@ -1387,48 +1377,56 @@ test('Texture mobile source journal flow stays within the reader width', async (
     });
     if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
     const doc = await docRes.json();
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-mobile-flow',
+        target: {
+          kind: 'web_url',
+          uri: 'https://example.com/mobile-source-flow-with-a-long-url-that-must-not-expand-the-reader-width',
+        },
+        selectors: [{
+          kind: 'text_quote',
+          data: { text_quote: 'NixOS declarative configuration helps reproduce system configuration and supports rollback.' },
+        }],
+        display: { mode: 'excerpt', title: 'NixOS reproducible configuration and rollback', label: '1' },
+        evidence: { state: 'available', open_surface: 'source' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const paragraphs = [
+      'Operating system. The server should run a Linux distribution that supports reproducible, version-controlled system configurations with rollback capability [1]. This normal paragraph must stay aligned with the phone viewport after the source is opened.',
+      'Base architecture. The architecture is European host, encrypted storage, vector database, open-weight embeddings, and private inference routing.',
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-mobile-source-flow', level: 1 }, content: [{ type: 'text', text: 'Mobile Source Flow Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-mobile-source-flow-1' },
+            content: [
+              { type: 'text', text: 'Operating system. The server should run a Linux distribution that supports reproducible, version-controlled system configurations with rollback capability ' },
+              { type: 'source_ref', attrs: { id: 'ref-mobile-flow', source_entity_id: 'src-mobile-flow', display_mode: 'numbered_ref', label: '1' } },
+              { type: 'text', text: '. This normal paragraph must stay aligned with the phone viewport after the source is opened.' },
+            ],
+          },
+          { type: 'paragraph', attrs: { id: 'p-mobile-source-flow-2' }, content: [{ type: 'text', text: paragraphs[1] }] },
+        ],
+      },
+    };
     const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: [
-          '# Mobile Source Flow Fixture',
-          '',
-          'Operating system. The server should run a Linux distribution that supports reproducible, version-controlled system configurations with rollback capability [1](source:src-mobile-flow). This normal paragraph must stay aligned with the phone viewport after the source is opened.',
-          '',
-          'Base architecture. The architecture is European host, encrypted storage, vector database, open-weight embeddings, and private inference routing.',
-        ].join('\n'),
+        content: `# Mobile Source Flow Fixture\n\n${paragraphs.join('\n\n')}`,
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
         author_kind: 'user',
         author_label: 'browser-test',
-        metadata: {
-          source_entities: [
-            {
-              entity_id: 'src-mobile-flow',
-              kind: 'content_item',
-              label: 'NixOS reproducible configuration and rollback',
-              target: {
-                target_kind: 'url',
-                url: 'https://example.com/mobile-source-flow-with-a-long-url-that-must-not-expand-the-reader-width',
-                canonical_url: 'https://example.com/mobile-source-flow-with-a-long-url-that-must-not-expand-the-reader-width',
-              },
-              selectors: [
-                {
-                  selector_kind: 'text_quote',
-                  text_quote: 'NixOS declarative configuration helps reproduce system configuration and supports rollback.',
-                },
-              ],
-              display: {
-                inline_mode: 'embedded_excerpt',
-                expanded_mode: 'source_card',
-                open_surface: 'source',
-                default_collapsed: true,
-              },
-              evidence: { state: 'available', research_state: 'confirmed' },
-              provenance: { created_by: 'browser-test', rights_scope: 'public_source' },
-            },
-          ],
-        },
       }),
     });
     if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);

@@ -910,7 +910,7 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; current V=3. Continue with D7 deletion/proof preparation: map remaining old source syntaxes, delete or hard-reject canonical clickable-link/source-token/citation-sidecar paths, and prepare staging acceptance. Do not deploy or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; D6 publication/export is implemented and independently accepted after P1 repairs; D7 prompt/renderer/current-fixture deletion slice is independently accepted; current V=2. Continue D7 by deleting or confining remaining runtime old source syntaxes, especially legacy normalizers, lineage, Universal Wire source-token handling, and citation validation. Do not deploy or claim mission settlement unless the paradoc is updated first.
 ```
 
 ## D6 Publication/Export Problem Checkpoint - 2026-06-21
@@ -1016,3 +1016,40 @@ tests that are meant to prove the current Texture contract to structured
 legacy fallback tests; and prepare the staging acceptance proof for source
 creation, edit preservation/deletion, multimedia expansion, publication/export,
 and source-link/token rejection.
+
+### D7 Slice 1 Accepted - Prompt/Renderer/Fixure Deletion
+
+Status: locally implemented and independently accepted on 2026-06-21.
+
+This slice deleted the highest-risk model/user-facing affordances for clickable
+source-link syntax without claiming the full D7 residue is gone:
+
+- Texture prompt overlays and coagent Texture routing now instruct agents to use
+  structured `patch_texture` source operations and `source_entity_id` handles,
+  not `[label](source:...)` links or raw source-token prose.
+- Agent revision preservation requirements no longer tell the model to preserve
+  a markdown source link exactly; they name the durable `source_entity_id` and
+  require a structured `source_ref`/`source_embed`.
+- Frontend markdown rendering no longer upgrades raw `[label](source:id)` or
+  `[source:id]` text into native Texture source refs. Native structured
+  `source_ref` nodes still render through the structured document renderer.
+- The unused `texture-markdown-serializer.ts` helper was deleted after review
+  found no live imports.
+- Current-contract frontend source/entity fixtures were converted from
+  markdown-only `content` plus `metadata.source_entities` to structured
+  `body_doc` with `source_ref` atoms plus top-level structured
+  `source_entities`. The only remaining raw source-link fixture in that spec is
+  an explicit regression proving raw source links do not become native refs.
+
+Independent re-review verdict: `accept`. Evidence included `git diff --check`,
+focused runtime prompt/source-entity tests, frontend build, and the
+browser-independent `texture-source-entities` subset. Full authenticated local
+browser proof remained blocked by local auth service lifetime
+(`127.0.0.1:8081` stopped listening after `start-services.sh`), so staging/Comet
+proof remains required before mission settlement.
+
+Residual D7 deletion targets remain live and must stay classified as
+legacy/residue until repaired or explicitly confined:
+`internal/runtime/texture_legacy_wire_normalization.go`,
+`internal/runtime/texture_lineage.go`, `internal/runtime/universal_wire.go`, and
+`internal/runtime/texture_citation_validation.go`.
