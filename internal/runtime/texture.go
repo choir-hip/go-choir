@@ -1671,24 +1671,24 @@ func (h *APIHandler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.
 }
 
 func textureStreamEventFromRecord(rec types.EventRecord) (textureDocumentStreamEvent, bool) {
-	var payload map[string]string
+	var payload map[string]any
 	if len(rec.Payload) > 0 {
 		if err := json.Unmarshal(rec.Payload, &payload); err != nil {
 			return textureDocumentStreamEvent{}, false
 		}
 	}
 
-	docID := strings.TrimSpace(payload["doc_id"])
+	docID := metadataStringValue(payload, "doc_id")
 	if docID == "" {
 		return textureDocumentStreamEvent{}, false
 	}
 
 	event := textureDocumentStreamEvent{
 		DocID:             docID,
-		LoopID:            strings.TrimSpace(payload["loop_id"]),
-		RevisionID:        strings.TrimSpace(payload["revision_id"]),
-		CurrentRevisionID: strings.TrimSpace(payload["current_revision_id"]),
-		Error:             strings.TrimSpace(payload["error"]),
+		LoopID:            metadataStringValue(payload, "loop_id"),
+		RevisionID:        metadataStringValue(payload, "revision_id"),
+		CurrentRevisionID: metadataStringValue(payload, "current_revision_id"),
+		Error:             metadataStringValue(payload, "error"),
 	}
 	switch rec.Kind {
 	case types.EventTextureAgentRevisionStarted:
@@ -1696,6 +1696,11 @@ func textureStreamEventFromRecord(rec types.EventRecord) (textureDocumentStreamE
 	case types.EventTextureAgentRevisionProgress:
 		event.Kind = "synth_progress"
 	case types.EventTextureAgentRevisionCompleted:
+		event.Kind = "synth_completed"
+	case types.EventRunPassivated:
+		if !isTextureAgentID(rec.AgentID) {
+			return textureDocumentStreamEvent{}, false
+		}
 		event.Kind = "synth_completed"
 	case types.EventTextureAgentRevisionFailed:
 		event.Kind = "synth_failed"

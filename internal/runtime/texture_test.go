@@ -8060,6 +8060,87 @@ func TestTextureStreamEventMapsProgressSeparatelyFromStarted(t *testing.T) {
 	}
 }
 
+func TestTextureStreamEventMapsTexturePassivationToSynthCompleted(t *testing.T) {
+	t.Parallel()
+	passivated, ok := textureStreamEventFromRecord(types.EventRecord{
+		Kind:    types.EventRunPassivated,
+		AgentID: "texture:doc-1",
+		Payload: json.RawMessage(`{"doc_id":"doc-1","loop_id":"run-1","current_revision_id":"rev-1"}`),
+	})
+	if !ok || passivated.Kind != "synth_completed" {
+		t.Fatalf("passivated event = %+v, ok=%v, want synth_completed", passivated, ok)
+	}
+	if passivated.DocID != "doc-1" || passivated.LoopID != "run-1" || passivated.CurrentRevisionID != "rev-1" {
+		t.Fatalf("passivated stream event metadata = %+v", passivated)
+	}
+
+	if event, ok := textureStreamEventFromRecord(types.EventRecord{
+		Kind:    types.EventRunPassivated,
+		AgentID: "researcher:doc-1",
+		Payload: json.RawMessage(`{"doc_id":"doc-1","loop_id":"run-1"}`),
+	}); ok {
+		t.Fatalf("non-Texture passivation mapped to Texture stream event: %+v", event)
+	}
+}
+
+func TestTextureIdlePassivationEventCarriesDocumentStreamCompletionPayload(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	provider := &textureParkResidentProvider{Provider: NewStubProvider(time.Millisecond)}
+	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	rt.cfg.TextureActorParkIdle = 25 * time.Millisecond
+	docID, _ := createDocWithUserRevision(t, h)
+	doc, err := s.GetDocument(ctx, docID, "user-1")
+	if err != nil {
+		t.Fatalf("get doc: %v", err)
+	}
+
+	textureRun, err := rt.submitTextureAgentRevisionRun(ctx, doc, "user-1", textureAgentRevisionRequest{
+		Intent: "initial_conductor_workflow",
+		Prompt: "Draft once, then passivate.",
+	}, 0)
+	if err != nil {
+		t.Fatalf("submit texture revision run: %v", err)
+	}
+
+	sleepingRun := waitForStoredRunState(t, s, textureRun.RunID, types.RunPassivated, 5*time.Second)
+	revisionID := metadataStringValue(sleepingRun.Metadata, "current_revision_id")
+	if revisionID == "" {
+		t.Fatalf("passivated run missing current_revision_id: %+v", sleepingRun.Metadata)
+	}
+
+	var passivation *types.EventRecord
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		events, err := s.ListEvents(ctx, textureRun.RunID, 200)
+		if err != nil {
+			t.Fatalf("list events: %v", err)
+		}
+		for i := range events {
+			if events[i].Kind == types.EventRunPassivated {
+				ev := events[i]
+				passivation = &ev
+				break
+			}
+		}
+		if passivation != nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if passivation == nil {
+		t.Fatalf("missing %s event for passivated Texture run", types.EventRunPassivated)
+	}
+
+	streamEvent, ok := textureStreamEventFromRecord(*passivation)
+	if !ok || streamEvent.Kind != "synth_completed" {
+		t.Fatalf("passivation stream event = %+v, ok=%v, want synth_completed", streamEvent, ok)
+	}
+	if streamEvent.DocID != docID || streamEvent.LoopID != textureRun.RunID || streamEvent.CurrentRevisionID != revisionID {
+		t.Fatalf("passivation stream metadata = %+v, want doc=%s loop=%s revision=%s", streamEvent, docID, textureRun.RunID, revisionID)
+	}
+}
+
 func TestTextureDocumentStreamEmitsHeadChangeAfterUserRevision(t *testing.T) {
 	t.Parallel()
 	h, s, _ := textureAPISetupWithRuntime(t)

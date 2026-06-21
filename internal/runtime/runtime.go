@@ -1766,13 +1766,25 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 		log.Printf("runtime: passivate idle run %s: %v", rec.RunID, err)
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"reason":        reason,
 		"result_length": len(text),
 		"input_tokens":  usage.InputTokens,
 		"output_tokens": usage.OutputTokens,
-	})
-	rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payload)
+	}
+	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+		if docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID)); docID != "" {
+			payload["doc_id"] = docID
+		}
+		if revisionID := strings.TrimSpace(metadataStringValue(rec.Metadata, "current_revision_id")); revisionID != "" {
+			payload["current_revision_id"] = revisionID
+		}
+		if runID := strings.TrimSpace(rec.RunID); runID != "" {
+			payload["loop_id"] = runID
+		}
+	}
+	payloadJSON, _ := json.Marshal(payload)
+	rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payloadJSON)
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}

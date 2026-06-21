@@ -260,6 +260,12 @@ position / live conjectures / open edges:
   instead of the prior source-entry caveat. C13 is not settled at native
   source-panel scope: the v2 window still had disabled `Sources` and visible
   tool-error / `Revising...` state.
+- C14 supported at focused-test scope, staging pending: Texture idle
+  passivation now emits a document-correlated stream settlement payload for
+  Texture revision actors, and the document stream maps that passivation to
+  `synth_completed`. This is a run-lifecycle repair, not a forced semantic
+  workflow: it clears owner-visible pending state only when the existing
+  Texture actor actually parks after idle.
 
 Native-source entity repair commit
 `043707fd1e1d2a50cc5e4ef7f218077ee04186fe` carries collated source entities
@@ -328,12 +334,23 @@ toolbar `Sources` control remained disabled, and the native Sources panel could
 not be inspected in an idle state. Treat this as a discovered residual, not a
 regression of the saved-evidence delivery repair.
 
-next move: use the remaining budget on always-deep/source-evidence robustness:
-diagnose why a deployed source-backed v2 can keep the Texture run in active
-`Revising...` / `Continuing...` state with the Sources toolbar disabled after
-native inline source rendering succeeds, then prove that typed researcher refs
-become owner-visible native source handles in both inline citation UI and the
-idle Sources panel.
+Texture passivation stream settlement repair, after problem checkpoint
+`a8a62b29`, adds `doc_id`, `current_revision_id`, and `loop_id` to
+`EventRunPassivated` for Texture revision actor passivation, maps that event to
+document-stream `synth_completed`, and makes stream payload decoding tolerate
+mixed metadata such as numeric token counts. Focused comprehensive tests prove
+the stream mapping and emitted passivation payload; adjacent parking/resume and
+source/citation tests plus `nix develop -c scripts/go-test-runtime-shards`
+passed locally. Actual ΔV remains provisional: local evidence supports the
+source-panel settlement hypothesis, but V remains 1 until deployed Comet proof
+shows the source-backed v2 reaches idle UI with the native Sources panel
+inspectable.
+
+next move: land and deploy the passivation stream settlement repair, then use
+Comet with the logged-in `yusefnathanson@me.com` session to prove that a
+source-backed Texture v2 renders native source handles inline, clears
+`Revising...` / `Continuing...` after passivation, enables the toolbar
+`Sources` control, and exposes represented sources in the idle Sources panel.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

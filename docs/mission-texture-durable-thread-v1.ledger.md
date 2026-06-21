@@ -948,3 +948,44 @@ source-panel attachment and clean run settlement were not proven on staging.
 Next realism axis: diagnose the disabled native Sources state and visible
 tool-error / `Revising...` residue after source-backed rewrite. The next fix
 must again document the problem first if it changes runtime behavior.
+
+## 2026-06-21 - Texture Passivation Stream Settlement Local Repair
+
+Claim: the disabled Sources / continuing-state residual after
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_004` is at least partly a stream
+settlement gap. The Texture actor can successfully create a source-backed v2 and
+then park, but the browser document stream does not receive a document-scoped
+completion event for idle passivation, so the editor can keep `agentPending`
+true and leave toolbar actions disabled.
+
+Move: added document stream metadata to Texture revision actor idle
+passivation: `doc_id`, `current_revision_id`, and `loop_id` now ride on
+`EventRunPassivated`. The Texture document stream maps Texture-owned
+`EventRunPassivated` to `synth_completed`, and its payload decoder now tolerates
+mixed JSON metadata so numeric token fields do not hide the string correlation
+fields. Added focused comprehensive tests for the stream mapping and the emitted
+passivation payload, while preserving non-Texture passivation filtering.
+
+Expected Delta V: -1 only after deployed product proof shows a source-backed v2
+settles to idle with native inline source handles and an inspectable Sources
+panel. Local tests alone do not settle the source-panel axis.
+
+Actual Delta V: provisional 0. V remains 1 pending commit, deploy, and Comet
+proof on `https://choir.news`.
+
+Receipts:
+- Focused passivation stream tests:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTextureStreamEventMaps(TexturePassivationToSynthCompleted|ProgressSeparatelyFromStarted)$|TestTextureIdlePassivationEventCarriesDocumentStreamCompletionPayload$' -count=1`
+  passed.
+- Adjacent resident actor tests:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run 'TestTexture(DocumentStreamEmitsHeadChangeAfterAgentRevision|IdlePassivatesAndResumesSameRun|RevisionRunParksAndConsumesUpdateWithoutColdWake)$' -count=1`
+  passed.
+- Source/evidence regression tests:
+  `nix develop -c go test ./internal/runtime -run 'TestResearcher(FailureSynthesizesCheckpointAfterSearch|CompletionSynthesizesCheckpointAfterSavedEvidence)|Test(EvidenceRecordToSourceEntity|EvidenceDerivedEntityFeedsCitationValidator|EvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch|PendingUpdateRefsBecomeSourceEntities|TextureCoagentSourceRefsSurviveInjectionAndDelivery|TextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation)$' -count=1`
+  passed.
+- Runtime coverage:
+  `nix develop -c scripts/go-test-runtime-shards` passed locally.
+
+Open edge: staging must prove the frontend receives the new `synth_completed`
+after idle passivation and that this enables the toolbar `Sources` panel without
+manual cancellation.
