@@ -513,6 +513,42 @@ Heresy delta: discovered: appagent write tools still operate on string content
 and source metadata sidecars. introduced: none by this documentation checkpoint.
 repaired: not yet; D4 implementation must repair it.
 
+## D4 Accepted Integration - 2026-06-21
+
+Independent D4 re-review returned `accept` after the Universal Wire structured
+source manifest repair. Root integrated the accepted D4 commits as `cdd7232c`
+and `cb690d8c`, then reran focused runtime/store evidence and the normal runtime
+shard script on the integrated branch.
+
+Accepted D4 state:
+
+- `patch_texture` now exposes validated structured operations over `BodyDoc`
+  rather than model-authored find/replace/append string patches.
+- `rewrite_texture` remains only as a recovery path whose plain prose is
+  converted and validated by the server into a structured document.
+- Appagent-authored Texture revisions write `BodyDoc` plus top-level
+  `SourceEntities`, clear legacy source/citation sidecars, and derive projection
+  text through the structured document projector.
+- Structured operations can update blocks, append/insert blocks, delete nodes,
+  preserve or explicitly remove source nodes, and insert `source_ref` /
+  `source_embed` nodes backed by top-level source entities.
+- Universal Wire source-network manifests read visible structured source refs
+  from `BodyDoc` / `SourceEntities` before article inventory sections; legacy
+  metadata source reads remain only as historical fallback for old revisions.
+
+Evidence on root:
+
+```text
+nix develop -c go test ./internal/runtime -run 'Texture.*(Structured|Tool|Agent|Source)|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest'
+nix develop -c go test ./internal/texturedoc ./internal/store
+nix develop -c scripts/go-test-runtime-shards
+git diff --check HEAD~2..HEAD
+```
+
+D4 does not claim mission settlement. Multimedia source rendering/resolution,
+publication/export, broad old-path deletion, deployment, and Comet/browser
+product proof remain open cuts.
+
 ## Editing And Citation Integrity
 
 Offsets are implementation details, not canonical citation identity. Structured
@@ -626,9 +662,10 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 6. Last delta: D4 agent operation
-problem and exact cut documented as the protected-surface precondition for code;
-no product obligation reduced yet.
+staging acceptance proof. Current value: 5. Last delta: -1 for accepted D4
+agent path integration: appagent Texture writes now use structured operations
+and top-level structured source entities instead of string patch/source-sidecar
+canonical writes.
 
 budget: Planning budget is one paradoc pass. D1 implementation plus review-fix
 budget was isolated additive code with focused tests and accepted independent
@@ -641,7 +678,10 @@ D2 API regression; it did not bundle agent tools, publication/export,
 multimedia embedding, staging/deploy, or broad old-path deletion. D4 budget is a
 bounded runtime/tool implementation pass with focused runtime tests; do not
 bundle multimedia resolver, publication/export, deployment, or broad old-path
-deletion unless this paradoc is updated first.
+deletion unless this paradoc is updated first. D4 used that budget for the
+bounded runtime/tool cut plus Universal Wire structured source-manifest repair
+and did not bundle D5/D6/D7. Next budget is D5 multimedia problem checkpoint
+first, then a bounded resolver/rendering cut.
 
 authority / bounds: D1 was authorized as an additive internal schema/parser/
 renderer spike only. It does not authorize production Texture write behavior,
@@ -655,11 +695,13 @@ schema/storage, source entity/provenance records, public Texture revision API,
 revision hash chain, and runtime paths that call `Store.CreateRevision`.
 Protected surfaces touched by D3 are the frontend Texture editor save/load path,
 structured source-ref rendering, and the revision API request contract for
-`body_doc` / top-level `source_entities`. Protected surfaces explicitly left for
-later cuts remain Texture agent structured edit tools/prompts,
-publication/export, Source Viewer/reader integration beyond existing
-open-source affordances, deployment routing, and run acceptance involving
-Texture.
+`body_doc` / top-level `source_entities`. Protected surfaces touched by D4 are
+Texture agent tool schemas/prompts, `commitTextureToolEdit`, appagent revision
+metadata/provenance, source entity carry-forward, mutation completion, and
+Universal Wire source manifest derivation. Protected surfaces explicitly left
+for later cuts remain multimedia/source resolver rendering, publication/export,
+Source Viewer/reader integration beyond existing open-source affordances,
+deployment routing, and run acceptance involving Texture.
 
 evidence packet: D0 design receipts plus a clear-context Codex thread review
 verdict; D1 focused Go tests for schema/source entity validation, including
@@ -673,23 +715,26 @@ evidence passed on root after independent acceptance. D3 evidence passed after
 independent acceptance and root integration: structured source-ref rendering,
 editor save-serialization preservation, top-level source entity filtering, no
 clickable source-link serialization, frontend build, and the D2 runtime API
-regression. Later cuts still need intentional source-ref insertion affordance if
-retained as a separate obligation, publication/export serialization, runtime
-shards where runtime is touched, CI, staging deploy identity, Comet/browser
-staging proof with numbered source refs, expanded source window, multimedia
-source expansion, agent edit preserving refs, and attempted markdown link/source
-token rejection; RunAcceptanceRecord at staging-smoke-level or higher if
-platform behavior changes. D4 evidence target is focused runtime tests for
+regression. D4 evidence passed after independent acceptance and root integration:
 structured Texture agent operations, source-ref preservation/deletion/insertion,
-legacy source syntax rejection, stale-base rejection, and `git diff --check`.
+legacy source syntax rejection, stale-base rejection, no legacy metadata/citation
+sidecar appagent writes, structured Universal Wire visible-source manifest
+derivation, runtime shards, and `git diff --check`. Later cuts still need
+multimedia resolver and renderer proof, publication/export serialization, broad
+old-path deletion, CI, staging deploy identity, Comet/browser staging proof with
+numbered source refs, expanded source window, multimedia source expansion, agent
+edit preserving refs, and attempted markdown link/source token rejection;
+RunAcceptanceRecord at staging-smoke-level or higher if platform behavior
+changes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
 by this paradoc. repaired by D2 for new server-side Texture revision writes at
 the store/API boundary after side-channel rejection, focused tests, independent
 review, and root integration. D3 repairs the owner/editor-authored preservation
-path after focused tests, independent review, and root integration. Full repair
-still requires Texture agent operation tools, multimedia resolver,
+path after focused tests, independent review, and root integration. D4 repairs
+the appagent-authored Texture mutation path after focused tests, independent
+review, and root integration. Full repair still requires multimedia resolver,
 publication/export, old-syntax deletion receipts, and staging proof.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
@@ -710,17 +755,21 @@ source-bearing citation/metadata sidecars unconditionally at
 `Store.CreateRevision`. D3 wires the frontend editor/user path to render
 structured `body_doc` source refs as native atom spans, serialize those atoms
 back to `source_ref` nodes, and send top-level `source_entities` instead of
-source metadata sidecars. E1: insertion affordance for new source refs is still
-not the primary proven path; D3 proves preservation/removal through editor atom
-round-trip. E2: D4 documentation records that Texture agent tools still use
-string patch/rewrite surfaces plus legacy source metadata sidecar normalization;
-implementation remains open. E3:
-publication/export/diff/search still consume the projection and must not be
-treated as proof of structured transclusion behavior.
+source metadata sidecars. D4 wires Texture agent tools to structured
+block/node/source operations and appagent revisions now carry top-level
+structured source entities instead of metadata sidecars. E1: human insertion
+affordance for new source refs is still thinner than preservation/removal
+coverage; D3 proves preservation/removal through editor atom round-trip. E2:
+multimedia source entities exist in schema, but resolver/rendering paths still
+need proof that image/video/audio/PDF/transcript/Texture-span targets open and
+render through the same source entity model. E3: publication/export/diff/search
+still consume the projection and must not be treated as proof of structured
+transclusion behavior.
 
-next move: implement D4 Texture agent structured operation tools. Keep the cut
-bounded to runtime tool schemas/materialization/write-path tests; do not bundle
-multimedia resolver, publication/export, deployment, or broad old-path deletion.
+next move: record the D5 multimedia path Problem Documentation First checkpoint,
+then implement the bounded multimedia resolver/rendering cut. Do not bundle
+publication/export, deployment, or broad old-path deletion unless this paradoc
+is updated first.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -729,8 +778,10 @@ version / lineage: v0. Created 2026-06-21 as a successor/specialization of
 `mission-vtext-source-entities-multimedia-transclusion-v0`. <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 
 learning state: D0 schema/API decision retained here. D1 code witness now lives
-in `internal/texturedoc`; promote outward only when the schema/API becomes the
-production Texture revision contract.
+in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
+writes, editor/user preservation, and appagent mutation. Promote outward only
+when multimedia, publication/export, deletion receipts, and staging proof close
+the product contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -743,5 +794,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1, D2, and D3 are integrated and accepted. D4 is documented but not implemented: Texture agent write tools still edit canonical text through string rewrite/patch surfaces and legacy source sidecar normalization. Implement D4 Texture agent structured operation tools with focused runtime tests. Do not push, deploy, bundle publication export, multimedia resolver, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; current V=5. Next move is D5: first record the multimedia path Problem Documentation First checkpoint, then implement a bounded multimedia source resolver/rendering cut for image/video/audio/PDF/transcript/Texture-span source entities using the same source_ref/source_embed + SourceEntity model. Do not push, deploy, bundle publication export, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
 ```

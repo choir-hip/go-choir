@@ -498,3 +498,47 @@ Open edge: implement the bounded D4 runtime/tool cut with focused tests for
 source-ref preservation, explicit source deletion, source ref/embed insertion,
 legacy syntax rejection, stale-base protection, and no metadata/citation source
 sidecar writes.
+
+## 2026-06-21 - Pass 18 - D4 Accepted And Integrated
+
+Claim: D4 can decrement the mission variant only if the accepted implementation
+shows appagent Texture writes now use structured block/node/source operations
+and no longer create canonical source identity through string patches, clickable
+source links, citations, or metadata sidecars.
+
+Move: prover shift + construct. D4 re-review thread
+`019eebae-975a-7430-b4ae-251e0e02025e` returned `accept` with no findings after
+focused runtime/store tests. Root integrated the accepted commits as `cdd7232c`
+(`Cut Texture agent tools to structured operations`) and `cb690d8c` (`Read
+Universal Wire sources from structured Texture refs`), then reran the focused
+and shard evidence on the root worktree. The paradoc now records D4 as accepted
+and updates the next move to D5 multimedia path documentation/implementation.
+
+Expected delta V: -1 for the Texture agent structured operation path.
+
+Actual delta V: -1. Current V=5. D4 is integrated and accepted; this is not
+mission settlement.
+
+Receipts:
+`internal/runtime/tools_texture.go`;
+`internal/runtime/texture_tool_unit_test.go`;
+`internal/runtime/texture_evidence_sources_test.go`;
+`internal/runtime/texture_legacy_wire_normalization.go`;
+`internal/runtime/universal_wire.go`;
+`internal/runtime/universal_wire_test.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+
+Evidence:
+`nix develop -c go test ./internal/runtime -run 'Texture.*(Structured|Tool|Agent|Source)|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest'`;
+`nix develop -c go test ./internal/texturedoc ./internal/store`;
+`nix develop -c scripts/go-test-runtime-shards`;
+`git diff --check HEAD~2..HEAD`;
+D4 review evidence: `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase|TestTextureToolRejectsLegacyEditsAndSourceSyntax|TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation'`;
+D4 review evidence: `nix develop -c go test ./internal/texturedoc ./internal/store -run 'TestValidatorRejectsLegacySourceSyntaxesInText|TestTextureCreateRevisionRejectsLegacySourceSidecars|TestTextureCreateRevisionStoresStructuredBodyAndSourceEntities|TestTextureCreateRevisionDerivesStructuredBodyForPlainText'`.
+
+Open edge: D5 multimedia. Before touching resolver/rendering behavior, record
+the Problem Documentation First checkpoint naming the current multimedia gap:
+schema-level image/video/audio/PDF/transcript/Texture-span source entities exist,
+but product resolver/rendering paths still must prove those targets transclude
+through the same `source_ref` / `source_embed` plus top-level `SourceEntity`
+model, without renderer-only media cards or clickable links.
