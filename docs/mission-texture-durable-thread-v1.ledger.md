@@ -1249,3 +1249,30 @@ Open edge: Parallax still forbids self-checked exit. Under the current
 no-subagent operating constraint, the independent prover obligation remains
 open unless the owner explicitly authorizes a separate prover or an equivalent
 non-authoring checker.
+
+## 2026-06-21 - Accessibility Residual Accepted As Polish Edge
+
+Claim: the stale Comet accessibility-tree `Continuing...` node observed after
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` should not block durable-thread
+mission exit if visible owner controls and source inspection had already settled.
+
+Move: decided the residual as an accepted, named polish edge with a future
+discriminator rather than a new runtime problem. The proof already showed no
+visible toolbar `Revising...`, enabled `Revise`, enabled and inspectable
+`Sources`, enabled `Publish v2`, and one represented GPT-5.5 source artifact in
+the native Sources panel.
+
+Expected Delta V: -1 if the residual can be named without weakening the source
+panel proof.
+
+Actual Delta V: -1. Current exit V is 1: obtain the independent prover/widest
+checker required before any Parallax exit.
+
+Discriminator: reopen this as a new accessibility/runtime problem only if
+screen-reader QA, live-region tests, or a fresh Comet proof shows the stale
+`Continuing...` node causes owner-visible confusion or blocks assistive
+navigation after visible controls have settled.
+
+Open edge: independent prover / widest checker remains required before
+`settled` or `open_handoff`; this authoring context must not grade its own
+proof.

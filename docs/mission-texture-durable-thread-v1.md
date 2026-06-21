@@ -110,12 +110,19 @@ passivation stream settlement all have receipts in the ledger.
 
 Current exit V counts only remaining settlement-review obligations:
 1. obtain the handoff-tier independent prover / widest checker required by the
-   Parallax skill before any `settled` or `open_handoff` exit;
-2. decide the stale accessibility/live-region `Continuing...` residual:
-   accepted polish edge with a next discriminator, or a new documented runtime
-   problem before code changes.
+   Parallax skill before any `settled` or `open_handoff` exit.
 
-Current V=2. Last actual Delta V=-1 on 2026-06-21 from scope reconciliation:
+Current V=1. Last actual Delta V=-1 on 2026-06-21 from accepting the stale
+Comet accessibility/live-region `Continuing...` node as a named polish edge.
+The `_005` proof showed visible owner controls settled: no toolbar
+`Revising...`, `Revise` enabled, `Sources` enabled and inspectable, and
+`Publish v2` enabled. The lingering accessibility-tree text did not block the
+durable-thread/source-panel mission. Discriminator: reopen as a new
+accessibility/runtime problem only if screen-reader QA, live-region tests, or a
+fresh Comet proof shows the stale node causes owner-visible confusion or blocks
+assistive navigation after controls settle.
+
+Prior actual Delta V=-1 on 2026-06-21 from scope reconciliation:
 the original witness clauses are now separated into supported scoped claims and
 accepted residual edges. Supported at current evidence scope: runtime-owned
 `update_id`; owner-visible work-state revisions before delegation; durable
@@ -210,11 +217,9 @@ Receipts for prior steps live in
 `docs/mission-texture-durable-thread-v1.ledger.md`; this state intentionally no
 longer mirrors the pass history.
 
-next move: settlement review. Either obtain the independent prover/widest
-checker required before any Parallax exit, or decide the stale
-accessibility/live-region `Continuing...` residual as an accepted polish edge
-with a discriminator. Do not start another runtime fix unless a new staging
-failure is documented first.
+next move: obtain the independent prover/widest checker required before any
+Parallax exit. Do not start another runtime fix unless a new staging failure is
+documented first.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
@@ -236,5 +241,5 @@ continuation-level acceptance.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status working, exit V=2: obtain the independent prover / widest checker required before any Parallax exit, and decide whether the stale Comet accessibility `Continuing...` node is an accepted polish edge or a new documented runtime problem. Scope reconciliation is complete: the durable-thread/source-evidence bridge is supported at focused-test plus staging-smoke scope, with residuals named instead of overclaiming universal prompt/depth/promotion coverage. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; protected surfaces remain Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Do not start another runtime fix unless a new staging failure is documented first.
+Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status working, exit V=1: obtain the independent prover / widest checker required before any Parallax exit. Scope reconciliation is complete: the durable-thread/source-evidence bridge is supported at focused-test plus staging-smoke scope, with residuals named instead of overclaiming universal prompt/depth/promotion coverage. The stale Comet accessibility `Continuing...` node is accepted as a polish edge unless screen-reader QA, live-region tests, or fresh Comet proof shows it blocks assistive navigation after controls settle. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; protected surfaces remain Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Do not start another runtime fix unless a new staging failure is documented first.
 ```
