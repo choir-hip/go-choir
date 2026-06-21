@@ -301,10 +301,39 @@ delivery / first-draft settlement: a researcher can save source-backed evidence
 without the foreground Texture actor producing a revision that carries native
 source entities.
 
+Saved-evidence completion checkpoint commit
+`c5b5e193d2c5d7d64bf9ee12dcf67d88d3d09a14`, after problem checkpoint
+`04fbe868`, synthesizes a researcher `update_coagent` checkpoint when a
+researcher completes after newer `save_evidence` / content-item read output and
+has not already sent a successful `update_coagent`. Focused source/citation and
+researcher fallback tests, broader runtime tests, runtime shards, CI run
+`27897059492`, deploy job `82550724282`, and staging health all reported this
+commit. Deployed Comet retest
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_004` showed foreground Texture move
+past the prior v0 first-draft stall into v2 under visible run fragment
+`a627cb00-8...593ff0`: the activity stream showed researcher run
+`7a3a9a0e-7d29-4aeb-bc7a-fd5d0efd21de` complete, Texture run
+`a6a9fba3-a602-42a0-bd8f-c10972b7c18f` call `patch_texture`, and "Texture
+created a new revision." The v2 document rendered a native source chip titled
+`GPT-5.5 Model | OpenAI API`; expanding it opened the source popover with
+`Open source` and the cited excerpt. The evidence ledger preserved
+`source:src_b430c59e225afa4c`,
+`content_id:67d9c15a-cedb-4b70-a559-b340d29ffc2f`,
+`evidence_id:4fb772ee-394b-538b-94d1-cb6bff81c32d`, and fallback
+`save_evidence` id `10288522-99da-41c8-b8c7-7bb23907e9ca`. Actual ΔV=1 for
+saved-evidence delivery and native inline source rendering. The source-panel
+settlement axis is still open: after the successful v2/source-chip render and a
+bounded wait, the window still showed `Revising...` / `Continuing...`, the
+toolbar `Sources` control remained disabled, and the native Sources panel could
+not be inspected in an idle state. Treat this as a discovered residual, not a
+regression of the saved-evidence delivery repair.
+
 next move: use the remaining budget on always-deep/source-evidence robustness:
-diagnose why deployed saved evidence can fail to reach or settle the foreground
-Texture revision, then prove that typed researcher refs become owner-visible
-native source handles as well as inline text handles.
+diagnose why a deployed source-backed v2 can keep the Texture run in active
+`Revising...` / `Continuing...` state with the Sources toolbar disabled after
+native inline source rendering succeeds, then prove that typed researcher refs
+become owner-visible native source handles in both inline citation UI and the
+idle Sources panel.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
