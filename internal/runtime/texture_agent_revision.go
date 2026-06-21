@@ -381,8 +381,9 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		// typed coagent findings already persisted into metadata["source_entities"],
 		// and (on worker integration) the typed evidence records attached to pending
 		// researcher update_coagent deliveries. Researcher prose is no longer
-		// regex-scraped into sources; excerpts arrive as typed evidence and become
-		// text_quote selectors the citation/quote validator checks at write time.
+		// regex-scraped into sources; evidence-backed content items become native
+		// source entities, and only explicit quote selectors become text_quote
+		// bindings that the citation/quote validator checks at write time.
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceRefs)
 		if workerWake {
 			if evidenceEntities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(evidenceEntities) > 0 {

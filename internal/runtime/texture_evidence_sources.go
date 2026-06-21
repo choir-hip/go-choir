@@ -29,15 +29,36 @@ func evidenceContentID(rec types.EvidenceRecord) string {
 	return ""
 }
 
+// evidenceTextQuote extracts an explicitly declared quote selector from evidence
+// metadata. EvidenceRecord.Content is intentionally generic: live researchers use
+// it for summaries, interpretations, and bounded notes as well as exact excerpts,
+// so treating it as a literal quote creates false citation-validation failures.
+func evidenceTextQuote(rec types.EvidenceRecord) string {
+	if len(rec.Metadata) == 0 {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(rec.Metadata, &meta); err != nil {
+		return ""
+	}
+	for _, key := range []string{"text_quote", "source_quote", "quote", "selector_text"} {
+		if quote := strings.TrimSpace(metadataString(meta, key)); quote != "" {
+			return quote
+		}
+	}
+	return ""
+}
+
 // evidenceRecordToSourceEntity turns a typed researcher evidence record into a
-// collated source entity. When the evidence references a retrievable content item
-// and carries an excerpt, the entity gets a text_quote selector (the excerpt),
-// which the deterministic citation/quote validator checks against the stored body
-// at write time. Evidence without a retrievable body becomes a whole_resource
-// reference (cited resolution still validated, quote not). Returns a zero entity
-// (EntityID == "") when there is nothing addressable to cite.
+// collated source entity. Evidence with a retrievable content item becomes a
+// whole_resource reference by default; if metadata explicitly declares a
+// text_quote, the entity carries that quote selector and the deterministic
+// citation/quote validator checks it against the stored body at write time.
+// Evidence without a retrievable body becomes a whole_resource reference (cited
+// resolution still validated, quote not). Returns a zero entity (EntityID == "")
+// when there is nothing addressable to cite.
 func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity {
-	quote := strings.TrimSpace(rec.Content)
+	quote := evidenceTextQuote(rec)
 	contentID := evidenceContentID(rec)
 	sourceURI := strings.TrimSpace(rec.SourceURI)
 
