@@ -744,17 +744,14 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 1. Last accepted D7 residue deletion:
-markdown-lineage import now converts old markers/source links into structured
-`source_ref` nodes, rejects unresolved markers, and retires the legacy
-source-repair/source-attachment metadata endpoints. Accepted D7 fourth slice:
-dead markdown-link citation validation, source-repair frontend affordances, and
-the stale source-attachment frontend affordance are removed. Local D7 fifth
-slice: publication/proxy current fixtures and source enrichment now use
-structured `body_doc` plus top-level `source_entities`; platform publication
-rejects `metadata.source_entities`; publication fallback no longer upgrades
-markdown `source:` links into source refs. D5
-multimedia reduced the variant locally, but its independent review agents
+staging acceptance proof. Current value: 1. Accepted D7 slices have removed the
+current-contract markdown source-link affordance band, Universal Wire/coagent
+source-link normalization, markdown-lineage/source-repair metadata residue,
+dead source-repair/source-attachment frontend affordances, publication fallback
+markdown source-link upgrading, and runtime use of `metadata.source_entities` as
+live source context. The remaining local deletion/classification edge is prompt
+contract residue that still teaches old `patch_texture` replace/append JSON.
+D5 multimedia reduced the variant locally, but its independent review agents
 stalled; retain that caveat until staging proof or a later reviewer checks the
 accumulated multimedia diff.
 
@@ -921,10 +918,11 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`. Markdown `[label](source:id)` parsing remains only as historical
 fallback for artifacts without structured body data.
 
-next move: send the local D7 publication/proxy source fixture cleanup to
-independent review. If accepted, classify the remaining runtime
-historical/prompt legacy refs, then run broad tests and the landing loop. Do
-not claim settlement until staging proves source creation, agent/human edit
+next move: commit this prompt-contract residue checkpoint, then repair
+`revision_policy.yaml` and active prompt tests so Texture no longer instructs
+agents to call old `replace` / `append` JSON operations after the structured
+tool cutover. After independent review, run broad tests and the landing loop.
+Do not claim settlement until staging proves source creation, agent/human edit
 preservation, multimedia source expansion, publication/export, and
 markdown-link/source-token rejection from the deployed product path.
 
@@ -939,14 +937,13 @@ in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
 writes, editor/user preservation, and appagent mutation. D5 locally proves the
 multimedia resolver/rendering cut, with independent review still unavailable due
 stalled review agents. D6 proves publication/export at local/package scope after
-independent review repair. D7 has accepted deletion receipts for prompt/frontend
-current-contract fixtures, Universal Wire/coagent source-normalization residue,
-and markdown-lineage/source-repair metadata residue. D7
-citation-helper/frontend repair-and-attachment-affordance deletion is also
-independently accepted. D7 publication/proxy source fixture cleanup is locally
-implemented and awaiting review. Promote outward only when remaining deletion
-receipts, staging proof, and any missing multimedia independent review close the
-product contract.
+independent review repair. D7 has accepted deletion receipts for
+prompt/frontend current-contract fixtures, Universal Wire/coagent
+source-normalization residue, markdown-lineage/source-repair metadata residue,
+frontend repair/attachment-affordance deletion, publication/proxy source
+fixture cleanup, and runtime source-context key separation. Promote outward only
+when remaining prompt-contract deletion receipts, staging proof, and any missing
+multimedia independent review close the product contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -1363,3 +1360,41 @@ entities.
 Open edge: remaining D7 classification should now focus on negative assertions,
 historical markdown-lineage import, prompt warnings that ban markdown source
 links, and top-level API fields named `source_entities`.
+
+### D7 Slice 7 Problem Checkpoint - Prompt Contract Still Teaches Old Edit JSON
+
+Status: problem documented on 2026-06-21 before prompt repair.
+
+Observed behavior: the structured `patch_texture` tool schema now accepts
+validated document operations such as `update_block_text`, `append_block`,
+`insert_block`, `delete_node`, `insert_source_ref`, and `insert_source_embed`.
+However, the active revision policy overlay still instructs Texture agents to
+call the old string-edit JSON:
+
+- `internal/runtime/textureprompts/overlays/revision_policy.yaml` gives
+  examples with `{"op":"replace","find":"exact previous text","replace":"new
+  text"}` and `{"op":"append","text":"section text"}`.
+- The same overlay still describes `rewrite_texture` as the full replacement
+  path, but does not explain that ordinary source-preserving edits should use
+  structured block/node/source operations.
+- Active prompt tests already assert that the retired "canonical inline source
+  link" language is absent, but the positive prompt contract still leaves
+  agents with stale operation examples that the current tool rejects.
+
+Problem: this does not create a canonical source-sidecar write bypass, because
+`patch_texture` rejects old operation names and the store rejects legacy source
+metadata. It is still live optimization pressure toward failed tool calls and
+string-edit mental models, especially for source-preserving revisions. A prompt
+that tells the model to call invalid old JSON undermines the D4 structured
+operation cutover even when the runtime rejects the call.
+
+Desired repair: replace old `replace` / `append` prompt examples with the
+structured operation vocabulary, including a clear note that `rewrite_texture`
+is exceptional recovery and that source changes use `insert_source_ref` /
+`insert_source_embed` backed by existing `source_entity_id` values. Update
+active prompt tests to assert the old operation examples are absent and the
+structured operation contract is present.
+
+Open edge: implement the prompt repair, run focused prompt/tool tests, and
+obtain independent review that no active Texture prompt teaches markdown source
+links or old string-edit operation JSON as the canonical edit path.

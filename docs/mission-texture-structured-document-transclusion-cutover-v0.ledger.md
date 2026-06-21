@@ -1157,3 +1157,30 @@ revision `SourceEntities` with run-scoped available source context; and
 available entities before validation/materialization.
 
 Open edge: final old-source classification, broad tests, and staging proof.
+
+## 2026-06-21 - Pass 31 - D7 Prompt Contract Problem Checkpoint
+
+Claim: before changing active Texture prompt text, D7 must name the remaining
+prompt-contract behavior problem separately from the repair. The tool schema is
+already structured, but prompts can still steer appagents into rejected legacy
+operations.
+
+Move: observe + document. After committing the runtime context split, scanned
+remaining active old-source/edit residue. The live `patch_texture` tool schema
+accepts structured operations, but `revision_policy.yaml` still demonstrates
+`{"op":"replace","find":...,"replace":...}` and
+`{"op":"append","text":...}`.
+
+Evidence:
+`internal/runtime/tools_texture.go` exposes `update_block_text`, `insert_block`,
+`append_block`, `delete_node`, `insert_source_ref`, and `insert_source_embed`;
+`internal/runtime/textureprompts/overlays/revision_policy.yaml` still shows old
+`replace` / `append` JSON examples; active prompt tests already assert retired
+markdown source-link language is absent but do not yet assert the structured
+operation examples.
+
+Actual delta V: no behavior delta. Problem checkpoint only.
+
+Next move: repair the revision policy overlay and active prompt tests so the
+prompt contract matches the structured tool contract and no longer teaches old
+string-edit operations.
