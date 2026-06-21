@@ -1065,3 +1065,56 @@ shards, CI, deploy identity, and deployed Comet proof through the logged-in
 owner browser. Next realism axis is settlement review and optional cleanup of
 the stale accessibility/live-region `Continuing...` node; any new runtime fix
 must begin with a problem checkpoint if staging evidence shows behavior impact.
+
+## 2026-06-21 - Texture Settlement Review Checkpoint And Acceptance Record
+
+Claim: the `_005` source-panel proof should be captured in durable product
+acceptance without inflating its level. The visible Texture id
+`33ac2a66-6c63-4bf6-8d8a-e0f965133a5b` is a document/loop-facing id, not a
+stored run id for the run-acceptance synthesizer; the correct synthesis key is
+the trace trajectory for the proof.
+
+Move: used the logged-in Comet browser session for `yusefnathanson@me.com` to
+renew `/auth/session`, query `/api/trace/trajectories`, identify trajectory
+`c3e06265-48a7-4f00-91d1-068c3706ff58` for
+`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005`, and then POST
+`/api/run-acceptances/synthesize` with that trajectory, CI run `27897682907`,
+deploy job `27897682907:82552403986`, and staging URL `https://choir.news`.
+The earlier browser-authenticated attempt using only the visible
+`33ac2a66-6c63-4bf6-8d8a-e0f965133a5b` loop id returned `record not found`,
+which explains why the mission needed a trace-trajectory lookup rather than a
+runtime code change.
+
+Expected Delta V: -1 on the settlement-record/document-drift obligation if the
+product synthesizer stores a record at the honest evidence level and the
+Parallax State no longer claims stale `planned, V=12` status.
+
+Actual Delta V: -1 for the settlement-record/document-drift obligation. Current
+exit V is 3: reconcile the original witness clauses, obtain the independent
+prover/widest checker required before exit, and decide the stale accessibility
+`Continuing...` residual.
+
+Receipts:
+- Comet-authenticated synthesis returned HTTP `202` and
+  RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d`.
+- Record fields included target mission
+  `mission-texture-durable-thread-v1`, source prompt objective
+  `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005 passivation stream
+  source-panel settlement proof`, trajectory
+  `c3e06265-48a7-4f00-91d1-068c3706ff58`, loop id
+  `c3e06265-48a7-4f00-91d1-068c3706ff58`, authority profile
+  `texture > conductor > researcher`, deployment commit
+  `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, CI run `27897682907`,
+  deploy run `27897682907:82552403986`, acceptance level
+  `staging-smoke-level`, and state `blocked`.
+- The `blocked` state is the correct product-level result for this proof:
+  source-panel settlement exercised conductor/Texture/researcher but did not
+  exercise super worker, AppChangePackage adoption, promotion, rollback, or
+  continuation checkpoints.
+- `docs/mission-texture-durable-thread-v1.md` now has a compact current
+  Parallax State, records the acceptance id, names the exit V=3 obligations, and
+  updates the Suggested Goal String away from the stale `planned, V=12` route.
+
+Open edge: no runtime behavior changed in this pass. Mission exit still needs
+the Parallax handoff-tier review; under the current no-subagent operating
+constraint, no independent prover was run here.

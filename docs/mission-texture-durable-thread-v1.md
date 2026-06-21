@@ -73,16 +73,13 @@ evidence remain legible to the owner and durable across process refresh.
 
 witness/spec (A/S):
 - runtime-owned `update_id` for model-facing `update_coagent`;
-- direct Texture owner requests write honest work-state revisions when work is
-  delegated or pending;
-- durable per-document thread identity and mailbox cursor;
-- same-thread passivation/resume with literal thread memory or structured
-  compaction, not doc-head reconstruction;
-- event-driven update delivery into the thread;
-- deletion of classifiers/guards/exact-first-tool scaffolding that encode
-  semantic choreography;
-- staging proof that direct Texture revise, researcher delivery, and multi-round
-  grounded deepening happen through one durable thread.
+- owner-visible Texture work-state revisions before delegated/pending work hides;
+- durable per-document mailbox cursor and same-thread passivation/resume;
+- event-driven delivery into the existing Texture thread;
+- deletion of classifier/guard/exact-first-tool scaffolding that encoded semantic
+  choreography;
+- deployed proof that source-backed researcher evidence can deepen a Texture
+  document, settle, and expose native source artifacts.
 
 invariants / qualities / domain ramp (I/Q/D):
 - I: Texture owns canonical document versions. Researcher/super evidence is
@@ -103,77 +100,33 @@ invariants / qualities / domain ramp (I/Q/D):
 - D3: deployed product proof on `https://choir.news`.
 
 variant (ranking function) V:
-1. runtime-owned update-id scheme designed and implemented;
-2. model-facing `update_coagent` no longer requires model-invented `update_id`;
-3. retry/collision tests prove idempotency without human-label collision;
-4. direct owner-triggered Texture work-state revision test passes;
-5. Texture first-tool policy stops forcing trivial patches as hidden work-state;
-6. durable thread/mailbox data model implemented;
-7. update delivery appends into the thread instead of cold reconstruction;
-8. same-thread passivation/resume implemented;
-9. classifiers/guards/exact-first-tool scaffolding deleted;
-10. always-deep research prompt/loop behavior proven beyond the current V2 cap;
-11. focused runtime tests and runtime shards pass;
-12. landed to main, CI/deploy identity verified, staging acceptance recorded.
-Current V=1; last ΔV=-1 on 2026-06-21 from deleting the
-Texture-specific model-prior completion guard and world-knowledge prompt
-scanner after the prior first-paint and initial-super guard deletions. Ordinary
-prompt-bar Texture starts now receive the full Texture tool surface with empty
-provider `tool_choice`; execution-shaped prompt text no longer creates
-runtime-owned initial super work before Texture acts; and current-events prompts
-no longer get a runtime-authored completion-guard retry after an honest
-model-prior/interim revision. Staging proof for the model-prior guard deletion
-at `cd79ed2d6f7ed629328daf658ab988baf42edad7` used Comet-visible marker
-`CHOIR_MODEL_PRIOR_GUARD_DELETION_PROOF_20260621_001` and structured marker
-`CHOIR_MODEL_PRIOR_GUARD_API_PROOF_20260621_1782021104911`, trajectory
-`780dc749-ab6c-4d4b-9594-721c02b8f60e`, doc
-`fc398877-517c-4eff-9fb4-2a17d8f1f736`, Texture loop
-`0f44a44a-1b0d-4b6e-bdc0-2fdf5c41a42e`, V1
-`fc33eecf-f8dc-404c-ab5a-ce11e7aba928`, V2
-`2ff153df-d469-4e36-8af5-7621b575c1fc`, V3
-`b7f981fa-76fa-44c2-a00c-1dbaef0d055c`, Trace roles
-`conductor + texture + researcher`, `spawn_agent` tool results, no
-`completion_guard`, no `texture_model_prior_interim_needs_evidence_path`, no
-old guard instruction, retained `model_prior_interim` metadata, and blocked
-staging-smoke RunAcceptanceRecord `runacc-d8bf901c9bbb56c5d583`. CI run
-`27895027562`, deploy job `82545223168`, and staging health all reported the
-same commit. The prior staging proofs at
-`1e0166474e17369828a1e8a7bfd655c34ae1454b`,
-`b4adb70ff4a01ea6be92ce30a062a66a824f89a9`, and
-`1c202e525f77a2a6169c0bf0ac49b986b75047b7` still support initial-super
-deletion, first-paint deletion, and same-thread researcher delivery through V2.
-The remaining durable-thread risk is proving always-deep/source-evidence
-robustness beyond this narrow V3 current-events path, including durable source
-attachment when researcher evidence is incorporated.
+Historical implementation variant from the original 12 obligations is closed
+for the source-evidence/source-panel axis by
+`fce827ca2a43994d1d67312f33fe4fef1d97f4d3` proof:
+runtime-owned update identity, work-state revision tests, durable mailbox
+delivery, same-thread passivation/resume, deletion of initial-super/first-paint
+model-prior scaffolds, source entity collation, saved-evidence delivery, and
+passivation stream settlement all have receipts in the ledger.
 
-Source-ref collation commit `06e729734cfff7a6ee33715ea5fde2e6bf7e05e5`
-adds typed `update_coagent.refs` ingestion for `source_service_item`,
-`content_id`, and evidence refs, and focused tests plus runtime shards passed.
-Deployed Comet proof with marker
-`CHOIR_SOURCE_REF_ATTACHMENT_PROOF_20260621_001` showed researcher
-`source_search`, `save_evidence`, and `update_coagent` delivery followed by a
-Texture `v2` rewrite containing grounded inline source links and no old
-"durable source-entry retrieval failed" caveat. Actual ΔV=0, so V remains 1:
-the native Texture `Sources` control was still disabled and the visible run
-remained in `Revising...` with tool-error activity after the v2 rewrite. The
-remaining source-evidence risk is now narrower: typed ref collation is locally
-proved and deployed inline-source behavior improved, but native source-panel
-attachment / clean run settlement is not yet proved.
+Current exit V counts only remaining settlement-review obligations:
+1. reconcile the whole mission claim against original witness clauses and name
+   any unsupported edge instead of calling it repaired;
+2. obtain the handoff-tier independent prover / widest checker required by the
+   Parallax skill before any `settled` or `open_handoff` exit;
+3. decide the stale accessibility/live-region `Continuing...` residual:
+   accepted polish edge with a next discriminator, or a new documented runtime
+   problem before code changes.
 
-Passivation stream settlement commit
-`fce827ca2a43994d1d67312f33fe4fef1d97f4d3` adds document-correlated idle
-passivation events for Texture revision actors and maps them to document-stream
-`synth_completed`. CI run `27897682907`, deploy job `82552403986`, and staging
-health all reported the same commit. Deployed Comet proof with marker
-`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` showed the source-backed v2
-settle out of pending toolbar state after idle passivation, with `Sources`
-enabled and the native Sources panel reporting `1 represented source`,
-`GPT-5.5 Model | OpenAI API`, content-item/source availability, and URL
-`https://developers.openai.com/api/docs/models/gpt-5.5`. Actual Delta V=-1, so
-V is now 0 for this mission variant. Residual risk: the accessibility tree still
-retained a stale `Continuing...` text node below the document after the toolbar
-settled; it no longer blocked revision controls or source inspection, but it is
-worth cleaning up if accessibility/live-region polish becomes the next focus.
+Current V=3. Last actual Delta V=-1 on 2026-06-21 from creating durable
+RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` for the `_005` Comet proof.
+The product record is `staging-smoke-level` and `blocked`, with
+`authority_profile` `texture > conductor > researcher`, trajectory
+`c3e06265-48a7-4f00-91d1-068c3706ff58`, document/Texture id
+`33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, CI run `27897682907`, deploy job
+`27897682907:82552403986`, and deployment commit
+`fce827ca2a43994d1d67312f33fe4fef1d97f4d3`. It is blocked honestly because this
+Texture/researcher source-panel proof did not exercise super/worker adoption or
+continuation checkpoints.
 
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
 (`update_id` + work-state revisions) may land first if it reduces risk, but it
@@ -196,191 +149,43 @@ evidence packet:
 - tests for durable thread mailbox, passivation/resume, and delete/cancel;
 - runtime shard suite or justified scoped substitute before commit;
 - staging proof with doc id, trajectory/thread id, revision count, source count,
-  deployed commit, CI/deploy status, rollback ref, residual risks.
+  deployed commit, CI/deploy status, rollback ref, residual risks;
+- run acceptance records at the honest level reached, without upgrading blocked
+  source-panel smoke proof into promotion or continuation acceptance.
 
 heresy delta: repairs H024a (trivial first patch as hidden work-state) and H024b
 (model-invented coagent update ids); should also repair run-centric cold rewarm
 and classifier/guard residues named in the v0 cautionary mission.
 
 position / live conjectures / open edges:
-- C1 supported for the update-identity half of R0a: runtime-owned
-  `update_id` can land before the full thread rewrite without adding run-centric
-  routing. It remains a ramp repair, not mission settlement.
-- C2 active: the durable mailbox cursor can replace pending-update rediscovery
-  without losing crash recovery.
-- C3 active: same-thread resume needs a run-lifecycle model change, not only
-  prompt or controller edits.
-- C4 active: always-deep research should be prompt/obligation driven, not
-  keyword-classifier driven.
-- C5 supported at focused-test scope: direct user-authored revise requests no
-  longer force exact `patch_texture`, and an end-to-end direct revise test proves
-  a canonical Texture work-state revision is written before researcher
-  delegation. This repairs the local R0a H024a shape; staging still must prove
-  the product path with a real provider before mission settlement.
-- C6 supported at runtime scope: `coagent_mailboxes` records a durable
-  contiguous processed cursor per addressed actor, and actor backlog reads no
-  longer filter on `delivered_at`; delivered markers are audit compatibility,
-  not the actor-facing cursor authority.
-- C7 supported at focused-test scope for established Texture documents:
-  resident, sleeping, restart-reactivated, and already-threaded documents no
-  longer mint replacement wake runs for ordinary addressed `update_coagent`
-  backlog. New `update_coagent` packets are appended as durable run-memory user
-  turns, including first-turn `activation_mailbox_turn` delivery only for
-  explicit first activation when no Texture revision-thread history exists.
-- C8 supported at focused-test scope: normal Texture idle quiescence now
-  passivates the run as a sleeping actor instead of completing it, keeps the run
-  memory intact, and resumes the same `loop_id` when new mailbox input arrives.
-- C9 supported at focused-test and staging-smoke scope for semantic delegation with parking:
-  `spawn_agent`, `request_super_execution`, and email handoff no longer act as
-  terminal shortcuts for parked Texture revision actors. After a work-state
-  revision and delegation, the actor parks/sleeps and later researcher evidence
-  can produce V2 in the same `loop_id`. Staging trajectory
-  `a893f0ca-a8b6-41de-a73b-1e8b05c7c80d` showed `spawn_agent`, park wait,
-  researcher `update_coagent`, V2 `patch_texture`, and final passivation all on
-  Texture loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`.
-- C10 supported at focused-test and staging-smoke scope: prompt-bar first-paint
-  exact `patch_texture` forcing is deleted. Ordinary first-paint Texture runs
-  have empty provider `tool_choice` and the full Texture tool surface, while
-  `update_coagent` integration remains grounded by narrow mechanical
-  continuation behavior. Staging trajectory
-  `20bf8cd1-ff91-4bae-87a0-96d348d7b3ae` showed first provider call
-  `tool_choice=""`, eight available tools including `patch_texture`,
-  `record_texture_decision`, `spawn_agent`, and `request_super_execution`,
-  first tool batch `record_texture_decision`, then `patch_texture` to V1.
-- C11 supported at focused-test and staging-smoke scope: deterministic
-  initial-super request parsing/recording is deleted. Execution-shaped prompt
-  text is now preserved as Texture document content and handled by the Texture
-  provider turn first. Focused tests prove the old phrase no longer stamps
-  initial-super metadata or auto-creates super work while manual
-  `request_super_execution` from Texture context still works. Staging trajectory
-  `a2e96589-dc7a-4be4-9e5d-556427f5afc2` showed `conductor + texture` only,
-  no `super` agent, first Texture tool event `record_texture_decision`, then
-  `patch_texture` to V1.
-- C12 supported at focused-test and staging-smoke scope:
-  `textureModelPriorCompletionGuard` and `texturePromptNeedsWorldKnowledge`
-  are deleted. Focused tests prove no Texture-specific completion-guard retry is
-  injected, current-events prompts can still open researcher work by normal
-  `spawn_agent` tool choice, model-prior/interim metadata remains, and no-op
-  protection remains intact. Staging trajectory
-  `780dc749-ab6c-4d4b-9594-721c02b8f60e` showed Texture writing an honest V1
-  model-prior interim, opening researcher by tool call, incorporating two
-  researcher packets into V2 and V3, and carrying no old guard reason,
-  instruction, or `completion_guard` retry in Trace.
-- C13 supported at focused-test scope and deployed source-panel scope:
-  researcher/source-service refs in `update_coagent.refs` now collate
-  into Texture source entities for typed `source_service_item`, `content_id`,
-  and evidence handles without scraping free-form prose. Deployed Comet proof
-  showed researcher `source_search`, `save_evidence`, accepted
-  `update_coagent`, and a Texture v2 rewrite with inline clickable sources
-  instead of the prior source-entry caveat. Later deployed Comet proof at
-  `fce827ca2a43994d1d67312f33fe4fef1d97f4d3` showed the native `Sources`
-  panel enabled after idle settlement and reporting one represented GPT-5.5
-  source artifact.
-- C14 supported at focused-test and staging-smoke scope: Texture idle
-  passivation now emits a document-correlated stream settlement payload for
-  Texture revision actors, and the document stream maps that passivation to
-  `synth_completed`. This is a run-lifecycle repair, not a forced semantic
-  workflow: it clears owner-visible pending state only when the existing
-  Texture actor actually parks after idle. Staging proof showed the toolbar
-  leave `Revising...`, `Revise` and `Sources` become enabled, and the Sources
-  panel become inspectable for the source-backed v2.
+- C1/C5/C6 supported: runtime-owned `update_id`, direct work-state revision,
+  and durable mailbox cursor are implemented at focused/runtime scope.
+- C7/C8/C9 supported: established Texture documents consume addressed
+  `update_coagent` backlog through durable run-memory turns, idle as sleeping
+  actors, and resume the same `loop_id`; staged semantic delegation with
+  researcher return proved V2 on the same Texture loop.
+- C10/C11/C12 supported: first-paint exact `patch_texture`, deterministic
+  initial-super parsing, and Texture-specific model-prior completion guard /
+  world-knowledge scanner are deleted; staged proofs show Texture acts first
+  with normal tools and can choose researcher without prompt classifiers.
+- C13/C14 supported: typed source refs and saved evidence now reach Texture
+  source entities, and Texture idle passivation emits document-correlated
+  `synth_completed`; the `_005` Comet proof showed source-backed v2, native
+  source chip, idle toolbar settlement, enabled `Sources`, and one represented
+  GPT-5.5 source artifact.
+- C2/C3/C4 remain settlement-review claims rather than new construction work:
+  the audit must decide whether the accumulated receipts are enough to call the
+  mailbox/resume/deepening bridge supported, or name the exact unsupported edge.
 
-Native-source entity repair commit
-`043707fd1e1d2a50cc5e4ef7f218077ee04186fe` carries collated source entities
-through fresh `update_coagent` injection, the typed packet, run metadata, and
-revision metadata; focused tests and runtime shards passed. Deployed Comet proof
-with marker `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_001` on trajectory
-`5f900cc2-1b14-4919-88b2-f3b20597699d` showed researcher/source-search evidence
-collection, `save_evidence`, Texture loop activity, and a v2 rewrite on staging
-that preserved source handles such as `src_b430c59e225afa4c`,
-`src_dae54bf2e10e21eb`, and `src_8595fa59f68412e3` with content ids. Actual
-ΔV=0, so V remains 1: the v2 document reported that native inline Texture source
-citations were attempted but citation validation rejected the collated quote
-bindings; the native `Sources` control was still disabled and the run remained
-visibly `Revising...` after `patch_texture` tool-error activity. The newly
-documented problem is now quote-binding validation / source-panel activation
-after source entities reach the live Texture turn, not source-entity delivery
-into the turn.
+Receipts for prior steps live in
+`docs/mission-texture-durable-thread-v1.ledger.md`; this state intentionally no
+longer mirrors the pass history.
 
-Summarized-evidence selector repair commit
-`efb3e1e4903935796d764f6e4304f1a85e21ecea`, after problem checkpoint
-`eacba57d`, stops treating generic saved evidence content as an exact quote
-selector unless the evidence metadata explicitly names quote text; generic
-content-item evidence now becomes a `whole_resource` source entity. Focused
-tests, broader source/citation runtime tests, runtime shards, CI run
-`27896507589`, deploy job `82549210404`, and staging health all reported this
-commit. Deployed Comet retest
-`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_002` produced v2 and enabled the
-Sources control only after cancellation, but the Sources panel reported
-`0 represented sources`; researcher packet
-`upd-717e2897dde829779ca78f6b301e4799` also reported source-ledger/source-search
-timeouts, so this did not prove native source attachment. Narrow retest
-`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_003` on visible run fragment
-`5d2340fe-4...8975f6` showed researcher run
-`5418d36c-fb47-4bcc-a6cd-fe263be36212` call `read_content_item`, call
-`save_evidence`, and complete, but foreground Texture stayed at v0 / first-draft
-state until cancellation and never incorporated the saved evidence into a
-revision. Actual ΔV=0. The newly documented problem is now saved-evidence
-delivery / first-draft settlement: a researcher can save source-backed evidence
-without the foreground Texture actor producing a revision that carries native
-source entities.
-
-Saved-evidence completion checkpoint commit
-`c5b5e193d2c5d7d64bf9ee12dcf67d88d3d09a14`, after problem checkpoint
-`04fbe868`, synthesizes a researcher `update_coagent` checkpoint when a
-researcher completes after newer `save_evidence` / content-item read output and
-has not already sent a successful `update_coagent`. Focused source/citation and
-researcher fallback tests, broader runtime tests, runtime shards, CI run
-`27897059492`, deploy job `82550724282`, and staging health all reported this
-commit. Deployed Comet retest
-`CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_004` showed foreground Texture move
-past the prior v0 first-draft stall into v2 under visible run fragment
-`a627cb00-8...593ff0`: the activity stream showed researcher run
-`7a3a9a0e-7d29-4aeb-bc7a-fd5d0efd21de` complete, Texture run
-`a6a9fba3-a602-42a0-bd8f-c10972b7c18f` call `patch_texture`, and "Texture
-created a new revision." The v2 document rendered a native source chip titled
-`GPT-5.5 Model | OpenAI API`; expanding it opened the source popover with
-`Open source` and the cited excerpt. The evidence ledger preserved
-`source:src_b430c59e225afa4c`,
-`content_id:67d9c15a-cedb-4b70-a559-b340d29ffc2f`,
-`evidence_id:4fb772ee-394b-538b-94d1-cb6bff81c32d`, and fallback
-`save_evidence` id `10288522-99da-41c8-b8c7-7bb23907e9ca`. Actual ΔV=1 for
-saved-evidence delivery and native inline source rendering. The source-panel
-settlement axis is still open: after the successful v2/source-chip render and a
-bounded wait, the window still showed `Revising...` / `Continuing...`, the
-toolbar `Sources` control remained disabled, and the native Sources panel could
-not be inspected in an idle state. Treat this as a discovered residual, not a
-regression of the saved-evidence delivery repair.
-
-Texture passivation stream settlement repair, after problem checkpoint
-`a8a62b29`, adds `doc_id`, `current_revision_id`, and `loop_id` to
-`EventRunPassivated` for Texture revision actor passivation, maps that event to
-document-stream `synth_completed`, and makes stream payload decoding tolerate
-mixed metadata such as numeric token counts. Focused comprehensive tests prove
-the stream mapping and emitted passivation payload; adjacent parking/resume and
-source/citation tests plus `nix develop -c scripts/go-test-runtime-shards`
-passed locally. CI run `27897682907`, deploy job `82552403986`, FlakeHub run
-`27897682928`, Docs Truth Check run `27897682904`, and staging health all
-reported `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`.
-
-Deployed Comet proof with the logged-in `yusefnathanson@me.com` session used
-marker `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005`. The proof produced v2
-with an inline native source chip `Source: GPT-5.5 Model | OpenAI API`,
-source handle `src_b430c59e225afa4c`, content id
-`67d9c15a-cedb-4b70-a559-b340d29ffc2f`, evidence id
-`2e421b69-fed6-4d99-b2f7-0220831b7d25`, and fetched URL
-`https://developers.openai.com/api/docs/models/gpt-5.5`. After idle settlement,
-the toolbar no longer showed `Revising...`, `Revise` was enabled, `Sources` was
-enabled, and opening `Sources` showed `1 represented source` plus source
-artifact `GPT-5.5 Model | OpenAI API` with `CONTENT ITEM` and
-`AVAILABLE SOURCE`. Actual Delta V=-1, so V=0 for the source-panel settlement
-axis. Residual: Comet's accessibility tree still exposed one stale
-`Continuing...` text node under the document even after the visible toolbar and
-source panel settled; this did not block owner action.
-
-next move: settlement review. Do not start another runtime fix unless a new
-staging failure is documented first. The only known follow-up from this slice is
-accessibility/live-region cleanup for the stale `Continuing...` text node after
+next move: settlement review. First reconcile original scope against the current
+evidence packet, then request or run an independent prover/widest checker if the
+human wants an exit. Do not start another runtime fix unless a new staging
+failure is documented first. The only known follow-up from the latest proof is
+accessibility/live-region cleanup for the stale `Continuing...` node after
 settled passivation.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
@@ -398,10 +203,12 @@ owner-visible work state in Texture.
 settlement: settled only when landed and deployed proof shows runtime-owned
 coagent update identity, direct Texture work-state visibility, durable same-thread
 resume, event-driven delivery, deepening beyond V2, deletion of old scaffolding,
-and no stranded source/evidence updates.
+no stranded source/evidence updates, and the Parallax exit checker has accepted
+the evidence packet. The `_005` source-panel proof is strong staging smoke
+evidence, not final mission settlement.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status planned, V=12. First move: implement R0a if it does not entrench the run-centric spine: model-facing update_coagent without model-invented update_id, runtime-owned idempotency, and honest owner-visible Texture work-state revisions. Then continue toward one durable Texture thread per document: same-thread mailbox, event-driven delivery, passivation/resume, always-deep research, and deletion of cold rewarm/classifier/guard/exact-first-tool scaffolding. Mutation class red; protected surfaces are Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Settlement requires commit -> push origin main -> CI -> deploy identity -> staging proof on choir.news with direct Texture work-state, researcher delivery without model-authored update_id, durable same-thread resume, deepening beyond V2, and rollback refs.
+Use Parallax on docs/mission-texture-durable-thread-v1.md. Treat it as the source program; do not use docs/mission-texture-long-running-agent-v0.ledger.md except as cautionary evidence for specific claims. Current status working, exit V=3: reconcile the original witness clauses against the accumulated evidence, obtain the independent prover / widest checker required before any Parallax exit, and decide whether the stale Comet accessibility `Continuing...` node is an accepted polish edge or a new documented runtime problem. Latest product proof is `CHOIR_NATIVE_SOURCE_ENTITY_PROOF_20260621_005` on deployed commit `fce827ca2a43994d1d67312f33fe4fef1d97f4d3`, trajectory `c3e06265-48a7-4f00-91d1-068c3706ff58`, Texture/doc id `33ac2a66-6c63-4bf6-8d8a-e0f965133a5b`, and RunAcceptanceRecord `runacc-21e9c87d45c3965bba1d` (`staging-smoke-level`, blocked honestly because no super/worker/adoption/continuation checkpoints were in scope). Mutation class red for runtime changes; this handoff update is docs-only. Protected surfaces remain Texture canonical writes, update_coagent persistence/delivery, run lifecycle, passivation, prompt defaults, Trace/evidence, and product acceptance. Do not start another runtime fix unless a new staging failure is documented first.
 ```
