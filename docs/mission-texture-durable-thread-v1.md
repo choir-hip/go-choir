@@ -204,10 +204,20 @@ position / live conjectures / open edges:
   `tool_choice=""`, eight available tools including `patch_texture`,
   `record_texture_decision`, `spawn_agent`, and `request_super_execution`,
   first tool batch `record_texture_decision`, then `patch_texture` to V1.
+- C11 active: deterministic initial-super request parsing is a remaining
+  classifier/guard residue. `explicitTextureSuperExecutionRequestFromPrompt`
+  recognizes prompt phrases such as "ask downstream super execution to", stores
+  `texture_initial_super_request_required` metadata, and
+  `recordExplicitInitialTextureSuperRequestIfNeeded` creates downstream super
+  work before the Texture provider turn. That is a runtime-created semantic
+  delegation from prompt text, not a Texture-chosen `request_super_execution`
+  tool call.
 
-next move: delete classifier/model-prior guard residues and prove always-deep
-research beyond the current V2/V3 staging cadence, while preserving the
-owner-visible work-state and no-op protection already proven.
+next move: delete deterministic initial-super request parsing/recording while
+preserving the `request_super_execution` affordance and prompt obligation
+language, then prove an execution-shaped prompt opens Texture first without an
+automatic super run. After that, continue to the remaining model-prior/world
+knowledge guards and always-deep staging proof.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

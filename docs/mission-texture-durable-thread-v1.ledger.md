@@ -598,3 +598,34 @@ Result: prompt-bar first-paint exact `patch_texture` forcing is no longer a
 semantic trust channel. The remaining realism axis is classifier/model-prior
 guard deletion plus always-deep research proof beyond the current V2/V3
 cadence.
+
+## 2026-06-21 - Deterministic Initial-Super Handoff Target Selected
+
+Claim: deterministic initial-super request parsing is the next highest-value
+classifier/guard residue to delete. The current path recognizes prompt phrases
+such as "ask downstream super execution to", persists
+`texture_initial_super_request_required` metadata, and calls
+`requestPersistentSuperExecution` from runtime before the Texture provider turn.
+That means runtime, not Texture, creates a semantic super delegation from prompt
+text.
+
+Move: document the problem before the runtime change. The intended behavior
+change is to leave execution-shaped prompt-bar requests inside Texture-owned
+artifact state, expose `request_super_execution` as an available affordance, and
+let Texture decide whether and when to call it. Prompt and hard-requirement
+language may still describe execution obligations, but must not deterministically
+open downstream super work.
+
+Expected ΔV: -1 if focused tests prove execution-shaped prompt-bar requests open
+Texture first without automatic super metadata/run creation, while Texture still
+sees the `request_super_execution` tool and can call it agentically.
+
+Admissible evidence: focused prompt-bar/Texture tests for no automatic
+`texture_initial_super_request_required` metadata, no pre-provider super run,
+presence of the super-execution tool affordance, no regression to explicit
+no-worker decision recording, full runtime shards, then deployed staging proof
+on `choir.news` if runtime behavior changes land.
+
+Rollback: revert the runtime commit that deletes the deterministic parser and
+recorder. The docs checkpoint may remain as problem evidence if the deletion
+shows an uncovered product need for visible command grammar.
