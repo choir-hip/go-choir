@@ -549,6 +549,88 @@ D4 does not claim mission settlement. Multimedia source rendering/resolution,
 publication/export, broad old-path deletion, deployment, and Comet/browser
 product proof remain open cuts.
 
+## D5 Multimedia Path Problem Checkpoint - 2026-06-21
+
+Mutation class: `green` documentation checkpoint only. No runtime behavior,
+frontend rendering, schema, source resolver, publication, deployment, or product
+path changed in this checkpoint.
+
+Reliable D5 inspection shows the next behavior problem:
+
+> Multimedia source identity still has a sidecar and renderer-only path:
+> live Texture can discover image/YouTube URLs from projection text into
+> `metadata.media_source_refs`, derive source entities from that sidecar, and
+> render special media HTML by kind rather than proving image/video/audio/PDF/
+> transcript/Texture-span targets through the structured `source_ref` /
+> `source_embed` plus top-level `SourceEntity` contract.
+
+Evidence:
+
+- `internal/runtime/texture_agent_revision.go:375` calls
+  `registerTextureMediaSourceRefs` on `currentRevision.Content`, and
+  `internal/runtime/texture_agent_revision.go:377` writes
+  `metadata.media_source_refs`.
+- `internal/runtime/texture_media_sources.go:52` discovers media URLs from text
+  and `internal/runtime/texture_media_sources.go:199` merges the sidecar into
+  legacy source entities.
+- `internal/runtime/texture_agent_revision.go:606` still prompts Texture agents
+  with "Detected durable media source refs" before ordinary source entities.
+- `frontend/src/lib/texture-source-state.ts:9` reads
+  `revision.metadata.media_source_refs`, and
+  `frontend/src/lib/texture-source-state.ts:25` synthesizes source entities from
+  those refs when top-level structured entities are missing.
+- `frontend/src/lib/texture-source-renderer.ts:286` converts media refs to
+  source entities client-side, while
+  `frontend/src/lib/texture-source-renderer.ts:321` renders YouTube/image media
+  through kind-specific helper HTML.
+- `internal/texturedoc/schema.go:393` accepts media display modes such as
+  `player`, `image_preview`, `pdf_pages`, and `transcript`, but
+  `internal/texturedoc/schema.go:403` only validates source/web-lens/Texture/
+  video/image open surfaces. Natural audio/PDF surfaces are not a complete
+  structured contract yet.
+
+Exact D5 cut:
+
+- Stop creating new canonical multimedia identity in
+  `metadata.media_source_refs`. New media discoveries must become top-level
+  structured `SourceEntity` records referenced by `source_ref` or `source_embed`
+  nodes, or remain noncanonical suggestions until attached through a structured
+  operation.
+- Preserve historical `media_source_refs` read fallback only for legacy
+  revisions; do not use it for new D5 writes or appagent prompts.
+- Add or normalize source-contract open surfaces needed by multimedia targets
+  (`audio`, `pdf`, and any required transcript/file/source-window mapping), then
+  validate them through `internal/texturedoc`.
+- Render image, video, audio, PDF, transcript, and Texture-span transclusions
+  from top-level `SourceEntity.target` / `selectors` / `display` plus document
+  `source_ref` or `source_embed` nodes. Rendering may still use specialized
+  players/previews, but those players must be node-view/display implementations
+  of the one structured source model, not parallel body syntaxes or sidecars.
+
+Protected surfaces for the later runtime/frontend slice: deterministic media
+ingestion, Texture agent prompt context, source entity normalization, structured
+document/source validation, frontend source-state derivation, frontend source
+renderer/media transclusion, and any tests that currently expect
+`media_source_refs` as the live source carrier.
+
+Admissible evidence class: focused Go tests proving new media discoveries do
+not write `metadata.media_source_refs`, multimedia source entities validate for
+image/video/audio/PDF/transcript/Texture-span targets and display modes, and
+appagent prompt context reads structured top-level entities. Focused frontend
+tests should prove structured source entities render image/video/audio/PDF/
+transcript/Texture-span transclusions without client-side `media_source_refs`
+synthesis or clickable source links. D5 is not settlement and does not require
+publication/export or staging proof until later cuts.
+
+Rollback path: revert the D5 runtime/frontend commits to return to the accepted
+D4 state. D2 store guards still reject legacy source sidecars on new canonical
+revisions, and D4 appagent write sanitization still strips media/source sidecars
+from appagent-authored revisions.
+
+Heresy delta: discovered: multimedia still has a sidecar discovery/prompt/render
+path outside structured source nodes. introduced: none by this documentation
+checkpoint. repaired: not yet; D5 implementation must repair it.
+
 ## Editing And Citation Integrity
 
 Offsets are implementation details, not canonical citation identity. Structured
@@ -665,7 +747,8 @@ multimedia resolver, publication/export projection, old-syntax deletion,
 staging acceptance proof. Current value: 5. Last delta: -1 for accepted D4
 agent path integration: appagent Texture writes now use structured operations
 and top-level structured source entities instead of string patch/source-sidecar
-canonical writes.
+canonical writes. D5 multimedia problem checkpoint is documented; it does not
+reduce V until implementation and review repair the multimedia path.
 
 budget: Planning budget is one paradoc pass. D1 implementation plus review-fix
 budget was isolated additive code with focused tests and accepted independent
@@ -681,7 +764,8 @@ bundle multimedia resolver, publication/export, deployment, or broad old-path
 deletion unless this paradoc is updated first. D4 used that budget for the
 bounded runtime/tool cut plus Universal Wire structured source-manifest repair
 and did not bundle D5/D6/D7. Next budget is D5 multimedia problem checkpoint
-first, then a bounded resolver/rendering cut.
+first, then a bounded resolver/rendering cut. The D5 checkpoint is now recorded;
+the next pass may touch the protected multimedia resolver/rendering surface.
 
 authority / bounds: D1 was authorized as an additive internal schema/parser/
 renderer spike only. It does not authorize production Texture write behavior,
@@ -701,7 +785,10 @@ metadata/provenance, source entity carry-forward, mutation completion, and
 Universal Wire source manifest derivation. Protected surfaces explicitly left
 for later cuts remain multimedia/source resolver rendering, publication/export,
 Source Viewer/reader integration beyond existing open-source affordances,
-deployment routing, and run acceptance involving Texture.
+deployment routing, and run acceptance involving Texture. D5 will be red/orange
+depending on final slice because it touches deterministic media ingestion,
+Texture agent prompt context, structured source validation, and frontend media
+transclusion rendering.
 
 evidence packet: D0 design receipts plus a clear-context Codex thread review
 verdict; D1 focused Go tests for schema/source entity validation, including
@@ -725,7 +812,11 @@ old-path deletion, CI, staging deploy identity, Comet/browser staging proof with
 numbered source refs, expanded source window, multimedia source expansion, agent
 edit preserving refs, and attempted markdown link/source token rejection;
 RunAcceptanceRecord at staging-smoke-level or higher if platform behavior
-changes.
+changes. D5 evidence target is focused Go/frontend tests proving new media
+discoveries do not write `metadata.media_source_refs`, multimedia structured
+source entities validate and render from top-level `SourceEntities` plus
+`source_ref` / `source_embed` nodes, and no clickable source links or client-side
+media-sidecar synthesis are required for new revisions.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -735,7 +826,9 @@ review, and root integration. D3 repairs the owner/editor-authored preservation
 path after focused tests, independent review, and root integration. D4 repairs
 the appagent-authored Texture mutation path after focused tests, independent
 review, and root integration. Full repair still requires multimedia resolver,
-publication/export, old-syntax deletion receipts, and staging proof.
+publication/export, old-syntax deletion receipts, and staging proof. D5
+checkpoint discovers the multimedia sidecar/rendering heresy; implementation has
+not repaired it yet.
 
 position / live conjectures / open edges: C1 supported for D1/D2: use a
 Choir-owned ProseMirror-compatible typed document schema validated in Go; do not
@@ -764,12 +857,13 @@ multimedia source entities exist in schema, but resolver/rendering paths still
 need proof that image/video/audio/PDF/transcript/Texture-span targets open and
 render through the same source entity model. E3: publication/export/diff/search
 still consume the projection and must not be treated as proof of structured
-transclusion behavior.
+transclusion behavior. D5 checkpoint records the specific sidecars/pathways to
+repair: runtime `media_source_refs`, prompt context that prefers those refs, and
+frontend media-ref synthesis/rendering outside top-level structured entities.
 
-next move: record the D5 multimedia path Problem Documentation First checkpoint,
-then implement the bounded multimedia resolver/rendering cut. Do not bundle
-publication/export, deployment, or broad old-path deletion unless this paradoc
-is updated first.
+next move: implement the bounded D5 multimedia resolver/rendering cut. Do not
+bundle publication/export, deployment, or broad old-path deletion unless this
+paradoc is updated first.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -779,9 +873,9 @@ version / lineage: v0. Created 2026-06-21 as a successor/specialization of
 
 learning state: D0 schema/API decision retained here. D1 code witness now lives
 in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
-writes, editor/user preservation, and appagent mutation. Promote outward only
-when multimedia, publication/export, deletion receipts, and staging proof close
-the product contract.
+writes, editor/user preservation, and appagent mutation. D5 checkpoint names the
+multimedia residue. Promote outward only when multimedia, publication/export,
+deletion receipts, and staging proof close the product contract.
 
 settlement: Not met. Settlement requires deployed staging proof that structured
 source/transclusion nodes are the only canonical source path, numbered refs
@@ -794,5 +888,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; current V=5. Next move is D5: first record the multimedia path Problem Documentation First checkpoint, then implement a bounded multimedia source resolver/rendering cut for image/video/audio/PDF/transcript/Texture-span source entities using the same source_ref/source_embed + SourceEntity model. Do not push, deploy, bundle publication export, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; the D5 multimedia path Problem Documentation First checkpoint is recorded; current V=5. Implement a bounded multimedia source resolver/rendering cut for image/video/audio/PDF/transcript/Texture-span source entities using the same source_ref/source_embed + SourceEntity model. Do not push, deploy, bundle publication export, broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
 ```

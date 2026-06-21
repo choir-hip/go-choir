@@ -542,3 +542,46 @@ schema-level image/video/audio/PDF/transcript/Texture-span source entities exist
 but product resolver/rendering paths still must prove those targets transclude
 through the same `source_ref` / `source_embed` plus top-level `SourceEntity`
 model, without renderer-only media cards or clickable links.
+
+## 2026-06-21 - Pass 19 - D5 Multimedia Problem Checkpoint
+
+Claim: D5 cannot safely mutate multimedia resolver/rendering behavior until the
+mission records the current behavior problem separately from the fix.
+
+Move: construct. Added `D5 Multimedia Path Problem Checkpoint - 2026-06-21` to
+the paradoc. The checkpoint names the gap: schema-level multimedia source
+entities exist, but live Texture still discovers image/YouTube URLs from
+projection text into `metadata.media_source_refs`, derives source entities from
+that sidecar, prompts agents with media refs, and has frontend media-ref
+synthesis plus kind-specific media rendering outside a fully proven structured
+`source_ref` / `source_embed` plus top-level `SourceEntity` path.
+
+Expected delta V: 0 on product obligations; satisfies the red/orange-surface
+precondition for D5 runtime/frontend mutation.
+
+Actual delta V: 0. Current V remains 5. Runtime/frontend behavior unchanged by
+this pass.
+
+Receipt:
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+
+Evidence recorded:
+`internal/runtime/texture_agent_revision.go:375`;
+`internal/runtime/texture_agent_revision.go:377`;
+`internal/runtime/texture_agent_revision.go:606`;
+`internal/runtime/texture_media_sources.go:52`;
+`internal/runtime/texture_media_sources.go:199`;
+`frontend/src/lib/texture-source-state.ts:9`;
+`frontend/src/lib/texture-source-state.ts:25`;
+`frontend/src/lib/texture-source-renderer.ts:286`;
+`frontend/src/lib/texture-source-renderer.ts:321`;
+`internal/texturedoc/schema.go:393`;
+`internal/texturedoc/schema.go:403`.
+
+Open edge: implement the bounded D5 multimedia resolver/rendering cut. Do not
+bundle publication/export, deployment, or broad old-path deletion. Expected
+evidence: focused Go tests for structured multimedia source validation and no
+new `metadata.media_source_refs` writes; focused frontend tests proving
+structured multimedia entities render from top-level `SourceEntities` plus
+document source nodes without client-side media sidecar synthesis or clickable
+source links.
