@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 func RegisterTextureTools(registry *ToolRegistry, rt *Runtime) error {
@@ -39,18 +39,36 @@ type textureTextEdit struct {
 	ReplaceAll bool   `json:"replace_all,omitempty"`
 }
 
+type textureStructuredEdit struct {
+	Op             string                   `json:"op"`
+	BlockID        string                   `json:"block_id,omitempty"`
+	NodeID         string                   `json:"node_id,omitempty"`
+	AfterBlockID   string                   `json:"after_block_id,omitempty"`
+	Text           string                   `json:"text,omitempty"`
+	BlockType      string                   `json:"block_type,omitempty"`
+	HeadingLevel   int                      `json:"heading_level,omitempty"`
+	SourceEntityID string                   `json:"source_entity_id,omitempty"`
+	DisplayMode    string                   `json:"display_mode,omitempty"`
+	Offset         *int                     `json:"offset,omitempty"`
+	SourceEntity   *texturedoc.SourceEntity `json:"source_entity,omitempty"`
+}
+
 type editTextureArgs struct {
-	DocID          string            `json:"doc_id"`
-	BaseRevisionID string            `json:"base_revision_id"`
-	Operation      string            `json:"operation"`
-	Content        string            `json:"content,omitempty"`
-	Edits          []textureTextEdit `json:"edits,omitempty"`
-	Rationale      string            `json:"rationale,omitempty"`
-	SourceTool     string            `json:"-"`
+	DocID            string                    `json:"doc_id"`
+	BaseRevisionID   string                    `json:"base_revision_id"`
+	Operation        string                    `json:"operation"`
+	Content          string                    `json:"content,omitempty"`
+	Edits            []textureTextEdit         `json:"-"`
+	StructuredEdits  []textureStructuredEdit   `json:"edits,omitempty"`
+	AvailableSources []texturedoc.SourceEntity `json:"-"`
+	Rationale        string                    `json:"rationale,omitempty"`
+	SourceTool       string                    `json:"-"`
 }
 
 type materializedTextureEdit struct {
 	Content        string
+	BodyDoc        json.RawMessage
+	SourceEntities json.RawMessage
 	Operation      string
 	SourceTool     string
 	BaseRevisionID string
@@ -73,7 +91,7 @@ func isTextureWriteToolName(name string) bool {
 func newPatchTextureTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "patch_texture",
-		Description: "Apply ordinary structured edits to the current Texture document and store the next complete canonical version. Use this for normal line, paragraph, section, citation, metadata, append, or first-draft changes. Do not use it for whole-document replacement; use rewrite_texture only when a full recovery rewrite is explicitly required.",
+		Description: "Apply validated structured operations to the current Texture document BodyDoc and store the next canonical version. Use update_block_text, insert_block, append_block, delete_node, insert_source_ref, and insert_source_embed. Do not send raw document JSON, markdown source links, find/replace patches, or metadata source sidecars.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
@@ -83,11 +101,20 @@ func newPatchTextureTool(rt *Runtime) Tool {
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"op":          map[string]any{"type": "string", "enum": []string{"replace", "append"}},
-						"find":        map[string]any{"type": "string"},
-						"replace":     map[string]any{"type": "string"},
-						"text":        map[string]any{"type": "string"},
-						"replace_all": map[string]any{"type": "boolean"},
+						"op":               map[string]any{"type": "string", "enum": []string{"update_block_text", "insert_block", "append_block", "delete_node", "insert_source_ref", "insert_source_embed"}},
+						"block_id":         map[string]any{"type": "string"},
+						"node_id":          map[string]any{"type": "string"},
+						"after_block_id":   map[string]any{"type": "string"},
+						"text":             map[string]any{"type": "string"},
+						"block_type":       map[string]any{"type": "string", "enum": []string{"paragraph", "heading"}},
+						"heading_level":    map[string]any{"type": "integer"},
+						"source_entity_id": map[string]any{"type": "string"},
+						"display_mode":     map[string]any{"type": "string", "enum": []string{"numbered_ref", "inline_chip", "block_embed", "excerpt", "player", "image_preview", "pdf_pages", "transcript", "source_window"}},
+						"offset":           map[string]any{"type": "integer"},
+						"source_entity": map[string]any{
+							"type":        "object",
+							"description": "Optional SourceEntity target/selectors/display/evidence payload for a new runtime-minted source. Omit source_entity_id or leave it blank; runtime assigns the canonical source_entity_id.",
+						},
 					},
 					"required":             []string{"op"},
 					"additionalProperties": false,
@@ -110,7 +137,7 @@ func newPatchTextureTool(rt *Runtime) Tool {
 func newRewriteTextureTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "rewrite_texture",
-		Description: "Exceptionally replace the entire current Texture document and store the next complete canonical version. Use only for explicit whole-document recovery rewrites or owner-requested full transformations after auditing hard constraints. Rationale is required.",
+		Description: "Exceptionally rewrite the whole Texture document from plain prose through server-owned StructuredTextureDoc conversion and validation. Use only for explicit recovery rewrites or owner-requested full transformations after auditing source/ref loss. Rationale is required.",
 		Parameters: jsonSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
@@ -573,6 +600,72 @@ func buildAppagentRevisionProvenance(rec *types.RunRecord, revMeta json.RawMessa
 	return json.RawMessage(canonical)
 }
 
+func buildStructuredAppagentRevisionProvenance(rec *types.RunRecord, sourceEntitiesRaw json.RawMessage, now time.Time) json.RawMessage {
+	var structured []texturedoc.SourceEntity
+	if len(strings.TrimSpace(string(sourceEntitiesRaw))) > 0 {
+		_ = json.Unmarshal(sourceEntitiesRaw, &structured)
+	}
+	sources := make([]types.SourceEntity, 0, len(structured))
+	for _, entity := range structured {
+		sources = append(sources, provenanceSourceEntityFromStructured(entity))
+	}
+	prov := types.Provenance{
+		SchemaVersion: types.ProvenanceSchemaVersion,
+		AuthoredAt:    now.UTC(),
+		Sources:       sources,
+	}
+	if rec != nil {
+		prov.AuthoringModel = types.ProvenanceModel{
+			Provider: strings.TrimSpace(metadataStringValue(rec.Metadata, "provider")),
+			Model:    strings.TrimSpace(metadataStringValue(rec.Metadata, "model")),
+		}
+	}
+	canonical, err := prov.CanonicalJSON()
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(canonical)
+}
+
+func provenanceSourceEntityFromStructured(entity texturedoc.SourceEntity) types.SourceEntity {
+	targetKind := strings.TrimSpace(entity.Target.Kind)
+	return types.SourceEntity{
+		EntityID: strings.TrimSpace(entity.SourceEntityID),
+		Kind:     targetKind,
+		Label:    strings.TrimSpace(firstNonEmpty(entity.Display.Title, entity.Display.Label, entity.Target.ID, entity.Target.URI)),
+		Target: types.SourceEntityTarget{
+			TargetKind:   targetKind,
+			ItemID:       strings.TrimSpace(entity.Target.ID),
+			ContentID:    strings.TrimSpace(entity.Target.ID),
+			URL:          strings.TrimSpace(entity.Target.URI),
+			CanonicalURL: strings.TrimSpace(entity.Target.URI),
+		},
+		Selectors:  provenanceSourceSelectorsFromStructured(entity.Selectors),
+		Display:    provenanceSourceDisplayFromStructured(entity.Display, entity.Evidence),
+		Evidence:   types.SourceEntityEvidence{State: strings.TrimSpace(entity.Evidence.State)},
+		Provenance: types.SourceEntityProvenance{CreatedBy: strings.TrimSpace(entity.Provenance.CreatedBy)},
+	}
+}
+
+func provenanceSourceSelectorsFromStructured(selectors []texturedoc.SourceSelector) []types.SourceEntitySelector {
+	out := make([]types.SourceEntitySelector, 0, len(selectors))
+	for _, selector := range selectors {
+		out = append(out, types.SourceEntitySelector{
+			SelectorKind: strings.TrimSpace(selector.Kind),
+			TextQuote:    metadataString(selector.Data, "exact"),
+		})
+	}
+	return out
+}
+
+func provenanceSourceDisplayFromStructured(display texturedoc.SourceDisplay, evidence texturedoc.SourceEvidence) types.SourceEntityDisplay {
+	return types.SourceEntityDisplay{
+		InlineMode:   strings.TrimSpace(display.Mode),
+		ExpandedMode: strings.TrimSpace(display.Mode),
+		OpenSurface:  strings.TrimSpace(evidence.OpenSurface),
+	}
+}
+
 func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunRecord, in editTextureArgs) (types.Revision, error) {
 	if rt == nil || rt.store == nil {
 		return types.Revision{}, fmt.Errorf("runtime store unavailable")
@@ -643,12 +736,13 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	in.BaseRevisionID = baseRevisionID
 	if strings.TrimSpace(in.Operation) == "" {
 		switch {
-		case len(in.Edits) > 0:
+		case len(in.StructuredEdits) > 0:
 			in.Operation = "apply_edits"
 		case strings.TrimSpace(in.Content) != "":
 			in.Operation = "replace_all"
 		}
 	}
+	in.AvailableSources = structuredSourceEntitiesFromRuntimeSources(rec.Metadata["source_entities"])
 	materialized, err := materializeTextureToolEdit(in, currentRevision)
 	if err != nil {
 		return types.Revision{}, err
@@ -669,39 +763,12 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			return types.Revision{}, fmt.Errorf("initial model-prior Texture revision must change prompt content before first paint is stored")
 		}
 	}
-	if normalizedContent, normalizedCount := normalizeWireArticleBareSourceRefs(materialized.Content, revMeta, rec); normalizedCount > 0 {
-		materialized.Content = normalizedContent
-		revMeta = mergeTextureRevisionMetadata(revMeta, map[string]any{
-			"source_ref_normalization": map[string]any{
-				"normalized_bare_source_refs": normalizedCount,
-				"syntax":                      "[label](source:ENTITY_ID)",
-			},
-		})
-	}
-	if normalizedContent, normalizedCount, entityPatch := normalizeWireArticleSourceServiceProse(materialized.Content, revMeta, rec); normalizedCount > 0 {
-		materialized.Content = normalizedContent
-		if len(entityPatch) > 0 {
-			revMeta = mergeTextureRevisionMetadata(revMeta, map[string]any{"source_entities": entityPatch})
-		}
-		revMeta = mergeTextureRevisionMetadata(revMeta, map[string]any{
-			"source_ref_normalization": map[string]any{
-				"normalized_source_service_prose": normalizedCount,
-				"syntax":                          "[label](source:ENTITY_ID)",
-			},
-		})
-	}
 	if canonicalPath != "" {
 		revMeta = mergeTextureRevisionMetadata(revMeta, map[string]any{
 			canonicalTextureSourcePathMetadataKey: canonicalPath,
 		})
 	}
-	collatedEntities := decodeTextureSourceEntities(decodeRevisionMetadata(revMeta)["source_entities"])
-	if citedIDs := extractInlineCitationEntityIDs(materialized.Content); len(citedIDs) > 0 {
-		sourceBodies := rt.collateCitationSourceBodies(ctx, rec.OwnerID, citedIDs, collatedEntities)
-		if issues := validateTextureCitations(materialized.Content, collatedEntities, sourceBodies); len(issues) > 0 {
-			return types.Revision{}, fmt.Errorf("%s", formatCitationValidationError(issues))
-		}
-	}
+	revMeta = sanitizeTextureToolRevisionMetadata(revMeta)
 	now := time.Now().UTC()
 	rev := types.Revision{
 		RevisionID:       uuid.NewString(),
@@ -709,10 +776,11 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		OwnerID:          rec.OwnerID,
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
-		Content:          materialized.Content,
+		BodyDoc:          materialized.BodyDoc,
+		SourceEntities:   materialized.SourceEntities,
 		Citations:        json.RawMessage("[]"),
 		Metadata:         revMeta,
-		Provenance:       buildAppagentRevisionProvenance(rec, revMeta, now),
+		Provenance:       buildStructuredAppagentRevisionProvenance(rec, materialized.SourceEntities, now),
 		ParentRevisionID: baseRevisionID,
 		CreatedAt:        now,
 	}
@@ -755,100 +823,27 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	return storedRev, nil
 }
 
-var bareTextureSourceRefRE = regexp.MustCompile(`\[source:([A-Za-z0-9_.:-]{1,160})\]`)
-
-func normalizeWireArticleBareSourceRefs(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int) {
-	if !wirepublish.IsWireArticleRevisionRun(rec) {
-		return content, 0
+func sanitizeTextureToolRevisionMetadata(raw json.RawMessage) json.RawMessage {
+	meta := decodeRevisionMetadata(raw)
+	if meta == nil {
+		return raw
 	}
-	meta := decodeRevisionMetadata(metadata)
-	entities := decodeTextureSourceEntities(meta["source_entities"])
-	if len(entities) == 0 || !strings.Contains(content, "[source:") {
-		return content, 0
+	for _, key := range []string{
+		"source_entities",
+		"media_source_refs",
+		"source_gaps",
+		"source_repair_resolutions",
+		"source_attachment_manifest",
+		"source_ref_normalization",
+		"citations_json",
+	} {
+		delete(meta, key)
 	}
-	labels := map[string]string{}
-	for _, entity := range entities {
-		id := strings.TrimSpace(entity.EntityID)
-		if id == "" {
-			continue
-		}
-		label := strings.TrimSpace(firstNonEmpty(entity.Label, entity.Kind, "source"))
-		if label == "" {
-			label = "source"
-		}
-		labels[id] = label
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return raw
 	}
-	if len(labels) == 0 {
-		return content, 0
-	}
-	count := 0
-	normalized := bareTextureSourceRefRE.ReplaceAllStringFunc(content, func(match string) string {
-		parts := bareTextureSourceRefRE.FindStringSubmatch(match)
-		if len(parts) != 2 {
-			return match
-		}
-		id := strings.TrimSpace(parts[1])
-		label := labels[id]
-		if label == "" {
-			return match
-		}
-		count++
-		return "[" + label + "](source:" + id + ")"
-	})
-	return normalized, count
-}
-
-var wireArticleSourceServiceProseRE = regexp.MustCompile(`Source Service item (srcitem_[A-Za-z0-9_-]+)`)
-
-func normalizeWireArticleSourceServiceProse(content string, metadata json.RawMessage, rec *types.RunRecord) (string, int, []textureSourceEntity) {
-	if !wirepublish.IsWireArticleRevisionRun(rec) {
-		return content, 0, nil
-	}
-	if !wireArticleSourceServiceProseRE.MatchString(content) && !textureRawSourceServiceItemIDRE.MatchString(content) {
-		return content, 0, nil
-	}
-	meta := decodeRevisionMetadata(metadata)
-	entities := decodeTextureSourceEntities(meta["source_entities"])
-	labels := map[string]string{}
-	entityByItem := map[string]textureSourceEntity{}
-	for _, entity := range entities {
-		id := strings.TrimSpace(entity.EntityID)
-		itemID := strings.TrimSpace(entity.Target.ItemID)
-		if id == "" {
-			continue
-		}
-		label := strings.TrimSpace(firstNonEmpty(entity.Label, entity.Kind, "source"))
-		if label == "" {
-			label = "source"
-		}
-		labels[id] = label
-		if itemID != "" {
-			entityByItem[itemID] = entity
-		}
-	}
-	count := 0
-	normalized := wireArticleSourceServiceProseRE.ReplaceAllStringFunc(content, func(match string) string {
-		parts := wireArticleSourceServiceProseRE.FindStringSubmatch(match)
-		if len(parts) != 2 {
-			return match
-		}
-		itemID := strings.TrimSpace(parts[1])
-		entity, ok := entityByItem[itemID]
-		if !ok {
-			entity = sourceServiceItemRefToSourceEntity(itemID, content)
-			entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{entity})
-			entityByItem[itemID] = entity
-		}
-		entityID := strings.TrimSpace(entity.EntityID)
-		label := strings.TrimSpace(firstNonEmpty(entity.Label, labels[entityID], "source"))
-		if entityID == "" || label == "" {
-			return match
-		}
-		labels[entityID] = label
-		count++
-		return "[" + label + "](source:" + entityID + ")"
-	})
-	return normalized, count, entities
+	return data
 }
 
 func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (materializedTextureEdit, error) {
@@ -868,38 +863,58 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 	if sourceTool == "" {
 		sourceTool = "patch_texture"
 	}
-	var content string
+	doc, entities, err := structuredRevisionForTextureToolEdit(edit, current)
+	if err != nil {
+		return materializedTextureEdit{}, err
+	}
+	entities = mergeStructuredSourceEntityPool(entities, edit.AvailableSources)
 	var editCount int
 	switch operation {
 	case "replace_all":
 		if len(current.Content) >= 12000 && strings.TrimSpace(edit.Rationale) == "" {
 			return materializedTextureEdit{}, fmt.Errorf("replace_all on long Texture documents requires rationale; use apply_edits for ordinary section or line changes")
 		}
-		content = edit.Content
+		doc = plainStructuredTextureToolDoc(edit.DocID, uuid.NewString(), cleanTextureToolContent(edit.Content))
+		entities = nil
 		editCount = 1
 	case "apply_edits":
-		content = current.Content
-		if len(edit.Edits) == 0 {
+		if len(edit.Edits) > 0 {
+			return materializedTextureEdit{}, fmt.Errorf("legacy find/replace Texture edits are not accepted; use structured BodyDoc operations")
+		}
+		if len(edit.StructuredEdits) == 0 {
 			return materializedTextureEdit{}, fmt.Errorf("apply_edits requires at least one edit")
 		}
-		for i, textEdit := range edit.Edits {
-			var err error
-			content, err = applyTextureTextEdit(content, textEdit)
-			if err != nil {
+		for i, structuredEdit := range edit.StructuredEdits {
+			if err := applyStructuredTextureEdit(&doc, &entities, structuredEdit); err != nil {
 				return materializedTextureEdit{}, fmt.Errorf("edit %d: %w", i, err)
 			}
 		}
-		editCount = len(edit.Edits)
+		editCount = len(edit.StructuredEdits)
 	default:
 		return materializedTextureEdit{}, fmt.Errorf("operation = %q, want replace_all or apply_edits", edit.Operation)
 	}
 
-	content = cleanTextureToolContent(content)
+	entities = filterDetachedStructuredSourceEntities(doc, entities)
+	projection, err := texturedoc.Project(doc, entities)
+	if err != nil {
+		return materializedTextureEdit{}, fmt.Errorf("structured Texture document validation failed: %w", err)
+	}
+	bodyDocJSON, err := json.Marshal(doc)
+	if err != nil {
+		return materializedTextureEdit{}, fmt.Errorf("marshal structured Texture document: %w", err)
+	}
+	sourceEntitiesJSON, err := json.Marshal(entities)
+	if err != nil {
+		return materializedTextureEdit{}, fmt.Errorf("marshal structured Texture source entities: %w", err)
+	}
+	content := strings.TrimSpace(projection.Text)
 	if content == "" {
 		return materializedTextureEdit{}, fmt.Errorf("materialized document content must not be empty")
 	}
 	return materializedTextureEdit{
 		Content:        content,
+		BodyDoc:        json.RawMessage(bodyDocJSON),
+		SourceEntities: json.RawMessage(sourceEntitiesJSON),
 		Operation:      operation,
 		SourceTool:     sourceTool,
 		BaseRevisionID: baseRevisionID,
@@ -909,6 +924,481 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 		ResultChars:    len(content),
 		DeltaChars:     len(content) - len(current.Content),
 	}, nil
+}
+
+func structuredRevisionForTextureToolEdit(edit editTextureArgs, current types.Revision) (texturedoc.StructuredTextureDoc, []texturedoc.SourceEntity, error) {
+	if len(strings.TrimSpace(string(current.BodyDoc))) == 0 {
+		return plainStructuredTextureToolDoc(edit.DocID, current.RevisionID, current.Content), nil, nil
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(current.BodyDoc, &doc); err != nil {
+		return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("current body_doc is invalid JSON: %w", err)
+	}
+	var entities []texturedoc.SourceEntity
+	sourceEntitiesRaw := strings.TrimSpace(string(current.SourceEntities))
+	if sourceEntitiesRaw != "" && sourceEntitiesRaw != "null" {
+		if err := json.Unmarshal(current.SourceEntities, &entities); err != nil {
+			return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("current source_entities are invalid JSON: %w", err)
+		}
+	}
+	if err := texturedoc.Validate(doc, entities); err != nil {
+		return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("current structured Texture revision is invalid: %w", err)
+	}
+	return doc, entities, nil
+}
+
+func plainStructuredTextureToolDoc(docID, revisionID, content string) texturedoc.StructuredTextureDoc {
+	content = cleanTextureToolContent(content)
+	return texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": textureToolNodeID("doc", docID, revisionID, "root")},
+			Content: []texturedoc.Node{{
+				Type:    "paragraph",
+				Attrs:   map[string]any{"id": textureToolNodeID("p", docID, revisionID, "0")},
+				Content: plainTextureToolInlineNodes(content),
+			}},
+		},
+	}
+}
+
+func plainTextureToolInlineNodes(content string) []texturedoc.Node {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+	if content == "" {
+		return nil
+	}
+	parts := strings.Split(content, "\n")
+	nodes := make([]texturedoc.Node, 0, len(parts)*2-1)
+	for i, part := range parts {
+		if i > 0 {
+			nodes = append(nodes, texturedoc.Node{Type: "hard_break"})
+		}
+		if part != "" {
+			nodes = append(nodes, texturedoc.Node{Type: "text", Text: part})
+		}
+	}
+	return nodes
+}
+
+func textureToolNodeID(prefix, docID, revisionID, suffix string) string {
+	parts := []string{strings.TrimSpace(prefix), strings.TrimSpace(docID), strings.TrimSpace(revisionID), strings.TrimSpace(suffix)}
+	for i, part := range parts {
+		if part == "" {
+			parts[i] = "unknown"
+		}
+	}
+	return strings.Join(parts, "-")
+}
+
+func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *[]texturedoc.SourceEntity, edit textureStructuredEdit) error {
+	switch strings.TrimSpace(edit.Op) {
+	case "update_block_text":
+		blockID := strings.TrimSpace(edit.BlockID)
+		if blockID == "" {
+			return fmt.Errorf("update_block_text requires block_id")
+		}
+		block := findStructuredNodeByID(&doc.Doc, blockID)
+		if block == nil {
+			return fmt.Errorf("block_id %q not found", blockID)
+		}
+		if block.Type != "paragraph" && block.Type != "heading" {
+			return fmt.Errorf("update_block_text supports paragraph or heading blocks, got %q", block.Type)
+		}
+		preservedRefs := collectDirectSourceRefNodes(block.Content)
+		block.Content = append(plainTextureToolInlineNodes(cleanTextureToolContent(edit.Text)), preservedRefs...)
+		return nil
+	case "insert_block", "append_block":
+		block, err := structuredBlockFromEdit(edit)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(edit.Op) == "append_block" || strings.TrimSpace(edit.AfterBlockID) == "" {
+			doc.Doc.Content = append(doc.Doc.Content, block)
+			return nil
+		}
+		return insertStructuredBlockAfter(&doc.Doc.Content, strings.TrimSpace(edit.AfterBlockID), block)
+	case "delete_node":
+		nodeID := strings.TrimSpace(edit.NodeID)
+		if nodeID == "" {
+			return fmt.Errorf("delete_node requires node_id")
+		}
+		if nodeID == textureNodeStringAttr(doc.Doc, "id") {
+			return fmt.Errorf("delete_node cannot delete the document root")
+		}
+		if !deleteStructuredNodeByID(&doc.Doc.Content, nodeID) {
+			return fmt.Errorf("node_id %q not found", nodeID)
+		}
+		return nil
+	case "insert_source_ref":
+		blockID := strings.TrimSpace(edit.BlockID)
+		if blockID == "" {
+			return fmt.Errorf("insert_source_ref requires block_id")
+		}
+		block := findStructuredNodeByID(&doc.Doc, blockID)
+		if block == nil {
+			return fmt.Errorf("block_id %q not found", blockID)
+		}
+		if block.Type != "paragraph" && block.Type != "heading" {
+			return fmt.Errorf("insert_source_ref supports paragraph or heading blocks, got %q", block.Type)
+		}
+		sourceEntityID, err := resolveStructuredEditSourceEntity(entities, edit, "numbered_ref")
+		if err != nil {
+			return err
+		}
+		ref := texturedoc.Node{
+			Type: "source_ref",
+			Attrs: map[string]any{
+				"id":               uuid.NewString(),
+				"source_entity_id": sourceEntityID,
+				"display_mode":     "numbered_ref",
+			},
+		}
+		block.Content = insertInlineNodeAtOffset(block.Content, ref, edit.Offset)
+		return nil
+	case "insert_source_embed":
+		sourceEntityID, err := resolveStructuredEditSourceEntity(entities, edit, firstNonEmpty(strings.TrimSpace(edit.DisplayMode), "block_embed"))
+		if err != nil {
+			return err
+		}
+		displayMode := strings.TrimSpace(edit.DisplayMode)
+		if displayMode == "" {
+			displayMode = "block_embed"
+		}
+		if displayMode == "numbered_ref" || displayMode == "inline_chip" {
+			return fmt.Errorf("insert_source_embed display_mode %q is not a block display mode", displayMode)
+		}
+		embed := texturedoc.Node{
+			Type: "source_embed",
+			Attrs: map[string]any{
+				"id":               uuid.NewString(),
+				"source_entity_id": sourceEntityID,
+				"display_mode":     displayMode,
+			},
+		}
+		if strings.TrimSpace(edit.AfterBlockID) == "" {
+			doc.Doc.Content = append(doc.Doc.Content, embed)
+			return nil
+		}
+		return insertStructuredBlockAfter(&doc.Doc.Content, strings.TrimSpace(edit.AfterBlockID), embed)
+	default:
+		return fmt.Errorf("op = %q, want update_block_text, insert_block, append_block, delete_node, insert_source_ref, or insert_source_embed", edit.Op)
+	}
+}
+
+func structuredBlockFromEdit(edit textureStructuredEdit) (texturedoc.Node, error) {
+	blockType := strings.TrimSpace(edit.BlockType)
+	if blockType == "" {
+		blockType = "paragraph"
+	}
+	switch blockType {
+	case "paragraph":
+		return texturedoc.Node{
+			Type:    "paragraph",
+			Attrs:   map[string]any{"id": uuid.NewString()},
+			Content: plainTextureToolInlineNodes(cleanTextureToolContent(edit.Text)),
+		}, nil
+	case "heading":
+		level := edit.HeadingLevel
+		if level == 0 {
+			level = 2
+		}
+		if level < 1 || level > 6 {
+			return texturedoc.Node{}, fmt.Errorf("heading_level must be 1..6")
+		}
+		return texturedoc.Node{
+			Type:    "heading",
+			Attrs:   map[string]any{"id": uuid.NewString(), "level": level},
+			Content: plainTextureToolInlineNodes(cleanTextureToolContent(edit.Text)),
+		}, nil
+	default:
+		return texturedoc.Node{}, fmt.Errorf("block_type = %q, want paragraph or heading", blockType)
+	}
+}
+
+func resolveStructuredEditSourceEntity(entities *[]texturedoc.SourceEntity, edit textureStructuredEdit, defaultDisplayMode string) (string, error) {
+	sourceEntityID := strings.TrimSpace(edit.SourceEntityID)
+	if edit.SourceEntity != nil {
+		if sourceEntityID != "" {
+			return "", fmt.Errorf("source_entity_id must be omitted when source_entity is provided; runtime mints the id")
+		}
+		entity := *edit.SourceEntity
+		entity.SourceEntityID = "src_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+		if strings.TrimSpace(entity.Display.Mode) == "" {
+			entity.Display.Mode = defaultDisplayMode
+		}
+		if strings.TrimSpace(entity.Evidence.State) == "" {
+			entity.Evidence.State = sourcecontract.EvidenceStateAvailable
+		}
+		if strings.TrimSpace(entity.Evidence.OpenSurface) == "" {
+			entity.Evidence.OpenSurface = sourcecontract.OpenSurfaceSource
+		}
+		if strings.TrimSpace(entity.Provenance.CreatedBy) == "" {
+			entity.Provenance.CreatedBy = "runtime"
+		}
+		if len(entity.Selectors) == 0 {
+			entity.Selectors = []texturedoc.SourceSelector{{Kind: sourcecontract.SelectorKindWholeResource}}
+		}
+		next := append([]texturedoc.SourceEntity{}, (*entities)...)
+		next = append(next, entity)
+		*entities = next
+		return entity.SourceEntityID, nil
+	}
+	if sourceEntityID == "" {
+		return "", fmt.Errorf("source_entity_id or source_entity is required")
+	}
+	for _, entity := range *entities {
+		if strings.TrimSpace(entity.SourceEntityID) == sourceEntityID {
+			return sourceEntityID, nil
+		}
+	}
+	return "", fmt.Errorf("source_entity_id %q is not present in the current structured source_entities", sourceEntityID)
+}
+
+func mergeStructuredSourceEntityPool(current, incoming []texturedoc.SourceEntity) []texturedoc.SourceEntity {
+	if len(incoming) == 0 {
+		return current
+	}
+	seen := map[string]bool{}
+	out := make([]texturedoc.SourceEntity, 0, len(current)+len(incoming))
+	for _, entity := range current {
+		id := strings.TrimSpace(entity.SourceEntityID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, entity)
+	}
+	for _, entity := range incoming {
+		id := strings.TrimSpace(entity.SourceEntityID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, entity)
+	}
+	return out
+}
+
+func structuredSourceEntitiesFromRuntimeSources(value any) []texturedoc.SourceEntity {
+	runtimeEntities := decodeTextureSourceEntities(value)
+	out := make([]texturedoc.SourceEntity, 0, len(runtimeEntities))
+	for _, entity := range runtimeEntities {
+		structured := structuredSourceEntityFromRuntimeSource(entity)
+		if strings.TrimSpace(structured.SourceEntityID) != "" {
+			out = append(out, structured)
+		}
+	}
+	return out
+}
+
+func structuredSourceEntityFromRuntimeSource(entity textureSourceEntity) texturedoc.SourceEntity {
+	targetKind := structuredSourceTargetKind(entity)
+	displayMode := structuredSourceDisplayMode(entity)
+	return texturedoc.SourceEntity{
+		SourceEntityID: strings.TrimSpace(entity.EntityID),
+		Target: texturedoc.SourceTarget{
+			Kind: targetKind,
+			URI:  strings.TrimSpace(firstNonEmpty(entity.Target.CanonicalURL, entity.Target.URL)),
+			ID:   strings.TrimSpace(firstNonEmpty(entity.Target.ItemID, entity.Target.ContentID, entity.Target.DocID, entity.Target.RevisionID, entity.EntityID)),
+		},
+		Selectors:  structuredSourceSelectorsFromRuntime(entity.Selectors),
+		Display:    texturedoc.SourceDisplay{Mode: displayMode, Title: strings.TrimSpace(entity.Label)},
+		Evidence:   structuredSourceEvidenceFromRuntime(entity),
+		Provenance: texturedoc.SourceEntityProvenance{CreatedBy: strings.TrimSpace(firstNonEmpty(entity.Provenance.CreatedBy, "runtime"))},
+	}
+}
+
+func structuredSourceTargetKind(entity textureSourceEntity) string {
+	switch strings.TrimSpace(entity.Target.TargetKind) {
+	case "source_service_item":
+		return "source_service_item"
+	case "content_item":
+		return "content_item"
+	case "image", "video", "audio", "pdf", "transcript", "texture_span", "publication_span", "source_viewer_artifact", "reader_artifact", "file_artifact":
+		return strings.TrimSpace(entity.Target.TargetKind)
+	case "url", "web_url":
+		return "web_url"
+	default:
+		switch strings.TrimSpace(entity.Kind) {
+		case "image":
+			return "image"
+		case "youtube_video", "video":
+			return "video"
+		default:
+			return "content_item"
+		}
+	}
+}
+
+func structuredSourceDisplayMode(entity textureSourceEntity) string {
+	switch strings.TrimSpace(firstNonEmpty(entity.Display.ExpandedMode, entity.Display.InlineMode)) {
+	case "image_preview", "player", "pdf_pages", "transcript", "source_window", "excerpt", "block_embed", "inline_chip", "numbered_ref":
+		return strings.TrimSpace(firstNonEmpty(entity.Display.ExpandedMode, entity.Display.InlineMode))
+	default:
+		return "numbered_ref"
+	}
+}
+
+func structuredSourceSelectorsFromRuntime(selectors []textureSourceEntitySelector) []texturedoc.SourceSelector {
+	if len(selectors) == 0 {
+		return []texturedoc.SourceSelector{{Kind: sourcecontract.SelectorKindWholeResource}}
+	}
+	out := make([]texturedoc.SourceSelector, 0, len(selectors))
+	for _, selector := range selectors {
+		kind := sourcecontract.NormalizeSelectorKind(selector.SelectorKind)
+		if kind == "" {
+			kind = sourcecontract.SelectorKindWholeResource
+		}
+		data := map[string]any{}
+		if selector.TextQuote != "" {
+			data["exact"] = selector.TextQuote
+		}
+		if selector.ContentHash != "" {
+			data["content_hash"] = selector.ContentHash
+		}
+		out = append(out, texturedoc.SourceSelector{Kind: kind, Data: data})
+	}
+	return out
+}
+
+func structuredSourceEvidenceFromRuntime(entity textureSourceEntity) texturedoc.SourceEvidence {
+	state := sourcecontract.NormalizeEvidenceState(entity.Evidence.State)
+	if state == "" {
+		state = sourcecontract.EvidenceStateAvailable
+	}
+	openSurface := sourcecontract.NormalizeOpenSurface(entity.Display.OpenSurface)
+	if openSurface == "" {
+		openSurface = sourcecontract.OpenSurfaceSource
+	}
+	return texturedoc.SourceEvidence{
+		State:               state,
+		OpenSurface:         openSurface,
+		ReaderArtifactState: sourcecontract.NormalizeReaderArtifactState(entity.Evidence.SourceRepresentationID),
+	}
+}
+
+func findStructuredNodeByID(node *texturedoc.Node, nodeID string) *texturedoc.Node {
+	if node == nil {
+		return nil
+	}
+	if textureNodeStringAttr(*node, "id") == nodeID {
+		return node
+	}
+	for i := range node.Content {
+		if found := findStructuredNodeByID(&node.Content[i], nodeID); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func insertStructuredBlockAfter(nodes *[]texturedoc.Node, afterNodeID string, block texturedoc.Node) error {
+	for i := range *nodes {
+		if textureNodeStringAttr((*nodes)[i], "id") == afterNodeID {
+			next := append((*nodes)[:i+1], append([]texturedoc.Node{block}, (*nodes)[i+1:]...)...)
+			*nodes = next
+			return nil
+		}
+		if err := insertStructuredBlockAfter(&(*nodes)[i].Content, afterNodeID, block); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("after_block_id %q not found", afterNodeID)
+}
+
+func deleteStructuredNodeByID(nodes *[]texturedoc.Node, nodeID string) bool {
+	for i := 0; i < len(*nodes); i++ {
+		if textureNodeStringAttr((*nodes)[i], "id") == nodeID {
+			*nodes = append((*nodes)[:i], (*nodes)[i+1:]...)
+			return true
+		}
+		if deleteStructuredNodeByID(&(*nodes)[i].Content, nodeID) {
+			return true
+		}
+	}
+	return false
+}
+
+func collectDirectSourceRefNodes(nodes []texturedoc.Node) []texturedoc.Node {
+	var refs []texturedoc.Node
+	for _, node := range nodes {
+		if node.Type == "source_ref" {
+			refs = append(refs, node)
+		}
+	}
+	return refs
+}
+
+func insertInlineNodeAtOffset(nodes []texturedoc.Node, insert texturedoc.Node, offset *int) []texturedoc.Node {
+	if offset == nil || *offset < 0 {
+		return append(nodes, insert)
+	}
+	remaining := *offset
+	out := make([]texturedoc.Node, 0, len(nodes)+1)
+	inserted := false
+	for _, node := range nodes {
+		if inserted || node.Type != "text" {
+			out = append(out, node)
+			continue
+		}
+		runes := []rune(node.Text)
+		if remaining > len(runes) {
+			remaining -= len(runes)
+			out = append(out, node)
+			continue
+		}
+		if remaining > 0 {
+			left := node
+			left.Text = string(runes[:remaining])
+			out = append(out, left)
+		}
+		out = append(out, insert)
+		if remaining < len(runes) {
+			right := node
+			right.Text = string(runes[remaining:])
+			out = append(out, right)
+		}
+		inserted = true
+	}
+	if !inserted {
+		out = append(out, insert)
+	}
+	return out
+}
+
+func filterDetachedStructuredSourceEntities(doc texturedoc.StructuredTextureDoc, entities []texturedoc.SourceEntity) []texturedoc.SourceEntity {
+	referenced := map[string]bool{}
+	collectStructuredSourceEntityRefs(doc.Doc, referenced)
+	out := make([]texturedoc.SourceEntity, 0, len(entities))
+	for _, entity := range entities {
+		if referenced[strings.TrimSpace(entity.SourceEntityID)] {
+			out = append(out, entity)
+		}
+	}
+	return out
+}
+
+func collectStructuredSourceEntityRefs(node texturedoc.Node, refs map[string]bool) {
+	if node.Type == "source_ref" || node.Type == "source_embed" {
+		if id := textureNodeStringAttr(node, "source_entity_id"); id != "" {
+			refs[id] = true
+		}
+	}
+	for _, child := range node.Content {
+		collectStructuredSourceEntityRefs(child, refs)
+	}
+}
+
+func textureNodeStringAttr(node texturedoc.Node, key string) string {
+	if node.Attrs == nil {
+		return ""
+	}
+	if value, ok := node.Attrs[key].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func cleanTextureToolContent(content string) string {

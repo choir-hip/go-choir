@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -471,10 +472,18 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	editArgs, err := json.Marshal(map[string]any{
 		"doc_id":           docID,
 		"base_revision_id": parent.RevisionID,
-		"edits": []map[string]any{{
-			"op":   "append",
-			"text": "\n\nOpenAI documentation supports the GPT-5.5 release [OpenAI docs](source:" + entityID + ").\n",
-		}},
+		"edits": []map[string]any{
+			{
+				"op":       "update_block_text",
+				"block_id": "p-" + docID + "-" + parent.RevisionID + "-0",
+				"text":     "OpenAI documentation supports the GPT-5.5 release.",
+			},
+			{
+				"op":               "insert_source_ref",
+				"block_id":         "p-" + docID + "-" + parent.RevisionID + "-0",
+				"source_entity_id": entityID,
+			},
+		},
 		"rationale": "Incorporate researcher source evidence with a native source citation.",
 	})
 	if err != nil {
@@ -491,12 +500,19 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	if err != nil {
 		t.Fatalf("GetRevision: %v", err)
 	}
-	if !strings.Contains(rev.Content, "](source:"+entityID+")") {
+	if !strings.Contains(rev.Content, "[1]") || strings.Contains(rev.Content, "](source:") {
 		t.Fatalf("revision missing native source citation: %q", rev.Content)
 	}
 	meta := decodeRevisionMetadata(rev.Metadata)
-	if !hasSourceEntity(decodeTextureSourceEntities(meta["source_entities"]), "content_item", "", contentID) {
-		t.Fatalf("revision metadata missing source_entities: %#v", meta["source_entities"])
+	if _, ok := meta["source_entities"]; ok {
+		t.Fatalf("revision metadata retained legacy source_entities: %#v", meta["source_entities"])
+	}
+	var structuredEntities []texturedoc.SourceEntity
+	if err := json.Unmarshal(rev.SourceEntities, &structuredEntities); err != nil {
+		t.Fatalf("unmarshal revision source_entities: %v", err)
+	}
+	if len(structuredEntities) != 1 || structuredEntities[0].SourceEntityID != entityID {
+		t.Fatalf("revision source_entities = %#v, want %q", structuredEntities, entityID)
 	}
 }
 

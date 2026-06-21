@@ -3,10 +3,16 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -85,6 +91,227 @@ func TestMaterializeTextureToolEditRequiresRationaleForLongRewrite(t *testing.T)
 	}
 	if got.Operation != "replace_all" || got.Rationale == "" || got.EditCount != 1 {
 		t.Fatalf("materialized rewrite metadata = %+v", got)
+	}
+}
+
+func TestTextureToolStructuredUpdatePreservesSourceRefs(t *testing.T) {
+	current := structuredTextureToolRevision(t)
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-1",
+			Text:    "Updated grounded claim",
+		}},
+	}, current)
+	if err != nil {
+		t.Fatalf("materialize structured update: %v", err)
+	}
+	if got.Content != "Updated grounded claim[1]" {
+		t.Fatalf("Content = %q, want source ref projection preserved", got.Content)
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(got.BodyDoc, &doc); err != nil {
+		t.Fatalf("unmarshal body_doc: %v", err)
+	}
+	if !structuredDocHasNode(doc.Doc, "source_ref", "ref-1") {
+		t.Fatalf("body_doc lost source_ref node: %s", got.BodyDoc)
+	}
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(got.SourceEntities, &entities); err != nil {
+		t.Fatalf("unmarshal source_entities: %v", err)
+	}
+	if len(entities) != 1 || entities[0].SourceEntityID != "src-web" {
+		t.Fatalf("source_entities = %#v, want src-web preserved", entities)
+	}
+}
+
+func TestTextureToolStructuredDeleteSourceNodeFiltersDetachedEntity(t *testing.T) {
+	current := structuredTextureToolRevision(t)
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:     "delete_node",
+			NodeID: "ref-1",
+		}},
+	}, current)
+	if err != nil {
+		t.Fatalf("materialize delete source node: %v", err)
+	}
+	if strings.Contains(got.Content, "[1]") {
+		t.Fatalf("Content = %q, want source projection removed", got.Content)
+	}
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(got.SourceEntities, &entities); err != nil {
+		t.Fatalf("unmarshal source_entities: %v", err)
+	}
+	if len(entities) != 0 {
+		t.Fatalf("source_entities = %#v, want detached source filtered", entities)
+	}
+}
+
+func TestTextureToolStructuredSourceInsertionWritesBodyNodesAndTopLevelEntities(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{
+			{
+				Op:      "insert_source_ref",
+				BlockID: "p-1",
+				SourceEntity: &texturedoc.SourceEntity{
+					Target:  texturedoc.SourceTarget{Kind: "web_url", URI: "https://example.com/ref"},
+					Display: texturedoc.SourceDisplay{Title: "Reference story"},
+				},
+			},
+			{
+				Op:           "insert_source_embed",
+				AfterBlockID: "p-1",
+				DisplayMode:  "image_preview",
+				SourceEntity: &texturedoc.SourceEntity{
+					Target:  texturedoc.SourceTarget{Kind: "image", URI: "https://example.com/image.png"},
+					Display: texturedoc.SourceDisplay{Title: "Launch image"},
+				},
+			},
+		},
+	}, current)
+	if err != nil {
+		t.Fatalf("materialize source insertion: %v", err)
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(got.BodyDoc, &doc); err != nil {
+		t.Fatalf("unmarshal body_doc: %v", err)
+	}
+	if !structuredDocHasType(doc.Doc, "source_ref") || !structuredDocHasType(doc.Doc, "source_embed") {
+		t.Fatalf("body_doc missing inserted source nodes: %s", got.BodyDoc)
+	}
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(got.SourceEntities, &entities); err != nil {
+		t.Fatalf("unmarshal source_entities: %v", err)
+	}
+	if len(entities) != 2 {
+		t.Fatalf("source_entities len = %d, want 2: %#v", len(entities), entities)
+	}
+	for _, entity := range entities {
+		if strings.TrimSpace(entity.SourceEntityID) == "" || strings.Contains(entity.SourceEntityID, "example.com") {
+			t.Fatalf("runtime did not mint opaque source id: %#v", entity)
+		}
+	}
+}
+
+func TestTextureToolRejectsLegacyEditsAndSourceSyntax(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	if _, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		Edits:          []textureTextEdit{{Op: "append", Text: "legacy"}},
+	}, current); err == nil || !strings.Contains(err.Error(), "legacy find/replace") {
+		t.Fatalf("legacy edit err = %v, want rejection", err)
+	}
+	if _, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-1",
+			Text:    "[Story](source:src-web)",
+		}},
+	}, current); err == nil || !strings.Contains(err.Error(), "legacy markdown source link") {
+		t.Fatalf("legacy source syntax err = %v, want rejection", err)
+	}
+}
+
+func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing.T) {
+	s, rt := textureToolCommitRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	doc := types.Document{DocID: "doc-d4-tool", OwnerID: "user-1", Title: "D4 Tool", CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	base := structuredTextureToolRevision(t)
+	base.DocID = doc.DocID
+	base.OwnerID = doc.OwnerID
+	base.CreatedAt = now
+	if err := s.CreateRevision(ctx, base); err != nil {
+		t.Fatalf("CreateRevision base: %v", err)
+	}
+	runID := "run-d4-tool"
+	if err := s.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID:     doc.DocID,
+		RunID:     runID,
+		OwnerID:   doc.OwnerID,
+		State:     "pending",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("CreateAgentMutation: %v", err)
+	}
+	run := &types.RunRecord{
+		RunID:        runID,
+		AgentID:      currentTextureAgentID(doc.DocID),
+		ChannelID:    doc.DocID,
+		OwnerID:      doc.OwnerID,
+		SandboxID:    "sandbox-texture-test",
+		State:        types.RunRunning,
+		Prompt:       "Patch structured Texture.",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		AgentProfile: AgentProfileTexture,
+		AgentRole:    AgentProfileTexture,
+		Metadata: map[string]any{
+			"type":                     textureAgentRevisionTaskType,
+			"doc_id":                   doc.DocID,
+			"source_entities":          []textureSourceEntity{{EntityID: "legacy-sidecar", Kind: "content_item"}},
+			"source_ref_normalization": map[string]any{"legacy_count": 1},
+			runMetadataAgentID:         currentTextureAgentID(doc.DocID),
+			runMetadataAgentProfile:    AgentProfileTexture,
+			runMetadataAgentRole:       AgentProfileTexture,
+			runMetadataChannelID:       doc.DocID,
+		},
+	}
+	rawArgs, err := json.Marshal(editTextureArgs{
+		DocID:          doc.DocID,
+		BaseRevisionID: base.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-1",
+			Text:    "Committed structured claim",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal patch args: %v", err)
+	}
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err != nil {
+		t.Fatalf("patch_texture: %v", err)
+	}
+	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
+	if err != nil {
+		t.Fatalf("ListRevisionsByDoc: %v", err)
+	}
+	if len(revs) != 2 {
+		t.Fatalf("revisions len = %d, want 2", len(revs))
+	}
+	appRev := revs[0]
+	if len(appRev.BodyDoc) == 0 || len(appRev.SourceEntities) == 0 {
+		t.Fatalf("app revision missing structured fields: body_doc=%s source_entities=%s", appRev.BodyDoc, appRev.SourceEntities)
+	}
+	meta := decodeRevisionMetadata(appRev.Metadata)
+	for _, key := range []string{"source_entities", "media_source_refs", "source_ref_normalization", "citations_json"} {
+		if _, ok := meta[key]; ok {
+			t.Fatalf("metadata retained legacy source key %q: %#v", key, meta)
+		}
+	}
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err == nil ||
+		!strings.Contains(err.Error(), "stale") {
+		t.Fatalf("stale base err = %v, want stale rejection", err)
 	}
 }
 
@@ -204,4 +431,152 @@ func TestApplyTextureModelMergeEditsStripsVisibleProvenance(t *testing.T) {
 	if len(applied) != 1 || applied[0]["operation"] != "replace_exact" {
 		t.Fatalf("applied edit evidence mismatch: %+v", applied)
 	}
+}
+
+func structuredTextureToolRevision(t *testing.T) types.Revision {
+	t.Helper()
+	bodyDoc, sourceEntities := structuredTextureToolPayload(t)
+	return types.Revision{
+		RevisionID:     "rev-structured-tool",
+		DocID:          "doc-structured-tool",
+		OwnerID:        "user-1",
+		AuthorKind:     types.AuthorUser,
+		AuthorLabel:    "user",
+		Content:        "Grounded[1].",
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
+	}
+}
+
+func plainTextureToolRevision(t *testing.T, content string) types.Revision {
+	t.Helper()
+	doc := texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-node"},
+			Content: []texturedoc.Node{{
+				Type:    "paragraph",
+				Attrs:   map[string]any{"id": "p-1"},
+				Content: []texturedoc.Node{{Type: "text", Text: content}},
+			}},
+		},
+	}
+	bodyDoc, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal body_doc: %v", err)
+	}
+	return types.Revision{
+		RevisionID:     "rev-plain-tool",
+		DocID:          "doc-plain-tool",
+		OwnerID:        "user-1",
+		AuthorKind:     types.AuthorUser,
+		AuthorLabel:    "user",
+		Content:        content,
+		BodyDoc:        bodyDoc,
+		SourceEntities: json.RawMessage("[]"),
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
+	}
+}
+
+func structuredTextureToolPayload(t *testing.T) (json.RawMessage, json.RawMessage) {
+	t.Helper()
+	doc := texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-node"},
+			Content: []texturedoc.Node{{
+				Type:  "paragraph",
+				Attrs: map[string]any{"id": "p-1"},
+				Content: []texturedoc.Node{
+					{Type: "text", Text: "Grounded"},
+					{
+						Type: "source_ref",
+						Attrs: map[string]any{
+							"id":               "ref-1",
+							"source_entity_id": "src-web",
+							"display_mode":     "numbered_ref",
+						},
+					},
+					{Type: "text", Text: "."},
+				},
+			}},
+		},
+	}
+	entities := []texturedoc.SourceEntity{{
+		SourceEntityID: "src-web",
+		Target:         texturedoc.SourceTarget{Kind: "web_url", URI: "https://example.com/story"},
+		Selectors:      []texturedoc.SourceSelector{{Kind: sourcecontract.SelectorKindTextQuote, Data: map[string]any{"exact": "Grounded"}}},
+		Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Example story"},
+		Evidence:       texturedoc.SourceEvidence{State: sourcecontract.EvidenceStateConfirms, OpenSurface: sourcecontract.OpenSurfaceSource},
+		Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "runtime", SourceSystem: "test"},
+	}}
+	bodyDoc, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal body_doc: %v", err)
+	}
+	sourceEntities, err := json.Marshal(entities)
+	if err != nil {
+		t.Fatalf("marshal source_entities: %v", err)
+	}
+	return bodyDoc, sourceEntities
+}
+
+func structuredDocHasType(node texturedoc.Node, nodeType string) bool {
+	if node.Type == nodeType {
+		return true
+	}
+	for _, child := range node.Content {
+		if structuredDocHasType(child, nodeType) {
+			return true
+		}
+	}
+	return false
+}
+
+func structuredDocHasNode(node texturedoc.Node, nodeType, nodeID string) bool {
+	if node.Type == nodeType && textureNodeStringAttr(node, "id") == nodeID {
+		return true
+	}
+	for _, child := range node.Content {
+		if structuredDocHasNode(child, nodeType, nodeID) {
+			return true
+		}
+	}
+	return false
+}
+
+func textureToolCommitRuntime(t *testing.T) (*store.Store, *Runtime) {
+	t.Helper()
+	dir := filepath.Join(os.TempDir(), "go-choir-d4-texture-tool-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	dbPath := filepath.Join(dir, t.Name()+".db")
+	promptRoot := filepath.Join(dir, t.Name()+"-prompts")
+	_ = os.Remove(dbPath)
+	_ = os.RemoveAll(promptRoot)
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	rt := New(Config{
+		SandboxID:           "sandbox-texture-test",
+		StorePath:           dbPath,
+		PromptRoot:          promptRoot,
+		ProviderTimeout:     time.Second,
+		SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), NewStubProvider(0))
+	if err := rt.InstallDefaultAgentTools(""); err != nil {
+		t.Fatalf("InstallDefaultAgentTools: %v", err)
+	}
+	t.Cleanup(func() {
+		rt.Stop()
+		_ = s.Close()
+		_ = os.Remove(dbPath)
+		_ = os.RemoveAll(promptRoot)
+	})
+	return s, rt
 }
