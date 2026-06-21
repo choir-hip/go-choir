@@ -627,27 +627,6 @@ func TestExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase(t *testing.T) {
 	}
 }
 
-func TestExplicitTextureSuperExecutionRequestParserIsNarrow(t *testing.T) {
-	explicit := "Create a Texture document. The document should ask downstream super execution to create a tiny file artifacts/proof.txt containing the marker. Do not research."
-	request, ok := explicitTextureSuperExecutionRequestFromPrompt(explicit)
-	if !ok {
-		t.Fatalf("explicit downstream super request was not parsed")
-	}
-	if !strings.Contains(request.Objective, "create a tiny file artifacts/proof.txt containing the marker") {
-		t.Fatalf("objective = %q", request.Objective)
-	}
-
-	for _, prompt := range []string{
-		"Create a Texture document for an execution-shaped request.",
-		"Debug and verify this after Texture owns the artifact context.",
-		"Because this task requires no research or execution worker, record an off-document Texture decision note with decision_kind no_worker_needed, exact reason no worker needed.",
-	} {
-		if got, ok := explicitTextureSuperExecutionRequestFromPrompt(prompt); ok {
-			t.Fatalf("prompt %q parsed as explicit super request: %+v", prompt, got)
-		}
-	}
-}
-
 func TestExplicitNoWorkerDecisionPromptParsesInitialDecision(t *testing.T) {
 	prompt := strings.Join([]string{
 		"Create a short Texture document titled M32_TEXTURE_DECISION_ROUTE_TEST.",

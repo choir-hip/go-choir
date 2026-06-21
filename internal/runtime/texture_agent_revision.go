@@ -469,10 +469,6 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		runMetadata["texture_initial_decision_reason"] = decision.Reason
 		runMetadata["texture_initial_decision_evidence_refs"] = decision.EvidenceRefs
 		runMetadata["texture_initial_decision_next_action"] = decision.NextAction
-	} else if superRequest, ok := explicitTextureSuperExecutionRequestFromPrompt(initialPromptText); ok && scheduledMessageSeq == 0 {
-		runMetadata["texture_initial_super_request_required"] = true
-		runMetadata["texture_initial_super_request_objective"] = superRequest.Objective
-		runMetadata["texture_initial_super_request_reason"] = superRequest.Reason
 	}
 	var (
 		rec *types.RunRecord

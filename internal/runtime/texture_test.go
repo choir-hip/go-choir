@@ -2544,8 +2544,10 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	p.mu.Unlock()
 
 	lastUser := extractLastUserMessage(req.Messages)
+	hasWorkerUpdate := messagesContainToolCall(req.Messages, "update_coagent") || messagesContainText(req.Messages, "coagent_update")
 	if strings.Contains(lastUser, "model_prior_interim") &&
 		toolDefinitionsContain(req.ToolDefinitions, "request_super_execution") &&
+		!hasWorkerUpdate &&
 		!messagesContainToolCall(req.Messages, "request_super_execution") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
@@ -2561,6 +2563,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	}
 	if p.initialTextureDone &&
 		toolDefinitionsContain(req.ToolDefinitions, "request_super_execution") &&
+		!hasWorkerUpdate &&
 		!messagesContainToolCall(req.Messages, "request_super_execution") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
@@ -2613,7 +2616,6 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 
-	hasWorkerUpdate := messagesContainToolCall(req.Messages, "update_coagent") || messagesContainText(req.Messages, "coagent_update")
 	p.mu.Lock()
 	initialDone := p.initialTextureDone
 	if !p.initialTextureDone {
@@ -3134,6 +3136,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	provider := &textureSuperEvidenceLoopProvider{Provider: NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
+	rt.cfg.TextureActorParkIdle = time.Second
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a Texture that needs execution evidence. Ask super to produce a tiny artifact proof before finalizing."}`, "user-1")
 	w := httptest.NewRecorder()
 	h.HandlePromptBar(w, req)
@@ -3158,8 +3161,9 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	if decision.DocID == "" || decision.InitialLoopID == "" {
 		t.Fatalf("conductor did not create texture route: %+v", decision)
 	}
-	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
-		t.Fatalf("initial texture state = %q, want completed", state)
+	initialRevs := waitForRevisionCount(t, s, decision.DocID, "user-1", 2, 5*time.Second)
+	if !revisionContentsContain(initialRevs, "TEXTURE_INITIAL_EXECUTION_REVISION") {
+		t.Fatalf("initial Texture revision missing execution marker; revs=%+v", initialRevs)
 	}
 	assertInitialTextureAutonomousSurface(t, provider.firstTools)
 
@@ -3397,7 +3401,7 @@ func TestTexturePromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 	}, "", false, nil, nil)
 
 	for _, want := range []string{
-		"For factual/current claims, keep the revision uncertain until researcher evidence arrives.",
+		"For factual/current claims, keep the revision explicitly model-prior/interim and uncertain until researcher evidence arrives.",
 		"Probe (researcher) gathers world-knowledge evidence",
 		"Ordinary factual, current-events, web, or \"what is going on now\" questions are Probe work",
 	} {

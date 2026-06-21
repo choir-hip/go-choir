@@ -196,10 +196,10 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	}
 }
 
-func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper(t *testing.T) {
+func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticSuper(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
-	prompt := "Create a Texture document for M32_CONTROL_PLANE_EXEC_TEST. This is an execution-shaped request: the document should ask downstream super execution to create a tiny file artifacts/m32_control_plane_exec_test.txt containing the marker, then report the requested execution handle. Do not research; this only needs execution authority after Texture owns the artifact context."
+	prompt := "Create a Texture document for M32_CONTROL_PLANE_EXEC_TEST. Include this execution-shaped sentence verbatim: the document should ask downstream super execution to create a tiny file artifacts/m32_control_plane_exec_test.txt containing the marker, then report the requested execution handle. Do not request super execution in this proof; only write the note after Texture owns the artifact context."
 	body, err := json.Marshal(map[string]string{"text": prompt})
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
@@ -230,47 +230,52 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureThenRequestsSuper
 	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
-	if !metadataBoolValue(initialRun.Metadata, "texture_initial_super_request_required") {
-		t.Fatalf("initial run missing Texture super request metadata: %+v", initialRun.Metadata)
+	if metadataBoolValue(initialRun.Metadata, "texture_initial_super_request_required") {
+		t.Fatalf("initial run carried deleted Texture super request metadata: %+v", initialRun.Metadata)
+	}
+	if got := metadataStringValue(initialRun.Metadata, "texture_initial_super_request_objective"); got != "" {
+		t.Fatalf("initial run carried deleted Texture super request objective = %q", got)
+	}
+	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
+		t.Fatalf("conductor opened a super handoff before Texture acted: %+v", conductor.Metadata)
 	}
 
-	var superRun *types.RunRecord
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(250 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		runs, err := rt.Store().ListRunsByOwner(context.Background(), "user-alice", 100)
 		if err != nil {
 			t.Fatalf("list runs: %v", err)
 		}
-		for i := range runs {
-			run := runs[i]
+		for _, run := range runs {
 			if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == AgentProfileSuper {
-				superRun = &run
-				break
+				t.Fatalf("automatic super run appeared before Texture requested one: %+v", run)
 			}
 		}
-		if superRun != nil {
-			break
-		}
 		time.Sleep(25 * time.Millisecond)
-	}
-	if superRun == nil {
-		t.Fatalf("no downstream super run appeared after Texture request")
-	}
-	if got := metadataStringValue(superRun.Metadata, "requested_by_profile"); got != AgentProfileTexture {
-		t.Fatalf("super requested_by_profile = %q, want %q; metadata=%+v", got, AgentProfileTexture, superRun.Metadata)
-	}
-	if got := metadataStringValue(superRun.Metadata, "requested_by_agent_id"); got != initialRun.AgentID {
-		t.Fatalf("super requested_by_agent_id = %q, want %q", got, initialRun.AgentID)
-	}
-	if got := metadataStringValue(superRun.Metadata, "requested_by_run_id"); got != initialRun.RunID {
-		t.Fatalf("super requested_by_run_id = %q, want %q", got, initialRun.RunID)
 	}
 	decisions, err := rt.Store().ListTextureDecisionsByDocument(context.Background(), "user-alice", decision.DocID, 10)
 	if err != nil {
 		t.Fatalf("list decisions: %v", err)
 	}
-	if len(decisions) != 1 || decisions[0].DecisionKind != "delegation_opened" || decisions[0].RunID != initialRun.RunID {
-		t.Fatalf("texture super decision records = %+v, want one delegation_opened from initial run", decisions)
+	for _, decision := range decisions {
+		if decision.RunID == initialRun.RunID && decision.DecisionKind == "delegation_opened" {
+			t.Fatalf("automatic delegation decision recorded before Texture requested super: %+v", decisions)
+		}
+	}
+
+	requestCtx := WithToolExecutionContext(context.Background(), initialRun)
+	superResult, err := rt.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Create artifacts/m32_control_plane_exec_test.txt and report evidence back to Texture.", "")
+	if err != nil {
+		t.Fatalf("texture request super execution: %v", err)
+	}
+	if got := superResult["profile"]; got != AgentProfileSuper {
+		t.Fatalf("super profile = %v, want %s: %+v", got, AgentProfileSuper, superResult)
+	}
+	if got := superResult["requested_by"]; got != initialRun.AgentID {
+		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
+	}
+	if got := superResult["requested_by_run_id"]; got != initialRun.RunID {
+		t.Fatalf("requested_by_run_id = %v, want %s", got, initialRun.RunID)
 	}
 }
 
