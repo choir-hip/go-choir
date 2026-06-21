@@ -881,3 +881,48 @@ Open edge: delete or confine `internal/runtime/texture_lineage.go`,
 `internal/runtime/texture_citation_validation.go`, source repair helpers that
 still operate on markdown citation syntax, and remaining current-contract tests
 that still teach old source links or `metadata.source_entities`.
+
+## 2026-06-21 - Pass 26 - D7 Markdown Lineage/Source Repair Retirement Accepted
+
+Claim: D7 decreases the remaining old-syntax residue if markdown lineage import
+becomes a historical conversion boundary that stores structured Texture source
+nodes, and if the legacy source repair/attachment endpoints can no longer create
+metadata-sidecar source revisions.
+
+Move: construct + prover shift. Replaced markdown-lineage import projection with
+structured `body_doc` construction, native `source_ref` nodes, top-level
+structured `source_entities`, referenced-entity filtering, unresolved-marker
+rejection, and explicit `no_source_needed` marker removal. Retired the legacy
+source-gap repair and source-artifact attachment endpoints with `410 Gone`
+responses so they cannot patch source identity through metadata sidecars. The
+first fast review returned `revise_before_continue` for two test issues; those
+were repaired and re-review returned `accept`.
+
+Expected delta V: no top-level decrement, because current V=1 is reserved for
+the remaining citation-validation/helper and old-fixture residue. This pass
+decreases the D7 subvariant by removing the markdown-lineage/source-repair
+residue named in Pass 25.
+
+Actual delta V: 0 at the top-level variant; D7 subvariant decreased. Current
+V=1. Mission settlement still requires deletion or confinement of the remaining
+old citation helpers and deployed staging proof.
+
+Receipts:
+`internal/runtime/texture.go`;
+`internal/runtime/texture_lineage.go`;
+`internal/runtime/texture_source_repairs.go`;
+`internal/runtime/texture_test.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Evidence:
+`git diff --check`;
+`nix develop -c go test -tags comprehensive ./internal/runtime -run 'MarkdownLineage|SourceGapRepair|SourceArtifactAttachment' -count=1`;
+`nix develop -c go test ./internal/runtime -run 'TestTextureStructured|TestTexturePatch|TestTextureAgentRevision|TestTexturePromptPreservesInlineSourceRefs|TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks' -count=1`;
+independent fast re-review verdict: `accept`.
+
+Open edge: continue D7 by deleting or strictly confining
+`internal/runtime/texture_citation_validation.go`, old markdown source-link
+helpers that are no longer reachable from canonical writes, and remaining
+current-contract fixtures that still teach `[label](source:id)` or
+`metadata.source_entities`.

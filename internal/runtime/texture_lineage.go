@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -53,12 +55,6 @@ func buildMarkdownLineageRevisionMetadata(sourcePath string, version textureMark
 	if len(sourceMeta) > 0 {
 		metadata["source_metadata"] = sourceMeta
 	}
-	if len(sourceEntities) > 0 {
-		metadata["source_entities"] = sourceEntities
-	}
-	if gaps := detectMarkdownLineageSourceGaps(content, resolutions); len(gaps) > 0 {
-		metadata["source_gaps"] = gaps
-	}
 	raw, _ := json.Marshal(metadata)
 	return raw, nil
 }
@@ -67,79 +63,128 @@ var textureMarkdownLineageCitationRefRE = regexp.MustCompile(`\[(?:\d{1,3}|\^[A-
 
 const textureCitationResolutionOmitSentinel = "__texture_omit_citation__"
 
-func detectMarkdownLineageSourceGaps(content string, resolutions []textureCitationMarkerResolution) []map[string]any {
-	matches := textureMarkdownLineageCitationRefRE.FindAllStringIndex(content, -1)
-	if len(matches) == 0 {
+var markdownLineageSourceLinkOrMarkerRE = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)|\[(?:\d{1,3}|\^[A-Za-z0-9_-]{1,40})\]`)
+var markdownLineageSourceLinkRE = regexp.MustCompile(`^\[([^\]\n]{1,160})\]\(source:([^) \t\r\n]{1,160})\)$`)
+
+func markdownLineageStructuredRevision(docID, revisionID, content string, sourceEntities []textureSourceEntity, resolutions []textureCitationMarkerResolution) (json.RawMessage, json.RawMessage, string, error) {
+	structuredEntities := structuredSourceEntitiesFromRuntimeSources(sourceEntities)
+	entityByID := make(map[string]texturedoc.SourceEntity, len(structuredEntities))
+	for _, entity := range structuredEntities {
+		entityByID[strings.TrimSpace(entity.SourceEntityID)] = entity
+	}
+	resolved := markdownLineageResolutionMap(resolutions)
+	used := map[string]bool{}
+	refSeq := 0
+	inlineNodes := []texturedoc.Node{}
+	addText := func(segment string) {
+		if segment == "" {
+			return
+		}
+		parts := strings.Split(segment, "\n")
+		for i, part := range parts {
+			if i > 0 {
+				inlineNodes = append(inlineNodes, texturedoc.Node{Type: "hard_break"})
+			}
+			if part != "" {
+				inlineNodes = append(inlineNodes, texturedoc.Node{Type: "text", Text: part})
+			}
+		}
+	}
+	addSourceRef := func(entityID, label string) error {
+		entityID = strings.TrimSpace(entityID)
+		if entityID == "" {
+			return fmt.Errorf("source_ref requires source_entity_id")
+		}
+		if _, ok := entityByID[entityID]; !ok {
+			return fmt.Errorf("source_ref references unknown source entity %s", entityID)
+		}
+		refSeq++
+		used[entityID] = true
+		attrs := map[string]any{
+			"id":               "source-ref-" + revisionID + "-" + strconv.Itoa(refSeq),
+			"source_entity_id": entityID,
+			"display_mode":     "numbered_ref",
+		}
+		if label = strings.TrimSpace(label); label != "" {
+			attrs["label"] = label
+		}
+		inlineNodes = append(inlineNodes, texturedoc.Node{Type: "source_ref", Attrs: attrs})
 		return nil
 	}
-	resolved := markdownLineageResolutionMap(resolutions)
-	gaps := make([]map[string]any, 0, len(matches))
-	seen := map[string]bool{}
-	for _, match := range matches {
-		marker := content[match[0]:match[1]]
-		if seen[marker] || resolved[marker] != "" {
-			continue
-		}
-		seen[marker] = true
-		gaps = append(gaps, map[string]any{
-			"kind":           "unresolved_markdown_citation_marker",
-			"marker":         marker,
-			"policy":         "repairable_gap_no_invented_citations",
-			"evidence_state": textureSourceEvidenceStateRecord("candidate", "", "unresolved markdown citation marker"),
-		})
-	}
-	return gaps
-}
 
-func markdownLineageProjectionContent(content string, resolutions []textureCitationMarkerResolution) string {
-	return applyTextureCitationResolutions(content, resolutions)
-}
-
-func applyTextureCitationResolutions(content string, resolutions []textureCitationMarkerResolution) string {
-	resolved := markdownLineageResolutionMap(resolutions)
-	if len(resolved) == 0 {
-		return content
-	}
-	matches := textureMarkdownLineageCitationRefRE.FindAllStringIndex(content, -1)
-	if len(matches) == 0 {
-		return content
-	}
-	var b strings.Builder
 	last := 0
-	changed := false
-	for _, match := range matches {
-		marker := content[match[0]:match[1]]
-		entityID := resolved[marker]
-		if entityID == "" || strings.HasPrefix(content[match[1]:], "(source:") {
-			continue
+	for _, match := range markdownLineageSourceLinkOrMarkerRE.FindAllStringIndex(content, -1) {
+		token := content[match[0]:match[1]]
+		addText(content[last:match[0]])
+		if parts := markdownLineageSourceLinkRE.FindStringSubmatch(token); len(parts) == 3 {
+			if err := addSourceRef(parts[2], parts[1]); err != nil {
+				return nil, nil, "", err
+			}
+		} else {
+			entityID := strings.TrimSpace(resolved[token])
+			if entityID == "" {
+				return nil, nil, "", fmt.Errorf("unresolved markdown citation marker %s requires a source_ref resolution or no_source_needed action", token)
+			}
+			if entityID != textureCitationResolutionOmitSentinel {
+				label := strings.TrimSuffix(strings.TrimPrefix(token, "["), "]")
+				if err := addSourceRef(entityID, label); err != nil {
+					return nil, nil, "", err
+				}
+			} else {
+				trimTrailingInlineHorizontalSpace(&inlineNodes)
+			}
 		}
-		b.WriteString(content[last:match[0]])
-		if entityID == textureCitationResolutionOmitSentinel {
-			trimTrailingHorizontalSpace(&b)
-			last = match[1]
-			changed = true
-			continue
-		}
-		label := strings.TrimSuffix(strings.TrimPrefix(marker, "["), "]")
-		b.WriteString(fmt.Sprintf("[%s](source:%s)", label, entityID))
 		last = match[1]
-		changed = true
 	}
-	if !changed {
-		return content
+	addText(content[last:])
+	if len(inlineNodes) == 0 {
+		return nil, nil, "", fmt.Errorf("structured markdown lineage revision would be empty")
 	}
-	b.WriteString(content[last:])
-	return b.String()
+	referencedEntities := make([]texturedoc.SourceEntity, 0, len(used))
+	for _, entity := range structuredEntities {
+		if used[strings.TrimSpace(entity.SourceEntityID)] {
+			referencedEntities = append(referencedEntities, entity)
+		}
+	}
+	doc := texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-" + docID + "-" + revisionID},
+			Content: []texturedoc.Node{{
+				Type:    "paragraph",
+				Attrs:   map[string]any{"id": "p-" + revisionID + "-0"},
+				Content: inlineNodes,
+			}},
+		},
+	}
+	projection, err := texturedoc.Project(doc, referencedEntities)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	bodyDoc, err := json.Marshal(doc)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	sourceEntityJSON, err := json.Marshal(referencedEntities)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return bodyDoc, sourceEntityJSON, projection.Text, nil
 }
 
-func trimTrailingHorizontalSpace(b *strings.Builder) {
-	value := b.String()
-	trimmed := strings.TrimRight(value, " \t")
-	if len(trimmed) == len(value) {
-		return
+func trimTrailingInlineHorizontalSpace(nodes *[]texturedoc.Node) {
+	for len(*nodes) > 0 {
+		last := &(*nodes)[len(*nodes)-1]
+		if last.Type != "text" {
+			return
+		}
+		last.Text = strings.TrimRight(last.Text, " \t")
+		if last.Text != "" {
+			return
+		}
+		*nodes = (*nodes)[:len(*nodes)-1]
 	}
-	b.Reset()
-	b.WriteString(trimmed)
 }
 
 func markdownLineageResolutionMap(resolutions []textureCitationMarkerResolution) map[string]string {
@@ -190,39 +235,6 @@ func markdownLineageResolutionManifest(resolutions []textureCitationMarkerResolu
 	return out
 }
 
-func markdownLineageSourceRepairResolutionManifest(resolutions []textureCitationMarkerResolution) []map[string]any {
-	if len(resolutions) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(resolutions))
-	for _, resolution := range resolutions {
-		marker := strings.TrimSpace(resolution.Marker)
-		entityID := strings.TrimSpace(resolution.EntityID)
-		action := normalizeTextureCitationResolutionAction(resolution.Action, entityID)
-		reason := strings.TrimSpace(resolution.Reason)
-		if marker == "" {
-			continue
-		}
-		state := normalizeTextureEvidenceState(resolution.EvidenceState)
-		if state == "" {
-			state = textureEvidenceStateForCitationResolution(action, "")
-		}
-		item := map[string]any{
-			"marker":         marker,
-			"action":         action,
-			"evidence_state": textureSourceEvidenceStateRecord(state, entityID, reason),
-		}
-		if entityID != "" {
-			item["entity_id"] = entityID
-		}
-		if reason != "" {
-			item["reason"] = reason
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
 func markdownLineageSourceEntities(global, local []textureSourceEntity) []textureSourceEntity {
 	entities, _ := mergeTextureSourceEntities(append([]textureSourceEntity{}, global...), local)
 	return entities
@@ -258,70 +270,6 @@ func markdownLineageCitationResolutions(global, local []textureCitationMarkerRes
 
 func normalizeTextureEvidenceState(value string) string {
 	return sourcecontract.NormalizeEvidenceState(value)
-}
-
-func textureEvidenceStateForCitationResolution(action, relation string) string {
-	relationState := normalizeTextureEvidenceState(relation)
-	if sourcecontract.IsRelationalEvidenceState(relationState) {
-		return relationState
-	}
-	if normalizeTextureCitationResolutionAction(action, "") == "no_source_needed" {
-		return sourcecontract.EvidenceStateNoSourceNeeded
-	}
-	return sourcecontract.EvidenceStateConfirms
-}
-
-func textureSourceEvidenceStateRecord(state, targetID, reason string) map[string]any {
-	normalized := normalizeTextureEvidenceState(state)
-	if normalized == "" {
-		normalized = "candidate"
-	}
-	record := map[string]any{"state": normalized}
-	if targetID = strings.TrimSpace(targetID); targetID != "" {
-		record["target_id"] = targetID
-	}
-	if reason = strings.TrimSpace(reason); reason != "" {
-		record["reason"] = reason
-	}
-	return record
-}
-
-func normalizeTextureSourceRepairEvidence(entities []textureSourceEntity, resolutions []textureCitationMarkerResolution) []textureSourceEntity {
-	if len(entities) == 0 {
-		return nil
-	}
-	stateByEntityID := map[string]string{}
-	for _, resolution := range resolutions {
-		entityID := strings.TrimSpace(resolution.EntityID)
-		if entityID == "" {
-			continue
-		}
-		state := normalizeTextureEvidenceState(resolution.EvidenceState)
-		if state == "" {
-			state = textureEvidenceStateForCitationResolution(resolution.Action, "")
-		}
-		stateByEntityID[entityID] = state
-	}
-	out := append([]textureSourceEntity{}, entities...)
-	for i := range out {
-		entityID := strings.TrimSpace(out[i].EntityID)
-		relation := normalizeTextureEvidenceState(out[i].Evidence.Relation)
-		if !sourcecontract.IsRelationalEvidenceState(relation) {
-			relation = normalizeTextureEvidenceState(out[i].Evidence.State)
-		}
-		if !sourcecontract.IsRelationalEvidenceState(relation) {
-			relation = stateByEntityID[entityID]
-		}
-		if !sourcecontract.IsRelationalEvidenceState(relation) {
-			relation = sourcecontract.EvidenceStateConfirms
-		}
-		out[i].Evidence.Relation = relation
-		out[i].Evidence.State = relation
-		if strings.TrimSpace(out[i].Evidence.ResearchState) == "" {
-			out[i].Evidence.ResearchState = "owner_supplied"
-		}
-	}
-	return out
 }
 
 func normalizeTextureCitationResolutionAction(action, entityID string) string {
@@ -370,45 +318,6 @@ func validateMarkdownLineageCitationResolutions(entities []textureSourceEntity, 
 		}
 	}
 	return nil
-}
-
-func filterTextureSourceGaps(value any, repaired map[string]string) []map[string]any {
-	if len(repaired) == 0 || value == nil {
-		return decodeTextureSourceGaps(value)
-	}
-	gaps := decodeTextureSourceGaps(value)
-	if len(gaps) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(gaps))
-	for _, gap := range gaps {
-		marker, _ := gap["marker"].(string)
-		if repaired[strings.TrimSpace(marker)] != "" {
-			continue
-		}
-		out = append(out, gap)
-	}
-	return out
-}
-
-func decodeTextureSourceGaps(value any) []map[string]any {
-	if value == nil {
-		return nil
-	}
-	var gaps []map[string]any
-	switch typed := value.(type) {
-	case []map[string]any:
-		return typed
-	case []any:
-		data, _ := json.Marshal(typed)
-		_ = json.Unmarshal(data, &gaps)
-	case json.RawMessage:
-		_ = json.Unmarshal(typed, &gaps)
-	default:
-		data, _ := json.Marshal(typed)
-		_ = json.Unmarshal(data, &gaps)
-	}
-	return gaps
 }
 
 func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version textureMarkdownLineageVersion, content string, now time.Time) types.ContentItem {

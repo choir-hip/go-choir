@@ -6173,7 +6173,7 @@ func TestTextureImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 			{
 				Label:            "v44",
 				SourceRevisionID: "git-a",
-				Content:          "# Proposal\n\nGlossary table survives here. [1]\n",
+				Content:          "# Proposal\n\nGlossary table survives here.\n",
 				CreatedAt:        "2026-06-04T10:00:00Z",
 			},
 			{
@@ -6253,13 +6253,8 @@ func TestTextureImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	if manifest["original_content_id"] == "" || manifest["original_content_hash"] == "" {
 		t.Fatalf("missing original snapshot refs in manifest: %#v", manifest)
 	}
-	gaps, ok := meta["source_gaps"].([]any)
-	if !ok || len(gaps) != 1 {
-		t.Fatalf("source gaps = %#v", meta["source_gaps"])
-	}
-	gap := gaps[0].(map[string]any)
-	if state := gap["evidence_state"].(map[string]any)["state"]; state != "candidate" {
-		t.Fatalf("source gap evidence_state = %#v", gap["evidence_state"])
+	if _, ok := meta["source_gaps"]; ok {
+		t.Fatalf("markdown lineage import retained legacy source_gaps metadata: %#v", meta["source_gaps"])
 	}
 	latestMeta := decodeRevisionMetadata(revs[0].Metadata)
 	if latestMeta["source_metadata"].(map[string]any)["import_note"] != "owner selected current draft" {
@@ -6322,7 +6317,7 @@ func TestTextureImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 		SourceEntities: []textureSourceEntity{entity},
 		Versions: []textureMarkdownLineageVersion{{
 			Label:   "v44",
-			Content: "# Proposal\n\nConfidentiality matters [1]. Unresolved claim [2].\n",
+			Content: "# Proposal\n\nConfidentiality matters [1].\n",
 			CitationResolutions: []textureCitationMarkerResolution{{
 				Marker:   "[1]",
 				EntityID: entity.EntityID,
@@ -6345,29 +6340,24 @@ func TestTextureImportMarkdownLineageResolvesCitationMarkers(t *testing.T) {
 	if len(revs) != 1 {
 		t.Fatalf("len(revisions) = %d, want 1", len(revs))
 	}
-	if !strings.Contains(revs[0].Content, "[1](source:src-aba-rule-16)") {
-		t.Fatalf("resolved citation was not rewritten as source link: %q", revs[0].Content)
-	}
-	if !strings.Contains(revs[0].Content, "Unresolved claim [2]") {
-		t.Fatalf("unresolved citation marker should remain visible: %q", revs[0].Content)
+	if !strings.Contains(revs[0].Content, "Confidentiality matters [1].") || strings.Contains(revs[0].Content, "](source:") {
+		t.Fatalf("resolved citation was not projected as native source ref: %q", revs[0].Content)
 	}
 	meta := decodeRevisionMetadata(revs[0].Metadata)
-	sourceEntities := decodeTextureSourceEntities(meta["source_entities"])
-	if len(sourceEntities) != 1 || sourceEntities[0].EntityID != entity.EntityID {
-		t.Fatalf("source_entities = %#v", meta["source_entities"])
+	if _, ok := meta["source_entities"]; ok {
+		t.Fatalf("markdown lineage import retained legacy source_entities metadata: %#v", meta["source_entities"])
+	}
+	var structuredEntities []map[string]any
+	if err := json.Unmarshal(revs[0].SourceEntities, &structuredEntities); err != nil {
+		t.Fatalf("decode structured source_entities: %v", err)
+	}
+	if len(structuredEntities) != 1 || structuredEntities[0]["source_entity_id"] != entity.EntityID {
+		t.Fatalf("structured source_entities = %#v", structuredEntities)
 	}
 	manifest := meta["migration_manifest"].(map[string]any)
 	resolutions, ok := manifest["citation_resolutions"].([]any)
 	if !ok || len(resolutions) != 1 {
 		t.Fatalf("citation_resolutions = %#v", manifest["citation_resolutions"])
-	}
-	gaps, ok := meta["source_gaps"].([]any)
-	if !ok || len(gaps) != 1 {
-		t.Fatalf("source_gaps = %#v", meta["source_gaps"])
-	}
-	gap := gaps[0].(map[string]any)
-	if gap["marker"] != "[2]" {
-		t.Fatalf("source gap = %#v", gap)
 	}
 
 	items, err := s.ListContentItems(context.Background(), "user-1", 10)
@@ -6630,36 +6620,7 @@ func TestTextureUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
 
 func TestTextureSourceGapRepairCreatesRevision(t *testing.T) {
 	t.Parallel()
-	h, s, _ := textureAPISetupWithRuntime(t)
-	entity := textureSourceEntity{
-		EntityID: "src-aba-rule-16-repair",
-		Kind:     "source_service_item",
-		Label:    "ABA Model Rule 1.6",
-		Target: textureSourceEntityTarget{
-			TargetKind: "source_service_item",
-			ItemID:     "srcitem_aba_rule_16_repair",
-		},
-		Selectors: []textureSourceEntitySelector{{
-			SelectorKind: "text_quote",
-			TextQuote:    "A lawyer shall not reveal information relating to the representation of a client.",
-		}},
-		Display: textureSourceEntityDisplay{
-			InlineMode:       "embedded_excerpt",
-			ExpandedMode:     "source_card",
-			OpenSurface:      "source",
-			DefaultCollapsed: false,
-		},
-		Evidence: textureSourceEntityEvidence{
-			State:         "available",
-			ResearchState: "represented",
-		},
-		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           "source_gap_repair",
-			RightsScope:         "source_service_projection",
-			UntrustedSourceText: true,
-		},
-	}
-
+	h, _, _ := textureAPISetupWithRuntime(t)
 	importReq := textureRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", textureMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-repairable.md",
 		Title:      "legal-cloud-repairable.md",
@@ -6670,86 +6631,14 @@ func TestTextureSourceGapRepairCreatesRevision(t *testing.T) {
 	})
 	importW := httptest.NewRecorder()
 	h.HandleTextureRouter(importW, importReq)
-	if importW.Code != http.StatusCreated {
-		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
-	}
-	var imported textureMarkdownLineageImportResponse
-	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
-		t.Fatalf("decode import response: %v", err)
-	}
-
-	repairReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", textureSourceGapRepairRequest{
-		BaseRevisionID: imported.CurrentRevisionID,
-		SourceEntities: []textureSourceEntity{
-			entity,
-		},
-		CitationResolutions: []textureCitationMarkerResolution{{
-			Marker:   "[1]",
-			EntityID: entity.EntityID,
-		}},
-	})
-	repairW := httptest.NewRecorder()
-	h.HandleTextureRouter(repairW, repairReq)
-	if repairW.Code != http.StatusCreated {
-		t.Fatalf("repair source gap: status = %d, want %d; body: %s", repairW.Code, http.StatusCreated, repairW.Body.String())
-	}
-	var repaired textureRevisionResponse
-	if err := json.NewDecoder(repairW.Body).Decode(&repaired); err != nil {
-		t.Fatalf("decode repair response: %v", err)
-	}
-	if repaired.ParentRevisionID != imported.CurrentRevisionID || repaired.VersionNumber != 1 {
-		t.Fatalf("repaired revision = %#v", repaired)
-	}
-	if !strings.Contains(repaired.Content, "[1](source:src-aba-rule-16-repair)") {
-		t.Fatalf("repaired content = %q", repaired.Content)
-	}
-	if strings.Contains(repaired.Content, "[1](source:src-aba-rule-16-repair)(source:") {
-		t.Fatalf("repaired content double-linked marker: %q", repaired.Content)
-	}
-	meta := decodeRevisionMetadata(repaired.Metadata)
-	if meta["source"] != "texture_source_gap_repair" || meta["base_revision_id"] != imported.CurrentRevisionID {
-		t.Fatalf("repair metadata = %#v", meta)
-	}
-	if _, ok := meta["source_gaps"]; ok {
-		t.Fatalf("source_gaps should be cleared after repair: %#v", meta["source_gaps"])
-	}
-	sourceEntities := decodeTextureSourceEntities(meta["source_entities"])
-	if len(sourceEntities) != 1 || sourceEntities[0].EntityID != entity.EntityID {
-		t.Fatalf("source_entities = %#v", meta["source_entities"])
-	}
-	if sourceEntities[0].Evidence.State != "confirms" || sourceEntities[0].Evidence.Relation != "confirms" {
-		t.Fatalf("source entity evidence = %#v", sourceEntities[0].Evidence)
-	}
-	manifest := meta["source_repair_resolutions"].([]any)
-	evidenceState := manifest[0].(map[string]any)["evidence_state"].(map[string]any)
-	if evidenceState["state"] != "confirms" || evidenceState["target_id"] != entity.EntityID {
-		t.Fatalf("source repair evidence_state = %#v", evidenceState)
-	}
-	revs, err := s.ListRevisionsByDoc(context.Background(), imported.DocID, "user-1", 10)
-	if err != nil {
-		t.Fatalf("ListRevisionsByDoc: %v", err)
-	}
-	if len(revs) != 2 || revs[0].RevisionID != repaired.RevisionID {
-		t.Fatalf("stored revisions = %#v", revs)
+	if importW.Code != http.StatusBadRequest || !strings.Contains(importW.Body.String(), "unresolved markdown citation marker [1]") {
+		t.Fatalf("import unresolved marker status = %d body=%s", importW.Code, importW.Body.String())
 	}
 }
 
 func TestTextureSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 	t.Parallel()
 	h, _, _ := textureAPISetupWithRuntime(t)
-	entity := textureSourceEntity{
-		EntityID: "src-rule-one",
-		Kind:     "source_service_item",
-		Label:    "Rule One",
-		Target:   textureSourceEntityTarget{TargetKind: "source_service_item", ItemID: "srcitem_rule_one"},
-		Display:  textureSourceEntityDisplay{InlineMode: "collapsed_citation", ExpandedMode: "source_card", OpenSurface: "source", DefaultCollapsed: true},
-		Evidence: textureSourceEntityEvidence{State: "available", ResearchState: "represented"},
-		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           "source_gap_repair",
-			RightsScope:         "source_service_projection",
-			UntrustedSourceText: true,
-		},
-	}
 	importReq := textureRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", textureMarkdownLineageImportRequest{
 		SourcePath: "proposals/legal-cloud-partial-repair.md",
 		Title:      "legal-cloud-partial-repair.md",
@@ -6760,44 +6649,8 @@ func TestTextureSourceGapRepairPreservesUnrepairedGaps(t *testing.T) {
 	})
 	importW := httptest.NewRecorder()
 	h.HandleTextureRouter(importW, importReq)
-	if importW.Code != http.StatusCreated {
-		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
-	}
-	var imported textureMarkdownLineageImportResponse
-	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
-		t.Fatalf("decode import response: %v", err)
-	}
-
-	repairReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", textureSourceGapRepairRequest{
-		SourceEntities: []textureSourceEntity{entity},
-		CitationResolutions: []textureCitationMarkerResolution{{
-			Marker:   "[1]",
-			EntityID: entity.EntityID,
-		}},
-	})
-	repairW := httptest.NewRecorder()
-	h.HandleTextureRouter(repairW, repairReq)
-	if repairW.Code != http.StatusCreated {
-		t.Fatalf("repair source gap: status = %d, want %d; body: %s", repairW.Code, http.StatusCreated, repairW.Body.String())
-	}
-	var repaired textureRevisionResponse
-	if err := json.NewDecoder(repairW.Body).Decode(&repaired); err != nil {
-		t.Fatalf("decode repair response: %v", err)
-	}
-	if !strings.Contains(repaired.Content, "[1](source:src-rule-one)") || !strings.Contains(repaired.Content, "Still unknown [2]") {
-		t.Fatalf("repaired content = %q", repaired.Content)
-	}
-	meta := decodeRevisionMetadata(repaired.Metadata)
-	gaps, ok := meta["source_gaps"].([]any)
-	if !ok || len(gaps) != 1 {
-		t.Fatalf("source_gaps = %#v", meta["source_gaps"])
-	}
-	gap := gaps[0].(map[string]any)
-	if gap["marker"] != "[2]" {
-		t.Fatalf("remaining source gap = %#v", gap)
-	}
-	if state := gap["evidence_state"].(map[string]any)["state"]; state != "candidate" {
-		t.Fatalf("remaining source gap evidence_state = %#v", gap["evidence_state"])
+	if importW.Code != http.StatusBadRequest || !strings.Contains(importW.Body.String(), "unresolved markdown citation marker [1]") {
+		t.Fatalf("partial unresolved import status = %d body=%s", importW.Code, importW.Body.String())
 	}
 }
 
@@ -6810,6 +6663,11 @@ func TestTextureSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 		Versions: []textureMarkdownLineageVersion{{
 			Label:   "v44",
 			Content: "Ordinary framing sentence [2].",
+			CitationResolutions: []textureCitationMarkerResolution{{
+				Marker: "[2]",
+				Action: "no_source_needed",
+				Reason: "The sentence is structural framing, not a factual claim needing citation.",
+			}},
 		}},
 	})
 	importW := httptest.NewRecorder()
@@ -6821,47 +6679,27 @@ func TestTextureSourceGapRepairCanOmitNoSourceNeededMarker(t *testing.T) {
 	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
 		t.Fatalf("decode import response: %v", err)
 	}
-
-	repairReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", textureSourceGapRepairRequest{
-		CitationResolutions: []textureCitationMarkerResolution{{
-			Marker: "[2]",
-			Action: "no_source_needed",
-			Reason: "The sentence is structural framing, not a factual claim needing citation.",
-		}},
-	})
-	repairW := httptest.NewRecorder()
-	h.HandleTextureRouter(repairW, repairReq)
-	if repairW.Code != http.StatusCreated {
-		t.Fatalf("repair source gap: status = %d, want %d; body: %s", repairW.Code, http.StatusCreated, repairW.Body.String())
+	if len(imported.Revisions) != 1 || imported.Revisions[0].Content != "Ordinary framing sentence." {
+		t.Fatalf("imported revisions = %#v", imported.Revisions)
 	}
-	var repaired textureRevisionResponse
-	if err := json.NewDecoder(repairW.Body).Decode(&repaired); err != nil {
-		t.Fatalf("decode repair response: %v", err)
-	}
-	if repaired.Content != "Ordinary framing sentence." {
-		t.Fatalf("repaired content = %q", repaired.Content)
-	}
-	meta := decodeRevisionMetadata(repaired.Metadata)
+	meta := decodeRevisionMetadata(imported.Revisions[0].Metadata)
 	if _, ok := meta["source_gaps"]; ok {
-		t.Fatalf("source_gaps should be cleared after no-source-needed repair: %#v", meta["source_gaps"])
+		t.Fatalf("source_gaps should not be written after no-source-needed import: %#v", meta["source_gaps"])
 	}
 	if _, ok := meta["source_entities"]; ok {
-		t.Fatalf("no-source-needed repair should not invent source_entities: %#v", meta["source_entities"])
+		t.Fatalf("no-source-needed import should not invent source_entities metadata: %#v", meta["source_entities"])
 	}
-	manifest, ok := meta["source_repair_resolutions"].([]any)
-	if !ok || len(manifest) != 1 {
-		t.Fatalf("source_repair_resolutions = %#v", meta["source_repair_resolutions"])
+	manifest := meta["migration_manifest"].(map[string]any)
+	resolutions, ok := manifest["citation_resolutions"].([]any)
+	if !ok || len(resolutions) != 1 {
+		t.Fatalf("citation_resolutions = %#v", manifest["citation_resolutions"])
 	}
-	item := manifest[0].(map[string]any)
+	item := resolutions[0].(map[string]any)
 	if item["marker"] != "[2]" || item["action"] != "no_source_needed" || item["entity_id"] != nil {
-		t.Fatalf("source repair manifest item = %#v", item)
+		t.Fatalf("citation resolution manifest item = %#v", item)
 	}
 	if item["reason"] != "The sentence is structural framing, not a factual claim needing citation." {
-		t.Fatalf("source repair reason = %#v", item["reason"])
-	}
-	evidenceState := item["evidence_state"].(map[string]any)
-	if evidenceState["state"] != "no_source_needed" || evidenceState["reason"] != item["reason"] {
-		t.Fatalf("no-source-needed evidence_state = %#v", evidenceState)
+		t.Fatalf("citation resolution reason = %#v", item["reason"])
 	}
 }
 
@@ -6878,27 +6716,8 @@ func TestTextureSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 	})
 	importW := httptest.NewRecorder()
 	h.HandleTextureRouter(importW, importReq)
-	if importW.Code != http.StatusCreated {
-		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
-	}
-	var imported textureMarkdownLineageImportResponse
-	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
-		t.Fatalf("decode import response: %v", err)
-	}
-
-	repairReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-repairs", textureSourceGapRepairRequest{
-		CitationResolutions: []textureCitationMarkerResolution{{
-			Marker:   "[1]",
-			EntityID: "missing-source",
-		}},
-	})
-	repairW := httptest.NewRecorder()
-	h.HandleTextureRouter(repairW, repairReq)
-	if repairW.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", repairW.Code, http.StatusBadRequest, repairW.Body.String())
-	}
-	if !strings.Contains(repairW.Body.String(), "references unknown source entity missing-source") {
-		t.Fatalf("body = %s", repairW.Body.String())
+	if importW.Code != http.StatusBadRequest || !strings.Contains(importW.Body.String(), "unresolved markdown citation marker [1]") {
+		t.Fatalf("unknown unresolved import status = %d body=%s", importW.Code, importW.Body.String())
 	}
 }
 
@@ -6953,10 +6772,6 @@ func TestTextureSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T
 	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
 		t.Fatalf("decode import response: %v", err)
 	}
-	baseRev, err := s.GetRevision(ctx, imported.CurrentRevisionID, "user-1")
-	if err != nil {
-		t.Fatalf("base revision: %v", err)
-	}
 	now := time.Now().UTC()
 	item := types.ContentItem{
 		ContentID:    "content-public-rule",
@@ -6986,39 +6801,18 @@ func TestTextureSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T
 	})
 	attachW := httptest.NewRecorder()
 	h.HandleTextureRouter(attachW, attachReq)
-	if attachW.Code != http.StatusCreated {
-		t.Fatalf("attach source artifact: status = %d, want %d; body: %s", attachW.Code, http.StatusCreated, attachW.Body.String())
+	if attachW.Code != http.StatusGone {
+		t.Fatalf("attach source artifact: status = %d, want %d; body: %s", attachW.Code, http.StatusGone, attachW.Body.String())
 	}
-	var attached textureRevisionResponse
-	if err := json.NewDecoder(attachW.Body).Decode(&attached); err != nil {
-		t.Fatalf("decode attached revision: %v", err)
+	if !strings.Contains(attachW.Body.String(), "legacy Texture source attachment endpoint is retired") {
+		t.Fatalf("attach source artifact body = %s", attachW.Body.String())
 	}
-	if attached.Content != baseRev.Content {
-		t.Fatalf("attachment changed content:\n got %q\nwant %q", attached.Content, baseRev.Content)
+	revs, err := s.ListRevisionsByDoc(ctx, imported.DocID, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list revisions after rejected attachment: %v", err)
 	}
-	if attached.ParentRevisionID != imported.CurrentRevisionID || attached.VersionNumber != 1 {
-		t.Fatalf("attached revision = %#v", attached)
-	}
-	meta := decodeRevisionMetadata(attached.Metadata)
-	if meta["source"] != "texture_source_artifact_attachment" || meta["base_revision_id"] != imported.CurrentRevisionID {
-		t.Fatalf("attachment metadata = %#v", meta)
-	}
-	if meta["source_attachment_count"] != float64(1) {
-		t.Fatalf("source_attachment_count = %#v", meta["source_attachment_count"])
-	}
-	entities := decodeTextureSourceEntities(meta["source_entities"])
-	if len(entities) != 1 {
-		t.Fatalf("source_entities = %#v", meta["source_entities"])
-	}
-	got := entities[0]
-	if got.EntityID != "src-public-rule" || got.Target.ContentID != "content-public-rule" || got.Target.TargetKind != "content_item" {
-		t.Fatalf("attached entity target = %#v", got.Target)
-	}
-	if got.Target.CanonicalURL != "https://example.com/rule" || got.Evidence.State != "available" || got.Provenance.RightsScope != "public_url_snapshot" {
-		t.Fatalf("attached entity metadata = %#v", got)
-	}
-	if !strings.Contains(attached.Content, "| Term | Definition |") {
-		t.Fatalf("table content not preserved: %q", attached.Content)
+	if len(revs) != 1 || revs[0].RevisionID != imported.CurrentRevisionID {
+		t.Fatalf("rejected legacy source attachment created a revision: %#v", revs)
 	}
 }
 
@@ -7081,10 +6875,10 @@ func TestTextureSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
 	})
 	attachW := httptest.NewRecorder()
 	h.HandleTextureRouter(attachW, attachReq)
-	if attachW.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", attachW.Code, http.StatusBadRequest, attachW.Body.String())
+	if attachW.Code != http.StatusGone {
+		t.Fatalf("status = %d, want %d; body: %s", attachW.Code, http.StatusGone, attachW.Body.String())
 	}
-	if !strings.Contains(attachW.Body.String(), "has no readable text_content") {
+	if !strings.Contains(attachW.Body.String(), "legacy Texture source attachment endpoint is retired") {
 		t.Fatalf("body = %s", attachW.Body.String())
 	}
 }
@@ -7094,7 +6888,7 @@ func TestTextureImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 	h, s, _ := textureAPISetupWithRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	oldContent := "# Proposal\n\nStored historical glossary [1].\n"
+	oldContent := "# Proposal\n\nStored historical glossary.\n"
 	latestContent := "# Proposal\n\nStored latest appendix table.\n"
 	oldItem := types.ContentItem{
 		ContentID:   "content-lineage-v44",
@@ -7170,7 +6964,7 @@ func TestTextureImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		t.Fatalf("latest revision content = %q", revs[0].Content)
 	}
 	oldest := revs[1]
-	if !strings.Contains(oldest.Content, "Stored historical glossary [1]") {
+	if !strings.Contains(oldest.Content, "Stored historical glossary.") {
 		t.Fatalf("oldest revision content = %q", oldest.Content)
 	}
 	meta := decodeRevisionMetadata(oldest.Metadata)

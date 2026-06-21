@@ -574,14 +574,21 @@ func (h *APIHandler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d].metadata must be a JSON object", i)})
 			return
 		}
-		projectionContent := markdownLineageProjectionContent(resolved.Content, resolutions)
+		revisionID := uuid.New().String()
+		bodyDoc, structuredSourceEntities, projectionContent, err := markdownLineageStructuredRevision(doc.DocID, revisionID, resolved.Content, sourceEntities, resolutions)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("versions[%d]: %v", i, err)})
+			return
+		}
 		rev := types.Revision{
-			RevisionID:       uuid.New().String(),
+			RevisionID:       revisionID,
 			DocID:            doc.DocID,
 			OwnerID:          ownerID,
 			AuthorKind:       types.AuthorUser,
 			AuthorLabel:      ownerID,
 			Content:          projectionContent,
+			BodyDoc:          bodyDoc,
+			SourceEntities:   structuredSourceEntities,
 			Metadata:         metadata,
 			ParentRevisionID: parentID,
 			CreatedAt:        versionNow,
