@@ -1174,3 +1174,36 @@ Receipts:
 Open edge: first repair or retire the stale/flaky verifier evidence in a
 test-only yellow commit. Do not claim mission settlement or start a runtime fix
 from this evidence alone.
+
+## 2026-06-21 - Same-Thread Researcher Verifier Repair
+
+Claim: the stale/flaky local verifier can be repaired without changing runtime
+behavior by aligning the test stubs with the post-guard Texture route and by
+removing a race against async researcher provider observation.
+
+Move: updated `textureResearchEvidenceLoopProvider` so the
+`TestTextureCreatedResearcherEvidenceWakesTextureV2` stub opens researcher after
+the first Texture write via ordinary `spawn_agent`, rather than waiting for the
+deleted `model_prior_interim` completion-guard reminder. Updated
+`TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard` to assert
+that all observed conductor/Texture tool choices are unconstrained without
+requiring the async researcher provider turn to append a third observation
+before the tested Texture path settles.
+
+Expected Delta V: -1 if the stale researcher verifier and parallel batch
+assertion are repaired, with no runtime implementation changes.
+
+Actual Delta V: -1. Current exit V returns to 3: reconcile original scope,
+obtain independent prover/widest checker before exit, and decide the stale
+accessibility/live-region residual.
+
+Receipts:
+- Specific repaired tests:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestTextureCreatedResearcherEvidenceWakesTextureV2$|^TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard$' -count=1 -v`
+  passed.
+- Focused settlement verifier set:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestInitialTextureRunWritesBeforeSpawningResearcher$|^TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard$|^TestTextureCreatedResearcherEvidenceWakesTextureV2$|^TestTextureCreatedSuperEvidenceWakesTextureV2$|^TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake$|^TestTextureIdlePassivatesAndResumesSameRun$|^TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp$|^TestTextureStreamEventMapsTexturePassivationToSynthCompleted$|^TestTextureIdlePassivationEventCarriesDocumentStreamCompletionPayload$|^TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce$|^TestUpdateCoagentDeliveryRequiresSuccessfulActivation$|^TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata$|^TestUpdateCoagentWarmActivationInjectsPendingTurn$|^TestCoagentRewarmUsesResidentActivationNotActiveRunProxy$|^TestCoagentRewarmIgnoresBlockedHistoricalActivation$' -count=1 -v`
+  passed.
+
+Open edge: this is still not handoff-tier settlement. The mission still needs a
+scope reconciliation and an independent prover / widest checker before exit.

@@ -2417,9 +2417,10 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 	p.mu.Unlock()
 
 	lastUser := extractLastUserMessage(req.Messages)
-	if strings.Contains(lastUser, "model_prior_interim") &&
+	if p.initialTextureDone &&
 		toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") &&
-		!messagesContainToolCall(req.Messages, "spawn_agent") {
+		!messagesContainToolCall(req.Messages, "spawn_agent") &&
+		messagesContainToolCall(req.Messages, "patch_texture") {
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
@@ -2977,8 +2978,13 @@ func TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard(t *tes
 	if !provider.spawned {
 		t.Fatalf("provider did not open researcher by ordinary tool choice; choices=%#v", provider.choices)
 	}
-	if len(provider.choices) < 3 || provider.choices[0] != "" || provider.choices[1] != "" || provider.choices[2] != "" {
-		t.Fatalf("texture choices = %#v, want unconstrained conductor/Texture tool choices", provider.choices)
+	if len(provider.choices) < 2 {
+		t.Fatalf("texture choices = %#v, want at least conductor and Texture calls", provider.choices)
+	}
+	for _, choice := range provider.choices {
+		if choice != "" {
+			t.Fatalf("texture choices = %#v, want unconstrained conductor/Texture tool choices", provider.choices)
+		}
 	}
 	events, err := rt.Store().ListEvents(context.Background(), decision.InitialLoopID, 100)
 	if err != nil {
