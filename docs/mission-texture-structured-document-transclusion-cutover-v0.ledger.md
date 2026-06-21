@@ -108,3 +108,22 @@ Actual delta V: 0. Current V remains 9.
 Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: commit this checkpoint before any runtime/schema behavior change.
+
+## 2026-06-21 - Pass 5 - D1 Implementation Delegated
+
+Claim: D1 can proceed as an additive implementation slice in an isolated worktree
+without changing production Texture write behavior.
+
+Move: construct + shift. Created a Codex worktree implementation thread with the
+D1 goal and scoped it to Go structs/validators, in-memory projection/rendering,
+and focused tests. The thread must commit its work and report SHA/tests/risks
+before integration.
+
+Expected delta V: 0 now; potential -1 when D1 is implemented and reviewed.
+
+Actual delta V: 0. Current V remains 9.
+
+Receipt: pending worktree id `local:d0c0fc69-81ca-4489-83ba-a7146b0c2de8`.
+
+Open edge: wait for the worktree thread result, then spawn independent review
+before integrating D1.

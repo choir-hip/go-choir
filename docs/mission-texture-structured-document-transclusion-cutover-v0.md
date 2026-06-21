@@ -478,12 +478,11 @@ contract enum validation must be promoted from publication normalization into
 Texture revision writes. E3: diff/blame/search need structured projections that
 do not become a second canonical body.
 
-next move: Before runtime mutation, commit a problem checkpoint naming the
-behavior problem: Texture canonical writes still accept markdown-ish body strings
-and sidecar source metadata, so source entities can exist without being document
-nodes. Then implement D1 as an internal schema/parser/renderer spike using the
-D0 schema above, followed by D2 write-path cutover that rejects old source
-syntaxes at write time.
+next move: Wait for D1 implementation worktree thread setup/result. Pending
+worktree id: `local:d0c0fc69-81ca-4489-83ba-a7146b0c2de8`. The D1 thread
+should implement only the additive internal schema/parser/renderer spike using
+the D0 schema above, commit it in its worktree, and report its SHA/tests/risks.
+After receiving that callback, spawn a fresh review thread before integration.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -505,5 +504,5 @@ classified as noncanonical historical import only.
 ## Suggested Goal String
 
 ```text
-/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D0 returned verdict revise_before_continue and chose a Choir-owned, Go-validated, raw ProseMirror-compatible canonical document shape, with Tiptap optional only for the later Svelte editor layer. Before runtime changes, ensure the Problem Checkpoint - Canonical Body Is Still Markdown-ish section is committed. Then implement D1 as an internal schema/parser/renderer spike: define StructuredTextureDoc v1 and SourceEntity v1 Go structs/validators, support paragraph/heading/list/quote/code/hr/source_ref/source_embed, validate source target/selector/display/evidence enums, render an in-memory doc with numbered source refs and source embeds, and prove old markdown/source-token/link citation syntaxes are rejected by the validator. Do not change production write behavior in D1 unless the paradoc is updated first. Execution mutation class is red once runtime writes change; protected surfaces include Texture canonical writes, revision schema, source entities/provenance, editor/renderer, agent tools/prompts, multimedia resolver, publication/export, and run acceptance. Settlement requires CI, staging deploy identity, Comet/browser proof on https://choir.news, and evidence that old markdown/source-token/offset sidecar paths are gone or noncanonical historical import only.
+/goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D0 returned verdict revise_before_continue and chose a Choir-owned, Go-validated, raw ProseMirror-compatible canonical document shape, with Tiptap optional only for the later Svelte editor layer. The Problem Checkpoint - Canonical Body Is Still Markdown-ish section is committed. Continue from pending D1 implementation worktree `local:d0c0fc69-81ca-4489-83ba-a7146b0c2de8`: read its callback/result, spawn an independent review thread, integrate accepted D1 changes, update the paradoc/ledger, then proceed to D2. D1 scope is additive internal schema/parser/renderer only: StructuredTextureDoc v1 and SourceEntity v1 Go structs/validators, paragraph/heading/list/quote/code/hr/source_ref/source_embed, source target/selector/display/evidence enum validation, in-memory rendering/projection with numbered source refs and source embeds, and rejection of old markdown/source-token/link citation syntaxes by the validator. Do not change production write behavior until D2 and a fresh review. Execution mutation class is red once runtime writes change; protected surfaces include Texture canonical writes, revision schema, source entities/provenance, editor/renderer, agent tools/prompts, multimedia resolver, publication/export, and run acceptance. Settlement requires CI, staging deploy identity, Comet/browser proof on https://choir.news, and evidence that old markdown/source-token/offset sidecar paths are gone or noncanonical historical import only.
 ```
