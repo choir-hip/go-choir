@@ -309,7 +309,8 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 	entityID := stableSourceEntityID("source_service_item", "srcitem_native_panel")
 	if !messageTextContains(t, msgs[0], `"source_entities"`) ||
 		!messageTextContains(t, msgs[0], entityID) ||
-		!messageTextContains(t, msgs[0], "[label](source:ENTITY_ID)") {
+		!messageTextContains(t, msgs[0], "Texture source entities/transclusion refs") ||
+		!messageTextContains(t, msgs[0], "Do not write ordinary URL links") {
 		t.Fatalf("coagent packet missing native source entity fields: %s", string(msgs[0]))
 	}
 	if !hasSourceEntity(decodeTextureSourceEntities(rec.Metadata["source_entities"]), "source_service_item", "srcitem_native_panel", "") {
