@@ -115,23 +115,22 @@ variant (ranking function) V:
 10. always-deep research prompt/loop behavior proven beyond the current V2 cap;
 11. focused runtime tests and runtime shards pass;
 12. landed to main, CI/deploy identity verified, staging acceptance recorded.
-Current V=4; last ΔV=-1 on 2026-06-21 from preventing established Texture
-document threads from minting replacement wake runs and from letting parked
-Texture delegation tools bypass idle passivation. A parked Texture actor keeps
-the same `loop_id` and run memory across idle, can resume that same loop for
-later `update_coagent` input, and advances the Texture controller checkpoint
-even when a same-loop mailbox packet is consumed without a canonical write.
-Fresh Texture update wakes still create the first activation only when a
-document has no Texture revision-thread history; after a thread exists,
-addressed backlog must wait for a resident or sleeping actor instead of silently
-creating a second run. Staging proof at
-`1c202e525f77a2a6169c0bf0ac49b986b75047b7` produced V2 in the original Texture
-loop `c3cb6b21-6220-4d6f-a226-641906ea56b9` after researcher
-`update_coagent` evidence, and synthesized blocked staging-smoke
-RunAcceptanceRecord `runacc-26cfe15a6fbd4fd6be6f`. The remaining
-durable-thread risks are the
-classifier/exact-first-tool/model-prior guard residues and proving always-deep
-research beyond the current V2/V3 cadence on staging.
+Current V=3; last ΔV=-1 on 2026-06-21 from deleting prompt-bar first-paint
+exact `patch_texture` forcing. Ordinary prompt-bar Texture starts now receive
+the full Texture tool surface with empty provider `tool_choice`, so Texture can
+record an off-document decision before patching when that is the honest first
+action. Staging proof at
+`b4adb70ff4a01ea6be92ce30a062a66a824f89a9` used trajectory
+`20bf8cd1-ff91-4bae-87a0-96d348d7b3ae`, Texture loop
+`c0dfb742-9797-42e7-931f-6951d63cddbc`, first provider-call moment
+`96b5c6e7-a1b9-4c18-965c-bc8cf4ba224c`, V1
+`cb641f7b-c821-43f3-82fe-2c5611479e19`, and blocked staging-smoke
+RunAcceptanceRecord `runacc-73a11f1381124ee76315`. The prior staging proof at
+`1c202e525f77a2a6169c0bf0ac49b986b75047b7` still supports same-thread
+researcher delivery through V2 in loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`
+with RunAcceptanceRecord `runacc-26cfe15a6fbd4fd6be6f`. The remaining
+durable-thread risks are classifier/model-prior guard residues and proving
+always-deep research beyond the current V2/V3 cadence on staging.
 
 budget: one broad red-surface mission, but execute in reviewable slices. R0a
 (`update_id` + work-state revisions) may land first if it reduces risk, but it
@@ -196,19 +195,19 @@ position / live conjectures / open edges:
   `a893f0ca-a8b6-41de-a73b-1e8b05c7c80d` showed `spawn_agent`, park wait,
   researcher `update_coagent`, V2 `patch_texture`, and final passivation all on
   Texture loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`.
-- C10 active: first-paint exact `patch_texture` forcing is a remaining runtime
-  trust channel. It hides a semantic policy decision inside provider
-  `tool_choice` and narrowed tool definitions, even though the durable
-  invariant is not "first tool must be patch_texture"; the invariant is that
-  Texture must take an owner-visible durable action and must not settle for a
-  no-op prompt-copy revision. Existing no-op guards and completion guards should
-  preserve that product behavior without exact first-tool choreography.
+- C10 supported at focused-test and staging-smoke scope: prompt-bar first-paint
+  exact `patch_texture` forcing is deleted. Ordinary first-paint Texture runs
+  have empty provider `tool_choice` and the full Texture tool surface, while
+  `update_coagent` integration remains grounded by narrow mechanical
+  continuation behavior. Staging trajectory
+  `20bf8cd1-ff91-4bae-87a0-96d348d7b3ae` showed first provider call
+  `tool_choice=""`, eight available tools including `patch_texture`,
+  `record_texture_decision`, `spawn_agent`, and `request_super_execution`,
+  first tool batch `record_texture_decision`, then `patch_texture` to V1.
 
-next move: delete prompt-bar first-paint exact `patch_texture` forcing while
-preserving grounded update integration and durable-action/no-op protection.
-Invert tests so ordinary first-paint Texture runs receive the full Texture tool
-surface with no exact tool choice, while update-backed integration still proves
-that worker evidence creates an owner-visible canonical revision.
+next move: delete classifier/model-prior guard residues and prove always-deep
+research beyond the current V2/V3 staging cadence, while preserving the
+owner-visible work-state and no-op protection already proven.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

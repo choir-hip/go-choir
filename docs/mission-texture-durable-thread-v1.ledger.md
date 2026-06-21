@@ -520,3 +520,81 @@ exact-tool forced.
 Rollback: revert the runtime commit that changes `initialTextureToolChoice` and
 its test inversions. Docs may remain as problem evidence if the rollback proves
 the deletion is not yet safe.
+
+## 2026-06-21 - Exact First-Tool Deletion Deployed and Staging-Proven
+
+Claim: commit `b4adb70ff4a01ea6be92ce30a062a66a824f89a9` should delete ordinary
+prompt-bar first-paint exact `patch_texture` forcing without weakening durable
+Texture progress. Initial prompt-bar Texture runs should enter the provider with
+empty `tool_choice` and the full Texture tool surface; grounded
+`update_coagent` integration may still use narrow mechanical continuation
+behavior.
+
+Move: changed `initialTextureToolChoice` so ordinary prompt-bar first paint is
+unconstrained, kept update-backed integration exact, inverted prompt-bar and
+Texture tests around the full initial tool surface, ran focused runtime tests
+and runtime shards, pushed to `origin/main`, monitored CI/deploy, verified
+staging build identity, used Comet for a logged-in UI proof, then used
+authenticated public product APIs for Trace fields that the Comet UI does not
+render.
+
+Expected ΔV: -1.
+
+Actual ΔV: -1. V is now 3.
+
+Receipts:
+- Commits:
+  - `39b163ba` (`docs: record texture exact first-tool deletion target`);
+  - `b4adb70ff4a01ea6be92ce30a062a66a824f89a9`
+    (`runtime: remove Texture first-paint exact patch forcing`).
+- Focused tests:
+  - `nix develop -c go test ./internal/runtime -run 'TestInitialTextureToolChoiceOnlyConstrainsMechanicalContinuations|TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture|TestInitialTextureRunWritesBeforeSpawningResearcher|TestTextureModelPriorCompletionGuardOpensProbePath|TestTextureCreatedResearcherEvidenceWakesTextureV2|TestTextureCreatedSuperEvidenceWakesTextureV2|TestInitialTextureRunDefaultsMinimalEditContextFromActivation|TestInitialTextureDecisionPromptRejectsPrematureEditBeforeDecision|TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake|TestInitialTextureNoOpPatchRetriesIntoUsefulDraft' -count=1`
+- Runtime suite: `nix develop -c scripts/go-test-runtime-shards` passed all
+  four sequential shards.
+- GitHub Actions:
+  - CI run `27893821509`: success, including deploy job `82542050100`.
+  - Docs Truth Check run `27893821503`: success.
+  - FlakeHub run `27893821512`: success.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `b4adb70ff4a01ea6be92ce30a062a66a824f89a9`, deployed at
+  `2026-06-21T04:48:51Z`, with `status=ok`, `upstream=ok`, and
+  `vmctl_status=ok`.
+- Authenticated Comet UI proof: submitted
+  `CHOIR_EXACT_TOOL_DELETION_PROOF_20260621_001` through the logged-in
+  `choir.news` session. The product opened a Texture document, advanced to
+  `v1`, rendered a concise proof note containing deployed commit
+  `b4adb70ff4a01ea6be92ce30a062a66a824f89a9`, and the visible activity stream
+  included `patch_texture` and `record_texture_decision` calls.
+- Structured deployed proof:
+  - prompt marker:
+    `CHOIR_EXACT_TOOL_DELETION_ACCEPT_1782018076150`;
+  - trajectory/submission: `20bf8cd1-ff91-4bae-87a0-96d348d7b3ae`;
+  - doc: `2355c0ea-ca1e-4449-b96e-f220a3952afb`;
+  - initial Texture loop id:
+    `c0dfb742-9797-42e7-931f-6951d63cddbc`;
+  - first provider-call moment:
+    `96b5c6e7-a1b9-4c18-965c-bc8cf4ba224c`;
+  - first provider-call payload:
+    `tool_choice=""`, `tools=8`, tool names included `patch_texture`,
+    `record_texture_decision`, `spawn_agent`, and `request_super_execution`;
+  - first tool batch chose `record_texture_decision`; second tool batch chose
+    `patch_texture`;
+  - tool results: `record_texture_decision returned` and
+    `patch_texture returned`;
+  - appagent V1:
+    `cb641f7b-c821-43f3-82fe-2c5611479e19`, 205 chars, containing the marker;
+  - retry evidence: no `initial_tool_choice` retry and no
+    `exact_initial_tool_choice_precondition` fallback.
+- RunAcceptanceRecord:
+  `runacc-73a11f1381124ee76315`, target mission
+  `mission-texture-durable-thread-v1`, trajectory
+  `20bf8cd1-ff91-4bae-87a0-96d348d7b3ae`, deployment/health commit
+  `b4adb70ff4a01ea6be92ce30a062a66a824f89a9`, acceptance level
+  `staging-smoke-level`, state `blocked`. The blocked state is expected for
+  this narrow slice because export-level and continuation-level evidence are
+  intentionally not claimed.
+
+Result: prompt-bar first-paint exact `patch_texture` forcing is no longer a
+semantic trust channel. The remaining realism axis is classifier/model-prior
+guard deletion plus always-deep research proof beyond the current V2/V3
+cadence.
