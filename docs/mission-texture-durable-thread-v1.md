@@ -229,9 +229,23 @@ position / live conjectures / open edges:
   `a2e96589-dc7a-4be4-9e5d-556427f5afc2` showed `conductor + texture` only,
   no `super` agent, first Texture tool event `record_texture_decision`, then
   `patch_texture` to V1.
+- C12 active: `textureModelPriorCompletionGuard` and
+  `texturePromptNeedsWorldKnowledge` still enforce a deterministic
+  keyword-scanned Probe/Execute path after a model-prior/interim first
+  revision. That guard is less invasive than the deleted initial-super path,
+  but it is still runtime-authored semantic choreography: runtime decides that
+  phrases such as "latest", "news", "today", or "government" require a
+  follow-up worker path and injects a retry instruction after Texture tries to
+  end. The desired shape is prompt/tool agency: Texture may write an honest
+  interim V1, call `spawn_agent` or `request_super_execution`, record a blocker,
+  or end with an audit-worthy decision through its normal tools, without a
+  hard-coded completion guard.
 
-next move: continue to the remaining model-prior/world-knowledge guards and
-always-deep staging proof without reintroducing semantic prompt scanners.
+next move: delete the Texture-specific model-prior completion guard and its
+world-knowledge keyword classifier while preserving model-prior/interim
+metadata, prompt obligations, no-op protection, and agentic researcher/super
+tool affordances. Then prove a current-events prompt can open a researcher path
+by model/tool choice without a completion-guard retry.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

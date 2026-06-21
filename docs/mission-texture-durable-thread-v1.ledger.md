@@ -629,3 +629,103 @@ on `choir.news` if runtime behavior changes land.
 Rollback: revert the runtime commit that deletes the deterministic parser and
 recorder. The docs checkpoint may remain as problem evidence if the deletion
 shows an uncovered product need for visible command grammar.
+
+## 2026-06-21 - Deterministic Initial-Super Handoff Deployed and Staging-Proven
+
+Claim: commit `1e0166474e17369828a1e8a7bfd655c34ae1454b` should delete
+runtime-created initial super work from Texture prompt text while preserving
+Texture's agentic `request_super_execution` affordance.
+
+Move: removed the deterministic initial-super parser/recorder, inverted focused
+prompt-bar and Texture tests, ran runtime shards, pushed to `origin/main`,
+monitored CI/deploy, verified staging build identity, used Comet for a
+logged-in UI proof, and used authenticated public product APIs for Trace fields
+not visible in the UI.
+
+Expected ΔV: -1.
+
+Actual ΔV: -1. V is now 2.
+
+Receipts:
+- Commits:
+  - `aa19d1c0` (`docs: record texture initial-super handoff target`);
+  - `1e0166474e17369828a1e8a7bfd655c34ae1454b`
+    (`runtime: stop auto-opening super from Texture prompt text`);
+  - `b823ff89` (`docs: record texture initial-super staging proof`).
+- Focused tests covered prompt-bar explicit-super text no longer stamping
+  `texture_initial_super_request_*` metadata or creating automatic super work,
+  plus manual `request_super_execution` from Texture context still working.
+- Runtime suite: `nix develop -c scripts/go-test-runtime-shards` passed all
+  four sequential shards.
+- GitHub Actions:
+  - CI run `27894521422`: success, including deploy job `82543893990`.
+  - Docs Truth Check run `27894521436`: success.
+  - FlakeHub run `27894521431`: success.
+  - Docs proof commit Docs Truth Check run `27894825543`: success.
+- Staging identity: `/health` reported proxy and sandbox both at
+  `1e0166474e17369828a1e8a7bfd655c34ae1454b`, deployed at
+  `2026-06-21T05:23:22Z`, with `status=ok`.
+- Authenticated Comet UI proof marker:
+  `CHOIR_INITIAL_SUPER_DELETION_PROOF_20260621_001`; the Texture window reached
+  `v1`, preserved the old execution phrase as document text, and showed Texture
+  tool activity.
+- Structured deployed proof:
+  - prompt marker:
+    `CHOIR_INITIAL_SUPER_DELETION_ACCEPT_1782019773071`;
+  - trajectory/submission: `a2e96589-dc7a-4be4-9e5d-556427f5afc2`;
+  - doc: `8789314a-fc2c-498d-9634-f9af72de6f56`;
+  - initial Texture loop id:
+    `ad8443b9-c5a2-4171-b59d-7cc06db91885`;
+  - appagent V1:
+    `652e8729-0172-4420-935d-f747876ba8ea`;
+  - Trace roles: `conductor + texture` only;
+  - first Texture tool event: `record_texture_decision`;
+  - no `super` agent, no `request_super_execution` tool call, no
+    `texture_initial_super_request_*` metadata, no `delegation_opened`.
+- RunAcceptanceRecord:
+  `runacc-db363e8ce03c8e65f0fe`, target mission
+  `mission-texture-durable-thread-v1`, trajectory
+  `a2e96589-dc7a-4be4-9e5d-556427f5afc2`, deployment/health commit
+  `1e0166474e17369828a1e8a7bfd655c34ae1454b`, acceptance level
+  `staging-smoke-level`, state `blocked`. The blocked state is expected for
+  this narrow slice because export-level and continuation-level evidence are
+  intentionally not claimed.
+
+Result: execution-shaped prompt text is no longer a runtime-owned super
+delegation trigger. The remaining realism axis is the model-prior/world-
+knowledge completion guard plus always-deep research proof beyond the current
+V2/V3 cadence.
+
+## 2026-06-21 - Model-Prior Completion Guard Target Selected
+
+Claim: `textureModelPriorCompletionGuard` and
+`texturePromptNeedsWorldKnowledge` are now the highest-value remaining
+classifier/guard residue. The current path scans prompt text for markers such
+as "latest", "today", "news", or "government" and injects a completion-guard
+retry after a model-prior/interim first revision if no evidence path has opened.
+That means runtime, not Texture, still chooses a semantic Probe/Execute
+obligation from prompt keywords.
+
+Move: document the problem before the runtime change. The intended behavior
+change is to keep model-prior/interim metadata and prompt obligations, keep
+`spawn_agent`/`request_super_execution` available, but delete the
+Texture-specific completion guard and its world-knowledge keyword classifier.
+Texture should open researcher/super work through ordinary tool choice, record
+an audit decision, or stop with an honest interim/blocker without a runtime
+retry instruction.
+
+Expected ΔV: -1 if focused tests prove no completion-guard retry is injected,
+current-events prompts can still open researcher work agentically, model-prior
+metadata/no-op protections remain intact, runtime shards pass, and staging
+shows researcher path opening without a guard retry.
+
+Admissible evidence: focused tool-loop/Texture tests showing no
+`texture_model_prior_interim_needs_evidence_path` guard, no
+`texturePromptNeedsWorldKnowledge` classifier, retained model-prior metadata
+and no-op guard behavior, researcher/super tool affordances still present, full
+runtime shards, then deployed staging proof on `choir.news`.
+
+Rollback: revert the runtime commit that removes the Texture-specific
+completion guard and classifier. The docs checkpoint may remain as problem
+evidence if deletion shows that prompt obligations alone are not sufficient to
+preserve agentic deepening.
