@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -92,4 +94,110 @@ func TestEvidenceDerivedEntityFeedsCitationValidator(t *testing.T) {
 	if got := reasonsByID(validateTextureCitations(body, entities, bad))[entity.EntityID]; got != citationQuoteNotInSource {
 		t.Fatalf("expected quote_not_in_source, got %q", got)
 	}
+}
+
+func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
+	t.Parallel()
+	rt, _ := testAPISetup(t)
+	s := rt.Store()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-refs"
+	targetAgentID := "texture:doc-refs"
+
+	if err := s.CreateContentItem(ctx, types.ContentItem{
+		ContentID:    "content-cloud-audit",
+		OwnerID:      ownerID,
+		SourceType:   "extracted_url",
+		MediaType:    "text/html",
+		Title:        "Cloud Audit Brief",
+		SourceURL:    "https://example.test/cloud-audit",
+		CanonicalURL: "https://example.test/cloud-audit",
+		TextContent:  "Cloud providers should preserve auditability.",
+		ContentHash:  "hash-cloud-audit",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+	if err := s.CreateEvidence(ctx, types.EvidenceRecord{
+		EvidenceID: "ev-cloud-audit",
+		OwnerID:    ownerID,
+		AgentID:    "researcher:refs",
+		Kind:       "source_excerpt",
+		Title:      "Cloud evidence",
+		SourceURI:  "https://example.test/evidence",
+		Content:    "Audit trails are available",
+		Metadata:   json.RawMessage(`{"content_id":"content-evidence-audit"}`),
+		CreatedAt:  now,
+	}); err != nil {
+		t.Fatalf("CreateEvidence: %v", err)
+	}
+
+	update := types.WorkerUpdateRecord{
+		UpdateID:      "update-refs-source-entities",
+		OwnerID:       ownerID,
+		AgentID:       "researcher:refs",
+		TargetAgentID: targetAgentID,
+		ChannelID:     "doc-refs",
+		Role:          AgentProfileResearcher,
+		Kind:          "findings",
+		Summary:       "source refs ready",
+		Findings:      []string{"Typed refs should be available to Texture."},
+		Refs: []string{
+			"source_service_item:srcitem_market_rules",
+			"source_service_item=srcitem_policy_digest",
+			"content_id:content-cloud-audit",
+			"evidence_id:ev-cloud-audit",
+			"free-form note mentioning srcitem_ignored in prose",
+		},
+		Content:   "source refs ready",
+		CreatedAt: now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   update.ChannelID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   update.TargetAgentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("DispatchWorkerUpdate: %v", err)
+	}
+
+	entities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, targetAgentID, 10)
+	if !hasSourceEntity(entities, "source_service_item", "srcitem_market_rules", "") {
+		t.Fatalf("missing source_service_item entity: %#v", entities)
+	}
+	if !hasSourceEntity(entities, "source_service_item", "srcitem_policy_digest", "") {
+		t.Fatalf("missing equals-form source_service_item entity: %#v", entities)
+	}
+	if !hasSourceEntity(entities, "content_item", "", "content-cloud-audit") {
+		t.Fatalf("missing content item entity: %#v", entities)
+	}
+	if !hasSourceEntity(entities, "content_item", "", "content-evidence-audit") {
+		t.Fatalf("missing evidence ref entity: %#v", entities)
+	}
+	for _, entity := range entities {
+		if entity.Target.ItemID == "srcitem_ignored" {
+			t.Fatalf("free-form prose ref was scraped into source entity: %#v", entities)
+		}
+	}
+}
+
+func hasSourceEntity(entities []textureSourceEntity, kind, itemID, contentID string) bool {
+	for _, entity := range entities {
+		if kind != "" && entity.Kind != kind {
+			continue
+		}
+		if itemID != "" && entity.Target.ItemID != itemID {
+			continue
+		}
+		if contentID != "" && entity.Target.ContentID != contentID {
+			continue
+		}
+		return true
+	}
+	return false
 }

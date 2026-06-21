@@ -81,6 +81,71 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 	return entity
 }
 
+func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Runtime, ownerID, ref string) textureSourceEntity {
+	key, value := splitTypedWorkerUpdateRef(ref)
+	if key == "" || value == "" {
+		return textureSourceEntity{}
+	}
+	switch key {
+	case "source_service_item":
+		if !textureRawSourceServiceItemIDRE.MatchString(value) || textureRawSourceServiceItemIDRE.FindString(value) != value {
+			return textureSourceEntity{}
+		}
+		return sourceServiceItemRefToSourceEntity(value, ref)
+	case "content_id", "content_item":
+		if rt == nil || rt.store == nil {
+			return textureSourceEntity{}
+		}
+		item, err := rt.store.GetContentItem(ctx, ownerID, value)
+		if err != nil {
+			return textureSourceEntity{}
+		}
+		return contentItemRefToSourceEntity(item)
+	case "evidence", "evidence_id":
+		if rt == nil || rt.store == nil {
+			return textureSourceEntity{}
+		}
+		rec, err := rt.store.GetEvidence(ctx, value, ownerID)
+		if err != nil {
+			return textureSourceEntity{}
+		}
+		return evidenceRecordToSourceEntity(rec)
+	default:
+		return textureSourceEntity{}
+	}
+}
+
+func splitTypedWorkerUpdateRef(ref string) (string, string) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", ""
+	}
+	for _, sep := range []string{":", "="} {
+		if before, after, ok := strings.Cut(ref, sep); ok {
+			key := normalizeWorkerUpdateRefKey(before)
+			value := strings.TrimSpace(after)
+			if key == "" || value == "" || strings.ContainsAny(value, " \t\r\n") {
+				return "", ""
+			}
+			return key, value
+		}
+	}
+	return "", ""
+}
+
+func normalizeWorkerUpdateRefKey(key string) string {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "source_service_item", "source_item", "item_id":
+		return "source_service_item"
+	case "content_id", "content_item", "content_item_id":
+		return "content_id"
+	case "evidence", "evidence_id":
+		return "evidence"
+	default:
+		return ""
+	}
+}
+
 func isHTTPURL(value string) bool {
 	value = strings.TrimSpace(value)
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
@@ -119,6 +184,15 @@ func (rt *Runtime) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context,
 				continue
 			}
 			entity := evidenceRecordToSourceEntity(rec)
+			key := sourceEntityKey(entity)
+			if entity.EntityID == "" || key == "" || seenEntity[key] {
+				continue
+			}
+			seenEntity[key] = true
+			entities = append(entities, entity)
+		}
+		for _, ref := range update.Refs {
+			entity := sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, ref)
 			key := sourceEntityKey(entity)
 			if entity.EntityID == "" || key == "" || seenEntity[key] {
 				continue
