@@ -872,7 +872,10 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`.
 
 next move: record an independent review receipt if a reviewer becomes available;
-otherwise continue to D6 publication/export projection cut. Do not bundle
+otherwise continue to D6 publication/export projection cut. D6 checkpoint has
+now recorded the publication/export problem: publication still derives source
+refs from markdown projection links and version history still carries flattened
+content/citations/metadata without structured body/source fields. Do not bundle
 deployment or broad old-path deletion unless this paradoc is updated first.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
@@ -885,7 +888,8 @@ learning state: D0 schema/API decision retained here. D1 code witness now lives
 in `internal/texturedoc`; D2-D4 prove the structured schema across new revision
 writes, editor/user preservation, and appagent mutation. D5 locally proves the
 multimedia resolver/rendering cut, with independent review still unavailable due
-stalled review agents. Promote outward only when publication/export, deletion
+stalled review agents. D6 checkpoint names the publication/export residue but
+does not repair it yet. Promote outward only when publication/export, deletion
 receipts, staging proof, and any missing independent review close the product
 contract.
 
@@ -902,3 +906,44 @@ classified as noncanonical historical import only.
 ```text
 /goal Use Parallax on docs/mission-texture-structured-document-transclusion-cutover-v0.md. D1-D4 are integrated and accepted; D5 multimedia sidecar/rendering implementation is locally tested but independent review stalled; current V=4. Continue with D6 publication/export projection cut so structured source_ref/source_embed + SourceEntity transclusions survive publication/export. Do not deploy, bundle broad old-path deletion, or claim mission settlement unless the paradoc is updated first.
 ```
+
+## D6 Publication/Export Problem Checkpoint - 2026-06-21
+
+Problem: The publication/export path still treats flattened markdown-ish
+projection content as the source of publication structure and source refs. In
+particular, `publicationDocumentBlocks` parses `bundle.Artifact.Content` and
+`parsePublicationInlines` reconstructs `source_ref` inlines from
+`[label](source:id)` links. `buildPublicationSourceMetadata` reads
+`metadata.source_entities` rather than top-level revision `SourceEntities`, and
+`PublicationVersionHistoryEntry` carries flattened `content`, `citations`, and
+`metadata` but no `body_doc` / top-level `source_entities` fields. Tests still
+publish source refs by embedding `[...](source:...)` in content plus
+`metadata.source_entities`.
+
+Evidence:
+
+- `internal/platform/publication_document.go:65` builds document blocks from
+  `bundle.Artifact.Content`.
+- `internal/platform/publication_document.go:276` parses markdown links into
+  publication inlines.
+- `internal/platform/publication_document.go:293` treats `source:` markdown
+  hrefs as publication `source_ref` inlines.
+- `internal/platform/source_metadata.go:94` reads `metadata.source_entities`.
+- `internal/platform/types.go:218` records version history entries as flattened
+  `Content`, `Citations`, and `Metadata`.
+- `internal/platform/service_test.go:1210` publishes a fixture containing
+  `[Federal Reserve rate statement](source:src-entity-fed-rates)`.
+
+Invariant to repair: publication/export must consume structured Texture body
+documents and top-level source entities as canonical input. Markdown projection
+may remain an export format, but it must not be the source identity parser for
+new publications. Published source refs, source manifests, DOCX/HTML/PDF exports,
+and version history should preserve or derive from structured `body_doc`
+`source_ref` / `source_embed` nodes plus top-level `source_entities`, not
+markdown links, citations sidecars, or metadata source sidecars.
+
+Cut target: extend platform publication input/types to accept and persist
+structured body/source entity fields, build `PublicationDocument` from the
+structured document projection when present, keep legacy markdown parsing only
+for historical publications without `body_doc`, and update export tests so new
+publication fixtures use `body_doc` + top-level `source_entities`.

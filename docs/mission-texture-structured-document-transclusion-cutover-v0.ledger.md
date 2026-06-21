@@ -642,3 +642,32 @@ Open edge: D6 publication/export projection. Publication/export/diff/search
 must consume structured body/source entity projections without reviving markdown
 links or source metadata sidecars. Record independent review when available and
 do not treat D5 as staging/product proof until the landing loop runs.
+
+## 2026-06-21 - Pass 21 - D6 Publication/Export Problem Checkpoint
+
+Claim: D6 cannot safely change publication/export until the mission records the
+remaining behavior problem separately from the fix.
+
+Move: construct. Added `D6 Publication/Export Problem Checkpoint - 2026-06-21`
+to the paradoc. The checkpoint names the gap: publication currently parses
+source refs from flattened markdown projection links, reads source entities from
+metadata, and records version history entries without structured `body_doc` /
+top-level `source_entities`.
+
+Expected delta V: 0 on product obligations; satisfies the red/orange-surface
+precondition for D6 publication/export mutation.
+
+Actual delta V: 0. Current V remains 4. Runtime/platform behavior unchanged by
+this pass.
+
+Evidence recorded:
+`internal/platform/publication_document.go:65`;
+`internal/platform/publication_document.go:276`;
+`internal/platform/publication_document.go:293`;
+`internal/platform/source_metadata.go:94`;
+`internal/platform/types.go:218`;
+`internal/platform/service_test.go:1210`.
+
+Open edge: implement the D6 publication/export projection cut. Keep legacy
+markdown publication parsing only as historical fallback and do not bundle broad
+old-path deletion or deployment in the same move.
