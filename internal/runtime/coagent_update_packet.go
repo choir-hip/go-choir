@@ -101,7 +101,7 @@ func coagentUpdateSourceInstruction(sourceEntities []textureSourceEntity) string
 	if len(sourceEntities) == 0 {
 		return ""
 	}
-	return "When writing Texture content from these updates, cite source-backed claims with native [label](source:ENTITY_ID) refs using the listed source_entities entity_id values. Do not replace a listed source entity with a plain URL when that source entity covers the claim."
+	return "When writing Texture content from these updates, preserve sources as Texture source entities/transclusion refs using the listed source_entities entity_id values. Do not write ordinary URL links, markdown web links, source inventories, or Source: lines as substitutes for a listed source entity."
 }
 
 func coagentUpdatePacketPreamble(deliveryPhase string) string {

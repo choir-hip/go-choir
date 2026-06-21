@@ -58,8 +58,12 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	}
 	if !strings.Contains(text, `"source_entities"`) ||
 		!strings.Contains(text, "src-source-service-demo") ||
-		!strings.Contains(text, "[label](source:ENTITY_ID)") {
+		!strings.Contains(text, "Texture source entities/transclusion refs") ||
+		!strings.Contains(text, "Do not write ordinary URL links") {
 		t.Fatalf("packet text missing native source entity instruction: %q", text)
+	}
+	if strings.Contains(text, "http://") || strings.Contains(text, "https://") {
+		t.Fatalf("packet text should not instruct ordinary clickable links: %q", text)
 	}
 }
 

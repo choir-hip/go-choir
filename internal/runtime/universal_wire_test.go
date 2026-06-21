@@ -207,7 +207,7 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	}
 	if len(story.Manifest.Lead) != 0 || len(story.Manifest.Context) != 1 ||
 		story.Manifest.Context[0].ID != "source-network-cycle:cycle-live" ||
-		!strings.Contains(story.Manifest.Context[0].Standing, "2 source handles retained in revision provenance") {
+		!strings.Contains(story.Manifest.Context[0].Standing, "2 source ids retained in revision provenance") {
 		t.Fatalf("indexed source-network story should expose bounded cycle provenance, got %+v", story.Manifest)
 	}
 	claimText := strings.Join(story.Claims, "\n")

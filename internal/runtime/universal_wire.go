@@ -549,7 +549,7 @@ func wireArticleManifestFromCycleProvenance(meta map[string]any, headline string
 	case cycleID != "":
 		standing := "source firehose cycle"
 		if len(sourceIDs) > 0 {
-			standing = fmt.Sprintf("source firehose cycle; %d source handles retained in revision provenance", len(sourceIDs))
+			standing = fmt.Sprintf("source firehose cycle; %d source ids retained in revision provenance", len(sourceIDs))
 		}
 		manifest.Context = append(manifest.Context, types.WireSourceItem{
 			ID:       "source-network-cycle:" + cycleID,

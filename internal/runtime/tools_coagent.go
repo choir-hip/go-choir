@@ -426,31 +426,8 @@ func coagentTextureSeedContent(parentRec *types.RunRecord, req coagentTextureRou
 	if seed[len(seed)-1] != '\n' {
 		b.WriteString("\n")
 	}
-	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
-	b.WriteString("\n## Style.texture Source\n\n")
-	for _, style := range selectedStyles {
-		b.WriteString("- ")
-		b.WriteString(style.Title)
-		b.WriteString(" (")
-		b.WriteString(firstNonEmpty(style.DocID, style.SourcePath, style.ID))
-		b.WriteString(")\n")
-	}
-	b.WriteString("\nSelection rationale: ")
-	b.WriteString(styleRationale)
-	b.WriteString("\n")
-	if len(sourceEntities) > 0 {
-		b.WriteString("\n## Source Handles\n\n")
-		for _, entity := range sourceEntities {
-			if strings.TrimSpace(entity.EntityID) == "" {
-				continue
-			}
-			b.WriteString("- [")
-			b.WriteString(firstNonEmpty(entity.Label, entity.Kind, "Source"))
-			b.WriteString("](source:")
-			b.WriteString(entity.EntityID)
-			b.WriteString(")\n")
-		}
-	}
+	_ = parentRec
+	_ = sourceEntities
 	return b.String()
 }
 
@@ -486,7 +463,7 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 	b.WriteString(styleRationale)
 	if len(sourceEntities) > 0 {
 		requiredSourceRefs := min(3, len(sourceEntities))
-		b.WriteString("\n\nNative source handles available to this article revision:\n")
+		b.WriteString("\n\nNative source entities available to this article revision:\n")
 		for _, entity := range sourceEntities {
 			if strings.TrimSpace(entity.EntityID) == "" {
 				continue
@@ -506,19 +483,21 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 			}
 			b.WriteString("\n")
 		}
-		b.WriteString("\nArticle citation requirement: cite at least ")
+		b.WriteString("\nArticle source requirement: reference at least ")
 		b.WriteString(strconv.Itoa(requiredSourceRefs))
-		b.WriteString(" distinct listed native source handle")
+		b.WriteString(" distinct listed source entit")
 		if requiredSourceRefs != 1 {
-			b.WriteString("s")
+			b.WriteString("ies")
+		} else {
+			b.WriteString("y")
 		}
-		b.WriteString(" in reader-facing article prose using [label](source:entity_id). Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement.")
+		b.WriteString(" in reader-facing article prose through native Texture transclusion refs like [label](source:entity_id). Source refs that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement.")
 	}
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use patch_texture to write the canonical Texture revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
-	b.WriteString("\n- Preserve source handles and use native Texture source refs like [label](source:entity_id) inside article prose; do not replace them with a plain source manifest or isolate them in an inventory section.")
+	b.WriteString("\n- Preserve source entities and use native Texture transclusion refs like [label](source:entity_id) inside article prose; do not replace them with ordinary clickable links, Source: lines, a plain source manifest, or an inventory section.")
 	b.WriteString("\n- Use the selected Style.texture sources to shape voice, structure, and editorial judgment; do not name the selected Style.texture or style rationale in reader-facing prose unless it is genuinely part of the story.")
 	b.WriteString("\n- Transclude related Textures where editorially useful; do not render bare related-Texture ID lists as article content.")
 	b.WriteString("\n- Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body unless they are editorially necessary. They belong in revision metadata and native source/transclusion affordances, not as reader-facing sections.")

@@ -4,5 +4,5 @@ comments:
   - Static intro for detected source entities.
 body: |
   
-  These source entities are the durable citation/transclusion substrate for this Texture. Preserve them as source-backed objects instead of flattening them into prose. Inline use should cite or summarize bounded source spans; expansion or owning-surface opens should reveal the underlying media/content/Texture target.
-  Canonical inline Source Entity syntax is [label](source:ENTITY_ID). Preserve existing source: entity ids exactly unless the citation is intentionally removed; do not rewrite source: refs as ordinary URLs, footnote prose, or copied transcript text. When adding citations for listed source entities, use this syntax with the listed entity_id.
+  These source_entities are the durable source/transclusion substrate for this Texture. Preserve them as source-backed objects instead of flattening them into prose. Inline use should reference bounded source spans through source: entity ids; expansion or owning-surface opens reveal the underlying media/content/Texture target.
+  Canonical inline Source Entity syntax is [label](source:ENTITY_ID). Treat that syntax as a native Texture transclusion reference, not a web link. Preserve existing source: entity ids exactly unless the citation is intentionally removed; do not rewrite source: refs as ordinary URLs, markdown web links, footnote prose, Source: lines, source-handle lists, or copied transcript text. When adding source refs for listed source_entities, use the listed entity_id.

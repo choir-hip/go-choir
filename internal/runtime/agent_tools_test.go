@@ -2054,8 +2054,9 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if seedRev.AuthorKind != types.AuthorAppAgent || !strings.Contains(seedRev.Content, "Source brief:") {
 		t.Fatalf("processor seed revision = author %q content %q", seedRev.AuthorKind, seedRev.Content)
 	}
-	if !strings.Contains(seedRev.Content, "Style.texture: Market Brief") {
-		t.Fatalf("processor seed revision missing selected Style.texture source: %q", seedRev.Content)
+	if strings.Contains(seedRev.Content, "Style.texture Source") ||
+		strings.Contains(seedRev.Content, "Source Handles") {
+		t.Fatalf("processor seed revision should not expose style/source inventory sections: %q", seedRev.Content)
 	}
 	seedMeta := decodeRevisionMetadata(seedRev.Metadata)
 	if metadataString(seedMeta, "artifact_kind") != "source_brief" || metadataString(seedMeta, "texture_version") == "v0" {
@@ -2072,8 +2073,8 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if len(sourceEntities) != 1 || sourceEntities[0].Target.ContentID != sourceItem.ContentID {
 		t.Fatalf("processor seed source_entities = %#v, want content item %q", sourceEntities, sourceItem.ContentID)
 	}
-	if !strings.Contains(seedRev.Content, "(source:"+sourceEntities[0].EntityID+")") {
-		t.Fatalf("processor seed should contain native source ref %q in %q", sourceEntities[0].EntityID, seedRev.Content)
+	if strings.Contains(seedRev.Content, "(source:"+sourceEntities[0].EntityID+")") {
+		t.Fatalf("processor seed should keep source refs in metadata/prompt, not visible inventory prose: %q", seedRev.Content)
 	}
 	if metadataString(seedMeta, "selected_style_rationale") == "" {
 		t.Fatalf("processor seed revision missing style rationale metadata: %+v", seedMeta)
@@ -2145,10 +2146,10 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if !strings.Contains(textureRun.Prompt, "must be a publishable article or correction/update draft") ||
 		!strings.Contains(textureRun.Prompt, "not a Source Brief, Working Revision, Evidence Gathering note") ||
 		!strings.Contains(textureRun.Prompt, "(source:"+sourceEntities[0].EntityID+")") ||
-		!strings.Contains(textureRun.Prompt, "cite at least 1 distinct listed native source handle") ||
-		!strings.Contains(textureRun.Prompt, "reader-facing article prose using [label](source:entity_id)") ||
-		!strings.Contains(textureRun.Prompt, "Citations that appear only in Source Handles, Source Manifest, source inventories, notes, or metadata sections do not satisfy this requirement") ||
-		!strings.Contains(textureRun.Prompt, "do not replace them with a plain source manifest") ||
+		!strings.Contains(textureRun.Prompt, "reference at least 1 distinct listed source entity") ||
+		!strings.Contains(textureRun.Prompt, "reader-facing article prose through native Texture transclusion refs like [label](source:entity_id)") ||
+		!strings.Contains(textureRun.Prompt, "Source refs that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement") ||
+		!strings.Contains(textureRun.Prompt, "do not replace them with ordinary clickable links") ||
 		!strings.Contains(textureRun.Prompt, "Use the selected Style.texture sources to shape voice, structure, and editorial judgment") ||
 		!strings.Contains(textureRun.Prompt, "do not name the selected Style.texture or style rationale in reader-facing prose") ||
 		!strings.Contains(textureRun.Prompt, "Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body") ||
