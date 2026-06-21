@@ -332,3 +332,34 @@ Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: implement the side-channel repair in the assigned worktree, add
 focused regressions, rerun focused tests plus `git diff --check`, and commit.
+
+## 2026-06-21 - Pass 13 - D2 Accepted And Integrated
+
+Claim: The repaired D2 server write-boundary cut is acceptable when independent
+review verifies that source identity cannot enter new revisions through
+`content`, `citations_json`, or legacy source metadata sidecars in D2 scope.
+
+Move: probe + construct. Independent D2 re-review returned `accept` with no
+findings after the side-channel repair. Root integrated the accepted D2 commit
+range as `d54458b5`, `e60f6523`, and `9d50485f`, then reran the focused tests
+on the integrated branch.
+
+Expected delta V: -1 for the D2 canonical revision write-path obligation.
+
+Actual delta V: -1. Current V=7. D2 is integrated and accepted, but this is not
+mission settlement.
+
+Receipt: commits `d54458b5`, `e60f6523`, and `9d50485f` on `main`; D2
+re-review thread `019eeb72-a271-72a2-a18d-7f9cb66c4de4`.
+
+Evidence:
+`nix develop -c go test ./internal/types ./internal/texturedoc ./internal/store`;
+`nix develop -c go test ./internal/runtime -run TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`;
+`git diff --check HEAD~3..HEAD`.
+
+Open edge: D3 editor/user path. Human edits must preserve source refs as atom
+nodes, support intentional insertion/removal, and render numbered source points
+from structured `BodyDoc` / `SourceEntities` without clickable-link source
+syntax. Later D4/D5/D6/D7 cuts still need Texture agent operations, multimedia
+resolver, publication/export, old-path deletion, staging deploy, and Comet
+product proof.
