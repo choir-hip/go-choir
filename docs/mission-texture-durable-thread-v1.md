@@ -196,11 +196,19 @@ position / live conjectures / open edges:
   `a893f0ca-a8b6-41de-a73b-1e8b05c7c80d` showed `spawn_agent`, park wait,
   researcher `update_coagent`, V2 `patch_texture`, and final passivation all on
   Texture loop `c3cb6b21-6220-4d6f-a226-641906ea56b9`.
+- C10 active: first-paint exact `patch_texture` forcing is a remaining runtime
+  trust channel. It hides a semantic policy decision inside provider
+  `tool_choice` and narrowed tool definitions, even though the durable
+  invariant is not "first tool must be patch_texture"; the invariant is that
+  Texture must take an owner-visible durable action and must not settle for a
+  no-op prompt-copy revision. Existing no-op guards and completion guards should
+  preserve that product behavior without exact first-tool choreography.
 
-next move: start deleting the classifier/exact-first-tool/model-prior guard
-residues that still encode semantic choreography. Prefer one deletion with a
-focused inversion test proving Texture keeps agency while still writing
-owner-visible work state and opening evidence paths when needed.
+next move: delete prompt-bar first-paint exact `patch_texture` forcing while
+preserving grounded update integration and durable-action/no-op protection.
+Invert tests so ordinary first-paint Texture runs receive the full Texture tool
+surface with no exact tool choice, while update-backed integration still proves
+that worker evidence creates an owner-visible canonical revision.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 

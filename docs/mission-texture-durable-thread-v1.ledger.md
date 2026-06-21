@@ -490,3 +490,33 @@ Result: the parked-delegation same-thread slice is deployed and supported by
 staging product evidence. It does not settle the mission. The next realism axis
 is still to delete classifier/exact-first-tool/model-prior guard residues while
 preserving owner-visible work state and evidence-path behavior.
+
+## 2026-06-21 - Exact First-Tool Deletion Target Selected
+
+Claim: prompt-bar first-paint exact `patch_texture` forcing is now the narrowest
+high-value guard residue to delete. It is a runtime trust channel because
+`initialTextureToolChoice` converts ordinary initial Texture work into
+provider-level `function:patch_texture` and `RunToolLoop` narrows the first-call
+tool list to that single tool. The durable-thread invariant should instead be:
+Texture must make owner-visible canonical progress, reject no-op prompt-copy
+patches, and open evidence paths when needed, without hidden semantic
+choreography in tool choice.
+
+Move: document this problem before the runtime change. The intended behavior
+change is to leave prompt-bar initial Texture runs unconstrained on the first
+provider call, while preserving grounded `update_coagent` integration safeguards
+and the existing no-op/progress guards.
+
+Expected ΔV: -1 if tests and staging show ordinary prompt-bar Texture starts
+with no exact first-tool choice, still creates a useful appagent revision, and
+still handles researcher/super evidence updates.
+
+Admissible evidence: focused unit/integration tests around
+`initialTextureToolChoice`, prompt-bar Texture starts, no-op prompt-copy retry,
+researcher/super V2 update paths, full runtime shards, then deployed product
+proof on `choir.news` with Trace evidence that the first provider call is not
+exact-tool forced.
+
+Rollback: revert the runtime commit that changes `initialTextureToolChoice` and
+its test inversions. Docs may remain as problem evidence if the rollback proves
+the deletion is not yet safe.
