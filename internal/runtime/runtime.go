@@ -1657,7 +1657,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 				"request_email_draft",
 			))
 		}
-		toolLoopOptions = append(toolLoopOptions, WithCompletionGuard(rt.textureModelPriorCompletionGuard(rec)))
 	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
@@ -2468,117 +2467,6 @@ func (rt *Runtime) latestActorToolLoopBudgetSpend(ctx context.Context, ownerID, 
 		spend.ProviderCalls = providerCallsFromPreflight
 	}
 	return spend, true, nil
-}
-
-func (rt *Runtime) textureModelPriorCompletionGuard(rec *types.RunRecord) ToolLoopCompletionGuardFunc {
-	return func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error) {
-		if rt == nil || rt.store == nil || rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		docID := strings.TrimSpace(firstNonEmpty(
-			metadataStringValue(rec.Metadata, "doc_id"),
-			rec.ChannelID,
-		))
-		if docID == "" || metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		prompt := strings.TrimSpace(firstNonEmpty(
-			metadataStringValue(rec.Metadata, "original_prompt"),
-			metadataStringValue(rec.Metadata, "request_intent"),
-			metadataStringValue(rec.Metadata, "seed_prompt"),
-			rec.Prompt,
-		))
-		if !texturePromptNeedsWorldKnowledge(prompt) {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		doc, err := rt.store.GetDocument(ctx, docID, rec.OwnerID)
-		if err != nil || strings.TrimSpace(doc.CurrentRevisionID) == "" {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		rev, err := rt.store.GetRevision(ctx, doc.CurrentRevisionID, rec.OwnerID)
-		if err != nil || rev.AuthorKind != types.AuthorAppAgent {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		meta := decodeRevisionMetadata(rev.Metadata)
-		if !metadataBoolValue(meta, "model_prior_interim") && metadataStringValue(meta, "revision_grounding") != "model_prior" {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		if rt.textureRunOpenedEvidencePath(ctx, rec, docID) {
-			return ToolLoopCompletionGuardResult{}, nil
-		}
-		return ToolLoopCompletionGuardResult{
-			Continue:    true,
-			Reason:      "texture_model_prior_interim_needs_evidence_path",
-			Instruction: "The latest canonical Texture revision is flagged model_prior_interim for a factual/current request. That checkpoint is not completion. Continue by choosing the next legitimate agentic action: open Probe work with spawn_agent role=\"researcher\" for concise current evidence back to this Texture, request execution only if execution evidence is actually needed, send follow-up to an active worker, or record_texture_decision with a truthful no_worker_needed, delegation_deferred, wait_for_evidence, or blocker reason. Do not end with only the model-prior/interim revision.",
-		}, nil
-	}
-}
-
-func (rt *Runtime) textureRunOpenedEvidencePath(ctx context.Context, rec *types.RunRecord, docID string) bool {
-	if rt == nil || rt.store == nil || rec == nil {
-		return false
-	}
-	decisions, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
-	if err == nil {
-		for _, decision := range decisions {
-			if decision.RunID == rec.RunID {
-				return true
-			}
-		}
-	}
-	events, err := rt.store.ListEvents(ctx, rec.RunID, 500)
-	if err != nil {
-		return false
-	}
-	for _, payload := range successfulToolResultPayloads(events, "spawn_agent") {
-		if stringMapValue(payload, "status") != "error" {
-			return true
-		}
-	}
-	for _, toolName := range []string{"request_super_execution", "update_coagent", "request_email_draft"} {
-		if len(successfulToolResultPayloads(events, toolName)) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func texturePromptNeedsWorldKnowledge(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	if text == "" || texturePromptExplicitlyRequestsNoWorkerDecision(text) || texturePromptNeedsSuperExecution(text) {
-		return false
-	}
-	if texturePromptExplicitlyRequestsResearcher(text) {
-		return true
-	}
-	worldMarkers := []string{
-		"what's going on",
-		"what is going on",
-		"what happened",
-		"latest",
-		"current",
-		"currently",
-		"today",
-		"yesterday",
-		"this week",
-		"recent",
-		"now",
-		"right now",
-		"news",
-		"search",
-		"web",
-		"internet",
-		"update on",
-		"updates on",
-		"status of",
-		"government",
-	}
-	for _, marker := range worldMarkers {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
 }
 
 func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {

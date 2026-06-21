@@ -2227,24 +2227,29 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 	}, nil
 }
 
-type textureGuardedResearchProvider struct {
+type textureAgenticResearchProvider struct {
 	Provider
-	choices  []string
-	wrote    bool
-	spawned  bool
-	sawGuard bool
+	choices             []string
+	wrote               bool
+	spawned             bool
+	sawPromptObligation bool
+	sawGuardInstruction bool
 }
 
-func (p *textureGuardedResearchProvider) ProviderName() string {
-	return "texture-guarded-research"
+func (p *textureAgenticResearchProvider) ProviderName() string {
+	return "texture-agentic-research"
 }
 
-func (p *textureGuardedResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureAgenticResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
+	if messagesContainText(req.Messages, "texture_model_prior_interim_needs_evidence_path") ||
+		messagesContainText(req.Messages, "The latest canonical Texture revision is flagged model_prior_interim") {
+		p.sawGuardInstruction = true
+	}
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "research opened", Model: "test-model"}, nil
 	}
@@ -2256,13 +2261,16 @@ func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req 
 			Model:      "test-model",
 		}, nil
 	}
-	if p.wrote && !p.spawned && strings.Contains(lastUser, "model_prior_interim") {
-		p.sawGuard = true
+	if strings.Contains(lastUser, "Probe morphisms (spawn_agent researcher) gather world knowledge") &&
+		strings.Contains(lastUser, "Substantive world knowledge requires Probe (researcher) evidence") {
+		p.sawPromptObligation = true
+	}
+	if p.wrote && !p.spawned && messagesContainToolCall(req.Messages, "patch_texture") {
 		p.spawned = true
 		return &ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
-				ID:   "call-open-researcher-after-guard",
+				ID:   "call-open-researcher-agentically",
 				Name: "spawn_agent",
 				Arguments: json.RawMessage(`{
 					"role":"researcher",
@@ -2279,9 +2287,9 @@ func (p *textureGuardedResearchProvider) CallWithTools(ctx context.Context, req 
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
-			ID:        "call-write-guarded-working-revision",
+			ID:        "call-write-agentic-working-revision",
 			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"GUARDED_MODEL_PRIOR_V1\n\nThis is an interim model-prior question map. Current evidence is still unresolved."}]}`),
+			Arguments: json.RawMessage(`{"edits":[{"op":"append","text":"AGENTIC_MODEL_PRIOR_V1\n\nThis is an interim model-prior question map. Current evidence is still unresolved."}]}`),
 		}},
 		Model: "test-model",
 	}, nil
@@ -2928,9 +2936,9 @@ func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 	}
 }
 
-func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
+func TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard(t *testing.T) {
 	t.Parallel()
-	provider := &textureGuardedResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureAgenticResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's going on with Anthropic and the US government?"}`, "user-1")
@@ -2960,11 +2968,29 @@ func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
 	if state := waitForTaskCompletion(t, h, decision.InitialLoopID, 5*time.Second); state != types.RunCompleted {
 		t.Fatalf("initial texture state = %q, want completed", state)
 	}
-	if !provider.sawGuard {
-		t.Fatalf("provider never saw model-prior completion guard; choices=%#v", provider.choices)
+	if provider.sawGuardInstruction {
+		t.Fatalf("provider saw removed model-prior completion guard; choices=%#v", provider.choices)
+	}
+	if !provider.sawPromptObligation {
+		t.Fatalf("provider never saw prompt-level Probe obligation; choices=%#v", provider.choices)
+	}
+	if !provider.spawned {
+		t.Fatalf("provider did not open researcher by ordinary tool choice; choices=%#v", provider.choices)
 	}
 	if len(provider.choices) < 3 || provider.choices[0] != "" || provider.choices[1] != "" || provider.choices[2] != "" {
-		t.Fatalf("texture choices = %#v, want unconstrained first paint and completion guard retry", provider.choices)
+		t.Fatalf("texture choices = %#v, want unconstrained conductor/Texture tool choices", provider.choices)
+	}
+	events, err := rt.Store().ListEvents(context.Background(), decision.InitialLoopID, 100)
+	if err != nil {
+		t.Fatalf("list texture events: %v", err)
+	}
+	for _, event := range events {
+		if event.Kind == types.EventRunRetry && event.Phase == "completion_guard" {
+			t.Fatalf("unexpected completion guard retry event: %+v", event)
+		}
+		if strings.Contains(string(event.Payload), "texture_model_prior_interim_needs_evidence_path") {
+			t.Fatalf("unexpected model-prior completion guard payload: %+v", event)
+		}
 	}
 	revs, err := s.ListRevisionsByDoc(context.Background(), decision.DocID, "user-1", 10)
 	if err != nil {
@@ -2972,13 +2998,13 @@ func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
 	}
 	var v1 *types.Revision
 	for i := range revs {
-		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "GUARDED_MODEL_PRIOR_V1") {
+		if revs[i].AuthorKind == types.AuthorAppAgent && strings.Contains(revs[i].Content, "AGENTIC_MODEL_PRIOR_V1") {
 			v1 = &revs[i]
 			break
 		}
 	}
 	if v1 == nil {
-		t.Fatalf("missing guarded model-prior V1; revisions=%+v", revs)
+		t.Fatalf("missing agentic model-prior V1; revisions=%+v", revs)
 	}
 	meta := decodeRevisionMetadata(v1.Metadata)
 	if !metadataBoolValue(meta, "model_prior_interim") || metadataStringValue(meta, "revision_grounding") != "model_prior" {
@@ -2996,7 +3022,7 @@ func TestTextureModelPriorCompletionGuardOpensProbePath(t *testing.T) {
 		}
 	}
 	if researcher == nil {
-		t.Fatalf("completion guard did not lead to researcher probe; runs=%+v", runs)
+		t.Fatalf("agentic Texture tool choice did not lead to researcher probe; runs=%+v", runs)
 	}
 	if researcher.ChannelID != decision.DocID || trajectoryIDForRun(researcher) != submission.SubmissionID {
 		t.Fatalf("researcher route = channel %q trajectory %q, want %s/%s; run=%+v", researcher.ChannelID, trajectoryIDForRun(researcher), decision.DocID, submission.SubmissionID, *researcher)
