@@ -1118,3 +1118,59 @@ Receipts:
 Open edge: no runtime behavior changed in this pass. Mission exit still needs
 the Parallax handoff-tier review; under the current no-subagent operating
 constraint, no independent prover was run here.
+
+## 2026-06-21 - Settlement Audit Finds Stale Researcher Verifier
+
+Claim: the next settlement-review move should reconcile the original durable
+thread witness clauses against current evidence before calling the mission
+settled. A focused verifier pass is admissible because it checks the same-thread
+researcher/source-delivery bridge that the mission still needs for exit.
+
+Move: inspected the current `docs/mission-texture-durable-thread-v1.md` state,
+runtime code for `update_coagent` delivery, mailbox reactivation, passivation
+stream metadata, and the Texture prompt/guard deletion surface. Then ran focused
+local verifier commands for same-thread researcher/super delivery,
+update-coagent mailbox delivery, passivation/resume, and passivation stream
+settlement.
+
+Expected Delta V: -1 if the audit proved the original witness clauses and left
+only independent prover / live-region residual. Otherwise, name the unsupported
+edge without touching runtime behavior.
+
+Actual Delta V: +1. The audit found a verifier gap, not a product-path runtime
+fix candidate yet. `TestTextureCreatedResearcherEvidenceWakesTextureV2` fails
+alone on current `main` because its stub provider waits for the deleted
+`model_prior_interim` completion-guard reminder before spawning researcher. That
+guard dependency is stale after the model-prior completion guard deletion.
+`TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard` passes
+alone, but in a broader parallel focused batch it can fail with
+`choices = []string{"", ""}` because it asserts the async researcher provider
+call has already appended a third tool-choice observation after the researcher
+run starts. The current verifier therefore cannot serve as settlement evidence
+until the stale guard dependency and async assertion are repaired or retired.
+
+Receipts:
+- Failing stale verifier:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestTextureCreatedResearcherEvidenceWakesTextureV2$' -count=1 -v`
+  failed with `Texture-created researcher run was not found`.
+- Stale mechanism: `textureResearchEvidenceLoopProvider` only emits
+  `spawn_agent` when the last user message contains `model_prior_interim`; that
+  was the old completion-guard route this mission intentionally deleted.
+- Healthy replacement path in isolation:
+  `nix develop -c go test -tags comprehensive ./internal/runtime -run '^TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard$' -count=1 -v`
+  passed and showed a researcher coagent run started by ordinary tool choice.
+- Broader focused batch excluding the stale researcher test still failed under
+  parallel execution at
+  `TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard`, with
+  `texture choices = []string{"", ""}`, while its run-alone result passed. This
+  points to verifier synchronization/assertion drift rather than a confirmed
+  product regression.
+- Other same-thread/passivation/update-coagent tests in that batch passed before
+  the failing parallel assertion ended the package run, including update-coagent
+  backlog delivery, rewarm selection, successful activation gating, idle
+  passivation/resume, active-revision follow-up, super-evidence V2 wake, and
+  passivation stream mapping.
+
+Open edge: first repair or retire the stale/flaky verifier evidence in a
+test-only yellow commit. Do not claim mission settlement or start a runtime fix
+from this evidence alone.
