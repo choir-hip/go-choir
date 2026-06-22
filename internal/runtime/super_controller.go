@@ -274,6 +274,9 @@ func (rt *Runtime) listAndSettlePersistentSuperBacklog(ctx context.Context, owne
 func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context, ownerID, agentID string, updates []types.CoagentSourcePacket) (bool, error) {
 	var nonExecIDs []string
 	for _, u := range updates {
+		if u.DeliveredAt != nil || strings.TrimSpace(u.DeliveredToRunID) != "" {
+			continue
+		}
 		if !persistentSuperExecutableUpdate(u) {
 			if id := strings.TrimSpace(u.UpdateID); id != "" {
 				nonExecIDs = append(nonExecIDs, id)

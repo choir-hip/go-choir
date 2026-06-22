@@ -518,3 +518,94 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 		t.Fatalf("backlog = %+v, want only executable update %s", backlog, exec.UpdateID)
 	}
 }
+
+func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "user-survivor-settle-reversed"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+
+	now := mustNow(t)
+	exec := types.CoagentSourcePacket{
+		OwnerID:       ownerID,
+		AgentID:       "cosuper:survivor-settle-reversed",
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		Role:          AgentProfileCoSuper,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "execution_request",
+			Summary:       "executable work before non-execution packet",
+			Claims:        []types.CoagentPacketClaim{{Text: "A valid execution request is first in the mailbox."}},
+			Actions: []types.CoagentPacketAction{{
+				Type:      "run_command",
+				Objective: "Run a harmless inspection command.",
+				Safety: types.CoagentPacketActionSafety{
+					MutationClass: "green",
+					Network:       "forbidden",
+					FileMutation:  "forbidden",
+				},
+			}},
+		},
+		CreatedAt: now,
+	}
+	exec.UpdateID = deriveWorkerUpdateID(exec)
+	exec.Content = buildWorkerUpdateMessage(exec)
+	nonExec := types.CoagentSourcePacket{
+		OwnerID:       ownerID,
+		AgentID:       "cosuper:survivor-settle-reversed",
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		Role:          AgentProfileCoSuper,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "non-execution packet after executable work",
+			Claims:        []types.CoagentPacketClaim{{Text: "This packet is evidence, not privileged work."}},
+		},
+		CreatedAt: now.Add(time.Millisecond),
+	}
+	nonExec.UpdateID = deriveWorkerUpdateID(nonExec)
+	nonExec.Content = buildWorkerUpdateMessage(nonExec)
+
+	for _, update := range []types.CoagentSourcePacket{exec, nonExec} {
+		msg := &types.ChannelMessage{
+			ChannelID:    update.ChannelID,
+			From:         update.AgentID,
+			FromAgentID:  update.AgentID,
+			ToAgentID:    update.TargetAgentID,
+			TrajectoryID: update.TrajectoryID,
+			Role:         update.Role,
+			Content:      update.Content,
+			Timestamp:    update.CreatedAt,
+		}
+		if _, created, err := s.DispatchWorkerUpdate(ctx, update, msg); err != nil {
+			t.Fatalf("dispatch seeded update %s: %v", update.UpdateID, err)
+		} else if !created {
+			t.Fatalf("seeded update %s was not created", update.UpdateID)
+		}
+	}
+
+	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	if err != nil {
+		t.Fatalf("reconcile persistent super: %v", err)
+	}
+	if run == nil {
+		t.Fatal("expected execution_request to start a persistent Super run")
+	}
+	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
+	if len(ids) != 1 || ids[0] != exec.UpdateID {
+		t.Fatalf("worker_update_ids = %+v, want only executable update %s", ids, exec.UpdateID)
+	}
+
+	storedNonExec, err := s.GetWorkerUpdate(ctx, ownerID, nonExec.UpdateID)
+	if err != nil {
+		t.Fatalf("get settled non-execution update: %v", err)
+	}
+	if storedNonExec.DeliveredToRunID != "settled_non_executable" || storedNonExec.DeliveredAt == nil {
+		t.Fatalf("non-execution update not settled: %+v", storedNonExec)
+	}
+}

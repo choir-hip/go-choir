@@ -579,6 +579,12 @@ packets to settle, and add a survivor test where `execution_request` precedes
 `evidence_update` in the persistent Super mailbox. The executable run must
 start and the non-execution row must remain settled.
 
+Repair receipt: landed by skipping already-settled rows before classifying
+non-executable settlement candidates. Added
+`TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog` to prove
+the executable-before-non-execution order starts the executable Super run and
+leaves the later non-execution row settled.
+
 ## Domain Ramp
 
 - **E0 Stall diagnosis (probe).** Reproduce the v3 stall locally or against

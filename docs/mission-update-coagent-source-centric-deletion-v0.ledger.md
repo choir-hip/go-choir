@@ -386,3 +386,26 @@ Required repair:
 
 Heresy delta: `discovered` for the executable-before-non-execution convergence
 case. No code repair is included in this checkpoint.
+
+## 2026-06-22 - Pass 6 - E3.2 Reviewer P1 Repair
+
+Claim: the E3.2 convergence defect is repaired if the settlement helper ignores
+already-settled rows returned by the cursor backlog query before classifying
+non-executable packets.
+
+Move: construct. Updated `settlePersistentSuperNonExecutionUpdates` to collect
+only rows with `DeliveredAt == nil` and empty `DeliveredToRunID`; added
+`TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog` for the
+reviewer case where seq 1 is executable and seq 2 is non-execution.
+
+Expected delta V: restores the E3.2 repair claim from Pass 4 after the P1.
+
+Actual delta V: E3.2 remains repaired; current V=8.
+
+Evidence:
+- `git diff --check`
+- `nix develop -c go test ./internal/runtime -run 'TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets|TestSurvivorContract_Super(SettlesNonExecutionRequestPackets|SettlesNonExecutionBeforeExecutionBacklog|ExecutesOnlyExecutionRequestPackets|ExecutesBeforeSettledNonExecutionBacklog)' -count=1 -v`
+- `nix develop -c go test ./internal/runtime -run 'TestUpdateCoagent|TestPersistentSuper|TestRequestSuperExecution|TestSurvivorContract_' -count=1`
+
+Heresy delta: `repaired` for the executable-before-non-execution convergence
+case. No staging deploy or existing-account product proof was attempted.
