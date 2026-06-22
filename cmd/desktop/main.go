@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"embed"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/fs"
@@ -16,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -24,6 +27,9 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+//go:embed bridge.html
+var bridgeHTML []byte
 
 // appInfo holds build-time metadata injected via ldflags.
 var (
@@ -71,6 +77,120 @@ func (d *DesktopService) ServiceStartup(ctx context.Context, options application
 
 func (d *DesktopService) ServiceShutdown() error {
 	return nil
+}
+
+// ─── Session-aware proxy (cookie bridge) ────────────────────────────────
+
+// cookieStore is a thread-safe store for auth cookies. It captures Set-Cookie
+// headers from auth service responses and injects them into all proxied
+// requests. This bridges Safari's cookie jar with WKWebView's — Safari
+// performs the WebAuthn ceremony and the resulting session cookies are shared
+// with WKWebView through this store.
+type cookieStore struct {
+	mu      sync.Mutex
+	cookies map[string]string
+}
+
+func newCookieStore() *cookieStore {
+	return &cookieStore{cookies: make(map[string]string)}
+}
+
+func (c *cookieStore) Set(name, value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if value != "" {
+		c.cookies[name] = value
+	} else {
+		delete(c.cookies, name)
+	}
+}
+
+func (c *cookieStore) All() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	result := make(map[string]string, len(c.cookies))
+	for k, v := range c.cookies {
+		result[k] = v
+	}
+	return result
+}
+
+// newSessionAwareProxy creates a reverse proxy that captures Set-Cookie headers
+// from upstream responses into the cookieStore and injects stored cookies into
+// all requests. This allows Safari and WKWebView to share auth state.
+func newSessionAwareProxy(target string, store *cookieStore) *httputil.ReverseProxy {
+	u, err := url.Parse(target)
+	if err != nil {
+		log.Fatalf("invalid proxy target %q: %v", target, err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(u)
+
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.Host = u.Host
+
+		// Inject stored cookies. We merge with any existing cookies on the
+		// request by clearing and re-adding, so stored cookies take
+		// precedence (they are the latest from upstream).
+		stored := store.All()
+		if len(stored) > 0 {
+			req.Header.Del("Cookie")
+			for name, value := range stored {
+				req.AddCookie(&http.Cookie{Name: name, Value: value})
+			}
+		}
+	}
+
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		for _, cookie := range resp.Cookies() {
+			store.Set(cookie.Name, cookie.Value)
+		}
+		return nil
+	}
+
+	return proxy
+}
+
+// ─── Safari bridge state ─────────────────────────────────────────────────
+
+// bridgeState tracks the Safari auth bridge completion status. The WKWebView
+// polls /desktop-auth/status while Safari performs the WebAuthn ceremony.
+type bridgeState struct {
+	mu       sync.Mutex
+	status   string // "idle", "pending", "complete", "error"
+	email    string
+	authType string
+}
+
+func newBridgeState() *bridgeState {
+	return &bridgeState{status: "idle"}
+}
+
+func (b *bridgeState) SetPending(email, authType string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.status = "pending"
+	b.email = email
+	b.authType = authType
+}
+
+func (b *bridgeState) SetComplete() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.status = "complete"
+}
+
+func (b *bridgeState) SetError() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.status = "error"
+}
+
+func (b *bridgeState) Status() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.status
 }
 
 // ─── Local service manager ──────────────────────────────────────────────
@@ -272,17 +392,76 @@ func stopLocalServices(procs []*serviceProcess) {
 // ─── Local frontend server ──────────────────────────────────────────────
 
 // startLocalFrontendServer serves embedded frontend assets on localhost and
-// proxies /auth/* and /api/* to the local services. This gives the Wails
-// WebView a real http://localhost origin so WebAuthn passkeys work.
+// proxies /auth/* and /api/* to the local services. It uses a session-aware
+// proxy that captures and injects auth cookies, so Safari and WKWebView share
+// auth state. It also serves the Safari bridge page and status endpoints.
 func startLocalFrontendServer() (*http.Server, error) {
+	store := newCookieStore()
+	bridge := newBridgeState()
+
 	mux := http.NewServeMux()
 
-	authProxy := newReverseProxy("http://127.0.0.1:" + localAuthPort)
+	// Session-aware auth proxy — captures Set-Cookie, injects stored cookies.
+	authProxy := newSessionAwareProxy("http://127.0.0.1:"+localAuthPort, store)
 	mux.HandleFunc("/auth/", authProxy.ServeHTTP)
 
-	apiProxy := newReverseProxy("http://127.0.0.1:" + localProxyPort)
+	// Session-aware API proxy — injects auth cookies so /api/* requests
+	// from WKWebView are authenticated after Safari completes the ceremony.
+	apiProxy := newSessionAwareProxy("http://127.0.0.1:"+localProxyPort, store)
 	mux.HandleFunc("/api/", apiProxy.ServeHTTP)
 
+	// Safari bridge page — performs the WebAuthn ceremony in Safari.
+	mux.HandleFunc("/desktop-auth/bridge", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(bridgeHTML)
+	})
+
+	// Open Safari to the bridge page.
+	mux.HandleFunc("/desktop-auth/open-bridge", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Email    string `json:"email"`
+			AuthType string `json:"authType"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		bridge.SetPending(req.Email, req.AuthType)
+
+		bridgeURL := fmt.Sprintf("http://localhost:%s/desktop-auth/bridge?email=%s",
+			localFrontendPort, url.QueryEscape(req.Email))
+		log.Printf("Opening Safari for %s auth: %s", req.AuthType, bridgeURL)
+
+		// Open Safari (not default browser — must be Safari for Touch ID).
+		cmd := exec.Command("open", "-a", "Safari", bridgeURL)
+		if err := cmd.Run(); err != nil {
+			log.Printf("Failed to open Safari: %v", err)
+			bridge.SetError()
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to open Safari"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"status": "opened"})
+	})
+
+	// Poll status from WKWebView.
+	mux.HandleFunc("/desktop-auth/status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": bridge.Status()})
+	})
+
+	// Called by the bridge page in Safari when the ceremony completes.
+	mux.HandleFunc("/desktop-auth/complete", func(w http.ResponseWriter, r *http.Request) {
+		bridge.SetComplete()
+		log.Printf("Safari auth bridge completed")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "complete"})
+	})
+
+	// Frontend assets with bridge script injection.
 	frontendFS, err := fs.Sub(assets, "frontend/dist")
 	if err != nil {
 		return nil, fmt.Errorf("embed sub: %w", err)
@@ -293,9 +472,27 @@ func startLocalFrontendServer() (*http.Server, error) {
 		if path == "/" {
 			path = "/index.html"
 		}
+
+		// Check if the file exists in the embedded FS.
 		if _, err := fs.Stat(frontendFS, strings.TrimPrefix(path, "/")); err != nil {
+			// SPA fallback to index.html.
 			r.URL.Path = "/"
+			path = "/index.html"
 		}
+
+		// Inject bridge script into index.html.
+		if path == "/index.html" {
+			data, err := fs.ReadFile(frontendFS, "index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			injected := injectBridgeScript(data)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(injected)
+			return
+		}
+
 		fileServer.ServeHTTP(w, r)
 	})
 
@@ -315,19 +512,43 @@ func startLocalFrontendServer() (*http.Server, error) {
 	return srv, nil
 }
 
-func newReverseProxy(target string) *httputil.ReverseProxy {
-	u, err := url.Parse(target)
-	if err != nil {
-		log.Fatalf("invalid proxy target %q: %v", target, err)
-	}
-	proxy := httputil.NewSingleHostReverseProxy(u)
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Host = u.Host
-	}
-	return proxy
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
+
+// injectBridgeScript injects a <script> tag into the HTML that patches
+// navigator.credentials and fetch to use the Safari bridge when running
+// inside WKWebView (which doesn't support WebAuthn platform authenticators).
+func injectBridgeScript(html []byte) []byte {
+	script := `<script>` + bridgeScript + `</script>`
+	// Insert before </head> if present, otherwise before </body>.
+	idx := bytes.Index(html, []byte("</head>"))
+	if idx == -1 {
+		idx = bytes.Index(html, []byte("</body>"))
+	}
+	if idx == -1 {
+		return html
+	}
+	result := make([]byte, 0, len(html)+len(script))
+	result = append(result, html[:idx]...)
+	result = append(result, []byte(script)...)
+	result = append(result, html[idx:]...)
+	return result
+}
+
+// bridgeScript is the JavaScript injected into index.html when served by the
+// local frontend server. It sets a flag that auth.js checks to route
+// WebAuthn ceremonies through the Safari bridge instead of calling
+// navigator.credentials (which doesn't support platform authenticators
+// in WKWebView).
+const bridgeScript = `
+(function() {
+  window.__CHOIR_DESKTOP_BRIDGE = true;
+  console.log('[choir-bridge] Desktop bridge flag set');
+})();
+`
 
 // ─── Main ───────────────────────────────────────────────────────────────
 

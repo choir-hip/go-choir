@@ -56,7 +56,49 @@ function bufferToBase64url(buffer) {
  * @returns {Promise<{ok: boolean, user?: object}>}
  * @throws {Error} On network failure, server error, or ceremony cancellation
  */
+function isDesktopBridge() {
+  return typeof window !== 'undefined' && window.__CHOIR_DESKTOP_BRIDGE === true;
+}
+
+async function openSafariBridge(email, authType) {
+  const res = await fetch('/desktop-auth/open-bridge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, authType }),
+  });
+  if (!res.ok) throw new Error('Failed to open Safari');
+}
+
+async function pollBridgeStatus(timeoutMs = 120000) {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    function check() {
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error('Auth bridge timeout'));
+        return;
+      }
+      fetch('/desktop-auth/status')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.status === 'complete') resolve();
+          else if (data.status === 'error') reject(new Error('Auth bridge error'));
+          else setTimeout(check, 500);
+        })
+        .catch(() => setTimeout(check, 500));
+    }
+    check();
+  });
+}
+
 export async function registerPasskey(email) {
+  // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
+  // WKWebView doesn't support platform authenticators, so we delegate.
+  if (isDesktopBridge()) {
+    await openSafariBridge(email, 'register');
+    await pollBridgeStatus();
+    return { ok: true, user: { id: '', email, createdAt: '' } };
+  }
+
   // Step 1: Begin registration.
   const beginRes = await fetch('/auth/register/begin', {
     method: 'POST',
@@ -139,6 +181,14 @@ export async function registerPasskey(email) {
  * @throws {Error} On network failure, server error, or ceremony cancellation
  */
 export async function loginPasskey(email) {
+  // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
+  // WKWebView doesn't support platform authenticators, so we delegate.
+  if (isDesktopBridge()) {
+    await openSafariBridge(email, 'login');
+    await pollBridgeStatus();
+    return { ok: true, user: { id: '', email, createdAt: '' } };
+  }
+
   // Step 1: Begin login.
   const beginRes = await fetch('/auth/login/begin', {
     method: 'POST',
