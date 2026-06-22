@@ -1,0 +1,82 @@
+version: '3'
+
+vars:
+  APP_NAME: Choir
+  BINARY_NAME: choir-desktop
+  BIN_DIR: bin
+  FRONTEND_DIR: ../../frontend
+  BUILD_DIR: build
+
+tasks:
+  # Build the frontend Svelte assets into frontend/dist
+  build:frontend:
+    desc: Build the Svelte frontend
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run build
+    sources:
+      - "{{.FRONTEND_DIR}}/src/**/*"
+      - "{{.FRONTEND_DIR}}/package.json"
+      - "{{.FRONTEND_DIR}}/svelte.config.js"
+      - "{{.FRONTEND_DIR}}/vite.config.js"
+    generates:
+      - "{{.FRONTEND_DIR}}/dist/**/*"
+
+  # Copy frontend build output into the desktop module's embed directory
+  copy:frontend:
+    desc: Copy frontend dist into embed directory
+    deps: [build:frontend]
+    cmds:
+      - rm -rf frontend/dist
+      - cp -r "{{.FRONTEND_DIR}}/dist" frontend/dist
+    sources:
+      - "{{.FRONTEND_DIR}}/dist/**/*"
+    generates:
+      - frontend/dist/**/*
+
+  # Dev build — builds frontend and runs the app with dev plist
+  dev:
+    desc: Run Choir Desktop in dev mode
+    deps: [copy:frontend]
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+      - "{{.BIN_DIR}}/{{.BINARY_NAME}}"
+
+  # Production build
+  build:
+    desc: Build Choir Desktop binary
+    deps: [copy:frontend]
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=0.1.0 -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+
+  # Package as .app bundle
+  package:
+    desc: Package Choir Desktop as macOS .app bundle
+    deps: [build]
+    cmds:
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
+      - cp "{{.BIN_DIR}}/{{.BINARY_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/"
+      - cp "{{.BUILD_DIR}}/darwin/Info.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/"
+      - echo "Packaged to {{.BIN_DIR}}/{{.APP_NAME}}.app"
+
+  # Ad-hoc sign the app bundle for local testing
+  sign:
+    desc: Ad-hoc sign the .app bundle
+    deps: [package]
+    cmds:
+      - codesign --force --deep --entitlements "{{.BUILD_DIR}}/darwin/entitlements.plist" --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - echo "Ad-hoc signed {{.BIN_DIR}}/{{.APP_NAME}}.app"
+
+  # Clean build artifacts
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+      - rm -rf frontend/dist
+
+  # Run go mod tidy
+  deps:
+    desc: Download and tidy Go dependencies
+    cmds:
+      - go mod tidy

@@ -595,11 +595,11 @@ notes 99 alpha releases over 3+ years with real API churn. Pinning means:
 
 ```text
 go.mod:
-  github.com/wailsapp/wails/v3 v3.0.0-alpha.XXX
+  github.com/wailsapp/wails/v3 v3.0.0-alpha2.104
 ```
 
-Record the pinned version and date in this spec when the build starts. If
-upgrading, record what changed and re-run the spike gate.
+Pinned 2026-06-22. Published 2026-06-18. If upgrading, record what changed
+and re-run the spike gate.
 
 ## Fallback Decision Tree
 

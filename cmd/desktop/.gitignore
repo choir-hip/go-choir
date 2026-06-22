@@ -1,0 +1,11 @@
+# Build artifacts
+bin/
+frontend/dist/*
+!frontend/dist/.gitkeep
+
+# Go
+go.sum
+
+# macOS
+.DS_Store
+*.app
