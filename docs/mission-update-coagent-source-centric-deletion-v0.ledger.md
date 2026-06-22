@@ -166,9 +166,10 @@ Open edges:
 - The D9 deploy itself must land before any deletion proof is meaningful.
   Deploying `be52b194` + `c35502b2` is the cheapest probe of the source-centric
   contract on real data and should, under H_deploy, make the researcher emit
-  `packet.sources` and the loop advance past v3. E5's deploy therefore moves
-  to the front of *observable product proof*, while E1-E4 harden the cutover
-  so a future stale-VM/stale-build scenario cannot silently fall back.
+  `packet.sources` and the loop settle cleanly without reproducing the old v3
+  idle-deadline/revising stall. E5's deploy therefore moves to the front of
+  *observable product proof*, while E1-E4 harden the cutover so a future
+  stale-VM/stale-build scenario cannot silently fall back.
 - E1 survivor contract must still include a loop-advances assertion and a
   rejected-sources-are-loud assertion; these do not depend on H_deploy.
 - E2 data migration still required for existing accounts (legacy findings-
@@ -443,6 +444,8 @@ Evidence reviewed:
 - trajectory `32e2169d-d7f2-4e59-91dd-c7fb4e3494b7`, Texture loop
   `ae1d6f94-0f5f-42aa-b546-631db76eae26`, researcher loop
   `27320029-8d3c-44b9-b571-f36912b44cfe`;
+- final trajectory state `passivated`, `live=false`;
+- final Texture loop state `passivated`;
 - head `body_doc.schema=choir.texture_doc.v1`;
 - three structured `source_ref` nodes and three top-level `source_entities`;
 - no `metadata.source_entities` legacy sidecar;
@@ -458,8 +461,15 @@ Decision: accept the deployed proof for the E5a stall/source criterion. The
 corrected criterion is "must not reproduce the old v3 idle-deadline stall":
 clean completion/passivation before v3 is acceptable when canonical
 `coagent_source_packet.v1` researcher updates, native source nodes, structured
-head, empty pending updates, and no revising hang are all present. Version
-number greater than 3 is not independently required and should not be forced.
+head, empty pending updates, and product/runtime read evidence all show clean
+settlement. Version number greater than 3 is not independently required and
+should not be forced.
+
+Evidence boundary: the callback did not record a passivation/sleep reason for
+the new run, `agent_revision_pending=false`, or signed-in UI toolbar/no-revising
+proof. Final Comet extraction saw a signed-out preview, so this adjudication
+does not claim independent visible UI proof; its clean-settlement claim rests on
+the product/runtime read evidence above.
 
 Heresy delta: `repaired` for the over-specific E5 version-number proxy.
 `introduced`: none. `discovered`: the earlier acceptance wording could drive
@@ -479,3 +489,42 @@ Residual risks:
 
 Receipt: `docs/mission-update-coagent-source-centric-deletion-v0.md`
 §"E5 Acceptance Semantics Clarification - 2026-06-22".
+
+## 2026-06-22 - Pass 8 - E5 Adjudication Evidence Boundary Repair
+
+Claim: the E5 adjudication is ready for second review only if its evidence list
+distinguishes captured runtime settlement from uncaptured UI no-revising proof
+and if live Parallax wording no longer teaches future agents to optimize for a
+literal `current_version_number > 3` threshold.
+
+Move: green docs repair. Added the captured final state fields from the proof
+callback (`trajectory state=passivated`, `live=false`; Texture loop
+`state=passivated`) to the mission doc and this ledger. Explicitly recorded the
+unknowns: no new-run passivation/sleep reason, no `agent_revision_pending=false`
+field, and no signed-in toolbar/no-revising UI proof were captured. The final
+Comet extraction saw a signed-out preview, so the clean-settlement claim rests
+on product/runtime read evidence only.
+
+Also updated the live Domain Ramp/Parallax witness language so "advance past
+v3" remains an old-failure description, not the binding E5 acceptance target.
+The source-centric gates are unchanged: canonical
+`coagent_source_packet.v1` researcher updates, typed sources, native source
+nodes/entities, no legacy metadata source sidecar, no pending worker updates,
+and no privileged Super path for non-execution evidence updates.
+
+Expected delta V: remove the docs evidence gap that caused
+`revise_before_continue` without changing source-centric acceptance.
+
+Actual delta V: docs-only checkpoint repaired; ready for second review.
+
+Evidence:
+- proof callback values already recorded in Pass 7 plus added final states:
+  trajectory `passivated`/`live=false`; Texture loop `passivated`;
+- explicit unknowns: passivation/sleep reason, `agent_revision_pending=false`,
+  and visible signed-in no-revising UI proof.
+
+Heresy delta: `repaired` for the over-specific version-number proxy and for
+the evidence-boundary gap in the adjudication record. `introduced`: none.
+`discovered`: empty pending worker updates alone is insufficient to distinguish
+clean settlement from the old E0 stuck state because E0 also had
+`worker_updates_pending=[]` while `agent_revision_pending` remained truthy.

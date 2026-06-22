@@ -377,8 +377,9 @@ E3-E4 (deletion) → E5 (deploy + accept). The diagnosis reshuffles the
 - **E5's deploy moves to the front of observable product proof.** Deploying
   the already-landed D9 commits (`be52b194`, `c35502b2`) is the first
   observable fix: under H_deploy, it alone should make the researcher emit
-  `packet.sources` and the loop advance past v3. This is the cheapest probe
-  of the source-centric contract on real data.
+  `packet.sources` and the loop settle cleanly without reproducing the old v3
+  idle-deadline/revising stall. This is the cheapest probe of the
+  source-centric contract on real data.
 - **E1-E4 then harden the cutover.** The contract test (E1) pins what the
   deploy just proved; the data migration (E2) and code deletion (E3-E4) remove
   the legacy surfaces so a future stale-VM or stale-build scenario cannot
@@ -511,7 +512,8 @@ patterns).**
 The audit sharpens E5a's acceptance criteria. Under H_deploy, deploying D9
 should produce, on a fresh prompt-bar submission:
 - a `coagent_source_packet.v1` researcher packet (not `Kind: findings`);
-- a revision loop that advances past v3 (not idle_deadline-passivates);
+- a revision loop that settles cleanly rather than idle-deadline-passivating
+  in the old v3/revising state;
 - a structured body_doc head (not raw markdown).
 
 The systemic 25/25 stall means the acceptance probe can run on any doc, not
@@ -674,7 +676,8 @@ idle-deadline-passivates without a clean settlement.
 
 The corrected stall criterion is therefore:
 
-- the run completes or passivates cleanly without a visible revising hang;
+- the run completes or passivates cleanly rather than reproducing the old
+  idle-deadline stuck state;
 - the head is structured `choir.texture_doc.v1`;
 - researcher updates are canonical `coagent_source_packet.v1` /
   `kind=evidence_update` packets with typed `sources`;
@@ -712,15 +715,24 @@ existing `yusefnathanson@me.com` account / owner
   `kind=evidence_update`, and canonical sources `s1`, `s2`, `s3`;
 - `worker_updates_pending` is empty; and
 - no Super agent or `execution_request` path exists for the trajectory.
+- final trajectory state was recorded as `passivated`, `live=false`;
+- final Texture loop state was recorded as `passivated`;
+- the callback did not record a passivation/sleep reason for the new run,
+  `agent_revision_pending=false`, or signed-in UI toolbar/no-revising proof;
+  final Comet extraction saw a signed-out preview, so the clean-settlement
+  claim rests on product/runtime read evidence rather than visible UI proof.
 
 ### Result
 
-This deployed proof satisfies the corrected stall criterion. It also preserves
-the stricter source-centric acceptance: canonical source packets, native source
-nodes, top-level source entities, no legacy metadata source sidecar, and no
-pending worker update residue. The earlier v3 wording should be read as
-"must not reproduce the old v3 idle-deadline stall," not as "must always end
-with `current_version_number > 3`."
+This deployed proof satisfies the corrected product/runtime stall criterion on
+the captured evidence. It also preserves the stricter source-centric
+acceptance: canonical source packets, native source nodes, top-level source
+entities, no legacy metadata source sidecar, and no pending worker update
+residue. The earlier v3 wording should be read as "must not reproduce the old
+v3 idle-deadline stall," not as "must always end with
+`current_version_number > 3`." This checkpoint does not claim independent
+visible no-revising UI proof, because that proof was not captured in the final
+extraction.
 
 ## Domain Ramp
 
@@ -764,9 +776,12 @@ with `current_version_number > 3`."
   `yusefnathanson@me.com`. Verify the run does not reproduce the old v3
   idle-deadline stall: it must settle cleanly with canonical
   `coagent_source_packet.v1` researcher updates, typed sources, structured
-  Texture head/source nodes, no pending worker updates, and no revising hang.
-  A clean earlier completion/passivation is acceptable; do not force extra
-  revisions solely to exceed v3.
+  Texture head/source nodes, no pending worker updates, and product/runtime
+  read evidence that the trajectory/Texture loop settled rather than staying
+  in the old revising state. Capture visible signed-in toolbar/no-revising UI
+  evidence when available, but do not claim it unless it was actually
+  observed. A clean earlier completion/passivation is acceptable; do not force
+  extra revisions solely to exceed v3.
 
 ## Parallax State
 
@@ -776,9 +791,9 @@ mission conjecture: If the legacy `worker_updates`, `research_findings`,
 markdown-source, and Super-backlog surfaces are deleted (with one-time data
 migration/quarantine) so that the source-centric `update_coagent` contract is
 the only live path, then a prompt-bar submission on the existing
-`yusefnathanson@me.com` account will advance past v3 and each revision will
-carry native `packet.sources` rendered as transclusions rather than stalling,
-showing raw markdown, or omitting sources.
+`yusefnathanson@me.com` account will settle cleanly with canonical
+`packet.sources` and native source entities rather than reproducing the old v3
+idle-deadline/revising stall, showing raw markdown, or omitting sources.
 
 deeper goal (G): Texture is Choir's canonical artifact control plane, and the
 source-centric `update_coagent` is the single envelope by which researcher and
@@ -790,10 +805,11 @@ witness/spec (A/S): A deployed staging state on Node B in which (a) the
 survivor contract test is green; (b) `rg` for legacy markers returns only
 migration/rejection code; (c) live mailbox reads fail on empty/invalid
 `packet_json` rather than reconstructing; (d) a fresh prompt-bar submission on
-`yusefnathanson@me.com` advances past v3 with `packet.sources` on each
-researcher update; (e) markdown control tokens do not appear as visible prose;
-(f) non-`execution_request` Super packets neither execute nor linger as
-backlog.
+`yusefnathanson@me.com` settles cleanly with `packet.sources` on each
+researcher update and product/runtime evidence that the trajectory/Texture
+loop is no longer stuck in the old v3 idle-deadline/revising state; (e)
+markdown control tokens do not appear as visible prose; (f)
+non-`execution_request` Super packets neither execute nor linger as backlog.
 
 invariants / qualities / domain ramp (I/Q/D):
 - I1: no live runtime compatibility for old update shapes; one-time data
@@ -807,8 +823,9 @@ invariants / qualities / domain ramp (I/Q/D):
   synthetic users.
 - Q1: deletion is mechanical once the survivor contract is pinned; no
   per-case judgment to be re-litigated.
-- Q2: the revision loop advancing past v3 with sources is the binding
-  acceptance signal, not render correctness against a stuck revision.
+- Q2: the binding acceptance signal is clean source-centric settlement with
+  sources, not a forced version threshold or render correctness against a
+  stuck revision.
 - Domain ramp E0-E5 above.
 
 variant (ranking function) V: open obligations:
@@ -849,9 +866,10 @@ constructs, each one deletion family per commit, each keeping E1 green. E5 is
 the landing loop. Solvency verdict after E0: the first *observable* product
 fix is deploying the already-written D9 commits (`be52b194`, `c35502b2`) —
 under H_deploy that alone should make the researcher emit `packet.sources` and
-the loop advance past v3. E1-E4 then harden the cutover so a future
-stale-VM/stale-build scenario cannot silently fall back to the legacy
-`findings` dialect. Full landing loop (E5) still required for settlement.
+the loop settle cleanly without reproducing the old v3 idle-deadline/revising
+stall. E1-E4 then harden the cutover so a future stale-VM/stale-build scenario
+cannot silently fall back to the legacy `findings` dialect. Full landing loop
+(E5) still required for settlement.
 
 authority / bounds: This paradoc authorizes documentation and planning only.
 E0 is read-only. E1 is additive test code. E2-E5 are red (storage schema,
@@ -922,15 +940,17 @@ next move: two parallel tracks.
 (A) Observable product proof: deploy the already-written D9 commits
 (`be52b194`, `c35502b2`) to Node B so the VM runs current code. Under H_deploy
 this alone should make the researcher emit `packet.sources` and the loop
-advance past v3 on a fresh prompt-bar submission on `yusefnathanson@me.com`.
+settle cleanly on a fresh prompt-bar submission on `yusefnathanson@me.com`
+without reproducing the old v3 idle-deadline/revising stall.
 This is the cheapest real-data probe of the source-centric contract and the
 first half of E5.
 (B) Hardening: E1 — pin the survivor contract as a contract test
 (`update_coagent` rejects legacy top-level fields and invalid nested objects;
 Texture reads only `packet.sources`; Super executes only
 `kind=execution_request`; revisions carry `packet.sources` on every researcher
-update; the loop advances past v3; rejected sources are reported, not silently
-swallowed at `texture_evidence_sources.go:163-170`). Then E2 (one-time data
+update; the loop settles cleanly without the old v3 idle-deadline/revising
+stall; rejected sources are reported, not silently swallowed at
+`texture_evidence_sources.go:163-170`). Then E2 (one-time data
 migration/quarantine), then E3-E4 deletion in families. Then the second half
 of E5 (deletion-proof staging acceptance on the existing account).
 
