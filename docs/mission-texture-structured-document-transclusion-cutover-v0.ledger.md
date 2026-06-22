@@ -1450,3 +1450,37 @@ import lookup disabled by -mod=vendor`.
 Open edge: add `internal/texturedoc` to every affected `flake.nix` Go service
 source filter, prove focused Nix package builds locally, then push a repair and
 rerun CI/deploy identity before staging browser proof.
+
+## 2026-06-21 - Pass 38 - D7 Deploy Source Filter Repair
+
+Claim: The staging deploy-source blocker is repaired if every Node B service
+whose transitive imports reach structured Texture code includes
+`internal/texturedoc` in its filtered Nix package source.
+
+Move: construct + probe. Added `internal/texturedoc` to `flake.nix`
+`internalDirs` for proxy, platformd, gateway, sourcecycled, and sandbox.
+Evaluated each affected `packages.x86_64-linux.<service>.src` filtered source
+output and inspected it for `internal/texturedoc/schema.go` and
+`internal/texturedoc/projection.go`.
+
+Expected delta V: unblock CI/deploy identity, with no product-behavior variant
+decrease until CI and staging acceptance pass.
+
+Actual delta V: local filtered-source evidence supports the repair. Full
+x86_64 package compilation could not run locally because this Mac has no
+available `x86_64-linux` builder; CI remains the compilation oracle.
+
+Receipts:
+`flake.nix`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`nix eval --raw .#packages.x86_64-linux.<service>.src` plus `find` over
+`internal/texturedoc` for proxy, platformd, sandbox, gateway, and sourcecycled;
+`rg -o 'github.com/yusefmosiah/go-choir/internal/[A-Za-z0-9_/-]+'` over the
+evaluated filtered sources;
+`git diff --check && nix flake check --no-build`.
+
+Open edge: commit and push the repair, monitor CI/deploy identity, then run
+deployed Comet/browser staging proof.

@@ -226,6 +226,7 @@
             "internal/proxy"
             "internal/server"
             "internal/sourcecontract"
+            "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
             "internal/wirepublish"
@@ -280,6 +281,7 @@
             "internal/sourcecontract"
             "internal/sourcefetch"
             "internal/store"
+            "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
             "internal/wirepublish"
@@ -295,6 +297,7 @@
             "internal/platform"
             "internal/server"
             "internal/sourcecontract"
+            "internal/texturedoc"
           ];
         };
         sourcecycled = mkGoService {
@@ -317,6 +320,7 @@
             "internal/sourcefetch"
             "internal/sources"
             "internal/store"
+            "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
             "internal/wirepublish"
@@ -340,6 +344,7 @@
             "internal/sourcecontract"
             "internal/sourcefetch"
             "internal/store"
+            "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
             "internal/wirepublish"

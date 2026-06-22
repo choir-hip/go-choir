@@ -751,9 +751,9 @@ dead source-repair/source-attachment frontend affordances, publication fallback
 markdown source-link upgrading, and runtime use of `metadata.source_entities` as
 live source context. The remaining local deletion/classification edge is prompt
 contract residue that still teaches old `patch_texture` replace/append JSON.
-The landing loop is currently blocked by a deploy-source allow-list failure:
-the Nix per-service source filter excludes the new `internal/texturedoc`
-package from services that import it, so staging cannot build the pushed repair.
+The landing loop found and repaired a deploy-source allow-list failure: the Nix
+per-service source filter excluded the new `internal/texturedoc` package from
+services that import it, so staging could not build the pushed repair.
 D5 multimedia reduced the variant locally, but its independent review agents
 stalled; retain that caveat until staging proof or a later reviewer checks the
 accumulated multimedia diff.
@@ -834,9 +834,13 @@ markdown link/source token rejection; RunAcceptanceRecord at staging-smoke-level
 or higher if platform behavior changes. Landing evidence for pushed commit
 `5c057afc63adf6df8db9a881c92942586c70fa51` currently includes GitHub CI run
 `27922543313`, whose only failed job is `Deploy to Staging (Node B)` because
-Nix package builds cannot resolve
+Nix package builds could not resolve
 `github.com/yusefmosiah/go-choir/internal/texturedoc` under the filtered source
-archive.
+archive. The local repair evidence for the follow-up fix is filtered-source
+inspection of the `packages.x86_64-linux` service source outputs for proxy,
+platformd, sandbox, gateway, and sourcecycled plus `nix flake check --no-build`;
+full x86_64 package compilation is deferred to CI because this Mac has no
+available `x86_64-linux` builder.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -917,9 +921,9 @@ turning markdown `source:` links into native publication source refs, rejects
 publication from top-level structured source entities instead of metadata
 sidecars, preserves reader snapshot/status fields in structured source entities,
 and converts publication/proxy/browser publication fixtures to structured source
-refs. The landing loop discovered that `flake.nix` service source filters still
-omit `internal/texturedoc`, so deployed Nix builds fail before staging identity
-can advance. D5 checkpoint
+refs. The landing loop discovered and repaired that `flake.nix` service source
+filters still omitted `internal/texturedoc`, so deployed Nix builds failed
+before staging identity could advance. D5 checkpoint
 records the specific sidecars/pathways repaired locally: runtime
 `media_source_refs`, prompt context that prefers those refs, and frontend
 media-ref synthesis/rendering outside top-level structured entities. D5
@@ -928,13 +932,11 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`. Markdown `[label](source:id)` parsing remains only as historical
 fallback for artifacts without structured body data.
 
-next move: commit this deploy-source blocker checkpoint, then add
-`internal/texturedoc` to the Nix Go service source filters for every service
-that imports structured Texture packages. After CI/deploy identity is green,
-run Comet/browser staging proof. Do not claim settlement until staging proves
-source creation, agent/human edit preservation, multimedia source expansion,
-publication/export, and markdown-link/source-token rejection from the deployed
-product path.
+next move: commit the deploy-source filter repair, push, monitor CI/deploy
+identity, then run Comet/browser staging proof. Do not claim settlement until
+staging proves source creation, agent/human edit preservation, multimedia source
+expansion, publication/export, and markdown-link/source-token rejection from the
+deployed product path.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -1635,3 +1637,25 @@ Required repair:
   platformd, gateway, sourcecycled, and sandbox.
 - Prove with focused `nix build` package checks before pushing the repair, then
   rerun CI/deploy and staging acceptance.
+
+Repair:
+
+- `flake.nix` now includes `internal/texturedoc` in the `internalDirs`
+  allow-list for proxy, platformd, gateway, sourcecycled, and sandbox.
+- Local proof inspected the evaluated filtered source outputs for
+  `packages.x86_64-linux.proxy`, `.platformd`, `.sandbox`, `.gateway`, and
+  `.sourcecycled`; each now contains `internal/texturedoc/schema.go` and
+  `internal/texturedoc/projection.go`.
+- Local x86_64 package compilation could not run on this Mac because no
+  `x86_64-linux` builder was available. CI/deploy remains the compilation and
+  activation oracle.
+
+Local evidence:
+
+- `nix eval --raw .#packages.x86_64-linux.<service>.src` plus `find` over
+  `internal/texturedoc` for proxy, platformd, sandbox, gateway, and
+  sourcecycled.
+- `rg -o 'github.com/yusefmosiah/go-choir/internal/[A-Za-z0-9_/-]+'` over the
+  evaluated filtered source outputs confirmed the `internal/texturedoc` import
+  family is present in each affected source archive.
+- `git diff --check && nix flake check --no-build`.
