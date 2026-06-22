@@ -369,7 +369,9 @@ func validSourceTargetKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
 	case "web_url", "url", "source_service_item", "content_item", "image", "video", "audio", "pdf",
 		"transcript", "texture_span", "publication_span", "source_viewer_artifact",
-		"reader_artifact", "file_artifact", "publication_version":
+		"reader_artifact", "file_artifact", "publication_version", "command_output",
+		"shell_session", "diff_hunk", "patch", "test_run", "app_change_package",
+		"screenshot", "video_artifact", "benchmark_log":
 		return true
 	default:
 		return false

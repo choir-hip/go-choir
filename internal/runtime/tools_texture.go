@@ -1161,7 +1161,15 @@ func structuredSourceEntityFromRuntimeSource(entity textureSourceEntity) texture
 		Target: texturedoc.SourceTarget{
 			Kind: targetKind,
 			URI:  strings.TrimSpace(firstNonEmpty(entity.Target.CanonicalURL, entity.Target.URL)),
-			ID:   strings.TrimSpace(firstNonEmpty(entity.Target.ItemID, entity.Target.ContentID, entity.Target.DocID, entity.Target.RevisionID, entity.EntityID)),
+			ID: strings.TrimSpace(firstNonEmpty(
+				entity.Target.ItemID,
+				entity.Target.ContentID,
+				entity.Target.FilePath,
+				entity.Target.PublicRecordID,
+				entity.Target.DocID,
+				entity.Target.RevisionID,
+				entity.EntityID,
+			)),
 		},
 		Selectors:  structuredSourceSelectorsFromRuntime(entity.Selectors),
 		Display:    texturedoc.SourceDisplay{Mode: displayMode, Title: strings.TrimSpace(entity.Label)},
@@ -1176,7 +1184,8 @@ func structuredSourceTargetKind(entity textureSourceEntity) string {
 		return "source_service_item"
 	case "content_item":
 		return "content_item"
-	case "image", "video", "audio", "pdf", "transcript", "texture_span", "publication_span", "source_viewer_artifact", "reader_artifact", "file_artifact":
+	case "image", "video", "audio", "pdf", "transcript", "texture_span", "publication_span", "source_viewer_artifact", "reader_artifact", "file_artifact",
+		"command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log":
 		return strings.TrimSpace(entity.Target.TargetKind)
 	case "url", "web_url":
 		return "web_url"

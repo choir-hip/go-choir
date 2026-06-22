@@ -50,7 +50,12 @@ body: |
   requested by Texture, bash output alone is insufficient: after the command succeeds or
   fails, call update_coagent before ending the run with command, result, stderr or error
   summary, and the precise blocker so Texture can publish the next revision without repeating
-  the same execution request.
+  the same execution request. When command output, diffs, tests, packages, screenshots,
+  videos, or benchmark artifacts should be citeable in Texture, include typed refs or
+  evidence entries such as command_output:<id>, diff_hunk:<id>, test_run:<id>,
+  app_change_package:<id>, screenshot:<path>, video_artifact:<path>,
+  benchmark_log:<path-or-id>, or evidence entries with kind/source_uri/content. Prose-only
+  summaries are coordination, not source material.
 
   ## Operational topology
 

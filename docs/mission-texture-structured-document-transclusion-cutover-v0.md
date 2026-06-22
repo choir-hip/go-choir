@@ -1842,3 +1842,40 @@ Required repair:
   refs must expose those as source entities that Texture can cite/transclude;
   a packet containing only prose must remain non-citeable and should not be
   rendered as reader-facing metadata.
+
+Repair slice:
+
+- `update_coagent` source collation is now role-neutral for typed source
+  substrate. Runtime still refuses prose scraping and raw URL promotion, but it
+  now mints native source entities from typed execution refs/evidence in
+  `refs`, path-shaped `artifacts`, bare `tests`, and evidence records.
+- Added execution target kinds to the structured Texture validator:
+  `command_output`, `shell_session`, `diff_hunk`, `patch`, `test_run`,
+  `app_change_package`, `screenshot`, `video_artifact`, and `benchmark_log`.
+  These target kinds round-trip through runtime-to-structured source conversion
+  with durable IDs/file paths and open through existing source/window, file,
+  image, or video surfaces.
+- Tightened researcher, super, `update_coagent`, and Texture prompts:
+  citable packets must include typed source substrate; prose-only findings and
+  raw URLs are coordination only; partial worker findings must not be pasted as
+  process metadata, source-status notes, or checkpoint labels in reader-facing
+  canonical document bodies.
+- Regression coverage now includes command-output evidence records, super-style
+  `update_coagent` refs/artifacts/tests becoming source entities without
+  scraping findings prose, and structured-doc validation/projection for
+  execution evidence targets.
+
+Repair evidence:
+
+- `nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`
+- `nix develop -c go test ./internal/runtime -run 'TestEvidenceRecordToSourceEntity|TestWorkerUpdateExecutionEvidence|TestPendingUpdateRefs|TestTextureCoagent|TestTexturePrompt|TestSystemPrompt|TestUpdateCoagent' -count=1`
+- `git diff --check`
+
+Remaining proof:
+
+- Land this behavior change through CI/deploy, then run a staging product-path
+  Texture proof that sends at least one researcher-style typed source packet and
+  one super-style execution evidence packet through `update_coagent`, verifies
+  the next Texture revision has structured `source_entities`, and verifies the
+  visible document uses native source refs/embeds without clickable markdown
+  source links or process-metadata body prose.

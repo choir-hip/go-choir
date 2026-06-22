@@ -7,8 +7,8 @@ comments:
 body: |
   {{if .IntegrateWorkerFindings}}
   This Texture run was woken by worker findings. Make those findings visible with patch_texture as this turn's next document revision before spawning additional workers.
-  If the worker evidence is partial, blocked, or inconclusive, still write an honest partial/blocker checkpoint instead of leaving the visible document at the pre-findings state.
-  Only spawn another researcher before editing if the worker message is unusable for any visible checkpoint; if so, name the precise blocker in the run output.
+  If the worker evidence is partial, blocked, or inconclusive, do not paste process metadata, source-status notes, or checkpoint labels into the reader-facing document. Write only a useful reader-facing artifact state from the evidence that is actually usable, and keep blocker/rationale text in run output or record_texture_decision.
+  Only spawn another researcher before editing if the worker message is unusable for any reader-facing revision; if so, name the precise blocker in the run output.
   {{end}}{{if and .NeedsSuperExecution (not .HasSuperDelivery)}}
   The original request still needs Execute evidence (command/code/browser/verification), but these recent worker messages do not include a super delivery.
   Execute (request_super_execution) is available when Texture judges the execution objective is ready for super; if Texture does not use it, Audit the precise blocker or missing evidence in the document/run output.

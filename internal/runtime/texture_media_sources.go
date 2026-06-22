@@ -445,8 +445,12 @@ func runtimeSourceEntityFromStructured(entity texturedoc.SourceEntity) textureSo
 	case "source_service_item":
 		runtimeEntity.Kind = "source_service_item"
 		runtimeEntity.Target.ItemID = targetID
-	case "content_item", "reader_artifact", "source_viewer_artifact", "file_artifact":
+	case "content_item", "reader_artifact", "source_viewer_artifact":
 		runtimeEntity.Target.ContentID = targetID
+	case "file_artifact", "patch", "screenshot", "video_artifact", "benchmark_log":
+		runtimeEntity.Target.FilePath = targetID
+	case "command_output", "shell_session", "diff_hunk", "test_run", "app_change_package":
+		runtimeEntity.Target.PublicRecordID = targetID
 	case "texture", "texture_revision", "texture_span":
 		runtimeEntity.Target.DocID = targetID
 	case "publication_version", "publication_span":
@@ -691,6 +695,12 @@ func sourceEntityKey(entity textureSourceEntity) string {
 	if entity.Target.ContentID != "" {
 		return entity.Kind + "|" + entity.Target.ContentID
 	}
+	if entity.Target.FilePath != "" {
+		return entity.Kind + "|" + entity.Target.FilePath
+	}
+	if entity.Target.PublicRecordID != "" {
+		return entity.Kind + "|" + entity.Target.PublicRecordID
+	}
 	if entity.EntityID != "" {
 		return entity.Kind + "|" + entity.EntityID
 	}
@@ -775,6 +785,14 @@ func formatTextureSourceEntitiesForPrompt(entities []textureSourceEntity) string
 		if entity.Target.ContentID != "" {
 			b.WriteString(" content_id=")
 			b.WriteString(entity.Target.ContentID)
+		}
+		if entity.Target.FilePath != "" {
+			b.WriteString(" file_path=")
+			b.WriteString(entity.Target.FilePath)
+		}
+		if entity.Target.PublicRecordID != "" {
+			b.WriteString(" public_record_id=")
+			b.WriteString(entity.Target.PublicRecordID)
 		}
 		if entity.Target.ItemID != "" {
 			b.WriteString(" item_id=")

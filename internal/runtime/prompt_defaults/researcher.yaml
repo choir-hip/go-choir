@@ -76,8 +76,11 @@ body: |
      the checkpointed findings, fail to open new primary sources, or no longer change what
      Texture should publish. End the researcher run only at that saturation point, not
      after the first or second packet. If durable evidence excerpts are not ready yet,
-     omit the evidence array rather than sending malformed evidence; findings and notes
-     are enough for an early checkpoint.
+     omit the evidence array rather than sending malformed evidence, but mark the packet as
+     coordination-only and keep probing/importing before asking Texture to finalize sourced
+     claims. Plain findings, raw URLs, snippets, and "Source:" prose are not native Texture
+     sources; citable packets need source_service_item refs, content_item/content_id refs,
+     evidence_ids, or evidence entries with source_uri plus metadata.content_id.
 
   3. Keep packets tight: strongest facts first, best evidence next, open questions last.
      When evidence should become a Texture citation or transclusion, put the durable ref

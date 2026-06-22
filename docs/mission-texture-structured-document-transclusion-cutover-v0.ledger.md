@@ -1590,3 +1590,37 @@ source target kinds for commands, diffs, tests, packages, screenshots, videos,
 and benchmark artifacts. Texture needs prompt/tool pressure to keep
 checkpoint/provenance prose out of reader-facing canonical documents when no
 native source substrate exists.
+
+## 2026-06-22 - Pass 41 - D8 update_coagent Source Envelope Repair
+
+Claim: `update_coagent` can be the shared source/evidence envelope for
+researcher and execution coagents without reintroducing source-link markdown or
+prose scraping.
+
+Move: implement role-neutral typed source collation. Runtime still ignores
+ordinary findings text and raw URLs as native source substrate, but it now
+recognizes typed execution refs/evidence from coagent updates:
+`command_output`, `shell_session`, `diff_hunk`, `patch`, `test_run`,
+`app_change_package`, `screenshot`, `video_artifact`, `benchmark_log`, and
+`file_artifact`. Structured Texture validation accepts these target kinds, and
+runtime-to-structured conversion preserves public record ids and file paths.
+
+Expected delta V: native Texture source entities can come from researcher
+source-service/content/evidence refs and from super/vsuper/co-super command,
+diff, test, package, screenshot, video, benchmark, or file evidence passed
+through `update_coagent`; prose-only packets remain non-citeable.
+
+Actual delta V: local focused tests pass. Prompt/tool contracts now say citable
+updates require typed refs/evidence and that process/source-status checkpoint
+text belongs in run output or decisions rather than reader-facing canonical
+document prose.
+
+Evidence:
+`nix develop -c go test ./internal/sourcecontract ./internal/texturedoc`;
+`nix develop -c go test ./internal/runtime -run 'TestEvidenceRecordToSourceEntity|TestWorkerUpdateExecutionEvidence|TestPendingUpdateRefs|TestTextureCoagent|TestTexturePrompt|TestSystemPrompt|TestUpdateCoagent' -count=1`;
+`git diff --check`.
+
+Open edge: deploy and staging product-path proof are still required. The proof
+must verify a typed researcher update and typed super execution update both
+produce structured `source_entities` and native citations/transclusions in
+Texture without markdown links or reader-facing process metadata.

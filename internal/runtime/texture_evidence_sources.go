@@ -61,6 +61,7 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 	quote := evidenceTextQuote(rec)
 	contentID := evidenceContentID(rec)
 	sourceURI := strings.TrimSpace(rec.SourceURI)
+	executionKind, executionID := executionEvidenceTarget(rec)
 
 	var entity textureSourceEntity
 	switch {
@@ -82,22 +83,32 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 		entity.Kind = "content_item"
 		entity.Target = textureSourceEntityTarget{TargetKind: "content_item", URL: sourceURI, CanonicalURL: sourceURI}
 		entity.Selectors = []textureSourceEntitySelector{{SelectorKind: "whole_resource"}}
+	case executionKind != "" && executionID != "":
+		entity = executionEvidenceSourceEntity(executionKind, executionID, strings.TrimSpace(firstNonEmpty(rec.Title, rec.SourceURI, rec.EvidenceID)), strings.TrimSpace(rec.AgentID))
 	default:
 		return textureSourceEntity{}
 	}
 
-	entity.Label = firstNonEmpty(strings.TrimSpace(rec.Title), contentID, sourceURI, "Researcher source")
-	entity.Display = textureSourceEntityDisplay{
-		InlineMode:       "collapsed_citation",
-		ExpandedMode:     "source_card",
-		OpenSurface:      sourcecontract.OpenSurfaceSource,
-		DefaultCollapsed: true,
+	if entity.Label == "" {
+		entity.Label = firstNonEmpty(strings.TrimSpace(rec.Title), contentID, sourceURI, "Coagent source")
 	}
-	entity.Evidence = textureSourceEntityEvidence{State: "available", ResearchState: "represented"}
-	entity.Provenance = textureSourceEntityProvenance{
-		CreatedBy:           "researcher",
-		RightsScope:         "private_user_source",
-		UntrustedSourceText: true,
+	if entity.Display.OpenSurface == "" {
+		entity.Display = textureSourceEntityDisplay{
+			InlineMode:       "collapsed_citation",
+			ExpandedMode:     "source_card",
+			OpenSurface:      sourcecontract.OpenSurfaceSource,
+			DefaultCollapsed: true,
+		}
+	}
+	if entity.Evidence.State == "" {
+		entity.Evidence = textureSourceEntityEvidence{State: "available", ResearchState: "represented"}
+	}
+	if entity.Provenance.CreatedBy == "" {
+		entity.Provenance = textureSourceEntityProvenance{
+			CreatedBy:           firstNonEmpty(strings.TrimSpace(rec.AgentID), "coagent"),
+			RightsScope:         "private_user_source",
+			UntrustedSourceText: true,
+		}
 	}
 	return entity
 }
@@ -131,6 +142,8 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Runtime, ownerID, 
 			return textureSourceEntity{}
 		}
 		return evidenceRecordToSourceEntity(rec)
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+		return executionEvidenceSourceEntity(key, value, value, "coagent")
 	default:
 		return textureSourceEntity{}
 	}
@@ -168,8 +181,16 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, 
 			seenEntity[key] = true
 			entities = append(entities, entity)
 		}
-		for _, ref := range update.Refs {
+		for _, ref := range workerUpdateSourceRefCandidates(update) {
 			entity := sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, ref)
+			key := sourceEntityKey(entity)
+			if entity.EntityID == "" || key == "" || seenEntity[key] {
+				continue
+			}
+			seenEntity[key] = true
+			entities = append(entities, entity)
+		}
+		for _, entity := range workerUpdateDirectSourceEntities(update) {
 			key := sourceEntityKey(entity)
 			if entity.EntityID == "" || key == "" || seenEntity[key] {
 				continue
@@ -179,6 +200,49 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, 
 		}
 	}
 	return entities
+}
+
+func workerUpdateSourceRefCandidates(update types.WorkerUpdateRecord) []string {
+	out := make([]string, 0, len(update.Refs)+len(update.Artifacts)+len(update.Tests))
+	out = append(out, update.Refs...)
+	for _, artifact := range update.Artifacts {
+		artifact = strings.TrimSpace(artifact)
+		if artifact == "" {
+			continue
+		}
+		if key, _ := splitTypedWorkerUpdateRef(artifact); key != "" {
+			out = append(out, artifact)
+			continue
+		}
+		if looksLikeArtifactPath(artifact) {
+			out = append(out, "file_artifact:"+artifact)
+		}
+	}
+	for _, test := range update.Tests {
+		test = strings.TrimSpace(test)
+		if test == "" {
+			continue
+		}
+		if key, _ := splitTypedWorkerUpdateRef(test); key != "" {
+			out = append(out, test)
+		}
+	}
+	return out
+}
+
+func workerUpdateDirectSourceEntities(update types.WorkerUpdateRecord) []textureSourceEntity {
+	out := []textureSourceEntity{}
+	for _, test := range update.Tests {
+		test = strings.TrimSpace(test)
+		if test == "" {
+			continue
+		}
+		if key, _ := splitTypedWorkerUpdateRef(test); key != "" {
+			continue
+		}
+		out = append(out, executionEvidenceSourceEntity("test_run", stableSourceEntityID("test_run_text", test), test, firstNonEmpty(update.AgentID, update.Role)))
+	}
+	return out
 }
 
 func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context, ownerID, targetAgentID string, updateIDs []string, limit int) []textureSourceEntity {
@@ -271,9 +335,146 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "content_id"
 	case "evidence", "evidence_id":
 		return "evidence"
+	case "command", "command_output", "cmd_output", "shell_command":
+		return "command_output"
+	case "shell", "shell_session", "terminal_session":
+		return "shell_session"
+	case "diff", "diff_hunk", "patch_hunk":
+		return "diff_hunk"
+	case "patch":
+		return "patch"
+	case "test", "tests", "test_run", "test_result":
+		return "test_run"
+	case "app_change_package", "change_package", "package":
+		return "app_change_package"
+	case "screenshot", "image_artifact":
+		return "screenshot"
+	case "video_artifact", "video_proof":
+		return "video_artifact"
+	case "benchmark", "benchmark_log":
+		return "benchmark_log"
+	case "file", "file_artifact", "artifact":
+		return "file_artifact"
 	default:
 		return ""
 	}
+}
+
+func executionEvidenceTarget(rec types.EvidenceRecord) (string, string) {
+	if key, value := splitTypedWorkerUpdateRef(rec.SourceURI); key != "" && executionTargetKind(key) {
+		return key, value
+	}
+	kind := normalizeWorkerUpdateRefKey(rec.Kind)
+	if !executionTargetKind(kind) {
+		return "", ""
+	}
+	identity := firstNonEmpty(strings.TrimSpace(rec.SourceURI), strings.TrimSpace(rec.EvidenceID))
+	if identity == "" {
+		return "", ""
+	}
+	if key, value := splitTypedWorkerUpdateRef(identity); key != "" && executionTargetKind(key) {
+		return key, value
+	}
+	return kind, identity
+}
+
+func executionTargetKind(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+		return true
+	default:
+		return false
+	}
+}
+
+func executionEvidenceSourceEntity(kind, identity, label, createdBy string) textureSourceEntity {
+	kind = strings.TrimSpace(kind)
+	identity = strings.TrimSpace(identity)
+	if !executionTargetKind(kind) || identity == "" {
+		return textureSourceEntity{}
+	}
+	entity := textureSourceEntity{
+		EntityID:  stableSourceEntityID(kind, identity),
+		Kind:      kind,
+		Label:     firstNonEmpty(strings.TrimSpace(label), executionSourceDefaultLabel(kind)),
+		Target:    textureSourceTargetForExecution(kind, identity),
+		Selectors: []textureSourceEntitySelector{{SelectorKind: sourcecontract.SelectorKindWholeResource}},
+		Display: textureSourceEntityDisplay{
+			InlineMode:       "collapsed_citation",
+			ExpandedMode:     "source_window",
+			OpenSurface:      executionSourceOpenSurface(kind),
+			DefaultCollapsed: true,
+		},
+		Evidence: textureSourceEntityEvidence{State: sourcecontract.EvidenceStateAvailable, ResearchState: "represented"},
+		Provenance: textureSourceEntityProvenance{
+			CreatedBy:           firstNonEmpty(strings.TrimSpace(createdBy), "coagent"),
+			RightsScope:         "private_user_source",
+			UntrustedSourceText: true,
+		},
+	}
+	return entity
+}
+
+func textureSourceTargetForExecution(kind, identity string) textureSourceEntityTarget {
+	target := textureSourceEntityTarget{TargetKind: kind}
+	switch kind {
+	case "file_artifact", "screenshot", "video_artifact", "benchmark_log", "patch":
+		target.FilePath = identity
+	default:
+		target.PublicRecordID = identity
+	}
+	return target
+}
+
+func executionSourceOpenSurface(kind string) string {
+	switch kind {
+	case "screenshot":
+		return sourcecontract.OpenSurfaceImage
+	case "video_artifact":
+		return sourcecontract.OpenSurfaceVideo
+	case "file_artifact", "benchmark_log", "patch":
+		return sourcecontract.OpenSurfaceFile
+	default:
+		return sourcecontract.OpenSurfaceSourceWindow
+	}
+}
+
+func executionSourceDefaultLabel(kind string) string {
+	switch kind {
+	case "command_output":
+		return "Command output"
+	case "shell_session":
+		return "Shell session"
+	case "diff_hunk":
+		return "Diff hunk"
+	case "patch":
+		return "Patch"
+	case "test_run":
+		return "Test run"
+	case "app_change_package":
+		return "AppChangePackage"
+	case "screenshot":
+		return "Screenshot"
+	case "video_artifact":
+		return "Video artifact"
+	case "benchmark_log":
+		return "Benchmark log"
+	case "file_artifact":
+		return "File artifact"
+	default:
+		return "Coagent source"
+	}
+}
+
+func looksLikeArtifactPath(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsAny(value, "\r\n") {
+		return false
+	}
+	return strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "./") ||
+		strings.HasPrefix(value, "../") ||
+		strings.Contains(value, "/")
 }
 
 func isHTTPURL(value string) bool {

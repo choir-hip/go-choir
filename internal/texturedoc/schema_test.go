@@ -255,6 +255,50 @@ func TestMultimediaTargetsUseSourceEntitiesNotBodySyntaxes(t *testing.T) {
 	}
 }
 
+func TestExecutionEvidenceTargetsUseSourceEntities(t *testing.T) {
+	entities := validEntities()
+	executionTargets := []struct {
+		id          string
+		targetKind  string
+		title       string
+		openSurface string
+	}{
+		{"src-command", "command_output", "go test output", sourcecontract.OpenSurfaceSourceWindow},
+		{"src-shell", "shell_session", "terminal session", sourcecontract.OpenSurfaceSourceWindow},
+		{"src-diff", "diff_hunk", "runtime diff", sourcecontract.OpenSurfaceSourceWindow},
+		{"src-patch", "patch", "candidate patch", sourcecontract.OpenSurfaceFile},
+		{"src-test", "test_run", "focused test run", sourcecontract.OpenSurfaceSourceWindow},
+		{"src-package", "app_change_package", "change package", sourcecontract.OpenSurfaceSourceWindow},
+		{"src-screenshot", "screenshot", "verification screenshot", sourcecontract.OpenSurfaceImage},
+		{"src-video-artifact", "video_artifact", "verification video", sourcecontract.OpenSurfaceVideo},
+		{"src-benchmark", "benchmark_log", "benchmark log", sourcecontract.OpenSurfaceFile},
+	}
+	doc := validDoc()
+	for _, target := range executionTargets {
+		entities = append(entities, sourceEntity(target.id, target.targetKind, target.title, "source_window", target.openSurface))
+		doc.Doc.Content = append(doc.Doc.Content, sourceEmbed("embed-"+target.id, target.id, "source_window"))
+	}
+	if err := Validate(doc, entities); err != nil {
+		t.Fatalf("Validate() rejected execution source targets: %v", err)
+	}
+	projection, err := Project(doc, entities)
+	if err != nil {
+		t.Fatalf("Project() error = %v", err)
+	}
+	for _, target := range executionTargets {
+		found := false
+		for _, embed := range projection.SourceEmbeds {
+			if embed.SourceEntityID == target.id && embed.TargetKind == target.targetKind {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("projection missing execution source target %#v in %#v", target, projection.SourceEmbeds)
+		}
+	}
+}
+
 func validDoc() StructuredTextureDoc {
 	return StructuredTextureDoc{
 		Schema: SchemaV1,

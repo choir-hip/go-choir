@@ -102,6 +102,28 @@ func TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch(t *testing.T
 	}
 }
 
+func TestEvidenceRecordToSourceEntity_CommandOutputIsAddressable(t *testing.T) {
+	rec := types.EvidenceRecord{
+		EvidenceID: "ev-command",
+		OwnerID:    "user-command",
+		AgentID:    "super:verify",
+		Kind:       "command_output",
+		Title:      "Focused runtime tests",
+		SourceURI:  "command_output:cmd-runtime-source-handoff",
+		Content:    "PASS",
+	}
+	entity := evidenceRecordToSourceEntity(rec)
+	if entity.EntityID == "" || entity.Kind != "command_output" {
+		t.Fatalf("unexpected command output entity %#v", entity)
+	}
+	if entity.Target.TargetKind != "command_output" || entity.Target.PublicRecordID != "cmd-runtime-source-handoff" {
+		t.Fatalf("unexpected command target %#v", entity.Target)
+	}
+	if entity.Display.OpenSurface != "source_window" || entity.Provenance.CreatedBy != "super:verify" {
+		t.Fatalf("unexpected command display/provenance %#v", entity)
+	}
+}
+
 func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 	t.Parallel()
 	rt, _ := testAPISetup(t)
@@ -188,6 +210,70 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 	for _, entity := range entities {
 		if entity.Target.ItemID == "srcitem_ignored" {
 			t.Fatalf("free-form prose ref was scraped into source entity: %#v", entities)
+		}
+	}
+}
+
+func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(t *testing.T) {
+	t.Parallel()
+	rt, _ := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-execution-sources"
+
+	updates := []types.WorkerUpdateRecord{{
+		UpdateID:      "update-super-execution-sources",
+		OwnerID:       ownerID,
+		AgentID:       "super:execution",
+		TargetAgentID: "texture:doc-execution",
+		ChannelID:     "doc-execution",
+		Role:          AgentProfileSuper,
+		Kind:          "verification",
+		Summary:       "implementation and verification evidence ready",
+		Findings: []string{
+			"Do not scrape command_output:prose-only or diff_hunk:prose-only from ordinary findings.",
+		},
+		Refs: []string{
+			"command_output:cmd-runtime-tests",
+			"diff_hunk:diff-texture-evidence",
+			"app_change_package:acp-structured-texture",
+		},
+		Artifacts: []string{
+			"./proof/screenshots/texture-sources.png",
+			"benchmark_log:bench-runtime-shards",
+		},
+		Tests: []string{
+			"go test ./internal/runtime -run TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping -count=1: passed",
+		},
+		Content:   "verification evidence ready",
+		CreatedAt: now,
+	}}
+
+	entities := rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
+	assertExecutionEntity(t, entities, "command_output", "cmd-runtime-tests", "")
+	assertExecutionEntity(t, entities, "diff_hunk", "diff-texture-evidence", "")
+	assertExecutionEntity(t, entities, "app_change_package", "acp-structured-texture", "")
+	assertExecutionEntity(t, entities, "file_artifact", "./proof/screenshots/texture-sources.png", "")
+	assertExecutionEntity(t, entities, "benchmark_log", "bench-runtime-shards", "")
+	foundTest := false
+	for _, entity := range entities {
+		if entity.Kind != "test_run" {
+			continue
+		}
+		foundTest = strings.Contains(entity.Label, "go test ./internal/runtime")
+		if foundTest {
+			if entity.Display.OpenSurface != "source_window" || entity.Target.PublicRecordID == "" {
+				t.Fatalf("test_run source did not retain source-window identity: %#v", entity)
+			}
+			break
+		}
+	}
+	if !foundTest {
+		t.Fatalf("missing test_run entity with command label: %#v", entities)
+	}
+	for _, entity := range entities {
+		if entity.Target.PublicRecordID == "prose-only" {
+			t.Fatalf("ordinary findings prose was scraped into source entity: %#v", entities)
 		}
 	}
 }
@@ -517,4 +603,22 @@ func hasSourceEntity(entities []textureSourceEntity, kind, itemID, contentID str
 		return true
 	}
 	return false
+}
+
+func assertExecutionEntity(t *testing.T, entities []textureSourceEntity, kind, identity, labelNeedle string) {
+	t.Helper()
+	for _, entity := range entities {
+		if entity.Kind != kind || entity.Target.TargetKind != kind {
+			continue
+		}
+		targetIdentity := firstNonEmpty(entity.Target.PublicRecordID, entity.Target.FilePath, entity.Target.ContentID, entity.Target.ItemID)
+		if targetIdentity != identity {
+			continue
+		}
+		if labelNeedle != "" && !strings.Contains(entity.Label, labelNeedle) {
+			continue
+		}
+		return
+	}
+	t.Fatalf("missing execution source kind=%s identity=%s label~%q in %#v", kind, identity, labelNeedle, entities)
 }

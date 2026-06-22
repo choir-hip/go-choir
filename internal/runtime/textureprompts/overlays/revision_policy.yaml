@@ -31,7 +31,7 @@ body: |
   Reuse the informed context already present in the current document and prior worker messages.
   If this follow-up needs facts or evidence beyond what the workflow has already grounded, Probe (researcher) is the morphism class for that gap.
   If the follow-up needs generated artifacts, execution, or verification, Execute (request_super_execution) is the morphism class for super-delivered evidence.
-  If recent worker findings are only partial and the document needs more evidence, write an honest partial revision first unless there is no usable checkpoint at all. A later turn can open the next focused research branch. Do not write that a follow-up researcher was dispatched, requested, or will return unless a spawn_agent call actually succeeds in this turn or the recent worker messages already show that worker.
+  If recent worker findings are only partial and the document needs more evidence, write only the reader-facing artifact state that the usable evidence supports, or keep the blocker/rationale in run output or record_texture_decision when no useful artifact edit exists. Do not paste process metadata, source-status notes, or checkpoint labels into the canonical document body. A later turn can open the next focused research branch. Do not write that a follow-up researcher was dispatched, requested, or will return unless a spawn_agent call actually succeeds in this turn or the recent worker messages already show that worker.
   {{else}}
   This document does not yet have grounded workflow history.
   {{if .UserAuthoredRevision}}
