@@ -354,3 +354,35 @@ Open edges:
 - E3.3 rejected-source reporting remains skipped in the survivor contract.
 - No staging deploy or existing-account product proof was attempted in this
   pass.
+
+## 2026-06-22 - Pass 5 - E3.2 Reviewer P1 Checkpoint
+
+Claim: the Pass 4 E3.2 local repair still has a convergence defect when an
+executable packet precedes a non-execution packet in the persistent Super
+mailbox.
+
+Move: document before repair. The reviewer observed that `ListCoagentMailboxBacklog`
+is cursor-based, not `delivered_at`-based. If seq 1 is an undelivered
+`execution_request` and seq 2 is a later `evidence_update`, settling seq 2
+does not advance the cursor past seq 1. The next backlog read can still return
+the delivered seq 2 row. Because delivered rows fail
+`persistentSuperExecutableUpdate`, the settlement helper can classify the
+already-settled row as non-executable again; `MarkWorkerUpdatesDelivered`
+then no-ops due to `delivered_at IS NULL`, and the bounded settlement loop can
+return `mailbox did not converge` before starting the seq 1 executable run.
+
+Expected delta V: none yet. This is the Problem Documentation First checkpoint
+for the reviewer P1; the repair follows in the next commit.
+
+Actual delta V: 0. Current V remains 8.
+
+Required repair:
+- collect only currently undelivered/unsettled rows before classifying
+  non-executable packets for settlement;
+- add a survivor test where `execution_request` precedes `evidence_update` in
+  the persistent Super mailbox;
+- prove the executable Super run starts and the later non-execution packet is
+  settled.
+
+Heresy delta: `discovered` for the executable-before-non-execution convergence
+case. No code repair is included in this checkpoint.

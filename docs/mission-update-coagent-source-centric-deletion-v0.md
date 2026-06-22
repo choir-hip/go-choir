@@ -562,6 +562,23 @@ precedes an executable row.
 Heresy delta: `repaired` for Super non-execution backlog residue. No staging
 or deployment proof was attempted in this pass.
 
+### E3.2 Reviewer P1 - executable-before-non-execution convergence
+
+Review found a remaining E3.2 defect in the local repair: when an executable
+packet precedes a later non-execution packet in the same persistent Super
+mailbox, the later non-execution row can be marked delivered while the earlier
+executable row keeps the mailbox cursor behind both rows. The cursor-based
+backlog query then returns the already-settled non-execution row again;
+classifying that delivered row as non-executable causes the settlement loop to
+try to settle it repeatedly, while `MarkWorkerUpdatesDelivered` no-ops because
+the row is already delivered. The bounded loop can then report mailbox
+non-convergence before starting the executable Super run.
+
+Required repair: ignore already-settled rows when collecting non-executable
+packets to settle, and add a survivor test where `execution_request` precedes
+`evidence_update` in the persistent Super mailbox. The executable run must
+start and the non-execution row must remain settled.
+
 ## Domain Ramp
 
 - **E0 Stall diagnosis (probe).** Reproduce the v3 stall locally or against
