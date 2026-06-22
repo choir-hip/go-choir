@@ -207,6 +207,17 @@ export const APP_REGISTRY = [
     theme: { surface: 'document', shellDataAttr: 'data-epub-window', contentClass: 'epub-content' },
   },
   {
+    id: 'slides',
+    name: 'Slides',
+    icon: '🖥️',
+    description: 'Slide player for PPTX, PDF, and HTML',
+    component: () => import('../SlidesApp.svelte'),
+    launcher: { desk: true, desktopIcon: false, mobileSwitcher: true, order: 125 },
+    window: { singleton: false, heavy: true, desktop: { width: 1024, height: 768, minWidth: 640, minHeight: 480 }, compact: compactDefault },
+    auth: { preview: 'public-preview', requiresAuthFor: ['file_upload'] },
+    theme: { surface: 'media', shellDataAttr: 'data-slides-window', contentClass: 'slides-content' },
+  },
+  {
     id: 'features',
     name: 'Features',
     icon: '🎬',
