@@ -528,3 +528,53 @@ the evidence-boundary gap in the adjudication record. `introduced`: none.
 `discovered`: empty pending worker updates alone is insufficient to distinguish
 clean settlement from the old E0 stuck state because E0 also had
 `worker_updates_pending=[]` while `agent_revision_pending` remained truthy.
+
+## 2026-06-22 - Pass 9 - Manual QA Rendering And Source Blocker Checkpoint
+
+Claim: the source-centric `update_coagent` cutover is not user-ready while a
+fresh manual QA pass can produce a structured-source Texture that still renders
+markdown syntax as prose, opens empty source-reader windows, and places
+numbered source refs inside words.
+
+Move: document first. Owner manual QA on staging around 2026-06-22 18:30-18:34
+captured a fresh document with handle prefix `a98b2384-7...b3aec9`. The visible
+revision flow advanced from an evidence-plan v1 into a source-bearing v2, but
+the user-facing article body still showed literal `#`, `##`, `###`, and
+markdown-list tokens instead of heading/list structure. In a later state, the
+content collapsed into a single long paragraph with heading markers inline.
+The same screenshots showed `Sources 14` and source titles such as
+`Newsroom - Anthropic`, but opening the source displayed only source chrome and
+`content item not found`. Inline source refs were inserted into words, including
+examples equivalent to `s[1]hipping`, `enterpris[2]e`, `rele[3]ase-note`,
+`clea[4]n`, and `O[5]penAI`.
+
+Mutation class: green for this checkpoint. The intended repair is orange
+because it may change Texture canonical BodyDoc construction, Texture patch
+operations, frontend source rendering, or source entity fallback behavior.
+Protected surfaces: Texture canonical writes/body_doc projection,
+`patch_texture` source-ref insertion semantics, top-level `source_entities`,
+source reader/viewer rendering, and source-centric coagent evidence projection.
+
+Conjecture delta: a clean source-centric packet and native source identity are
+necessary but not sufficient. The rendered artifact must also preserve document
+structure, display source content or an honest source fallback, and place source
+refs at readable boundaries. A source node that resolves to a missing content
+item, or a source ref inserted mid-word, is not acceptable owner-visible proof.
+
+Admissible evidence class for repair: focused Go or frontend tests that prove
+markdown headings/lists no longer render as literal raw markdown in generated
+Texture content; source-ref insertion normalizes unsafe offsets to readable
+boundaries; source viewer/source panels display non-empty source snapshot,
+summary, excerpt, or URL-backed fallback when no content item exists; and no
+legacy source identity path is reintroduced. Product/staging proof is still the
+acceptance environment after landing, but this local repair thread must not
+push or deploy.
+
+Rollback path: revert the follow-up code/test repair commit(s) while preserving
+this problem checkpoint. Do not roll back to clickable markdown source links,
+metadata `source_entities`, legacy `research_findings`, or generic markdown
+source-link parsing as canonical source identity.
+
+Heresy delta: `discovered` for the rendering/source-reader/ref-placement defects
+in the source-centric path. `introduced`: none in this checkpoint. `repaired`:
+none until a later code/test commit.
