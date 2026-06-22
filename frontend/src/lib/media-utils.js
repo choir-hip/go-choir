@@ -8,6 +8,7 @@ export const MEDIA_FILE_ROUTES = [
   { appId: 'pdf', mediaType: 'application/pdf', extensions: ['pdf'] },
   { appId: 'epub', mediaType: 'application/epub+zip', extensions: ['epub'] },
   { appId: 'slides', mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extensions: ['pptx', 'html', 'htm'] },
+  { appId: 'calendar', mediaType: 'text/calendar', extensions: ['ics'] },
 ];
 
 export function appTitle(kind) {

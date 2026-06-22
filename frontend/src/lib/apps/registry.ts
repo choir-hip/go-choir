@@ -218,6 +218,17 @@ export const APP_REGISTRY = [
     theme: { surface: 'media', shellDataAttr: 'data-slides-window', contentClass: 'slides-content' },
   },
   {
+    id: 'calendar',
+    name: 'Calendar',
+    icon: '📅',
+    description: 'Calendar with ICS import',
+    component: () => import('../CalendarApp.svelte'),
+    launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 115 },
+    window: { singleton: true, heavy: false, desktop: { width: 960, height: 720, minWidth: 640, minHeight: 480 }, compact: compactDefault },
+    auth: { preview: 'public-preview', requiresAuthFor: ['file_upload'] },
+    theme: { surface: 'standard', shellDataAttr: 'data-calendar-window', contentClass: 'calendar-content' },
+  },
+  {
     id: 'features',
     name: 'Features',
     icon: '🎬',

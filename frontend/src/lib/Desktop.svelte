@@ -1349,7 +1349,7 @@
 
     const detail = event.detail || {};
     const appId = detail.appId || '';
-    if (!['image', 'audio', 'video', 'pdf', 'epub', 'slides'].includes(appId)) {
+    if (!['image', 'audio', 'video', 'pdf', 'epub', 'slides', 'calendar'].includes(appId)) {
       showToast(`Could not open ${detail.fileName || 'media file'}`);
       return;
     }
