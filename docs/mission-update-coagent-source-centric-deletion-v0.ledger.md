@@ -241,3 +241,71 @@ Open edges:
   and make the assertion green, OR D9 validation must reject unsupported
   source kinds at the tool boundary (the test records that as an acceptable
   alternative).
+
+## 2026-06-22 - Pass 3 - E2 Data Audit (Read-Only)
+
+Claim: the existing-account data audit can be completed read-only via the VM
+runtime API, and its results determine the migration/quarantine policy for
+each legacy data family.
+
+Move: probe. Enumerated all 25 docs owned by 5bd6de97-... via
+/api/texture/documents, pulled /api/texture/documents/{id}/diagnosis for each
+(5.6MB total), and aggregated counts across four legacy data families.
+
+Expected delta V: -1 for the data audit obligation; the migration/quarantine
+implementation remains open.
+
+Actual delta V: -1. Current V=9. Audit complete; migration policy recorded.
+
+Audit results:
+- Legacy Kind: findings worker_updates: 34 occurrences across 11 of 25 docs.
+  Account is ~3.8x legacy-shaped vs source-centric-shaped (9 "sources":[
+  occurrences across 6 docs, concentrated in D8 probe docs). Expected under
+  H_deploy.
+- research_findings: ZERO references in 5.6MB of diagnosis data. Confirms
+  the live write path has already cut over; table is dead schema for this
+  account. E3.1 deletion is pure code/schema cleanup.
+- Raw-markdown texture_revisions: all 25 docs have markdown in revision
+  content; 515 heading patterns total. The visible-markdown symptom at scale.
+- Queued non-execution Super packets: not directly countable via product API
+  (mailbox table not exposed), but the stall is systemic — all 25 docs have
+  exactly 2 idle_deadline passivations. 08fa6a2f-... is representative, not
+  exceptional. Account run totals: 388 completed, 161 passivated, 50
+  idle_deadline.
+
+Migration/quarantine policy (per family):
+- Family A (legacy findings worker_updates): quarantine as audit-only
+  historical rows. Do NOT fabricate typed sources from prose — that would
+  violate E1's TextureCollatesOnlyPacketSources. E3.1's scanWorkerUpdate
+  removal makes legacy rows fail live delivery reads, enforcing quarantine.
+- Family B (research_findings): no migration needed (zero rows). E3.1 deletes
+  write path + type.
+- Family C (raw-markdown revisions): historical revisions stay historical
+  (audit facts). After E5a deploys D9, next prompt-bar revision produces a
+  structured head. plainTextStructuredTextureDoc fallback (E3.3) is the
+  mechanism that currently fakes-structured from markdown; deleting it
+  prevents new acquisitions of the defect.
+- Family D (queued non-execution Super packets): E3.2 settles them, does not
+  leave pending. The survivor contract test already encodes the target.
+
+Key finding for E5a: the systemic 25/25 stall means the acceptance probe can
+run on any doc, but E5a is the first time this account sees the source-centric
+contract in production. Synthetic-fixture D9 tests did not exercise
+existing-account data; watch for H_code bugs pre-mortem failure mode C did
+not cover.
+
+Scratch files (/tmp/audit, /tmp/diag.json, /tmp/docs.json, /tmp/traj.json on
+node-b) cleaned up; no scratch data left on the host.
+
+Receipt: docs/mission-update-coagent-source-centric-deletion-v0.md §"E2 Data
+Audit - 2026-06-22". Evidence: 25 diagnosis JSON pulls from the VM runtime
+API (transient, aggregated into the counts above).
+
+Open edges:
+- The migration/quarantine is not a separate data-write pass; it is encoded
+  as policy enforced by E3.1 (scanWorkerUpdate removal) and E3.2 (Super
+  settlement). No standalone data-migration script is needed for this
+  account under H_deploy, because deploying D9 + deleting the
+  reconstruction/settlement paths enforces the quarantine structurally.
+- E5a must run on the existing account and watch for H_code bugs the
+  synthetic D9 tests missed.

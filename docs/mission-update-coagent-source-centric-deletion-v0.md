@@ -387,6 +387,141 @@ E3-E4 (deletion) → E5 (deploy + accept). The diagnosis reshuffles the
   alone, without deletion receipts and existing-account acceptance, does not
   close the mission.
 
+## E2 Data Audit - 2026-06-22
+
+Mutation class: `green` documentation checkpoint only. Read-only audit via
+the VM runtime API (`10.200.233.2:8085`) with `X-Authenticated-User` header
+from node-b for owner `5bd6de97-3b58-408c-bf89-c42c81b083de`
+(`yusefnathanson@me.com`). No data was modified.
+
+### Audit method
+
+The runtime API exposes three product-path read endpoints for an owner:
+`/api/texture/documents` (all docs), `/api/texture/documents/{id}/diagnosis`
+(per-doc worker_updates, runs, revisions, agent state), and
+`/api/trajectories`. The internal `worker_updates`, `research_findings`,
+`coagent_mailboxes`, and `texture_agent_mutations` tables are not directly
+exposed (correctly); the diagnosis endpoint is the product-path projection
+that surfaces their live state. Diagnosis was pulled for all 25 docs owned by
+this account and aggregated.
+
+### Audit results
+
+Account scope: 25 documents, 24 trajectories (`kind=document`).
+
+**1. Legacy `Kind: findings` worker_updates (vs typed `packet.sources`).**
+- 11 of 25 docs have at least one consumed worker_update with
+  `Kind: findings` (legacy pre-D9 shape).
+- 34 total occurrences of `Kind: findings` across the account.
+- 6 docs have at least one occurrence of `"sources":[` (typed packet.sources);
+  9 total occurrences. These are concentrated in the D8 typed-evidence probe
+  docs (`a7260780-...`, `5d89a835-...`).
+- Ratio: the account is ~3.8x legacy-shaped vs source-centric-shaped. Under
+  H_deploy this is expected — the VM has been running pre-D9 code, so every
+  researcher emission took the legacy path.
+
+**2. `research_findings` rows.**
+- Zero references to `research_findings` or `ResearchFinding` anywhere in the
+  account's 5.6MB of diagnosis data. Confirms the code-only finding from E0's
+  side-discoveries: the live write path has already cut over away from
+  `research_findings`; the table is dead schema for this account. Deletion
+  is pure code/schema cleanup with no data risk.
+
+**3. Raw-markdown `texture_revisions`.**
+- All 25 docs have raw markdown in revision `content` (`\n## ` headings and
+  `\*\*` bold present in every doc).
+- 515 total markdown-heading patterns across the account.
+- This is the visible-markdown symptom at scale: every doc's revisions
+  carry raw markdown that the `plainTextStructuredTextureDoc` fallback
+  wraps as paragraph text.
+
+**4. Queued non-execution Super packets / stall prevalence.**
+- **The v3 stall is systemic, not single-doc.** All 25 docs (25/25) have
+  exactly 2 `reason=idle_deadline` passivations in their recent run history.
+  `08fa6a2f-...` is representative, not exceptional.
+- Account run totals: 388 `state=completed`, 161 `state=passivated`,
+  50 `reason=idle_deadline`. Most runs complete, but every doc has at least
+  one idle-deadline passivation — every doc has hit the stall at least once.
+- No non-execution Super packets were visible as live pending residue in the
+  diagnosis projections (the persistent Super agent for this owner would need
+  a targeted backlog query, which the product API does not surface; deferred
+  to the E5a in-VM confirmation).
+
+### Migration / quarantine policy
+
+The audit results determine the policy per family. Code-path deletion remains
+unconditional; data migration is the only legitimate outlet for deletion
+reticence, and only where deterministic conversion is possible.
+
+**Family A: legacy `Kind: findings` worker_updates (34 rows across 11 docs).**
+- Policy: **quarantine as audit-only historical rows.** These rows carry
+  researcher findings prose that has no typed source target (no `kind`, no
+  `target.uri`, no `selectors`). The deletion report's existing-account
+  requirement says "Research claims from old rows where only snippets/prose
+  remain and no durable source target exists" may not be updated
+  automatically. Fabricating typed sources from prose would violate the
+  source-centric contract (E1's `TextureCollatesOnlyPacketSources`).
+- Mechanism: after D9 deploys (E5a), new researcher runs will emit
+  `coagent_source_packet.v1`. The 34 legacy rows remain readable as
+  historical channel messages but must not be re-collated as source
+  substrate. E3.1's removal of `scanWorkerUpdate` reconstruction makes this
+  enforceable: legacy rows with empty/invalid `packet_json` will fail live
+  delivery reads rather than being reconstructed.
+
+**Family B: `research_findings` rows (zero).**
+- Policy: **no data migration needed.** Zero rows for this owner. E3.1 deletes
+  the write path and type; the table can be dropped or archived in a later
+  schema pass once the trace UI is updated to label any historical rows as
+  legacy (there are none here, but the mechanism is general).
+
+**Family C: raw-markdown `texture_revisions` (all 25 docs, 515 heading
+patterns).**
+- Policy: **historical revisions stay historical; corrected heads are produced
+  by future runs under D9.** Per the deletion report: "Old Texture revisions
+  with raw markdown should remain in version history as historical revisions
+  or be transformed by a deterministic structured importer. In either case,
+  the current head for active documents should be a corrected structured
+  revision if the document remains user-visible."
+- Mechanism: do NOT rewrite historical revisions (they are audit facts).
+  After E5a deploys D9, the next prompt-bar revision on each active doc will
+  produce a structured head. For docs the owner continues editing, the
+  corrected head supersedes the markdown head naturally. For docs that
+  remain stale, the markdown head stays as a historical revision visible in
+  version history; the deletion report allows this.
+- The `plainTextStructuredTextureDoc` fallback (E3.3 deletion target) is the
+  mechanism that currently turns markdown into a fake-structured doc; once
+  deleted, new revisions cannot acquire the defect, and old ones remain
+  historical.
+
+**Family D: queued non-execution Super packets.**
+- Policy: **settle, do not leave pending.** This is E3.2's obligation. The
+  audit could not directly count these via the product API (the mailbox
+  table is not exposed), but the systemic idle_deadline pattern (25/25 docs)
+  indicates the wake path is consistently running into dead-end states. E3.2
+  must reject/quarantine non-`execution_request` packets addressed to
+  persistent Super so they stop appearing as live pending work.
+- Mechanism: E3.2 moves the pinned regression at
+  `update_coagent_source_packet_test.go:169` from "asserts pending" to
+  "asserts settled" (the survivor contract test
+  `TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets` already
+  encodes the target behavior).
+
+### What this changes about E5a
+
+The audit sharpens E5a's acceptance criteria. Under H_deploy, deploying D9
+should produce, on a fresh prompt-bar submission:
+- a `coagent_source_packet.v1` researcher packet (not `Kind: findings`);
+- a revision loop that advances past v3 (not idle_deadline-passivates);
+- a structured body_doc head (not raw markdown).
+
+The systemic 25/25 stall means the acceptance probe can run on any doc, not
+just `08fa6a2f-...`. But the audit also means **E5a is the first time this
+account will have seen the source-centric contract in production** — the
+researcher prompts, validation, and Texture collation have never executed
+against real data. The probe must watch for any H_code bug that the local
+D9 tests did not catch (they are synthetic-fixture tests, not
+existing-account tests, per pre-mortem failure mode C).
+
 ## Domain Ramp
 
 - **E0 Stall diagnosis (probe).** Reproduce the v3 stall locally or against
