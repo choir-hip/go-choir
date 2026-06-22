@@ -1534,3 +1534,59 @@ Open edge: incorporate independent review of the deploy-source repair and
 landing evidence. If accepted, close this mission as settled for deployed
 structured Texture source/transclusion and carry Comet blank-viewport proof as a
 separate browser-specific issue.
+
+## 2026-06-22 - Pass 40 - Live Research Handoff Defect Checkpoint
+
+Claim: The deployed structured Texture source/transclusion cutover is not yet
+settled for broad current-events research if live researcher findings can reach
+Texture as prose-only update packets and the resulting reader-facing document
+stores no top-level source entities or native source nodes.
+
+Move: probe + document before repair. Used Node B read-only staging diagnostics
+for the `yusefnathanson@me.com` primary computer. Resolved owner
+`5bd6de97-3b58-408c-bf89-c42c81b083de`, active VM
+`vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`, sandbox URL
+`http://10.200.230.2:8085`, and deployed commit
+`d77e0457806d6a9de27657b7ffb5f8f3a7862922`. Read the live Texture document and
+diagnosis bundle through trusted owner headers.
+
+Expected delta V: identify whether the no-citation screenshot was a frontend
+rendering failure, a structured write failure, or an upstream researcher source
+handoff failure.
+
+Actual delta V: classified the failure as upstream source-substrate handoff plus
+prompt/document-boundary leakage. The finding generalizes beyond researcher:
+`update_coagent` is the cross-role evidence handoff envelope, so super/vsuper/
+co-super command output, diffs, tests, packages, screenshots, videos, and
+benchmarks need the same citeable/transcludable source treatment as public
+research sources. Document
+`5d89a835-41a6-49e0-8555-172a574ef317` reached v7 with structured `body_doc`
+present on every appagent revision, but every revision had zero
+`source_entities`. Researcher messages seq 1-5 carried findings/questions with
+no typed refs/evidence ids; seq 6 was a runtime fallback with raw URLs and
+`tool:web_search`, not `source_service_item`, `content_item`, or evidence
+handles. Texture then wrote process/source-status prose into the canonical body
+instead of native citations.
+
+Receipts:
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/runbook-staging-live-texture-debugging.md`;
+live document `5d89a835-41a6-49e0-8555-172a574ef317`;
+head revision `7fde6600-bea8-4fe6-9ef9-667be64131e8`;
+trajectory `125d3235-815d-4b92-99f3-efbaff10a3cf`;
+Texture loop `cb9463d8-288d-4394-aa5d-e267602911d9`;
+researcher loops `4f7adcdb-d08f-4d8a-bbf5-7b5ae0727e77` and
+`59dadbaa-38bb-4df0-9c90-f2f87d7b5add`.
+
+Evidence:
+`GET /api/texture/documents` on the active sandbox;
+`GET /api/texture/documents/5d89a835-41a6-49e0-8555-172a574ef317/revisions?limit=20`;
+`GET /api/texture/documents/5d89a835-41a6-49e0-8555-172a574ef317/diagnosis?limit=20`.
+
+Open edge: repair without reintroducing prose scraping. Researchers need a
+citable-source handoff path using source-service item ids, content items, or
+saved evidence records. Super/vsuper/co-super execution evidence needs explicit
+source target kinds for commands, diffs, tests, packages, screenshots, videos,
+and benchmark artifacts. Texture needs prompt/tool pressure to keep
+checkpoint/provenance prose out of reader-facing canonical documents when no
+native source substrate exists.

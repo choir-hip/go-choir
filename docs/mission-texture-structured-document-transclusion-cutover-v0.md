@@ -1732,3 +1732,113 @@ Comet/browser note:
   product-path proof all succeeded. Treat this as a separate Comet-specific
   visual proof blocker unless mission settlement is defined to require Comet
   rendering specifically.
+
+### D8 Live Research Handoff Problem Checkpoint - Findings Without Native Sources
+
+Status: discovered on 2026-06-22 UTC from live staging evidence in the
+`yusefnathanson@me.com` primary computer; must repair before claiming the
+research-to-Texture citation path is settled for broad current-events briefs.
+
+Problem:
+
+- The live document `What’s new in world news.texture` reached appagent version
+  7 and kept revising, which supports the multi-revision liveness claim.
+- Every revision in that document stored a structured `body_doc`, but every
+  revision had zero top-level `source_entities`. Therefore the frontend had no
+  native `source_ref` / `source_embed` nodes to render as citation points.
+- Researcher updates delivered useful narrative findings, but the first five
+  `update_coagent` packets carried no typed `refs` or `evidence_ids`. The final
+  runtime fallback carried raw URLs and `tool:web_search`, but no
+  `source_service_item`, `content_item`, or evidence record handle.
+- Runtime source collation intentionally ignores free-form prose and raw URLs;
+  it mints native Texture sources only from typed evidence records,
+  `content_item` refs, or `source_service_item` refs. That invariant is correct,
+  but the live researcher path did not produce enough typed source substrate.
+- The same shape applies beyond researchers. `update_coagent` is the typed
+  handoff envelope from every non-Texture actor into a Texture-owned artifact:
+  researchers hand off source-service/content/evidence records; super/vsuper/
+  co-super hand off command output, code diffs, test results, AppChangePackages,
+  screenshots, videos, benchmark logs, and other execution artifacts. These
+  must be represented as citeable/transcludable source entities rather than
+  pasted into prose or left as opaque notes.
+- Texture then compensated by writing source-status and process/provenance prose
+  into the reader-facing document body, including "evidence pending",
+  "research checkpoint", and "Evidence note" sections. That violates the
+  user-facing artifact contract: internal research state belongs in updates,
+  revision metadata, decisions, or native source transclusions, not as ordinary
+  document content.
+
+Evidence:
+
+- Live active computer lookup:
+  `yusefnathanson@me.com` maps to user
+  `5bd6de97-3b58-408c-bf89-c42c81b083de`; `ownerships.json` maps that owner and
+  desktop `primary` to active VM
+  `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` at sandbox URL
+  `http://10.200.230.2:8085`.
+- Sandbox health for that VM reported deployed commit
+  `d77e0457806d6a9de27657b7ffb5f8f3a7862922`.
+- `GET /api/texture/documents` with trusted owner headers identified document
+  `5d89a835-41a6-49e0-8555-172a574ef317`, current revision
+  `7fde6600-bea8-4fe6-9ef9-667be64131e8`, current version `7`, and
+  `revision_count` `8`.
+- `GET /api/texture/documents/5d89a835-41a6-49e0-8555-172a574ef317/revisions`
+  showed versions 1 through 7 all appagent-authored, all with `body_doc`
+  present and `source_entities` empty.
+- `GET /api/texture/documents/5d89a835-41a6-49e0-8555-172a574ef317/diagnosis`
+  showed researcher channel messages at seq 1-6. Seq 1-5 contained findings and
+  questions but no typed source refs. Seq 6 was a runtime fallback with raw
+  Reuters URLs and `tool:web_search`, not source-service or content-item refs.
+- Head revision metadata for version 7 recorded `source: rewrite_texture`,
+  `worker_updates_consumed` seq 6, and rationale: "Transform accumulated
+  research checkpoints into the reader-facing world-news brief..." while
+  `source_entities` remained absent.
+
+Debugging/tooling gap:
+
+- This investigation required reconstructing the account -> owner id -> VM
+  ownership -> sandbox URL -> trusted-header Texture API path from scattered
+  implementation knowledge.
+- The project needs a documented, read-only staging-debugging path and ideally a
+  small tool for "given email and optional Texture title, print active computer,
+  sandbox health/build identity, recent documents, revisions, source entity
+  counts, worker update refs/evidence, and relevant runs." This is now recorded
+  in `docs/runbook-staging-live-texture-debugging.md`.
+
+Required repair:
+
+- Preserve the no-prose-scraping invariant. Do not reintroduce parsing of
+  researcher narrative text or raw markdown/source links into native sources.
+- Treat `update_coagent` as an evidence-bearing source envelope for all
+  coagents, not a researcher-only findings message. Its typed fields must be
+  enough to mint source entities for reader-facing Texture citations and
+  transclusions.
+- Make researcher current-events handoff produce typed source substrate before a
+  reader-facing finalization pass: prefer `source_search` results with
+  `source_service_item:<id>`, imported content items, or `save_evidence` records
+  with `metadata.content_id`.
+- Extend the source/transclusion contract for execution evidence: command
+  outputs, shell sessions, diffs/patch hunks, test runs, AppChangePackages,
+  screenshots, videos, and benchmark logs should have explicit target kinds,
+  selectors, open surfaces, and rights/provenance. A Texture can then cite a
+  factual claim with a research source, cite a code-change claim with a diff
+  hunk, cite a verification claim with a command/test output, or embed media
+  proof, all through the same `source_ref` / `source_embed` nodes.
+- Ensure runtime fallback from research tools can carry citable typed refs when
+  the underlying tool output has source-service item ids or imported content
+  ids, and report an explicit "no native source substrate" blocker when only raw
+  web URLs/snippets exist.
+- Tighten Texture prompts so status/provenance/checkpoint prose is not written
+  into the canonical reader-facing document when native source entities are
+  absent. Texture should either write a concise, honest reader-facing draft
+  without pretending it has citations, or request/follow up for citable source
+  substrate.
+- Add regression coverage for the live shape: broad researcher findings with
+  no typed source refs must not produce native citations by prose scraping, and
+  a citable researcher packet with typed refs must produce top-level
+  `source_entities` plus `source_ref` nodes in the next appagent revision.
+- Add cross-role regression coverage: a super/vsuper/co-super `update_coagent`
+  packet containing command output refs, diff refs, tests, artifacts, or package
+  refs must expose those as source entities that Texture can cite/transclude;
+  a packet containing only prose must remain non-citeable and should not be
+  rendered as reader-facing metadata.
