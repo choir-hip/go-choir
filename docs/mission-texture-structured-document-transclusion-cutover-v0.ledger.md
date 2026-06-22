@@ -1415,3 +1415,38 @@ does not hide a current structured table contract. Three review-agent attempts
 were interrupted after failing to return a callback, so this slice remains a
 locally verified repair pending later batch review rather than an
 independently accepted repair.
+
+## 2026-06-21 - Pass 37 - D7 Landing Problem Checkpoint
+
+Claim: The pushed D7 published-readback repair cannot settle until staging can
+build and deploy the structured Texture code through the same Nix package path
+used by Node B.
+
+Move: document problem before repair. GitHub Actions run `27922543313` checked
+out `5c057afc63adf6df8db9a881c92942586c70fa51`; the only failing job was
+`Deploy to Staging (Node B)`. The deploy job failed before activation because
+filtered Nix package builds could not resolve
+`github.com/yusefmosiah/go-choir/internal/texturedoc` from proxy/platform and
+sandbox/store imports.
+
+Expected delta V: no variant decrease from discovery alone.
+
+Actual delta V: unchanged. This is a newly discovered deploy-source blocker in
+the landing loop, not a product behavior repair.
+
+Receipts:
+`flake.nix`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`;
+GitHub Actions CI run `27922543313`, job `Deploy to Staging (Node B)`.
+
+Evidence:
+`gh run view 27922543313 --job 82618968094 --log` showed proxy failing at
+`internal/platform/publication_document.go:13:2` and sandbox failing at
+`internal/store/texture_structured_revision.go:8:2`, both with
+`cannot find module providing package github.com/yusefmosiah/go-choir/internal/texturedoc:
+import lookup disabled by -mod=vendor`.
+
+Open edge: add `internal/texturedoc` to every affected `flake.nix` Go service
+source filter, prove focused Nix package builds locally, then push a repair and
+rerun CI/deploy identity before staging browser proof.

@@ -751,6 +751,9 @@ dead source-repair/source-attachment frontend affordances, publication fallback
 markdown source-link upgrading, and runtime use of `metadata.source_entities` as
 live source context. The remaining local deletion/classification edge is prompt
 contract residue that still teaches old `patch_texture` replace/append JSON.
+The landing loop is currently blocked by a deploy-source allow-list failure:
+the Nix per-service source filter excludes the new `internal/texturedoc`
+package from services that import it, so staging cannot build the pushed repair.
 D5 multimedia reduced the variant locally, but its independent review agents
 stalled; retain that caveat until staging proof or a later reviewer checks the
 accumulated multimedia diff.
@@ -828,7 +831,12 @@ CI, staging deploy identity, Comet/browser staging proof with numbered source
 refs, expanded source window, multimedia source expansion, agent edit preserving
 refs, publication/export structured source proof on staging, and attempted
 markdown link/source token rejection; RunAcceptanceRecord at staging-smoke-level
-or higher if platform behavior changes.
+or higher if platform behavior changes. Landing evidence for pushed commit
+`5c057afc63adf6df8db9a881c92942586c70fa51` currently includes GitHub CI run
+`27922543313`, whose only failed job is `Deploy to Staging (Node B)` because
+Nix package builds cannot resolve
+`github.com/yusefmosiah/go-choir/internal/texturedoc` under the filtered source
+archive.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -909,7 +917,9 @@ turning markdown `source:` links into native publication source refs, rejects
 publication from top-level structured source entities instead of metadata
 sidecars, preserves reader snapshot/status fields in structured source entities,
 and converts publication/proxy/browser publication fixtures to structured source
-refs. D5 checkpoint
+refs. The landing loop discovered that `flake.nix` service source filters still
+omit `internal/texturedoc`, so deployed Nix builds fail before staging identity
+can advance. D5 checkpoint
 records the specific sidecars/pathways repaired locally: runtime
 `media_source_refs`, prompt context that prefers those refs, and frontend
 media-ref synthesis/rendering outside top-level structured entities. D5
@@ -918,13 +928,13 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`. Markdown `[label](source:id)` parsing remains only as historical
 fallback for artifacts without structured body data.
 
-next move: commit this prompt-contract residue checkpoint, then repair
-`revision_policy.yaml` and active prompt tests so Texture no longer instructs
-agents to call old `replace` / `append` JSON operations after the structured
-tool cutover. After independent review, run broad tests and the landing loop.
-Do not claim settlement until staging proves source creation, agent/human edit
-preservation, multimedia source expansion, publication/export, and
-markdown-link/source-token rejection from the deployed product path.
+next move: commit this deploy-source blocker checkpoint, then add
+`internal/texturedoc` to the Nix Go service source filters for every service
+that imports structured Texture packages. After CI/deploy identity is green,
+run Comet/browser staging proof. Do not claim settlement until staging proves
+source creation, agent/human edit preservation, multimedia source expansion,
+publication/export, and markdown-link/source-token rejection from the deployed
+product path.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -1591,3 +1601,37 @@ Non-blocking discovered edge:
   separate schema/design edge: either add structured table nodes deliberately or
   retire/relabel those tests as legacy fallback checks that do not define
   canonical Texture structure.
+
+### D7 Landing Problem Checkpoint - Nix Service Source Filters Omit Structured Doc Package
+
+Status: discovered on 2026-06-21 during the pushed landing loop; must repair
+before staging deploy proof.
+
+Problem:
+
+- The pushed behavior repair commit
+  `5c057afc63adf6df8db9a881c92942586c70fa51` reached GitHub Actions, but
+  staging deploy failed before service activation.
+- The deployment Nix build uses per-service `internalDirs` allow-lists in
+  `flake.nix`. D1-D7 introduced `internal/texturedoc` imports into platform,
+  store, runtime, and publication paths, but the Nix service source filters were
+  not updated to include that package.
+- Local `go test` sees the full worktree, so this class of failure only appears
+  in filtered Nix package builds and deploy jobs.
+
+Evidence:
+
+- GitHub Actions CI run `27922543313`, job `Deploy to Staging (Node B)`, failed
+  after checkout of `5c057afc`.
+- The proxy package build failed with:
+  `internal/platform/publication_document.go:13:2: cannot find module providing package github.com/yusefmosiah/go-choir/internal/texturedoc: import lookup disabled by -mod=vendor`.
+- The sandbox package build failed with:
+  `internal/store/texture_structured_revision.go:8:2: cannot find module providing package github.com/yusefmosiah/go-choir/internal/texturedoc: import lookup disabled by -mod=vendor`.
+
+Required repair:
+
+- Add `internal/texturedoc` to every Nix Go service source filter whose
+  transitive imports can reach structured Texture code: at minimum proxy,
+  platformd, gateway, sourcecycled, and sandbox.
+- Prove with focused `nix build` package checks before pushing the repair, then
+  rerun CI/deploy and staging acceptance.
