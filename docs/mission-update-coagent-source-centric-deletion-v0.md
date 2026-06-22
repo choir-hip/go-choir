@@ -585,6 +585,78 @@ non-executable settlement candidates. Added
 the executable-before-non-execution order starts the executable Super run and
 leaves the later non-execution row settled.
 
+## E5 CI Blocker - 2026-06-22
+
+Mutation class: `green` documentation checkpoint only. No runtime behavior,
+schema, API, prompt, Texture, Super, store, source resolver, or deployment code
+changes in this checkpoint.
+
+### Evidence
+
+E5 landed to `origin/main` at commit
+`1709f5c79924312daf3db432979a977788dfb325`, but GitHub Actions run
+`27983375546` failed before Node B deploy. Staging therefore remains at
+`63f44e07`; no staging acceptance has run for E5.
+
+Failed jobs:
+- Go Test (non-runtime):
+  `https://github.com/choir-hip/go-choir/actions/runs/27983375546/job/82818796037`
+- Go Test (internal/runtime shard 0):
+  `https://github.com/choir-hip/go-choir/actions/runs/27983375546/job/82818796084`
+- Go Test (internal/runtime shard 1):
+  `https://github.com/choir-hip/go-choir/actions/runs/27983375546/job/82818796104`
+- Go Test (internal/runtime shard 2):
+  `https://github.com/choir-hip/go-choir/actions/runs/27983375546/job/82818796142`
+- Go Test (internal/runtime shard 3):
+  `https://github.com/choir-hip/go-choir/actions/runs/27983375546/job/82818796123`
+- Go Vet + Test + Build aggregate gate:
+  `https://github.com/choir-hip/go-choir/actions/runs/27983375546/job/82819602136`
+
+Initial failing-test family reported from the E5 run:
+- `internal/store`: `TestTextureListRevisionsByDoc`,
+  `TestTextureGetHistory`, `TestTextureGetDiff`, `TestTextureGetBlame`,
+  `TestTextureDiffOwnerScope`.
+- `internal/runtime`: `TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages`,
+  `TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads`,
+  `TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc`,
+  `TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict`,
+  `TestWireInputRevisionDoesNotAutonomousPublish`,
+  `TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest`,
+  `TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists`,
+  `TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformTextures`,
+  `TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails`,
+  `TestEditTextureGroundedEmailArtifactRequiresEmailAppagentContinuation`,
+  `TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformTextures`,
+  `TestWireAutonomousPublishTranscludesEditionAndDebounces`.
+
+### Initial hypotheses
+
+- Store Texture failures may be fixture/caller drift after E3.3 made
+  non-user/appagent revisions require explicit structured `body_doc`. If those
+  tests are creating legitimate appagent revisions, fixtures must provide
+  structured bodies; if product paths still need to write those revisions, the
+  store validation may be too strict for that path.
+- Universal Wire failures may be fixture/caller drift after source-kind and
+  target validation became canonical. Tests or source materialization may still
+  be using aliases or missing `target.uri` / `source_id` in ways that the hard
+  cutover intentionally rejects.
+- Typed AppChangePackage preservation may have lost semantics during the E3.3
+  typed evidence ref/source conversion. The repair must preserve app change
+  package source identity, not collapse it into a generic source.
+- `update_coagent` validation must not be weakened to admit old shapes. Any
+  fixture update must use the source-centric survivor contract, or the repair
+  must be in code that preserves intended source-centric behavior.
+
+### Remaining error field
+
+The mission is now blocked on CI repair. E5 is not accepted, Node B did not
+deploy, and staging evidence remains unavailable for commit
+`1709f5c79924312daf3db432979a977788dfb325`. The next move is to inspect the
+GitHub logs (`gh run view 27983375546 --log-failed` and job logs as needed),
+reproduce the failures locally under `nix develop`, repair the smallest
+coherent failing family, run focused tests plus `git diff --check`, then hand
+the repair back for review without pushing or starting staging acceptance.
+
 ## Domain Ramp
 
 - **E0 Stall diagnosis (probe).** Reproduce the v3 stall locally or against
