@@ -351,7 +351,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		notes = append(notes, fmt.Sprintf("worker_event_count=%d", eventCount))
 	}
 	notes = append(notes, provenance.Notes...)
-	sources := coagentSourcesFromRefs(trimDedupeNonEmpty(append(append(evidenceIDs, refs...), artifacts...)))
+	sources := coagentSourcesFromTypedEvidenceRefs(trimDedupeNonEmpty(append(append(evidenceIDs, refs...), artifacts...)))
 
 	return types.CoagentSourcePacket{
 		UpdateID:      "delegate-worker-vm-" + sanitizeExportPart(rec.RunID),
@@ -434,7 +434,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	notes = append(notes, provenance.Notes...)
 	updateKey := delegateWorkerCheckpointUpdateKey(output, source)
 	artifacts := trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...))
-	sources := coagentSourcesFromRefs(trimDedupeNonEmpty(append(append(evidenceIDs, refs...), artifacts...)))
+	sources := coagentSourcesFromTypedEvidenceRefs(trimDedupeNonEmpty(append(append(evidenceIDs, refs...), artifacts...)))
 	return types.CoagentSourcePacket{
 		UpdateID:      delegateWorkerCheckpointUpdateID(rec, output, updateKey),
 		OwnerID:       rec.OwnerID,
@@ -496,7 +496,7 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 		Role:          AgentProfileSuper,
 		Packet: newCoagentPacket("blocker", "Runtime fallback: Super failed before worker delegation/package evidence reached Texture.",
 			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), nil),
-			coagentSourcesFromRefs(trimDedupeNonEmpty(refs)),
+			coagentSourcesFromTypedEvidenceRefs(trimDedupeNonEmpty(refs)),
 			[]types.CoagentPacketAction{coagentAction("request_worker", "Resume with a smaller control step: either call request_worker_vm/start_worker_delegation immediately with the mission objective, or update_coagent with the exact blocker before further repo exploration.", nil, nil, types.CoagentPacketActionSafety{MutationClass: "red", Network: "allowed", FileMutation: "allowed"})},
 			nil,
 			trimDedupeNonEmpty(notes)),

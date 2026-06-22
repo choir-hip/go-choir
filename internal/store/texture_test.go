@@ -29,6 +29,27 @@ func textureTestStore(t *testing.T) *Store {
 	return s
 }
 
+func testTextureBodyDoc(t *testing.T, docID, revisionID, content string) json.RawMessage {
+	t.Helper()
+	doc := texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-" + docID + "-" + revisionID},
+			Content: []texturedoc.Node{{
+				Type:    "paragraph",
+				Attrs:   map[string]any{"id": "p-" + revisionID},
+				Content: []texturedoc.Node{{Type: "text", Text: content}},
+			}},
+		},
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal test body_doc: %v", err)
+	}
+	return raw
+}
+
 func TestOpenTextureWorkspaceUsesTextureDatabaseForFreshWorkspace(t *testing.T) {
 	s := textureTestStore(t)
 
@@ -716,6 +737,7 @@ func TestTextureRevisionProvenanceRoundTrip(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "appagent",
 		Content:     "Grounded body.",
+		BodyDoc:     testTextureBodyDoc(t, "doc-prov", "rev-prov", "Grounded body."),
 		Provenance:  json.RawMessage(canonical),
 		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
 	}
@@ -784,7 +806,7 @@ func TestTextureRevisionHashChain(t *testing.T) {
 	rev1 := types.Revision{
 		RevisionID: "rev-1", DocID: "doc-hash", OwnerID: "user-1",
 		AuthorKind: types.AuthorAppAgent, AuthorLabel: "appagent",
-		Content: "v1 body", ParentRevisionID: "rev-0",
+		Content: "v1 body", BodyDoc: testTextureBodyDoc(t, "doc-hash", "rev-1", "v1 body"), ParentRevisionID: "rev-0",
 		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	if err := s.CreateRevision(ctx, rev1); err != nil {
@@ -911,6 +933,7 @@ func TestTextureRevisionMetadataConcurrentMergePatchesPreserveKeys(t *testing.T)
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "wire",
 		Content:     "Article",
+		BodyDoc:     testTextureBodyDoc(t, doc.DocID, "rev-concurrent-metadata", "Article"),
 		Metadata:    initialMeta,
 		CreatedAt:   time.Now().UTC(),
 	}

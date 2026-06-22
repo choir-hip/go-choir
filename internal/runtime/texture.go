@@ -44,7 +44,6 @@ var (
 	textureNumberedHeadingRE     = regexp.MustCompile(`(?m)^\s*(?:#{1,6}\s*)?(\d{1,2}\.\s+[^\n:]{2,100})\s*$`)
 	textureSectionUpdatePrefixRE = regexp.MustCompile(`\bSECTION\s+\d+\s+UPDATE:`)
 	textureSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
-	textureInlineSourceRefRE     = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)`)
 )
 
 // ----- Request/Response types -----

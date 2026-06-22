@@ -150,11 +150,18 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Runtime, ownerID, 
 }
 
 func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.CoagentSourcePacket) []textureSourceEntity {
+	entities, _ := rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
+	return entities
+}
+
+func (rt *Runtime) evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.CoagentSourcePacket) ([]textureSourceEntity, []coagentSourceRejection) {
 	if len(updates) == 0 {
-		return nil
+		return nil, nil
 	}
 	entities := []textureSourceEntity{}
+	rejections := []coagentSourceRejection{}
 	seenEntity := map[string]bool{}
+	seenRejection := map[string]bool{}
 	for _, update := range updates {
 		if ownerID != "" && strings.TrimSpace(update.OwnerID) != strings.TrimSpace(ownerID) {
 			continue
@@ -162,14 +169,23 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, 
 		for _, packetSource := range update.Packet.Sources {
 			entity := sourceEntityFromCoagentPacketSource(ctx, rt, ownerID, packetSource, update)
 			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" || seenEntity[key] {
+			if entity.EntityID == "" || key == "" {
+				rejection := coagentSourceRejectionFromPacketSource(update, packetSource)
+				rejectionKey := sourceRejectionKey(rejection)
+				if rejectionKey != "" && !seenRejection[rejectionKey] {
+					seenRejection[rejectionKey] = true
+					rejections = append(rejections, rejection)
+				}
+				continue
+			}
+			if seenEntity[key] {
 				continue
 			}
 			seenEntity[key] = true
 			entities = append(entities, entity)
 		}
 	}
-	return entities
+	return entities, rejections
 }
 
 func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, ownerID string, source types.CoagentPacketSource, update types.CoagentSourcePacket) textureSourceEntity {
@@ -277,6 +293,32 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context
 	return rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
 }
 
+func coagentSourceRejectionFromPacketSource(update types.CoagentSourcePacket, source types.CoagentPacketSource) coagentSourceRejection {
+	reason := "packet source did not materialize into a Texture source entity"
+	if strings.TrimSpace(source.Kind) == "" {
+		reason = "packet source kind is missing"
+	} else if strings.TrimSpace(source.Target.URI) == "" {
+		reason = "packet source target.uri is missing"
+	}
+	return coagentSourceRejection{
+		UpdateID:  strings.TrimSpace(update.UpdateID),
+		SourceID:  strings.TrimSpace(source.SourceID),
+		Kind:      strings.TrimSpace(source.Kind),
+		TargetURI: strings.TrimSpace(source.Target.URI),
+		Reason:    reason,
+	}
+}
+
+func sourceRejectionKey(rejection coagentSourceRejection) string {
+	parts := []string{
+		strings.TrimSpace(rejection.UpdateID),
+		strings.TrimSpace(rejection.SourceID),
+		strings.TrimSpace(rejection.Kind),
+		strings.TrimSpace(rejection.TargetURI),
+	}
+	return strings.Join(parts, "\x00")
+}
+
 func decodeAvailableTextureSourceEntities(metadata map[string]any) []textureSourceEntity {
 	if metadata == nil {
 		return nil
@@ -304,6 +346,135 @@ func mergeTextureSourceEntitiesIntoRunMetadata(rec *types.RunRecord, incoming []
 		rec.Metadata = map[string]any{}
 	}
 	return mergeTextureSourceEntitiesIntoAvailableContext(rec.Metadata, incoming)
+}
+
+const textureSourceRejectionsKey = "texture_source_rejections"
+
+func decodeCoagentSourceRejections(value any) []coagentSourceRejection {
+	if value == nil {
+		return nil
+	}
+	var rejections []coagentSourceRejection
+	switch typed := value.(type) {
+	case []coagentSourceRejection:
+		rejections = typed
+	case []any:
+		raw, err := json.Marshal(typed)
+		if err != nil {
+			return nil
+		}
+		if err := json.Unmarshal(raw, &rejections); err != nil {
+			return nil
+		}
+	case json.RawMessage:
+		if err := json.Unmarshal(typed, &rejections); err != nil {
+			return nil
+		}
+	case []byte:
+		if err := json.Unmarshal(typed, &rejections); err != nil {
+			return nil
+		}
+	case string:
+		if err := json.Unmarshal([]byte(typed), &rejections); err != nil {
+			return nil
+		}
+	default:
+		return nil
+	}
+	out := make([]coagentSourceRejection, 0, len(rejections))
+	for _, rejection := range rejections {
+		if strings.TrimSpace(rejection.Reason) == "" {
+			continue
+		}
+		out = append(out, rejection)
+	}
+	return out
+}
+
+func mergeCoagentSourceRejectionsIntoRunMetadata(rec *types.RunRecord, incoming []coagentSourceRejection) bool {
+	if rec == nil || len(incoming) == 0 {
+		return false
+	}
+	if rec.Metadata == nil {
+		rec.Metadata = map[string]any{}
+	}
+	existing := decodeCoagentSourceRejections(rec.Metadata[textureSourceRejectionsKey])
+	merged, changed := mergeCoagentSourceRejections(existing, incoming)
+	if changed {
+		rec.Metadata[textureSourceRejectionsKey] = merged
+	}
+	return changed
+}
+
+func mergeCoagentSourceRejectionsIntoMetadata(metadata map[string]any, incoming []coagentSourceRejection) bool {
+	if metadata == nil || len(incoming) == 0 {
+		return false
+	}
+	existing := decodeCoagentSourceRejections(metadata[textureSourceRejectionsKey])
+	merged, changed := mergeCoagentSourceRejections(existing, incoming)
+	if changed {
+		metadata[textureSourceRejectionsKey] = merged
+	}
+	return changed
+}
+
+func mergeCoagentSourceRejections(existing, incoming []coagentSourceRejection) ([]coagentSourceRejection, bool) {
+	merged := append([]coagentSourceRejection{}, existing...)
+	seen := map[string]bool{}
+	for _, rejection := range merged {
+		if key := sourceRejectionKey(rejection); key != "" {
+			seen[key] = true
+		}
+	}
+	changed := false
+	for _, rejection := range incoming {
+		key := sourceRejectionKey(rejection)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		merged = append(merged, rejection)
+		changed = true
+	}
+	return merged, changed
+}
+
+func formatCoagentSourceRejectionsForPrompt(rejections []coagentSourceRejection) string {
+	if len(rejections) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, rejection := range rejections {
+		reason := strings.TrimSpace(rejection.Reason)
+		if reason == "" {
+			continue
+		}
+		b.WriteString("- ")
+		if rejection.SourceID != "" {
+			b.WriteString("source_id=")
+			b.WriteString(rejection.SourceID)
+			b.WriteString(" ")
+		}
+		if rejection.UpdateID != "" {
+			b.WriteString("update_id=")
+			b.WriteString(rejection.UpdateID)
+			b.WriteString(" ")
+		}
+		if rejection.Kind != "" {
+			b.WriteString("kind=")
+			b.WriteString(rejection.Kind)
+			b.WriteString(" ")
+		}
+		if rejection.TargetURI != "" {
+			b.WriteString("target_uri=")
+			b.WriteString(rejection.TargetURI)
+			b.WriteString(" ")
+		}
+		b.WriteString("reason=")
+		b.WriteString(reason)
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func splitTypedWorkerUpdateRef(ref string) (string, string) {
@@ -485,17 +656,22 @@ func isHTTPURL(value string) bool {
 // researcher-prose scraping: sources (and their text_quote excerpts) come from
 // structured researcher evidence, not from parsing message text.
 func (rt *Runtime) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) []textureSourceEntity {
+	entities, _ := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, textureAgentID, limit)
+	return entities
+}
+
+func (rt *Runtime) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) ([]textureSourceEntity, []coagentSourceRejection) {
 	if rt == nil || rt.store == nil {
-		return nil
+		return nil, nil
 	}
 	textureAgentID = strings.TrimSpace(textureAgentID)
 	ownerID = strings.TrimSpace(ownerID)
 	if textureAgentID == "" || ownerID == "" {
-		return nil
+		return nil, nil
 	}
 	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, limit)
 	if err != nil || len(updates) == 0 {
-		return nil
+		return nil, nil
 	}
-	return rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
+	return rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
 }

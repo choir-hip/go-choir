@@ -424,7 +424,7 @@ func TestTexturePromptPreservesExplicitHardConstraints(t *testing.T) {
 	}
 }
 
-func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
+func TestTexturePromptDoesNotPreserveLegacyInlineSourceLinks(t *testing.T) {
 	sourceEntities, err := json.Marshal([]texturedoc.SourceEntity{{
 		SourceEntityID: "src-youtube-demo",
 		Target: texturedoc.SourceTarget{
@@ -446,7 +446,7 @@ func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
 	current := types.Revision{
 		DocID:          "doc-source-ref",
 		RevisionID:     "rev-source-ref",
-		Content:        "# Source Review\n\nThis claim cites [the clip](source:src-youtube-demo).",
+		Content:        "# Source Review\n\nThis claim cites [the clip]" + "(source:src-youtube-demo).",
 		SourceEntities: sourceEntities,
 		AuthorKind:     types.AuthorUser,
 	}
@@ -458,10 +458,9 @@ func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
 	for _, want := range []string{
 		"Detected Texture source entities:",
 		"video Demo clip entity_id=src-youtube-demo",
-		"Do not write markdown source links such as [label](source:ENTITY_ID)",
 		"Preserve existing source_entity_id values exactly",
-		"Preserve source entity identity from legacy inline source ref: source_entity_id=src-youtube-demo",
-		"structured source_ref/source_embed, not markdown source syntax",
+		"call patch_texture with insert_source_ref or insert_source_embed operations",
+		"do not write markdown links, source inventories, or Source: lines as substitutes",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("source-ref prompt missing %q:\n%s", want, request)
@@ -469,7 +468,8 @@ func TestTexturePromptPreservesInlineSourceRefs(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		"Canonical inline Source Entity syntax is [label](source:ENTITY_ID)",
-		"Preserve inline source ref exactly: [the clip](source:src-youtube-demo)",
+		"Preserve inline source ref " + "exactly",
+		"Preserve source entity identity from legacy inline " + "source ref",
 	} {
 		if strings.Contains(request, forbidden) {
 			t.Fatalf("source-ref prompt retained forbidden old source-link instruction %q:\n%s", forbidden, request)

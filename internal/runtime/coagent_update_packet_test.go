@@ -37,7 +37,7 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 			ItemID:     "srcitem_demo",
 		},
 	}}
-	msgs, ids, err := buildCoagentUpdateUserMessages(updates, coagentPacketDeliveryMid, "texture:doc-1", sourceEntities)
+	msgs, ids, err := buildCoagentUpdateUserMessages(updates, coagentPacketDeliveryMid, "texture:doc-1", sourceEntities, nil)
 	if err != nil {
 		t.Fatalf("build messages: %v", err)
 	}
