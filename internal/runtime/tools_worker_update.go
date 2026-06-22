@@ -796,34 +796,55 @@ func coagentSourceFromURI(sourceID, kind, uri, title string) types.CoagentPacket
 	}
 }
 
-func coagentSourcesFromRefs(refs []string) []types.CoagentPacketSource {
+func coagentSourcesFromTypedEvidenceRefs(refs []string) []types.CoagentPacketSource {
 	out := make([]types.CoagentPacketSource, 0, len(refs))
 	seen := map[string]bool{}
 	for _, ref := range refs {
-		ref = strings.TrimSpace(ref)
-		if ref == "" {
+		source, ok := coagentSourceFromTypedEvidenceRef(ref)
+		if !ok {
 			continue
 		}
-		key, _ := splitTypedWorkerUpdateRef(ref)
-		kind := key
-		if kind == "" && looksLikeArtifactPath(ref) {
-			kind = "file_artifact"
-			ref = "file_artifact:" + ref
-		}
-		if kind == "" {
-			continue
-		}
-		if kind == "evidence" {
-			kind = "content_item"
-		}
-		sourceID := "src-" + sanitizeExportPart(ref)
-		if sourceID == "src-" || seen[sourceID] {
+		sourceID := strings.TrimSpace(source.SourceID)
+		if sourceID == "" || seen[sourceID] {
 			continue
 		}
 		seen[sourceID] = true
-		out = append(out, coagentSourceFromURI(sourceID, kind, ref, ref))
+		out = append(out, source)
 	}
 	return out
+}
+
+func coagentSourceFromTypedEvidenceRef(ref string) (types.CoagentPacketSource, bool) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return types.CoagentPacketSource{}, false
+	}
+	key, value := splitTypedWorkerUpdateRef(ref)
+	uri := ref
+	if key == "" && looksLikeArtifactPath(ref) {
+		key = "file_artifact"
+		value = ref
+		uri = "file_artifact:" + ref
+	}
+	if key == "" || value == "" {
+		return types.CoagentPacketSource{}, false
+	}
+	kind := key
+	switch key {
+	case "content_id", "evidence":
+		kind = "content_item"
+	case "source_service_item":
+		kind = "source_service_item"
+	default:
+		if !executionTargetKind(kind) {
+			return types.CoagentPacketSource{}, false
+		}
+	}
+	sourceID := "src-" + sanitizeExportPart(uri)
+	if sourceID == "src-" {
+		return types.CoagentPacketSource{}, false
+	}
+	return coagentSourceFromURI(sourceID, kind, uri, uri), true
 }
 
 func coagentClaimsFromTexts(texts []string, sources []types.CoagentPacketSource) []types.CoagentPacketClaim {

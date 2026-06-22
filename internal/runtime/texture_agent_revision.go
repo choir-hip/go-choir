@@ -384,11 +384,13 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
 		if workerWake {
-			if evidenceEntities := rt.evidenceSourceEntitiesFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12); len(evidenceEntities) > 0 {
+			evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
+			if len(evidenceEntities) > 0 {
 				var changedEvidenceEntities bool
 				sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
 				changedSourceEntities = changedSourceEntities || changedEvidenceEntities
 			}
+			mergeCoagentSourceRejectionsIntoMetadata(metadata, sourceRejections)
 		}
 		if len(sourceEntities) > 0 {
 			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
@@ -538,9 +540,6 @@ func textureHardRequirementHints(parts ...string) []string {
 		for _, match := range textureSHA256RequirementRE.FindAllString(text, -1) {
 			add("Required hash/value: " + match)
 		}
-		for _, match := range textureInlineSourceRefRE.FindAllString(text, -1) {
-			add("Preserve source entity identity from legacy inline source ref: " + legacyInlineSourceRefRequirement(match))
-		}
 		for _, label := range []string{"[S1]", "[S2]", "[S3]"} {
 			if strings.Contains(text, label) {
 				add("Required evidence label: " + label)
@@ -554,21 +553,6 @@ func textureHardRequirementHints(parts ...string) []string {
 		return out[:32]
 	}
 	return out
-}
-
-func legacyInlineSourceRefRequirement(match string) string {
-	label := strings.TrimSpace(match)
-	entityID := ""
-	if start := strings.LastIndex(match, "(source:"); start >= 0 {
-		entityID = strings.TrimSpace(strings.TrimSuffix(match[start+len("(source:"):], ")"))
-		label = strings.TrimSpace(match[:start])
-		label = strings.TrimPrefix(label, "[")
-		label = strings.TrimSuffix(label, "]")
-	}
-	if entityID == "" {
-		return truncatePromptSnippet(match, 180)
-	}
-	return fmt.Sprintf("source_entity_id=%s label=%q; keep it as a structured source_ref/source_embed, not markdown source syntax", entityID, label)
 }
 
 func textureAgentRevisionContextMode(current types.Revision, previous *types.Revision) string {
@@ -629,6 +613,11 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n\nDetected Texture source entities:\n")
 		b.WriteString(formattedEntities)
 		b.WriteString(textureprompts.RevisionSourceEntitiesIntro())
+	}
+	if formattedRejections := formatCoagentSourceRejectionsForPrompt(decodeCoagentSourceRejections(metadata[textureSourceRejectionsKey])); formattedRejections != "" {
+		b.WriteString("\n\nRejected packet.sources that could not become Texture source entities:\n")
+		b.WriteString(formattedRejections)
+		b.WriteString("\nTreat these as explicit source blockers or source gaps. Do not replace them with ordinary markdown links or uncited prose.\n")
 	}
 	if current.RevisionID != "" {
 		b.WriteString("\n\nCurrent head revision: ")

@@ -27,7 +27,10 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		if sourceEntitiesRaw != "" && sourceEntitiesRaw != "[]" && sourceEntitiesRaw != "null" {
 			return types.Revision{}, "", "", fmt.Errorf("%w: source_entities require body_doc", ErrInvalidTextureRevision)
 		}
-		doc = plainTextStructuredTextureDoc(rev.DocID, rev.RevisionID, rev.Content)
+		if rev.AuthorKind != types.AuthorUser {
+			return types.Revision{}, "", "", fmt.Errorf("%w: body_doc is required for non-user Texture revisions", ErrInvalidTextureRevision)
+		}
+		doc = userAuthoredTextStructuredTextureDoc(rev.DocID, rev.RevisionID, rev.Content)
 		entities = []texturedoc.SourceEntity{}
 	}
 	if err := rejectLegacySourceSidecars(rev); err != nil {
@@ -127,7 +130,7 @@ func rawJSONCarriesData(raw json.RawMessage, emptyObjectDefault string) bool {
 	}
 }
 
-func plainTextStructuredTextureDoc(docID, revisionID, content string) texturedoc.StructuredTextureDoc {
+func userAuthoredTextStructuredTextureDoc(docID, revisionID, content string) texturedoc.StructuredTextureDoc {
 	docNodeID := stableStructuredNodeID("doc", docID, revisionID, "root")
 	paragraphID := stableStructuredNodeID("p", docID, revisionID, "0")
 	return texturedoc.StructuredTextureDoc{

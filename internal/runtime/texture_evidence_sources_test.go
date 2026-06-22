@@ -162,7 +162,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		t.Fatalf("CreateEvidence: %v", err)
 	}
 
-	sources := coagentSourcesFromRefs([]string{
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{
 		"source_service_item:srcitem_market_rules",
 		"source_service_item=srcitem_policy_digest",
 		"content_id:content-cloud-audit",
@@ -219,7 +219,7 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 	now := time.Now().UTC()
 	ownerID := "user-execution-sources"
 
-	sources := coagentSourcesFromRefs([]string{
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{
 		"command_output:cmd-runtime-tests",
 		"diff_hunk:diff-texture-evidence",
 		"app_change_package:acp-structured-texture",
@@ -306,7 +306,7 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 	}
 	doc.CurrentRevisionID = parent.RevisionID
 
-	sources := coagentSourcesFromRefs([]string{"source_service_item:srcitem_native_panel"})
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{"source_service_item:srcitem_native_panel"})
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-native-source-refs",
 		OwnerID:       ownerID,
@@ -454,7 +454,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	}
 	doc.CurrentRevisionID = parent.RevisionID
 
-	sources := coagentSourcesFromRefs([]string{"evidence_id:" + evidenceID})
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{"evidence_id:" + evidenceID})
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-summary-source",
 		OwnerID:       ownerID,

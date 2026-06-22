@@ -551,9 +551,11 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		}
 		appendCoagentUpdateIDsForRun(rec, updateIDs)
 		var sourceEntities []textureSourceEntity
+		var sourceRejections []coagentSourceRejection
 		if agentProfileForRun(rec) == AgentProfileTexture {
-			sourceEntities = rt.evidenceSourceEntitiesFromWorkerUpdates(context.Background(), ownerID, fresh)
+			sourceEntities, sourceRejections = rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(context.Background(), ownerID, fresh)
 			mergeTextureSourceEntitiesIntoRunMetadata(rec, sourceEntities)
+			mergeCoagentSourceRejectionsIntoRunMetadata(rec, sourceRejections)
 		}
 		phase := coagentPacketDeliveryMid
 		if finalCheckpoint {
@@ -562,7 +564,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			phase = initialPhase
 			initialPhase = ""
 		}
-		msgs, _, err := buildCoagentUpdateUserMessages(fresh, phase, agentID, sourceEntities)
+		msgs, _, err := buildCoagentUpdateUserMessages(fresh, phase, agentID, sourceEntities, sourceRejections)
 		if err != nil {
 			return nil, err
 		}
@@ -681,7 +683,14 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 		return messages, nil
 	}
 	appendCoagentUpdateIDsForRun(rec, updateIDs)
-	msgs, _, err := buildCoagentUpdateUserMessages(fresh, coagentPacketDeliveryCold, agentID, nil)
+	var sourceEntities []textureSourceEntity
+	var sourceRejections []coagentSourceRejection
+	if agentProfileForRun(rec) == AgentProfileTexture {
+		sourceEntities, sourceRejections = rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, fresh)
+		mergeTextureSourceEntitiesIntoRunMetadata(rec, sourceEntities)
+		mergeCoagentSourceRejectionsIntoRunMetadata(rec, sourceRejections)
+	}
+	msgs, _, err := buildCoagentUpdateUserMessages(fresh, coagentPacketDeliveryCold, agentID, sourceEntities, sourceRejections)
 	if err != nil {
 		return messages, err
 	}

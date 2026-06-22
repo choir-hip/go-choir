@@ -24,8 +24,17 @@ type coagentUpdatePacket struct {
 	TrajectoryID      string                    `json:"trajectory_id,omitempty"`
 	Updates           []coagentUpdatePacketItem `json:"updates"`
 	SourceEntities    []textureSourceEntity     `json:"source_entities,omitempty"`
+	SourceRejections  []coagentSourceRejection  `json:"source_rejections,omitempty"`
 	SourceInstruction string                    `json:"source_instruction,omitempty"`
 	Instruction       string                    `json:"instruction,omitempty"`
+}
+
+type coagentSourceRejection struct {
+	UpdateID  string `json:"update_id,omitempty"`
+	SourceID  string `json:"source_id,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	TargetURI string `json:"target_uri,omitempty"`
+	Reason    string `json:"reason"`
 }
 
 type coagentUpdatePacketItem struct {
@@ -38,7 +47,7 @@ type coagentUpdatePacketItem struct {
 	HumanProjection string                           `json:"human_projection"`
 }
 
-func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliveryPhase string, targetAgentID string, sourceEntities []textureSourceEntity) ([]json.RawMessage, []string, error) {
+func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliveryPhase string, targetAgentID string, sourceEntities []textureSourceEntity, sourceRejections []coagentSourceRejection) ([]json.RawMessage, []string, error) {
 	if len(updates) == 0 {
 		return nil, nil, nil
 	}
@@ -47,7 +56,8 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 		DeliveryPhase:     deliveryPhase,
 		TargetAgentID:     strings.TrimSpace(targetAgentID),
 		SourceEntities:    sourceEntities,
-		SourceInstruction: coagentUpdateSourceInstruction(sourceEntities),
+		SourceRejections:  sourceRejections,
+		SourceInstruction: coagentUpdateSourceInstruction(sourceEntities, sourceRejections),
 		Instruction:       coagentUpdateInstruction(deliveryPhase),
 		Updates:           make([]coagentUpdatePacketItem, 0, len(updates)),
 	}
@@ -91,11 +101,21 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 	return []json.RawMessage{msg}, updateIDs, nil
 }
 
-func coagentUpdateSourceInstruction(sourceEntities []textureSourceEntity) string {
-	if len(sourceEntities) == 0 {
+func coagentUpdateSourceInstruction(sourceEntities []textureSourceEntity, sourceRejections []coagentSourceRejection) string {
+	if len(sourceEntities) == 0 && len(sourceRejections) == 0 {
 		return ""
 	}
-	return "When writing Texture content from these updates, preserve sources as Texture source entities/transclusion refs using the listed source_entities entity_id values. Do not write ordinary URL links, markdown web links, source inventories, or Source: lines as substitutes for a listed source entity."
+	instruction := ""
+	if len(sourceEntities) > 0 {
+		instruction = "When writing Texture content from these updates, preserve sources as Texture source entities/transclusion refs using the listed source_entities entity_id values. Do not write ordinary URL links, markdown web links, source inventories, or Source: lines as substitutes for a listed source entity."
+	}
+	if len(sourceRejections) > 0 {
+		if instruction != "" {
+			instruction += " "
+		}
+		instruction += "Some packet.sources could not be materialized; treat source_rejections as blockers or explicit source gaps, and do not silently cite or replace them with prose links."
+	}
+	return instruction
 }
 
 func coagentUpdatePacketPreamble(deliveryPhase string) string {

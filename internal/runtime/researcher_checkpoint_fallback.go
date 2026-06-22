@@ -117,7 +117,7 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 	}
 	sourceRefs := append([]string{}, researcherFallbackEvidenceIDs(output)...)
 	sourceRefs = append(sourceRefs, refs...)
-	sources := coagentSourcesFromRefs(sourceRefs)
+	sources := coagentSourcesFromTypedEvidenceRefs(sourceRefs)
 	args := map[string]any{
 		"schema_version": types.CoagentSourcePacketSchemaV1,
 		"kind":           kind,

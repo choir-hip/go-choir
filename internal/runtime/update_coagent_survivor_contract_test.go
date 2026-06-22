@@ -300,8 +300,6 @@ func TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets(t *testing.T)
 // skipped until E3.3 lands a reporting surface; the skip text names the
 // unblock condition so E3.3 cannot silently leave it skipped.
 func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
-	t.Skip("E3.3 obligation: when a packet.source fails to materialize into a Texture source entity, the rejection must be reported to the integrating agent (logged as a structured source-rejection event or surfaced in revision metadata), not silently continued at texture_evidence_sources.go:163-170. Remove this skip once the reporting surface lands and make the assertion below green.")
-
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
@@ -348,16 +346,13 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get stored packet: %v", err)
 	}
-	entities := rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, []types.CoagentSourcePacket{stored})
+	entities, rejections := rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, []types.CoagentSourcePacket{stored})
 	if len(entities) != 0 {
 		t.Fatalf("expected zero materialized entities for an unsupported source kind, got %#v", entities)
 	}
-	// Survivor contract: the rejection must be observable. The concrete
-	// surface is E3.3's choice (structured event, revision metadata field,
-	// or a dedicated report), but it must exist and it must reference the
-	// source_id of the rejected source. This assertion fails today and goes
-	// green when E3.3 lands.
-	t.Fatalf("E3.3 not landed: source src-unsupported was silently dropped at collation with no observable rejection; expected a reported rejection referencing src-unsupported")
+	if len(rejections) != 1 || rejections[0].SourceID != "src-unsupported" || !strings.Contains(rejections[0].Reason, "did not materialize") {
+		t.Fatalf("source rejection = %#v, want visible rejection for src-unsupported", rejections)
+	}
 }
 
 func mustNow(t *testing.T) time.Time {
