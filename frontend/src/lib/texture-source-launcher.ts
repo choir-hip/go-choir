@@ -12,9 +12,10 @@ export function sourceEntityLaunchPayload(entity: any): any | null {
   const appId = openPlan.appId || sourceEntityOpenAppID(entity);
   const sourceUrl = sourceEntityTargetURL(entity);
   const targetKind = String(entity?.target?.target_kind || entity?.target?.kind || '').trim();
-  const contentId = entity?.target?.content_id || (targetKind === 'content_item' ? entity?.target?.id : '') || '';
   const title = sourceEntityTitle(entity);
   const entityId = sourceEntityID(entity);
+  const targetID = String(entity?.target?.id || '').trim();
+  const contentId = entity?.target?.content_id || (targetKind === 'content_item' && targetID !== entityId ? targetID : '') || '';
   const sourceKind = String(entity?.kind || entity?.target?.kind || '').trim();
   return {
     appId,

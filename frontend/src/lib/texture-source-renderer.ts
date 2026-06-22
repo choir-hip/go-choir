@@ -90,6 +90,16 @@ export function sourceEntitySnapshotText(entity: any): string {
   return sourceEntityReaderSnapshotText(entity) || sourceEntityExcerptText(entity);
 }
 
+export function sourceEntityReaderFallbackText(entity: any): string {
+  if (!entity) return '';
+  const title = sourceEntityTitle(entity);
+  const url = sourceEntityTargetURL(entity);
+  const lines = [];
+  if (title) lines.push(title);
+  if (url) lines.push(`Original source: ${url}`);
+  return lines.join('\n\n');
+}
+
 function normalizeExcerptText(value: unknown): string {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }

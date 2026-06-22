@@ -204,6 +204,39 @@ func TestTextureToolStructuredSourceInsertionWritesBodyNodesAndTopLevelEntities(
 	}
 }
 
+func TestTextureToolSourceRefOffsetNormalizesOutOfWord(t *testing.T) {
+	current := plainTextureToolRevision(t, "Frontier labs are still shipping, and OpenAI is active.")
+	offset := len("Frontier labs are still s")
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:             "insert_source_ref",
+			BlockID:        "p-1",
+			SourceEntityID: "src-web",
+			Offset:         &offset,
+		}},
+		AvailableSources: []texturedoc.SourceEntity{{
+			SourceEntityID: "src-web",
+			Target:         texturedoc.SourceTarget{Kind: "web_url", URI: "https://example.com/story"},
+			Selectors:      []texturedoc.SourceSelector{{Kind: sourcecontract.SelectorKindWholeResource}},
+			Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Example story"},
+			Evidence:       texturedoc.SourceEvidence{State: sourcecontract.EvidenceStateConfirms, OpenSurface: sourcecontract.OpenSurfaceSource},
+			Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "runtime"},
+		}},
+	}, current)
+	if err != nil {
+		t.Fatalf("materialize source ref insertion: %v", err)
+	}
+	if strings.Contains(got.Content, "s[1]hipping") {
+		t.Fatalf("source ref landed inside word: %q", got.Content)
+	}
+	if !strings.Contains(got.Content, "shipping[1],") {
+		t.Fatalf("source ref did not normalize to word boundary: %q", got.Content)
+	}
+}
+
 func TestTextureToolRejectsLegacyEditsAndSourceSyntax(t *testing.T) {
 	current := plainTextureToolRevision(t, "Start")
 	if _, err := materializeTextureToolEdit(editTextureArgs{

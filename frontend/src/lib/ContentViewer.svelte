@@ -8,6 +8,7 @@
     normalizeSourceEvidenceState,
     readerArtifactStateLabel,
     sourceEntityExcerptText,
+    sourceEntityReaderFallbackText,
     sourceEntityReaderSnapshotText,
     sourceEntityReaderSnapshotStatus,
     sourceEvidenceResearchLabel,
@@ -27,6 +28,7 @@
   $: sourceEntityTarget = sourceEntity?.target || {};
   $: sourceEntityReaderSnapshot = sourceEntityReaderSnapshotText(sourceEntity);
   $: sourceEntityFallbackSnapshot = sourceEntityExcerptText(sourceEntity);
+  $: sourceEntityReaderFallback = sourceEntityReaderFallbackText(sourceEntity);
   $: sourceUrl = item?.source_url || appContext?.sourceUrl || '';
   $: browserSourceUrl = browserOpenableSourceURL(sourceUrl);
   $: filePath = item?.file_path || appContext?.filePath || '';
@@ -40,8 +42,8 @@
     : '';
   $: readerText = String(
     isPublishedSourceReader
-      ? sourceEntityReaderSnapshot || item?.text_content || sourceEntityFallbackSnapshot
-      : item?.text_content || sourceEntityReaderSnapshot || sourceEntityFallbackSnapshot
+      ? sourceEntityReaderSnapshot || item?.text_content || sourceEntityFallbackSnapshot || sourceEntityReaderFallback
+      : item?.text_content || sourceEntityReaderSnapshot || sourceEntityFallbackSnapshot || sourceEntityReaderFallback
   ).trim();
   $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: true, linkMode: 'anchor' });
   $: hasReaderText = readerText.length > 0;

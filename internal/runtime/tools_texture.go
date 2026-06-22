@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -500,7 +501,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 				FileMutation:  "allowed",
 			}),
 		}, nil, nil),
-		CreatedAt:     now,
+		CreatedAt: now,
 	}
 	update.Content = buildWorkerUpdateMessage(update)
 	message := &types.ChannelMessage{
@@ -1309,7 +1310,7 @@ func insertInlineNodeAtOffset(nodes []texturedoc.Node, insert texturedoc.Node, o
 	if offset == nil || *offset < 0 {
 		return append(nodes, insert)
 	}
-	remaining := *offset
+	remaining := normalizeInlineInsertionOffset(nodes, *offset)
 	out := make([]texturedoc.Node, 0, len(nodes)+1)
 	inserted := false
 	for _, node := range nodes {
@@ -1340,6 +1341,33 @@ func insertInlineNodeAtOffset(nodes []texturedoc.Node, insert texturedoc.Node, o
 		out = append(out, insert)
 	}
 	return out
+}
+
+func normalizeInlineInsertionOffset(nodes []texturedoc.Node, offset int) int {
+	if offset <= 0 {
+		return 0
+	}
+	runes := []rune{}
+	for _, node := range nodes {
+		if node.Type != "text" {
+			continue
+		}
+		runes = append(runes, []rune(node.Text)...)
+	}
+	if offset >= len(runes) {
+		return offset
+	}
+	if !isTextureWordRune(runes[offset-1]) || !isTextureWordRune(runes[offset]) {
+		return offset
+	}
+	for offset < len(runes) && isTextureWordRune(runes[offset]) {
+		offset++
+	}
+	return offset
+}
+
+func isTextureWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '\''
 }
 
 func filterDetachedStructuredSourceEntities(doc texturedoc.StructuredTextureDoc, entities []texturedoc.SourceEntity) []texturedoc.SourceEntity {

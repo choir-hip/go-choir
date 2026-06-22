@@ -65,8 +65,42 @@ func TestEvidenceRecordToSourceEntity_URLOnlyIsWholeResource(t *testing.T) {
 	if entity.EntityID == "" || entity.Target.URL != "https://example.test/a" {
 		t.Fatalf("unexpected entity %#v", entity)
 	}
+	if entity.Kind != "web_url" || entity.Target.TargetKind != "web_url" {
+		t.Fatalf("URL-only evidence should stay a web_url source, got %#v", entity)
+	}
 	if len(entity.Selectors) != 1 || entity.Selectors[0].SelectorKind != "whole_resource" {
 		t.Fatalf("expected whole_resource selector, got %#v", entity.Selectors)
+	}
+}
+
+func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing.T) {
+	update := types.CoagentSourcePacket{
+		OwnerID: "owner-url-source",
+		AgentID: "researcher:url-source",
+		Role:    AgentProfileResearcher,
+		Packet: types.CoagentSourcePacketPayload{
+			Sources: []types.CoagentPacketSource{{
+				SourceID: "src-http",
+				Kind:     "web_url",
+				Target: types.CoagentPacketSourceTarget{
+					URI:   "https://example.test/newsroom",
+					Title: "Example newsroom",
+				},
+			}},
+		},
+	}
+	entity := sourceEntityFromCoagentPacketSource(context.Background(), nil, update.OwnerID, update.Packet.Sources[0], update)
+	if entity.EntityID == "" {
+		t.Fatal("expected URL source entity")
+	}
+	if entity.Kind != "web_url" || entity.Target.TargetKind != "web_url" {
+		t.Fatalf("HTTP packet source should stay URL-backed, got %#v", entity)
+	}
+	if entity.Target.ContentID != "" || entity.Target.ItemID != "" {
+		t.Fatalf("HTTP packet source should not invent retrievable content ids: %#v", entity.Target)
+	}
+	if entity.Target.CanonicalURL != "https://example.test/newsroom" {
+		t.Fatalf("canonical URL not preserved: %#v", entity.Target)
 	}
 }
 

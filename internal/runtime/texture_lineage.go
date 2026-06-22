@@ -65,6 +65,9 @@ const textureCitationResolutionOmitSentinel = "__texture_omit_citation__"
 
 var markdownLineageSourceLinkOrMarkerRE = regexp.MustCompile(`\[[^\]\n]{1,160}\]\(source:[^) \t\r\n]{1,160}\)|\[(?:\d{1,3}|\^[A-Za-z0-9_-]{1,40})\]`)
 var markdownLineageSourceLinkRE = regexp.MustCompile(`^\[([^\]\n]{1,160})\]\(source:([^) \t\r\n]{1,160})\)$`)
+var markdownLineageHeadingRE = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+var markdownLineageBulletRE = regexp.MustCompile(`^[-*]\s+(.+)$`)
+var markdownLineageOrderedRE = regexp.MustCompile(`^(\d{1,3})\.\s+(.+)$`)
 
 func markdownLineageStructuredRevision(docID, revisionID, content string, sourceEntities []textureSourceEntity, resolutions []textureCitationMarkerResolution) (json.RawMessage, json.RawMessage, string, error) {
 	structuredEntities := structuredSourceEntitiesFromRuntimeSources(sourceEntities)
@@ -75,22 +78,22 @@ func markdownLineageStructuredRevision(docID, revisionID, content string, source
 	resolved := markdownLineageResolutionMap(resolutions)
 	used := map[string]bool{}
 	refSeq := 0
-	inlineNodes := []texturedoc.Node{}
-	addText := func(segment string) {
+	blockSeq := 0
+	addText := func(nodes *[]texturedoc.Node, segment string) {
 		if segment == "" {
 			return
 		}
 		parts := strings.Split(segment, "\n")
 		for i, part := range parts {
 			if i > 0 {
-				inlineNodes = append(inlineNodes, texturedoc.Node{Type: "hard_break"})
+				*nodes = append(*nodes, texturedoc.Node{Type: "hard_break"})
 			}
 			if part != "" {
-				inlineNodes = append(inlineNodes, texturedoc.Node{Type: "text", Text: part})
+				*nodes = append(*nodes, texturedoc.Node{Type: "text", Text: part})
 			}
 		}
 	}
-	addSourceRef := func(entityID, label string) error {
+	addSourceRef := func(nodes *[]texturedoc.Node, entityID, label string) error {
 		entityID = strings.TrimSpace(entityID)
 		if entityID == "" {
 			return fmt.Errorf("source_ref requires source_entity_id")
@@ -108,36 +111,57 @@ func markdownLineageStructuredRevision(docID, revisionID, content string, source
 		if label = strings.TrimSpace(label); label != "" {
 			attrs["label"] = label
 		}
-		inlineNodes = append(inlineNodes, texturedoc.Node{Type: "source_ref", Attrs: attrs})
+		*nodes = append(*nodes, texturedoc.Node{Type: "source_ref", Attrs: attrs})
 		return nil
 	}
-
-	last := 0
-	for _, match := range markdownLineageSourceLinkOrMarkerRE.FindAllStringIndex(content, -1) {
-		token := content[match[0]:match[1]]
-		addText(content[last:match[0]])
-		if parts := markdownLineageSourceLinkRE.FindStringSubmatch(token); len(parts) == 3 {
-			if err := addSourceRef(parts[2], parts[1]); err != nil {
-				return nil, nil, "", err
-			}
-		} else {
-			entityID := strings.TrimSpace(resolved[token])
-			if entityID == "" {
-				return nil, nil, "", fmt.Errorf("unresolved markdown citation marker %s requires a source_ref resolution or no_source_needed action", token)
-			}
-			if entityID != textureCitationResolutionOmitSentinel {
-				label := strings.TrimSuffix(strings.TrimPrefix(token, "["), "]")
-				if err := addSourceRef(entityID, label); err != nil {
-					return nil, nil, "", err
+	parseInline := func(text string) ([]texturedoc.Node, error) {
+		inlineNodes := []texturedoc.Node{}
+		last := 0
+		for _, match := range markdownLineageSourceLinkOrMarkerRE.FindAllStringIndex(text, -1) {
+			token := text[match[0]:match[1]]
+			addText(&inlineNodes, text[last:match[0]])
+			if parts := markdownLineageSourceLinkRE.FindStringSubmatch(token); len(parts) == 3 {
+				if err := addSourceRef(&inlineNodes, parts[2], parts[1]); err != nil {
+					return nil, err
 				}
 			} else {
-				trimTrailingInlineHorizontalSpace(&inlineNodes)
+				entityID := strings.TrimSpace(resolved[token])
+				if entityID == "" {
+					return nil, fmt.Errorf("unresolved markdown citation marker %s requires a source_ref resolution or no_source_needed action", token)
+				}
+				if entityID != textureCitationResolutionOmitSentinel {
+					label := strings.TrimSuffix(strings.TrimPrefix(token, "["), "]")
+					if err := addSourceRef(&inlineNodes, entityID, label); err != nil {
+						return nil, err
+					}
+				} else {
+					trimTrailingInlineHorizontalSpace(&inlineNodes)
+				}
 			}
+			last = match[1]
 		}
-		last = match[1]
+		addText(&inlineNodes, text[last:])
+		return inlineNodes, nil
 	}
-	addText(content[last:])
-	if len(inlineNodes) == 0 {
+	nextBlockID := func(prefix string) string {
+		blockSeq++
+		return prefix + "-" + revisionID + "-" + strconv.Itoa(blockSeq)
+	}
+	paragraphNode := func(text string) (texturedoc.Node, bool, error) {
+		inlineNodes, err := parseInline(strings.TrimSpace(text))
+		if err != nil {
+			return texturedoc.Node{}, false, err
+		}
+		if len(inlineNodes) == 0 {
+			return texturedoc.Node{}, false, nil
+		}
+		return texturedoc.Node{Type: "paragraph", Attrs: map[string]any{"id": nextBlockID("p")}, Content: inlineNodes}, true, nil
+	}
+	blocks, err := markdownLineageBodyDocBlocks(content, parseInline, nextBlockID, paragraphNode)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if len(blocks) == 0 {
 		return nil, nil, "", fmt.Errorf("structured markdown lineage revision would be empty")
 	}
 	referencedEntities := make([]texturedoc.SourceEntity, 0, len(used))
@@ -149,13 +173,9 @@ func markdownLineageStructuredRevision(docID, revisionID, content string, source
 	doc := texturedoc.StructuredTextureDoc{
 		Schema: texturedoc.SchemaV1,
 		Doc: texturedoc.Node{
-			Type:  "doc",
-			Attrs: map[string]any{"id": "doc-" + docID + "-" + revisionID},
-			Content: []texturedoc.Node{{
-				Type:    "paragraph",
-				Attrs:   map[string]any{"id": "p-" + revisionID + "-0"},
-				Content: inlineNodes,
-			}},
+			Type:    "doc",
+			Attrs:   map[string]any{"id": "doc-" + docID + "-" + revisionID},
+			Content: blocks,
 		},
 	}
 	projection, err := texturedoc.Project(doc, referencedEntities)
@@ -171,6 +191,143 @@ func markdownLineageStructuredRevision(docID, revisionID, content string, source
 		return nil, nil, "", err
 	}
 	return bodyDoc, sourceEntityJSON, projection.Text, nil
+}
+
+func markdownLineageBodyDocBlocks(content string, parseInline func(string) ([]texturedoc.Node, error), nextBlockID func(string) string, paragraphNode func(string) (texturedoc.Node, bool, error)) ([]texturedoc.Node, error) {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	lines := strings.Split(normalized, "\n")
+	blocks := []texturedoc.Node{}
+	paragraph := []string{}
+	bulletItems := []texturedoc.Node{}
+	orderedItems := []texturedoc.Node{}
+	orderedStart := 1
+
+	flushParagraph := func() error {
+		if len(paragraph) == 0 {
+			return nil
+		}
+		block, ok, err := paragraphNode(strings.Join(paragraph, " "))
+		if err != nil {
+			return err
+		}
+		if ok {
+			blocks = append(blocks, block)
+		}
+		paragraph = nil
+		return nil
+	}
+	flushBulletList := func() {
+		if len(bulletItems) == 0 {
+			return
+		}
+		blocks = append(blocks, texturedoc.Node{
+			Type:    "bullet_list",
+			Attrs:   map[string]any{"id": nextBlockID("ul")},
+			Content: bulletItems,
+		})
+		bulletItems = nil
+	}
+	flushOrderedList := func() {
+		if len(orderedItems) == 0 {
+			return
+		}
+		blocks = append(blocks, texturedoc.Node{
+			Type:    "ordered_list",
+			Attrs:   map[string]any{"id": nextBlockID("ol"), "start": orderedStart},
+			Content: orderedItems,
+		})
+		orderedItems = nil
+		orderedStart = 1
+	}
+	flushLists := func() {
+		flushBulletList()
+		flushOrderedList()
+	}
+	flushAll := func() error {
+		if err := flushParagraph(); err != nil {
+			return err
+		}
+		flushLists()
+		return nil
+	}
+	listItem := func(text string) (texturedoc.Node, error) {
+		block, ok, err := paragraphNode(text)
+		if err != nil {
+			return texturedoc.Node{}, err
+		}
+		if !ok {
+			block = texturedoc.Node{Type: "paragraph", Attrs: map[string]any{"id": nextBlockID("p")}}
+		}
+		return texturedoc.Node{
+			Type:    "list_item",
+			Attrs:   map[string]any{"id": nextBlockID("li")},
+			Content: []texturedoc.Node{block},
+		}, nil
+	}
+
+	for _, rawLine := range lines {
+		line := strings.TrimRight(rawLine, " \t")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if err := flushAll(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if heading := markdownLineageHeadingRE.FindStringSubmatch(trimmed); len(heading) == 3 {
+			if err := flushAll(); err != nil {
+				return nil, err
+			}
+			inlineNodes, err := parseInline(heading[2])
+			if err != nil {
+				return nil, err
+			}
+			if len(inlineNodes) > 0 {
+				blocks = append(blocks, texturedoc.Node{
+					Type:    "heading",
+					Attrs:   map[string]any{"id": nextBlockID("h"), "level": len(heading[1])},
+					Content: inlineNodes,
+				})
+			}
+			continue
+		}
+		if bullet := markdownLineageBulletRE.FindStringSubmatch(trimmed); len(bullet) == 2 {
+			if err := flushParagraph(); err != nil {
+				return nil, err
+			}
+			flushOrderedList()
+			item, err := listItem(bullet[1])
+			if err != nil {
+				return nil, err
+			}
+			bulletItems = append(bulletItems, item)
+			continue
+		}
+		if ordered := markdownLineageOrderedRE.FindStringSubmatch(trimmed); len(ordered) == 3 {
+			if err := flushParagraph(); err != nil {
+				return nil, err
+			}
+			flushBulletList()
+			if len(orderedItems) == 0 {
+				if start, err := strconv.Atoi(ordered[1]); err == nil && start > 0 {
+					orderedStart = start
+				}
+			}
+			item, err := listItem(ordered[2])
+			if err != nil {
+				return nil, err
+			}
+			orderedItems = append(orderedItems, item)
+			continue
+		}
+		flushLists()
+		paragraph = append(paragraph, trimmed)
+	}
+	if err := flushAll(); err != nil {
+		return nil, err
+	}
+	return blocks, nil
 }
 
 func trimTrailingInlineHorizontalSpace(nodes *[]texturedoc.Node) {

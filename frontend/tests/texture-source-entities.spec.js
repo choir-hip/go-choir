@@ -9,6 +9,7 @@ import {
   sourceSelectorList,
   sourceOpenPlan,
   sourceEntityInlineExcerptText,
+  sourceEntityReaderFallbackText,
   sourceEntityOpenPlan,
   renderSourceTransclusionBody,
   renderInlineMarkdown,
@@ -19,6 +20,7 @@ import {
   sourceEvidenceStateLabel,
   textureRelatedMarkdownTarget,
 } from '../src/lib/texture-source-renderer.ts';
+import { sourceEntityLaunchPayload } from '../src/lib/texture-source-launcher.ts';
 import { revisionSourceEntities } from '../src/lib/texture-source-state.ts';
 import { browserOpenableSourceURL } from '../src/lib/source-url.ts';
 
@@ -50,6 +52,59 @@ test('source reader exposes only web-safe original links to the browser', () => 
   expect(browserOpenableSourceURL('choir://universal-wire/source/source-port-authority')).toBe('');
   expect(browserOpenableSourceURL('source_service_item:srcitem_123')).toBe('');
   expect(browserOpenableSourceURL('/api/content/items/item_123')).toBe('');
+});
+
+test('URL-only source entities open as reader fallback, not missing content items', () => {
+  const entity = {
+    source_entity_id: 'src-url-only',
+    kind: 'web_url',
+    target: {
+      kind: 'web_url',
+      uri: 'https://example.com/newsroom',
+      id: 'src-url-only',
+    },
+    display: {
+      title: 'Newsroom - Example',
+      mode: 'numbered_ref',
+    },
+    evidence: {
+      state: 'available',
+      open_surface: 'source',
+    },
+  };
+
+  const payload = sourceEntityLaunchPayload(entity);
+
+  expect(payload.appId).toBe('content');
+  expect(payload.appContext.contentId).toBe('');
+  expect(payload.appContext.sourceUrl).toBe('https://example.com/newsroom');
+  expect(sourceEntityReaderFallbackText(entity)).toContain('Newsroom - Example');
+  expect(sourceEntityReaderFallbackText(entity)).toContain('Original source: https://example.com/newsroom');
+});
+
+test('legacy URL-only content_item source ids do not trigger content-item fetches', () => {
+  const entity = {
+    source_entity_id: 'src-synthetic-url',
+    kind: 'content_item',
+    target: {
+      kind: 'content_item',
+      id: 'src-synthetic-url',
+      uri: 'https://example.com/legacy-newsroom',
+    },
+    display: {
+      title: 'Legacy newsroom source',
+    },
+    evidence: {
+      state: 'available',
+      open_surface: 'source',
+    },
+  };
+
+  const payload = sourceEntityLaunchPayload(entity);
+
+  expect(payload.appContext.contentId).toBe('');
+  expect(payload.appContext.sourceUrl).toBe('https://example.com/legacy-newsroom');
+  expect(sourceEntityReaderFallbackText(entity)).toContain('Legacy newsroom source');
 });
 
 test('source inline excerpts prefer selected transclusion over full reader snapshot', () => {

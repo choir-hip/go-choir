@@ -80,8 +80,8 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 		}
 	case isHTTPURL(sourceURI):
 		entity.EntityID = stableSourceEntityID("content_item", sourceURI)
-		entity.Kind = "content_item"
-		entity.Target = textureSourceEntityTarget{TargetKind: "content_item", URL: sourceURI, CanonicalURL: sourceURI}
+		entity.Kind = "web_url"
+		entity.Target = textureSourceEntityTarget{TargetKind: "web_url", URL: sourceURI, CanonicalURL: sourceURI}
 		entity.Selectors = []textureSourceEntitySelector{{SelectorKind: "whole_resource"}}
 	case executionKind != "" && executionID != "":
 		entity = executionEvidenceSourceEntity(executionKind, executionID, strings.TrimSpace(firstNonEmpty(rec.Title, rec.SourceURI, rec.EvidenceID)), strings.TrimSpace(rec.AgentID))
@@ -197,9 +197,9 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, owner
 		if entity.EntityID == "" && isHTTPURL(uri) {
 			entity = textureSourceEntity{
 				EntityID:  stableSourceEntityID("content_item", uri),
-				Kind:      "content_item",
+				Kind:      "web_url",
 				Label:     firstNonEmpty(strings.TrimSpace(source.Target.Title), uri),
-				Target:    textureSourceEntityTarget{TargetKind: "content_item", URL: uri, CanonicalURL: uri},
+				Target:    textureSourceEntityTarget{TargetKind: "web_url", URL: uri, CanonicalURL: uri},
 				Selectors: []textureSourceEntitySelector{{SelectorKind: sourcecontract.SelectorKindWholeResource}},
 				Display: textureSourceEntityDisplay{
 					InlineMode:       "collapsed_citation",
