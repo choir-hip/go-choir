@@ -952,6 +952,7 @@
     const bundle = await resolvePublication(routePath);
     publishedBundle = bundle;
     publishedRoutePath = bundle.route?.path || routePath;
+    editorBodyDoc = bundle.artifact?.body_doc || null;
     editorValue = bundle.artifact?.content || '';
     lastAutosavedContent = editorValue;
     const ref = buildPublishedTransclusionRef(bundle);

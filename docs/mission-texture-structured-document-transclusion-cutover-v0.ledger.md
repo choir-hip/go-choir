@@ -1373,3 +1373,45 @@ kind normalization, add focused regression coverage, then rerun the failing
 publication browser specs. The two table autosave failures from this same run
 are a separate legacy content-only markdown-table fixture edge because the D1
 structured schema currently has no table nodes.
+
+## 2026-06-21 - Pass 36 - D7 Published Structured Readback Repair Local
+
+Claim: D7 decreases publication readback residue if public Texture readers
+render from structured `body_doc` when the publication bundle carries one, and
+if URL-backed source entities preserve source kind `web_source` separately from
+target kind `url`.
+
+Move: construct + probe. Hydrated `TextureEditor` published mode with
+`bundle.artifact.body_doc`; normalized platform publication source kind for
+URL/web-url targets; converted the two stale content-only markdown-table
+browser tests into explicit legacy fallback assertions rather than current
+canonical table-contract tests.
+
+Expected delta V: no top-level decrement until independent review accepts this
+repair slice.
+
+Actual delta V: local evidence supports repair. Public published readers now
+render native `[data-texture-source-ref]` atoms from structured artifact bodies,
+and source-service/content-item/URL publication browser checks pass.
+
+Receipts:
+`frontend/src/lib/TextureEditor.svelte`;
+`frontend/tests/texture-source-entities.spec.js`;
+`frontend/tests/texture-source-service-publication.spec.js`;
+`internal/platform/source_metadata.go`;
+`internal/platform/service_test.go`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Local evidence:
+`nix develop -c go test ./internal/platform -run 'TestPublishTextureStructuredBodyDrivesPublicationSources|TestPublicationURLTargetDefaultsToWebSourceKind|TestBuildPublicationSourceMetadata|TestPublishTextureRejectsSourceEntitiesWithoutBodyDoc' -count=1`;
+`cd frontend && npx playwright test tests/texture-source-service-publication.spec.js --workers=1`;
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js --grep 'legacy content-only markdown tables' --workers=1`;
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js tests/texture-structured-editor-doc.spec.js tests/texture-source-service-publication.spec.js --workers=1`.
+
+Open edge: independent review should verify the published readback repair does
+not reintroduce markdown source-link rendering, and that the table test rewrite
+does not hide a current structured table contract. Three review-agent attempts
+were interrupted after failing to return a callback, so this slice remains a
+locally verified repair pending later batch review rather than an
+independently accepted repair.

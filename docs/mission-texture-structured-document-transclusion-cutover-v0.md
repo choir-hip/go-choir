@@ -1562,6 +1562,26 @@ Required repair:
   source kind and target kind for URL-backed sources: source kind
   `web_source`, target kind `url`.
 
+Repair:
+
+- `TextureEditor` now hydrates `editorBodyDoc` from
+  `bundle.artifact.body_doc` in published read mode before rendering.
+- Platform publication source normalization now defaults URL/web-url targets to
+  source kind `web_source` while preserving target kind `url`.
+- Browser tests now assert the hard-cut legacy table behavior explicitly:
+  content-only markdown table text is a structured paragraph until table nodes
+  are deliberately added to the canonical schema.
+
+Local evidence:
+`nix develop -c go test ./internal/platform -run 'TestPublishTextureStructuredBodyDrivesPublicationSources|TestPublicationURLTargetDefaultsToWebSourceKind|TestBuildPublicationSourceMetadata|TestPublishTextureRejectsSourceEntitiesWithoutBodyDoc' -count=1`;
+`cd frontend && npx playwright test tests/texture-source-service-publication.spec.js --workers=1`;
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js --grep 'legacy content-only markdown tables' --workers=1`;
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js tests/texture-structured-editor-doc.spec.js tests/texture-source-service-publication.spec.js --workers=1`.
+
+Review state: independent review was attempted three times, but review agents
+failed to return callbacks and were interrupted. Treat this repair as locally
+verified pending later batch review.
+
 Non-blocking discovered edge:
 
 - The same browser run exposed two old table autosave tests that create

@@ -178,6 +178,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	normalizePublicationReaderSnapshotStatus(m)
 	raw = mustJSONRaw(m)
 	targetKind := firstNonEmpty(firstString(target, "target_kind", "kind"), firstString(m, "target_kind"))
+	sourceKind := normalizePublicationSourceKind(firstString(m, "kind", "source_kind"), targetKind)
 	targetID := firstNonEmpty(
 		firstString(target, "item_id"),
 		firstString(target, "content_id"),
@@ -193,7 +194,7 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 	)
 	entity = publicationSourceEntityInput{
 		SourceEntityID: entityID,
-		Kind:           firstNonEmpty(firstString(m, "kind", "source_kind"), targetKind),
+		Kind:           sourceKind,
 		TargetKind:     targetKind,
 		TargetID:       targetID,
 		DisplayPolicy:  displayPolicy,
@@ -211,6 +212,19 @@ func normalizePublicationSourceEntity(value any) (publicationSourceEntityInput, 
 		EntityJSON:         raw,
 	}
 	return entity, transclusion, true, nil
+}
+
+func normalizePublicationSourceKind(sourceKind, targetKind string) string {
+	sourceKind = strings.TrimSpace(sourceKind)
+	if sourceKind != "" {
+		return sourceKind
+	}
+	switch strings.TrimSpace(targetKind) {
+	case "url", "web_url":
+		return "web_source"
+	default:
+		return targetKind
+	}
 }
 
 func marshalPublicationSourceSelector(selectors []map[string]any, firstSelector map[string]any, evidenceState map[string]any) (json.RawMessage, error) {

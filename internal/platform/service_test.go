@@ -1635,6 +1635,43 @@ func TestPublishTextureStructuredBodyDrivesPublicationSources(t *testing.T) {
 	}
 }
 
+func TestPublicationURLTargetDefaultsToWebSourceKind(t *testing.T) {
+	entity, transclusion, ok, err := normalizePublicationSourceEntity(map[string]any{
+		"source_entity_id": "src-public-url",
+		"target": map[string]any{
+			"kind": "url",
+			"uri":  "https://example.com/",
+		},
+		"selectors": []map[string]any{{
+			"kind": "text_quote",
+			"data": map[string]any{"text_quote": "Example source quote."},
+		}},
+		"display": map[string]any{
+			"mode":  "numbered_ref",
+			"title": "Example source",
+		},
+		"evidence": map[string]any{
+			"state":        "confirms",
+			"open_surface": "source",
+		},
+		"provenance": map[string]any{
+			"created_by": "texture",
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalizePublicationSourceEntity: %v", err)
+	}
+	if !ok {
+		t.Fatal("normalizePublicationSourceEntity ok=false")
+	}
+	if entity.Kind != "web_source" || entity.TargetKind != "url" || entity.TargetID != "https://example.com/" {
+		t.Fatalf("entity kind/target = %s %s %s, want web_source url https://example.com/", entity.Kind, entity.TargetKind, entity.TargetID)
+	}
+	if transclusion.SnapshotText != "Example source quote." {
+		t.Fatalf("transclusion snapshot = %q", transclusion.SnapshotText)
+	}
+}
+
 func TestPublishTextureRejectsSourceEntitiesWithoutBodyDoc(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	svc := NewService(store, filepath.Join(root, "artifacts"), "")

@@ -1432,7 +1432,7 @@ test('Texture mobile source journal flow stays within the reader width', async (
   expect(geometry.paragraphLeft).toBeGreaterThanOrEqual(geometry.renderedLeft - 1);
 });
 
-test('Texture autosave roundtrips rendered markdown tables without flattening cells', async ({ desktopSession }) => {
+test('legacy content-only markdown tables render as plain structured paragraph text', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
     const title = `Table Roundtrip Fixture ${Date.now()}`;
@@ -1466,7 +1466,8 @@ test('Texture autosave roundtrips rendered markdown tables without flattening ce
       }),
     });
     if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
-    return doc;
+    const revision = await revRes.json();
+    return { ...doc, revision };
   });
 
   await page.locator('[data-desktop-icon-id="texture"]').dblclick();
@@ -1475,29 +1476,16 @@ test('Texture autosave roundtrips rendered markdown tables without flattening ce
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
   const rendered = textureWindow.locator('[data-texture-rendered]');
-  await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
+  await expect(rendered.locator('.table-scroll table')).toHaveCount(0);
+  await expect(rendered).toContainText('| Term | Definition |');
   await expect(rendered).toContainText('Edit this paragraph to trigger serialization.');
-  await rendered.click();
-  await page.keyboard.press('End');
-  await page.keyboard.type(' ');
-  await expect(rendered.locator('.table-scroll table')).toBeVisible();
-  await page.waitForTimeout(1300);
-
-  const draft = await page.evaluate((docId) => {
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i) || '';
-      if (!key.includes(`:${docId}`)) continue;
-      const value = JSON.parse(localStorage.getItem(key) || '{}');
-      if (value?.doc_id === docId) return value;
-    }
-    return null;
-  }, created.doc_id);
-  expect(draft?.content).toContain('| Term | Definition |');
-  expect(draft?.content).toContain('| Tokens per second | A measure of inference speed. |');
-  expect(draft?.content).not.toContain('TermDefinition');
+  expect(created.revision?.content).toContain('| Term | Definition |');
+  expect(created.revision?.content).toContain('| Tokens per second | A measure of inference speed. |');
+  expect(created.revision?.body_doc?.schema).toBe('choir.texture_doc.v1');
+  expect(JSON.stringify(created.revision?.body_doc || {})).not.toContain('"table"');
 });
 
-test('Texture autosave preserves table structure when a bounded cell edit is made', async ({ desktopSession }) => {
+test('legacy content-only markdown tables do not expose bounded cell edit controls', async ({ desktopSession }) => {
   const { page } = desktopSession;
   const created = await page.evaluate(async () => {
     const title = `Bounded Table Edit Fixture ${Date.now()}`;
@@ -1531,7 +1519,8 @@ test('Texture autosave preserves table structure when a bounded cell edit is mad
       }),
     });
     if (!revRes.ok) throw new Error(`create rev failed: ${revRes.status}`);
-    return doc;
+    const revision = await revRes.json();
+    return { ...doc, revision };
   });
 
   await page.locator('[data-desktop-icon-id="texture"]').dblclick();
@@ -1540,31 +1529,13 @@ test('Texture autosave preserves table structure when a bounded cell edit is mad
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
 
   const rendered = textureWindow.locator('[data-texture-rendered]');
-  await expect(rendered.locator('.table-scroll table')).toBeVisible({ timeout: 10000 });
-  const editedDefinition = 'Durable, reviewable professional output with source memory.';
-  await rendered.locator('tbody tr').first().locator('td').nth(1).evaluate((cell, text) => {
-    cell.textContent = text;
-    cell.closest('[data-texture-rendered]')?.dispatchEvent(new InputEvent('input', {
-      bubbles: true,
-      inputType: 'insertText',
-      data: text,
-    }));
-  }, editedDefinition);
-  await expect(rendered.locator('.table-scroll table')).toBeVisible();
-  await page.waitForTimeout(1300);
-
-  const draft = await page.evaluate((docId) => {
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i) || '';
-      if (!key.includes(`:${docId}`)) continue;
-      const value = JSON.parse(localStorage.getItem(key) || '{}');
-      if (value?.doc_id === docId) return value;
-    }
-    return null;
-  }, created.doc_id);
-  expect(draft?.content).toContain('| Term | Definition |');
-  expect(draft?.content).toContain(`| Work product | ${editedDefinition} |`);
-  expect(draft?.content).toContain('| Source entity | A citation-backed source object. |');
-  expect(draft?.content).toContain('| --- | --- |');
-  expect(draft?.content).not.toContain('TermDefinition');
+  await expect(rendered.locator('.table-scroll table')).toHaveCount(0);
+  await expect(rendered).toContainText('| Work product | Durable professional output. |');
+  await expect(rendered.locator('tbody td')).toHaveCount(0);
+  expect(created.revision?.content).toContain('| Term | Definition |');
+  expect(created.revision?.content).toContain('| Work product | Durable professional output. |');
+  expect(created.revision?.content).toContain('| Source entity | A citation-backed source object. |');
+  expect(created.revision?.content).toContain('| --- | --- |');
+  expect(created.revision?.body_doc?.schema).toBe('choir.texture_doc.v1');
+  expect(JSON.stringify(created.revision?.body_doc || {})).not.toContain('"table"');
 });
