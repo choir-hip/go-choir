@@ -901,7 +901,7 @@ func coagentSourceFromTypedEvidenceRef(ref string) (types.CoagentPacketSource, b
 	if sourceID == "src-" {
 		return types.CoagentPacketSource{}, false
 	}
-	return coagentSourceFromURI(sourceID, kind, uri, uri), true
+	return coagentSourceFromURI(sourceID, kind, uri, ""), true
 }
 
 func coagentClaimsFromTexts(texts []string, sources []types.CoagentPacketSource) []types.CoagentPacketClaim {

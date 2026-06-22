@@ -159,6 +159,68 @@ func TestCoagentPacketHTTPSourcePreservesSourceTextForTransclusion(t *testing.T)
 	}
 }
 
+func TestCoagentPacketContentIDSourceHydratesImportedText(t *testing.T) {
+	t.Parallel()
+	rt, _ := testAPISetup(t)
+	s := rt.Store()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "owner-content-id-source-text"
+	contentID := "content-whitehouse-eo"
+
+	if err := s.CreateContentItem(ctx, types.ContentItem{
+		ContentID:    contentID,
+		OwnerID:      ownerID,
+		SourceType:   "imported_url",
+		MediaType:    "text/html",
+		Title:        "White House AI security executive order",
+		SourceURL:    "https://www.whitehouse.gov/presidential-actions/2026/06/promoting-advanced-artificial-intelligence-innovation-and-security/",
+		CanonicalURL: "https://www.whitehouse.gov/presidential-actions/2026/06/promoting-advanced-artificial-intelligence-innovation-and-security/",
+		TextContent:  "PROMOTING ADVANCED ARTIFICIAL INTELLIGENCE INNOVATION AND SECURITY\n\nExecutive Order 14409 directs agencies to accelerate secure AI adoption.",
+		ContentHash:  "hash-whitehouse-eo",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+
+	update := types.CoagentSourcePacket{
+		OwnerID: ownerID,
+		AgentID: "researcher:content-id-source-text",
+		Role:    AgentProfileResearcher,
+		Packet: types.CoagentSourcePacketPayload{
+			Sources: []types.CoagentPacketSource{{
+				SourceID: "src-content-id",
+				Kind:     "content_item",
+				Target: types.CoagentPacketSourceTarget{
+					URI:   "content_id:" + contentID,
+					Title: "content_id:" + contentID,
+				},
+			}},
+		},
+	}
+
+	entity := sourceEntityFromCoagentPacketSource(ctx, rt, ownerID, update.Packet.Sources[0], update)
+	if entity.EntityID == "" {
+		t.Fatal("expected content-id source entity")
+	}
+	if entity.Label != "White House AI security executive order" {
+		t.Fatalf("typed ref title leaked into label: %#v", entity)
+	}
+	if entity.Target.TargetKind != "content_item" || entity.Target.ContentID != contentID {
+		t.Fatalf("expected hydrated content_item target, got %#v", entity.Target)
+	}
+	if entity.ReaderSnapshot == nil || !strings.Contains(metadataString(entity.ReaderSnapshot, "text_content"), "Executive Order 14409") {
+		t.Fatalf("content item text was not preserved as reader snapshot: %#v", entity.ReaderSnapshot)
+	}
+	if metadataString(entity.ReaderSnapshotStatus, "state") != sourcecontract.ReaderArtifactStateReady {
+		t.Fatalf("reader snapshot status = %#v", entity.ReaderSnapshotStatus)
+	}
+	if !entity.Evidence.ReaderSnapshot || entity.Evidence.BodyKind != "reader_snapshot" {
+		t.Fatalf("reader snapshot evidence not recorded: %#v", entity.Evidence)
+	}
+}
+
 func TestEvidenceRecordToSourceEntity_NoAddressableTargetSkipped(t *testing.T) {
 	rec := types.EvidenceRecord{EvidenceID: "ev-3", Kind: "note", Content: "ungrounded thought"}
 	if entity := evidenceRecordToSourceEntity(rec); entity.EntityID != "" {
@@ -290,6 +352,13 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 	}
 	if !hasSourceEntity(entities, "content_item", "", "content-cloud-audit") {
 		t.Fatalf("missing content item entity: %#v", entities)
+	}
+	cloudAudit := sourceEntityByContentID(entities, "content-cloud-audit")
+	if cloudAudit.Label != "Cloud Audit Brief" {
+		t.Fatalf("content-id ref leaked into source label: %#v", cloudAudit)
+	}
+	if cloudAudit.ReaderSnapshot == nil || !strings.Contains(metadataString(cloudAudit.ReaderSnapshot, "text_content"), "preserve auditability") {
+		t.Fatalf("content item text not preserved for pending update ref: %#v", cloudAudit.ReaderSnapshot)
 	}
 	if !hasSourceEntity(entities, "content_item", "", "content-evidence-audit") {
 		t.Fatalf("missing evidence ref entity: %#v", entities)
@@ -683,6 +752,15 @@ func hasSourceEntity(entities []textureSourceEntity, kind, itemID, contentID str
 		return true
 	}
 	return false
+}
+
+func sourceEntityByContentID(entities []textureSourceEntity, contentID string) textureSourceEntity {
+	for _, entity := range entities {
+		if entity.Target.ContentID == contentID {
+			return entity
+		}
+	}
+	return textureSourceEntity{}
 }
 
 func assertExecutionEntity(t *testing.T, entities []textureSourceEntity, kind, identity, labelNeedle string) {

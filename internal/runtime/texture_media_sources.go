@@ -332,7 +332,7 @@ func contentItemRefToSourceEntity(item types.ContentItem) textureSourceEntity {
 	if item.ContentHash != "" {
 		selector.ContentHash = item.ContentHash
 	}
-	return textureSourceEntity{
+	entity := textureSourceEntity{
 		EntityID: stableSourceEntityID("content_item", firstNonEmpty(item.ContentID, canonicalURL)),
 		Kind:     "content_item",
 		Label:    firstNonEmpty(item.Title, canonicalURL, "Content source "+item.ContentID),
@@ -359,6 +359,46 @@ func contentItemRefToSourceEntity(item types.ContentItem) textureSourceEntity {
 			UntrustedSourceText: true,
 		},
 	}
+	applyContentItemReaderSnapshot(&entity, item)
+	return entity
+}
+
+func applyContentItemReaderSnapshot(entity *textureSourceEntity, item types.ContentItem) {
+	if entity == nil || strings.TrimSpace(item.TextContent) == "" {
+		return
+	}
+	text := strings.TrimSpace(item.TextContent)
+	snapshotText := truncateRunes(text, 100000)
+	truncated := len([]rune(snapshotText)) < len([]rune(text))
+	mediaType := firstNonEmpty(strings.TrimSpace(item.MediaType), "text/markdown")
+	sourceURL := firstNonEmpty(strings.TrimSpace(item.CanonicalURL), strings.TrimSpace(item.SourceURL))
+	snapshot := map[string]any{
+		"text_content":  snapshotText,
+		"source_url":    sourceURL,
+		"snapshot_kind": "imported_content_item_text",
+		"media_type":    mediaType,
+		"access_scope":  "private_user_source",
+		"rights_scope":  entity.Provenance.RightsScope,
+		"excerpt_text":  truncateRunes(text, 2000),
+		"source_title":  strings.TrimSpace(item.Title),
+		"source_id":     strings.TrimSpace(item.ContentID),
+	}
+	if strings.TrimSpace(item.ContentHash) != "" {
+		snapshot["content_hash"] = strings.TrimSpace(item.ContentHash)
+	}
+	if truncated {
+		snapshot["truncated"] = true
+	}
+	entity.ReaderSnapshot = pruneEmptyMap(snapshot)
+	status := map[string]any{"state": sourcecontract.ReaderArtifactStateReady}
+	if truncated {
+		status["truncated"] = true
+	}
+	entity.ReaderSnapshotStatus = status
+	entity.Evidence.ReaderSnapshot = true
+	entity.Evidence.BodyKind = "reader_snapshot"
+	entity.Evidence.BodyLength = len([]rune(snapshotText))
+	entity.Evidence.SourceRepresentationID = sourcecontract.ReaderArtifactStateReady
 }
 
 func sourceServiceItemLabel(itemID, contextText string) string {

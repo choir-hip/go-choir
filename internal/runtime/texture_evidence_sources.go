@@ -228,7 +228,7 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, owner
 	if entity.EntityID == "" {
 		return textureSourceEntity{}
 	}
-	if label := strings.TrimSpace(source.Target.Title); label != "" {
+	if label := strings.TrimSpace(source.Target.Title); coagentPacketSourceTitleUsable(label) {
 		entity.Label = label
 	}
 	if len(source.Selectors) > 0 {
@@ -257,6 +257,18 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, owner
 		entity.Provenance.RightsScope = rights
 	}
 	return entity
+}
+
+func coagentPacketSourceTitleUsable(title string) bool {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return false
+	}
+	key, value := splitTypedWorkerUpdateRef(title)
+	if key != "" && value != "" {
+		return false
+	}
+	return true
 }
 
 func applyCoagentPacketSourceContent(entity *textureSourceEntity, source types.CoagentPacketSource) {
