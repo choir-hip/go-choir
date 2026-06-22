@@ -641,7 +641,7 @@ test('dry-run test endpoint: submit_worker_update records artifacts and tests be
           uri: 'file_artifact:artifacts/evolution-ca.html',
           title: 'Evolution CA visualization',
         },
-        evidence: { state: 'observed' },
+        evidence: { state: 'available' },
       },
       {
         source_id: 'src-test',
@@ -650,7 +650,7 @@ test('dry-run test endpoint: submit_worker_update records artifacts and tests be
           uri: 'test_run:node artifacts/evolution-ca.verify.js passed',
           title: 'Evolution CA verification',
         },
-        evidence: { state: 'observed' },
+        evidence: { state: 'available' },
       },
     ],
     actions: [{
