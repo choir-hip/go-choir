@@ -578,3 +578,49 @@ source-link parsing as canonical source identity.
 Heresy delta: `discovered` for the rendering/source-reader/ref-placement defects
 in the source-centric path. `introduced`: none in this checkpoint. `repaired`:
 none until a later code/test commit.
+
+## 2026-06-22 - Pass 10 - Source Text Preservation Correction Checkpoint
+
+Claim: the Pass 9 repair is incomplete if URL-backed sources degrade to
+title/URL-only fallback even when the researcher already read source content.
+`web_url` is the correct target identity for URL-backed sources, but it is not a
+license to drop bounded source text from the Texture source/transclusion
+substrate.
+
+Move: document first. Owner correction after the manual QA landing review:
+the expected behavior is that URLs can back native source entities while still
+showing source content in the small transcluded inline/body stub and fuller
+source viewer. The source viewer may honestly show title/URL fallback only when
+no bounded source text or reader snapshot is present. When `update_coagent`
+delivers researcher-read text, the runtime must preserve it as native source
+entity content rather than treating the source as link-only chrome.
+
+Mutation class: green for this checkpoint. The intended repair is red because
+it changes the canonical source packet/source entity contract and Texture
+source display semantics. Protected surfaces: `update_coagent` packet schema,
+source entity materialization, structured `source_entities`, source viewer
+reader snapshots, inline source/transclusion excerpts, and publication export
+of source metadata.
+
+Conjecture delta: a source-centric Texture system must preserve source content
+as a source artifact, not merely source identity. Rightsholder-positive display
+means users see bounded source material in context and can open the source
+viewer for more/full available text, while original URLs remain available as an
+escape hatch. A title/URL-only fallback is acceptable only as an explicit
+absence-of-content state.
+
+Admissible evidence class for repair: focused tests that prove canonical
+`update_coagent` packet sources can carry bounded source text; URL-backed
+source entities retain `web_url` identity while gaining `transclusion`/
+`reader_snapshot` content in stored structured source entities; frontend inline
+transclusions and Source Viewer prefer that content over title/URL fallback; and
+legacy markdown links, metadata `source_entities`, or synthetic `content_item`
+IDs are not reintroduced.
+
+Rollback path: revert the follow-up code/test repair commit(s) while preserving
+this checkpoint. Do not roll back to clickable markdown links or synthetic
+content-item IDs for URL-backed sources.
+
+Heresy delta: `discovered` for the link-only interpretation of URL-backed
+sources. `introduced`: none in this checkpoint. `repaired`: none until a later
+code/test commit.
