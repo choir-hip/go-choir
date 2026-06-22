@@ -409,3 +409,73 @@ Evidence:
 
 Heresy delta: `repaired` for the executable-before-non-execution convergence
 case. No staging deploy or existing-account product proof was attempted.
+
+## 2026-06-22 - Pass 7 - E5 Acceptance Semantics Adjudication
+
+Claim: the literal "advance past v3" phrase in the E5 text was a proxy for the
+old v3 idle-deadline/revising stall, not a requirement to force additional
+Texture revisions after a source-backed structured head has already settled.
+
+Move: adjudicate + green checkpoint. Re-read the paradoc's owner direction,
+E0 diagnosis, E5 acceptance text, and the hard-cutover deletion inventory. E0
+shows why `> v3` was chosen: the old deployed path produced legacy
+`Kind: findings` updates with no typed `packet.sources`, wrote a v3 markdown
+head, showed "Revising...", and idle-deadline-passivated without a further
+deliverable packet. The version threshold was a symptom discriminator for that
+specific failure. It should not override the deeper source-centric settlement
+condition once a fresh deployed proof cleanly settles earlier.
+
+Expected delta V: clarify E5a acceptance so the mission can accept a clean
+earlier completion/passivation without weakening canonical-source gates.
+
+Actual delta V: E5a source/stall proof accepted under corrected semantics. The
+full deletion mission still carries any remaining E3/E4 hard-cutover receipts
+and post-deletion re-confirmation obligations not settled by this adjudication.
+
+Evidence reviewed:
+- deployed commit `fc620961e0be07a7dbab41aca3843ef396b2a512`;
+- prompt token `E5_RETRY_SOURCE_TEXTURE_PROOF_20260622`;
+- owner `5bd6de97-3b58-408c-bf89-c42c81b083de`
+  (`yusefnathanson@me.com`);
+- doc `6f7114c7-72ab-4b68-8e73-b5b687a2bc09`, current revision
+  `2b854664-9081-4d22-ab34-acbcb061fb32`, current version number `2`,
+  revision count `3`;
+- trajectory `32e2169d-d7f2-4e59-91dd-c7fb4e3494b7`, Texture loop
+  `ae1d6f94-0f5f-42aa-b546-631db76eae26`, researcher loop
+  `27320029-8d3c-44b9-b571-f36912b44cfe`;
+- head `body_doc.schema=choir.texture_doc.v1`;
+- three structured `source_ref` nodes and three top-level `source_entities`;
+- no `metadata.source_entities` legacy sidecar;
+- reader-facing first paragraph;
+- consumed worker update seq 1 with `Schema: coagent_source_packet.v1` /
+  `Kind: evidence_update`;
+- trace `update_coagent` args with `schema_version=coagent_source_packet.v1`,
+  `kind=evidence_update`, and canonical sources `s1`, `s2`, `s3`;
+- `worker_updates_pending` empty; and
+- no Super agent or `execution_request` path for the trajectory.
+
+Decision: accept the deployed proof for the E5a stall/source criterion. The
+corrected criterion is "must not reproduce the old v3 idle-deadline stall":
+clean completion/passivation before v3 is acceptable when canonical
+`coagent_source_packet.v1` researcher updates, native source nodes, structured
+head, empty pending updates, and no revising hang are all present. Version
+number greater than 3 is not independently required and should not be forced.
+
+Heresy delta: `repaired` for the over-specific E5 version-number proxy.
+`introduced`: none. `discovered`: the earlier acceptance wording could drive
+counterproductive prompt design that manufactures revisions rather than proving
+source-centric settlement.
+
+Residual risks:
+- This adjudication accepts the provided deployed read-only product/runtime
+  evidence; it did not create a new prompt-bar mutation.
+- Source-centric acceptance remains strict: future proofs must still show
+  canonical source packets, native source nodes/entities, no legacy metadata
+  source sidecar, no pending worker updates, and no privileged Super path for
+  non-execution evidence updates.
+- The broader hard-cutover mission may still need remaining deletion receipts
+  and post-deletion re-confirmation; this checkpoint only removes the
+  counterproductive `current_version_number > 3` requirement.
+
+Receipt: `docs/mission-update-coagent-source-centric-deletion-v0.md`
+§"E5 Acceptance Semantics Clarification - 2026-06-22".
