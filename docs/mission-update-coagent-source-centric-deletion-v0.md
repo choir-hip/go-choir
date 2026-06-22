@@ -620,29 +620,77 @@ settlement: Not met. Settlement requires:
 
 ```text
 /goal Use Parallax on docs/mission-update-coagent-source-centric-deletion-v0.md.
-E0 is complete: the v3 stall on yusefnathanson@me.com doc 08fa6a2f is caused by
-H_deploy — the VM is running pre-D9 code (63f44e07), confirmed by four
-converging proofs (message-string divergence "Coagent update ready" vs "Coagent
-source packet ready"; packet Kind vocabulary — live packets carry legacy
-Kind: findings which D9 rejects; runtime type WorkerUpdateRecord vs
-CoagentSourcePacket; and direct run state state=passivated/reason=idle_deadline
-with zero packet.sources in the live diagnosis). The researcher emits legacy
-findings with no typed sources; Texture cannot metabolize them; the loop
-idle-deadline-passivates at v3. The D9 code and prompts are coherent and would
-fix this if deployed. Current V=11.
-Next, two parallel tracks. (A) Observable product proof: deploy the already-
-written D9 commits (be52b194, c35502b2) to Node B; under H_deploy this alone
-should make a fresh prompt-bar submission on yusefnathanson@me.com advance
-past v3 with packet.sources on each researcher update. (B) Hardening: E1 pin
-the survivor contract as a contract test (update_coagent accepts only
-coagent_source_packet.v1; Texture reads only packet.sources; Super executes
-only kind=execution_request; revisions carry packet.sources on every
-researcher update; the loop advances past v3; rejected sources are reported
-not silently swallowed at texture_evidence_sources.go:163-170). Then E2
-one-time data migration/quarantine for the existing account. Then E3-E4
-delete the legacy code paths in order (storage shims, Super backlog
-settlement, runtime prompt/tool legacy, frontend/publication legacy,
-test-only endpoints, P1/P2 validation gates), each commit keeping E1 green.
-Then the second half of E5: deletion-proof staging acceptance on the existing
-account. Do not reintroduce compat shims.
+
+Read the paradoc first. E0 is COMPLETE and committed (commit 36b0f591); do not
+redo E0 or re-diagnose the v3 stall. The E0 conclusion is authoritative: the
+v3 stall on yusefnathanson@me.com doc 08fa6a2f is H_deploy — the owner's VM
+(vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19, runtime API 10.200.233.2:8085, reachable
+from node-b with X-Authenticated-User header) is running pre-D9 code
+(63f44e07). The researcher emits legacy Kind: findings with no typed
+packet.sources; Texture cannot metabolize it; the loop idle-deadline-
+passivates at v3. The D9 code and prompts (be52b194, c35502b2) are coherent
+and would fix this if deployed. Current V=11.
+
+Resume at E1, then proceed E2 -> E3 -> E4 -> E5. Keep the original ordering
+discipline: NO render/fallback code deletion before E1 (the survivor contract)
+is pinned green; NO compat shims reintroduced.
+
+E1 — pin the survivor contract as a failing-then-green contract test. The
+survivor set is exactly: update_coagent accepts ONLY the
+coagent_source_packet.v1 surface (schema_version, kind, summary, claims,
+sources, actions, questions, notes, agent_id, channel_id) and rejects legacy
+top-level fields (findings, evidence_ids, evidence, artifacts, refs, tests,
+proposals, capability_requests) and invalid nested objects. Texture reads
+ONLY packet.sources. Super executes ONLY kind=execution_request packets.
+Revisions carry packet.sources on every researcher update. The loop advances
+past v3 on a researcher-bearing prompt-bar submission. Rejected sources are
+REPORTED (not silently swallowed at internal/runtime/texture_evidence_sources.go:163-170).
+Every later deletion commit must keep this test green.
+
+E2 — one-time data migration/quarantine for the existing account
+(5bd6de97-3b58-408c-bf89-c42c81b083de). Read-only audit first (count
+invalid/empty packet_json worker_updates; old-shape research_findings;
+raw-markdown texture_revisions; queued non-execution Super packets). Then
+convert deterministically or quarantine as audit-only. Code-path deletion is
+unconditional; data migration is the only legitimate outlet for deletion
+reticence.
+
+E3-E4 — delete the legacy code paths in this order, each commit keeping E1 green:
+  E3.1 storage shims: scanWorkerUpdate reconstruction (store.go:2688-2697),
+      live research_findings write path;
+  E3.2 Super backlog settlement: non-execution_request packets addressed to
+      persistent Super are rejected/quarantined, not left pending
+      (super_controller.go:256-265; the pinned regression at
+      update_coagent_source_packet_test.go:169 must move from "asserts
+      pending" to "asserts settled");
+  E3.3 runtime prompt/tool legacy: textureInlineSourceRefRE (texture.go:47),
+      plainTextStructuredTextureDoc fallback
+      (texture_structured_revision.go:130), coagentSourcesFromRefs generic
+      parsing, silent source-materialization skip
+      (texture_evidence_sources.go:163-170);
+  E3.4 frontend/publication legacy: clickable-link upgrading
+      (frontend/src/lib/texture-source-renderer.ts:489),
+      markdown-as-canonical-body rendering;
+  E3.5 test-only endpoints: /api/test/texture/research-findings;
+  E4 P1/P2 validation gates: vocabulary-validate packet.sources[].kind and
+      selectors[].kind (P1, tools_worker_update.go:604); reconcile target.uri
+      schema vs Go validation (P2, tools_worker_update.go:58 vs :608);
+      settle non-execution Super packets (P2).
+
+E5 — deploy and run staging acceptance on yusefnathanson@me.com. Two halves:
+  E5a push be52b194 + c35502b2 (and any E1-E4 commits) to origin/main, run
+      the full landing loop (CI -> Node B deploy identity -> health), then on
+      choir.news create/revise a Texture from the prompt bar as the owner and
+      confirm: the loop advances past v3, each researcher update carries
+      packet.sources, Texture renders native source nodes (not clickable
+      links, not markdown prose), the first paragraph is reader-facing (not
+      process metadata), markdown control tokens are absent from visible
+      prose, non-execution Super packets neither execute nor linger.
+  E5b after deletion: re-confirm all of the above plus the E1 contract test
+      green on the deployed build, and rg for legacy markers returns only
+      migration/rejection code.
+
+Do not claim settlement without deployed staging proof on the existing
+yusefnathanson@me.com account (not a synthetic user). Do not reintroduce
+compat shims.
 ```
