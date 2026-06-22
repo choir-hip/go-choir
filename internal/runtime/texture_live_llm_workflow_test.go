@@ -148,22 +148,25 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	if researchDone.State != types.RunCompleted {
 		t.Fatalf("researcher state = %q error=%q result=%q", researchDone.State, researchDone.Error, researchDone.Result)
 	}
-	findings, err := db.ListResearchFindingsByTrajectory(context.Background(), liveLLMOwnerID, conductorID, 20)
+	updates, err := db.ListWorkerUpdatesByTrajectory(context.Background(), liveLLMOwnerID, conductorID, 20)
 	if err != nil {
-		t.Fatalf("list live findings: %v", err)
+		t.Fatalf("list live coagent updates: %v", err)
 	}
-	var researchFinding *types.ResearchFindingRecord
-	for i := range findings {
-		if findings[i].FindingID == "live-research-ca" {
-			researchFinding = &findings[i]
+	var researchUpdate *types.CoagentSourcePacket
+	for i := range updates {
+		if updates[i].Role == "researcher" {
+			researchUpdate = &updates[i]
 			break
 		}
 	}
-	if researchFinding == nil {
-		t.Fatalf("live researcher completed without the expected durable finding; findings=%+v result=%q", findings, researchDone.Result)
+	if researchUpdate == nil {
+		t.Fatalf("live researcher completed without a durable coagent source packet; updates=%+v result=%q", updates, researchDone.Result)
 	}
-	if researchFinding.ChannelID != decision.DocID || researchFinding.TargetAgentID != "texture:"+decision.DocID || researchFinding.MessageSeq == 0 {
-		t.Fatalf("live researcher finding routed to target=%q channel=%q seq=%d, want texture:%s/%s with message cursor; finding=%+v result=%q", researchFinding.TargetAgentID, researchFinding.ChannelID, researchFinding.MessageSeq, decision.DocID, decision.DocID, researchFinding, researchDone.Result)
+	if researchUpdate.ChannelID != decision.DocID || researchUpdate.TargetAgentID != "texture:"+decision.DocID || researchUpdate.MessageSeq == 0 {
+		t.Fatalf("live researcher update routed to target=%q channel=%q seq=%d, want texture:%s/%s with message cursor; update=%+v result=%q", researchUpdate.TargetAgentID, researchUpdate.ChannelID, researchUpdate.MessageSeq, decision.DocID, decision.DocID, researchUpdate, researchDone.Result)
+	}
+	if len(researchUpdate.Packet.Sources) == 0 {
+		t.Fatalf("live researcher update missing packet sources: %+v", researchUpdate)
 	}
 
 	textureRegistry := rt.ToolRegistryForProfile(choirruntime.AgentProfileTexture)
@@ -185,7 +188,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	if superDone.State != types.RunCompleted {
 		t.Fatalf("super state = %q error=%q result=%q", superDone.State, superDone.Error, superDone.Result)
 	}
-	updates, err := db.ListWorkerUpdatesByTrajectory(context.Background(), liveLLMOwnerID, conductorID, 20)
+	updates, err = db.ListWorkerUpdatesByTrajectory(context.Background(), liveLLMOwnerID, conductorID, 20)
 	if err != nil {
 		t.Fatalf("list live worker updates: %v", err)
 	}
@@ -212,7 +215,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 		t.Fatalf("live super did not create artifact file: %v", err)
 	}
 
-	final := waitLiveConsumedSeqs(t, db, decision.DocID, conductorID, []int64{researchFinding.MessageSeq, superUpdate.MessageSeq}, 180*time.Second)
+	final := waitLiveConsumedSeqs(t, db, decision.DocID, conductorID, []int64{researchUpdate.MessageSeq, superUpdate.MessageSeq}, 180*time.Second)
 	if final.revision.RevisionID == "" {
 		t.Fatal("missing final texture revision")
 	}
@@ -258,7 +261,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 		OwnerID:                     liveLLMOwnerID,
 		TrajectoryID:                conductorID,
 		PromptSubmissionID:          conductorID,
-		RequireResearchFindings:     true,
+		RequireResearchUpdates:      true,
 		RequireWorkerUpdates:        true,
 		RequirePersistentSuper:      true,
 		RequireSearchToolEvent:      true,

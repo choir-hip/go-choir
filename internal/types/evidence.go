@@ -21,25 +21,6 @@ type EvidenceRecord struct {
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
-// ResearchFindingRecord captures one researcher-specific "persist evidence, then
-// notify the owning agent" dispatch. The finding_id is user/agent supplied so
-// retries can be deduplicated without replaying the addressed message.
-type ResearchFindingRecord struct {
-	FindingID     string    `json:"finding_id"`
-	OwnerID       string    `json:"owner_id"`
-	AgentID       string    `json:"agent_id"`
-	TargetAgentID string    `json:"target_agent_id"`
-	ChannelID     string    `json:"channel_id"`
-	MessageSeq    int64     `json:"message_seq"`
-	TrajectoryID  string    `json:"trajectory_id,omitempty"`
-	Findings      []string  `json:"findings,omitempty"`
-	EvidenceIDs   []string  `json:"evidence_ids,omitempty"`
-	Notes         []string  `json:"notes,omitempty"`
-	Questions     []string  `json:"questions,omitempty"`
-	Content       string    `json:"content"`
-	CreatedAt     time.Time `json:"created_at"`
-}
-
 const CoagentSourcePacketSchemaV1 = "coagent_source_packet.v1"
 
 // CoagentSourcePacketPayload is the canonical update_coagent payload. It is a
@@ -66,11 +47,11 @@ type CoagentPacketClaim struct {
 }
 
 type CoagentPacketSource struct {
-	SourceID  string                         `json:"source_id,omitempty"`
-	Kind      string                         `json:"kind"`
-	Target    CoagentPacketSourceTarget      `json:"target"`
-	Selectors []CoagentPacketSourceSelector  `json:"selectors,omitempty"`
-	Evidence  CoagentPacketSourceEvidence    `json:"evidence,omitempty"`
+	SourceID  string                        `json:"source_id,omitempty"`
+	Kind      string                        `json:"kind"`
+	Target    CoagentPacketSourceTarget     `json:"target"`
+	Selectors []CoagentPacketSourceSelector `json:"selectors,omitempty"`
+	Evidence  CoagentPacketSourceEvidence   `json:"evidence,omitempty"`
 }
 
 type CoagentPacketSourceTarget struct {
@@ -97,12 +78,12 @@ type CoagentPacketSourceEvidence struct {
 }
 
 type CoagentPacketAction struct {
-	ActionID        string                         `json:"action_id,omitempty"`
-	Type            string                         `json:"type"`
-	Objective       string                         `json:"objective"`
-	Inputs          map[string]any                 `json:"inputs,omitempty"`
-	ExpectedSources []CoagentPacketExpectedSource  `json:"expected_sources,omitempty"`
-	Safety          CoagentPacketActionSafety      `json:"safety,omitempty"`
+	ActionID        string                        `json:"action_id,omitempty"`
+	Type            string                        `json:"type"`
+	Objective       string                        `json:"objective"`
+	Inputs          map[string]any                `json:"inputs,omitempty"`
+	ExpectedSources []CoagentPacketExpectedSource `json:"expected_sources,omitempty"`
+	Safety          CoagentPacketActionSafety     `json:"safety,omitempty"`
 }
 
 type CoagentPacketExpectedSource struct {

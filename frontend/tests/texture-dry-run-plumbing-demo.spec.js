@@ -122,10 +122,6 @@ async function waitForConsumedWorkerRoles(page, docId, roles, timeout = 20000) {
   throw new Error(`document ${docId} did not consume worker roles: ${roles.join(', ')}`);
 }
 
-async function submitDryRunResearchFindings(page, payload) {
-  return postJSON(page, '/api/test/texture/research-findings', payload);
-}
-
 async function submitDryRunWorkerUpdate(page, payload) {
   return postJSON(page, '/api/test/texture/worker-update', payload);
 }
@@ -212,19 +208,35 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
   await expect(textureWindow.locator('[data-texture-version]')).toContainText(/^v[3-9]/, { timeout: 10000 });
 
   const artifactHTML = await seedEvolutionArtifact(page);
-  const researchResp = await submitDryRunResearchFindings(page, {
+  const researchResp = await submitDryRunWorkerUpdate(page, {
     doc_id: conductorDecision.doc_id,
-    finding_id: `biology-ca-${Date.now()}`,
-    findings: [
-      'Cellular automata are useful toy models when local rules, inherited state, mutation, and selection pressure are explicit.',
-      'The demo should label assumptions instead of claiming biological fidelity.',
-    ],
-    evidence: [
+    role: 'researcher',
+    schema_version: 'coagent_source_packet.v1',
+    kind: 'evidence_update',
+    summary: `biology-ca-${Date.now()}`,
+    claims: [
       {
-        kind: 'web_summary',
-        source_uri: 'https://plato.stanford.edu/entries/cellular-automata/',
-        title: 'Cellular Automata overview',
-        content: 'Background source for local-rule cellular automata framing.',
+        text: 'Cellular automata are useful toy models when local rules, inherited state, mutation, and selection pressure are explicit.',
+        source_ids: ['src-ca-overview'],
+      },
+      {
+        text: 'The demo should label assumptions instead of claiming biological fidelity.',
+        source_ids: ['src-ca-overview'],
+      },
+    ],
+    sources: [
+      {
+        source_id: 'src-ca-overview',
+        kind: 'web_page',
+        target: {
+          uri: 'https://plato.stanford.edu/entries/cellular-automata/',
+          title: 'Cellular Automata overview',
+        },
+        selectors: [{
+          kind: 'text_quote',
+          quote: 'Background source for local-rule cellular automata framing.',
+        }],
+        evidence: { state: 'observed' },
       },
     ],
     notes: ['Fold the source and assumption limits into the next canonical version.'],
@@ -234,22 +246,68 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
 
   const superResp = await submitDryRunWorkerUpdate(page, {
     doc_id: conductorDecision.doc_id,
-    update_id: `super-evolution-artifact-${Date.now()}`,
     role: 'super',
-    artifacts: ['artifacts/evolution-ca.html', 'artifacts/evolution-ca.verify.js'],
-    tests: ['node artifacts/evolution-ca.verify.js passed'],
-    proposals: ['Mention the generated artifact and deterministic verification result in the next version.'],
+    schema_version: 'coagent_source_packet.v1',
+    kind: 'execution_result',
+    summary: `super-evolution-artifact-${Date.now()}`,
+    claims: [
+      {
+        text: 'Generated the deterministic cellular automata artifact and verification script.',
+        source_ids: ['src-artifact-html', 'src-artifact-test'],
+      },
+    ],
+    sources: [
+      {
+        source_id: 'src-artifact-html',
+        kind: 'file_artifact',
+        target: {
+          uri: 'file_artifact:artifacts/evolution-ca.html',
+          title: 'Evolution CA Demo',
+        },
+        evidence: { state: 'observed' },
+      },
+      {
+        source_id: 'src-artifact-test',
+        kind: 'test_run',
+        target: {
+          uri: 'test_run:node artifacts/evolution-ca.verify.js passed',
+          title: 'Evolution CA verification',
+        },
+        evidence: { state: 'observed' },
+      },
+    ],
+    actions: [{
+      type: 'revise_texture',
+      objective: 'Mention the generated artifact and deterministic verification result in the next version.',
+    }],
   });
   expect(superResp.status).toBe('submitted');
   expect(superResp.trajectory_id).toBe(conductorSubmitted.submission_id);
 
   const coSuperResp = await submitDryRunWorkerUpdate(page, {
     doc_id: conductorDecision.doc_id,
-    update_id: `cosuper-evolution-review-${Date.now()}`,
     role: 'co-super',
-    findings: ['The artifact exposes seed, generation count, and a stable verification claim.'],
-    refs: ['artifacts/evolution-ca.html#grid'],
-    tests: ['Manual visual smoke check: canvas renders non-empty colored cells.'],
+    schema_version: 'coagent_source_packet.v1',
+    kind: 'execution_result',
+    summary: `cosuper-evolution-review-${Date.now()}`,
+    claims: [
+      {
+        text: 'The artifact exposes seed, generation count, and a stable verification claim.',
+        source_ids: ['src-canvas-smoke'],
+      },
+    ],
+    sources: [
+      {
+        source_id: 'src-canvas-smoke',
+        kind: 'screenshot',
+        target: {
+          uri: 'screenshot:artifacts/evolution-ca.html#grid',
+          title: 'Canvas visual smoke check',
+        },
+        selectors: [{ kind: 'image_region', x: 0, y: 0, width: 1, height: 1 }],
+        evidence: { state: 'observed' },
+      },
+    ],
     notes: ['Keep the final text bounded: this is a toy model, not a biological simulator.'],
   });
   expect(coSuperResp.status).toBe('submitted');

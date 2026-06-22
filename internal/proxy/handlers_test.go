@@ -2207,7 +2207,7 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 	gotUser := ""
 	gotPath := ""
 	sandboxMux := http.NewServeMux()
-	sandboxMux.HandleFunc("/api/test/texture/research-findings", func(w http.ResponseWriter, r *http.Request) {
+	sandboxMux.HandleFunc("/api/test/texture/worker-update", func(w http.ResponseWriter, r *http.Request) {
 		gotUser = r.Header.Get("X-Authenticated-User")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
@@ -2230,7 +2230,7 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 
 	accessToken := issueTestAccessJWT(priv, "user-authenticated")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/test/texture/research-findings", strings.NewReader(`{"doc_id":"doc-1","finding_id":"finding-1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/test/texture/worker-update", strings.NewReader(`{"doc_id":"doc-1","schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"canonical packet"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
 	w := httptest.NewRecorder()
@@ -2243,8 +2243,8 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 	if gotUser != "user-authenticated" {
 		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
 	}
-	if gotPath != "/api/test/texture/research-findings" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/test/texture/research-findings")
+	if gotPath != "/api/test/texture/worker-update" {
+		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/test/texture/worker-update")
 	}
 }
 

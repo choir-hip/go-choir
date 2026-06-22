@@ -13,7 +13,7 @@ type TextureWorkflowVerificationOptions struct {
 	OwnerID                     string
 	TrajectoryID                string
 	PromptSubmissionID          string
-	RequireResearchFindings     bool
+	RequireResearchUpdates      bool
 	RequireWorkerUpdates        bool
 	RequirePersistentSuper      bool
 	RequireCoSuper              bool
@@ -146,7 +146,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		return report, fmt.Errorf("list worker updates: %w", err)
 	}
 	textureUpdates := workerUpdatesForTextureDoc(updates, doc.DocID)
-	if opts.RequireResearchFindings {
+	if opts.RequireResearchUpdates {
 		researchUpdateCount := 0
 		for _, update := range updates {
 			if update.Role != AgentProfileResearcher {
@@ -163,7 +163,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		if researchUpdateCount == 0 {
 			return report, fmt.Errorf("missing structured research coagent updates")
 		}
-		guarantee("researchers emitted structured findings and evidence")
+		guarantee("researchers emitted structured coagent source packets")
 	}
 	if opts.RequireWorkerUpdates {
 		workerUpdateCount := 0

@@ -4422,7 +4422,7 @@ func TestTextureWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
 	t.Fatalf("expected requeued wake revision after pending mutation cleared, got %+v", revs)
 }
 
-func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
+func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	t.Parallel()
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Integrated persisted findings into the next revision."))
 	provider.delay = 500 * time.Millisecond
@@ -5527,70 +5527,6 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 	}
 	if checkpoint == nil || checkpoint.IntegratedMessageSeq != message.Seq {
 		t.Fatalf("checkpoint after recovery = %+v, want integrated_message_seq=%d", checkpoint, message.Seq)
-	}
-}
-
-func TestHandleTestTextureResearchFindingsUsesResearcherToolPath(t *testing.T) {
-	t.Parallel()
-	provider := newTextureEditToolProvider(textureReplaceAllResult("Browser test findings revision."))
-
-	h, s, rt := textureAPISetupWithProvider(t, provider, true)
-	rt.cfg.EnableTestAPIs = true
-
-	docID, _ := createDocWithUserRevision(t, h)
-
-	revReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
-		map[string]string{"prompt": "Write the first draft"})
-	revW := httptest.NewRecorder()
-	h.HandleTextureAgentRevision(revW, revReq)
-	if revW.Code != http.StatusAccepted {
-		t.Fatalf("agent revision: status = %d, want %d; body: %s", revW.Code, http.StatusAccepted, revW.Body.String())
-	}
-	var revResp textureAgentRevisionResponse
-	if err := json.NewDecoder(revW.Body).Decode(&revResp); err != nil {
-		t.Fatalf("decode agent revision response: %v", err)
-	}
-	if state := waitForTaskCompletion(t, h, revResp.RunID, 5*time.Second); state != types.RunCompleted {
-		t.Fatalf("agent revision state = %q, want %q", state, types.RunCompleted)
-	}
-
-	req := textureRequest(t, http.MethodPost, "/api/test/texture/research-findings", map[string]any{
-		"doc_id":         docID,
-		"schema_version": types.CoagentSourcePacketSchemaV1,
-		"kind":           "evidence_update",
-		"summary":        "browser-hook-001",
-		"claims": []map[string]any{{
-			"text": "A sourced update arrived.",
-		}},
-		"notes": []string{"Fold this into the next revision."},
-	})
-	w := httptest.NewRecorder()
-	h.HandleTestTextureResearchFindings(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("test findings status = %d, want %d; body: %s", w.Code, http.StatusAccepted, w.Body.String())
-	}
-
-	var resp map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode findings response: %v", err)
-	}
-	if got, _ := resp["status"].(string); got != "submitted" {
-		t.Fatalf("status = %q, want submitted", got)
-	}
-	if got, _ := resp["loop_id"].(string); strings.TrimSpace(got) == "" {
-		t.Fatal("loop_id should not be empty")
-	}
-
-	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
-	found := false
-	for _, rev := range revs {
-		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "Browser test findings revision.") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected findings-driven revision, got %+v", revs)
 	}
 }
 

@@ -93,7 +93,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	executeVerifierTools(t, rt, researcherRun, researcherRegistry, []types.ToolCall{
 		{
-			ID:   "research-findings",
+			ID:   "research-update",
 			Name: "update_coagent",
 			Arguments: json.RawMessage(`{
 					"schema_version":"coagent_source_packet.v1",
@@ -190,7 +190,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 		OwnerID:                     ownerID,
 		TrajectoryID:                submission.SubmissionID,
 		PromptSubmissionID:          submission.SubmissionID,
-		RequireResearchFindings:     true,
+		RequireResearchUpdates:      true,
 		RequireWorkerUpdates:        true,
 		RequirePersistentSuper:      true,
 		RequireCoSuper:              true,
@@ -359,7 +359,7 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 		OwnerID:                     ownerID,
 		TrajectoryID:                submission.SubmissionID,
 		PromptSubmissionID:          submission.SubmissionID,
-		RequireResearchFindings:     true,
+		RequireResearchUpdates:      true,
 		RequireWorkerUpdates:        true,
 		RequirePersistentSuper:      true,
 		RequireWorkerConsumption:    true,

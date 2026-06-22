@@ -111,22 +111,6 @@ async function waitForRevisionTotal(page, docId, want, timeout = 12000) {
   throw new Error(`document ${docId} did not reach ${want} revisions, got ${(revisions.revisions || []).length}`);
 }
 
-async function submitTestResearchFindings(page, payload) {
-  return page.evaluate(async (body) => {
-    const res = await fetch('/api/test/texture/research-findings', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`failed to submit research findings: ${res.status} ${err}`);
-    }
-    return res.json();
-  }, payload);
-}
-
 async function submitTestWorkerUpdate(page, payload) {
   return page.evaluate(async (body) => {
     const res = await fetch('/api/test/texture/worker-update', {
@@ -537,10 +521,10 @@ test('texture file-backed window restores on reload with the latest canonical he
   await expect(restoredEditor).toContainText(externalContent, { timeout: 10000 });
 });
 
-test('dry-run test endpoint: submit_research_findings batches rapid worker updates into one auto-advanced next version', async ({ page, authenticator }) => {
+test('dry-run test endpoint: researcher source packets batch into one auto-advanced next version', async ({ page, authenticator }) => {
   test.skip(
     process.env.GO_CHOIR_RUN_TEXTURE_DRY_RUN_TESTS !== '1',
-    'uses /api/test/texture/research-findings and is only a dry-run plumbing check'
+    'uses /api/test/texture/worker-update and is only a dry-run plumbing check'
   );
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const initialContent = 'Base draft that should get a findings-driven follow-up.';
@@ -563,16 +547,34 @@ test('dry-run test endpoint: submit_research_findings batches rapid worker updat
   const baselineRevisions = await listRevisions(page, revisionJSON.doc_id);
   const baselineCount = baselineRevisions.revisions.length;
 
-  await submitTestResearchFindings(page, {
+  await submitTestWorkerUpdate(page, {
     doc_id: revisionJSON.doc_id,
-    finding_id: `finding-a-${Date.now()}`,
-    findings: ['Finding A: a new sourced detail arrived.'],
+    role: 'researcher',
+    schema_version: 'coagent_source_packet.v1',
+    kind: 'evidence_update',
+    summary: `research-a-${Date.now()}`,
+    claims: [{ text: 'Finding A: a new sourced detail arrived.', source_ids: ['src-finding-a'] }],
+    sources: [{
+      source_id: 'src-finding-a',
+      kind: 'web_page',
+      target: { uri: 'https://example.test/finding-a', title: 'Finding A' },
+      selectors: [{ kind: 'text_quote', quote: 'Finding A' }],
+    }],
     notes: ['Use a brief update.'],
   });
-  await submitTestResearchFindings(page, {
+  await submitTestWorkerUpdate(page, {
     doc_id: revisionJSON.doc_id,
-    finding_id: `finding-b-${Date.now()}`,
-    findings: ['Finding B: another sourced detail arrived right after.'],
+    role: 'researcher',
+    schema_version: 'coagent_source_packet.v1',
+    kind: 'evidence_update',
+    summary: `research-b-${Date.now()}`,
+    claims: [{ text: 'Finding B: another sourced detail arrived right after.', source_ids: ['src-finding-b'] }],
+    sources: [{
+      source_id: 'src-finding-b',
+      kind: 'web_page',
+      target: { uri: 'https://example.test/finding-b', title: 'Finding B' },
+      selectors: [{ kind: 'text_quote', quote: 'Finding B' }],
+    }],
     notes: ['Still one follow-up revision.'],
   });
 

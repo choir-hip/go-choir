@@ -651,7 +651,7 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 	}
 }
 
-func TestCompactWebSearchProjectionGuidesResearchFindingsCheckpoint(t *testing.T) {
+func TestCompactWebSearchProjectionGuidesResearchUpdateCheckpoint(t *testing.T) {
 	resp := &webSearchResponse{
 		Query:    "nba update",
 		Provider: "mock",
@@ -716,7 +716,7 @@ func TestCompactWebSearchProjectionSurfacesGatewayOutage(t *testing.T) {
 	}
 }
 
-func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
+func TestShouldRequireResearchUpdateAfterResearchToolBatches(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	rec := &types.RunRecord{
@@ -725,7 +725,7 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 		AgentProfile: AgentProfileResearcher,
 	}
 	toolCtx := WithToolExecutionContext(ctx, rec)
-	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+	if !shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("first researcher search should require a findings checkpoint")
 	}
 	superRec := &types.RunRecord{
@@ -733,7 +733,7 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 	}
-	if shouldRequireResearchFindingsAfterTool(WithToolExecutionContext(ctx, superRec), rt) {
+	if shouldRequireResearchUpdateAfterTool(WithToolExecutionContext(ctx, superRec), rt) {
 		t.Fatalf("super search should not require update_coagent")
 	}
 
@@ -757,23 +757,23 @@ func TestShouldRequireResearchFindingsAfterResearchToolBatches(t *testing.T) {
 	}
 
 	appendToolResult("ev-web-search", "web_search")
-	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+	if shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("second researcher search before findings should not repeatedly require another first checkpoint")
 	}
 	appendToolResult("ev-submit-1", "update_coagent")
-	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+	if !shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("first research batch after a checkpoint should require the next findings update")
 	}
 	appendToolResult("ev-fetch-1", "fetch_url")
-	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+	if shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("additional research before the next findings update should not stack repeated required-tool reminders")
 	}
 	appendToolResult("ev-submit-2", "update_coagent")
-	if !shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+	if !shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("another post-checkpoint research batch should require another findings update")
 	}
 	appendToolResult("ev-source-search", "source_search")
-	if shouldRequireResearchFindingsAfterTool(toolCtx, rt) {
+	if shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("source_search before the next findings update should not stack repeated required-tool reminders")
 	}
 }

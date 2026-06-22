@@ -334,23 +334,6 @@ CREATE TABLE IF NOT EXISTS browser_sessions (
 	updated_at       DATETIME NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS research_findings (
-	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
-	finding_id        VARCHAR(255) NOT NULL DEFAULT '',
-	agent_id          VARCHAR(255) NOT NULL DEFAULT '',
-	target_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id        VARCHAR(255) NOT NULL DEFAULT '',
-	message_seq       BIGINT NOT NULL DEFAULT 0,
-	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
-	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
-	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
-	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
-	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
-	content           LONGTEXT NOT NULL DEFAULT '',
-	created_at        DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, finding_id)
-);
-
 CREATE TABLE IF NOT EXISTS worker_updates (
 	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
 	update_id         VARCHAR(255) NOT NULL DEFAULT '',
@@ -469,8 +452,6 @@ CREATE INDEX IF NOT EXISTS idx_run_continuations_owner_status ON run_continuatio
 CREATE INDEX IF NOT EXISTS idx_run_continuations_source_loop ON run_continuations(source_loop_id);
 CREATE INDEX IF NOT EXISTS idx_run_continuations_next_loop ON run_continuations(next_loop_id);
 CREATE INDEX IF NOT EXISTS idx_browser_sessions_owner_updated ON browser_sessions(owner_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_research_findings_channel_id ON research_findings(channel_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_research_findings_target_agent_id ON research_findings(target_agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(target_agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
@@ -1819,53 +1800,6 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 	return messages, nil
 }
 
-// GetResearchFinding returns a previously dispatched researcher findings bundle.
-func (s *Store) GetResearchFinding(ctx context.Context, ownerID, findingID string) (types.ResearchFindingRecord, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT owner_id, finding_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, findings_json, evidence_ids_json, notes_json, questions_json, content, created_at
-		   FROM research_findings
-		  WHERE owner_id = ? AND finding_id = ?`,
-		ownerID, findingID,
-	)
-	return scanResearchFinding(row)
-}
-
-// ListResearchFindingsByTrajectory returns researcher dispatch bundles for one
-// trajectory ordered by creation time ascending.
-func (s *Store) ListResearchFindingsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.ResearchFindingRecord, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT owner_id, finding_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, findings_json, evidence_ids_json, notes_json, questions_json, content, created_at
-		   FROM research_findings
-		  WHERE owner_id = ?
-		    AND trajectory_id = ?
-		  ORDER BY created_at ASC
-		  LIMIT ?`,
-		ownerID,
-		trajectoryID,
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query research findings by trajectory: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var findings []types.ResearchFindingRecord
-	for rows.Next() {
-		rec, err := scanResearchFinding(rows)
-		if err != nil {
-			return nil, err
-		}
-		findings = append(findings, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate research findings by trajectory: %w", err)
-	}
-	return findings, nil
-}
-
 // GetWorkerUpdate returns a previously dispatched structured worker update.
 func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
 	row := s.db.QueryRowContext(ctx,
@@ -2197,132 +2131,6 @@ func refreshCoagentMailboxCursorWithExec(ctx context.Context, exec workerUpdateD
 	return nil
 }
 
-// DispatchResearchFinding atomically persists the addressed channel message,
-// inbox delivery, and finding dispatch record inside the runtime store.
-// Evidence durability remains in the texture workspace and should be handled
-// before calling this method with deterministic evidence IDs.
-func (s *Store) DispatchResearchFinding(ctx context.Context, finding types.ResearchFindingRecord, message *types.ChannelMessage, delivery types.InboxDelivery) (types.ResearchFindingRecord, bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("begin research finding transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	existing, err := scanResearchFinding(tx.QueryRowContext(ctx,
-		`SELECT owner_id, finding_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, findings_json, evidence_ids_json, notes_json, questions_json, content, created_at
-		   FROM research_findings
-		  WHERE owner_id = ? AND finding_id = ?`,
-		finding.OwnerID, finding.FindingID,
-	))
-	if err == nil {
-		return existing, false, nil
-	}
-	if !errors.Is(err, ErrNotFound) {
-		return types.ResearchFindingRecord{}, false, err
-	}
-
-	row := tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(seq), 0) + 1 FROM channel_messages WHERE channel_id = ?`,
-		message.ChannelID,
-	)
-	if err := row.Scan(&message.Seq); err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("query next research finding message sequence: %w", err)
-	}
-	if message.Timestamp.IsZero() {
-		message.Timestamp = time.Now().UTC()
-	}
-	if delivery.CreatedAt.IsZero() {
-		delivery.CreatedAt = message.Timestamp
-	}
-	finding.MessageSeq = message.Seq
-	if finding.CreatedAt.IsZero() {
-		finding.CreatedAt = message.Timestamp
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO channel_messages (channel_id, seq, owner_id, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		message.ChannelID,
-		message.Seq,
-		finding.OwnerID,
-		message.FromAgentID,
-		message.FromRunID,
-		message.ToAgentID,
-		message.ToRunID,
-		message.TrajectoryID,
-		message.From,
-		message.Role,
-		message.Content,
-		message.Timestamp.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("insert research finding channel message: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO inbox_deliveries (delivery_id, owner_id, to_agent_id, to_loop_id, from_agent_id, from_loop_id, channel_id, role, content, trajectory_id, created_at, delivered_to_loop_id, delivered_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		delivery.DeliveryID,
-		delivery.OwnerID,
-		delivery.ToAgentID,
-		delivery.ToRunID,
-		delivery.FromAgentID,
-		delivery.FromRunID,
-		delivery.ChannelID,
-		delivery.Role,
-		delivery.Content,
-		delivery.TrajectoryID,
-		delivery.CreatedAt.UTC().Format(time.RFC3339Nano),
-		delivery.DeliveredToLoopID,
-		formatTimePtr(delivery.DeliveredAt),
-	)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("insert research finding inbox delivery: %w", err)
-	}
-
-	findingsJSON, err := marshalStringSliceJSON(finding.Findings)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("marshal research findings findings: %w", err)
-	}
-	evidenceIDsJSON, err := marshalStringSliceJSON(finding.EvidenceIDs)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("marshal research findings evidence ids: %w", err)
-	}
-	notesJSON, err := marshalStringSliceJSON(finding.Notes)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("marshal research findings notes: %w", err)
-	}
-	questionsJSON, err := marshalStringSliceJSON(finding.Questions)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("marshal research findings questions: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO research_findings (owner_id, finding_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, findings_json, evidence_ids_json, notes_json, questions_json, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		finding.OwnerID,
-		finding.FindingID,
-		finding.AgentID,
-		finding.TargetAgentID,
-		finding.ChannelID,
-		finding.MessageSeq,
-		finding.TrajectoryID,
-		string(findingsJSON),
-		string(evidenceIDsJSON),
-		string(notesJSON),
-		string(questionsJSON),
-		finding.Content,
-		finding.CreatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("insert research finding record: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return types.ResearchFindingRecord{}, false, fmt.Errorf("commit research finding transaction: %w", err)
-	}
-	return finding, true, nil
-}
-
 // DispatchWorkerUpdate atomically persists a structured worker update with its
 // addressed channel audit message. The worker_updates row is the durable wake
 // backlog; the update_id is idempotent per owner, so retries can return the
@@ -2600,55 +2408,6 @@ func scanInboxDelivery(row interface{ Scan(...any) error }) (types.InboxDelivery
 			return types.InboxDelivery{}, fmt.Errorf("parse inbox delivery delivered_at: %w", err)
 		}
 		rec.DeliveredAt = &ts
-	}
-	return rec, nil
-}
-
-func scanResearchFinding(row interface{ Scan(...any) error }) (types.ResearchFindingRecord, error) {
-	var (
-		rec             types.ResearchFindingRecord
-		findingsJSON    string
-		evidenceIDsJSON string
-		notesJSON       string
-		questionsJSON   string
-		createdAt       string
-	)
-	err := row.Scan(
-		&rec.OwnerID,
-		&rec.FindingID,
-		&rec.AgentID,
-		&rec.TargetAgentID,
-		&rec.ChannelID,
-		&rec.MessageSeq,
-		&rec.TrajectoryID,
-		&findingsJSON,
-		&evidenceIDsJSON,
-		&notesJSON,
-		&questionsJSON,
-		&rec.Content,
-		&createdAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return types.ResearchFindingRecord{}, ErrNotFound
-		}
-		return types.ResearchFindingRecord{}, fmt.Errorf("scan research finding: %w", err)
-	}
-	if err := json.Unmarshal([]byte(findingsJSON), &rec.Findings); err != nil {
-		return types.ResearchFindingRecord{}, fmt.Errorf("decode research finding findings: %w", err)
-	}
-	if err := json.Unmarshal([]byte(evidenceIDsJSON), &rec.EvidenceIDs); err != nil {
-		return types.ResearchFindingRecord{}, fmt.Errorf("decode research finding evidence ids: %w", err)
-	}
-	if err := json.Unmarshal([]byte(notesJSON), &rec.Notes); err != nil {
-		return types.ResearchFindingRecord{}, fmt.Errorf("decode research finding notes: %w", err)
-	}
-	if err := json.Unmarshal([]byte(questionsJSON), &rec.Questions); err != nil {
-		return types.ResearchFindingRecord{}, fmt.Errorf("decode research finding questions: %w", err)
-	}
-	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
-	if err != nil {
-		return types.ResearchFindingRecord{}, fmt.Errorf("parse research finding created_at: %w", err)
 	}
 	return rec, nil
 }

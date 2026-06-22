@@ -305,7 +305,7 @@ func newImportDocumentContentTool(rt *Runtime) Tool {
 				"selector_count": len(selectors),
 				"provenance":     item.Provenance,
 			}
-			addResearchFindingsCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, rt, result)
 			return toolResultJSON(result)
 		},
 	}
@@ -348,7 +348,7 @@ func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) Tool {
 				"metadata":           resp.Metadata,
 				"results":            resp.Results,
 			}
-			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchFindingsAfterTool(ctx, rt))
+			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
@@ -397,7 +397,7 @@ func newImportURLContentTool(rt *Runtime) Tool {
 				"text_chars":    len(item.TextContent),
 				"provenance":    item.Provenance,
 			}
-			addResearchFindingsCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, rt, result)
 			return toolResultJSON(result)
 		},
 	}
@@ -487,7 +487,7 @@ func newReadContentItemTool(rt *Runtime) Tool {
 				"segment_count":      segmentCount,
 				"segments_truncated": segmentsTruncated,
 			}
-			addResearchFindingsCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, rt, result)
 			return toolResultJSON(result)
 		},
 	}
@@ -537,7 +537,7 @@ func newListContentItemSelectorsTool(rt *Runtime) Tool {
 				"selector_count": len(previews),
 				"selectors":      previews,
 			}
-			addResearchFindingsCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, rt, result)
 			return toolResultJSON(result)
 		},
 	}
@@ -612,7 +612,7 @@ func newReadContentItemSelectorTool(rt *Runtime) Tool {
 				"text_chars":     len(selected.Text),
 				"text_truncated": truncated,
 			}
-			addResearchFindingsCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, rt, result)
 			return toolResultJSON(result)
 		},
 	}
@@ -717,13 +717,13 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 				full["code"] = resp.Code
 				full["error"] = resp.Error
 			}
-			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchFindingsAfterTool(ctx, rt))
+			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}
 }
 
-func shouldRequireResearchFindingsAfterTool(ctx context.Context, rt *Runtime) bool {
+func shouldRequireResearchUpdateAfterTool(ctx context.Context, rt *Runtime) bool {
 	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileResearcher {
 		return false
 	}
@@ -789,8 +789,8 @@ func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...st
 	return latest
 }
 
-func addResearchFindingsCheckpointRequirement(ctx context.Context, rt *Runtime, result map[string]any) {
-	if !shouldRequireResearchFindingsAfterTool(ctx, rt) {
+func addResearchUpdateCheckpointRequirement(ctx context.Context, rt *Runtime, result map[string]any) {
+	if !shouldRequireResearchUpdateAfterTool(ctx, rt) {
 		return
 	}
 	result["next_instruction"] = "Submit a concise update_coagent source packet from this latest research batch before any additional search/fetch turn. Use schema_version=\"coagent_source_packet.v1\" with kind=\"evidence_update\" or kind=\"blocker\", claims[], packet.sources for citeable handles, questions[], and notes[]."
@@ -853,7 +853,7 @@ func newFetchURLTool(httpClient *http.Client, rt *Runtime) Tool {
 				"content_length": len(data),
 				"content":        content,
 			}
-			model, metadata := compactFetchURLProjection(full, content, shouldRequireResearchFindingsAfterTool(ctx, rt))
+			model, metadata := compactFetchURLProjection(full, content, shouldRequireResearchUpdateAfterTool(ctx, rt))
 			return toolProjectionResultJSON(model, full, metadata)
 		},
 	}

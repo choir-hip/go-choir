@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -39,48 +38,8 @@ func seedTraceTrajectory(t *testing.T, rt *Runtime) (*types.RunRecord, *types.Ru
 		t.Fatalf("start child run: %v", err)
 	}
 
-	findingAt := time.Now().UTC()
-	message := &types.ChannelMessage{
-		ChannelID:    child.ChannelID,
-		From:         "researcher",
-		FromAgentID:  child.AgentID,
-		FromRunID:    child.RunID,
-		ToAgentID:    parent.AgentID,
-		TrajectoryID: parent.RunID,
-		Role:         "researcher",
-		Content:      "Finding: moss thrives in damp shade with steady humidity.",
-		Timestamp:    findingAt,
-	}
-	finding := types.ResearchFindingRecord{
-		FindingID:     "finding-" + uuid.NewString(),
-		OwnerID:       "user-alice",
-		AgentID:       child.AgentID,
-		TargetAgentID: parent.AgentID,
-		ChannelID:     child.ChannelID,
-		TrajectoryID:  parent.RunID,
-		Findings:      []string{"Moss thrives in damp shade with steady humidity."},
-		EvidenceIDs:   []string{"ev-moss-1"},
-		Notes:         []string{"Humidity matters more than direct light."},
-		Questions:     []string{"Which moss species tolerate brighter light?"},
-		Content:       message.Content,
-		CreatedAt:     findingAt,
-	}
-	delivery := types.InboxDelivery{
-		DeliveryID:   "delivery-" + uuid.NewString(),
-		OwnerID:      "user-alice",
-		ToAgentID:    parent.AgentID,
-		FromAgentID:  child.AgentID,
-		FromRunID:    child.RunID,
-		ChannelID:    child.ChannelID,
-		Role:         "researcher",
-		Content:      message.Content,
-		TrajectoryID: parent.RunID,
-		CreatedAt:    findingAt,
-	}
-	if _, created, err := rt.store.DispatchResearchFinding(context.Background(), finding, message, delivery); err != nil {
-		t.Fatalf("dispatch research finding: %v", err)
-	} else if created {
-		rt.emitChannelMessageEvent(WithToolExecutionContext(context.Background(), child), *message, child.OwnerID)
+	if _, err := rt.ChannelPost(WithToolExecutionContext(context.Background(), child), child.ChannelID, "researcher", "researcher", "Finding: moss thrives in damp shade with steady humidity."); err != nil {
+		t.Fatalf("post researcher channel message: %v", err)
 	}
 
 	time.Sleep(200 * time.Millisecond)
@@ -145,16 +104,16 @@ func TestTraceTrajectorySummaryUsesEntryRunTitle(t *testing.T) {
 		},
 	}
 	child := types.RunRecord{
-		RunID:        "texture-revision-child",
-		AgentID:      "texture:texture-revision-child",
-		RequestedByRunID:  parent.RunID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
-		OwnerID:      "user-alice",
-		State:        types.RunRunning,
-		Prompt:       "A revise event was triggered for the current texture document. Intent: regenerate text.",
-		CreatedAt:    now.Add(time.Second),
-		UpdatedAt:    now.Add(2 * time.Second),
+		RunID:            "texture-revision-child",
+		AgentID:          "texture:texture-revision-child",
+		RequestedByRunID: parent.RunID,
+		AgentProfile:     AgentProfileTexture,
+		AgentRole:        AgentProfileTexture,
+		OwnerID:          "user-alice",
+		State:            types.RunRunning,
+		Prompt:           "A revise event was triggered for the current texture document. Intent: regenerate text.",
+		CreatedAt:        now.Add(time.Second),
+		UpdatedAt:        now.Add(2 * time.Second),
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileTexture,
 			runMetadataAgentRole:    AgentProfileTexture,
@@ -164,7 +123,7 @@ func TestTraceTrajectorySummaryUsesEntryRunTitle(t *testing.T) {
 
 	runs := []types.RunRecord{parent, child}
 	agents, _ := buildTraceAgentNodes(runs)
-	summary := buildTraceTrajectorySummary(parent.RunID, runs, agents, buildTraceAgentEdges(runs), nil, nil, nil, traceSearchSummary{})
+	summary := buildTraceTrajectorySummary(parent.RunID, runs, agents, buildTraceAgentEdges(runs), nil, nil, traceSearchSummary{})
 
 	if summary.Title != parent.Prompt {
 		t.Fatalf("title = %q, want prompt-bar parent prompt %q", summary.Title, parent.Prompt)
@@ -394,15 +353,15 @@ func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
 			},
 		},
 		{
-			RunID:        "run-super-live-summary",
-			AgentID:      "agent-super-live-summary",
-			RequestedByRunID:  "run-conductor-live-summary",
-			AgentProfile: AgentProfileSuper,
-			AgentRole:    AgentProfileSuper,
-			State:        types.RunRunning,
-			Prompt:       "Delegate to a worker VM.",
-			CreatedAt:    now.Add(5 * time.Second),
-			UpdatedAt:    now.Add(10 * time.Second),
+			RunID:            "run-super-live-summary",
+			AgentID:          "agent-super-live-summary",
+			RequestedByRunID: "run-conductor-live-summary",
+			AgentProfile:     AgentProfileSuper,
+			AgentRole:        AgentProfileSuper,
+			State:            types.RunRunning,
+			Prompt:           "Delegate to a worker VM.",
+			CreatedAt:        now.Add(5 * time.Second),
+			UpdatedAt:        now.Add(10 * time.Second),
 			Metadata: map[string]any{
 				runMetadataAgentProfile: AgentProfileSuper,
 				runMetadataAgentRole:    AgentProfileSuper,
@@ -412,7 +371,7 @@ func TestTraceTrajectorySummaryStaysLiveWhileAnyRunIsActive(t *testing.T) {
 	}
 	agents, _ := buildTraceAgentNodes(runs)
 
-	summary := buildTraceTrajectorySummary("traj-live-summary", runs, agents, nil, nil, nil, nil, traceSearchSummary{})
+	summary := buildTraceTrajectorySummary("traj-live-summary", runs, agents, nil, nil, nil, traceSearchSummary{})
 	if summary.State != types.RunRunning {
 		t.Fatalf("trajectory state = %q, want running", summary.State)
 	}
@@ -620,7 +579,7 @@ func TestBuildTraceSearchSummaryAggregatesProviderAttempts(t *testing.T) {
 	}
 }
 
-func TestHandleTraceMomentDetailReturnsMessageAndFindings(t *testing.T) {
+func TestHandleTraceMomentDetailReturnsMessage(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
 
@@ -664,15 +623,6 @@ func TestHandleTraceMomentDetailReturnsMessageAndFindings(t *testing.T) {
 	}
 	if !strings.Contains(detail.Messages[0].Content, "damp shade") {
 		t.Fatalf("unexpected message content: %q", detail.Messages[0].Content)
-	}
-	if len(detail.Findings) != 1 {
-		t.Fatalf("findings: got %d, want 1", len(detail.Findings))
-	}
-	if detail.Findings[0].FindingID == "" {
-		t.Fatal("finding_id should not be empty")
-	}
-	if len(detail.References.EvidenceIDs) != 1 || detail.References.EvidenceIDs[0] != "ev-moss-1" {
-		t.Fatalf("unexpected evidence ids: %+v", detail.References.EvidenceIDs)
 	}
 }
 

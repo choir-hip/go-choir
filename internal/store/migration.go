@@ -20,7 +20,6 @@ var runtimeTables = []string{
 	"run_acceptances",
 	"run_continuations",
 	"browser_sessions",
-	"research_findings",
 	"worker_updates",
 	"media_progress",
 	"media_recents",

@@ -31,13 +31,12 @@ type traceTrajectorySnapshotResponse struct {
 }
 
 type traceMomentDetailResponse struct {
-	TrajectoryID string                        `json:"trajectory_id"`
-	Moment       traceMomentSummary            `json:"moment"`
-	Events       []types.EventRecord           `json:"events"`
-	Messages     []types.ChannelMessage        `json:"messages"`
-	Findings     []types.ResearchFindingRecord `json:"findings"`
-	References   traceMomentReferences         `json:"references"`
-	Artifacts    traceMomentArtifacts          `json:"artifacts,omitempty"`
+	TrajectoryID string                 `json:"trajectory_id"`
+	Moment       traceMomentSummary     `json:"moment"`
+	Events       []types.EventRecord    `json:"events"`
+	Messages     []types.ChannelMessage `json:"messages"`
+	References   traceMomentReferences  `json:"references"`
+	Artifacts    traceMomentArtifacts   `json:"artifacts,omitempty"`
 }
 
 type traceTrajectorySummary struct {
@@ -52,7 +51,6 @@ type traceTrajectorySummary struct {
 	DelegationCount      int            `json:"delegation_count"`
 	MomentCount          int            `json:"moment_count"`
 	MessageCount         int            `json:"message_count"`
-	FindingCount         int            `json:"finding_count"`
 	DocID                string         `json:"doc_id,omitempty"`
 	LatestStreamSeq      int64          `json:"latest_stream_seq,omitempty"`
 	SearchAttemptCount   int            `json:"search_attempt_count,omitempty"`
@@ -140,7 +138,6 @@ type traceMomentSummary struct {
 	DocID             string          `json:"doc_id,omitempty"`
 	RevisionID        string          `json:"revision_id,omitempty"`
 	CurrentRevisionID string          `json:"current_revision_id,omitempty"`
-	FindingID         string          `json:"finding_id,omitempty"`
 	LLMProvider       string          `json:"llm_provider,omitempty"`
 	LLMModel          string          `json:"llm_model,omitempty"`
 	LLMReasoning      string          `json:"llm_reasoning_effort,omitempty"`
@@ -152,7 +149,6 @@ type traceMomentReferences struct {
 	RevisionID           string   `json:"revision_id,omitempty"`
 	CurrentRevisionID    string   `json:"current_revision_id,omitempty"`
 	TextureDecisionID    string   `json:"texture_decision_id,omitempty"`
-	FindingID            string   `json:"finding_id,omitempty"`
 	EvidenceIDs          []string `json:"evidence_ids,omitempty"`
 	RunMemoryEntryID     string   `json:"run_memory_entry_id,omitempty"`
 	ContinuationID       string   `json:"continuation_id,omitempty"`
@@ -177,7 +173,6 @@ type traceTrajectoryBundle struct {
 	Acceptances []types.RunAcceptanceRecord
 	events      []types.EventRecord
 	messages    []types.ChannelMessage
-	findings    []types.ResearchFindingRecord
 	agentIndex  map[string]traceAgentNode
 }
 
@@ -338,23 +333,6 @@ func (h *APIHandler) handleTraceTrajectoryMomentDetail(w http.ResponseWriter, r 
 		}
 	}
 
-	findingID := moment.FindingID
-	for _, finding := range bundle.findings {
-		if findingID != "" && finding.FindingID == findingID {
-			detail.Findings = append(detail.Findings, finding)
-			continue
-		}
-		if channelID != "" && messageSeq > 0 && finding.ChannelID == channelID && finding.MessageSeq == messageSeq {
-			detail.Findings = append(detail.Findings, finding)
-		}
-	}
-	if len(detail.Findings) > 0 {
-		detail.References.EvidenceIDs = append(detail.References.EvidenceIDs, collectFindingEvidenceIDs(detail.Findings)...)
-		if detail.References.FindingID == "" {
-			detail.References.FindingID = detail.Findings[0].FindingID
-		}
-	}
-
 	writeAPIJSON(w, http.StatusOK, detail)
 }
 
@@ -435,12 +413,11 @@ func formatTraceTrajectoryLog(bundle traceTrajectoryBundle) string {
 	fmt.Fprintf(&b, "ID: %s\n", bundle.Trajectory.TrajectoryID)
 	fmt.Fprintf(&b, "State: %s\n", bundle.Trajectory.State)
 	fmt.Fprintf(&b, "Latest activity: %s\n", bundle.Trajectory.LatestActivityAt)
-	fmt.Fprintf(&b, "Counts: %d agents, %d delegations, %d moments, %d messages, %d findings, %d searches\n\n",
+	fmt.Fprintf(&b, "Counts: %d agents, %d delegations, %d moments, %d messages, %d searches\n\n",
 		bundle.Trajectory.AgentCount,
 		bundle.Trajectory.DelegationCount,
 		bundle.Trajectory.MomentCount,
 		bundle.Trajectory.MessageCount,
-		bundle.Trajectory.FindingCount,
 		bundle.Trajectory.SearchAttemptCount,
 	)
 
@@ -515,22 +492,6 @@ func formatTraceTrajectoryLog(bundle traceTrajectoryBundle) string {
 		b.WriteString("\n")
 	}
 
-	if len(bundle.findings) > 0 {
-		b.WriteString("Research Findings\n")
-		for _, finding := range bundle.findings {
-			fmt.Fprintf(&b, "- %s %s agent=%s channel=%s findings=%s questions=%s evidence=%s\n",
-				finding.FindingID,
-				finding.CreatedAt.UTC().Format(time.RFC3339Nano),
-				finding.AgentID,
-				finding.ChannelID,
-				strings.Join(finding.Findings, " | "),
-				strings.Join(finding.Questions, " | "),
-				strings.Join(finding.EvidenceIDs, ","),
-			)
-		}
-		b.WriteString("\n")
-	}
-
 	return b.String()
 }
 
@@ -574,16 +535,12 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 	if err != nil {
 		return traceTrajectoryBundle{}, fmt.Errorf("list trajectory messages: %w", err)
 	}
-	findings, err := h.rt.Store().ListResearchFindingsByTrajectory(ctx, ownerID, trajectoryID, 1000)
-	if err != nil {
-		return traceTrajectoryBundle{}, fmt.Errorf("list trajectory findings: %w", err)
-	}
 	acceptances, err := h.rt.Store().ListRunAcceptancesByTrajectory(ctx, ownerID, trajectoryID, 100)
 	if err != nil {
 		return traceTrajectoryBundle{}, fmt.Errorf("list trajectory run acceptances: %w", err)
 	}
 
-	if len(filteredRuns) == 0 && len(events) == 0 && len(messages) == 0 && len(findings) == 0 && len(acceptances) == 0 {
+	if len(filteredRuns) == 0 && len(events) == 0 && len(messages) == 0 && len(acceptances) == 0 {
 		return traceTrajectoryBundle{}, store.ErrNotFound
 	}
 
@@ -591,7 +548,7 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 	edges := buildTraceAgentEdges(filteredRuns)
 	moments := buildTraceMomentSummaries(events, agentIndex)
 	search := buildTraceSearchSummary(events)
-	trajectory := buildTraceTrajectorySummary(trajectoryID, filteredRuns, agents, edges, moments, messages, findings, search)
+	trajectory := buildTraceTrajectorySummary(trajectoryID, filteredRuns, agents, edges, moments, messages, search)
 
 	return traceTrajectoryBundle{
 		Trajectory:  trajectory,
@@ -602,7 +559,6 @@ func (h *APIHandler) loadTraceTrajectoryBundle(ctx context.Context, ownerID, tra
 		Acceptances: acceptances,
 		events:      events,
 		messages:    messages,
-		findings:    findings,
 		agentIndex:  agentIndex,
 	}, nil
 }
@@ -629,7 +585,7 @@ func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecor
 		edges := buildTraceAgentEdges(runGroup)
 		moments := buildTraceMomentSummaries(groupedEvents[trajectoryID], nil)
 		search := buildTraceSearchSummary(groupedEvents[trajectoryID])
-		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, runGroup, agents, edges, moments, nil, nil, search))
+		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, runGroup, agents, edges, moments, nil, search))
 		seen[trajectoryID] = true
 	}
 	for trajectoryID, eventGroup := range groupedEvents {
@@ -638,7 +594,7 @@ func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecor
 		}
 		moments := buildTraceMomentSummaries(eventGroup, nil)
 		search := buildTraceSearchSummary(eventGroup)
-		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, nil, nil, nil, moments, nil, nil, search))
+		summaries = append(summaries, buildTraceTrajectorySummary(trajectoryID, nil, nil, nil, moments, nil, search))
 	}
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].LatestActivityAt > summaries[j].LatestActivityAt
@@ -646,7 +602,7 @@ func buildTraceTrajectoryIndex(runs []types.RunRecord, events []types.EventRecor
 	return summaries
 }
 
-func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, agents []traceAgentNode, edges []traceAgentEdge, moments []traceMomentSummary, messages []types.ChannelMessage, findings []types.ResearchFindingRecord, search traceSearchSummary) traceTrajectorySummary {
+func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, agents []traceAgentNode, edges []traceAgentEdge, moments []traceMomentSummary, messages []types.ChannelMessage, search traceSearchSummary) traceTrajectorySummary {
 	latestAt := time.Time{}
 	var latestRun types.RunRecord
 	for _, run := range runs {
@@ -667,12 +623,6 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 			latestAt = msg.Timestamp
 		}
 	}
-	for _, finding := range findings {
-		if finding.CreatedAt.After(latestAt) {
-			latestAt = finding.CreatedAt
-		}
-	}
-
 	leadAgents := make([]string, 0)
 	for _, agent := range agents {
 		if agent.Entry {
@@ -718,7 +668,6 @@ func buildTraceTrajectorySummary(trajectoryID string, runs []types.RunRecord, ag
 		DelegationCount:      len(edges),
 		MomentCount:          len(moments),
 		MessageCount:         len(messages),
-		FindingCount:         len(findings),
 		DocID:                docID,
 		LatestStreamSeq:      latestStreamSeq,
 		SearchAttemptCount:   search.Attempts,
@@ -1125,7 +1074,6 @@ func buildTraceMomentSummary(ev types.EventRecord, agentIndex map[string]traceAg
 	docID := payloadString(payload, "doc_id")
 	revisionID := payloadString(payload, "revision_id")
 	currentRevisionID := payloadString(payload, "current_revision_id")
-	findingID := payloadString(payload, "finding_id")
 	llmProvider := payloadString(payload, "llm_provider")
 	if llmProvider == "" {
 		llmProvider = payloadString(payload, "provider")
@@ -1157,7 +1105,6 @@ func buildTraceMomentSummary(ev types.EventRecord, agentIndex map[string]traceAg
 		DocID:             docID,
 		RevisionID:        revisionID,
 		CurrentRevisionID: currentRevisionID,
-		FindingID:         findingID,
 		LLMProvider:       llmProvider,
 		LLMModel:          llmModel,
 		LLMReasoning:      payloadString(payload, "llm_reasoning_effort"),
@@ -1171,7 +1118,6 @@ func buildTraceMomentReferences(payload map[string]any) traceMomentReferences {
 		RevisionID:           payloadString(payload, "revision_id"),
 		CurrentRevisionID:    payloadString(payload, "current_revision_id"),
 		TextureDecisionID:    payloadString(payload, "decision_id"),
-		FindingID:            payloadString(payload, "finding_id"),
 		EvidenceIDs:          payloadStringSlice(payload, "evidence_ids"),
 		RunMemoryEntryID:     payloadString(payload, "entry_id"),
 		ContinuationID:       payloadString(payload, "continuation_id"),
@@ -1237,25 +1183,6 @@ func (h *APIHandler) findTraceRunMemoryArtifact(ctx context.Context, ownerID str
 		return entry, true
 	}
 	return types.RunMemoryEntry{}, false
-}
-
-func collectFindingEvidenceIDs(findings []types.ResearchFindingRecord) []string {
-	seen := make(map[string]struct{})
-	var ids []string
-	for _, finding := range findings {
-		for _, evidenceID := range finding.EvidenceIDs {
-			if evidenceID == "" {
-				continue
-			}
-			if _, ok := seen[evidenceID]; ok {
-				continue
-			}
-			seen[evidenceID] = struct{}{}
-			ids = append(ids, evidenceID)
-		}
-	}
-	sort.Strings(ids)
-	return ids
 }
 
 func parseTracePayload(raw json.RawMessage) map[string]any {

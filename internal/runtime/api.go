@@ -1759,7 +1759,6 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	if h.rt.cfg.EnableTestAPIs {
 		s.HandleFunc("/api/prompts", h.HandlePromptList)
 		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
-		s.HandleFunc("/api/test/texture/research-findings", h.HandleTestTextureResearchFindings)
 		s.HandleFunc("/api/test/texture/worker-update", h.HandleTestTextureWorkerUpdate)
 	}
 
