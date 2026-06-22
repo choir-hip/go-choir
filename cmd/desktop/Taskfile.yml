@@ -4,6 +4,7 @@ vars:
   APP_NAME: Choir
   BINARY_NAME: choir-desktop
   BIN_DIR: bin
+  REPO_BIN_DIR: ../../bin
   FRONTEND_DIR: ../../frontend
   BUILD_DIR: build
 
@@ -34,13 +35,33 @@ tasks:
     generates:
       - frontend/dist/**/*
 
-  # Dev build — builds frontend and runs the app with dev plist
+  # Build the Choir backend service binaries (auth, gateway, sandbox, proxy)
+  build:services:
+    desc: Build Choir backend services for local mode
+    dir: ../..
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/auth ./cmd/auth
+      - go build -o bin/gateway ./cmd/gateway
+      - go build -o bin/sandbox ./cmd/sandbox
+      - go build -o bin/proxy ./cmd/proxy
+      - echo "Services built to bin/"
+
+  # Dev build — builds frontend and runs the app (local mode by default)
   dev:
-    desc: Run Choir Desktop in dev mode
-    deps: [copy:frontend]
+    desc: Run Choir Desktop in local dev mode
+    deps: [copy:frontend, build:services]
     cmds:
       - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
       - "{{.BIN_DIR}}/{{.BINARY_NAME}}"
+
+  # Cloud mode — connects to staging, no local services
+  cloud:
+    desc: Run Choir Desktop in cloud mode (connects to staging)
+    deps: [copy:frontend]
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+      - CHOIR_MODE=cloud "{{.BIN_DIR}}/{{.BINARY_NAME}}"
 
   # Production build
   build:

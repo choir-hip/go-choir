@@ -1,3 +1,0 @@
-# This directory is populated by `task copy:frontend` from ../../frontend/dist.
-# It is the embed source for the Wails asset server.
-# Do not commit its contents — they are build artifacts.

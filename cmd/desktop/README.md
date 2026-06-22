@@ -61,12 +61,42 @@ task sign
 
 ## Configuration
 
-The backend URL defaults to `https://choir.news`. Override with:
+The desktop app supports two modes:
+
+### Local mode (default)
+
+Runs the full Choir backend stack locally as child processes. The Wails
+window loads `http://localhost:3000`, giving a real localhost origin so
+WebAuthn passkeys work in WKWebView.
 
 ```bash
-# Connect to a local server instead of staging
-CHOIR_BACKEND=http://localhost:8082 task dev
+# Build everything and run
+task dev
+
+# Or run in cloud mode instead
+task cloud
 ```
+
+Service binaries are built to `../../bin/` and launched with environment
+variables configured for localhost. State is stored in `/tmp/choir-desktop/`.
+
+### Cloud mode
+
+Connects to the staging backend at `choir.news`. No local services.
+
+```bash
+task cloud
+
+# Or override the backend
+CHOIR_BACKEND=https://choir.news task cloud
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `CHOIR_MODE` | (unset = local) | Set to `cloud` for cloud mode |
+| `CHOIR_BACKEND` | `https://choir.news` | Backend URL in cloud mode |
 
 ## Architecture
 

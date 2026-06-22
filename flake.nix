@@ -419,7 +419,7 @@ EOF
           packages = [
             devPkgs.go
             devPkgs.nodejs
-            devPkgs.task
+            devPkgs.go-task
           ];
           shellHook = ''
             echo "Choir Desktop dev shell (Wails v3)"
