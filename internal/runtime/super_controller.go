@@ -42,9 +42,9 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		return nil, fmt.Errorf("check blocked super run: %w", err)
 	}
 
-	updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
+	updates, err := rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
 	if err != nil {
-		return nil, fmt.Errorf("list super pending updates: %w", err)
+		return nil, err
 	}
 	updates = filterPersistentSuperExecutionUpdates(updates)
 	if len(updates) == 0 {
@@ -251,6 +251,42 @@ func filterPersistentSuperExecutionUpdates(updates []types.CoagentSourcePacket) 
 		}
 	}
 	return out
+}
+
+func (rt *Runtime) listAndSettlePersistentSuperBacklog(ctx context.Context, ownerID, agentID string) ([]types.CoagentSourcePacket, error) {
+	const limit = 100
+	for i := 0; i < 10; i++ {
+		updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
+		if err != nil {
+			return nil, fmt.Errorf("list super pending updates: %w", err)
+		}
+		settled, err := rt.settlePersistentSuperNonExecutionUpdates(ctx, ownerID, agentID, updates)
+		if err != nil {
+			return nil, fmt.Errorf("settle non-execution super updates: %w", err)
+		}
+		if !settled {
+			return updates, nil
+		}
+	}
+	return nil, fmt.Errorf("settle non-execution super updates: mailbox did not converge")
+}
+
+func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context, ownerID, agentID string, updates []types.CoagentSourcePacket) (bool, error) {
+	var nonExecIDs []string
+	for _, u := range updates {
+		if !persistentSuperExecutableUpdate(u) {
+			if id := strings.TrimSpace(u.UpdateID); id != "" {
+				nonExecIDs = append(nonExecIDs, id)
+			}
+		}
+	}
+	if len(nonExecIDs) == 0 {
+		return false, nil
+	}
+	if err := rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, agentID, nonExecIDs, "settled_non_executable"); err != nil {
+		return false, fmt.Errorf("mark non-execution updates settled: %w", err)
+	}
+	return true, nil
 }
 
 func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {

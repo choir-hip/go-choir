@@ -21,9 +21,8 @@ import (
 //   - Texture source collation reads ONLY packet.sources; prose in notes,
 //     summary, or claims.text does not become a source entity;
 //   - Super executes ONLY kind=execution_request packets (privilege gate);
-//   - the privilege-gate rejection does not by itself settle a non-execution
-//     packet addressed to persistent Super; the loop-advances contract is
-//     pinned separately.
+//   - non-execution packets addressed to persistent Super are settled instead
+//     of remaining as live pending backlog.
 //
 // Every later deletion commit (E2-E4) must keep this file green. If a test
 // here is intentionally relaxed or removed, the paradoc must record why and
@@ -364,4 +363,158 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 func mustNow(t *testing.T) time.Time {
 	t.Helper()
 	return time.Now().UTC()
+}
+
+// TestSurvivorContract_SuperSettlesNonExecutionRequestPackets proves the E3.2
+// obligation: non-execution packets addressed to persistent Super are
+// automatically settled (marked delivered/settled) during reconciliation
+// so they do not linger in the mailbox backlog forever.
+func TestSurvivorContract_SuperSettlesNonExecutionRequestPackets(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	ownerID := "user-survivor-settle"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+
+	coSuperRun := d9CoagentRun("run-survivor-settle-cosuper", ownerID, "cosuper:survivor-settle", AgentProfileCoSuper, "", "")
+	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(WithToolExecutionContext(ctx, coSuperRun), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"non-execution packet to be settled",
+		"agent_id":"`+superAgent.AgentID+`",
+		"channel_id":"`+superAgent.ChannelID+`",
+		"claims":[{"text":"This packet is non-executable and must be settled."}]
+	}`))
+	if err != nil {
+		t.Fatalf("update_coagent: %v", err)
+	}
+	updateID := d9UpdateID(t, raw)
+
+	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	if err != nil {
+		t.Fatalf("reconcile persistent super: %v", err)
+	}
+	if run != nil {
+		t.Fatalf("expected no run to start, got %+v", run)
+	}
+
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list backlog after: %v", err)
+	}
+	if len(backlog) != 0 {
+		t.Fatalf("backlog = %+v, want 0 (settled)", backlog)
+	}
+
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, updateID)
+	if err != nil {
+		t.Fatalf("get worker update: %v", err)
+	}
+	if stored.DeliveredToRunID != "settled_non_executable" {
+		t.Fatalf("delivered_to_loop_id = %q, want settled_non_executable", stored.DeliveredToRunID)
+	}
+	if stored.DeliveredAt == nil {
+		t.Fatal("expected delivered_at to be non-nil")
+	}
+}
+
+func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "user-survivor-settle-mixed"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+
+	now := mustNow(t)
+	nonExec := types.CoagentSourcePacket{
+		OwnerID:       ownerID,
+		AgentID:       "cosuper:survivor-settle-mixed",
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		Role:          AgentProfileCoSuper,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "non-execution packet before executable work",
+			Claims:        []types.CoagentPacketClaim{{Text: "This packet is evidence, not privileged work."}},
+		},
+		CreatedAt: now,
+	}
+	nonExec.UpdateID = deriveWorkerUpdateID(nonExec)
+	nonExec.Content = buildWorkerUpdateMessage(nonExec)
+	exec := types.CoagentSourcePacket{
+		OwnerID:       ownerID,
+		AgentID:       "cosuper:survivor-settle-mixed",
+		TargetAgentID: superAgent.AgentID,
+		ChannelID:     superAgent.ChannelID,
+		Role:          AgentProfileCoSuper,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "execution_request",
+			Summary:       "executable work after non-execution packet",
+			Claims:        []types.CoagentPacketClaim{{Text: "A valid execution request follows the evidence update."}},
+			Actions: []types.CoagentPacketAction{{
+				Type:      "run_command",
+				Objective: "Run a harmless inspection command.",
+				Safety: types.CoagentPacketActionSafety{
+					MutationClass: "green",
+					Network:       "forbidden",
+					FileMutation:  "forbidden",
+				},
+			}},
+		},
+		CreatedAt: now.Add(time.Millisecond),
+	}
+	exec.UpdateID = deriveWorkerUpdateID(exec)
+	exec.Content = buildWorkerUpdateMessage(exec)
+
+	for _, update := range []types.CoagentSourcePacket{nonExec, exec} {
+		msg := &types.ChannelMessage{
+			ChannelID:    update.ChannelID,
+			From:         update.AgentID,
+			FromAgentID:  update.AgentID,
+			ToAgentID:    update.TargetAgentID,
+			TrajectoryID: update.TrajectoryID,
+			Role:         update.Role,
+			Content:      update.Content,
+			Timestamp:    update.CreatedAt,
+		}
+		if _, created, err := s.DispatchWorkerUpdate(ctx, update, msg); err != nil {
+			t.Fatalf("dispatch seeded update %s: %v", update.UpdateID, err)
+		} else if !created {
+			t.Fatalf("seeded update %s was not created", update.UpdateID)
+		}
+	}
+
+	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	if err != nil {
+		t.Fatalf("reconcile persistent super: %v", err)
+	}
+	if run == nil {
+		t.Fatal("expected execution_request to start a persistent Super run")
+	}
+	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
+	if len(ids) != 1 || ids[0] != exec.UpdateID {
+		t.Fatalf("worker_update_ids = %+v, want only executable update %s", ids, exec.UpdateID)
+	}
+
+	storedNonExec, err := s.GetWorkerUpdate(ctx, ownerID, nonExec.UpdateID)
+	if err != nil {
+		t.Fatalf("get settled non-execution update: %v", err)
+	}
+	if storedNonExec.DeliveredToRunID != "settled_non_executable" || storedNonExec.DeliveredAt == nil {
+		t.Fatalf("non-execution update not settled: %+v", storedNonExec)
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list backlog: %v", err)
+	}
+	if len(backlog) != 1 || backlog[0].UpdateID != exec.UpdateID {
+		t.Fatalf("backlog = %+v, want only executable update %s", backlog, exec.UpdateID)
+	}
 }

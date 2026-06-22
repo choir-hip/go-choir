@@ -170,8 +170,18 @@ func TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list super backlog: %v", err)
 	}
-	if len(backlog) != 1 || backlog[0].UpdateID != updateID {
-		t.Fatalf("super backlog = %+v, want only pending non-execution update %s", backlog, updateID)
+	if len(backlog) != 0 {
+		t.Fatalf("super backlog = %+v, want 0 pending updates (settled non-execution packet)", backlog)
+	}
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, updateID)
+	if err != nil {
+		t.Fatalf("get settled non-execution update: %v", err)
+	}
+	if stored.DeliveredToRunID != "settled_non_executable" {
+		t.Fatalf("delivered_to_loop_id = %q, want settled_non_executable", stored.DeliveredToRunID)
+	}
+	if stored.DeliveredAt == nil {
+		t.Fatal("non-execution update delivered_at is nil")
 	}
 	rec := &types.RunRecord{
 		RunID:        "run-d9-super-ignore-inject",

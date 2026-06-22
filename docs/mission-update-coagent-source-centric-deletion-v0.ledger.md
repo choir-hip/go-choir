@@ -309,3 +309,48 @@ Open edges:
   reconstruction/settlement paths enforces the quarantine structurally.
 - E5a must run on the existing account and watch for H_code bugs the
   synthetic D9 tests missed.
+
+## 2026-06-22 - Pass 4 - E3.2 Super Backlog Settlement
+
+Claim: non-`execution_request` packets addressed to persistent Super can be
+settled as explicit non-executable receipts without weakening the privilege
+gate, and the settlement must also handle historical/migration mailboxes where
+a non-execution row precedes a valid execution request.
+
+Move: construct. Repaired `reconcilePersistentSuperActor` to list the
+persistent Super mailbox through a bounded settlement loop before filtering for
+executable work. Each pass marks non-executable packets delivered to
+`settled_non_executable`, refreshes the mailbox cursor, and re-lists. After the
+backlog converges, only validated `kind=execution_request` packets can start a
+persistent Super run.
+
+Expected delta V: -1 for E3.2 Super backlog settlement.
+
+Actual delta V: -1. Current V=8. E3.2 is locally repaired. Non-execution
+Super packets neither start privileged execution nor remain live pending
+backlog. Mixed historical mailboxes no longer let an earlier non-execution row
+block a later executable row.
+
+Evidence:
+- `nix develop -c go test ./internal/runtime -run 'TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets|TestSurvivorContract_Super(SettlesNonExecutionRequestPackets|SettlesNonExecutionBeforeExecutionBacklog|ExecutesOnlyExecutionRequestPackets)' -count=1 -v`
+- `nix develop -c go test ./internal/runtime -run 'TestUpdateCoagent|TestPersistentSuper|TestRequestSuperExecution|TestSurvivorContract_' -count=1`
+- `git diff --check`
+
+Notable implementation detail: new `update_coagent` writes addressed to
+persistent Super already wake reconciliation synchronously, so the new-write
+test must assert the durable `settled_non_executable` receipt after tool
+execution rather than expect an intermediate visible backlog row. A separate
+store-seeded mixed-backlog test covers the existing-account/migration case.
+
+Receipt: `internal/runtime/super_controller.go`,
+`internal/runtime/update_coagent_source_packet_test.go`, and
+`internal/runtime/update_coagent_survivor_contract_test.go`.
+
+Open edges:
+- E3.1 research_findings/test-endpoint deletion remains open. The interrupted
+  Agy WIP attempted to rename a legacy test endpoint to
+  `/api/test/texture/worker-update`; that was not kept in this pass because it
+  mixes endpoint deletion with a live test route rename.
+- E3.3 rejected-source reporting remains skipped in the survivor contract.
+- No staging deploy or existing-account product proof was attempted in this
+  pass.

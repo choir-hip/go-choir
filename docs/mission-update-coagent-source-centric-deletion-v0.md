@@ -522,6 +522,46 @@ against real data. The probe must watch for any H_code bug that the local
 D9 tests did not catch (they are synthetic-fixture tests, not
 existing-account tests, per pre-mortem failure mode C).
 
+## E3.2 Super Backlog Settlement - 2026-06-22
+
+Mutation class: `orange`. Protected surfaces touched: persistent Super
+coagent mailbox reconciliation, worker update delivery state, and survivor
+contract tests. Rollback path: revert the E3.2 code/test commit and return to
+the previous privilege-gate-only behavior.
+
+### Claim
+
+Non-`execution_request` packets addressed to persistent Super must be settled
+as non-executable receipts, not left as live pending backlog. Existing-account
+cleanup also requires the mixed case: if an old non-execution packet sits
+before a valid execution request in the mailbox, the non-execution packet must
+not block the cursor or prevent the executable packet from starting Super.
+
+### Move
+
+Repair `reconcilePersistentSuperActor` so it lists the persistent Super
+mailbox, marks non-executable packets delivered to the explicit receipt id
+`settled_non_executable`, refreshes the mailbox cursor, and then filters the
+remaining backlog for executable `kind=execution_request` packets. The
+settlement loop is bounded and errors if the mailbox does not converge.
+
+### Evidence
+
+- `nix develop -c go test ./internal/runtime -run 'TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets|TestSurvivorContract_Super(SettlesNonExecutionRequestPackets|SettlesNonExecutionBeforeExecutionBacklog|ExecutesOnlyExecutionRequestPackets)' -count=1 -v`
+- `nix develop -c go test ./internal/runtime -run 'TestUpdateCoagent|TestPersistentSuper|TestRequestSuperExecution|TestSurvivorContract_' -count=1`
+- `git diff --check`
+
+### Result
+
+E3.2 is locally repaired. Non-execution Super packets no longer execute and no
+longer remain as pending backlog. The survivor contract now covers both the
+new-write path, where `update_coagent` wakes Super and settles immediately,
+and the existing-account/migration shape, where a preseeded non-execution row
+precedes an executable row.
+
+Heresy delta: `repaired` for Super non-execution backlog residue. No staging
+or deployment proof was attempted in this pass.
+
 ## Domain Ramp
 
 - **E0 Stall diagnosis (probe).** Reproduce the v3 stall locally or against
