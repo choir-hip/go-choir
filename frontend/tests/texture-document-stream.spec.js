@@ -622,15 +622,41 @@ test('dry-run test endpoint: submit_worker_update records artifacts and tests be
 
   const baselineRevisions = await listRevisions(page, revisionJSON.doc_id);
   const baselineCount = baselineRevisions.revisions.length;
-  const updateId = `super-artifact-${Date.now()}`;
 
   const workerResp = await submitTestWorkerUpdate(page, {
     doc_id: revisionJSON.doc_id,
-    update_id: updateId,
     role: 'super',
-    artifacts: ['artifacts/evolution-ca.html'],
-    tests: ['node artifacts/evolution-ca.verify.js passed'],
-    proposals: ['Mention the verified cellular automata visualization in the next version.'],
+    schema_version: 'coagent_source_packet.v1',
+    kind: 'execution_result',
+    summary: `super-artifact-${Date.now()}`,
+    claims: [{
+      text: 'The cellular automata visualization artifact was generated and verified.',
+      source_ids: ['src-artifact', 'src-test'],
+    }],
+    sources: [
+      {
+        source_id: 'src-artifact',
+        kind: 'file_artifact',
+        target: {
+          uri: 'file_artifact:artifacts/evolution-ca.html',
+          title: 'Evolution CA visualization',
+        },
+        evidence: { state: 'observed' },
+      },
+      {
+        source_id: 'src-test',
+        kind: 'test_run',
+        target: {
+          uri: 'test_run:node artifacts/evolution-ca.verify.js passed',
+          title: 'Evolution CA verification',
+        },
+        evidence: { state: 'observed' },
+      },
+    ],
+    actions: [{
+      type: 'revise_texture',
+      objective: 'Mention the verified cellular automata visualization in the next version.',
+    }],
   });
   expect(workerResp.status).toBe('submitted');
   expect(workerResp.loop_id).toBeTruthy();
