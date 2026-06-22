@@ -262,6 +262,7 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "processor:processor-global",
 		Content:     "Source brief: processor handoff seed only.",
+		BodyDoc:     runtimeTestTextureBodyDoc(t, doc.DocID, "rev-input-only", "Source brief: processor handoff seed only."),
 		Citations:   json.RawMessage("[]"),
 		Metadata:    seedMeta,
 		CreatedAt:   now,

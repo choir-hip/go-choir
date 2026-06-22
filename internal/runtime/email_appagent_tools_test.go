@@ -447,6 +447,7 @@ func TestEditTextureGroundedEmailArtifactRequiresEmailAppagentContinuation(t *te
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
 		Content:          "Status: research in progress. No email draft has been created yet.",
+		BodyDoc:          runtimeTestTextureBodyDoc(t, doc.DocID, "rev-grounded-initial-email-continuation", "Status: research in progress. No email draft has been created yet."),
 		ParentRevisionID: userRev.RevisionID,
 		CreatedAt:        now.Add(time.Second),
 	}

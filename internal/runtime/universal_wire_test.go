@@ -16,6 +16,16 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func runtimeTestTextureBodyDoc(t *testing.T, docID, revisionID, content string) json.RawMessage {
+	t.Helper()
+	doc := plainStructuredTextureToolDoc(docID, revisionID, content)
+	bodyDoc, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal test body_doc: %v", err)
+	}
+	return bodyDoc
+}
+
 func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	_, handler := testAPISetup(t)
 
@@ -66,22 +76,24 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 		metaMap["platformd_route_path"] = "/pub/texture/madrid-dispatch"
 	}
 	meta, _ := json.Marshal(metaMap)
+	content := strings.Join([]string{
+		"# Madrid dispatch",
+		"",
+		"MADRID -- Pope Leo XIV addressed a packed crowd while city officials adjusted transport and security plans around the visit.",
+		"",
+		"The article keeps the sourcing narrow: official crowd-control notices, local transit updates, and source-network context remain separate from commentary.",
+	}, "\n")
 	rev := types.Revision{
 		RevisionID:  "rev-" + docID,
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "texture:" + doc.DocID,
-		Content: strings.Join([]string{
-			"# Madrid dispatch",
-			"",
-			"MADRID -- Pope Leo XIV addressed a packed crowd while city officials adjusted transport and security plans around the visit.",
-			"",
-			"The article keeps the sourcing narrow: official crowd-control notices, local transit updates, and source-network context remain separate from commentary.",
-		}, "\n"),
-		Citations: json.RawMessage("[]"),
-		Metadata:  meta,
-		CreatedAt: now,
+		Content:     content,
+		BodyDoc:     runtimeTestTextureBodyDoc(t, doc.DocID, "rev-"+docID, content),
+		Citations:   json.RawMessage("[]"),
+		Metadata:    meta,
+		CreatedAt:   now,
 	}
 	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
 		t.Fatalf("create platform source maxx revision: %v", err)
@@ -111,13 +123,15 @@ func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, included
 	for _, docID := range includedDocIDs {
 		lines = append(lines, "", fmt.Sprintf("- [Article](texture:%s)", docID))
 	}
+	content := strings.Join(lines, "\n")
 	if err := handler.rt.Store().CreateRevision(ctx, types.Revision{
 		RevisionID:  "rev-universal-wire-edition",
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "texture:" + doc.DocID,
-		Content:     strings.Join(lines, "\n"),
+		Content:     content,
+		BodyDoc:     runtimeTestTextureBodyDoc(t, doc.DocID, "rev-universal-wire-edition", content),
 		Citations:   json.RawMessage("[]"),
 		Metadata:    json.RawMessage(`{"source":"universal_wire_edition"}`),
 		CreatedAt:   now,

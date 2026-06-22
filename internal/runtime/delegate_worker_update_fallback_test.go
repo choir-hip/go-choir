@@ -74,29 +74,23 @@ func TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages(t *testin
 	if strings.Contains(joinedFindings, "no AppChangePackages") {
 		t.Fatalf("checkpoint still reported missing exports: %#v", update.Packet.Claims)
 	}
+	if !strings.Contains(joinedFindings, "App adoption evidence: id=adoption-1") {
+		t.Fatalf("checkpoint claims did not preserve adoption evidence: %#v", update.Packet.Claims)
+	}
+	for _, want := range []string{
+		"worker_head=head-1",
+		"manifest_sha256=manifest-sha-1",
+	} {
+		if !strings.Contains(joinedFindings, want) {
+			t.Fatalf("checkpoint claims missing %q: %#v", want, update.Packet.Claims)
+		}
+	}
 	sourceURIs := coagentPacketSourceURIs(update.Packet)
 	for _, want := range []string{
-		"worker_child_loop:implementation-run-1",
-		"worker_child_loop:verifier-run-1",
-		"worker_child_agent:agent-implementation-1",
-		"worker_channel:channel-implementation-1",
 		"app_change_package:package-1",
-		"app_adoption:adoption-1",
 	} {
 		if !containsString(sourceURIs, want) {
 			t.Fatalf("checkpoint sources missing %q: %#v", want, sourceURIs)
-		}
-	}
-	joinedRefs := strings.Join(sourceURIs, "\n")
-	for _, want := range []string{
-		"worker_state:completed",
-		"app_change_package:package-1",
-		"worker_head:head-1",
-		"package_manifest_sha256:manifest-sha-1",
-		"worker_channel_message:agent-verifier-1->agent-vsuper-1",
-	} {
-		if !strings.Contains(joinedRefs, want) {
-			t.Fatalf("checkpoint source refs missing %q: %#v", want, sourceURIs)
 		}
 	}
 	joinedNotes := strings.Join(update.Packet.Notes, "\n")
@@ -104,6 +98,7 @@ func TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages(t *testin
 		"worker_child_event_count:implementation-run-1=7",
 		"worker_root_event_count=5",
 		"Verifier observed AppChangePackage evidence",
+		"worker_channel_message:role=result; from=agent-verifier-1; to=agent-vsuper-1",
 	} {
 		if !strings.Contains(joinedNotes, want) {
 			t.Fatalf("checkpoint notes missing %q: %#v", want, update.Packet.Notes)

@@ -50,6 +50,15 @@ func testTextureBodyDoc(t *testing.T, docID, revisionID, content string) json.Ra
 	return raw
 }
 
+func testTextureRevisionWithBodyDoc(t *testing.T, rev types.Revision) types.Revision {
+	t.Helper()
+	if rev.AuthorKind == types.AuthorAppAgent && len(strings.TrimSpace(string(rev.BodyDoc))) == 0 {
+		rev.Content = strings.TrimRight(rev.Content, "\n")
+		rev.BodyDoc = testTextureBodyDoc(t, rev.DocID, rev.RevisionID, rev.Content)
+	}
+	return rev
+}
+
 func TestOpenTextureWorkspaceUsesTextureDatabaseForFreshWorkspace(t *testing.T) {
 	s := textureTestStore(t)
 
@@ -1110,6 +1119,7 @@ func TestTextureListRevisionsByDoc(t *testing.T) {
 		if i > 0 {
 			rev.ParentRevisionID = "rev-" + string(rune('0'+i))
 		}
+		rev = testTextureRevisionWithBodyDoc(t, rev)
 		if err := s.CreateRevision(ctx, rev); err != nil {
 			t.Fatalf("CreateRevision %d: %v", i, err)
 		}
@@ -1341,6 +1351,7 @@ func TestTextureGetHistory(t *testing.T) {
 		},
 	}
 	for _, r := range revs {
+		r = testTextureRevisionWithBodyDoc(t, r)
 		if err := s.CreateRevision(ctx, r); err != nil {
 			t.Fatalf("CreateRevision: %v", err)
 		}
@@ -1409,6 +1420,7 @@ func TestTextureGetDiff(t *testing.T) {
 		},
 	}
 	for _, r := range revs {
+		r = testTextureRevisionWithBodyDoc(t, r)
 		if err := s.CreateRevision(ctx, r); err != nil {
 			t.Fatalf("CreateRevision: %v", err)
 		}
@@ -1471,6 +1483,7 @@ func TestTextureGetBlame(t *testing.T) {
 		},
 	}
 	for _, r := range revs {
+		r = testTextureRevisionWithBodyDoc(t, r)
 		if err := s.CreateRevision(ctx, r); err != nil {
 			t.Fatalf("CreateRevision: %v", err)
 		}
@@ -1593,6 +1606,7 @@ func TestTextureSnapshotDoesNotMutateHead(t *testing.T) {
 		},
 	}
 	for _, r := range revs {
+		r = testTextureRevisionWithBodyDoc(t, r)
 		if err := s.CreateRevision(ctx, r); err != nil {
 			t.Fatalf("CreateRevision: %v", err)
 		}
@@ -1693,6 +1707,7 @@ func TestTextureDiffOwnerScope(t *testing.T) {
 		},
 	}
 	for _, r := range revs {
+		r = testTextureRevisionWithBodyDoc(t, r)
 		if err := s.CreateRevision(ctx, r); err != nil {
 			t.Fatalf("CreateRevision: %v", err)
 		}

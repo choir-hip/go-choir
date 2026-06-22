@@ -332,6 +332,10 @@ func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *
 
 	seedContent := coagentTextureSeedContent(parentRec, req, sourceEntities)
 	seedRevisionID := uuid.New().String()
+	bodyDoc, sourceEntitiesJSON, projectedContent, err := markdownLineageStructuredRevision(doc.DocID, seedRevisionID, seedContent, sourceEntities, nil)
+	if err != nil {
+		return types.Document{}, false, "", fmt.Errorf("create texture seed body_doc: %w", err)
+	}
 	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
 	seedMetaMap := map[string]any{
 		"source":                         "coagent_texture_seed",
@@ -367,10 +371,12 @@ func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *
 			parentRec.AgentID,
 			canonicalAgentProfile(req.CallerProfile),
 		)),
-		Content:   seedContent,
-		Citations: json.RawMessage("[]"),
-		Metadata:  seedMeta,
-		CreatedAt: now,
+		Content:        projectedContent,
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntitiesJSON,
+		Citations:      json.RawMessage("[]"),
+		Metadata:       seedMeta,
+		CreatedAt:      now,
 	}
 	if err := rt.store.CreateRevision(ctx, seedRev); err != nil {
 		return types.Document{}, false, "", fmt.Errorf("create texture seed revision: %w", err)

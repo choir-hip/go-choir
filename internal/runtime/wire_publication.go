@@ -131,6 +131,11 @@ func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, st
 		newContent += "\n\n"
 	}
 	newContent += fmt.Sprintf("- [%s](texture:%s)", headline, storyDoc.DocID)
+	revisionID := uuid.NewString()
+	bodyDoc, sourceEntitiesJSON, projectedContent, err := markdownLineageStructuredRevision(editionDoc.DocID, revisionID, newContent, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("create wire edition body_doc: %w", err)
+	}
 
 	editionMeta, _ := json.Marshal(map[string]any{
 		"source":            "universal_wire_edition",
@@ -138,12 +143,14 @@ func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, st
 		"published_doc_ids": append(append([]string(nil), included...), storyDoc.DocID),
 	})
 	newEditionRev := types.Revision{
-		RevisionID:       uuid.NewString(),
+		RevisionID:       revisionID,
 		DocID:            editionDoc.DocID,
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "wire_publication_policy",
-		Content:          newContent,
+		Content:          projectedContent,
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntitiesJSON,
 		Citations:        json.RawMessage("[]"),
 		Metadata:         editionMeta,
 		ParentRevisionID: editionRev.RevisionID,

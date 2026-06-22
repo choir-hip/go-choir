@@ -400,6 +400,7 @@ func seedPublishedCoverageDoc(t *testing.T, s interface {
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
 		Content:          "# Covered story\n\nAlready published.",
+		BodyDoc:          runtimeTestTextureBodyDoc(t, docID, "rev-"+routePath, "# Covered story\n\nAlready published."),
 		Citations:        json.RawMessage("[]"),
 		Metadata:         meta,
 		ParentRevisionID: "",
