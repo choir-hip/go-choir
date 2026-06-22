@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -54,7 +55,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 					"type": "object",
 					"properties": map[string]any{
 						"source_id": map[string]any{"type": "string"},
-						"kind":      map[string]any{"type": "string"},
+						"kind":      map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
 						"target": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
@@ -62,6 +63,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 								"title":      map[string]any{"type": "string"},
 								"media_type": map[string]any{"type": "string"},
 							},
+							"required":             []string{"uri"},
 							"additionalProperties": false,
 						},
 						"selectors": map[string]any{
@@ -69,7 +71,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"kind":   map[string]any{"type": "string"},
+									"kind":   map[string]any{"type": "string", "enum": sourcecontract.SelectorKindValues()},
 									"quote":  map[string]any{"type": "string"},
 									"start":  map[string]any{"type": "integer"},
 									"end":    map[string]any{"type": "integer"},
@@ -110,7 +112,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"kind":     map[string]any{"type": "string"},
+									"kind":     map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
 									"required": map[string]any{"type": "boolean"},
 								},
 								"required":             []string{"kind"},
@@ -461,7 +463,7 @@ func normalizeCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload
 	for _, source := range packet.Sources {
 		normalized := types.CoagentPacketSource{
 			SourceID: strings.TrimSpace(source.SourceID),
-			Kind:     strings.TrimSpace(source.Kind),
+			Kind:     sourcecontract.NormalizeSourceKind(source.Kind),
 			Target: types.CoagentPacketSourceTarget{
 				URI:       strings.TrimSpace(source.Target.URI),
 				Title:     strings.TrimSpace(source.Target.Title),
@@ -474,8 +476,9 @@ func normalizeCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload
 			},
 		}
 		for _, selector := range source.Selectors {
+			selectorKind := strings.TrimSpace(selector.Kind)
 			sel := types.CoagentPacketSourceSelector{
-				Kind:   strings.TrimSpace(selector.Kind),
+				Kind:   sourcecontract.NormalizeSelectorKind(selectorKind),
 				Quote:  strings.TrimSpace(selector.Quote),
 				Start:  selector.Start,
 				End:    selector.End,
@@ -484,7 +487,7 @@ func normalizeCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload
 				Width:  selector.Width,
 				Height: selector.Height,
 			}
-			if sel.Kind != "" {
+			if selectorKind != "" {
 				normalized.Selectors = append(normalized.Selectors, sel)
 			}
 		}
@@ -508,7 +511,7 @@ func normalizeCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload
 			},
 		}
 		for _, expected := range action.ExpectedSources {
-			kind := strings.TrimSpace(expected.Kind)
+			kind := sourcecontract.NormalizeSourceKind(expected.Kind)
 			if kind == "" {
 				continue
 			}
@@ -605,12 +608,18 @@ func validateCoagentPacketSource(source types.CoagentPacketSource) error {
 	if strings.TrimSpace(source.Kind) == "" {
 		return fmt.Errorf("kind is required")
 	}
+	if !sourcecontract.IsSourceKind(source.Kind) {
+		return fmt.Errorf("kind %q is not supported", source.Kind)
+	}
 	if strings.TrimSpace(source.Target.URI) == "" {
 		return fmt.Errorf("target.uri is required")
 	}
 	for i, selector := range source.Selectors {
 		if strings.TrimSpace(selector.Kind) == "" {
 			return fmt.Errorf("selectors[%d].kind is required", i)
+		}
+		if !sourcecontract.IsSelectorKind(selector.Kind) {
+			return fmt.Errorf("selectors[%d].kind %q is not supported", i, selector.Kind)
 		}
 	}
 	if state := strings.TrimSpace(source.Evidence.State); state != "" && !validCoagentSourceEvidenceState(state) {
@@ -635,6 +644,9 @@ func validateCoagentPacketAction(action types.CoagentPacketAction, requireSafety
 	for i, expected := range action.ExpectedSources {
 		if strings.TrimSpace(expected.Kind) == "" {
 			return fmt.Errorf("expected_sources[%d].kind is required", i)
+		}
+		if !sourcecontract.IsSourceKind(expected.Kind) {
+			return fmt.Errorf("expected_sources[%d].kind %q is not supported", i, expected.Kind)
 		}
 	}
 	safety := action.Safety

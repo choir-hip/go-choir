@@ -129,6 +129,111 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 	}
 }
 
+func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
+	rt, _ := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "researcher:d9-source-vocab", AgentProfileResearcher, "doc-d9-source-vocab", "")
+	for name, raw := range map[string]json.RawMessage{
+		"unsupported source kind": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"evidence_update",
+			"summary":"unsupported source kind",
+			"claims":[{"text":"The claim cites a source with an unsupported kind.","source_ids":["src-bad-kind"]}],
+			"sources":[{"source_id":"src-bad-kind","kind":"magic_oracle","target":{"uri":"https://example.test/source","title":"Bad source"},"selectors":[{"kind":"whole_resource"}]}]
+		}`),
+		"unsupported selector kind": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"evidence_update",
+			"summary":"unsupported selector kind",
+			"claims":[{"text":"The claim cites a source with an unsupported selector.","source_ids":["src-bad-selector"]}],
+			"sources":[{"source_id":"src-bad-selector","kind":"content_item","target":{"uri":"https://example.test/source","title":"Bad selector"},"selectors":[{"kind":"css_selector","quote":"main article"}]}]
+		}`),
+		"unsupported expected source kind": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"unsupported expected source kind",
+			"actions":[{"type":"request_worker","objective":"Return impossible evidence.","expected_sources":[{"kind":"magic_oracle","required":true}],"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}}]
+		}`),
+	} {
+		if _, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, run), "update_coagent", raw); err == nil {
+			t.Fatalf("%s: update_coagent unexpectedly accepted unsupported source vocabulary", name)
+		}
+	}
+}
+
+func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	ownerID := "user-d9-source-alias"
+	docID := "doc-d9-source-alias"
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   currentTextureAgentID(docID),
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert texture agent: %v", err)
+	}
+	run := d9CoagentRun("run-d9-source-alias", ownerID, "researcher:d9-source-alias", AgentProfileResearcher, docID, "")
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, run), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"source aliases normalize",
+		"agent_id":"texture:doc-d9-source-alias",
+		"channel_id":"doc-d9-source-alias",
+		"claims":[{"text":"The source and selector aliases should be canonicalized.","source_ids":["src-alias"]}],
+		"sources":[{"source_id":"src-alias","kind":"web_page","target":{"uri":"https://example.test/source","title":"Alias source"},"selectors":[{"kind":"text quote","quote":"Alias source"}]}]
+	}`))
+	if err != nil {
+		t.Fatalf("update_coagent alias packet: %v", err)
+	}
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, d9UpdateID(t, raw))
+	if err != nil {
+		t.Fatalf("get stored alias packet: %v", err)
+	}
+	if got := stored.Packet.Sources[0].Kind; got != "web_source" {
+		t.Fatalf("source kind = %q, want web_source", got)
+	}
+	if got := stored.Packet.Sources[0].Selectors[0].Kind; got != "text_quote" {
+		t.Fatalf("selector kind = %q, want text_quote", got)
+	}
+}
+
+func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *testing.T) {
+	rt, _ := testRuntime(t)
+	d9InstallTools(t, rt)
+	tool, ok := rt.ToolRegistryForProfile(AgentProfileResearcher).Lookup("update_coagent")
+	if !ok {
+		t.Fatal("update_coagent tool missing")
+	}
+	props := schemaObject(t, tool.Parameters, "properties")
+	sources := schemaObject(t, props, "sources")
+	sourceItems := schemaObject(t, sources, "items")
+	sourceProps := schemaObject(t, sourceItems, "properties")
+	sourceKind := schemaObject(t, sourceProps, "kind")
+	if !schemaEnumContains(sourceKind, "content_item") || !schemaEnumContains(sourceKind, "test_run") || schemaEnumContains(sourceKind, "web_page") {
+		t.Fatalf("source kind enum = %#v, want canonical source contract kinds", sourceKind["enum"])
+	}
+	target := schemaObject(t, sourceProps, "target")
+	if !schemaRequiredContains(target, "uri") {
+		t.Fatalf("target schema required = %#v, want uri", target["required"])
+	}
+	selectors := schemaObject(t, sourceProps, "selectors")
+	selectorItems := schemaObject(t, selectors, "items")
+	selectorProps := schemaObject(t, selectorItems, "properties")
+	selectorKind := schemaObject(t, selectorProps, "kind")
+	if !schemaEnumContains(selectorKind, "whole_resource") || !schemaEnumContains(selectorKind, "text_quote") || schemaEnumContains(selectorKind, "css_selector") {
+		t.Fatalf("selector kind enum = %#v, want canonical source contract selector kinds", selectorKind["enum"])
+	}
+}
+
 func TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
@@ -313,6 +418,59 @@ func d9CoagentRun(runID, ownerID, agentID, profile, channelID, requestedTextureA
 		SandboxID:    "sandbox-test",
 		Metadata:     metadata,
 	}
+}
+
+func schemaObject(t *testing.T, parent map[string]any, key string) map[string]any {
+	t.Helper()
+	child, ok := parent[key].(map[string]any)
+	if !ok {
+		t.Fatalf("schema key %q = %#v, want object", key, parent[key])
+	}
+	return child
+}
+
+func schemaEnumContains(schema map[string]any, want string) bool {
+	values, ok := schema["enum"].([]string)
+	if ok {
+		for _, value := range values {
+			if value == want {
+				return true
+			}
+		}
+		return false
+	}
+	anyValues, ok := schema["enum"].([]any)
+	if !ok {
+		return false
+	}
+	for _, value := range anyValues {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func schemaRequiredContains(schema map[string]any, want string) bool {
+	values, ok := schema["required"].([]string)
+	if ok {
+		for _, value := range values {
+			if value == want {
+				return true
+			}
+		}
+		return false
+	}
+	anyValues, ok := schema["required"].([]any)
+	if !ok {
+		return false
+	}
+	for _, value := range anyValues {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func d9UpdateID(t *testing.T, raw string) string {

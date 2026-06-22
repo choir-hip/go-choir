@@ -16,6 +16,7 @@ const sourceContractSchemaPath = "source_contract_schema.json"
 type sourceContractSchema struct {
 	EvidenceStates       map[string]sourceContractState `json:"evidence_states"`
 	ReaderArtifactStates map[string]sourceContractState `json:"reader_artifact_states"`
+	SourceKinds          map[string]sourceContractState `json:"source_kinds"`
 	SelectorKinds        map[string]sourceContractState `json:"selector_kinds"`
 	OpenSurfaces         map[string]sourceContractState `json:"open_surfaces"`
 }

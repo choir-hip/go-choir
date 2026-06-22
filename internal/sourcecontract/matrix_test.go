@@ -9,6 +9,7 @@ import (
 type sourceContractMatrix struct {
 	EvidenceStates       []normalizerCase `json:"evidence_states"`
 	ReaderArtifactStates []normalizerCase `json:"reader_artifact_states"`
+	SourceKinds          []normalizerCase `json:"source_kinds"`
 	SelectorKinds        []normalizerCase `json:"selector_kinds"`
 	OpenSurfaces         []normalizerCase `json:"open_surfaces"`
 }
@@ -44,6 +45,13 @@ func TestSharedSourceContractMatrix(t *testing.T) {
 		t.Run("reader_artifact/"+tc.Raw, func(t *testing.T) {
 			if got := NormalizeReaderArtifactState(tc.Raw); got != tc.Want {
 				t.Fatalf("NormalizeReaderArtifactState(%q) = %q, want %q", tc.Raw, got, tc.Want)
+			}
+		})
+	}
+	for _, tc := range matrix.SourceKinds {
+		t.Run("source/"+tc.Raw, func(t *testing.T) {
+			if got := NormalizeSourceKind(tc.Raw); got != tc.Want {
+				t.Fatalf("NormalizeSourceKind(%q) = %q, want %q", tc.Raw, got, tc.Want)
 			}
 		})
 	}

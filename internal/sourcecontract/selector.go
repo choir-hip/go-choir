@@ -1,5 +1,7 @@
 package sourcecontract
 
+import "sort"
+
 const (
 	SelectorKindWholeResource     = "whole_resource"
 	SelectorKindTextQuote         = "text_quote"
@@ -25,6 +27,24 @@ func NormalizeSelectorKind(value string) string {
 		return canonical
 	}
 	return normalized
+}
+
+func IsSelectorKind(value string) bool {
+	normalized := NormalizeSelectorKind(value)
+	if normalized == "" {
+		return false
+	}
+	_, ok := embeddedSourceContractSchema.SelectorKinds[normalized]
+	return ok
+}
+
+func SelectorKindValues() []string {
+	values := make([]string, 0, len(embeddedSourceContractSchema.SelectorKinds))
+	for value := range embeddedSourceContractSchema.SelectorKinds {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return values
 }
 
 func NormalizeSelector(selector map[string]any) map[string]any {

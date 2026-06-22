@@ -18,6 +18,23 @@
     { "raw": "source_import_failed", "want": "import_failed" },
     { "raw": "confirms", "want": "" }
   ],
+  "source_kinds": [
+    { "raw": "web-page", "want": "web_source" },
+    { "raw": "content item", "want": "content_item" },
+    { "raw": "source-item", "want": "source_service_item" },
+    { "raw": "published texture span", "want": "publication_span" },
+    { "raw": "youtube", "want": "youtube_video" },
+    { "raw": "podcast", "want": "audio" },
+    { "raw": "document-pdf", "want": "pdf" },
+    { "raw": "attachment", "want": "file_artifact" },
+    { "raw": "cmd-output", "want": "command_output" },
+    { "raw": "terminal session", "want": "shell_session" },
+    { "raw": "diff", "want": "diff_hunk" },
+    { "raw": "test-result", "want": "test_run" },
+    { "raw": "change-package", "want": "app_change_package" },
+    { "raw": "video-proof", "want": "video_artifact" },
+    { "raw": "unknown source", "want": "unknown_source" }
+  ],
   "selector_kinds": [
     { "raw": "", "want": "whole_resource" },
     { "raw": "text quote", "want": "text_quote" },
