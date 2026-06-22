@@ -46,6 +46,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if err != nil {
 		return nil, fmt.Errorf("list super pending updates: %w", err)
 	}
+	updates = filterPersistentSuperExecutionUpdates(updates)
 	if len(updates) == 0 {
 		if blockedActive != nil {
 			return blockedActive, nil
@@ -217,10 +218,20 @@ func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if agentProfileForRun(rec) != AgentProfileSuper {
+	if !isPersistentSuperAgentRun(rec) {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_source") != "update_coagent" {
+		return false
+	}
+	return true
+}
+
+func isPersistentSuperAgentRun(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	if agentProfileForRun(rec) != AgentProfileSuper {
 		return false
 	}
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.AgentID) == "" {
@@ -229,10 +240,41 @@ func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
 	return rec.AgentID == persistentSuperAgentID(rec.OwnerID)
 }
 
+func filterPersistentSuperExecutionUpdates(updates []types.CoagentSourcePacket) []types.CoagentSourcePacket {
+	if len(updates) == 0 {
+		return nil
+	}
+	out := make([]types.CoagentSourcePacket, 0, len(updates))
+	for _, update := range updates {
+		if persistentSuperExecutableUpdate(update) {
+			out = append(out, update)
+		}
+	}
+	return out
+}
+
+func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
+	if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
+		return false
+	}
+	packet := normalizeCoagentSourcePacketPayload(update.Packet)
+	if packet.Kind != "execution_request" {
+		return false
+	}
+	return validateCoagentSourcePacketPayload(packet) == nil
+}
+
+func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
+	if isPersistentSuperAgentRun(rec) {
+		return persistentSuperExecutableUpdate(update)
+	}
+	return true
+}
+
 func buildPersistentSuperUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
 	b.WriteString("Process the pending update_coagent records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Use privileged tools only for packet.kind=execution_request actions. When you have command output, diffs, tests, artifacts, questions, or blockers, report them back with update_coagent as packet.sources, claims, actions, questions, and notes.\n")
+	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, report them back with update_coagent as packet.sources, claims, actions, questions, and notes.\n")
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -458,6 +500,9 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			if id == "" || seen[id] {
 				continue
 			}
+			if !coagentUpdateDeliverableForRun(rec, update) {
+				continue
+			}
 			seen[id] = true
 			fresh = append(fresh, update)
 			updateIDs = append(updateIDs, id)
@@ -525,6 +570,9 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 			for _, update := range updates {
 				id := strings.TrimSpace(update.UpdateID)
 				if id != "" && !seen[id] {
+					if !coagentUpdateDeliverableForRun(rec, update) {
+						continue
+					}
 					return true, nil
 				}
 			}
@@ -581,6 +629,9 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 	for _, update := range updates {
 		id := strings.TrimSpace(update.UpdateID)
 		if id == "" || seen[id] {
+			continue
+		}
+		if !coagentUpdateDeliverableForRun(rec, update) {
 			continue
 		}
 		seen[id] = true

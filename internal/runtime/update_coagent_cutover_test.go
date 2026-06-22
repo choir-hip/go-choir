@@ -19,6 +19,16 @@ func testCoagentUpdatePacket(kind, summary string) types.CoagentSourcePacketPayl
 	return newCoagentPacket(kind, summary, []types.CoagentPacketClaim{coagentClaim(summary)}, nil, nil, nil, nil)
 }
 
+func testSuperExecutionRequestPacket(summary string) types.CoagentSourcePacketPayload {
+	return newCoagentPacket("execution_request", summary, nil, nil, []types.CoagentPacketAction{
+		coagentAction("request_worker", summary, nil, nil, types.CoagentPacketActionSafety{
+			MutationClass: "red",
+			Network:       "allowed",
+			FileMutation:  "allowed",
+		}),
+	}, nil, nil)
+}
+
 func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
@@ -46,7 +56,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 		ChannelID:     superAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Packet:        testCoagentUpdatePacket("evidence_update", "implementation evidence is ready"),
+		Packet:        testSuperExecutionRequestPacket("implementation evidence is ready"),
 		Content:       "implementation evidence is ready",
 		CreatedAt:     time.Now().UTC(),
 	}

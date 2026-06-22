@@ -77,6 +77,136 @@ func TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions(t *te
 	}
 }
 
+func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
+	rt, _ := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	superRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "super:d9-malformed", AgentProfileSuper, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
+	validSafety := `"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}`
+	for name, raw := range map[string]json.RawMessage{
+		"missing action type": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"missing action type",
+			"actions":[{"objective":"Run the requested command.",` + validSafety + `}]
+		}`),
+		"unsupported action type": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"unsupported action type",
+			"actions":[{"type":"shell_out","objective":"Run the requested command.",` + validSafety + `}]
+		}`),
+		"empty safety": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"empty safety",
+			"actions":[{"type":"run_command","objective":"Run the requested command."}]
+		}`),
+		"unsupported safety enum": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"bad safety enum",
+			"actions":[{"type":"run_command","objective":"Run the requested command.","safety":{"mutation_class":"purple","network":"allowed","file_mutation":"allowed"}}]
+		}`),
+		"malformed source target": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"bad source target",
+			"sources":[{"source_id":"src-bad","kind":"test_run","target":{"title":"missing uri"}}],
+			"actions":[{"type":"run_command","objective":"Run the requested command.",` + validSafety + `}]
+		}`),
+		"claim cites missing source": json.RawMessage(`{
+			"schema_version":"coagent_source_packet.v1",
+			"kind":"execution_request",
+			"summary":"missing claim source",
+			"claims":[{"text":"The claim cites an absent source.","source_ids":["src-missing"]}],
+			"actions":[{"type":"run_command","objective":"Run the requested command.",` + validSafety + `}]
+		}`),
+	} {
+		if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", raw); err == nil {
+			t.Fatalf("%s: update_coagent unexpectedly accepted malformed execution_request", name)
+		}
+	}
+}
+
+func TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets(t *testing.T) {
+	rt, s := testRuntime(t)
+	d9InstallTools(t, rt)
+	ctx := context.Background()
+	ownerID := "user-d9-super-ignore"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+	coSuperRun := d9CoagentRun("run-d9-super-ignore", ownerID, "cosuper:d9-super-ignore", AgentProfileCoSuper, "", "")
+	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(WithToolExecutionContext(ctx, coSuperRun), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"status evidence for Super, not an execution request",
+		"agent_id":"`+superAgent.AgentID+`",
+		"channel_id":"`+superAgent.ChannelID+`",
+		"claims":[{"text":"A non-execution evidence packet should stay pending for Super review."}],
+		"notes":["This packet must not start privileged execution."]
+	}`))
+	if err != nil {
+		t.Fatalf("update_coagent evidence_update to super: %v", err)
+	}
+	updateID := d9UpdateID(t, raw)
+	if run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID); err != nil {
+		t.Fatalf("reconcile persistent super: %v", err)
+	} else if run != nil {
+		t.Fatalf("evidence_update started persistent Super run: %+v", run)
+	}
+	runs, err := s.ListRunsByOwner(ctx, ownerID, 10)
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	for _, run := range runs {
+		if run.AgentID == superAgent.AgentID && metadataStringValue(run.Metadata, "request_source") == "update_coagent" {
+			t.Fatalf("persistent Super run was created for non-execution packet: %+v", run)
+		}
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
+	if err != nil {
+		t.Fatalf("list super backlog: %v", err)
+	}
+	if len(backlog) != 1 || backlog[0].UpdateID != updateID {
+		t.Fatalf("super backlog = %+v, want only pending non-execution update %s", backlog, updateID)
+	}
+	rec := &types.RunRecord{
+		RunID:        "run-d9-super-ignore-inject",
+		OwnerID:      ownerID,
+		AgentID:      superAgent.AgentID,
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		ChannelID:    superAgent.ChannelID,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentID:      superAgent.AgentID,
+			"request_source":        "update_coagent",
+		},
+	}
+	inject := rt.coagentUpdateTurnInjector(rec)
+	if inject == nil {
+		t.Fatal("persistent Super coagent update injector is nil")
+	}
+	msgs, err := inject(false)
+	if err != nil {
+		t.Fatalf("inject pending Super update: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("non-execution Super update was injected: %s", string(msgs[0]))
+	}
+	seed := []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)}
+	prepended, err := rt.prependInitialCoagentUpdatePackets(ctx, rec, seed)
+	if err != nil {
+		t.Fatalf("cold inject pending Super update: %v", err)
+	}
+	if len(prepended) != len(seed) || string(prepended[0]) != string(seed[0]) {
+		t.Fatalf("non-execution Super update was cold-injected: %v", prepended)
+	}
+}
+
 func TestUpdateCoagentAcceptsSuperExecutionResultSourcesAndTextureCollatesPacketSourcesOnly(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)

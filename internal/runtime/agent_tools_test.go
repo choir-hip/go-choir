@@ -4853,6 +4853,110 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 	}
 }
 
+func TestFinishWorkerDelegationDoesNotMirrorLegacyWorkerSubmitUpdate(t *testing.T) {
+	t.Parallel()
+	activeRT, activeStore, activeCWD := testRuntimeWithTempCWD(t)
+	if err := activeRT.InstallDefaultAgentTools(activeCWD); err != nil {
+		t.Fatalf("install active tools: %v", err)
+	}
+	ctx := context.Background()
+	ownerID := "user-alice"
+	docID := "doc-worker-submit-legacy"
+	trajectoryID := "traj-worker-submit-legacy"
+	now := time.Now().UTC()
+	if err := activeStore.CreateDocument(ctx, types.Document{
+		DocID:     docID,
+		OwnerID:   ownerID,
+		Title:     "Worker Submit Legacy",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create active texture document: %v", err)
+	}
+	if err := activeStore.UpsertAgent(ctx, types.AgentRecord{
+		AgentID:   "texture:" + docID,
+		OwnerID:   ownerID,
+		SandboxID: "active-sandbox",
+		Profile:   AgentProfileTexture,
+		Role:      AgentProfileTexture,
+		ChannelID: docID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert active texture agent: %v", err)
+	}
+
+	superRun := &types.RunRecord{
+		RunID:        "run-worker-submit-legacy-super",
+		OwnerID:      ownerID,
+		AgentID:      "super:primary",
+		AgentProfile: AgentProfileSuper,
+		AgentRole:    AgentProfileSuper,
+		ChannelID:    docID,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: AgentProfileSuper,
+			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentID:      "super:primary",
+			runMetadataChannelID:    docID,
+			runMetadataTrajectoryID: trajectoryID,
+			"requested_by_agent_id": "texture:" + docID,
+			"requested_by_profile":  AgentProfileTexture,
+		},
+	}
+	events := []types.EventRecord{
+		{
+			EventID:      "worker-legacy-invoked",
+			RunID:        "worker-run-legacy",
+			AgentID:      "vsuper:worker-legacy",
+			OwnerID:      ownerID,
+			TrajectoryID: trajectoryID,
+			Timestamp:    now,
+			Kind:         types.EventToolInvoked,
+			Payload: json.RawMessage(`{
+				"tool":"update_coagent",
+				"call_id":"call-worker-legacy",
+				"arguments":{
+					"schema_version":"coagent_source_packet.v1",
+					"kind":"evidence_update",
+					"summary":"legacy worker update should not mirror",
+					"findings":["old worker finding shape"],
+					"refs":["legacy-ref"],
+					"notes":["canonical-looking note that old mirror collection would have accepted"]
+				}
+			}`),
+		},
+		{
+			EventID:      "worker-legacy-result",
+			RunID:        "worker-run-legacy",
+			AgentID:      "vsuper:worker-legacy",
+			OwnerID:      ownerID,
+			TrajectoryID: trajectoryID,
+			Timestamp:    now.Add(time.Second),
+			Kind:         types.EventToolResult,
+			Payload:      json.RawMessage(`{"tool":"update_coagent","call_id":"call-worker-legacy","is_error":false,"output":"{\"update_id\":\"worker-legacy-update\"}"}`),
+		},
+	}
+	result := map[string]any{"profile": AgentProfileVSuper, "agent_id": "vsuper:worker-legacy"}
+	activeRT.mirrorWorkerSubmitUpdates(ctx, superRun, workerRunEvidence{Events: events}, result)
+	if count := intMapValue(result, "mirrored_worker_update_count"); count != 0 {
+		t.Fatalf("legacy worker update was mirrored: result=%+v", result)
+	}
+	updates, err := activeStore.ListWorkerUpdatesByTrajectory(ctx, ownerID, trajectoryID, 10)
+	if err != nil {
+		t.Fatalf("list active worker updates: %v", err)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("legacy worker update created active mirror rows: %+v", updates)
+	}
+	messages, err := activeStore.ListChannelMessages(ctx, ownerID, docID, 0, 10)
+	if err != nil {
+		t.Fatalf("list active channel messages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("legacy worker update created channel messages: %+v", messages)
+	}
+}
+
 func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testing.T) {
 	t.Parallel()
 	activeRT, _, activeCWD := testRuntimeWithTempCWD(t)

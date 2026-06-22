@@ -538,12 +538,180 @@ func validateCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload)
 	if packet.Kind == "execution_request" && len(packet.Actions) == 0 {
 		return fmt.Errorf("update_coagent kind=execution_request requires actions")
 	}
+	sourceIDs := make(map[string]bool, len(packet.Sources))
+	for i, source := range packet.Sources {
+		if err := validateCoagentPacketSource(source); err != nil {
+			return fmt.Errorf("update_coagent sources[%d]: %w", i, err)
+		}
+		sourceID := strings.TrimSpace(source.SourceID)
+		if sourceID == "" {
+			return fmt.Errorf("update_coagent sources[%d].source_id is required", i)
+		}
+		if sourceIDs[sourceID] {
+			return fmt.Errorf("update_coagent sources[%d].source_id %q is duplicated", i, sourceID)
+		}
+		sourceIDs[sourceID] = true
+	}
+	for i, claim := range packet.Claims {
+		if err := validateCoagentPacketClaim(claim, sourceIDs); err != nil {
+			return fmt.Errorf("update_coagent claims[%d]: %w", i, err)
+		}
+	}
+	for i, action := range packet.Actions {
+		if err := validateCoagentPacketAction(action, packet.Kind == "execution_request"); err != nil {
+			return fmt.Errorf("update_coagent actions[%d]: %w", i, err)
+		}
+	}
 	return nil
 }
 
 func validCoagentPacketKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
 	case "evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateCoagentPacketClaim(claim types.CoagentPacketClaim, sourceIDs map[string]bool) error {
+	if strings.TrimSpace(claim.Text) == "" {
+		return fmt.Errorf("text is required")
+	}
+	if stance := strings.TrimSpace(claim.Stance); stance != "" && !validCoagentClaimStance(stance) {
+		return fmt.Errorf("stance %q is not supported", stance)
+	}
+	if surface := strings.TrimSpace(claim.RecommendedSurface); surface != "" && !validCoagentClaimRecommendedSurface(surface) {
+		return fmt.Errorf("recommended_surface %q is not supported", surface)
+	}
+	seen := map[string]bool{}
+	for _, sourceID := range claim.SourceIDs {
+		sourceID = strings.TrimSpace(sourceID)
+		if sourceID == "" {
+			return fmt.Errorf("source_ids must not contain empty values")
+		}
+		if seen[sourceID] {
+			return fmt.Errorf("source_id %q is duplicated", sourceID)
+		}
+		seen[sourceID] = true
+		if !sourceIDs[sourceID] {
+			return fmt.Errorf("source_id %q does not match packet.sources", sourceID)
+		}
+	}
+	return nil
+}
+
+func validateCoagentPacketSource(source types.CoagentPacketSource) error {
+	if strings.TrimSpace(source.Kind) == "" {
+		return fmt.Errorf("kind is required")
+	}
+	if strings.TrimSpace(source.Target.URI) == "" {
+		return fmt.Errorf("target.uri is required")
+	}
+	for i, selector := range source.Selectors {
+		if strings.TrimSpace(selector.Kind) == "" {
+			return fmt.Errorf("selectors[%d].kind is required", i)
+		}
+	}
+	if state := strings.TrimSpace(source.Evidence.State); state != "" && !validCoagentSourceEvidenceState(state) {
+		return fmt.Errorf("evidence.state %q is not supported", state)
+	}
+	if confidence := strings.TrimSpace(source.Evidence.Confidence); confidence != "" && !validCoagentSourceEvidenceConfidence(confidence) {
+		return fmt.Errorf("evidence.confidence %q is not supported", confidence)
+	}
+	return nil
+}
+
+func validateCoagentPacketAction(action types.CoagentPacketAction, requireSafety bool) error {
+	if strings.TrimSpace(action.Type) == "" {
+		return fmt.Errorf("type is required")
+	}
+	if !validCoagentActionType(action.Type) {
+		return fmt.Errorf("type %q is not supported", action.Type)
+	}
+	if strings.TrimSpace(action.Objective) == "" {
+		return fmt.Errorf("objective is required")
+	}
+	for i, expected := range action.ExpectedSources {
+		if strings.TrimSpace(expected.Kind) == "" {
+			return fmt.Errorf("expected_sources[%d].kind is required", i)
+		}
+	}
+	safety := action.Safety
+	if requireSafety {
+		if strings.TrimSpace(safety.MutationClass) == "" || strings.TrimSpace(safety.Network) == "" || strings.TrimSpace(safety.FileMutation) == "" {
+			return fmt.Errorf("safety.mutation_class, safety.network, and safety.file_mutation are required for execution_request actions")
+		}
+	}
+	if mutationClass := strings.TrimSpace(safety.MutationClass); mutationClass != "" && !validMutationClass(mutationClass) {
+		return fmt.Errorf("safety.mutation_class %q is not supported", mutationClass)
+	}
+	if network := strings.TrimSpace(safety.Network); network != "" && !validCoagentActionSafetyMode(network) {
+		return fmt.Errorf("safety.network %q is not supported", network)
+	}
+	if fileMutation := strings.TrimSpace(safety.FileMutation); fileMutation != "" && !validCoagentActionSafetyMode(fileMutation) {
+		return fmt.Errorf("safety.file_mutation %q is not supported", fileMutation)
+	}
+	return nil
+}
+
+func validCoagentClaimStance(stance string) bool {
+	switch strings.TrimSpace(stance) {
+	case "supports", "qualifies", "contradicts", "background":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCoagentClaimRecommendedSurface(surface string) bool {
+	switch strings.TrimSpace(surface) {
+	case "inline_ref", "block_embed", "source_panel", "decision_log":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCoagentSourceEvidenceState(state string) bool {
+	switch strings.TrimSpace(state) {
+	case "available", "pending", "blocked", "unavailable":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCoagentSourceEvidenceConfidence(confidence string) bool {
+	switch strings.TrimSpace(confidence) {
+	case "low", "medium", "high":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCoagentActionType(actionType string) bool {
+	switch strings.TrimSpace(actionType) {
+	case "run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "request_worker", "import_source", "revise_texture":
+		return true
+	default:
+		return false
+	}
+}
+
+func validMutationClass(mutationClass string) bool {
+	switch strings.TrimSpace(mutationClass) {
+	case "green", "yellow", "orange", "red", "black":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCoagentActionSafetyMode(mode string) bool {
+	switch strings.TrimSpace(mode) {
+	case "forbidden", "allowed", "required":
 		return true
 	default:
 		return false

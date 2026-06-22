@@ -1341,11 +1341,17 @@ func collectSuccessfulWorkerSubmitUpdates(events []types.EventRecord) []mirrored
 		if callID == "" {
 			continue
 		}
+		if err := rejectLegacyUpdateCoagentFields(payload.Arguments); err != nil {
+			continue
+		}
 		var args submitCoagentUpdateArgs
 		if err := json.Unmarshal(payload.Arguments, &args); err != nil {
 			continue
 		}
 		args.CoagentSourcePacketPayload = normalizeCoagentSourcePacketPayload(args.CoagentSourcePacketPayload)
+		if err := validateCoagentSourcePacketPayload(args.CoagentSourcePacketPayload); err != nil {
+			continue
+		}
 		if _, exists := invokedByCallID[callID]; !exists {
 			order = append(order, callID)
 		}
