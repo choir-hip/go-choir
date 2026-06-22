@@ -1879,3 +1879,236 @@ Remaining proof:
   the next Texture revision has structured `source_entities`, and verifies the
   visible document uses native source refs/embeds without clickable markdown
   source links or process-metadata body prose.
+
+### D8 staging blocker: Super execution packets are lossy/ambiguous
+
+After deploying the D8 `update_coagent` source-envelope repair, staging proved a
+new, narrower blocker in the super execution path.
+
+Problem:
+
+- Texture can call `request_super_execution` and the persistent Super run wakes,
+  but the handoff is delivered as a generic coagent update rather than an
+  unmistakable execution packet. In the live proof, Texture asked Super to run a
+  harmless command and report command evidence through typed `update_coagent`
+  refs. Super replied that no pending privileged execution packet was present,
+  so no command evidence was produced and Texture could not create a native
+  `source_ref` for command output.
+- The coagent packet shape injected into runs also omits typed fields that now
+  matter for the whole source system: `evidence_ids`, `artifacts`, `tests`,
+  `questions`, `proposals`, `capability_requests`, and `notes`. The plain
+  rendered `content` still contains those sections, but the machine-readable
+  packet only exposes `summary`, `findings`, `refs`, and `content`.
+
+Evidence:
+
+- Deployed commit under test:
+  `63f44e07691c7df58ceec9dd078b6e9a8be37322`.
+- Active staging computer for `yusefnathanson@me.com` reported sandbox URL
+  `http://10.200.233.2:8085` and health/build commit
+  `63f44e07691c7df58ceec9dd078b6e9a8be37322`.
+- Prompt-bar submission
+  `0545d5f3-38b7-4765-acca-8bd80c12d3b7` created Texture document
+  `a7260780-92d8-4a60-bce5-849cb2f679c8`.
+- Diagnosis for that document showed channel seq 1 from Texture to Super:
+  "Run a harmless command that prints exactly D8_TYPED_SOURCE_PROOF. Report back
+  to Texture via update_coagent with a typed command_output reference or evidence
+  entry..." Seq 2 from Super replied: "No privileged execution packet was
+  included in this turn/context..."
+- The appagent revision stayed honest: it wrote an interim reader-facing note
+  without process metadata and without false citation points, but it had
+  `source_entities` count `0` because no command evidence arrived.
+
+Required repair:
+
+- Treat `request_super_execution` deliveries as explicitly typed execution
+  packets while still using `update_coagent` as the durable delivery envelope.
+  Super should see that the objective itself is the work packet, including
+  constraints and expected evidence.
+- Carry the full typed `WorkerUpdateRecord` evidence surface in coagent packet
+  JSON, not just the rendered prose content. Execution refs, tests, artifacts,
+  and capability requests must survive wake/injection as first-class fields.
+- Keep the source invariant unchanged: Texture may mint native sources from
+  typed evidence substrate, never from scraped prose.
+
+### D9 redesign: make `update_coagent` source-centric
+
+Cognitive transforms used:
+
+- **Object transform:** `update_coagent` is not fundamentally a chat message.
+  It is an append-only evidence/source packet addressed to another durable
+  actor. The message users and agents read is a projection.
+- **Duality:** swap the current object/observer relationship. Today sources are
+  optional annotations on a worker update; in the target design, narrative
+  claims and directives are annotations on sources, artifacts, and requested
+  actions.
+- **State machine:** separate observed material, proposed interpretation,
+  requested action, and reader-facing document mutation. This prevents the
+  impossible state "Texture cites a claim whose source identity exists only in
+  prose."
+- **API contract:** define what the receiver can trust structurally. A receiver
+  should not need to parse the rendered message to know what sources, commands,
+  tests, diffs, or media are available for transclusion.
+- **Deletion-first:** delete parallel syntaxes rather than supporting every old
+  shape. The cutover should have one durable envelope and no legacy compatibility
+  layer.
+
+Redesigned primitive:
+
+```text
+update_coagent = addressed SourcePacket append
+```
+
+The canonical payload should have five top-level sections:
+
+```json
+{
+  "schema_version": "coagent_source_packet.v1",
+  "kind": "evidence_update | execution_request | execution_result | blocker | question | proposal | decision_request",
+  "summary": "short human-readable projection",
+  "claims": [],
+  "sources": [],
+  "actions": [],
+  "questions": [],
+  "notes": []
+}
+```
+
+Only `summary` and `notes` are prose-only. They are never citeable. Everything
+that Texture may cite, embed, or open must be represented in `sources`; every
+instruction that asks another actor to do work must be represented in `actions`.
+
+#### `sources`
+
+`sources[]` is the source graph edge format shared by researcher, super,
+vsuper, co-super, processor, reconciler, and future actors. Each item is either
+an inline evidence object or a reference to a durable evidence object:
+
+```json
+{
+  "source_id": "optional caller-local id",
+  "kind": "web_page | content_item | command_output | shell_session | diff_hunk | patch | test_run | app_change_package | file_artifact | screenshot | video_artifact | benchmark_log | publication | texture_span",
+  "target": {
+    "uri": "source_service_item:... | content_item:... | command_output:... | file:/... | app_change_package:...",
+    "title": "human label",
+    "media_type": "text/markdown | text/plain | image/png | video/mp4 | application/vnd.choir.diff"
+  },
+  "selectors": [
+    {"kind": "whole_resource"},
+    {"kind": "text_quote", "quote": "..."},
+    {"kind": "line_range", "start": 12, "end": 20},
+    {"kind": "image_region", "x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4}
+  ],
+  "evidence": {
+    "state": "available | pending | blocked | unavailable",
+    "confidence": "low | medium | high",
+    "rights_scope": "private_user_source | public_url | generated_artifact | local_computer"
+  }
+}
+```
+
+This compiles directly to Texture `SourceEntity` plus visible `source_ref` or
+`source_embed` document nodes. It also covers multimedia and code execution
+without adding special markdown syntaxes.
+
+#### `claims`
+
+`claims[]` records the semantic use of source material without making the model
+write JSON document nodes:
+
+```json
+{
+  "claim_id": "claim-local-id",
+  "text": "A reader-facing claim or execution result.",
+  "source_ids": ["source-local-id"],
+  "stance": "supports | qualifies | contradicts | background",
+  "recommended_surface": "inline_ref | block_embed | source_panel | decision_log"
+}
+```
+
+Texture can choose whether and where to write this claim into the canonical
+document. The source relationship survives even if Texture rewrites the prose.
+
+#### `actions`
+
+`actions[]` replaces the current ambiguous "assignment prose" problem:
+
+```json
+{
+  "action_id": "act-local-id",
+  "type": "run_command | inspect_file | produce_diff | run_tests | open_browser | request_worker | import_source | revise_texture",
+  "objective": "Run a harmless command that prints D8_TYPED_SOURCE_PROOF.",
+  "inputs": {
+    "command": "printf 'D8_TYPED_SOURCE_PROOF\\n'",
+    "cwd": "/Users/wiz/go-choir",
+    "mutation": "none"
+  },
+  "expected_sources": [
+    {"kind": "command_output", "required": true},
+    {"kind": "test_run", "required": false}
+  ],
+  "safety": {
+    "mutation_class": "green | yellow | orange | red | black",
+    "network": "forbidden | allowed | required",
+    "file_mutation": "forbidden | allowed | required"
+  }
+}
+```
+
+Super no longer has to infer whether a mailbox update is an execution packet:
+`kind=execution_request` with `actions[]` is executable. Its response should be
+`kind=execution_result` with `sources[]` for command output, diffs, tests,
+packages, screenshots, videos, or blockers.
+
+#### Receiver rules
+
+- Texture may cite or embed only `sources[]`, never `summary`, `notes`, or
+  freeform `claims[].text`.
+- Super may execute only `actions[]`, never ambiguous prose hidden in `summary`.
+- Researcher must return source-service/content/evidence sources for factual
+  claims, or return a blocker explaining that the current tool output has no
+  native source substrate.
+- The rendered channel message is derived from the packet for humans. It is not
+  the canonical machine contract.
+- Legacy `findings`, `evidence_ids`, `refs`, `artifacts`, and `tests` fields
+  are deleted in the hard cutover. Do not accept them as alternate API shapes,
+  do not compile them at the boundary, and do not leave downstream readers that
+  interpret them. Callers must speak `claims[]`, `sources[]`, and `actions[]`
+  directly.
+
+#### Why this resolves the current bugs
+
+- The no-citation world-news failure becomes structurally impossible to mistake:
+  a prose-only packet has `sources=[]`, so Texture knows it can write an
+  uncited draft or ask for source substrate, but cannot invent citation points.
+- The Super command proof failure gets a first-class `actions[]` request and a
+  first-class `command_output` source result.
+- Multimedia and code artifacts use the same source/entity surface as web
+  research, so `source_ref` / `source_embed` remain the only Texture
+  transclusion primitives.
+- Editing becomes simpler: the model edits prose and places refs by
+  `source_id`; the stored document remains ProseMirror-compatible JSON with
+  source atoms, not markdown links or offset citations.
+
+Hard cutover plan:
+
+- Replace `WorkerUpdateRecord` with `CoagentSourcePacket` in types, storage,
+  tool schemas, wake/injection, diagnosis, and tests. Do not add a compatibility
+  parser for the old shape.
+- Change `update_coagent` to require `schema_version`, `kind`, and at least one
+  of `claims`, `sources`, `actions`, `questions`, or `notes`.
+- Remove old tool parameters: `findings`, `evidence_ids`, `evidence`,
+  `artifacts`, `refs`, `tests`, `proposals`, and `capability_requests`.
+  Equivalent information must appear in `claims`, `sources`, `actions`,
+  `questions`, or `notes`.
+- Delete old packet JSON fields from `coagentUpdatePacketItem`; wake/injection
+  should deliver the source packet verbatim plus a rendered human projection.
+- Delete Texture source collation from old worker-update fields; source collation
+  reads only `packet.sources`.
+- Delete Super execution inference from prose. Super executes only
+  `kind=execution_request` packets with `actions[]`.
+- Update prompts and tests in the same cutover so no role is instructed to use
+  old fields.
+- Staging acceptance is allowed to break old prerelease documents and old
+  in-flight coagent messages. This is prerelease; correctness of the new
+  invariant beats migration continuity.

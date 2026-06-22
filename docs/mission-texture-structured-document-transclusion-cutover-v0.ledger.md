@@ -1624,3 +1624,65 @@ Open edge: deploy and staging product-path proof are still required. The proof
 must verify a typed researcher update and typed super execution update both
 produce structured `source_entities` and native citations/transclusions in
 Texture without markdown links or reader-facing process metadata.
+
+## 2026-06-22 - Pass 42 - D8 Super Execution Packet Blocker
+
+Claim: the D8 source-envelope repair is necessary but insufficient while a
+Texture `request_super_execution` handoff can wake Super as a generic mailbox
+update that Super does not recognize as its executable packet.
+
+Move: deployed probe + document before repair. Submitted prompt-bar proof
+`0545d5f3-38b7-4765-acca-8bd80c12d3b7` on staging commit
+`63f44e07691c7df58ceec9dd078b6e9a8be37322`. Texture document
+`a7260780-92d8-4a60-bce5-849cb2f679c8` requested a harmless command proof,
+woke persistent Super, and kept the reader-facing draft honest while waiting.
+Super replied that no privileged execution packet was included, so no typed
+command evidence reached Texture.
+
+Expected delta V: distinguish whether the remaining staging proof failure is
+source rendering, source collation, Texture prompt behavior, or the
+Texture-to-Super execution envelope.
+
+Actual delta V: classified as an execution-envelope blocker plus a typed-packet
+lossiness issue. Coagent packet JSON does not expose the complete
+`WorkerUpdateRecord` typed surface (`evidence_ids`, `artifacts`, `tests`,
+`questions`, `proposals`, `capability_requests`, `notes`), and
+`request_super_execution` deliveries are not labelled as execution packets even
+though their objective is the work Super should execute.
+
+Receipts:
+document `a7260780-92d8-4a60-bce5-849cb2f679c8`;
+submission `0545d5f3-38b7-4765-acca-8bd80c12d3b7`;
+Texture-to-Super message seq 1;
+Super-to-Texture message seq 2.
+
+Open edge: repair the coagent packet shape and `request_super_execution`
+delivery framing, then rerun staging proof until command evidence is returned
+through typed `update_coagent` and rendered as a native Texture source ref.
+
+## 2026-06-22 - Pass 43 - Source-Centric update_coagent Hard Cutover
+
+Claim: the correct repair is not another legacy field expansion. `update_coagent`
+must become an addressed source/evidence packet API, with the readable channel
+message as a projection.
+
+Move: applied cognitive transforms and rewrote the D9 target in the paradoc.
+Object transform reclassified `update_coagent` as a `CoagentSourcePacket`.
+Duality moved prose from canonical payload to projection. State-machine and API
+contract transforms separated sources, claims, actions, questions, and notes.
+Deletion-first transform made this a prerelease hard cutover with no old-shape
+compatibility.
+
+Expected delta V: prevent a local patch that preserves the current confused API
+and merely adds more optional fields.
+
+Actual delta V: new target requires deleting legacy `findings`, `evidence_ids`,
+`evidence`, `artifacts`, `refs`, `tests`, `proposals`, and
+`capability_requests` parameters from `update_coagent`; replacing
+`WorkerUpdateRecord` with `CoagentSourcePacket`; delivering packet JSON verbatim
+through wake/injection; and making Texture cite only `sources[]` while Super
+executes only `kind=execution_request` packets with `actions[]`.
+
+Open edge: implement the hard cutover in one coherent branch/commit series and
+then rerun staging acceptance. Old prerelease docs/messages may break; that is
+allowed by the mission.
