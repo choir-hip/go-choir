@@ -2690,10 +2690,16 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.CoagentSourceP
 			return types.CoagentSourcePacket{}, fmt.Errorf("decode coagent source packet: %w", err)
 		}
 	}
-	if strings.TrimSpace(rec.Packet.SchemaVersion) == "" && strings.TrimSpace(kind) != "" {
-		rec.Packet.SchemaVersion = types.CoagentSourcePacketSchemaV1
-		rec.Packet.Kind = strings.TrimSpace(kind)
-		rec.Packet.Summary = strings.TrimSpace(summary)
+	// Hard cutover (E3.1): a live worker_updates read with no canonical
+	// packet_json is a legacy-shape row that must not be reconstructed into a
+	// fake CoagentSourcePacket. The source-centric contract requires that
+	// empty/invalid packet_json fail live delivery reads so legacy rows are
+	// quarantined as audit-only historical data. Pre-cutover rows that still
+	// carry only kind/summary are no longer deliverable as live coagent
+	// packets; they remain readable as channel-message history. See
+	// docs/mission-update-coagent-source-centric-deletion-v0.md §E2 Family A.
+	if strings.TrimSpace(rec.Packet.SchemaVersion) == "" {
+		return types.CoagentSourcePacket{}, fmt.Errorf("worker_update %s has no canonical packet_json; legacy-shape rows are not deliverable under the source-centric contract", rec.UpdateID)
 	}
 	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {

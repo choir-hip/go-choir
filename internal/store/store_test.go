@@ -282,6 +282,49 @@ CREATE TABLE worker_updates (
 	}
 }
 
+// TestWorkerUpdateLegacyShapeRowIsNotDeliverable proves the E3.1 hard
+// cutover: a worker_updates row written in the legacy shape (kind/summary
+// populated, packet_json empty) is migrated to have the packet_json column
+// but is NOT deliverable as a live CoagentSourcePacket. scanWorkerUpdate
+// must reject it rather than reconstructing a fake packet from kind/summary.
+// This is the structural enforcement of the Family-A quarantine policy from
+// docs/mission-update-coagent-source-centric-deletion-v0.md §E2.
+func TestWorkerUpdateLegacyShapeRowIsNotDeliverable(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+	ctx := context.Background()
+	ownerID := "user-legacy-quarantine"
+
+	// Insert a legacy-shape row directly: the kind/summary columns populated,
+	// packet_json empty, mimicking a pre-cutover row that the D9 write path
+	// never would have produced.
+	_, err = s.db.ExecContext(ctx, `INSERT INTO worker_updates
+		(owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq,
+		 trajectory_id, role, kind, summary, packet_json, content, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ownerID, "update-legacy-1", "researcher:legacy", "texture:doc-legacy",
+		"doc-legacy", 1, "traj-legacy", "researcher",
+		"findings", "legacy findings summary", "", "Coagent update ready.\nKind: findings.",
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("seed legacy-shape row: %v", err)
+	}
+
+	// Live delivery read must fail, not reconstruct. This is the hard cutover.
+	_, err = s.GetWorkerUpdate(ctx, ownerID, "update-legacy-1")
+	if err == nil {
+		t.Fatal("GetWorkerUpdate unexpectedly reconstructed a legacy-shape row into a live CoagentSourcePacket; hard cutover requires empty packet_json to fail live delivery reads")
+	}
+}
+
 func TestOpenMigratesRunsRequestedByRunIDBeforeIndex(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
