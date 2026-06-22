@@ -407,10 +407,30 @@ EOF
       # image so high-fidelity screenshot/video proof does not inflate every VM.
       guest-image = mkGuestImage "go-choir-guest-image" guestVmConfig;
       guest-image-playwright = mkGuestImage "go-choir-guest-image-playwright" playwrightGuestVmConfig;
+
+      # Desktop dev shell — for building Choir Desktop with Wails v3.
+      # Separate from the default shell so it doesn't pull in ICU/Dolt
+      # or interfere with the main Go dev environment.
+      mkDesktopShell = devSystem:
+        let
+          devPkgs = import nixpkgs { system = devSystem; };
+        in
+        devPkgs.mkShell {
+          packages = [
+            devPkgs.go
+            devPkgs.nodejs
+            devPkgs.task
+          ];
+          shellHook = ''
+            echo "Choir Desktop dev shell (Wails v3)"
+            echo "  cd cmd/desktop && task deps && task dev"
+          '';
+        };
     in
     {
       devShells = forDevSystems (devSystem: {
         default = mkDevShell devSystem;
+        desktop = mkDesktopShell devSystem;
       });
 
       packages.${system} = goChoirPackages // {

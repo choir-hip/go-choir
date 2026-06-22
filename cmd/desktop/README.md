@@ -18,6 +18,23 @@ using Wails v3. In Phase 1, it connects to the staging backend
 
 ## Setup
 
+### Option A: Nix dev shell (recommended)
+
+```bash
+# From the repo root — uses the desktop dev shell, not the default one
+nix develop .#desktop -c bash
+
+# Then from cmd/desktop:
+cd cmd/desktop
+task deps
+task dev
+```
+
+This gives you Go, Node, and Task without pulling in ICU/Dolt or
+interfering with the main `nix develop` shell.
+
+### Option B: Manual setup
+
 ```bash
 # From the desktop module directory
 cd cmd/desktop
