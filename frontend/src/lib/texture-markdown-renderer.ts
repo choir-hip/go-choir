@@ -5,7 +5,7 @@ type RenderMarkdownOptions = {
   headingLevelOffset?: number;
   wrapTables?: boolean;
   relatedTextures?: any[];
-  relatedTextures?: any[];
+  linkMode?: 'anchor' | 'text';
 };
 
 function splitTableCells(value: string): string[] {
@@ -63,7 +63,7 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
   const headingOffset = Number.isFinite(options.headingLevelOffset) ? Number(options.headingLevelOffset) : 0;
   const wrapTables = options.wrapTables !== false;
 
-  const inline = (text: string) => renderInlineMarkdown(text, sourceEntities, options.relatedTextures || options.relatedTextures || []);
+  const inline = (text: string) => renderInlineMarkdown(text, sourceEntities, options.relatedTextures || [], { linkMode: options.linkMode });
 
   function flushParagraph() {
     if (paragraph.length === 0) return;

@@ -43,7 +43,7 @@
       ? sourceEntityReaderSnapshot || item?.text_content || sourceEntityFallbackSnapshot
       : item?.text_content || sourceEntityReaderSnapshot || sourceEntityFallbackSnapshot
   ).trim();
-  $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: true });
+  $: readerHTML = renderMarkdownBlocks(readerText, [], { headingLevelOffset: 1, wrapTables: true, linkMode: 'anchor' });
   $: hasReaderText = readerText.length > 0;
   $: isSourceReader = hasReaderText && (appHint === 'content' || !!sourceEntity);
   $: sourceOpenPlan = appContext?.sourceOpenPlan || {};

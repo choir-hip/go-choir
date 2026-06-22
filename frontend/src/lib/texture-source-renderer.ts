@@ -478,15 +478,18 @@ export function renderInlineTextureRef(label: string, docRef: string, relatedTex
   </span>`;
 }
 
-export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedTextures: any[] = []): string {
+type InlineMarkdownOptions = {
+  linkMode?: 'anchor' | 'text';
+};
+
+export function renderInlineMarkdown(value: unknown, sourceEntities: any[] = [], relatedTextures: any[] = [], options: InlineMarkdownOptions = {}): string {
   let html = escapeHTML(value);
   html = html.replace(/\[([^\]]+)\]\(texture:([^)]+)\)/g, (_match, label, docID) =>
     renderInlineTextureRef(label, docID, relatedTextures)
   );
-  html = html.replace(/\[([^\]]+)\]\(texture:([^)]+)\)/g, (_match, label, docID) =>
-    renderInlineTextureRef(label, docID, relatedTextures)
-  );
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  if (options.linkMode === 'anchor') {
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  }
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
   html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');

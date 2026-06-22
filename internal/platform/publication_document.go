@@ -479,8 +479,12 @@ func parsePublicationInlines(text string) []publicationInline {
 		}
 		label := text[loc[2]:loc[3]]
 		href := text[loc[4]:loc[5]]
-		inline := publicationInline{Kind: "link", Text: label, Href: href}
-		out = append(out, inline)
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(href)), "source:") {
+			out = append(out, publicationInline{Kind: "text", Text: text[loc[0]:loc[1]]})
+		} else {
+			inline := publicationInline{Kind: "link", Text: label, Href: href}
+			out = append(out, inline)
+		}
 		text = text[loc[1]:]
 	}
 	return mergeAdjacentTextInlines(out)

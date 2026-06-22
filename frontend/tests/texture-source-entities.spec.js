@@ -131,6 +131,17 @@ test('raw markdown source links do not render as native Texture source refs', ()
   expect(html).toContain('[source label](source:src-raw-link)');
 });
 
+test('Texture inline markdown keeps ordinary web links inert unless source-reader mode opts in', () => {
+  const raw = 'This claim links to [ordinary context](https://example.com/context).';
+  const textureHTML = renderInlineMarkdown(raw, [], []);
+  const readerHTML = renderInlineMarkdown(raw, [], [], { linkMode: 'anchor' });
+
+  expect(textureHTML).not.toContain('<a ');
+  expect(textureHTML).toContain('[ordinary context](https://example.com/context)');
+  expect(readerHTML).toContain('<a href="https://example.com/context"');
+  expect(readerHTML).toContain('target="_blank"');
+});
+
 test('related Texture refs parse and format pinned revision targets', () => {
   expect(parseTextureRelatedRef('doc-grid-story@rev-grid-v1')).toEqual({
     docID: 'doc-grid-story',

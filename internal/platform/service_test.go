@@ -772,6 +772,25 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 	}
 }
 
+func TestPublicationFallbackMarkdownSourceLinksRemainInert(t *testing.T) {
+	inlines := parsePublicationInlines("Legacy [clip](source:src-legacy) remains prose; [web](https://example.com/context) remains a web link.")
+
+	if len(inlines) != 3 {
+		t.Fatalf("inlines = %#v, want text/link/text", inlines)
+	}
+	if inlines[0].Kind != "text" || !strings.Contains(inlines[0].Text, "[clip](source:src-legacy)") {
+		t.Fatalf("legacy source markdown inline = %#v, want inert text", inlines[0])
+	}
+	if inlines[1].Kind != "link" || inlines[1].Href != "https://example.com/context" {
+		t.Fatalf("web inline = %#v, want ordinary web link", inlines[1])
+	}
+	for _, inline := range inlines {
+		if inline.Kind == "source_ref" || inline.Href == "source:src-legacy" {
+			t.Fatalf("legacy source markdown became source identity or clickable source href: %#v", inlines)
+		}
+	}
+}
+
 func TestBuildPublicationSourceMetadataDefaultsQuotedExcerptToEmbeddedTransclusion(t *testing.T) {
 	entity := testTextureSourceEntity(
 		"src-quoted-excerpt",

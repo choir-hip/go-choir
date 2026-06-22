@@ -476,7 +476,7 @@
     let paragraph = [];
     const flushParagraph = () => {
       const text = paragraph.join(' ').trim();
-      if (text) blocks.push(`<p>${renderInlineMarkdown(text, [])}</p>`);
+      if (text) blocks.push(`<p>${renderInlineMarkdown(text, [], [], { linkMode: 'anchor' })}</p>`);
       paragraph = [];
     };
     for (const line of lines) {
@@ -489,7 +489,7 @@
       if (heading) {
         flushParagraph();
         const level = Math.min(4, heading[1].length + 1);
-        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2], [])}</h${level}>`);
+        blocks.push(`<h${level}>${renderInlineMarkdown(heading[2], [], [], { linkMode: 'anchor' })}</h${level}>`);
         continue;
       }
       paragraph.push(trimmed);
