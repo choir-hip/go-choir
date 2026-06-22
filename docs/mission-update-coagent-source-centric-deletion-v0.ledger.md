@@ -624,3 +624,54 @@ content-item IDs for URL-backed sources.
 Heresy delta: `discovered` for the link-only interpretation of URL-backed
 sources. `introduced`: none in this checkpoint. `repaired`: none until a later
 code/test commit.
+
+## 2026-06-22 - Pass 11 - Imported Source Text Preservation Gap
+
+Claim: the Pass 10 source-text repair is incomplete while imported source
+content can still re-enter Texture through `content_id:*` refs as title-only
+or URL-only source chrome. Researcher-read text preserved directly in
+`update_coagent` packets now works, but imported content items must also carry
+their stored text into native source transclusions and the Source Viewer.
+
+Move: document first. A fresh deployed proof on commit
+`3fc60e1b37e5170dcd7c532ce21d64bcfd1b0735` used prompt token
+`SOURCE_TEXT_PRESERVATION_PROOF_20260622_2334` and created Texture document
+`f8c29bde-0fa6-45cf-8430-3ec0bbade95d`. The proof showed the intended
+positive path: head v5 had structured `choir.texture_doc.v1`, no
+`metadata.source_entities`, seven top-level source entities, four URL-backed
+entities with preserved `reader_snapshot.text_content`, and visible embedded
+source excerpt blocks in the Texture body. It also exposed the remaining gap:
+three imported/fallback entities showed `content_id:*` or `file_artifact:*`
+labels and no reader snapshot even though imported source text is available in
+the content substrate. The run also showed repeated researcher
+`update_coagent` tool errors for string-valued `sources` entries before runtime
+fallback salvaged a canonical packet.
+
+Mutation class: green for this checkpoint. The intended repair is red because
+it changes Texture source entity materialization and source text display for
+imported content items. Protected surfaces: Texture structured
+`source_entities`, content-item source projection, coagent source fallback
+normalization, Source Viewer/inline transclusion content, and the
+source-centric `update_coagent` contract.
+
+Conjecture delta: preserving source content cannot depend on whether the
+researcher delivered text directly in `sources[].reader_snapshot` or indirectly
+through an imported `ContentItem`. `content_id:*` is an internal pointer and
+must not become a user-visible source title; it should hydrate the native source
+entity from the stored content item title, URL, and text snapshot.
+
+Admissible evidence class for repair: tests proving `content_id:*` source refs
+materialize as native content-item sources with the content item title,
+canonical URL, and `reader_snapshot.text_content`; packet/fallback titles that
+look like internal typed refs do not overwrite hydrated source titles; Texture
+source embeds prefer stored source text over title/URL fallback; and no
+metadata source sidecars, clickable markdown links, or synthetic content-item
+IDs are reintroduced.
+
+Rollback path: revert the follow-up code/test repair commit(s) while preserving
+this checkpoint. Do not roll back to title/URL-only source display as the
+target behavior.
+
+Heresy delta: `discovered` for the imported content-item source text gap and
+internal typed-ref title leak. `introduced`: none in this checkpoint.
+`repaired`: none until a later code/test commit.
