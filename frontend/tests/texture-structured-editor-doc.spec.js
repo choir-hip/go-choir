@@ -118,6 +118,40 @@ test('structured docs render source refs as native non-link citation atoms', () 
   expect(html).not.toContain('source:src-1');
 });
 
+test('structured docs render source embeds with preserved source text', () => {
+  const bodyDoc = {
+    schema: 'choir.texture_doc.v1',
+    doc: {
+      type: 'doc',
+      attrs: { id: 'doc-source-embed-render' },
+      content: [{
+        type: 'source_embed',
+        attrs: {
+          id: 'embed-1',
+          source_entity_id: 'src-embed',
+        },
+      }],
+    },
+  };
+  const entity = {
+    ...sourceEntity('src-embed'),
+    selectors: [{
+      kind: 'text_quote',
+      data: { exact: 'Embedded source excerpt should be visible.' },
+    }],
+    reader_snapshot: {
+      text_content: 'Embedded source excerpt should be visible.\n\nFull source viewer text remains available separately.',
+    },
+  };
+
+  const html = renderStructuredTextureDocHTML(bodyDoc, [entity]);
+
+  expect(html).toContain('data-texture-source-embed');
+  expect(html).toContain('Carrier service advisory');
+  expect(html).toContain('Embedded source excerpt should be visible.');
+  expect(html).not.toContain('source:src-embed');
+});
+
 test('structured doc source entities keep only attached entities', () => {
   const bodyDoc = {
     schema: 'choir.texture_doc.v1',

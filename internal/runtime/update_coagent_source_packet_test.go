@@ -37,7 +37,7 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 		"agent_id":"texture:doc-d9-researcher",
 		"channel_id":"doc-d9-researcher",
 		"claims":[{"text":"The official source confirms the update.","source_ids":["src-official"],"stance":"supports","recommended_surface":"inline_ref"}],
-		"sources":[{"source_id":"src-official","kind":"content_item","target":{"uri":"https://example.test/official","title":"Official source"},"selectors":[{"kind":"whole_resource"}],"evidence":{"state":"available","confidence":"high","rights_scope":"private_user_source"}}],
+		"sources":[{"source_id":"src-official","kind":"content_item","target":{"uri":"https://example.test/official","title":"Official source"},"selectors":[{"kind":"whole_resource"}],"excerpt":"Official source excerpt for inline transclusion.","reader_snapshot":{"text_content":"Official source excerpt for inline transclusion.\n\nFuller cleaned reader text for the Source Viewer.","snapshot_kind":"cleaned_reader_markdown","media_type":"text/markdown","source_url":"https://example.test/official","access_scope":"private_user_source"},"evidence":{"state":"available","confidence":"high","rights_scope":"private_user_source"}}],
 		"notes":["Delivered as a source packet."]
 	}`))
 	if err != nil {
@@ -53,6 +53,15 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 	}
 	if len(stored.Packet.Claims) != 1 || len(stored.Packet.Sources) != 1 {
 		t.Fatalf("packet claims/sources = %#v", stored.Packet)
+	}
+	if stored.Packet.Sources[0].Excerpt != "Official source excerpt for inline transclusion." {
+		t.Fatalf("source excerpt not preserved: %#v", stored.Packet.Sources[0])
+	}
+	if stored.Packet.Sources[0].ReaderSnapshot == nil || !strings.Contains(stored.Packet.Sources[0].ReaderSnapshot.TextContent, "Fuller cleaned reader text") {
+		t.Fatalf("source reader snapshot not preserved: %#v", stored.Packet.Sources[0].ReaderSnapshot)
+	}
+	if !strings.Contains(stored.Content, "Official source excerpt for inline transclusion.") {
+		t.Fatalf("human projection omitted source excerpt: %q", stored.Content)
 	}
 	if strings.Contains(stored.Content, "Findings:") || strings.Contains(stored.Content, "Evidence IDs:") {
 		t.Fatalf("human projection retained legacy sections: %q", stored.Content)

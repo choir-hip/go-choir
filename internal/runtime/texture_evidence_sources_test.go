@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -101,6 +102,60 @@ func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing
 	}
 	if entity.Target.CanonicalURL != "https://example.test/newsroom" {
 		t.Fatalf("canonical URL not preserved: %#v", entity.Target)
+	}
+}
+
+func TestCoagentPacketHTTPSourcePreservesSourceTextForTransclusion(t *testing.T) {
+	update := types.CoagentSourcePacket{
+		OwnerID: "owner-url-source-text",
+		AgentID: "researcher:url-source-text",
+		Role:    AgentProfileResearcher,
+		Packet: types.CoagentSourcePacketPayload{
+			Sources: []types.CoagentPacketSource{{
+				SourceID: "src-whitehouse",
+				Kind:     "web_url",
+				Target: types.CoagentPacketSourceTarget{
+					URI:       "https://example.test/ai-policy",
+					Title:     "AI policy source",
+					MediaType: "text/html",
+				},
+				Excerpt: "The order directs agencies to accelerate secure AI adoption.",
+				ReaderSnapshot: &types.CoagentPacketSourceReaderSnapshot{
+					TextContent:       "The order directs agencies to accelerate secure AI adoption.\n\nIt also assigns responsibilities across federal agencies.",
+					SnapshotKind:      "cleaned_reader_markdown",
+					MediaType:         "text/markdown",
+					OriginalMediaType: "text/html",
+					AccessScope:       "private_user_source",
+				},
+			}},
+		},
+	}
+	entity := sourceEntityFromCoagentPacketSource(context.Background(), nil, update.OwnerID, update.Packet.Sources[0], update)
+	if entity.EntityID == "" {
+		t.Fatal("expected URL source entity")
+	}
+	if entity.Kind != "web_url" || entity.Target.TargetKind != "web_url" || entity.Target.ContentID != "" {
+		t.Fatalf("source text must not turn URL source into synthetic content item: %#v", entity)
+	}
+	if len(entity.Selectors) == 0 || entity.Selectors[0].SelectorKind != sourcecontract.SelectorKindTextQuote || !strings.Contains(entity.Selectors[0].TextQuote, "accelerate secure AI adoption") {
+		t.Fatalf("expected bounded excerpt text_quote selector first, got %#v", entity.Selectors)
+	}
+	if entity.ReaderSnapshot == nil || !strings.Contains(metadataString(entity.ReaderSnapshot, "text_content"), "assigns responsibilities") {
+		t.Fatalf("reader snapshot text not preserved: %#v", entity.ReaderSnapshot)
+	}
+	if metadataString(entity.ReaderSnapshotStatus, "state") != sourcecontract.ReaderArtifactStateReady {
+		t.Fatalf("reader snapshot status = %#v", entity.ReaderSnapshotStatus)
+	}
+	if !entity.Evidence.ReaderSnapshot || entity.Evidence.SourceRepresentationID != sourcecontract.ReaderArtifactStateReady {
+		t.Fatalf("evidence reader snapshot not recorded: %#v", entity.Evidence)
+	}
+
+	structured := structuredSourceEntityFromRuntimeSource(entity)
+	if structured.ReaderSnapshot == nil || !strings.Contains(metadataString(structured.ReaderSnapshot, "text_content"), "assigns responsibilities") {
+		t.Fatalf("structured reader snapshot not preserved: %#v", structured.ReaderSnapshot)
+	}
+	if structured.Selectors[0].Kind != sourcecontract.SelectorKindTextQuote {
+		t.Fatalf("structured selector = %#v", structured.Selectors)
 	}
 }
 

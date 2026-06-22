@@ -84,6 +84,23 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 								"additionalProperties": false,
 							},
 						},
+						"excerpt": map[string]any{
+							"type":        "string",
+							"description": "Bounded source text to show in Texture inline/source_embed transclusions. Use this for the short source stub when the researcher has read source content.",
+						},
+						"reader_snapshot": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"text_content":        map[string]any{"type": "string"},
+								"snapshot_kind":       map[string]any{"type": "string"},
+								"media_type":          map[string]any{"type": "string"},
+								"original_media_type": map[string]any{"type": "string"},
+								"source_url":          map[string]any{"type": "string"},
+								"access_scope":        map[string]any{"type": "string"},
+								"truncated":           map[string]any{"type": "boolean"},
+							},
+							"additionalProperties": false,
+						},
 						"evidence": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
@@ -375,6 +392,15 @@ func appendCoagentSourceSection(b *strings.Builder, sources []types.CoagentPacke
 			b.WriteString(uri)
 			b.WriteString(">")
 		}
+		if excerpt := strings.TrimSpace(source.Excerpt); excerpt != "" {
+			b.WriteString(" excerpt=")
+			b.WriteString(strconvQuote(truncateRunes(excerpt, 280)))
+		} else if source.ReaderSnapshot != nil {
+			if text := strings.TrimSpace(source.ReaderSnapshot.TextContent); text != "" {
+				b.WriteString(" reader_snapshot=")
+				b.WriteString(strconvQuote(truncateRunes(text, 280)))
+			}
+		}
 		b.WriteString("\n")
 	}
 }
@@ -474,6 +500,19 @@ func normalizeCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload
 				Confidence:  strings.TrimSpace(source.Evidence.Confidence),
 				RightsScope: strings.TrimSpace(source.Evidence.RightsScope),
 			},
+			Excerpt: strings.TrimSpace(source.Excerpt),
+		}
+		if source.ReaderSnapshot != nil {
+			snapshot := *source.ReaderSnapshot
+			snapshot.TextContent = strings.TrimSpace(snapshot.TextContent)
+			snapshot.SnapshotKind = strings.TrimSpace(snapshot.SnapshotKind)
+			snapshot.MediaType = strings.TrimSpace(snapshot.MediaType)
+			snapshot.OriginalMediaType = strings.TrimSpace(snapshot.OriginalMediaType)
+			snapshot.SourceURL = strings.TrimSpace(snapshot.SourceURL)
+			snapshot.AccessScope = strings.TrimSpace(snapshot.AccessScope)
+			if snapshot.TextContent != "" || snapshot.SnapshotKind != "" || snapshot.MediaType != "" || snapshot.OriginalMediaType != "" || snapshot.SourceURL != "" || snapshot.AccessScope != "" || snapshot.Truncated {
+				normalized.ReaderSnapshot = &snapshot
+			}
 		}
 		for _, selector := range source.Selectors {
 			selectorKind := strings.TrimSpace(selector.Kind)
@@ -613,6 +652,12 @@ func validateCoagentPacketSource(source types.CoagentPacketSource) error {
 	}
 	if strings.TrimSpace(source.Target.URI) == "" {
 		return fmt.Errorf("target.uri is required")
+	}
+	if len([]rune(strings.TrimSpace(source.Excerpt))) > 2000 {
+		return fmt.Errorf("excerpt must be at most 2000 characters")
+	}
+	if source.ReaderSnapshot != nil && len([]rune(strings.TrimSpace(source.ReaderSnapshot.TextContent))) > 100000 {
+		return fmt.Errorf("reader_snapshot.text_content must be at most 100000 characters")
 	}
 	for i, selector := range source.Selectors {
 		if strings.TrimSpace(selector.Kind) == "" {

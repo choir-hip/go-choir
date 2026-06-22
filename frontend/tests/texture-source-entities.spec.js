@@ -9,6 +9,7 @@ import {
   sourceSelectorList,
   sourceOpenPlan,
   sourceEntityInlineExcerptText,
+  sourceEntityReaderSnapshotText,
   sourceEntityReaderFallbackText,
   sourceEntityOpenPlan,
   renderSourceTransclusionBody,
@@ -105,6 +106,40 @@ test('legacy URL-only content_item source ids do not trigger content-item fetche
   expect(payload.appContext.contentId).toBe('');
   expect(payload.appContext.sourceUrl).toBe('https://example.com/legacy-newsroom');
   expect(sourceEntityReaderFallbackText(entity)).toContain('Legacy newsroom source');
+});
+
+test('URL-backed source entities prefer preserved source text over title-only fallback', () => {
+  const entity = {
+    source_entity_id: 'src-url-preserved-text',
+    kind: 'web_url',
+    target: {
+      kind: 'web_url',
+      uri: 'https://example.com/policy-source',
+    },
+    display: {
+      title: 'Policy source',
+      mode: 'numbered_ref',
+    },
+    selectors: [{
+      kind: 'text_quote',
+      data: { exact: 'Bounded source excerpt shown in the Texture stub.' },
+    }],
+    reader_snapshot: {
+      text_content: 'Bounded source excerpt shown in the Texture stub.\n\nFuller researcher-read source text appears in the Source Viewer.',
+      source_url: 'https://example.com/policy-source',
+      snapshot_kind: 'cleaned_reader_markdown',
+      media_type: 'text/markdown',
+    },
+    reader_snapshot_status: {
+      state: 'reader_snapshot_ready',
+    },
+  };
+
+  expect(sourceEntityInlineExcerptText(entity)).toContain('Bounded source excerpt');
+  expect(sourceEntityReaderSnapshotText(entity)).toContain('Fuller researcher-read source text');
+  const body = renderSourceTransclusionBody(entity);
+  expect(body).toContain('Bounded source excerpt shown in the Texture stub.');
+  expect(body).not.toContain('Original source: https://example.com/policy-source');
 });
 
 test('source inline excerpts prefer selected transclusion over full reader snapshot', () => {

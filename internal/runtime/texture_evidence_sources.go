@@ -249,6 +249,7 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, owner
 			entity.Selectors = selectors
 		}
 	}
+	applyCoagentPacketSourceContent(&entity, source)
 	if state := strings.TrimSpace(source.Evidence.State); state != "" {
 		entity.Evidence.State = state
 	}
@@ -256,6 +257,141 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, owner
 		entity.Provenance.RightsScope = rights
 	}
 	return entity
+}
+
+func applyCoagentPacketSourceContent(entity *textureSourceEntity, source types.CoagentPacketSource) {
+	if entity == nil || strings.TrimSpace(entity.EntityID) == "" {
+		return
+	}
+	excerpt := coagentPacketSourceExcerpt(source)
+	readerText := coagentPacketSourceReaderText(source, excerpt)
+	if excerpt != "" && !sourceEntityHasTextQuote(entity.Selectors) {
+		entity.Selectors = append([]textureSourceEntitySelector{{
+			SelectorKind: sourcecontract.SelectorKindTextQuote,
+			TextQuote:    excerpt,
+		}}, entity.Selectors...)
+	}
+	if readerText == "" {
+		return
+	}
+	snapshot := map[string]any{
+		"text_content": readerText,
+		"source_url":   firstNonEmpty(coagentPacketSourceReaderSnapshotSourceURL(source), strings.TrimSpace(source.Target.URI)),
+		"snapshot_kind": firstNonEmpty(
+			coagentPacketSourceReaderSnapshotKind(source),
+			"researcher_read_source_text",
+		),
+		"media_type":   firstNonEmpty(coagentPacketSourceReaderSnapshotMediaType(source), strings.TrimSpace(source.Target.MediaType), "text/markdown"),
+		"access_scope": firstNonEmpty(coagentPacketSourceReaderSnapshotAccessScope(source), "private_user_source"),
+		"rights_scope": firstNonEmpty(strings.TrimSpace(source.Evidence.RightsScope), entity.Provenance.RightsScope),
+		"excerpt_text": excerpt,
+		"source_title": strings.TrimSpace(source.Target.Title),
+		"source_id":    strings.TrimSpace(source.SourceID),
+	}
+	if source.ReaderSnapshot != nil {
+		if source.ReaderSnapshot.OriginalMediaType != "" {
+			snapshot["original_media_type"] = strings.TrimSpace(source.ReaderSnapshot.OriginalMediaType)
+		}
+		if source.ReaderSnapshot.Truncated {
+			snapshot["truncated"] = true
+		}
+	}
+	entity.ReaderSnapshot = pruneEmptyMap(snapshot)
+	state := sourcecontract.ReaderArtifactStateReady
+	if source.ReaderSnapshot == nil || strings.TrimSpace(source.ReaderSnapshot.TextContent) == "" {
+		state = sourcecontract.ReaderArtifactStateBoundedExcerptOnly
+	}
+	status := map[string]any{"state": state}
+	if source.ReaderSnapshot != nil && source.ReaderSnapshot.Truncated {
+		status["truncated"] = true
+	}
+	entity.ReaderSnapshotStatus = status
+	entity.Evidence.ReaderSnapshot = true
+	entity.Evidence.BodyKind = "reader_snapshot"
+	entity.Evidence.BodyLength = len([]rune(readerText))
+	entity.Evidence.SourceRepresentationID = state
+}
+
+func coagentPacketSourceExcerpt(source types.CoagentPacketSource) string {
+	if excerpt := strings.TrimSpace(source.Excerpt); excerpt != "" {
+		return truncateRunes(excerpt, 2000)
+	}
+	for _, selector := range source.Selectors {
+		if sourcecontract.NormalizeSelectorKind(selector.Kind) == sourcecontract.SelectorKindTextQuote {
+			if quote := strings.TrimSpace(selector.Quote); quote != "" {
+				return truncateRunes(quote, 2000)
+			}
+		}
+	}
+	if source.ReaderSnapshot != nil {
+		if text := strings.TrimSpace(source.ReaderSnapshot.TextContent); text != "" {
+			return truncateRunes(text, 720)
+		}
+	}
+	return ""
+}
+
+func coagentPacketSourceReaderText(source types.CoagentPacketSource, excerpt string) string {
+	if source.ReaderSnapshot != nil {
+		if text := strings.TrimSpace(source.ReaderSnapshot.TextContent); text != "" {
+			return text
+		}
+	}
+	return strings.TrimSpace(excerpt)
+}
+
+func coagentPacketSourceReaderSnapshotKind(source types.CoagentPacketSource) string {
+	if source.ReaderSnapshot == nil {
+		return ""
+	}
+	return strings.TrimSpace(source.ReaderSnapshot.SnapshotKind)
+}
+
+func coagentPacketSourceReaderSnapshotMediaType(source types.CoagentPacketSource) string {
+	if source.ReaderSnapshot == nil {
+		return ""
+	}
+	return strings.TrimSpace(source.ReaderSnapshot.MediaType)
+}
+
+func coagentPacketSourceReaderSnapshotAccessScope(source types.CoagentPacketSource) string {
+	if source.ReaderSnapshot == nil {
+		return ""
+	}
+	return strings.TrimSpace(source.ReaderSnapshot.AccessScope)
+}
+
+func coagentPacketSourceReaderSnapshotSourceURL(source types.CoagentPacketSource) string {
+	if source.ReaderSnapshot == nil {
+		return ""
+	}
+	return strings.TrimSpace(source.ReaderSnapshot.SourceURL)
+}
+
+func sourceEntityHasTextQuote(selectors []textureSourceEntitySelector) bool {
+	for _, selector := range selectors {
+		if sourcecontract.NormalizeSelectorKind(selector.SelectorKind) == sourcecontract.SelectorKindTextQuote && strings.TrimSpace(selector.TextQuote) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func pruneEmptyMap(values map[string]any) map[string]any {
+	for key, value := range values {
+		switch typed := value.(type) {
+		case string:
+			if strings.TrimSpace(typed) == "" {
+				delete(values, key)
+			}
+		case nil:
+			delete(values, key)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }
 
 func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context, ownerID, targetAgentID string, updateIDs []string, limit int) []textureSourceEntity {

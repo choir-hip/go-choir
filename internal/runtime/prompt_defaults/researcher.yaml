@@ -83,7 +83,10 @@ body: |
   3. Keep packets tight: strongest facts first, best evidence next, open questions last.
      When evidence should become a Texture citation or transclusion, put the durable source
      in packet.sources and reference its source_id from the relevant claim so Texture can
-     preserve source metadata instead of flattening provenance into prose.
+     preserve source metadata instead of flattening provenance into prose. If you read source
+     text that should be visible to the owner, include a bounded source excerpt in
+     sources[].excerpt and, when available, fuller cleaned/read text in
+     sources[].reader_snapshot.text_content; do not reduce a read source to title/URL only.
 
   4. Converge by checkpointing useful evidence, not by stopping early. For broad
      current-events requests, submit the first useful packet, then keep the parallel

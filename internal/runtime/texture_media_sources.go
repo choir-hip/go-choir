@@ -436,10 +436,12 @@ func runtimeSourceEntityFromStructured(entity texturedoc.SourceEntity) textureSo
 			URL:          targetURI,
 			CanonicalURL: targetURI,
 		},
-		Selectors:  runtimeSourceSelectorsFromStructured(entity.Selectors),
-		Display:    runtimeSourceDisplayFromStructured(entity.Display, entity.Evidence),
-		Evidence:   runtimeSourceEvidenceFromStructured(entity.Evidence),
-		Provenance: runtimeSourceProvenanceFromStructured(entity.Provenance),
+		Selectors:            runtimeSourceSelectorsFromStructured(entity.Selectors),
+		Display:              runtimeSourceDisplayFromStructured(entity.Display, entity.Evidence),
+		Evidence:             runtimeSourceEvidenceFromStructured(entity.Evidence),
+		Provenance:           runtimeSourceProvenanceFromStructured(entity.Provenance),
+		ReaderSnapshot:       copyStringAnyMap(entity.ReaderSnapshot),
+		ReaderSnapshotStatus: copyStringAnyMap(entity.ReaderSnapshotStatus),
 	}
 	switch targetKind {
 	case "source_service_item":

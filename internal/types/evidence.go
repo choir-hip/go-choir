@@ -47,11 +47,13 @@ type CoagentPacketClaim struct {
 }
 
 type CoagentPacketSource struct {
-	SourceID  string                        `json:"source_id,omitempty"`
-	Kind      string                        `json:"kind"`
-	Target    CoagentPacketSourceTarget     `json:"target"`
-	Selectors []CoagentPacketSourceSelector `json:"selectors,omitempty"`
-	Evidence  CoagentPacketSourceEvidence   `json:"evidence,omitempty"`
+	SourceID       string                             `json:"source_id,omitempty"`
+	Kind           string                             `json:"kind"`
+	Target         CoagentPacketSourceTarget          `json:"target"`
+	Selectors      []CoagentPacketSourceSelector      `json:"selectors,omitempty"`
+	Excerpt        string                             `json:"excerpt,omitempty"`
+	ReaderSnapshot *CoagentPacketSourceReaderSnapshot `json:"reader_snapshot,omitempty"`
+	Evidence       CoagentPacketSourceEvidence        `json:"evidence,omitempty"`
 }
 
 type CoagentPacketSourceTarget struct {
@@ -75,6 +77,16 @@ type CoagentPacketSourceEvidence struct {
 	State       string `json:"state,omitempty"`
 	Confidence  string `json:"confidence,omitempty"`
 	RightsScope string `json:"rights_scope,omitempty"`
+}
+
+type CoagentPacketSourceReaderSnapshot struct {
+	TextContent       string `json:"text_content,omitempty"`
+	SnapshotKind      string `json:"snapshot_kind,omitempty"`
+	MediaType         string `json:"media_type,omitempty"`
+	OriginalMediaType string `json:"original_media_type,omitempty"`
+	SourceURL         string `json:"source_url,omitempty"`
+	AccessScope       string `json:"access_scope,omitempty"`
+	Truncated         bool   `json:"truncated,omitempty"`
 }
 
 type CoagentPacketAction struct {

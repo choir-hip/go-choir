@@ -79,14 +79,16 @@ func (p Provenance) CanonicalJSON() ([]byte, error) {
 // (EntityID) is minted by the runtime at the retrieval boundary, never chosen by
 // a model.
 type SourceEntity struct {
-	EntityID   string                 `json:"entity_id"`
-	Kind       string                 `json:"kind"`
-	Label      string                 `json:"label,omitempty"`
-	Target     SourceEntityTarget     `json:"target"`
-	Selectors  []SourceEntitySelector `json:"selectors,omitempty"`
-	Display    SourceEntityDisplay    `json:"display"`
-	Evidence   SourceEntityEvidence   `json:"evidence"`
-	Provenance SourceEntityProvenance `json:"provenance"`
+	EntityID             string                 `json:"entity_id"`
+	Kind                 string                 `json:"kind"`
+	Label                string                 `json:"label,omitempty"`
+	Target               SourceEntityTarget     `json:"target"`
+	Selectors            []SourceEntitySelector `json:"selectors,omitempty"`
+	Display              SourceEntityDisplay    `json:"display"`
+	Evidence             SourceEntityEvidence   `json:"evidence"`
+	Provenance           SourceEntityProvenance `json:"provenance"`
+	ReaderSnapshot       map[string]any         `json:"reader_snapshot,omitempty"`
+	ReaderSnapshotStatus map[string]any         `json:"reader_snapshot_status,omitempty"`
 }
 
 // SourceEntityTarget identifies what a source entity points at.

@@ -1,4 +1,4 @@
-import { escapeHTML, renderInlineSourceRef, sourceEntityID } from './texture-source-renderer';
+import { escapeHTML, findSourceEntity, renderInlineSourceRef, renderSourceTransclusionBody, sourceEntityID, sourceEntityTitle } from './texture-source-renderer';
 
 export const TEXTURE_DOC_SCHEMA = 'choir.texture_doc.v1';
 
@@ -220,8 +220,13 @@ function renderBlockNode(node: StructuredNode, sourceEntities: any[] = []): stri
       return `<pre><code>${escapeHTML((node.content || []).map((item) => item.text || '').join('\n'))}</code></pre>`;
     case 'horizontal_rule':
       return '<hr>';
-    case 'source_embed':
-      return `<div data-texture-source-embed data-source-entity-id="${escapeHTML(String(node.attrs?.source_entity_id || ''))}"></div>`;
+    case 'source_embed': {
+      const entityID = String(node.attrs?.source_entity_id || '').trim();
+      const entity = findSourceEntity(sourceEntities, entityID);
+      return `<aside class="texture-source-embed" data-texture-source-embed data-source-entity-id="${escapeHTML(entityID)}">
+        ${entity ? `<h4>${escapeHTML(sourceEntityTitle(entity))}</h4>${renderSourceTransclusionBody(entity)}` : ''}
+      </aside>`;
+    }
     default:
       return '';
   }

@@ -1177,10 +1177,12 @@ func structuredSourceEntityFromRuntimeSource(entity textureSourceEntity) texture
 				entity.EntityID,
 			)),
 		},
-		Selectors:  structuredSourceSelectorsFromRuntime(entity.Selectors),
-		Display:    texturedoc.SourceDisplay{Mode: displayMode, Title: strings.TrimSpace(entity.Label)},
-		Evidence:   structuredSourceEvidenceFromRuntime(entity),
-		Provenance: texturedoc.SourceEntityProvenance{CreatedBy: strings.TrimSpace(firstNonEmpty(entity.Provenance.CreatedBy, "runtime"))},
+		Selectors:            structuredSourceSelectorsFromRuntime(entity.Selectors),
+		Display:              texturedoc.SourceDisplay{Mode: displayMode, Title: strings.TrimSpace(entity.Label)},
+		Evidence:             structuredSourceEvidenceFromRuntime(entity),
+		Provenance:           texturedoc.SourceEntityProvenance{CreatedBy: strings.TrimSpace(firstNonEmpty(entity.Provenance.CreatedBy, "runtime"))},
+		ReaderSnapshot:       copyStringAnyMap(entity.ReaderSnapshot),
+		ReaderSnapshotStatus: copyStringAnyMap(entity.ReaderSnapshotStatus),
 	}
 }
 
