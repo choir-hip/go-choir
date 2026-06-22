@@ -1335,3 +1335,41 @@ overlay is gone, and focused Go/frontend tests pass.
 
 Open edge: commit this accepted media-ref fallback deletion, then continue D7
 classification and broad proof.
+
+## 2026-06-21 - Pass 35 - D7 Browser Proof Problem Checkpoint
+
+Claim: D7 cannot proceed to staging if public publication readback drops
+structured document nodes. Publication metadata/transclusion rows alone do not
+settle the contract; the published reader must render source identity from
+`body_doc` nodes.
+
+Move: document problem before repair. Authenticated local browser proof against
+the repo service stack passed source-window/media/transclusion cases but found
+that published Texture readers initialize from flattened
+`bundle.artifact.content` and do not hydrate `bundle.artifact.body_doc`, so
+structured `source_ref` nodes disappear on public routes.
+
+Expected delta V: no variant decrease from discovery alone.
+
+Actual delta V: unchanged. This is a newly discovered D7 blocker, not a
+regression introduced by this documentation checkpoint.
+
+Receipts:
+`frontend/src/lib/TextureEditor.svelte`;
+`frontend/tests/texture-source-service-publication.spec.js`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
+
+Evidence:
+`cd frontend && npx playwright test tests/texture-source-entities.spec.js tests/texture-structured-editor-doc.spec.js tests/texture-source-service-publication.spec.js --workers=1`
+with `nix develop -c env CHOIR_SERVICES_FOREGROUND=1 ./start-services.sh`
+running: 25 passed, 5 failed. The blocking publication failures were missing
+`[data-texture-source-ref]` in `[data-texture-published-reader]` and URL source
+kind normalization returning `url` where the publication source kind contract
+expects `web_source`.
+
+Open edge: repair published readback to hydrate `body_doc`, repair URL source
+kind normalization, add focused regression coverage, then rerun the failing
+publication browser specs. The two table autosave failures from this same run
+are a separate legacy content-only markdown-table fixture edge because the D1
+structured schema currently has no table nodes.

@@ -1520,3 +1520,54 @@ derivation now returns publication bundle entities or top-level
 `revision.source_entities`, runtime source construction starts from current
 top-level revision `SourceEntities` plus deterministic media discovery, the
 media-source-ref prompt overlay is gone, and focused Go/frontend tests pass.
+
+### D7 Browser Proof Problem - Published Structured Artifacts Render Flattened Content
+
+Status: discovered on 2026-06-21; must repair before staging.
+
+Problem:
+
+- Local authenticated browser proof against the repo service stack showed that
+  public publication bundles can resolve with `artifact.body_doc` and
+  `source_entities`, while the published Texture reader still initializes the
+  editor from only `bundle.artifact.content`.
+- That flattened-content rendering path erases structured `source_ref` nodes on
+  public routes, so a publication can store transclusions in platform metadata
+  while the reader surface has no native `[data-texture-source-ref]` citation
+  atoms to expand.
+- This is a D7 blocker because the hard-cut contract requires source identity
+  to remain a document node across publication/readback, not merely a sidecar
+  available through resolve/export APIs.
+
+Evidence:
+
+- `cd frontend && npx playwright test tests/texture-source-entities.spec.js
+  tests/texture-structured-editor-doc.spec.js
+  tests/texture-source-service-publication.spec.js --workers=1` with
+  `nix develop -c env CHOIR_SERVICES_FOREGROUND=1 ./start-services.sh` running
+  passed current source-window/media/transclusion tests but failed publication
+  source-service tests because `[data-texture-published-reader]` had no
+  `[data-texture-source-ref]`.
+- Code inspection shows `loadPublishedContext` in
+  `frontend/src/lib/TextureEditor.svelte` assigns
+  `editorValue = bundle.artifact?.content || ''` but does not assign
+  `editorBodyDoc = bundle.artifact?.body_doc || null`.
+
+Required repair:
+
+- Published Texture read mode must hydrate `editorBodyDoc` from
+  `bundle.artifact.body_doc` and render via `renderStructuredTextureDocHTML`
+  when present, using publication bundle source entities.
+- Publication source metadata should preserve the canonical distinction between
+  source kind and target kind for URL-backed sources: source kind
+  `web_source`, target kind `url`.
+
+Non-blocking discovered edge:
+
+- The same browser run exposed two old table autosave tests that create
+  `content`-only markdown-table revisions and expect markdown tables to be the
+  current editable contract. The D1 structured schema has no table nodes yet, so
+  those fixtures are legacy-shaped under the hard cutover. Track this as a
+  separate schema/design edge: either add structured table nodes deliberately or
+  retire/relabel those tests as legacy fallback checks that do not define
+  canonical Texture structure.
