@@ -744,16 +744,23 @@ D0-D7 above.
 variant (ranking function) V: 10 open obligations: schema decision, source
 entity target vocabulary, edit API, write path, human editor path, agent path,
 multimedia resolver, publication/export projection, old-syntax deletion,
-staging acceptance proof. Current value: 1. Accepted D7 slices have removed the
+staging acceptance proof. Current value: 0 for the structured source/
+publication/deploy hard-cut obligations proven in this mission pass. Accepted
+D7 slices have removed the
 current-contract markdown source-link affordance band, Universal Wire/coagent
 source-link normalization, markdown-lineage/source-repair metadata residue,
 dead source-repair/source-attachment frontend affordances, publication fallback
-markdown source-link upgrading, and runtime use of `metadata.source_entities` as
-live source context. The remaining local deletion/classification edge is prompt
-contract residue that still teaches old `patch_texture` replace/append JSON.
+markdown source-link upgrading, runtime use of `metadata.source_entities` as
+live source context, prompt-contract residue that taught old `patch_texture`
+replace/append JSON, the dead legacy text edit helper, and the media-source-ref
+fallback path.
 The landing loop found and repaired a deploy-source allow-list failure: the Nix
 per-service source filter excluded the new `internal/texturedoc` package from
-services that import it, so staging could not build the pushed repair.
+services that import it, so staging could not build the pushed repair. Staging
+deploy and deployed product-path Texture source/transclusion proof now pass.
+Comet-specific visual proof is blocked: the user's Comet session renders a blank
+viewport for both `https://choir.news` and a proven public Texture route, while
+Playwright and public HTTP health render/validate the route.
 D5 multimedia reduced the variant locally, but its independent review agents
 stalled; retain that caveat until staging proof or a later reviewer checks the
 accumulated multimedia diff.
@@ -840,7 +847,14 @@ archive. The local repair evidence for the follow-up fix is filtered-source
 inspection of the `packages.x86_64-linux` service source outputs for proxy,
 platformd, sandbox, gateway, and sourcecycled plus `nix flake check --no-build`;
 full x86_64 package compilation is deferred to CI because this Mac has no
-available `x86_64-linux` builder.
+available `x86_64-linux` builder. CI run `27922834186` completed successfully
+for `d77e0457806d6a9de27657b7ffb5f8f3a7862922`; the deploy job built selected
+Nix services and guest images, restarted services, refreshed active computers,
+and health checks reported proxy/sandbox/platformd deployed commit
+`d77e0457806d6a9de27657b7ffb5f8f3a7862922`. Deployed acceptance used
+`https://choir.news` with a virtual passkey account and passed publication,
+source expansion, multimedia/no-clickable-source-link, edit-preservation, and
+legacy markdown source-link rejection probes.
 
 heresy delta: discovered: Texture currently permits or preserves multiple
 source-shaped syntaxes that are not canonical transclusions. introduced: none
@@ -923,7 +937,10 @@ sidecars, preserves reader snapshot/status fields in structured source entities,
 and converts publication/proxy/browser publication fixtures to structured source
 refs. The landing loop discovered and repaired that `flake.nix` service source
 filters still omitted `internal/texturedoc`, so deployed Nix builds failed
-before staging identity could advance. D5 checkpoint
+before staging identity could advance. Staging deploy identity and deployed
+product proof for structured source transclusion now pass; Comet visual proof
+remains a separate browser-specific blocker because Comet displays a blank
+viewport on the proven route. D5 checkpoint
 records the specific sidecars/pathways repaired locally: runtime
 `media_source_refs`, prompt context that prefers those refs, and frontend
 media-ref synthesis/rendering outside top-level structured entities. D5
@@ -932,11 +949,11 @@ keeps legacy media-ref synthesis only for revisions without structured
 `body_doc`. Markdown `[label](source:id)` parsing remains only as historical
 fallback for artifacts without structured body data.
 
-next move: commit the deploy-source filter repair, push, monitor CI/deploy
-identity, then run Comet/browser staging proof. Do not claim settlement until
-staging proves source creation, agent/human edit preservation, multimedia source
-expansion, publication/export, and markdown-link/source-token rejection from the
-deployed product path.
+next move: incorporate independent review of the deploy-source repair and
+landing evidence. If accepted, close this mission as settled for deployed
+structured Texture source/transclusion; carry the Comet blank-viewport issue as
+a separate browser-specific acceptance blocker unless the owner requires Comet
+visual proof as part of this mission's settlement.
 
 ledger file: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
 
@@ -1659,3 +1676,59 @@ Local evidence:
   evaluated filtered source outputs confirmed the `internal/texturedoc` import
   family is present in each affected source archive.
 - `git diff --check && nix flake check --no-build`.
+
+### D7 Landing Proof - Structured Texture Source Transclusions On Staging
+
+Status: deployed and product-path verified on 2026-06-21/2026-06-22 UTC for
+commit `d77e0457806d6a9de27657b7ffb5f8f3a7862922`.
+
+CI/deploy:
+
+- GitHub Actions CI run `27922834186` completed successfully for
+  `d77e0457806d6a9de27657b7ffb5f8f3a7862922`.
+- Staging deploy job `82619778958` built the selected Nix services, ordinary
+  guest image, and Playwright guest image. Health checks reported deployed
+  commit `d77e0457806d6a9de27657b7ffb5f8f3a7862922` for proxy, sandbox, and
+  platformd.
+- Deploy job health log lines reported proxy build commit, upstream sandbox
+  build commit, and platformd build commit
+  `d77e0457806d6a9de27657b7ffb5f8f3a7862922`.
+
+Deployed product-path acceptance:
+
+- `BASE_URL=https://choir.news ... npx playwright test
+  tests/texture-source-service-publication.spec.js --workers=1`: 3 passed.
+  This creates Texture documents through `/api/texture/*`, publishes through
+  `/api/platform/texture/publications`, resolves/exports through platform APIs,
+  opens public `/pub/texture/...` routes, expands native
+  `[data-texture-source-ref]` citations, opens source reader windows, and checks
+  guest access without Browser-as-source gathering.
+- `BASE_URL=https://choir.news ... npx playwright test
+  tests/texture-source-entities.spec.js --grep
+  "raw markdown|structured revisions|multimedia source entities|source selectors|source evidence states|legacy texture"
+  --workers=1`: 5 passed. This confirms raw markdown source links do not render
+  as native Texture source refs and multimedia source entities render
+  transcluded media without clickable source links.
+- Direct deployed API probe with virtual-passkey auth created document
+  `f1fff3b4-1e5a-4416-89f4-e699489e7289`, wrote revision
+  `bf27f1a3-c95f-4f64-98f1-b575303650af`, wrote revision
+  `4f989f43-e26a-4384-9eff-e92b178cffa9` changing surrounding prose while
+  preserving source entity `src-edit-preserve`, verified the head still carries
+  `body_doc` `source_ref` plus top-level `source_entities`, and verified raw
+  `[bad](source:detached)` revision input is rejected with HTTP 400.
+- The same proof document was published at
+  `/pub/texture/structured-edit-preservation-1782089779444-pub47b0efe77`
+  (`pub-47b0efe7-7040-40fb-9de7-4c3e6633c9ed`,
+  `pubver-ef87a710-f7e8-4bb0-9ec6-8be8547afd4b`). Playwright confirmed the
+  public reader has exactly one native `data-texture-source-ref` for
+  `src-edit-preserve` and no `href=` or `source:src-edit-preserve` source-link
+  syntax.
+
+Comet/browser note:
+
+- The user's Comet session was used as requested, but it rendered a blank
+  viewport for both `https://choir.news` and the proven public Texture route
+  above. Public HTTP for the app shell, deploy health logs, and Playwright
+  product-path proof all succeeded. Treat this as a separate Comet-specific
+  visual proof blocker unless mission settlement is defined to require Comet
+  rendering specifically.

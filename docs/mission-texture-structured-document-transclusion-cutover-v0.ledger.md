@@ -1484,3 +1484,53 @@ evaluated filtered sources;
 
 Open edge: commit and push the repair, monitor CI/deploy identity, then run
 deployed Comet/browser staging proof.
+
+## 2026-06-21 - Pass 39 - D7 Staging Landing Proof
+
+Claim: The structured Texture source/transclusion hard-cut is deployed and
+product-path verified if staging runs the pushed commit, publication/readback
+renders native source refs from `body_doc`, multimedia/source entity rendering
+does not use clickable source links, editing across revisions preserves source
+nodes, and old markdown source links are rejected.
+
+Move: probe. Monitored CI/deploy for
+`d77e0457806d6a9de27657b7ffb5f8f3a7862922`, ran focused deployed Playwright
+acceptance against `https://choir.news` with a virtual-passkey account, ran a
+direct deployed API probe for multi-revision source-ref preservation and legacy
+markdown rejection, published the proof document, and attempted to open the
+published route in the user's Comet session.
+
+Expected delta V: close the staging acceptance proof obligation if CI/deploy
+identity and deployed product-path proof pass; leave a named edge if Comet
+cannot render.
+
+Actual delta V: CI/deploy and deployed product-path proof passed. Comet visual
+proof did not pass because Comet showed a blank viewport on both root and the
+validated public Texture route; classify that as a separate browser-specific
+proof blocker unless the mission settlement requires Comet rendering.
+
+Receipts:
+GitHub Actions run `27922834186`;
+deploy job `82619778958`;
+public route `/pub/texture/structured-edit-preservation-1782089779444-pub47b0efe77`;
+document `f1fff3b4-1e5a-4416-89f4-e699489e7289`;
+revisions `bf27f1a3-c95f-4f64-98f1-b575303650af` and
+`4f989f43-e26a-4384-9eff-e92b178cffa9`;
+publication `pub-47b0efe7-7040-40fb-9de7-4c3e6633c9ed`;
+publication version `pubver-ef87a710-f7e8-4bb0-9ec6-8be8547afd4b`.
+
+Evidence:
+`gh run view 27922834186 --json conclusion,status,headSha,url,updatedAt`;
+deploy health log lines reporting proxy/sandbox/platformd commit
+`d77e0457806d6a9de27657b7ffb5f8f3a7862922`;
+`BASE_URL=https://choir.news ... npx playwright test tests/texture-source-service-publication.spec.js --workers=1`;
+`BASE_URL=https://choir.news ... npx playwright test tests/texture-source-entities.spec.js --grep "raw markdown|structured revisions|multimedia source entities|source selectors|source evidence states|legacy texture" --workers=1`;
+deployed API probe output showing preserved `src-edit-preserve`, v2 projection
+with `[1]`, and legacy markdown source-link rejection status `400`;
+published-route proof showing one native `data-texture-source-ref` and no
+`href=` / `source:src-edit-preserve` source-link syntax.
+
+Open edge: incorporate independent review of the deploy-source repair and
+landing evidence. If accepted, close this mission as settled for deployed
+structured Texture source/transclusion and carry Comet blank-viewport proof as a
+separate browser-specific issue.
