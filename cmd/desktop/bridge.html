@@ -223,9 +223,10 @@ async function handleRegister() {
   hideStatus();
   try {
     await registerPasskey(email);
-    showStatus('Passkey created! You can close this window and return to Choir.', 'success');
+    showStatus('Passkey created! Returning to Choir...', 'success');
     document.getElementById('auth-form').classList.add('hidden');
     await completeAuth();
+    window.location.href = 'choir-desktop://auth-complete';
   } catch (err) {
     showStatus(err.message || 'Registration failed', 'error');
   }
@@ -237,9 +238,10 @@ async function handleLogin() {
   hideStatus();
   try {
     await loginPasskey(email);
-    showStatus('Signed in! You can close this window and return to Choir.', 'success');
+    showStatus('Signed in! Returning to Choir...', 'success');
     document.getElementById('auth-form').classList.add('hidden');
     await completeAuth();
+    window.location.href = 'choir-desktop://auth-complete';
   } catch (err) {
     showStatus(err.message || 'Login failed', 'error');
   }

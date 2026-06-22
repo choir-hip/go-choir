@@ -416,7 +416,7 @@ func startLocalFrontendServer() (*http.Server, error) {
 		_, _ = w.Write(bridgeHTML)
 	})
 
-	// Open Safari to the bridge page.
+	// Open Safari to the bridge page (legacy polling-based approach).
 	mux.HandleFunc("/desktop-auth/open-bridge", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -447,6 +447,44 @@ func startLocalFrontendServer() (*http.Server, error) {
 		}
 
 		writeJSON(w, http.StatusOK, map[string]string{"status": "opened"})
+	})
+
+	// Start an ASWebAuthenticationSession — the native macOS API for
+	// WebAuthn. This opens the default browser (Safari/Chrome) to the
+	// bridge page and blocks until the ceremony completes and the browser
+	// redirects to the choir-desktop:// callback scheme. The session-aware
+	// proxy captures auth cookies from the ceremony responses.
+	mux.HandleFunc("/desktop-auth/start-session", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Email    string `json:"email"`
+			AuthType string `json:"authType"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		bridge.SetPending(req.Email, req.AuthType)
+
+		bridgeURL := fmt.Sprintf("http://localhost:%s/desktop-auth/bridge?email=%s",
+			localFrontendPort, url.QueryEscape(req.Email))
+		log.Printf("Starting ASWebAuthenticationSession for %s auth: %s", req.AuthType, bridgeURL)
+
+		callbackURL, err := startWebAuthSession(bridgeURL, "choir-desktop")
+		if err != nil {
+			log.Printf("ASWebAuthenticationSession error: %v", err)
+			bridge.SetError()
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		log.Printf("ASWebAuthenticationSession completed: %s", callbackURL)
+		bridge.SetComplete()
+		writeJSON(w, http.StatusOK, map[string]string{"status": "complete"})
 	})
 
 	// Poll status from WKWebView.

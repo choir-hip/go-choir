@@ -60,42 +60,23 @@ function isDesktopBridge() {
   return typeof window !== 'undefined' && window.__CHOIR_DESKTOP_BRIDGE === true;
 }
 
-async function openSafariBridge(email, authType) {
-  const res = await fetch('/desktop-auth/open-bridge', {
+async function startDesktopAuthSession(email, authType) {
+  const res = await fetch('/desktop-auth/start-session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, authType }),
   });
-  if (!res.ok) throw new Error('Failed to open Safari');
-}
-
-async function pollBridgeStatus(timeoutMs = 120000) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    function check() {
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error('Auth bridge timeout'));
-        return;
-      }
-      fetch('/desktop-auth/status')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.status === 'complete') resolve();
-          else if (data.status === 'error') reject(new Error('Auth bridge error'));
-          else setTimeout(check, 500);
-        })
-        .catch(() => setTimeout(check, 500));
-    }
-    check();
-  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Auth session failed (${res.status})`);
+  }
 }
 
 export async function registerPasskey(email) {
   // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
   // WKWebView doesn't support platform authenticators, so we delegate.
   if (isDesktopBridge()) {
-    await openSafariBridge(email, 'register');
-    await pollBridgeStatus();
+    await startDesktopAuthSession(email, 'register');
     return { ok: true, user: { id: '', email, createdAt: '' } };
   }
 
@@ -184,8 +165,7 @@ export async function loginPasskey(email) {
   // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
   // WKWebView doesn't support platform authenticators, so we delegate.
   if (isDesktopBridge()) {
-    await openSafariBridge(email, 'login');
-    await pollBridgeStatus();
+    await startDesktopAuthSession(email, 'login');
     return { ok: true, user: { id: '', email, createdAt: '' } };
   }
 
