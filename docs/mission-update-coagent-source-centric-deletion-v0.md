@@ -489,7 +489,7 @@ variant (ranking function) V: open obligations:
 11. P2 Super non-execution packet settlement absent (E4).
 12. staging deploy + existing-account acceptance not run (E5).
 
-Current value: 11 open. E0 stall diagnosis discharged (Pass 1): root cause is
+Current value: 10 open. E0 stall diagnosis discharged (Pass 1): root cause is
 H_deploy — the VM is running pre-D9 code (`63f44e07`), confirmed by four
 converging proofs (message-string divergence, packet-Kind vocabulary
 divergence, runtime type divergence, and direct run-state evidence showing
@@ -497,6 +497,11 @@ divergence, runtime type divergence, and direct run-state evidence showing
 live diagnosis). The researcher emits legacy `Kind: findings` with no typed
 sources; Texture cannot metabolize it; the loop idle-deadline-passivates at
 v3. The D9 code and prompts are coherent and would fix this if deployed.
+E1 survivor contract test discharged (Pass 2, commit `1a603e4d`): six sub-
+tests pin the survivor surface (canonical packet accepted, all 9 legacy fields
+rejected, unknown field rejected, Texture collates ONLY packet.sources, Super
+privilege gate intact, E3.3 loud-rejection marker skipped with unblock
+condition). 5 green, 1 skip. Every later deletion commit must keep this green.
 
 budget: Planning budget is this paradoc pass. E0 is complete (read-only
 diagnosis discharged; H_deploy established). E1 is a bounded construct (one

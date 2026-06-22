@@ -187,3 +187,57 @@ Open edges:
   swallowed.
 - E3.2 (Super backlog settlement) must land so non-execution packets stop
   accumulating as reconciliation noise.
+
+## 2026-06-22 - Pass 2 - E1 Survivor Contract Test
+
+Claim: the survivor contract can be pinned as a test before any deletion, so
+every later deletion commit has a green gate to keep green.
+
+Move: construct. Wrote internal/runtime/update_coagent_survivor_contract_test.go
+with six focused sub-tests covering the full survivor surface: canonical
+coagent_source_packet.v1 accepted; all 9 legacy top-level fields rejected;
+unknown top-level field rejected (closed surface); Texture collates ONLY
+packet.sources (prose scraping blocked from notes/summary/claims.text); Super
+privilege gate rejects non-execution packets from both the update filter and
+the run deliverable filter; and a t.Skip marker for the E3.3 "rejected sources
+are reported" obligation with the unblock condition named in the skip text.
+
+Expected delta V: -1 for the survivor contract obligation.
+
+Actual delta V: -1. Current V=10. 5 tests green, 1 skipped (E3.3 marker).
+Full coagent test set green (TestUpdateCoagent*, TestPersistentSuper*,
+TestRequestSuperExecution*, TestSurvivorContract_*). go vet, gofmt,
+git diff --check clean.
+
+Notable design decisions:
+- The "Texture collates ONLY packet.sources" test deliberately embeds
+  source-shaped text in notes (http URL), summary ([Source: foo] label), and
+  claims.text (bare command_output: URI), then asserts exactly ONE entity is
+  produced (the typed packet.source) and none of the prose-only references
+  leak. This is the core invariant that makes the H_deploy failure mode
+  impossible once the D9 code runs: even if a future stale prompt tells the
+  researcher to write source prose, Texture will not scrape it.
+- The E3.3 marker is t.Skip, not a stub failing test, because the loud-
+  rejection surface is a real behavior change (E3.3) that must land with its
+  own implementation. A failing test would block CI unrelated to the
+  behavior change. The skip text names the exact unblock condition so E3.3
+  cannot silently leave it skipped.
+- The Super gate test constructs a persistent-Super-shaped RunRecord
+  directly (rather than relying on reconcilePersistentSuperActor) so it
+  exercises the coagentUpdateDeliverableForRun filter in isolation,
+  independent of the mailbox reconciliation path.
+
+Receipt: commit 1a603e4d. Evidence:
+nix develop -c go test ./internal/runtime -run 'TestSurvivorContract_' -count=1 -v
+nix develop -c go test ./internal/runtime -run 'TestUpdateCoagent|TestPersistentSuper|TestRequestSuperExecution|TestSurvivorContract_' -count=1
+
+Open edges:
+- The "loop advances past v3" survivor obligation is not unit-testable in
+  isolation; it requires the deployed D9 code + a real prompt-bar submission
+  on the existing account (E5a). The unit-level survivor contract here pins
+  the preconditions (sources are typed, Super gating is intact, prose is not
+  scraped); E5a pins the outcome.
+- E3.3 must remove the t.Skip on TestSurvivorContract_RejectedSourcesAreReported
+  and make the assertion green, OR D9 validation must reject unsupported
+  source kinds at the tool boundary (the test records that as an acceptable
+  alternative).
