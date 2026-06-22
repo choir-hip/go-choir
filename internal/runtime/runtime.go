@@ -1742,10 +1742,6 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 			rt.handleExecutionError(ctx, rec, err)
 			return
 		}
-		if err := rt.markTextureRevisionRunUpdatesDelivered(ctx, rec); err != nil {
-			rt.handleExecutionError(ctx, rec, err)
-			return
-		}
 	}
 	now := time.Now().UTC()
 	rec.State = types.RunPassivated
@@ -1785,6 +1781,9 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payloadJSON)
+	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+		rt.reconcileCompletedTextureRun(rec)
+	}
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}
@@ -3226,6 +3225,9 @@ func (rt *Runtime) textureWorkerUpdateCommitSeq(ctx context.Context, rec *types.
 	if rt == nil || rt.store == nil || rec == nil {
 		return seq
 	}
+	if seq == 0 {
+		seq = int64(metadataIntValue(rec.Metadata, "scheduled_message_seq"))
+	}
 	ownerID := strings.TrimSpace(rec.OwnerID)
 	targetAgentID := currentTextureAgentID(docID)
 	if ownerID == "" || strings.TrimSpace(targetAgentID) == "" {
@@ -3322,7 +3324,7 @@ func (rt *Runtime) markTextureWorkerUpdatesDelivered(ctx context.Context, rec *t
 		return nil
 	}
 	targetAgentIDs := []string{currentTextureAgentID(docID)}
-	updates := make([]types.WorkerUpdateRecord, 0)
+	updates := make([]types.CoagentSourcePacket, 0)
 	seenUpdates := make(map[string]bool)
 	targetByUpdateID := make(map[string]string)
 	for _, targetAgentID := range targetAgentIDs {

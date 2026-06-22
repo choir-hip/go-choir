@@ -40,45 +40,97 @@ type ResearchFindingRecord struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// CapabilityRequest is a typed signal that a coagent has reached the boundary
-// of its role and needs another capability. It is not an authority transfer or
-// automatic route; the receiving owner/supervisor decides what to do next.
-type CapabilityRequest struct {
-	Capability         string `json:"capability"`
-	RequestedRole      string `json:"requested_role,omitempty"`
-	Objective          string `json:"objective"`
-	WhyNeeded          string `json:"why_needed,omitempty"`
-	Blocking           bool   `json:"blocking,omitempty"`
-	EvidenceNeededFor  string `json:"evidence_needed_for,omitempty"`
-	SuggestedNextOwner string `json:"suggested_next_owner,omitempty"`
+const CoagentSourcePacketSchemaV1 = "coagent_source_packet.v1"
+
+// CoagentSourcePacketPayload is the canonical update_coagent payload. It is a
+// source packet, not a chat message: readable prose is a projection of this
+// payload, while Texture may cite only Sources and Super may execute only
+// execution_request Actions.
+type CoagentSourcePacketPayload struct {
+	SchemaVersion string                `json:"schema_version"`
+	Kind          string                `json:"kind"`
+	Summary       string                `json:"summary,omitempty"`
+	Claims        []CoagentPacketClaim  `json:"claims,omitempty"`
+	Sources       []CoagentPacketSource `json:"sources,omitempty"`
+	Actions       []CoagentPacketAction `json:"actions,omitempty"`
+	Questions     []string              `json:"questions,omitempty"`
+	Notes         []string              `json:"notes,omitempty"`
 }
 
-// WorkerUpdateRecord captures a structured non-canonical worker handoff to an
-// appagent or super. It is broader than researcher findings so execution roles
-// can report artifacts, refs, tests, questions, and proposals without sending
-// document patches.
-type WorkerUpdateRecord struct {
-	UpdateID           string              `json:"update_id"`
-	OwnerID            string              `json:"owner_id"`
-	AgentID            string              `json:"agent_id"`
-	TargetAgentID      string              `json:"target_agent_id"`
-	ChannelID          string              `json:"channel_id"`
-	MessageSeq         int64               `json:"message_seq"`
-	TrajectoryID       string              `json:"trajectory_id,omitempty"`
-	Role               string              `json:"role,omitempty"`
-	Kind               string              `json:"kind,omitempty"`
-	Summary            string              `json:"summary,omitempty"`
-	Findings           []string            `json:"findings,omitempty"`
-	EvidenceIDs        []string            `json:"evidence_ids,omitempty"`
-	Artifacts          []string            `json:"artifacts,omitempty"`
-	Refs               []string            `json:"refs,omitempty"`
-	Tests              []string            `json:"tests,omitempty"`
-	Questions          []string            `json:"questions,omitempty"`
-	Proposals          []string            `json:"proposals,omitempty"`
-	CapabilityRequests []CapabilityRequest `json:"capability_requests,omitempty"`
-	Notes              []string            `json:"notes,omitempty"`
-	Content            string              `json:"content"`
-	CreatedAt          time.Time           `json:"created_at"`
-	DeliveredToRunID   string              `json:"delivered_to_loop_id,omitempty"`
-	DeliveredAt        *time.Time          `json:"delivered_at,omitempty"`
+type CoagentPacketClaim struct {
+	ClaimID            string   `json:"claim_id,omitempty"`
+	Text               string   `json:"text"`
+	SourceIDs          []string `json:"source_ids,omitempty"`
+	Stance             string   `json:"stance,omitempty"`
+	RecommendedSurface string   `json:"recommended_surface,omitempty"`
+}
+
+type CoagentPacketSource struct {
+	SourceID  string                         `json:"source_id,omitempty"`
+	Kind      string                         `json:"kind"`
+	Target    CoagentPacketSourceTarget      `json:"target"`
+	Selectors []CoagentPacketSourceSelector  `json:"selectors,omitempty"`
+	Evidence  CoagentPacketSourceEvidence    `json:"evidence,omitempty"`
+}
+
+type CoagentPacketSourceTarget struct {
+	URI       string `json:"uri,omitempty"`
+	Title     string `json:"title,omitempty"`
+	MediaType string `json:"media_type,omitempty"`
+}
+
+type CoagentPacketSourceSelector struct {
+	Kind   string  `json:"kind"`
+	Quote  string  `json:"quote,omitempty"`
+	Start  int     `json:"start,omitempty"`
+	End    int     `json:"end,omitempty"`
+	X      float64 `json:"x,omitempty"`
+	Y      float64 `json:"y,omitempty"`
+	Width  float64 `json:"width,omitempty"`
+	Height float64 `json:"height,omitempty"`
+}
+
+type CoagentPacketSourceEvidence struct {
+	State       string `json:"state,omitempty"`
+	Confidence  string `json:"confidence,omitempty"`
+	RightsScope string `json:"rights_scope,omitempty"`
+}
+
+type CoagentPacketAction struct {
+	ActionID        string                         `json:"action_id,omitempty"`
+	Type            string                         `json:"type"`
+	Objective       string                         `json:"objective"`
+	Inputs          map[string]any                 `json:"inputs,omitempty"`
+	ExpectedSources []CoagentPacketExpectedSource  `json:"expected_sources,omitempty"`
+	Safety          CoagentPacketActionSafety      `json:"safety,omitempty"`
+}
+
+type CoagentPacketExpectedSource struct {
+	Kind     string `json:"kind"`
+	Required bool   `json:"required,omitempty"`
+}
+
+type CoagentPacketActionSafety struct {
+	MutationClass string `json:"mutation_class,omitempty"`
+	Network       string `json:"network,omitempty"`
+	FileMutation  string `json:"file_mutation,omitempty"`
+}
+
+// CoagentSourcePacket is the persisted delivery envelope for one addressed
+// source packet. The Packet field is the canonical update_coagent payload; the
+// surrounding fields are runtime-owned delivery/idempotency metadata.
+type CoagentSourcePacket struct {
+	UpdateID         string                     `json:"update_id"`
+	OwnerID          string                     `json:"owner_id"`
+	AgentID          string                     `json:"agent_id"`
+	TargetAgentID    string                     `json:"target_agent_id"`
+	ChannelID        string                     `json:"channel_id"`
+	MessageSeq       int64                      `json:"message_seq"`
+	TrajectoryID     string                     `json:"trajectory_id,omitempty"`
+	Role             string                     `json:"role,omitempty"`
+	Packet           CoagentSourcePacketPayload `json:"packet"`
+	Content          string                     `json:"content"`
+	CreatedAt        time.Time                  `json:"created_at"`
+	DeliveredToRunID string                     `json:"delivered_to_loop_id,omitempty"`
+	DeliveredAt      *time.Time                 `json:"delivered_at,omitempty"`
 }

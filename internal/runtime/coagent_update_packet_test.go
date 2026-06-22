@@ -11,15 +11,22 @@ import (
 
 func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	t.Parallel()
-	updates := []types.WorkerUpdateRecord{{
+	updates := []types.CoagentSourcePacket{{
 		UpdateID:      "upd-1",
 		AgentID:       "researcher:doc-1",
 		TargetAgentID: "texture:doc-1",
 		ChannelID:     "doc-1",
-		Kind:          "findings",
-		Summary:       "grounded fact",
-		Content:       "A sourced update arrived.",
-		MessageSeq:    3,
+		Packet: newCoagentPacket(
+			"evidence_update",
+			"grounded fact",
+			[]types.CoagentPacketClaim{coagentClaim("A sourced update arrived.", "src-demo")},
+			[]types.CoagentPacketSource{coagentSourceFromURI("src-demo", "source_service_item", "source_service_item:srcitem_demo", "Demo source")},
+			nil,
+			nil,
+			nil,
+		),
+		Content:    "A sourced update arrived.",
+		MessageSeq: 3,
 	}}
 	sourceEntities := []textureSourceEntity{{
 		EntityID: "src-source-service-demo",

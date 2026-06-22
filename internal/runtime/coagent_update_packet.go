@@ -29,19 +29,16 @@ type coagentUpdatePacket struct {
 }
 
 type coagentUpdatePacketItem struct {
-	UpdateID    string   `json:"update_id"`
-	FromAgentID string   `json:"from_agent_id,omitempty"`
-	FromRole    string   `json:"from_role,omitempty"`
-	ChannelID   string   `json:"channel_id,omitempty"`
-	Kind        string   `json:"kind,omitempty"`
-	Summary     string   `json:"summary,omitempty"`
-	MessageSeq  int64    `json:"message_seq,omitempty"`
-	Findings    []string `json:"findings,omitempty"`
-	Refs        []string `json:"refs,omitempty"`
-	Content     string   `json:"content"`
+	UpdateID        string                           `json:"update_id"`
+	FromAgentID     string                           `json:"from_agent_id,omitempty"`
+	FromRole        string                           `json:"from_role,omitempty"`
+	ChannelID       string                           `json:"channel_id,omitempty"`
+	MessageSeq      int64                            `json:"message_seq,omitempty"`
+	Packet          types.CoagentSourcePacketPayload `json:"packet"`
+	HumanProjection string                           `json:"human_projection"`
 }
 
-func buildCoagentUpdateUserMessages(updates []types.WorkerUpdateRecord, deliveryPhase string, targetAgentID string, sourceEntities []textureSourceEntity) ([]json.RawMessage, []string, error) {
+func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliveryPhase string, targetAgentID string, sourceEntities []textureSourceEntity) ([]json.RawMessage, []string, error) {
 	if len(updates) == 0 {
 		return nil, nil, nil
 	}
@@ -67,16 +64,13 @@ func buildCoagentUpdateUserMessages(updates []types.WorkerUpdateRecord, delivery
 			packet.TrajectoryID = strings.TrimSpace(update.TrajectoryID)
 		}
 		packet.Updates = append(packet.Updates, coagentUpdatePacketItem{
-			UpdateID:    id,
-			FromAgentID: strings.TrimSpace(update.AgentID),
-			FromRole:    strings.TrimSpace(update.Role),
-			ChannelID:   strings.TrimSpace(update.ChannelID),
-			Kind:        strings.TrimSpace(update.Kind),
-			Summary:     strings.TrimSpace(update.Summary),
-			MessageSeq:  update.MessageSeq,
-			Findings:    trimNonEmpty(update.Findings),
-			Refs:        trimNonEmpty(update.Refs),
-			Content:     strings.TrimSpace(update.Content),
+			UpdateID:        id,
+			FromAgentID:     strings.TrimSpace(update.AgentID),
+			FromRole:        strings.TrimSpace(update.Role),
+			ChannelID:       strings.TrimSpace(update.ChannelID),
+			MessageSeq:      update.MessageSeq,
+			Packet:          normalizeCoagentSourcePacketPayload(update.Packet),
+			HumanProjection: strings.TrimSpace(update.Content),
 		})
 	}
 	packetJSON, err := json.Marshal(packet)

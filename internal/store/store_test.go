@@ -15,6 +15,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func testStoreCoagentPacket(kind, summary string) types.CoagentSourcePacketPayload {
+	return types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          kind,
+		Summary:       summary,
+		Claims: []types.CoagentPacketClaim{{
+			Text:               summary,
+			Stance:             "supports",
+			RecommendedSurface: "decision_log",
+		}},
+	}
+}
+
 // testStorePath returns a unique temporary database path for each test.
 func testStorePath(t *testing.T) string {
 	t.Helper()
@@ -262,7 +275,7 @@ CREATE TABLE worker_updates (
 	}
 	defer func() { _ = s.Close() }()
 
-	for _, column := range []string{"kind", "summary", "capability_requests_json", "delivered_to_loop_id", "delivered_at"} {
+	for _, column := range []string{"kind", "summary", "packet_json", "delivered_to_loop_id", "delivered_at"} {
 		if !testDoltColumnExists(t, s, "worker_updates", column) {
 			t.Fatalf("expected worker_updates.%s to be added before delivery index creation", column)
 		}
@@ -568,15 +581,14 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 	if err := s.CreateRun(ctx, rec); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-terminal-1",
 		OwnerID:       rec.OwnerID,
 		AgentID:       "super:primary",
 		TargetAgentID: rec.AgentID,
 		ChannelID:     rec.ChannelID,
 		Role:          "super",
-		Kind:          "directive",
-		Summary:       "finish M2",
+		Packet:        testStoreCoagentPacket("decision_request", "finish M2"),
 		Content:       "finish M2",
 		CreatedAt:     now,
 	}
@@ -639,7 +651,7 @@ func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
 	ownerID := "user-alice"
 	targetAgentID := "texture:doc-mailbox-cursor"
 	channelID := "doc-mailbox-cursor"
-	for _, update := range []types.WorkerUpdateRecord{
+	for _, update := range []types.CoagentSourcePacket{
 		{
 			UpdateID:      "update-mailbox-1",
 			OwnerID:       ownerID,
@@ -647,8 +659,7 @@ func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
 			TargetAgentID: targetAgentID,
 			ChannelID:     channelID,
 			Role:          "researcher",
-			Kind:          "findings",
-			Summary:       "first finding",
+			Packet:        testStoreCoagentPacket("evidence_update", "first finding"),
 			Content:       "first finding",
 			CreatedAt:     now,
 		},
@@ -659,8 +670,7 @@ func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
 			TargetAgentID: targetAgentID,
 			ChannelID:     channelID,
 			Role:          "researcher",
-			Kind:          "findings",
-			Summary:       "second finding",
+			Packet:        testStoreCoagentPacket("evidence_update", "second finding"),
 			Content:       "second finding",
 			CreatedAt:     now.Add(time.Second),
 		},
@@ -731,15 +741,14 @@ func TestCoagentMailboxBacklogAllUsesActorCursors(t *testing.T) {
 	ownerID := "user-alice"
 	dispatch := func(updateID, targetAgentID, channelID string, at time.Time) {
 		t.Helper()
-		update := types.WorkerUpdateRecord{
+		update := types.CoagentSourcePacket{
 			UpdateID:      updateID,
 			OwnerID:       ownerID,
 			AgentID:       "researcher:mailbox",
 			TargetAgentID: targetAgentID,
 			ChannelID:     channelID,
 			Role:          "researcher",
-			Kind:          "findings",
-			Summary:       updateID,
+			Packet:        testStoreCoagentPacket("evidence_update", updateID),
 			Content:       updateID,
 			CreatedAt:     at,
 		}

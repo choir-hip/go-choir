@@ -374,10 +374,10 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 	}, "", true, recent, nil)
 
 	for _, want := range []string{
-		"This Texture run was woken by worker findings",
-		"Make those findings visible with patch_texture as this turn's next document revision before spawning additional workers",
-		"If recent worker findings are only partial and the document needs more evidence",
-		"write only the reader-facing artifact state that the usable evidence supports",
+		"This Texture run was woken by worker source packets",
+		"Make the useful claims and packet.sources visible with patch_texture as this turn's next document revision before spawning additional workers",
+		"If recent worker source packets are only partial and the document needs more evidence",
+		"write only the reader-facing artifact state that the usable claims and packet.sources support",
 		"Do not paste process metadata, source-status notes, or checkpoint labels into the canonical document body",
 		"Do not write that a follow-up researcher was dispatched",
 		"Never describe coordination as already done unless the tool action really happened",

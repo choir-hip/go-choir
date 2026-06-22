@@ -86,14 +86,14 @@ func TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation(t *testi
 		t.Fatalf("worker updates = %d, want 1", len(updates))
 	}
 	update := updates[0]
-	if update.Kind != "blocker" || update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
+	if update.Packet.Kind != "blocker" || update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
 		t.Fatalf("update kind/target/channel = %+v", update)
 	}
-	if !strings.Contains(strings.Join(update.Findings, "\n"), "No worker lease/delegation tool result was recorded") {
-		t.Fatalf("findings missing no-worker blocker: %+v", update.Findings)
+	if !strings.Contains(coagentClaimsText(update.Packet.Claims), "No worker lease/delegation tool result was recorded") {
+		t.Fatalf("claims missing no-worker blocker: %+v", update.Packet.Claims)
 	}
-	if !strings.Contains(strings.Join(update.Notes, "\n"), "successful tools: read_file") {
-		t.Fatalf("notes missing successful tool summary: %+v", update.Notes)
+	if !strings.Contains(strings.Join(update.Packet.Notes, "\n"), "successful tools: read_file") {
+		t.Fatalf("notes missing successful tool summary: %+v", update.Packet.Notes)
 	}
 }
 
@@ -181,17 +181,14 @@ func TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation(t *t
 		t.Fatalf("worker updates = %d, want 1", len(updates))
 	}
 	update := updates[0]
-	if !containsString(update.EvidenceIDs, "event:event-start-worker-delegation") {
-		t.Fatalf("evidence ids missing start_worker_delegation event: %+v", update.EvidenceIDs)
-	}
-	findings := strings.Join(update.Findings, "\n")
+	findings := coagentClaimsText(update.Packet.Claims)
 	if !strings.Contains(findings, "worker delegation returned status") {
-		t.Fatalf("findings missing worker delegation summary: %+v", update.Findings)
+		t.Fatalf("claims missing worker delegation summary: %+v", update.Packet.Claims)
 	}
 	if strings.Contains(findings, "No worker lease/delegation tool result was recorded") {
-		t.Fatalf("findings used stale before-delegation fallback: %+v", update.Findings)
+		t.Fatalf("claims used stale before-delegation fallback: %+v", update.Packet.Claims)
 	}
-	if !strings.Contains(strings.Join(update.Notes, "\n"), "delegate_terminal_error=worker failed before AppChangePackage evidence") {
-		t.Fatalf("notes missing worker terminal error: %+v", update.Notes)
+	if !strings.Contains(strings.Join(update.Packet.Notes, "\n"), "delegate_terminal_error=worker failed before AppChangePackage evidence") {
+		t.Fatalf("notes missing worker terminal error: %+v", update.Packet.Notes)
 	}
 }

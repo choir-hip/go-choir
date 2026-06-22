@@ -1141,8 +1141,9 @@ func TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence(t *testing.
 	if !strings.Contains(deliveries[0].Content, "Runtime fallback") || !strings.Contains(deliveries[0].Content, "save_evidence") {
 		t.Fatalf("delivery content = %q, want save_evidence fallback", deliveries[0].Content)
 	}
-	if len(deliveries[0].EvidenceIDs) != 1 || deliveries[0].EvidenceIDs[0] != "ev-openai-docs" {
-		t.Fatalf("delivery evidence ids = %+v, want saved evidence id", deliveries[0].EvidenceIDs)
+	sourceURIs := coagentPacketSourceURIs(deliveries[0].Packet)
+	if len(sourceURIs) != 1 || sourceURIs[0] != "evidence:ev-openai-docs" {
+		t.Fatalf("delivery sources = %+v, want saved evidence source", sourceURIs)
 	}
 	sourceEntities := rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, deliveries)
 	if len(sourceEntities) != 1 {
@@ -1379,8 +1380,8 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
 		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
 		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
-		{ID: "cast-1", Name: "update_coagent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
-		{ID: "cast-2", Name: "update_coagent", Arguments: json.RawMessage(`{"agent_id":"agent-impl","content":"proceed with exact evidence"}`)},
+		{ID: "cast-1", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
+		{ID: "cast-2", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
 		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}

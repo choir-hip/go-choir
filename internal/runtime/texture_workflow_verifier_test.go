@@ -23,7 +23,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 	t.Parallel()
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Moss habitats working document.\n\nInitial useful draft."))
 	provider.resultFunc = func(prompt string) string {
-		if strings.Contains(prompt, "update_coagent records") {
+		if strings.Contains(prompt, "Choir coagent update packet") || strings.Contains(prompt, "coagent_update") || strings.Contains(prompt, "update_coagent records") {
 			return textureReplaceAllResult("Moss habitats working document.\n\nInitial useful draft.\n\nIntegrated structured worker update.")
 		}
 		return textureReplaceAllResult("Moss habitats working document.\n\nInitial useful draft.")
@@ -96,13 +96,15 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 			ID:   "research-findings",
 			Name: "update_coagent",
 			Arguments: json.RawMessage(`{
-				"update_id":"moss-finding-1",
-				"agent_id":"texture:` + decision.DocID + `",
-				"channel_id":"` + decision.DocID + `",
-				"findings":["Moss prefers damp shade and steady humidity."],
-				"evidence":[{"kind":"web_page","source_uri":"https://example.test/moss","title":"Moss habitat","content":"Moss prefers damp shade and steady humidity."}],
-				"notes":["Use this as a scoped habitat claim."]
-			}`),
+					"schema_version":"coagent_source_packet.v1",
+					"kind":"evidence_update",
+					"summary":"moss finding",
+					"agent_id":"texture:` + decision.DocID + `",
+					"channel_id":"` + decision.DocID + `",
+					"claims":[{"text":"Moss prefers damp shade and steady humidity.","source_ids":["src-moss"]}],
+					"sources":[{"source_id":"src-moss","kind":"web_page","target":{"uri":"https://example.test/moss","title":"Moss habitat"},"selectors":[{"kind":"text_quote","quote":"Moss prefers damp shade and steady humidity."}]}],
+					"notes":["Use this as a scoped habitat claim."]
+				}`),
 		},
 	})
 
@@ -163,13 +165,17 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 			ID:   "worker-update",
 			Name: "update_coagent",
 			Arguments: json.RawMessage(`{
-					"update_id":"moss-worker-update-1",
-					"agent_id":"texture:` + decision.DocID + `",
-					"channel_id":"` + decision.DocID + `",
-					"artifacts":["` + artifactRelPath + `"],
-					"tests":["test -f ` + artifactRelPath + ` && grep -q verified ` + artifactRelPath + `"],
-					"proposals":["Include the verified artifact path in the current document."]
-				}`),
+						"schema_version":"coagent_source_packet.v1",
+						"kind":"execution_result",
+						"summary":"moss worker update",
+						"agent_id":"texture:` + decision.DocID + `",
+						"channel_id":"` + decision.DocID + `",
+						"sources":[
+							{"source_id":"src-artifact","kind":"file_artifact","target":{"uri":"file_artifact:` + artifactRelPath + `"}},
+							{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:test -f ` + artifactRelPath + ` && grep -q verified ` + artifactRelPath + `"}}
+						],
+						"actions":[{"type":"revise_texture","objective":"Include the verified artifact path in the current document."}]
+					}`),
 		},
 	})
 	var updateResp struct {
@@ -206,7 +212,7 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 	rng := rand.New(rand.NewSource(20260501))
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Stochastic ordering document.\n\nResearch and worker updates integrated."))
 	provider.resultFunc = func(prompt string) string {
-		if strings.Contains(prompt, "update_coagent records") {
+		if strings.Contains(prompt, "Choir coagent update packet") || strings.Contains(prompt, "coagent_update") || strings.Contains(prompt, "update_coagent records") {
 			return textureReplaceAllResult("Stochastic ordering document.\n\nResearch and worker updates integrated.\n\nLatest worker update consumed.")
 		}
 		return textureReplaceAllResult("Stochastic ordering document.\n\nResearch and worker updates integrated.")
@@ -290,12 +296,14 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 				ID:   "stochastic-research",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
-					"update_id":"stochastic-finding-1",
-					"agent_id":"texture:` + decision.DocID + `",
-					"channel_id":"` + decision.DocID + `",
-					"findings":["The stochastic order still preserves durable causality."],
-					"evidence":[{"kind":"note","content":"seeded stochastic evidence"}]
-				}`),
+						"schema_version":"coagent_source_packet.v1",
+						"kind":"evidence_update",
+						"summary":"stochastic finding",
+						"agent_id":"texture:` + decision.DocID + `",
+						"channel_id":"` + decision.DocID + `",
+						"claims":[{"text":"The stochastic order still preserves durable causality.","source_ids":["src-stochastic-note"]}],
+						"sources":[{"source_id":"src-stochastic-note","kind":"note","target":{"uri":"note:seeded stochastic evidence","title":"seeded stochastic evidence"}}]
+					}`),
 			}})
 			return 0
 		}},
@@ -304,12 +312,14 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 				ID:   "stochastic-worker-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
-					"update_id":"stochastic-worker-update-1",
-					"agent_id":"texture:` + decision.DocID + `",
-					"channel_id":"` + decision.DocID + `",
-					"tests":["seeded stochastic verification passed"],
-					"proposals":["Preserve the latest stochastic worker update."]
-				}`),
+						"schema_version":"coagent_source_packet.v1",
+						"kind":"execution_result",
+						"summary":"stochastic worker update",
+						"agent_id":"texture:` + decision.DocID + `",
+						"channel_id":"` + decision.DocID + `",
+						"sources":[{"source_id":"src-stochastic-test","kind":"test_run","target":{"uri":"test_run:seeded stochastic verification passed"}}],
+						"actions":[{"type":"revise_texture","objective":"Preserve the latest stochastic worker update."}]
+					}`),
 			}})
 			var resp struct {
 				Cursor int64 `json:"cursor"`
@@ -409,7 +419,7 @@ func TestTextureRevisionCausalityAllowsManyRevisionsFromOneLoop(t *testing.T) {
 		successfulTextureWriteEvent(loopID, "tool-v1", "rev-v1"),
 		successfulTextureWriteEvent(loopID, "tool-v2", "rev-v2"),
 	}
-	updates := []types.WorkerUpdateRecord{{
+	updates := []types.CoagentSourcePacket{{
 		MessageSeq: 1,
 	}}
 	if err := verifyTextureRevisionCausality(revisions, events, updates, true); err != nil {

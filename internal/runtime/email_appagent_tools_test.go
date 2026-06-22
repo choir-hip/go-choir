@@ -284,9 +284,11 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 		t.Fatalf("create super run: %v", err)
 	}
 	_, err = rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "update_coagent", mustJSON(t, map[string]any{
-		"update_id": "email-direct-update",
-		"agent_id":  persistentEmailAgentID("user-alice"),
-		"summary":   "send person@example.com hello",
+		"schema_version": types.CoagentSourcePacketSchemaV1,
+		"agent_id":       persistentEmailAgentID("user-alice"),
+		"kind":           "evidence_update",
+		"summary":        "send person@example.com hello",
+		"claims":         []map[string]any{{"text": "send person@example.com hello"}},
 	}))
 	if err == nil {
 		t.Fatal("direct update_coagent to email appagent succeeded")

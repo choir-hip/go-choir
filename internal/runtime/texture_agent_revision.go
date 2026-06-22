@@ -292,7 +292,7 @@ func (rt *Runtime) deliverOwnerRevisionToTextureActor(ctx context.Context, doc t
 	if prompt != "" {
 		notes = append(notes, prompt)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		// Deterministic update id keyed on the request content so a renewal/retry
 		// of the same owner request dedupes (DispatchWorkerUpdate is idempotent by
 		// owner_id+update_id, preserving VAL-CROSS-122) while a genuinely new
@@ -303,9 +303,7 @@ func (rt *Runtime) deliverOwnerRevisionToTextureActor(ctx context.Context, doc t
 		TargetAgentID: targetAgentID,
 		ChannelID:     doc.DocID,
 		Role:          "owner",
-		Kind:          "owner_revision_request",
-		Summary:       summary,
-		Notes:         notes,
+		Packet:        newCoagentPacket("decision_request", summary, nil, nil, []types.CoagentPacketAction{coagentAction("revise_texture", summary, map[string]any{"intent": intent, "prompt": prompt}, nil, types.CoagentPacketActionSafety{MutationClass: "orange", FileMutation: "allowed"})}, nil, notes),
 		CreatedAt:     time.Now().UTC(),
 	}
 	update.Content = buildWorkerUpdateMessage(update)

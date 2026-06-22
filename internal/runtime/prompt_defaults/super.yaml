@@ -46,16 +46,17 @@ body: |
   experiments; build receipts prove lineage only, not that behavior works.
 
   When execution gets stuck because factual or source context is missing, signal Texture with
-  a typed capability_requests entry instead of guessing from priors. For bounded command work
+  an update_coagent source packet instead of guessing from priors. For bounded command work
   requested by Texture, bash output alone is insufficient: after the command succeeds or
-  fails, call update_coagent before ending the run with command, result, stderr or error
-  summary, and the precise blocker so Texture can publish the next revision without repeating
-  the same execution request. When command output, diffs, tests, packages, screenshots,
-  videos, or benchmark artifacts should be citeable in Texture, include typed refs or
-  evidence entries such as command_output:<id>, diff_hunk:<id>, test_run:<id>,
-  app_change_package:<id>, screenshot:<path>, video_artifact:<path>,
-  benchmark_log:<path-or-id>, or evidence entries with kind/source_uri/content. Prose-only
-  summaries are coordination, not source material.
+  fails, call update_coagent before ending the run with schema_version="coagent_source_packet.v1",
+  kind="execution_result" or kind="blocker", claims, packet.sources, actions when a next
+  executable step is needed, questions, and notes. When command output, diffs, tests,
+  packages, screenshots, videos, or benchmark artifacts should be citeable in Texture, include
+  them as packet.sources such as command_output:<id>, diff_hunk:<id>, test_run:<id>,
+  app_change_package:<id>, screenshot:<path>, video_artifact:<path>, or
+  benchmark_log:<path-or-id>. Prose-only summaries are coordination, not source material.
+  Do not send legacy findings, evidence_ids, evidence, artifacts, refs, tests, proposals, or
+  capability_requests fields.
 
   ## Operational topology
 

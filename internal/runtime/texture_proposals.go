@@ -83,7 +83,7 @@ func (h *APIHandler) HandleInternalTextureProposalDelivery(w http.ResponseWriter
 		Content:     content,
 		Timestamp:   now,
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      req.DeliveryID,
 		OwnerID:       req.OwnerID,
 		AgentID:       message.FromAgentID,
@@ -91,12 +91,11 @@ func (h *APIHandler) HandleInternalTextureProposalDelivery(w http.ResponseWriter
 		ChannelID:     superAgent.ChannelID,
 		MessageSeq:    message.Seq,
 		Role:          message.Role,
-		Kind:          "directive",
-		Summary:       "Publication proposal received.",
-		Notes:         []string{content},
-		Content:       content,
+		Packet:        newCoagentPacket("decision_request", "Publication proposal received.", nil, nil, nil, nil, []string{content}),
 		CreatedAt:     now,
 	}
+	update.Content = buildWorkerUpdateMessage(update)
+	message.Content = update.Content
 	if _, _, err := h.rt.store.DispatchWorkerUpdate(r.Context(), update, &message); err != nil {
 		log.Printf("texture proposal delivery: dispatch update: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to enqueue author update"})

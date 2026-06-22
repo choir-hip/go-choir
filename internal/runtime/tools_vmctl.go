@@ -1231,6 +1231,7 @@ type mirroredWorkerSubmitUpdate struct {
 	InvokedEvent types.EventRecord
 	ResultEvent  types.EventRecord
 	Args         submitCoagentUpdateArgs
+	UpdateID     string
 }
 
 func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *types.RunRecord, evidence workerRunEvidence, result map[string]any) {
@@ -1249,7 +1250,7 @@ func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *type
 	var mirroredIDs []string
 	var mirrorErrors []string
 	for _, item := range submitted {
-		sourceUpdateID := strings.TrimSpace(item.Args.UpdateID)
+		sourceUpdateID := strings.TrimSpace(item.UpdateID)
 		if sourceUpdateID == "" {
 			continue
 		}
@@ -1259,44 +1260,30 @@ func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *type
 			sourceAgentID = stringMapValue(result, "agent_id")
 		}
 		role := firstNonEmpty(stringMapValue(result, "profile"), AgentProfileVSuper)
-		update := types.WorkerUpdateRecord{
-			UpdateID:           "mirrored-worker-update-" + sanitizeExportPart(superRec.RunID) + "-" + sanitizeExportPart(sourceUpdateID),
-			OwnerID:            superRec.OwnerID,
-			AgentID:            firstNonEmpty(sourceAgentID, agentIDForRun(superRec)),
-			TargetAgentID:      targetAgentID,
-			ChannelID:          channelID,
-			TrajectoryID:       metadataStringValue(superRec.Metadata, runMetadataTrajectoryID),
-			Role:               role,
-			Kind:               strings.TrimSpace(item.Args.Kind),
-			Summary:            strings.TrimSpace(item.Args.Summary),
-			Findings:           trimNonEmpty(item.Args.Findings),
-			EvidenceIDs:        trimNonEmpty(item.Args.EvidenceIDs),
-			Artifacts:          trimNonEmpty(item.Args.Artifacts),
-			Refs:               trimNonEmpty(item.Args.Refs),
-			Tests:              trimNonEmpty(item.Args.Tests),
-			Questions:          trimNonEmpty(item.Args.Questions),
-			Proposals:          trimNonEmpty(item.Args.Proposals),
-			CapabilityRequests: normalizeCapabilityRequests(item.Args.CapabilityRequests),
-			Notes:              trimNonEmpty(item.Args.Notes),
-			CreatedAt:          item.ResultEvent.Timestamp,
+		packet := normalizeCoagentSourcePacketPayload(item.Args.CoagentSourcePacketPayload)
+		packet.Notes = trimDedupeNonEmpty(append(packet.Notes,
+			"mirrored_from=worker_update_coagent",
+			"worker_update:"+sourceUpdateID,
+			"worker_agent:"+sourceAgentID,
+			"worker_run:"+sourceRunID,
+			"worker_tool_invoked_event:"+item.InvokedEvent.EventID,
+			"worker_tool_result_event:"+item.ResultEvent.EventID,
+			"super_run:"+superRec.RunID,
+		))
+		update := types.CoagentSourcePacket{
+			UpdateID:      "mirrored-worker-update-" + sanitizeExportPart(superRec.RunID) + "-" + sanitizeExportPart(sourceUpdateID),
+			OwnerID:       superRec.OwnerID,
+			AgentID:       firstNonEmpty(sourceAgentID, agentIDForRun(superRec)),
+			TargetAgentID: targetAgentID,
+			ChannelID:     channelID,
+			TrajectoryID:  metadataStringValue(superRec.Metadata, runMetadataTrajectoryID),
+			Role:          role,
+			Packet:        packet,
+			CreatedAt:     item.ResultEvent.Timestamp,
 		}
 		if update.CreatedAt.IsZero() {
 			update.CreatedAt = time.Now().UTC()
 		}
-		update.EvidenceIDs = trimDedupeNonEmpty(append(update.EvidenceIDs,
-			"worker_run:"+sourceRunID,
-			"worker_tool_invoked_event:"+item.InvokedEvent.EventID,
-			"worker_tool_result_event:"+item.ResultEvent.EventID,
-		))
-		update.Refs = trimDedupeNonEmpty(append(update.Refs,
-			"worker_update:"+sourceUpdateID,
-			"worker_agent:"+sourceAgentID,
-			"worker_run:"+sourceRunID,
-		))
-		update.Notes = trimDedupeNonEmpty(append(update.Notes,
-			"mirrored_from=worker_update_coagent",
-			"super_run:"+superRec.RunID,
-		))
 		update.Content = buildWorkerUpdateMessage(update)
 
 		message := &types.ChannelMessage{
@@ -1355,9 +1342,10 @@ func collectSuccessfulWorkerSubmitUpdates(events []types.EventRecord) []mirrored
 			continue
 		}
 		var args submitCoagentUpdateArgs
-		if err := json.Unmarshal(payload.Arguments, &args); err != nil || strings.TrimSpace(args.UpdateID) == "" {
+		if err := json.Unmarshal(payload.Arguments, &args); err != nil {
 			continue
 		}
+		args.CoagentSourcePacketPayload = normalizeCoagentSourcePacketPayload(args.CoagentSourcePacketPayload)
 		if _, exists := invokedByCallID[callID]; !exists {
 			order = append(order, callID)
 		}
@@ -1394,15 +1382,32 @@ func collectSuccessfulWorkerSubmitUpdates(events []types.EventRecord) []mirrored
 		if !ok {
 			continue
 		}
-		sourceUpdateID := strings.TrimSpace(item.Args.UpdateID)
+		sourceUpdateID := updateIDFromUpdateCoagentResult(resultEvent)
 		if sourceUpdateID == "" || seenUpdates[sourceUpdateID] {
 			continue
 		}
 		seenUpdates[sourceUpdateID] = true
 		item.ResultEvent = resultEvent
+		item.UpdateID = sourceUpdateID
 		out = append(out, item)
 	}
 	return out
+}
+
+func updateIDFromUpdateCoagentResult(ev types.EventRecord) string {
+	var payload struct {
+		Output string `json:"output"`
+	}
+	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+		return ""
+	}
+	var output struct {
+		UpdateID string `json:"update_id"`
+	}
+	if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(output.UpdateID)
 }
 
 func newCancelWorkerDelegationTool(rt *Runtime) Tool {

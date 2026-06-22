@@ -197,14 +197,17 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 		}, nil
 	}
 	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
-		if !strings.Contains(req.ToolChoice, "patch_texture") || !messagesContainText(req.Messages, "update_coagent records") {
-			return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+		if !strings.Contains(req.ToolChoice, "patch_texture") {
+			if !messagesContainCoagentFollowUpDelivery(req.Messages) ||
+				messagesToolCallCount(req.Messages, "patch_texture")+messagesToolCallCount(req.Messages, "rewrite_texture") >= 2 {
+				return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+			}
 		}
 	}
-	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+	if (lastUser == "" && !strings.Contains(req.ToolChoice, "patch_texture")) || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
 	}
-	prompt := req.System + "\n" + lastUser
+	prompt := toolLoopPromptContext(req)
 	result := p.result
 	if p.resultFunc != nil {
 		result = p.resultFunc(prompt)
@@ -212,6 +215,12 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 	call, err := editTextureToolCallFromLegacyResult(prompt, result)
 	if err != nil {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: result, Model: "test-model"}, nil
+	}
+	if strings.Contains(req.ToolChoice, "patch_texture") {
+		call, err = requiredPatchTextureToolCallFromLegacyResult(prompt, result)
+		if err != nil {
+			return &ToolLoopResponse{StopReason: "end_turn", Text: result, Model: "test-model"}, nil
+		}
 	}
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
@@ -376,8 +385,40 @@ func messagesContainText(messages []json.RawMessage, text string) bool {
 		if strings.Contains(string(raw), text) {
 			return true
 		}
+		var msg struct {
+			Content any `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &msg); err == nil && strings.Contains(extractTextFromContent(msg.Content), text) {
+			return true
+		}
 	}
 	return false
+}
+
+func messagesContainCoagentFollowUpDelivery(messages []json.RawMessage) bool {
+	return messagesContainText(messages, `"delivery_phase":"`+coagentPacketDeliveryMid+`"`) ||
+		messagesContainText(messages, `"delivery_phase":"`+coagentPacketDeliveryFinal+`"`)
+}
+
+func messagesToolCallCount(messages []json.RawMessage, name string) int {
+	count := 0
+	for _, raw := range messages {
+		var msg struct {
+			Content []map[string]any `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			continue
+		}
+		for _, block := range msg.Content {
+			if blockType, _ := block["type"].(string); blockType != "tool_use" {
+				continue
+			}
+			if toolName, _ := block["name"].(string); toolName == name {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func toolDefinitionsContain(defs []ToolDefinition, name string) bool {
@@ -442,6 +483,74 @@ func editTextureToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, er
 		return types.ToolCall{}, err
 	}
 	return types.ToolCall{ID: "edit-texture-test-call", Name: toolName, Arguments: data}, nil
+}
+
+func requiredPatchTextureToolCallFromLegacyResult(prompt, raw string) (types.ToolCall, error) {
+	call, err := editTextureToolCallFromLegacyResult(prompt, raw)
+	if err != nil {
+		return types.ToolCall{}, err
+	}
+	if call.Name == "patch_texture" {
+		var args editTextureArgs
+		if err := json.Unmarshal(call.Arguments, &args); err != nil {
+			return types.ToolCall{}, err
+		}
+		args.BaseRevisionID = ""
+		data, err := json.Marshal(args)
+		if err != nil {
+			return types.ToolCall{}, err
+		}
+		call.Arguments = data
+		return call, nil
+	}
+	var args editTextureArgs
+	if err := json.Unmarshal(call.Arguments, &args); err != nil {
+		return types.ToolCall{}, err
+	}
+	content := strings.TrimSpace(args.Content)
+	if content == "" {
+		content = "Texture revision updated."
+	}
+	args.Operation = ""
+	args.BaseRevisionID = ""
+	args.Content = ""
+	args.Rationale = ""
+	args.StructuredEdits = []textureStructuredEdit{{
+		Op:        "append_block",
+		BlockType: "paragraph",
+		Text:      content,
+	}}
+	data, err := json.Marshal(args)
+	if err != nil {
+		return types.ToolCall{}, err
+	}
+	call.Name = "patch_texture"
+	call.Arguments = data
+	return call, nil
+}
+
+func toolLoopPromptContext(req ToolLoopRequest) string {
+	var b strings.Builder
+	b.WriteString(req.System)
+	for _, raw := range req.Messages {
+		var msg struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &msg); err == nil {
+			if text := strings.TrimSpace(extractTextFromContent(msg.Content)); text != "" {
+				b.WriteString("\n")
+				if msg.Role != "" {
+					b.WriteString(msg.Role)
+					b.WriteString(": ")
+				}
+				b.WriteString(text)
+			}
+		}
+		b.WriteString("\n")
+		b.Write(raw)
+	}
+	return b.String()
 }
 
 func extractCurrentCanonicalContentFromPrompt(s string) string {
@@ -1701,11 +1810,15 @@ func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req Tool
 		}, nil
 	}
 	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
+		if strings.Contains(req.ToolChoice, "patch_texture") {
+			goto producePatch
+		}
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
-	if lastUser == "" || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+	if (lastUser == "" && !strings.Contains(req.ToolChoice, "patch_texture")) || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
+producePatch:
 	delay := p.delay
 	if delay == 0 {
 		delay = 90 * time.Millisecond
@@ -1717,10 +1830,17 @@ func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req Tool
 		return nil, ctx.Err()
 	case <-timer.C:
 	}
-	prompt := req.System + "\n" + lastUser
-	call, err := editTextureToolCallFromLegacyResult(prompt, buildStochasticTextureResult(prompt))
+	prompt := toolLoopPromptContext(req)
+	result := buildStochasticTextureResult(prompt)
+	call, err := editTextureToolCallFromLegacyResult(prompt, result)
 	if err != nil {
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
+	}
+	if strings.Contains(req.ToolChoice, "patch_texture") {
+		call, err = requiredPatchTextureToolCallFromLegacyResult(prompt, result)
+		if err != nil {
+			return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
+		}
 	}
 	return &ToolLoopResponse{
 		StopReason: "tool_use",
@@ -1990,7 +2110,7 @@ func revisionContentsContain(revs []types.Revision, text string) bool {
 func waitForNoPendingWorkerUpdates(t *testing.T, s *store.Store, ownerID, agentID string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
-	var last []types.WorkerUpdateRecord
+	var last []types.CoagentSourcePacket
 	for time.Now().Before(deadline) {
 		pending, err := s.ListPendingWorkerUpdates(context.Background(), ownerID, agentID, 10)
 		if err != nil {
@@ -2471,19 +2591,20 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 				ID:   "call-research-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
-					"agent_id":` + strconv.Quote(targetAgentID) + `,
-					"update_id":"texture-created-research-evidence",
-					"summary":"Researcher evidence returned to Texture.",
-					"findings":["TEXTURE_CREATED_RESEARCH_EVIDENCE: public signal requires a cautious current-state revision."],
-					"evidence":[
-						{
-							"kind":"web_page",
-							"source_uri":"https://example.com/current-signal",
-							"title":"Current signal evidence",
-							"content":"A current signal exists, but claims must stay scoped and cite worker evidence."
-						}
-					],
-					"notes":["Use this evidence in the next Texture revision."]
+						"schema_version":"coagent_source_packet.v1",
+						"kind":"evidence_update",
+						"agent_id":` + strconv.Quote(targetAgentID) + `,
+						"summary":"Researcher evidence returned to Texture.",
+						"claims":[{"text":"TEXTURE_CREATED_RESEARCH_EVIDENCE: public signal requires a cautious current-state revision.","source_ids":["src-current-signal"]}],
+						"sources":[
+							{
+								"kind":"web_page",
+								"source_id":"src-current-signal",
+								"target":{"uri":"https://example.com/current-signal","title":"Current signal evidence"},
+								"selectors":[{"kind":"text_quote","quote":"A current signal exists, but claims must stay scoped and cite worker evidence."}]
+							}
+						],
+						"notes":["Use this evidence in the next Texture revision."]
 				}`),
 			}},
 			Model: "test-model",
@@ -2623,14 +2744,17 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 				ID:   "call-super-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
-					"agent_id":` + strconv.Quote(targetAgentID) + `,
-					"update_id":"texture-created-super-evidence",
-					"summary":"Super execution evidence returned to Texture.",
-					"artifacts":["artifacts/texture-super-proof.txt"],
-					"tests":["test -f artifacts/texture-super-proof.txt"],
-					"proposals":["TEXTURE_CREATED_SUPER_EVIDENCE: execution proof is ready for Texture synthesis."],
-					"notes":["Use this execution evidence in the next Texture revision."]
-				}`),
+						"schema_version":"coagent_source_packet.v1",
+						"kind":"execution_result",
+						"agent_id":` + strconv.Quote(targetAgentID) + `,
+						"summary":"Super execution evidence returned to Texture.",
+						"sources":[
+							{"source_id":"src-super-artifact","kind":"file_artifact","target":{"uri":"file_artifact:artifacts/texture-super-proof.txt"}},
+							{"source_id":"src-super-test","kind":"test_run","target":{"uri":"test_run:test -f artifacts/texture-super-proof.txt"}}
+						],
+						"actions":[{"type":"revise_texture","objective":"TEXTURE_CREATED_SUPER_EVIDENCE: execution proof is ready for Texture synthesis."}],
+						"notes":["Use this execution evidence in the next Texture revision."]
+					}`),
 			}},
 			Model: "test-model",
 		}, nil
@@ -3255,7 +3379,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list worker updates: %v", err)
 	}
-	var superUpdate *types.WorkerUpdateRecord
+	var superUpdate *types.CoagentSourcePacket
 	for i := range updates {
 		if updates[i].Role == AgentProfileSuper && updates[i].TargetAgentID == currentTextureAgentID(decision.DocID) {
 			superUpdate = &updates[i]
@@ -3268,8 +3392,8 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	if superUpdate.AgentID != superRun.AgentID ||
 		superUpdate.ChannelID != decision.DocID ||
 		superUpdate.MessageSeq == 0 ||
-		len(superUpdate.Artifacts) == 0 ||
-		len(superUpdate.Tests) == 0 {
+		len(coagentPacketSourceURIs(superUpdate.Packet, "file_artifact")) == 0 ||
+		len(coagentPacketSourceURIs(superUpdate.Packet, "test_run")) == 0 {
 		t.Fatalf("super update route/evidence = %+v, super=%+v", *superUpdate, *superRun)
 	}
 
@@ -4354,15 +4478,17 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherRun), "update_coagent", json.RawMessage(`{
-		"update_id":"finding-stream-001",
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"finding stream 001",
 		"agent_id":"texture:`+docID+`",
-		"findings":["A new release landed this week."],
-		"evidence":[
+		"claims":[{"text":"A new release landed this week.","source_ids":["src-release"]}],
+		"sources":[
 			{
 				"kind":"web_page",
-				"source_uri":"https://example.com/release",
-				"title":"Release notes",
-				"content":"The release notes describe the new capabilities."
+				"source_id":"src-release",
+				"target":{"uri":"https://example.com/release","title":"Release notes"},
+				"selectors":[{"kind":"text_quote","quote":"The release notes describe the new capabilities."}]
 			}
 		],
 		"notes":["Prefer a brief update in the next draft."]
@@ -4387,10 +4513,10 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get coagent update %s: %v", findingResp.UpdateID, err)
 	}
-	if len(findingUpdate.EvidenceIDs) != 1 {
-		t.Fatalf("coagent update evidence_ids = %+v, want one durable evidence handle", findingUpdate.EvidenceIDs)
+	if len(findingUpdate.Packet.Sources) != 1 {
+		t.Fatalf("coagent update sources = %+v, want one durable source handle", findingUpdate.Packet.Sources)
 	}
-	evidenceID := findingUpdate.EvidenceIDs[0]
+	evidenceID := findingUpdate.Packet.Sources[0].SourceID
 
 	clock.fireAll()
 	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
@@ -4473,12 +4599,8 @@ func TestSubmitResearchFindingsWakeUsesSameDebouncedPath(t *testing.T) {
 	if got := initialTextureToolChoice(wakeRun); got != "function:patch_texture" {
 		t.Fatalf("initialTextureToolChoice(wake run) = %q, want function:patch_texture", got)
 	}
-	evidence, err := s.GetEvidence(context.Background(), evidenceID, "user-1")
-	if err != nil {
-		t.Fatalf("evidence handle %s in wake prompt does not resolve: %v", evidenceID, err)
-	}
-	if evidence.Title != "Release notes" {
-		t.Fatalf("evidence title = %q, want %q", evidence.Title, "Release notes")
+	if !strings.Contains(activationMailboxText, `"title":"Release notes"`) {
+		t.Fatalf("activation mailbox turn missing packet source title: %s", activationMailboxText)
 	}
 }
 
@@ -4544,15 +4666,17 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 		t.Fatalf("create researcher run: %v", err)
 	}
 	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, &researcherRun), "update_coagent", json.RawMessage(`{
-		"update_id":"parked-finding-001",
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"parked finding 001",
 		"agent_id":"texture:`+docID+`",
-		"findings":["A new grounded finding arrived from the parked resident test."],
-		"evidence":[
+		"claims":[{"text":"A new grounded finding arrived from the parked resident test.","source_ids":["src-parked"]}],
+		"sources":[
 			{
 				"kind":"web_page",
-				"source_uri":"https://example.com/parked",
-				"title":"Parked update evidence",
-				"content":"A new grounded finding arrived."
+				"source_id":"src-parked",
+				"target":{"uri":"https://example.com/parked","title":"Parked update evidence"},
+				"selectors":[{"kind":"text_quote","quote":"A new grounded finding arrived."}]
 			}
 		],
 		"notes":["The existing resident Texture actor should consume this without a cold wake run."]
@@ -4663,14 +4787,17 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 		t.Fatalf("create researcher run: %v", err)
 	}
 	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, &researcherRun), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"idle resume finding",
 		"agent_id":"texture:`+docID+`",
-		"findings":["A new grounded finding arrived from the parked resident test."],
-		"evidence":[
+		"claims":[{"text":"A new grounded finding arrived from the parked resident test.","source_ids":["src-idle-resume"]}],
+		"sources":[
 			{
 				"kind":"web_page",
-				"source_uri":"https://example.com/idle-resume",
-				"title":"Idle resume evidence",
-				"content":"A new grounded finding arrived."
+				"source_id":"src-idle-resume",
+				"target":{"uri":"https://example.com/idle-resume","title":"Idle resume evidence"},
+				"selectors":[{"kind":"text_quote","quote":"A new grounded finding arrived."}]
 			}
 		],
 		"notes":["The sleeping Texture actor should resume the same run and consume this without a cold wake run."]
@@ -4737,10 +4864,10 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 	}
 }
 
-func TestTextureWakeDoesNotMintReplacementForExistingThreadHistory(t *testing.T) {
+func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	provider := newTextureEditToolProvider(textureReplaceAllResult("replacement should not run"))
+	provider := newTextureEditToolProvider(textureReplaceAllResult("completed thread update integrated"))
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	docID, _ := createDocWithUserRevision(t, h)
 	doc, err := s.GetDocument(ctx, docID, "user-1")
@@ -4777,7 +4904,7 @@ func TestTextureWakeDoesNotMintReplacementForExistingThreadHistory(t *testing.T)
 	if err := s.CreateRun(ctx, completed); err != nil {
 		t.Fatalf("create completed texture thread: %v", err)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-existing-thread-history",
 		OwnerID:       "user-1",
 		AgentID:       "researcher:existing-thread",
@@ -4785,8 +4912,7 @@ func TestTextureWakeDoesNotMintReplacementForExistingThreadHistory(t *testing.T)
 		ChannelID:     docID,
 		TrajectoryID:  completed.RunID,
 		Role:          AgentProfileResearcher,
-		Kind:          "findings",
-		Summary:       "existing thread update should not create a replacement run",
+		Packet:        testCoagentUpdatePacket("evidence_update", "existing thread update should not create a replacement run"),
 		Content:       "Existing thread update should wait for a resident or sleeping Texture actor.",
 		CreatedAt:     now.Add(time.Millisecond),
 	}
@@ -4806,8 +4932,12 @@ func TestTextureWakeDoesNotMintReplacementForExistingThreadHistory(t *testing.T)
 	if err != nil {
 		t.Fatalf("reconcile texture wake: %v", err)
 	}
-	if rec != nil {
-		t.Fatalf("reconcile returned replacement run %+v, want no new activation for existing thread history", rec)
+	if rec == nil {
+		t.Fatalf("reconcile returned no activation for completed thread history")
+	}
+	terminal := waitForRuntimeRunTerminal(t, rt, rec.RunID, "user-1", 5*time.Second)
+	if terminal.State != types.RunCompleted {
+		t.Fatalf("wake activation state = %q error=%q", terminal.State, terminal.Error)
 	}
 	runs, err := s.ListRunsByChannel(ctx, "user-1", docID, 20)
 	if err != nil {
@@ -4819,15 +4949,18 @@ func TestTextureWakeDoesNotMintReplacementForExistingThreadHistory(t *testing.T)
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
-	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != completed.RunID {
-		t.Fatalf("texture revision runs = %+v, want only historical thread %s", textureRevisionRuns, completed.RunID)
+	if len(textureRevisionRuns) != 2 {
+		t.Fatalf("texture revision runs = %+v, want historical thread plus D9 packet integration run", textureRevisionRuns)
+	}
+	if ids := metadataStringSlice(terminal.Metadata["worker_update_ids"]); !containsString(ids, update.UpdateID) {
+		t.Fatalf("wake activation worker_update_ids = %+v, want %s", ids, update.UpdateID)
 	}
 	backlog, err := s.ListCoagentMailboxBacklog(ctx, "user-1", "texture:"+docID, 10)
 	if err != nil {
 		t.Fatalf("list coagent backlog: %v", err)
 	}
-	if len(backlog) != 1 || backlog[0].UpdateID != update.UpdateID {
-		t.Fatalf("backlog = %+v, want pending update %s retained", backlog, update.UpdateID)
+	if len(backlog) != 0 {
+		t.Fatalf("backlog = %+v, want pending packet consumed", backlog)
 	}
 }
 
@@ -4874,11 +5007,15 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "update_coagent", json.RawMessage(`{
-		"update_id":"super-artifact-001",
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"execution_result",
+		"summary":"super artifact 001",
 		"agent_id":"texture:`+docID+`",
-		"artifacts":["artifacts/evolution-ca.html"],
-		"tests":["node artifacts/evolution-ca.verify.js passed"],
-		"proposals":["Mention the generated visualization and verification result in the next version."]
+		"sources":[
+			{"source_id":"src-artifact","kind":"file_artifact","target":{"uri":"file_artifact:artifacts/evolution-ca.html"}},
+			{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:node artifacts/evolution-ca.verify.js passed"}}
+		],
+		"actions":[{"type":"revise_texture","objective":"Mention the generated visualization and verification result in the next version."}]
 	}`))
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
@@ -4916,11 +5053,11 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if len(update.Artifacts) != 1 || update.Artifacts[0] != "artifacts/evolution-ca.html" {
-		t.Fatalf("artifacts = %+v", update.Artifacts)
+	if !containsString(coagentPacketSourceURIs(update.Packet), "file_artifact:artifacts/evolution-ca.html") {
+		t.Fatalf("sources missing artifact: %+v", update.Packet.Sources)
 	}
-	if len(update.Tests) != 1 || !strings.Contains(update.Tests[0], "passed") {
-		t.Fatalf("tests = %+v", update.Tests)
+	if !strings.Contains(strings.Join(coagentPacketSourceURIs(update.Packet, "test_run"), "\n"), "evolution") {
+		t.Fatalf("sources missing test: %+v", update.Packet.Sources)
 	}
 
 	runs, err := rt.Store().ListRunsByChannel(context.Background(), "user-1", docID, 20)
@@ -4989,14 +5126,17 @@ func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *test
 		t.Fatalf("start research run: %v", err)
 	}
 	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(context.Background(), researchRun), "update_coagent", json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"late finding",
 		"agent_id":"texture:`+docID+`",
-		"findings":["Late finding: a sourced correction arrived while the texture run was already active."],
-		"evidence":[
+		"claims":[{"text":"Late finding: a sourced correction arrived while the texture run was already active.","source_ids":["src-late"]}],
+		"sources":[
 			{
 				"kind":"web_page",
-				"source_uri":"https://example.com/late",
-				"title":"Late finding evidence",
-				"content":"Late finding: a sourced correction arrived while the texture run was already active."
+				"source_id":"src-late",
+				"target":{"uri":"https://example.com/late","title":"Late finding evidence"},
+				"selectors":[{"kind":"text_quote","quote":"Late finding: a sourced correction arrived while the texture run was already active."}]
 			}
 		],
 		"notes":["The active Texture run should append this as a mailbox turn and continue in the same loop."]
@@ -5016,7 +5156,7 @@ func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *test
 		t.Fatalf("update_coagent response = %+v, want submitted runtime id and cursor", updateResp)
 	}
 
-	revs := waitForRevisionCount(t, s, docID, "user-1", 2, 8*time.Second)
+	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 8*time.Second)
 	var appAgentContents []string
 	for _, rev := range revs {
 		if rev.AuthorKind == types.AuthorAppAgent {
@@ -5043,16 +5183,30 @@ func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *test
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
-	if len(textureRevisionRuns) != 1 || textureRevisionRuns[0].RunID != initialResp.RunID {
-		t.Fatalf("texture revision runs = %+v, want only active same run %s", textureRevisionRuns, initialResp.RunID)
+	foundInitialRun := false
+	for _, run := range textureRevisionRuns {
+		if run.RunID == initialResp.RunID {
+			foundInitialRun = true
+		}
+	}
+	if !foundInitialRun {
+		t.Fatalf("texture revision runs = %+v, want original actor run %s to remain in lineage", textureRevisionRuns, initialResp.RunID)
 	}
 	if ids := metadataStringSlice(sleepingRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
 		t.Fatalf("same-run worker_update_ids = %+v, want %s", ids, updateResp.UpdateID)
 	}
 
-	checkpoint, err := s.GetTextureControllerCheckpoint(context.Background(), docID, "user-1")
-	if err != nil {
-		t.Fatalf("get controller checkpoint: %v", err)
+	var checkpoint *store.TextureControllerCheckpoint
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		checkpoint, err = s.GetTextureControllerCheckpoint(context.Background(), docID, "user-1")
+		if err != nil {
+			t.Fatalf("get controller checkpoint: %v", err)
+		}
+		if checkpoint != nil && checkpoint.IntegratedMessageSeq >= updateResp.Cursor {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if checkpoint == nil || checkpoint.IntegratedMessageSeq < updateResp.Cursor {
 		t.Fatalf("checkpoint = %+v, want integrated seq >= %d", checkpoint, updateResp.Cursor)
@@ -5170,7 +5324,7 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 		Content:      "Durable finding: the corrected fact landed while the sandbox was about to restart.",
 		Timestamp:    now.Add(3 * time.Second),
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-restart-rewarm",
 		OwnerID:       "user-1",
 		AgentID:       message.FromAgentID,
@@ -5178,9 +5332,7 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 		ChannelID:     message.ChannelID,
 		TrajectoryID:  message.TrajectoryID,
 		Role:          message.Role,
-		Kind:          "findings",
-		Summary:       "restart rewarm finding",
-		Findings:      []string{message.Content},
+		Packet:        newCoagentPacket("evidence_update", "restart rewarm finding", []types.CoagentPacketClaim{coagentClaim(message.Content)}, nil, nil, nil, nil),
 		Content:       message.Content,
 		CreatedAt:     message.Timestamp,
 	}
@@ -5403,10 +5555,14 @@ func TestHandleTestTextureResearchFindingsUsesResearcherToolPath(t *testing.T) {
 	}
 
 	req := textureRequest(t, http.MethodPost, "/api/test/texture/research-findings", map[string]any{
-		"doc_id":     docID,
-		"finding_id": "browser-hook-001",
-		"findings":   []string{"A sourced update arrived."},
-		"notes":      []string{"Fold this into the next revision."},
+		"doc_id":         docID,
+		"schema_version": types.CoagentSourcePacketSchemaV1,
+		"kind":           "evidence_update",
+		"summary":        "browser-hook-001",
+		"claims": []map[string]any{{
+			"text": "A sourced update arrived.",
+		}},
+		"notes": []string{"Fold this into the next revision."},
 	})
 	w := httptest.NewRecorder()
 	h.HandleTestTextureResearchFindings(w, req)
@@ -5463,13 +5619,38 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 	}
 
 	req := textureRequest(t, http.MethodPost, "/api/test/texture/worker-update", map[string]any{
-		"doc_id":       docID,
-		"update_id":    "browser-worker-update-001",
-		"role":         "super",
-		"artifacts":    []string{"artifacts/evolution-ca.html"},
-		"tests":        []string{"node artifacts/evolution-ca.verify.js passed"},
-		"proposals":    []string{"Mention the verified visualization in the next draft."},
-		"evidence_ids": []string{"evidence-browser-001"},
+		"doc_id":         docID,
+		"role":           "super",
+		"schema_version": types.CoagentSourcePacketSchemaV1,
+		"kind":           "execution_result",
+		"summary":        "browser-worker-update-001",
+		"sources": []map[string]any{
+			{
+				"source_id": "src-artifact",
+				"kind":      "file_artifact",
+				"target": map[string]any{
+					"uri": "file_artifact:artifacts/evolution-ca.html",
+				},
+			},
+			{
+				"source_id": "src-test",
+				"kind":      "test_run",
+				"target": map[string]any{
+					"uri": "test_run:node artifacts/evolution-ca.verify.js passed",
+				},
+			},
+			{
+				"source_id": "src-evidence",
+				"kind":      "evidence",
+				"target": map[string]any{
+					"uri": "evidence:evidence-browser-001",
+				},
+			},
+		},
+		"actions": []map[string]any{{
+			"type":      "revise_texture",
+			"objective": "Mention the verified visualization in the next draft.",
+		}},
 	})
 	w := httptest.NewRecorder()
 	h.HandleTestTextureWorkerUpdate(w, req)
@@ -5504,7 +5685,7 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.Role != AgentProfileSuper || len(update.Artifacts) != 1 || len(update.Tests) != 1 || len(update.Proposals) != 1 {
+	if update.Role != AgentProfileSuper || len(coagentPacketSourceURIs(update.Packet, "file_artifact")) != 1 || len(coagentPacketSourceURIs(update.Packet, "test_run")) != 1 || len(update.Packet.Actions) == 0 {
 		t.Fatalf("unexpected structured update: %+v", update)
 	}
 	if update.TrajectoryID != trajectoryIDForRun(&workerRun) || update.TrajectoryID != trajectoryIDForRun(&textureRun) {
@@ -8326,7 +8507,7 @@ func TestTextureAgentRevisionDeliversOwnerRequestToResidentActor(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("pending owner updates = %d, want 1 (P1#2: owner request must not be dropped)", len(updates))
 	}
-	if updates[0].Kind != "owner_revision_request" || !strings.Contains(updates[0].Content, "Add a risks section") {
+	if updates[0].Packet.Kind != "decision_request" || !strings.Contains(updates[0].Content, "Add a risks section") {
 		t.Fatalf("delivered update = %+v, want owner_revision_request carrying the prompt", updates[0])
 	}
 

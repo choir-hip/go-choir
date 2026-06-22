@@ -395,11 +395,12 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 		WithToolExecutionContext(context.Background(), parent),
 		"update_coagent",
 		json.RawMessage(fmt.Sprintf(`{
-		"update_id":"shared-work-directive-1",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"%s",
 		"channel_id":"shared-work",
-		"kind":"directive",
-		"summary":"Please inspect the runtime tool wiring."
+		"kind":"decision_request",
+		"summary":"Please inspect the runtime tool wiring.",
+		"notes":["Please inspect the runtime tool wiring."]
 	}`, child.AgentID)),
 	)
 	if err != nil {
@@ -520,20 +521,22 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	toolCtx := WithToolExecutionContext(ctx, &superRun)
 	_, err := registry.Execute(toolCtx, "update_coagent", json.RawMessage(`{
-		"update_id":"skip-level-private",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"agent-cosuper-skip",
-		"kind":"directive",
-		"summary":"Change direction privately."
+		"kind":"decision_request",
+		"summary":"Change direction privately.",
+		"notes":["Change direction privately."]
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "skip-level directive") {
 		t.Fatalf("update_coagent error = %v, want skip-level directive rejection", err)
 	}
 
 	raw, err := registry.Execute(toolCtx, "update_coagent", json.RawMessage(`{
-		"update_id":"skip-level-vsuper-forward",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"agent-vsuper-skip",
-		"kind":"directive",
-		"summary":"Forward this verifier scope adjustment to the implementation co-super."
+		"kind":"decision_request",
+		"summary":"Forward this verifier scope adjustment to the implementation co-super.",
+		"notes":["Forward this verifier scope adjustment to the implementation co-super."]
 	}`))
 	if err != nil {
 		t.Fatalf("update_coagent owning vsuper directive: %v", err)
@@ -546,7 +549,7 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent: %v\n%s", err, raw)
 	}
-	if resp.UpdateID != "skip-level-vsuper-forward" || resp.AgentID != "agent-vsuper-skip" || resp.Status != "submitted" {
+	if strings.TrimSpace(resp.UpdateID) == "" || resp.AgentID != "agent-vsuper-skip" || resp.Status != "submitted" {
 		t.Fatalf("unexpected update response: %+v", resp)
 	}
 	messages, _, err := rt.ChannelRead("skip-level-channel", 0)
@@ -3179,16 +3182,11 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
 	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
 		"agent_id":"texture:doc-1",
-		"kind":"findings",
-		"findings":["Model releases this week improved reasoning and tool use."],
-		"evidence":[
-			{
-				"kind":"web_page",
-				"source_uri":"https://example.com/release",
-				"title":"Release notes",
-				"content":"Release notes describing stronger reasoning and tool use."
-			}
-		],
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"Model release evidence",
+		"claims":[{"text":"Model releases this week improved reasoning and tool use.","source_ids":["src-release"]}],
+		"sources":[{"source_id":"src-release","kind":"content_item","target":{"uri":"https://example.com/release","title":"Release notes"},"selectors":[{"kind":"whole_resource"}],"evidence":{"state":"available","confidence":"medium","rights_scope":"private_user_source"}}],
 		"notes":["The claim is recent enough that priors alone are weak."],
 		"questions":["Should we mention the release date explicitly?"]
 	}`))
@@ -3220,38 +3218,23 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get coagent update: %v", err)
 	}
-	// The tool response was normalized to delivery metadata only; inline
-	// evidence must still be persisted and linked on the durable update.
-	if len(finding.EvidenceIDs) != 1 {
-		t.Fatalf("evidence_ids = %+v, want 1 id", finding.EvidenceIDs)
-	}
-
-	evidence, err := s.GetEvidence(context.Background(), finding.EvidenceIDs[0], "user-alice")
-	if err != nil {
-		t.Fatalf("get evidence: %v", err)
-	}
-	if evidence.Title != "Release notes" {
-		t.Fatalf("evidence title = %q, want %q", evidence.Title, "Release notes")
+	if len(finding.Packet.Sources) != 1 || finding.Packet.Sources[0].SourceID != "src-release" {
+		t.Fatalf("packet sources = %+v, want release source", finding.Packet.Sources)
 	}
 	if finding.MessageSeq != resp.Cursor {
 		t.Fatalf("update message_seq = %d, want %d", finding.MessageSeq, resp.Cursor)
 	}
-	if finding.Kind != "findings" || finding.Role != AgentProfileResearcher {
+	if finding.Packet.Kind != "evidence_update" || finding.Role != AgentProfileResearcher {
 		t.Fatalf("unexpected coagent update role/kind: %+v", finding)
 	}
 
 	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
 		"agent_id":"texture:doc-1",
-		"kind":"findings",
-		"findings":["Model releases this week improved reasoning and tool use."],
-		"evidence":[
-			{
-				"kind":"web_page",
-				"source_uri":"https://example.com/release",
-				"title":"Release notes",
-				"content":"Release notes describing stronger reasoning and tool use."
-			}
-		],
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"evidence_update",
+		"summary":"Model release evidence",
+		"claims":[{"text":"Model releases this week improved reasoning and tool use.","source_ids":["src-release"]}],
+		"sources":[{"source_id":"src-release","kind":"content_item","target":{"uri":"https://example.com/release","title":"Release notes"},"selectors":[{"kind":"whole_resource"}],"evidence":{"state":"available","confidence":"medium","rights_scope":"private_user_source"}}],
 		"notes":["The claim is recent enough that priors alone are weak."],
 		"questions":["Should we mention the release date explicitly?"]
 	}`))
@@ -3282,7 +3265,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 	var findingsMessage *types.ChannelMessage
 	for i := range messages {
-		if messages[i].ToAgentID == "texture:doc-1" && strings.Contains(messages[i].Content, finding.EvidenceIDs[0]) {
+		if messages[i].ToAgentID == "texture:doc-1" && strings.Contains(messages[i].Content, "src-release") {
 			findingsMessage = &messages[i]
 			break
 		}
@@ -3502,24 +3485,20 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	rawArgs := json.RawMessage(`{
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"execution_result",
+		"summary":"cellular automata visualization verified",
 		"agent_id":"texture:doc-structured-worker-update",
 		"channel_id":"doc-structured-worker-update",
-		"findings":["A deterministic seed keeps the cellular automata visualization reproducible."],
-		"artifacts":["artifacts/evolution-ca.html"],
-		"refs":["git:abc123"],
-		"tests":["node artifacts/evolution-ca.verify.js passed"],
+		"claims":[{"text":"A deterministic seed keeps the cellular automata visualization reproducible.","source_ids":["src-artifact","src-test","src-git"]}],
+		"sources":[
+			{"source_id":"src-artifact","kind":"file_artifact","target":{"uri":"file_artifact:artifacts/evolution-ca.html","title":"artifacts/evolution-ca.html"}},
+			{"source_id":"src-git","kind":"patch","target":{"uri":"patch:git-abc123","title":"git:abc123"}},
+			{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:evolution-ca-verify","title":"node artifacts/evolution-ca.verify.js passed"}}
+		],
+		"actions":[{"type":"import_source","objective":"Ground whether the chosen mutation model has precedent in published toy-model literature.","inputs":{"suggested_next_owner":"texture"},"expected_sources":[{"kind":"content_item","required":true}]}],
 		"questions":["Should mutation rate be user-adjustable in the UI?"],
-		"proposals":["Expose generation count, population, and mean fitness as visible controls."],
-		"capability_requests":[{
-			"capability":"research",
-			"requested_role":"researcher",
-			"objective":"Ground whether the chosen mutation model has precedent in published toy-model literature.",
-			"why_needed":"Super should not invent source context while reporting execution evidence.",
-			"blocking":true,
-			"evidence_needed_for":"Source Ledger [S2]",
-			"suggested_next_owner":"texture"
-		}],
-		"notes":["This is a structured worker update, not a document patch."]
+		"notes":["This is a structured worker update, not a document patch.","Expose generation count, population, and mean fitness as visible controls."]
 	}`)
 	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
 	if err != nil {
@@ -3550,16 +3529,17 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if update.AgentID != "super:primary" || update.TargetAgentID != "texture:"+docID || update.Role != AgentProfileSuper {
 		t.Fatalf("unexpected worker update identity: %+v", update)
 	}
-	if len(update.Artifacts) != 1 || update.Artifacts[0] != "artifacts/evolution-ca.html" {
-		t.Fatalf("artifacts = %+v", update.Artifacts)
+	sourceURIs := coagentPacketSourceURIs(update.Packet)
+	if !containsString(sourceURIs, "file_artifact:artifacts/evolution-ca.html") {
+		t.Fatalf("packet sources missing artifact: %+v", sourceURIs)
 	}
-	if len(update.Tests) != 1 || !strings.Contains(update.Tests[0], "passed") {
-		t.Fatalf("tests = %+v", update.Tests)
+	if !containsString(sourceURIs, "test_run:evolution-ca-verify") {
+		t.Fatalf("packet sources missing test: %+v", sourceURIs)
 	}
-	if len(update.CapabilityRequests) != 1 || update.CapabilityRequests[0].Capability != "research" || !update.CapabilityRequests[0].Blocking {
-		t.Fatalf("capability_requests = %+v", update.CapabilityRequests)
+	if len(update.Packet.Actions) != 1 || update.Packet.Actions[0].Type != "import_source" {
+		t.Fatalf("packet actions = %+v", update.Packet.Actions)
 	}
-	if !strings.Contains(update.Content, "Artifacts:") || !strings.Contains(update.Content, "Tests:") || !strings.Contains(update.Content, "Proposals:") || !strings.Contains(update.Content, "Capability requests:") {
+	if !strings.Contains(update.Content, "Sources:") || !strings.Contains(update.Content, "Actions:") || !strings.Contains(update.Content, "Questions:") || !strings.Contains(update.Content, "Notes:") {
 		t.Fatalf("worker update content is not structured: %q", update.Content)
 	}
 
@@ -3616,9 +3596,11 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	}
 
 	rawDifferent, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
-		"update_id":"legacy-human-label-is-ignored",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"texture:doc-structured-worker-update",
-		"tests":["different test payload"]
+		"kind":"execution_result",
+		"summary":"different test payload",
+		"sources":[{"source_id":"src-different-test","kind":"test_run","target":{"uri":"test_run:different test payload"}}]
 	}`))
 	if err != nil {
 		t.Fatalf("same human label with different payload should mint distinct runtime update: %v", err)
@@ -3682,11 +3664,15 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
-		"update_id":"super-authoritative-channel",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"texture:doc-authoritative-channel",
 		"channel_id":"not-the-texture-doc-channel",
-		"artifacts":["artifacts/authoritative.txt"],
-		"tests":["verified authoritative channel routing"]
+		"kind":"execution_result",
+		"summary":"super authoritative channel",
+		"sources":[
+			{"source_id":"src-artifact","kind":"file_artifact","target":{"uri":"file_artifact:artifacts/authoritative.txt"}},
+			{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:verified authoritative channel routing"}}
+		]
 	}`))
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
@@ -3784,15 +3770,20 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
-		"update_id":"super-authoritative-parent",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"researcher:decoy",
-		"artifacts":["artifacts/parent.txt"],
-		"tests":["verified parent target routing"]
+		"kind":"execution_result",
+		"summary":"super authoritative parent",
+		"sources":[
+			{"source_id":"src-artifact","kind":"file_artifact","target":{"uri":"file_artifact:artifacts/parent.txt"}},
+			{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:verified parent target routing"}}
+		]
 	}`))
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
 	var resp struct {
+		UpdateID  string `json:"update_id"`
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 	}
@@ -3803,7 +3794,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		t.Fatalf("response target = %q channel = %q, want parent texture target/channel", resp.AgentID, resp.ChannelID)
 	}
 
-	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-authoritative-parent")
+	update, err := s.GetWorkerUpdate(ctx, ownerID, resp.UpdateID)
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
@@ -3886,15 +3877,20 @@ func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
-		"update_id":"super-requester-target",
+		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"researcher:decoy-requester",
-		"artifacts":["artifacts/requester.txt"],
-		"tests":["verified requester target routing"]
+		"kind":"execution_result",
+		"summary":"super requester target",
+		"sources":[
+			{"source_id":"src-artifact","kind":"file_artifact","target":{"uri":"file_artifact:artifacts/requester.txt"}},
+			{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:verified requester target routing"}}
+		]
 	}`))
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
 	var resp struct {
+		UpdateID  string `json:"update_id"`
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 	}
@@ -3905,7 +3901,7 @@ func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 		t.Fatalf("response target = %q channel = %q, want texture requester target/channel", resp.AgentID, resp.ChannelID)
 	}
 
-	update, err := s.GetWorkerUpdate(ctx, ownerID, "super-requester-target")
+	update, err := s.GetWorkerUpdate(ctx, ownerID, resp.UpdateID)
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
@@ -3940,9 +3936,11 @@ func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testi
 
 	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
 	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "update_coagent", json.RawMessage(`{
-		"update_id":"remote-worker-update",
-		"findings":["Remote worker update should route through inherited Texture metadata."],
-		"tests":["metadata-only requester routing passed"]
+		"schema_version":"coagent_source_packet.v1",
+		"kind":"execution_result",
+		"summary":"remote worker update",
+		"claims":[{"text":"Remote worker update should route through inherited Texture metadata."}],
+		"sources":[{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:metadata-only requester routing passed"}}]
 	}`))
 	if err != nil {
 		t.Fatalf("update_coagent should not require local requester agent row: %v", err)
@@ -4008,17 +4006,18 @@ func TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing(t 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rawArgs := json.RawMessage(fmt.Sprintf(`{
-				"update_id":%q,
-				"agent_id":%q,
-				"kind":"blocker",
-				"summary":"Worker canceled after terminal evidence failed to publish.",
-				"findings":["update_coagent should route to the Texture channel when the explicit target is stale."]
-			}`, tc.updateID, tc.explicitAgentID))
+					"schema_version":"coagent_source_packet.v1",
+					"agent_id":%q,
+					"kind":"blocker",
+					"summary":"Worker canceled after terminal evidence failed to publish (%s).",
+					"claims":[{"text":"update_coagent should route to the Texture channel when the explicit target is stale."}]
+				}`, tc.explicitAgentID, tc.updateID))
 			raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
 			if err != nil {
 				t.Fatalf("update_coagent: %v", err)
 			}
 			var resp struct {
+				UpdateID  string `json:"update_id"`
 				AgentID   string `json:"agent_id"`
 				ChannelID string `json:"channel_id"`
 				Status    string `json:"status"`
@@ -4029,7 +4028,10 @@ func TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing(t 
 			if resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
 				t.Fatalf("response target/channel/status = %+v, want texture fallback", resp)
 			}
-			update, err := s.GetWorkerUpdate(ctx, ownerID, tc.updateID)
+			if strings.TrimSpace(resp.UpdateID) == "" {
+				t.Fatalf("response missing runtime-derived update_id: %+v", resp)
+			}
+			update, err := s.GetWorkerUpdate(ctx, ownerID, resp.UpdateID)
 			if err != nil {
 				t.Fatalf("get worker update: %v", err)
 			}
@@ -4154,11 +4156,8 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
 		t.Fatalf("update target/channel = %q/%q", update.TargetAgentID, update.ChannelID)
 	}
-	if !containsString(update.EvidenceIDs, "event:event-delegate-fallback") || !containsString(update.EvidenceIDs, "worker_loop:worker-run-timeout") {
-		t.Fatalf("evidence ids missing delegate refs: %+v", update.EvidenceIDs)
-	}
-	if !strings.Contains(strings.Join(update.Findings, "\n"), "no AppChangePackages") {
-		t.Fatalf("findings missing export blocker: %+v", update.Findings)
+	if !strings.Contains(coagentClaimsText(update.Packet.Claims), "no AppChangePackages") {
+		t.Fatalf("claims missing export blocker: %+v", update.Packet.Claims)
 	}
 	if !strings.Contains(update.Content, "worker delegation returned") {
 		t.Fatalf("worker update content missing delegate summary: %q", update.Content)
@@ -4599,11 +4598,11 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
 	}
-	joinedFindings := strings.Join(updates[0].Findings, "\n")
+	joinedFindings := coagentClaimsText(updates[0].Packet.Claims)
 	if !strings.Contains(joinedFindings, "returned 1 AppChangePackage") || strings.Contains(joinedFindings, "no AppChangePackages") {
 		t.Fatalf("worker update checkpoint did not preserve successful package: %+v", updates[0])
 	}
-	if packageID == "" || !containsString(updates[0].EvidenceIDs, "app_change_package:"+packageID) {
+	if packageID == "" || !containsString(coagentPacketSourceURIs(updates[0].Packet), "app_change_package:"+packageID) {
 		t.Fatalf("worker update checkpoint missing AppChangePackage evidence: %+v", updates[0])
 	}
 }
@@ -4748,12 +4747,16 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 				ID:   "call-worker-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
-					"update_id":"worker-direct-update",
-					"findings":["WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint."],
-					"artifacts":["artifacts/chiron-proof.png"],
-					"tests":["worker update routing verified"],
-					"proposals":["Continue supervision from the active Texture dashboard."]
-				}`),
+						"schema_version":"coagent_source_packet.v1",
+						"kind":"execution_result",
+						"summary":"WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint.",
+						"claims":[{"text":"WORKER_DIRECT_UPDATE: vsuper produced a substantive checkpoint.","source_ids":["src-proof","src-test"]}],
+						"sources":[
+							{"source_id":"src-proof","kind":"screenshot","target":{"uri":"screenshot:artifacts/chiron-proof.png","title":"artifacts/chiron-proof.png"}},
+							{"source_id":"src-test","kind":"test_run","target":{"uri":"test_run:worker-update-routing","title":"worker update routing verified"}}
+						],
+						"notes":["Continue supervision from the active Texture dashboard."]
+					}`),
 			}},
 		},
 		&ToolLoopResponse{
@@ -4835,9 +4838,9 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 	if !strings.HasPrefix(update.UpdateID, "mirrored-worker-update-") || update.TargetAgentID != "texture:"+docID || update.ChannelID != docID {
 		t.Fatalf("unexpected mirrored update routing: %+v", update)
 	}
-	if !strings.Contains(strings.Join(update.Findings, "\n"), "WORKER_DIRECT_UPDATE") ||
-		!containsString(update.Artifacts, "artifacts/chiron-proof.png") ||
-		!containsString(update.Tests, "worker update routing verified") {
+	if !strings.Contains(coagentClaimsText(update.Packet.Claims), "WORKER_DIRECT_UPDATE") ||
+		!containsString(coagentPacketSourceURIs(update.Packet), "screenshot:artifacts/chiron-proof.png") ||
+		!containsString(coagentPacketSourceURIs(update.Packet), "test_run:worker-update-routing") {
 		t.Fatalf("mirrored update did not preserve worker payload: %+v", update)
 	}
 	messages, err := activeStore.ListChannelMessages(ctx, ownerID, docID, 0, 10)
@@ -5934,17 +5937,18 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
 	}
-	if !strings.Contains(strings.Join(updates[0].Findings, "\n"), "worker_observed") ||
-		!containsString(updates[0].Refs, "worker_vm:vm-worker-timeout") ||
-		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-timeout") {
+	sourceURIs := coagentPacketSourceURIs(updates[0].Packet)
+	if !strings.Contains(coagentClaimsText(updates[0].Packet.Claims), "worker_observed") ||
+		!containsString(sourceURIs, "worker_vm:vm-worker-timeout") ||
+		!containsString(sourceURIs, "worker_loop:worker-run-timeout") {
 		t.Fatalf("worker update checkpoint missing delegate evidence: %+v", updates[0])
 	}
-	joinedFindings := strings.Join(updates[0].Findings, "\n")
+	joinedFindings := coagentClaimsText(updates[0].Packet.Claims)
 	if !strings.Contains(joinedFindings, "returned 1 AppChangePackage") || strings.Contains(joinedFindings, "no AppChangePackages") {
 		t.Fatalf("worker update checkpoint did not preserve child package evidence: %+v", updates[0])
 	}
-	if !containsString(updates[0].Artifacts, "package-timeout") ||
-		!containsString(updates[0].Artifacts, "manifest-timeout") {
+	if !containsString(sourceURIs, "app_change_package:package-timeout") ||
+		!strings.Contains(strings.Join(sourceURIs, "\n"), "manifest-timeout") {
 		t.Fatalf("worker update checkpoint missing child export artifacts: %+v", updates[0])
 	}
 }
@@ -6081,12 +6085,13 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
 	}
-	joinedFindings := strings.Join(updates[0].Findings, "\n")
+	joinedFindings := coagentClaimsText(updates[0].Packet.Claims)
+	sourceURIs := coagentPacketSourceURIs(updates[0].Packet)
 	if !strings.Contains(joinedFindings, "worker event summary was preserved with 2 event") ||
-		!strings.Contains(strings.Join(updates[0].Notes, "\n"), "checkpoint_source=async_finish_active") ||
-		!strings.Contains(strings.Join(updates[0].Notes, "\n"), "active_worker_obligation=true") ||
-		!containsString(updates[0].Refs, "worker_vm:vm-worker-active") ||
-		!containsString(updates[0].EvidenceIDs, "worker_loop:worker-run-active") {
+		!strings.Contains(strings.Join(updates[0].Packet.Notes, "\n"), "checkpoint_source=async_finish_active") ||
+		!strings.Contains(strings.Join(updates[0].Packet.Notes, "\n"), "active_worker_obligation=true") ||
+		!containsString(sourceURIs, "worker_vm:vm-worker-active") ||
+		!containsString(sourceURIs, "worker_loop:worker-run-active") {
 		t.Fatalf("worker update checkpoint missing active finish evidence: %+v", updates[0])
 	}
 
@@ -6543,7 +6548,7 @@ func (p *blockingExecuteProvider) releaseAll() {
 	})
 }
 
-func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID string) []types.WorkerUpdateRecord {
+func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID string) []types.CoagentSourcePacket {
 	t.Helper()
 	deliveries, err := s.ListPendingWorkerUpdates(context.Background(), ownerID, agentID, 20)
 	if err != nil {
@@ -6552,7 +6557,7 @@ func pendingDeliveriesForAgent(t *testing.T, s *store.Store, ownerID, agentID st
 	return deliveries
 }
 
-func workerUpdatesContain(updates []types.WorkerUpdateRecord, content string) bool {
+func workerUpdatesContain(updates []types.CoagentSourcePacket, content string) bool {
 	for _, update := range updates {
 		if strings.Contains(update.Content, content) {
 			return true

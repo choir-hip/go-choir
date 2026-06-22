@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -98,12 +96,8 @@ func latestSuccessfulResearchToolResultOutput(eventsForRun []types.EventRecord) 
 }
 
 func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent types.EventRecord, toolName string, output map[string]any) (map[string]any, error) {
-	updateID := "runtime-research-checkpoint-" + strings.TrimSpace(toolEvent.EventID)
-	if updateID == "runtime-research-checkpoint-" {
-		updateID = "runtime-research-checkpoint-" + uuid.NewString()
-	}
 	summary := fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run completed.", toolName)
-	kind := "evidence"
+	kind := "evidence_update"
 	if runErr != nil {
 		summary = fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run failed.", toolName)
 		kind = "blocker"
@@ -121,14 +115,16 @@ func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent 
 	if rec != nil && strings.TrimSpace(rec.RunID) != "" {
 		notes = append(notes, "Researcher loop: "+strings.TrimSpace(rec.RunID))
 	}
+	sourceRefs := append([]string{}, researcherFallbackEvidenceIDs(output)...)
+	sourceRefs = append(sourceRefs, refs...)
+	sources := coagentSourcesFromRefs(sourceRefs)
 	args := map[string]any{
-		"update_id":    updateID,
-		"kind":         kind,
-		"summary":      summary,
-		"findings":     findings,
-		"evidence_ids": researcherFallbackEvidenceIDs(output),
-		"refs":         trimDedupeNonEmpty(refs),
-		"notes":        trimDedupeNonEmpty(notes),
+		"schema_version": types.CoagentSourcePacketSchemaV1,
+		"kind":           kind,
+		"summary":        summary,
+		"claims":         coagentClaimsFromTexts(findings, sources),
+		"sources":        sources,
+		"notes":          trimDedupeNonEmpty(notes),
 	}
 	if rec != nil {
 		if textureAgentID := strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by_agent_id")); isTextureAgentID(textureAgentID) {
@@ -210,7 +206,7 @@ func researcherFallbackFinding(toolName string, output map[string]any, failed bo
 
 func researcherFallbackEvidenceIDs(output map[string]any) []string {
 	if evidenceID := stringMapValue(output, "evidence_id"); evidenceID != "" {
-		return []string{evidenceID}
+		return []string{"evidence:" + evidenceID}
 	}
 	return nil
 }

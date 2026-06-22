@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -17,78 +18,133 @@ func RegisterCoagentUpdateTools(registry *ToolRegistry, rt *Runtime) error {
 }
 
 type submitCoagentUpdateArgs struct {
-	UpdateID           string                         `json:"update_id"`
-	Kind               string                         `json:"kind,omitempty"`
-	Summary            string                         `json:"summary,omitempty"`
-	AgentID            string                         `json:"agent_id,omitempty"`
-	ChannelID          string                         `json:"channel_id,omitempty"`
-	Findings           []string                       `json:"findings,omitempty"`
-	Evidence           []researchFindingEvidenceInput `json:"evidence,omitempty"`
-	EvidenceIDs        []string                       `json:"evidence_ids,omitempty"`
-	Artifacts          []string                       `json:"artifacts,omitempty"`
-	Refs               []string                       `json:"refs,omitempty"`
-	Tests              []string                       `json:"tests,omitempty"`
-	Questions          []string                       `json:"questions,omitempty"`
-	Proposals          []string                       `json:"proposals,omitempty"`
-	CapabilityRequests []types.CapabilityRequest      `json:"capability_requests,omitempty"`
-	Notes              []string                       `json:"notes,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+	ChannelID string `json:"channel_id,omitempty"`
+	types.CoagentSourcePacketPayload
 }
 
 func newUpdateCoagentTool(rt *Runtime) Tool {
 	return Tool{
 		Name:        "update_coagent",
-		Description: "Persist one structured non-canonical coagent update and wake the addressed owning agent. Use this for research findings, execution results, verification results, artifacts, blockers, directives, assignments, questions, proposals, and typed capability_requests. When the update should be citeable/transcludable in Texture, include typed refs/evidence such as source_service_item:<id>, content_id:<id>, evidence_id:<id>, command_output:<id>, diff_hunk:<id>, test_run:<id>, app_change_package:<id>, screenshot:<path>, video_artifact:<path>, benchmark_log:<path-or-id>, or evidence entries with source_uri/content/metadata.content_id. Prose-only findings and raw URLs are coordination, not native Texture sources. Runtime derives the durable update_id from the delivery envelope and normalized payload; do not invent one. A capability request is a signal to the owner/supervisor, not automatic routing.",
+		Description: "Append one addressed coagent source packet and wake the target actor. The canonical packet shape is schema_version, kind, summary, claims, sources, actions, questions, and notes. Texture may cite/embed only packet.sources; Super may execute only kind=execution_request packets with actions. Runtime derives update_id; do not send update_id or legacy findings/evidence_ids/evidence/artifacts/refs/tests/proposals/capability_requests fields.",
 		Parameters: jsonSchemaObject(map[string]any{
-			"update_id":    map[string]any{"type": "string", "description": "Deprecated and ignored for durable identity. Runtime derives update_id from the delivery envelope and normalized payload."},
-			"kind":         map[string]any{"type": "string", "enum": []string{"findings", "evidence", "capability_request", "blocker", "proposal", "status", "verification", "artifact", "question", "directive", "assignment"}},
-			"summary":      map[string]any{"type": "string"},
-			"agent_id":     map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
-			"channel_id":   map[string]any{"type": "string"},
-			"findings":     stringArraySchema(),
-			"evidence_ids": stringArraySchema(),
-			"evidence": map[string]any{
+			"schema_version": map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
+			"kind":           map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
+			"summary":        map[string]any{"type": "string"},
+			"agent_id":       map[string]any{"type": "string", "description": "Required for researcher deliveries: the addressed Texture coagent id (texture:<doc_id>). Other roles should set the addressed owning coagent id when not implicit."},
+			"channel_id":     map[string]any{"type": "string"},
+			"claims": map[string]any{
 				"type": "array",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"kind":       map[string]any{"type": "string"},
-						"source_uri": map[string]any{"type": "string"},
-						"title":      map[string]any{"type": "string"},
-						"content":    map[string]any{"type": "string"},
-						"metadata":   map[string]any{"type": "object"},
+						"claim_id":            map[string]any{"type": "string"},
+						"text":                map[string]any{"type": "string"},
+						"source_ids":          stringArraySchema(),
+						"stance":              map[string]any{"type": "string", "enum": []string{"supports", "qualifies", "contradicts", "background"}},
+						"recommended_surface": map[string]any{"type": "string", "enum": []string{"inline_ref", "block_embed", "source_panel", "decision_log"}},
 					},
-					"required":             []string{"kind", "content"},
+					"required":             []string{"text"},
 					"additionalProperties": false,
 				},
 			},
-			"artifacts": stringArraySchema(),
-			"refs":      stringArraySchema(),
-			"tests":     stringArraySchema(),
+			"sources": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"source_id": map[string]any{"type": "string"},
+						"kind":      map[string]any{"type": "string"},
+						"target": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"uri":        map[string]any{"type": "string"},
+								"title":      map[string]any{"type": "string"},
+								"media_type": map[string]any{"type": "string"},
+							},
+							"additionalProperties": false,
+						},
+						"selectors": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"kind":   map[string]any{"type": "string"},
+									"quote":  map[string]any{"type": "string"},
+									"start":  map[string]any{"type": "integer"},
+									"end":    map[string]any{"type": "integer"},
+									"x":      map[string]any{"type": "number"},
+									"y":      map[string]any{"type": "number"},
+									"width":  map[string]any{"type": "number"},
+									"height": map[string]any{"type": "number"},
+								},
+								"required":             []string{"kind"},
+								"additionalProperties": false,
+							},
+						},
+						"evidence": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"state":        map[string]any{"type": "string", "enum": []string{"available", "pending", "blocked", "unavailable"}},
+								"confidence":   map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
+								"rights_scope": map[string]any{"type": "string"},
+							},
+							"additionalProperties": false,
+						},
+					},
+					"required":             []string{"kind", "target"},
+					"additionalProperties": false,
+				},
+			},
+			"actions": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"action_id": map[string]any{"type": "string"},
+						"type":      map[string]any{"type": "string", "enum": []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "request_worker", "import_source", "revise_texture"}},
+						"objective": map[string]any{"type": "string"},
+						"inputs":    map[string]any{"type": "object"},
+						"expected_sources": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"kind":     map[string]any{"type": "string"},
+									"required": map[string]any{"type": "boolean"},
+								},
+								"required":             []string{"kind"},
+								"additionalProperties": false,
+							},
+						},
+						"safety": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"mutation_class": map[string]any{"type": "string", "enum": []string{"green", "yellow", "orange", "red", "black"}},
+								"network":        map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
+								"file_mutation":  map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
+							},
+							"additionalProperties": false,
+						},
+					},
+					"required":             []string{"type", "objective"},
+					"additionalProperties": false,
+				},
+			},
 			"questions": stringArraySchema(),
-			"proposals": stringArraySchema(),
-			"capability_requests": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"capability":           map[string]any{"type": "string"},
-						"requested_role":       map[string]any{"type": "string"},
-						"objective":            map[string]any{"type": "string"},
-						"why_needed":           map[string]any{"type": "string"},
-						"blocking":             map[string]any{"type": "boolean"},
-						"evidence_needed_for":  map[string]any{"type": "string"},
-						"suggested_next_owner": map[string]any{"type": "string"},
-					},
-					"required":             []string{"capability", "objective"},
-					"additionalProperties": false,
-				},
-			},
-			"notes": stringArraySchema(),
-		}, nil, false),
+			"notes":     stringArraySchema(),
+		}, []string{"schema_version", "kind", "summary"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			if err := rejectLegacyUpdateCoagentFields(raw); err != nil {
+				return "", err
+			}
 			var in submitCoagentUpdateArgs
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode update_coagent args: %w", err)
+			}
+			packet := normalizeCoagentSourcePacketPayload(in.CoagentSourcePacketPayload)
+			if err := validateCoagentSourcePacketPayload(packet); err != nil {
+				return "", err
 			}
 			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
 			agentID := stringFromToolContext(ctx, toolCtxAgentID)
@@ -98,27 +154,13 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("update_coagent missing coagent context")
 			}
 
-			update := types.WorkerUpdateRecord{
-				OwnerID:            ownerID,
-				AgentID:            agentID,
-				Role:               nonEmpty(role, configuredAgentProfileForRun(ctxRunRecord(ctx))),
-				Kind:               strings.TrimSpace(in.Kind),
-				Summary:            strings.TrimSpace(in.Summary),
-				Findings:           trimNonEmpty(in.Findings),
-				EvidenceIDs:        trimNonEmpty(in.EvidenceIDs),
-				Artifacts:          trimNonEmpty(in.Artifacts),
-				Refs:               trimNonEmpty(in.Refs),
-				Tests:              trimNonEmpty(in.Tests),
-				Questions:          trimNonEmpty(in.Questions),
-				Proposals:          trimNonEmpty(in.Proposals),
-				CapabilityRequests: normalizeCapabilityRequests(in.CapabilityRequests),
-				Notes:              trimNonEmpty(in.Notes),
-				CreatedAt:          time.Now().UTC(),
+			update := types.CoagentSourcePacket{
+				OwnerID:   ownerID,
+				AgentID:   agentID,
+				Role:      nonEmpty(role, configuredAgentProfileForRun(ctxRunRecord(ctx))),
+				Packet:    packet,
+				CreatedAt: time.Now().UTC(),
 			}
-			if workerUpdateEmpty(update) {
-				return "", fmt.Errorf("update_coagent requires summary, findings, evidence, evidence_ids, artifacts, refs, tests, questions, proposals, capability_requests, or notes")
-			}
-
 			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
 			if err != nil {
 				return "", err
@@ -152,17 +194,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			update.TargetAgentID = targetAgentID
 			update.ChannelID = channelID
 			update.TrajectoryID = trajectoryID
-			update.UpdateID = deriveWorkerUpdateID(update, in.Evidence)
-
-			evidenceIDs := append([]string(nil), update.EvidenceIDs...)
-			for idx, item := range in.Evidence {
-				rec, err := ensureFindingEvidence(ctx, rt.store, ownerID, agentID, update.UpdateID, idx, item)
-				if err != nil {
-					return "", err
-				}
-				evidenceIDs = append(evidenceIDs, rec.EvidenceID)
-			}
-			update.EvidenceIDs = evidenceIDs
+			update.UpdateID = deriveWorkerUpdateID(update)
 			update.Content = buildWorkerUpdateMessage(update)
 
 			message := &types.ChannelMessage{
@@ -238,45 +270,32 @@ func ctxRunRecord(ctx context.Context) *types.RunRecord {
 	return runRec
 }
 
-func workerUpdateEmpty(update types.WorkerUpdateRecord) bool {
-	return strings.TrimSpace(update.Summary) == "" &&
-		len(update.Findings) == 0 &&
-		len(update.EvidenceIDs) == 0 &&
-		len(update.Artifacts) == 0 &&
-		len(update.Refs) == 0 &&
-		len(update.Tests) == 0 &&
-		len(update.Questions) == 0 &&
-		len(update.Proposals) == 0 &&
-		len(update.CapabilityRequests) == 0 &&
-		len(update.Notes) == 0
+func workerUpdateEmpty(update types.CoagentSourcePacket) bool {
+	return coagentPacketPayloadEmpty(update.Packet)
 }
 
-func buildWorkerUpdateMessage(update types.WorkerUpdateRecord) string {
+func buildWorkerUpdateMessage(update types.CoagentSourcePacket) string {
+	packet := update.Packet
 	var b strings.Builder
-	b.WriteString("Coagent update ready.")
+	b.WriteString("Coagent source packet ready.")
 	if strings.TrimSpace(update.Role) != "" {
 		b.WriteString("\nRole: ")
 		b.WriteString(strings.TrimSpace(update.Role))
 		b.WriteString(".")
 	}
-	if strings.TrimSpace(update.Kind) != "" {
-		b.WriteString("\nKind: ")
-		b.WriteString(strings.TrimSpace(update.Kind))
-		b.WriteString(".")
-	}
-	if strings.TrimSpace(update.Summary) != "" {
+	b.WriteString("\nSchema: ")
+	b.WriteString(packet.SchemaVersion)
+	b.WriteString("\nKind: ")
+	b.WriteString(packet.Kind)
+	if strings.TrimSpace(packet.Summary) != "" {
 		b.WriteString("\nSummary: ")
-		b.WriteString(strings.TrimSpace(update.Summary))
+		b.WriteString(strings.TrimSpace(packet.Summary))
 	}
-	appendWorkerUpdateSection(&b, "Findings", update.Findings)
-	appendWorkerUpdateSection(&b, "Evidence", update.EvidenceIDs)
-	appendWorkerUpdateSection(&b, "Artifacts", update.Artifacts)
-	appendWorkerUpdateSection(&b, "Refs", update.Refs)
-	appendWorkerUpdateSection(&b, "Tests", update.Tests)
-	appendWorkerUpdateSection(&b, "Questions", update.Questions)
-	appendWorkerUpdateSection(&b, "Proposals", update.Proposals)
-	appendCapabilityRequestSection(&b, update.CapabilityRequests)
-	appendWorkerUpdateSection(&b, "Notes", update.Notes)
+	appendCoagentClaimSection(&b, packet.Claims)
+	appendCoagentSourceSection(&b, packet.Sources)
+	appendCoagentActionSection(&b, packet.Actions)
+	appendWorkerUpdateSection(&b, "Questions", packet.Questions)
+	appendWorkerUpdateSection(&b, "Notes", packet.Notes)
 	return b.String()
 }
 
@@ -298,149 +317,433 @@ func appendWorkerUpdateSection(b *strings.Builder, title string, items []string)
 	}
 }
 
-func appendCapabilityRequestSection(b *strings.Builder, requests []types.CapabilityRequest) {
-	if len(requests) == 0 {
+func appendCoagentClaimSection(b *strings.Builder, claims []types.CoagentPacketClaim) {
+	if len(claims) == 0 {
 		return
 	}
-	b.WriteString("\n\nCapability requests:\n")
-	for _, request := range requests {
-		b.WriteString("- capability=")
-		b.WriteString(request.Capability)
-		if request.RequestedRole != "" {
-			b.WriteString(" requested_role=")
-			b.WriteString(request.RequestedRole)
+	b.WriteString("\n\nClaims:\n")
+	for _, claim := range claims {
+		text := strings.TrimSpace(claim.Text)
+		if text == "" {
+			continue
 		}
-		if request.Blocking {
-			b.WriteString(" blocking=true")
+		b.WriteString("- ")
+		if claim.ClaimID != "" {
+			b.WriteString(claim.ClaimID)
+			b.WriteString(": ")
 		}
-		if request.EvidenceNeededFor != "" {
-			b.WriteString(" evidence_needed_for=")
-			b.WriteString(request.EvidenceNeededFor)
+		b.WriteString(text)
+		if len(claim.SourceIDs) > 0 {
+			b.WriteString(" [sources: ")
+			b.WriteString(strings.Join(claim.SourceIDs, ", "))
+			b.WriteString("]")
 		}
-		if request.SuggestedNextOwner != "" {
-			b.WriteString(" suggested_next_owner=")
-			b.WriteString(request.SuggestedNextOwner)
-		}
-		b.WriteString("\n  objective: ")
-		b.WriteString(request.Objective)
-		if request.WhyNeeded != "" {
-			b.WriteString("\n  why_needed: ")
-			b.WriteString(request.WhyNeeded)
+		if claim.Stance != "" {
+			b.WriteString(" stance=")
+			b.WriteString(claim.Stance)
 		}
 		b.WriteString("\n")
 	}
 }
 
-func deriveWorkerUpdateID(update types.WorkerUpdateRecord, evidence []researchFindingEvidenceInput) string {
-	type normalizedEvidence struct {
-		Kind      string `json:"kind,omitempty"`
-		SourceURI string `json:"source_uri,omitempty"`
-		Title     string `json:"title,omitempty"`
-		Content   string `json:"content,omitempty"`
-		Metadata  string `json:"metadata,omitempty"`
+func appendCoagentSourceSection(b *strings.Builder, sources []types.CoagentPacketSource) {
+	if len(sources) == 0 {
+		return
 	}
+	b.WriteString("\n\nSources:\n")
+	for _, source := range sources {
+		kind := strings.TrimSpace(source.Kind)
+		uri := strings.TrimSpace(source.Target.URI)
+		title := strings.TrimSpace(source.Target.Title)
+		if kind == "" && uri == "" && title == "" {
+			continue
+		}
+		b.WriteString("- ")
+		if source.SourceID != "" {
+			b.WriteString(source.SourceID)
+			b.WriteString(": ")
+		}
+		b.WriteString(kind)
+		if title != "" {
+			b.WriteString(" ")
+			b.WriteString(strconvQuote(title))
+		}
+		if uri != "" {
+			b.WriteString(" <")
+			b.WriteString(uri)
+			b.WriteString(">")
+		}
+		b.WriteString("\n")
+	}
+}
+
+func appendCoagentActionSection(b *strings.Builder, actions []types.CoagentPacketAction) {
+	if len(actions) == 0 {
+		return
+	}
+	b.WriteString("\n\nActions:\n")
+	for _, action := range actions {
+		if strings.TrimSpace(action.Type) == "" && strings.TrimSpace(action.Objective) == "" {
+			continue
+		}
+		b.WriteString("- ")
+		if action.ActionID != "" {
+			b.WriteString(action.ActionID)
+			b.WriteString(": ")
+		}
+		b.WriteString(action.Type)
+		if action.Objective != "" {
+			b.WriteString(" - ")
+			b.WriteString(action.Objective)
+		}
+		b.WriteString("\n")
+	}
+}
+
+func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
 	payload := struct {
-		OwnerID            string                    `json:"owner_id"`
-		AgentID            string                    `json:"agent_id"`
-		TargetAgentID      string                    `json:"target_agent_id"`
-		ChannelID          string                    `json:"channel_id"`
-		TrajectoryID       string                    `json:"trajectory_id,omitempty"`
-		Role               string                    `json:"role,omitempty"`
-		Kind               string                    `json:"kind,omitempty"`
-		Summary            string                    `json:"summary,omitempty"`
-		Findings           []string                  `json:"findings,omitempty"`
-		EvidenceIDs        []string                  `json:"evidence_ids,omitempty"`
-		Evidence           []normalizedEvidence      `json:"evidence,omitempty"`
-		Artifacts          []string                  `json:"artifacts,omitempty"`
-		Refs               []string                  `json:"refs,omitempty"`
-		Tests              []string                  `json:"tests,omitempty"`
-		Questions          []string                  `json:"questions,omitempty"`
-		Proposals          []string                  `json:"proposals,omitempty"`
-		CapabilityRequests []types.CapabilityRequest `json:"capability_requests,omitempty"`
-		Notes              []string                  `json:"notes,omitempty"`
+		OwnerID       string                           `json:"owner_id"`
+		AgentID       string                           `json:"agent_id"`
+		TargetAgentID string                           `json:"target_agent_id"`
+		ChannelID     string                           `json:"channel_id"`
+		TrajectoryID  string                           `json:"trajectory_id,omitempty"`
+		Role          string                           `json:"role,omitempty"`
+		Packet        types.CoagentSourcePacketPayload `json:"packet"`
 	}{
-		OwnerID:            strings.TrimSpace(update.OwnerID),
-		AgentID:            strings.TrimSpace(update.AgentID),
-		TargetAgentID:      strings.TrimSpace(update.TargetAgentID),
-		ChannelID:          strings.TrimSpace(update.ChannelID),
-		TrajectoryID:       strings.TrimSpace(update.TrajectoryID),
-		Role:               strings.TrimSpace(update.Role),
-		Kind:               strings.TrimSpace(update.Kind),
-		Summary:            strings.TrimSpace(update.Summary),
-		Findings:           append([]string(nil), update.Findings...),
-		EvidenceIDs:        append([]string(nil), update.EvidenceIDs...),
-		Artifacts:          append([]string(nil), update.Artifacts...),
-		Refs:               append([]string(nil), update.Refs...),
-		Tests:              append([]string(nil), update.Tests...),
-		Questions:          append([]string(nil), update.Questions...),
-		Proposals:          append([]string(nil), update.Proposals...),
-		CapabilityRequests: append([]types.CapabilityRequest(nil), update.CapabilityRequests...),
-		Notes:              append([]string(nil), update.Notes...),
-	}
-	for _, item := range evidence {
-		payload.Evidence = append(payload.Evidence, normalizedEvidence{
-			Kind:      strings.TrimSpace(item.Kind),
-			SourceURI: strings.TrimSpace(item.SourceURI),
-			Title:     strings.TrimSpace(item.Title),
-			Content:   strings.TrimSpace(item.Content),
-			Metadata:  rawJSONText(item.Metadata),
-		})
+		OwnerID:       strings.TrimSpace(update.OwnerID),
+		AgentID:       strings.TrimSpace(update.AgentID),
+		TargetAgentID: strings.TrimSpace(update.TargetAgentID),
+		ChannelID:     strings.TrimSpace(update.ChannelID),
+		TrajectoryID:  strings.TrimSpace(update.TrajectoryID),
+		Role:          strings.TrimSpace(update.Role),
+		Packet:        normalizeCoagentSourcePacketPayload(update.Packet),
 	}
 	raw, _ := json.Marshal(payload)
 	sum := sha256.Sum256(raw)
 	return "upd-" + hex.EncodeToString(sum[:])[:32]
 }
 
-func validateExistingWorkerUpdate(existing, want types.WorkerUpdateRecord) error {
+func validateExistingWorkerUpdate(existing, want types.CoagentSourcePacket) error {
 	if existing.AgentID != want.AgentID ||
 		existing.TargetAgentID != want.TargetAgentID ||
 		existing.ChannelID != want.ChannelID ||
 		existing.Role != want.Role ||
-		existing.Kind != want.Kind ||
-		existing.Summary != want.Summary ||
 		existing.Content != want.Content ||
-		!stringSlicesEqual(existing.Findings, want.Findings) ||
-		!stringSlicesEqual(existing.EvidenceIDs, want.EvidenceIDs) ||
-		!stringSlicesEqual(existing.Artifacts, want.Artifacts) ||
-		!stringSlicesEqual(existing.Refs, want.Refs) ||
-		!stringSlicesEqual(existing.Tests, want.Tests) ||
-		!stringSlicesEqual(existing.Questions, want.Questions) ||
-		!stringSlicesEqual(existing.Proposals, want.Proposals) ||
-		!capabilityRequestsEqual(existing.CapabilityRequests, want.CapabilityRequests) ||
-		!stringSlicesEqual(existing.Notes, want.Notes) {
+		!reflect.DeepEqual(normalizeCoagentSourcePacketPayload(existing.Packet), normalizeCoagentSourcePacketPayload(want.Packet)) {
 		return fmt.Errorf("update_id %s already exists with different payload", want.UpdateID)
 	}
 	return nil
 }
 
-func normalizeCapabilityRequests(requests []types.CapabilityRequest) []types.CapabilityRequest {
-	out := make([]types.CapabilityRequest, 0, len(requests))
-	for _, request := range requests {
-		normalized := types.CapabilityRequest{
-			Capability:         strings.TrimSpace(request.Capability),
-			RequestedRole:      strings.TrimSpace(request.RequestedRole),
-			Objective:          strings.TrimSpace(request.Objective),
-			WhyNeeded:          strings.TrimSpace(request.WhyNeeded),
-			Blocking:           request.Blocking,
-			EvidenceNeededFor:  strings.TrimSpace(request.EvidenceNeededFor),
-			SuggestedNextOwner: strings.TrimSpace(request.SuggestedNextOwner),
+func normalizeCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload) types.CoagentSourcePacketPayload {
+	packet.SchemaVersion = strings.TrimSpace(packet.SchemaVersion)
+	packet.Kind = strings.TrimSpace(packet.Kind)
+	packet.Summary = strings.TrimSpace(packet.Summary)
+	packet.Questions = trimNonEmpty(packet.Questions)
+	packet.Notes = trimNonEmpty(packet.Notes)
+
+	claims := make([]types.CoagentPacketClaim, 0, len(packet.Claims))
+	for _, claim := range packet.Claims {
+		normalized := types.CoagentPacketClaim{
+			ClaimID:            strings.TrimSpace(claim.ClaimID),
+			Text:               strings.TrimSpace(claim.Text),
+			SourceIDs:          trimNonEmpty(claim.SourceIDs),
+			Stance:             strings.TrimSpace(claim.Stance),
+			RecommendedSurface: strings.TrimSpace(claim.RecommendedSurface),
 		}
-		if normalized.Capability == "" && normalized.Objective == "" {
+		if normalized.Text != "" {
+			claims = append(claims, normalized)
+		}
+	}
+	packet.Claims = claims
+
+	sources := make([]types.CoagentPacketSource, 0, len(packet.Sources))
+	for _, source := range packet.Sources {
+		normalized := types.CoagentPacketSource{
+			SourceID: strings.TrimSpace(source.SourceID),
+			Kind:     strings.TrimSpace(source.Kind),
+			Target: types.CoagentPacketSourceTarget{
+				URI:       strings.TrimSpace(source.Target.URI),
+				Title:     strings.TrimSpace(source.Target.Title),
+				MediaType: strings.TrimSpace(source.Target.MediaType),
+			},
+			Evidence: types.CoagentPacketSourceEvidence{
+				State:       strings.TrimSpace(source.Evidence.State),
+				Confidence:  strings.TrimSpace(source.Evidence.Confidence),
+				RightsScope: strings.TrimSpace(source.Evidence.RightsScope),
+			},
+		}
+		for _, selector := range source.Selectors {
+			sel := types.CoagentPacketSourceSelector{
+				Kind:   strings.TrimSpace(selector.Kind),
+				Quote:  strings.TrimSpace(selector.Quote),
+				Start:  selector.Start,
+				End:    selector.End,
+				X:      selector.X,
+				Y:      selector.Y,
+				Width:  selector.Width,
+				Height: selector.Height,
+			}
+			if sel.Kind != "" {
+				normalized.Selectors = append(normalized.Selectors, sel)
+			}
+		}
+		if normalized.Kind != "" || normalized.Target.URI != "" || normalized.Target.Title != "" {
+			sources = append(sources, normalized)
+		}
+	}
+	packet.Sources = sources
+
+	actions := make([]types.CoagentPacketAction, 0, len(packet.Actions))
+	for _, action := range packet.Actions {
+		normalized := types.CoagentPacketAction{
+			ActionID:  strings.TrimSpace(action.ActionID),
+			Type:      strings.TrimSpace(action.Type),
+			Objective: strings.TrimSpace(action.Objective),
+			Inputs:    action.Inputs,
+			Safety: types.CoagentPacketActionSafety{
+				MutationClass: strings.TrimSpace(action.Safety.MutationClass),
+				Network:       strings.TrimSpace(action.Safety.Network),
+				FileMutation:  strings.TrimSpace(action.Safety.FileMutation),
+			},
+		}
+		for _, expected := range action.ExpectedSources {
+			kind := strings.TrimSpace(expected.Kind)
+			if kind == "" {
+				continue
+			}
+			normalized.ExpectedSources = append(normalized.ExpectedSources, types.CoagentPacketExpectedSource{Kind: kind, Required: expected.Required})
+		}
+		if normalized.Type != "" || normalized.Objective != "" {
+			actions = append(actions, normalized)
+		}
+	}
+	packet.Actions = actions
+	return packet
+}
+
+func validateCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload) error {
+	if packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 {
+		return fmt.Errorf("update_coagent schema_version must be %q", types.CoagentSourcePacketSchemaV1)
+	}
+	if !validCoagentPacketKind(packet.Kind) {
+		return fmt.Errorf("update_coagent kind %q is not supported", packet.Kind)
+	}
+	if packet.Summary == "" {
+		return fmt.Errorf("update_coagent summary is required")
+	}
+	if coagentPacketPayloadEmpty(packet) {
+		return fmt.Errorf("update_coagent requires at least one of claims, sources, actions, questions, or notes")
+	}
+	if packet.Kind == "execution_request" && len(packet.Actions) == 0 {
+		return fmt.Errorf("update_coagent kind=execution_request requires actions")
+	}
+	return nil
+}
+
+func validCoagentPacketKind(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request":
+		return true
+	default:
+		return false
+	}
+}
+
+func coagentPacketPayloadEmpty(packet types.CoagentSourcePacketPayload) bool {
+	return len(packet.Claims) == 0 &&
+		len(packet.Sources) == 0 &&
+		len(packet.Actions) == 0 &&
+		len(packet.Questions) == 0 &&
+		len(packet.Notes) == 0
+}
+
+func rejectLegacyUpdateCoagentFields(raw json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("decode update_coagent args: %w", err)
+	}
+	allowed := map[string]bool{
+		"agent_id":       true,
+		"channel_id":     true,
+		"schema_version": true,
+		"kind":           true,
+		"summary":        true,
+		"claims":         true,
+		"sources":        true,
+		"actions":        true,
+		"questions":      true,
+		"notes":          true,
+	}
+	legacy := map[string]bool{
+		"update_id":           true,
+		"findings":            true,
+		"evidence_ids":        true,
+		"evidence":            true,
+		"artifacts":           true,
+		"refs":                true,
+		"tests":               true,
+		"proposals":           true,
+		"capability_requests": true,
+	}
+	for key := range fields {
+		key = strings.TrimSpace(key)
+		if legacy[key] {
+			return fmt.Errorf("update_coagent legacy field %q is not accepted; use claims, sources, actions, questions, or notes", key)
+		}
+		if !allowed[key] {
+			return fmt.Errorf("update_coagent unknown field %q", key)
+		}
+	}
+	return nil
+}
+
+func newCoagentPacket(kind, summary string, claims []types.CoagentPacketClaim, sources []types.CoagentPacketSource, actions []types.CoagentPacketAction, questions, notes []string) types.CoagentSourcePacketPayload {
+	return normalizeCoagentSourcePacketPayload(types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          strings.TrimSpace(kind),
+		Summary:       strings.TrimSpace(summary),
+		Claims:        claims,
+		Sources:       sources,
+		Actions:       actions,
+		Questions:     questions,
+		Notes:         notes,
+	})
+}
+
+func coagentSourceFromURI(sourceID, kind, uri, title string) types.CoagentPacketSource {
+	return types.CoagentPacketSource{
+		SourceID: strings.TrimSpace(sourceID),
+		Kind:     strings.TrimSpace(kind),
+		Target: types.CoagentPacketSourceTarget{
+			URI:   strings.TrimSpace(uri),
+			Title: strings.TrimSpace(title),
+		},
+		Selectors: []types.CoagentPacketSourceSelector{{Kind: "whole_resource"}},
+		Evidence: types.CoagentPacketSourceEvidence{
+			State:       "available",
+			Confidence:  "medium",
+			RightsScope: "private_user_source",
+		},
+	}
+}
+
+func coagentSourcesFromRefs(refs []string) []types.CoagentPacketSource {
+	out := make([]types.CoagentPacketSource, 0, len(refs))
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
 			continue
 		}
-		out = append(out, normalized)
+		key, _ := splitTypedWorkerUpdateRef(ref)
+		kind := key
+		if kind == "" && looksLikeArtifactPath(ref) {
+			kind = "file_artifact"
+			ref = "file_artifact:" + ref
+		}
+		if kind == "" {
+			continue
+		}
+		if kind == "evidence" {
+			kind = "content_item"
+		}
+		sourceID := "src-" + sanitizeExportPart(ref)
+		if sourceID == "src-" || seen[sourceID] {
+			continue
+		}
+		seen[sourceID] = true
+		out = append(out, coagentSourceFromURI(sourceID, kind, ref, ref))
 	}
 	return out
 }
 
-func capabilityRequestsEqual(a, b []types.CapabilityRequest) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+func coagentClaimsFromTexts(texts []string, sources []types.CoagentPacketSource) []types.CoagentPacketClaim {
+	sourceIDs := make([]string, 0, len(sources))
+	for _, source := range sources {
+		if id := strings.TrimSpace(source.SourceID); id != "" {
+			sourceIDs = append(sourceIDs, id)
 		}
 	}
-	return true
+	claims := make([]types.CoagentPacketClaim, 0, len(texts))
+	for _, text := range trimNonEmpty(texts) {
+		claims = append(claims, coagentClaim(text, sourceIDs...))
+	}
+	return claims
+}
+
+func coagentClaim(text string, sourceIDs ...string) types.CoagentPacketClaim {
+	return types.CoagentPacketClaim{
+		Text:               strings.TrimSpace(text),
+		SourceIDs:          trimNonEmpty(sourceIDs),
+		Stance:             "supports",
+		RecommendedSurface: "decision_log",
+	}
+}
+
+func coagentAction(actionType, objective string, inputs map[string]any, expected []types.CoagentPacketExpectedSource, safety types.CoagentPacketActionSafety) types.CoagentPacketAction {
+	return types.CoagentPacketAction{
+		Type:            strings.TrimSpace(actionType),
+		Objective:       strings.TrimSpace(objective),
+		Inputs:          inputs,
+		ExpectedSources: expected,
+		Safety:          safety,
+	}
+}
+
+func coagentActionsFromTexts(texts []string) []types.CoagentPacketAction {
+	actions := make([]types.CoagentPacketAction, 0, len(texts))
+	for _, text := range trimNonEmpty(texts) {
+		actions = append(actions, coagentAction("revise_texture", text, nil, nil, types.CoagentPacketActionSafety{}))
+	}
+	return actions
+}
+
+func coagentSourcesFromResearchEvidence(items []researchFindingEvidenceInput) []types.CoagentPacketSource {
+	sources := make([]types.CoagentPacketSource, 0, len(items))
+	for i, item := range items {
+		kind := strings.TrimSpace(item.Kind)
+		uri := strings.TrimSpace(item.SourceURI)
+		if kind == "" && uri == "" {
+			continue
+		}
+		sourceID := fmt.Sprintf("src-evidence-%d", i+1)
+		sources = append(sources, coagentSourceFromURI(sourceID, firstNonEmpty(kind, "content_item"), uri, item.Title))
+	}
+	return sources
+}
+
+func coagentPacketSummary(packet types.CoagentSourcePacketPayload) string {
+	return strings.TrimSpace(packet.Summary)
+}
+
+func coagentPacketKind(packet types.CoagentSourcePacketPayload) string {
+	return strings.TrimSpace(packet.Kind)
+}
+
+func coagentPacketQuestions(packet types.CoagentSourcePacketPayload) []string {
+	return trimNonEmpty(packet.Questions)
+}
+
+func coagentPacketNotes(packet types.CoagentSourcePacketPayload) []string {
+	return trimNonEmpty(packet.Notes)
+}
+
+func coagentPacketSourceURIs(packet types.CoagentSourcePacketPayload, kinds ...string) []string {
+	want := map[string]bool{}
+	for _, kind := range kinds {
+		if kind = strings.TrimSpace(kind); kind != "" {
+			want[kind] = true
+		}
+	}
+	out := []string{}
+	for _, source := range packet.Sources {
+		if len(want) > 0 && !want[strings.TrimSpace(source.Kind)] {
+			continue
+		}
+		if uri := strings.TrimSpace(source.Target.URI); uri != "" {
+			out = append(out, uri)
+		}
+	}
+	return out
 }

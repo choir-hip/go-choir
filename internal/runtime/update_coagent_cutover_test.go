@@ -15,6 +15,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+func testCoagentUpdatePacket(kind, summary string) types.CoagentSourcePacketPayload {
+	return newCoagentPacket(kind, summary, []types.CoagentPacketClaim{coagentClaim(summary)}, nil, nil, nil, nil)
+}
+
 func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
@@ -34,7 +38,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 		t.Fatalf("create trajectory: %v", err)
 	}
 
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-restart-1",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:impl",
@@ -42,8 +46,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 		ChannelID:     superAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "status",
-		Summary:       "implementation evidence is ready",
+		Packet:        testCoagentUpdatePacket("evidence_update", "implementation evidence is ready"),
 		Content:       "implementation evidence is ready",
 		CreatedAt:     time.Now().UTC(),
 	}
@@ -120,7 +123,7 @@ func TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite(t *testing.T) {
 		t.Fatalf("start researcher run: %v", err)
 	}
 
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-texture-warm-consume",
 		OwnerID:       ownerID,
 		AgentID:       "researcher:warm",
@@ -128,10 +131,8 @@ func TestTextureWarmInjectedUpdateIsConsumedByRevisionWrite(t *testing.T) {
 		ChannelID:     docID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileResearcher,
-		Kind:          "findings",
-		Summary:       "grounded warm finding",
+		Packet:        testCoagentUpdatePacket("evidence_update", "grounded warm finding"),
 		Content:       "grounded warm finding",
-		Findings:      []string{"grounded warm finding"},
 		CreatedAt:     now,
 	}
 	message := types.ChannelMessage{
@@ -802,7 +803,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create second work item: %v", err)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-combined-rewarm",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:verifier",
@@ -810,8 +811,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "verification",
-		Summary:       "combined restart update",
+		Packet:        testCoagentUpdatePacket("execution_result", "combined restart update"),
 		Content:       "pending update content for combined restart",
 		CreatedAt:     now.Add(time.Millisecond),
 	}
@@ -827,7 +827,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	if _, _, err := s1.DispatchWorkerUpdate(ctx, update, &message); err != nil {
 		t.Fatalf("dispatch update: %v", err)
 	}
-	otherUpdate := types.WorkerUpdateRecord{
+	otherUpdate := types.CoagentSourcePacket{
 		UpdateID:      "update-combined-rewarm-other",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:reviewer",
@@ -835,8 +835,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		ChannelID:     channelID,
 		TrajectoryID:  otherTrajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "status",
-		Summary:       "second trajectory restart update",
+		Packet:        testCoagentUpdatePacket("evidence_update", "second trajectory restart update"),
 		Content:       "pending update content for second trajectory",
 		CreatedAt:     now.Add(2 * time.Millisecond),
 	}
@@ -1442,7 +1441,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 	}); err != nil {
 		t.Fatalf("create process-restart trajectory: %v", err)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      m3RestartUpdateID,
 		OwnerID:       m3RestartOwnerID,
 		AgentID:       "co-super:process-verifier",
@@ -1450,8 +1449,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		ChannelID:     m3RestartChannelID,
 		TrajectoryID:  m3RestartTrajectory,
 		Role:          AgentProfileCoSuper,
-		Kind:          "verification",
-		Summary:       "process restart update",
+		Packet:        testCoagentUpdatePacket("execution_result", "process restart update"),
 		Content:       "pending update content from the killed process proof",
 		CreatedAt:     now.Add(time.Millisecond),
 	}
@@ -1488,7 +1486,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 type storeWriter interface {
 	UpsertAgent(context.Context, types.AgentRecord) error
 	CreateTrajectoryIfAbsent(context.Context, types.TrajectoryRecord) (types.TrajectoryRecord, error)
-	DispatchWorkerUpdate(context.Context, types.WorkerUpdateRecord, *types.ChannelMessage) (types.WorkerUpdateRecord, bool, error)
+	DispatchWorkerUpdate(context.Context, types.CoagentSourcePacket, *types.ChannelMessage) (types.CoagentSourcePacket, bool, error)
 	CreateWorkItem(context.Context, types.WorkItemRecord) (types.WorkItemRecord, error)
 }
 
@@ -1623,7 +1621,7 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 		t.Fatalf("resident lookup = (%+v, %v), want %s", resident, found, active.RunID)
 	}
 
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-resident-reuse",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:impl",
@@ -1631,7 +1629,7 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 		ChannelID:     active.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "status",
+		Packet:        testCoagentUpdatePacket("evidence_update", "new steering input"),
 		Content:       "new steering input",
 		CreatedAt:     time.Now().UTC(),
 	}
@@ -1701,7 +1699,7 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 	if err := s.CreateRun(ctx, blocked); err != nil {
 		t.Fatalf("create blocked historical run: %v", err)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-blocked-history",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:impl",
@@ -1709,7 +1707,7 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 		ChannelID:     blocked.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "status",
+		Packet:        testCoagentUpdatePacket("evidence_update", "durable backlog should start a fresh activation"),
 		Content:       "durable backlog should start a fresh activation",
 		CreatedAt:     now.Add(time.Millisecond),
 	}
@@ -1780,7 +1778,7 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-stall-1",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:verifier",
@@ -1788,8 +1786,7 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 		ChannelID:     superAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "verification",
-		Summary:       "verification result pending",
+		Packet:        testCoagentUpdatePacket("execution_result", "verification result pending"),
 		Content:       "verification result pending",
 		CreatedAt:     time.Now().UTC(),
 	}
@@ -1837,7 +1834,7 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 			updateID := "update-delivery-" + tc.name
 			now := time.Now().UTC()
 
-			update := types.WorkerUpdateRecord{
+			update := types.CoagentSourcePacket{
 				UpdateID:      updateID,
 				OwnerID:       ownerID,
 				AgentID:       "co-super:impl",
@@ -1845,8 +1842,7 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 				ChannelID:     "chan-delivery-" + tc.name,
 				TrajectoryID:  "traj-delivery-" + tc.name,
 				Role:          AgentProfileCoSuper,
-				Kind:          "status",
-				Summary:       "delivery rule evidence",
+				Packet:        testCoagentUpdatePacket("evidence_update", "delivery rule evidence"),
 				Content:       "delivery rule evidence",
 				CreatedAt:     now,
 			}
@@ -1940,7 +1936,7 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-alice"
 	now := time.Now().UTC()
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-stray-1",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:impl",
@@ -1948,8 +1944,7 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		ChannelID:     "chan-stray",
 		TrajectoryID:  "traj-stray",
 		Role:          AgentProfileCoSuper,
-		Kind:          "status",
-		Summary:       "stray metadata must not consume this",
+		Packet:        testCoagentUpdatePacket("evidence_update", "stray metadata must not consume this"),
 		Content:       "stray metadata must not consume this",
 		CreatedAt:     now,
 	}
@@ -2074,7 +2069,7 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 		t.Fatalf("create warm run: %v", err)
 	}
 
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-warm-1",
 		OwnerID:       ownerID,
 		AgentID:       "co-super:impl",
@@ -2082,8 +2077,7 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileCoSuper,
-		Kind:          "status",
-		Summary:       "warm steering evidence",
+		Packet:        testCoagentUpdatePacket("evidence_update", "warm steering evidence"),
 		Content:       "WARM_UPDATE_CONTENT: incorporate this before finishing.",
 		CreatedAt:     now.Add(time.Millisecond),
 	}

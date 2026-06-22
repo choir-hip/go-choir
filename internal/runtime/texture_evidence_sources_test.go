@@ -162,25 +162,23 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		t.Fatalf("CreateEvidence: %v", err)
 	}
 
-	update := types.WorkerUpdateRecord{
+	sources := coagentSourcesFromRefs([]string{
+		"source_service_item:srcitem_market_rules",
+		"source_service_item=srcitem_policy_digest",
+		"content_id:content-cloud-audit",
+		"evidence_id:ev-cloud-audit",
+		"free-form note mentioning srcitem_ignored in prose",
+	})
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-refs-source-entities",
 		OwnerID:       ownerID,
 		AgentID:       "researcher:refs",
 		TargetAgentID: targetAgentID,
 		ChannelID:     "doc-refs",
 		Role:          AgentProfileResearcher,
-		Kind:          "findings",
-		Summary:       "source refs ready",
-		Findings:      []string{"Typed refs should be available to Texture."},
-		Refs: []string{
-			"source_service_item:srcitem_market_rules",
-			"source_service_item=srcitem_policy_digest",
-			"content_id:content-cloud-audit",
-			"evidence_id:ev-cloud-audit",
-			"free-form note mentioning srcitem_ignored in prose",
-		},
-		Content:   "source refs ready",
-		CreatedAt: now,
+		Packet:        newCoagentPacket("evidence_update", "source refs ready", coagentClaimsFromTexts([]string{"Typed refs should be available to Texture."}, sources), sources, nil, nil, nil),
+		Content:       "source refs ready",
+		CreatedAt:     now,
 	}
 	message := types.ChannelMessage{
 		ChannelID:   update.ChannelID,
@@ -221,30 +219,27 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 	now := time.Now().UTC()
 	ownerID := "user-execution-sources"
 
-	updates := []types.WorkerUpdateRecord{{
+	sources := coagentSourcesFromRefs([]string{
+		"command_output:cmd-runtime-tests",
+		"diff_hunk:diff-texture-evidence",
+		"app_change_package:acp-structured-texture",
+		"./proof/screenshots/texture-sources.png",
+		"benchmark_log:bench-runtime-shards",
+	})
+	sources = append(sources, coagentSourceFromURI("src-test-runtime-focused", "test_run", "test_run:runtime-focused-test", "go test ./internal/runtime -run TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping -count=1: passed"))
+	updates := []types.CoagentSourcePacket{{
 		UpdateID:      "update-super-execution-sources",
 		OwnerID:       ownerID,
 		AgentID:       "super:execution",
 		TargetAgentID: "texture:doc-execution",
 		ChannelID:     "doc-execution",
 		Role:          AgentProfileSuper,
-		Kind:          "verification",
-		Summary:       "implementation and verification evidence ready",
-		Findings: []string{
-			"Do not scrape command_output:prose-only or diff_hunk:prose-only from ordinary findings.",
-		},
-		Refs: []string{
-			"command_output:cmd-runtime-tests",
-			"diff_hunk:diff-texture-evidence",
-			"app_change_package:acp-structured-texture",
-		},
-		Artifacts: []string{
-			"./proof/screenshots/texture-sources.png",
-			"benchmark_log:bench-runtime-shards",
-		},
-		Tests: []string{
-			"go test ./internal/runtime -run TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping -count=1: passed",
-		},
+		Packet: newCoagentPacket("execution_result", "implementation and verification evidence ready",
+			coagentClaimsFromTexts([]string{"Do not scrape command_output:prose-only or diff_hunk:prose-only from ordinary findings."}, sources),
+			sources,
+			nil,
+			nil,
+			nil),
 		Content:   "verification evidence ready",
 		CreatedAt: now,
 	}}
@@ -311,17 +306,15 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 	}
 	doc.CurrentRevisionID = parent.RevisionID
 
-	update := types.WorkerUpdateRecord{
+	sources := coagentSourcesFromRefs([]string{"source_service_item:srcitem_native_panel"})
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-native-source-refs",
 		OwnerID:       ownerID,
 		AgentID:       "researcher:native-sources",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
 		Role:          AgentProfileResearcher,
-		Kind:          "findings",
-		Summary:       "native source refs ready",
-		Findings:      []string{"The source-backed finding is ready."},
-		Refs:          []string{"source_service_item:srcitem_native_panel"},
+		Packet:        newCoagentPacket("evidence_update", "native source refs ready", coagentClaimsFromTexts([]string{"The source-backed finding is ready."}, sources), sources, nil, nil, nil),
 		Content:       "Use the source-backed finding.",
 		CreatedAt:     now,
 	}
@@ -461,17 +454,15 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	}
 	doc.CurrentRevisionID = parent.RevisionID
 
-	update := types.WorkerUpdateRecord{
+	sources := coagentSourcesFromRefs([]string{"evidence_id:" + evidenceID})
+	update := types.CoagentSourcePacket{
 		UpdateID:      "update-summary-source",
 		OwnerID:       ownerID,
 		AgentID:       "researcher:summary-source",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
 		Role:          AgentProfileResearcher,
-		Kind:          "findings",
-		Summary:       "source evidence ready",
-		Findings:      []string{"OpenAI GPT-5.5 public release evidence is ready."},
-		EvidenceIDs:   []string{evidenceID},
+		Packet:        newCoagentPacket("evidence_update", "source evidence ready", coagentClaimsFromTexts([]string{"OpenAI GPT-5.5 public release evidence is ready."}, sources), sources, nil, nil, nil),
 		Content:       "Use the OpenAI docs source evidence.",
 		CreatedAt:     now,
 	}

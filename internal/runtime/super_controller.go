@@ -163,9 +163,6 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			return err
 		}
-		if err := rt.markTextureRevisionRunUpdatesDelivered(ctx, rec); err != nil {
-			return err
-		}
 		return rt.completeSuccessfulRunWorkItems(ctx, rec)
 	}
 	if len(updateIDs) == 0 || rec.State != types.RunCompleted {
@@ -232,10 +229,10 @@ func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
 	return rec.AgentID == persistentSuperAgentID(rec.OwnerID)
 }
 
-func buildPersistentSuperUpdatePrompt(updates []types.WorkerUpdateRecord) string {
+func buildPersistentSuperUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
 	b.WriteString("Process the pending update_coagent records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Use privileged tools only for the requested execution work. When you have artifacts, test results, references, questions, or proposals, report them back with update_coagent to the addressed texture document.\n")
+	b.WriteString("Use privileged tools only for packet.kind=execution_request actions. When you have command output, diffs, tests, artifacts, questions, or blockers, report them back with update_coagent as packet.sources, claims, actions, questions, and notes.\n")
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -247,9 +244,9 @@ func buildPersistentSuperUpdatePrompt(updates []types.WorkerUpdateRecord) string
 			b.WriteString(" from=")
 			b.WriteString(update.AgentID)
 		}
-		if update.Kind != "" {
+		if kind := coagentPacketKind(update.Packet); kind != "" {
 			b.WriteString(" kind=")
-			b.WriteString(update.Kind)
+			b.WriteString(kind)
 		}
 		b.WriteString(":\n")
 		b.WriteString(strings.TrimSpace(update.Content))
@@ -331,7 +328,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	return rec, nil
 }
 
-func (rt *Runtime) assignedOpenWorkItemsForAgentUpdateBacklog(ctx context.Context, ownerID, agentID string, updates []types.WorkerUpdateRecord) ([]types.WorkItemRecord, error) {
+func (rt *Runtime) assignedOpenWorkItemsForAgentUpdateBacklog(ctx context.Context, ownerID, agentID string, updates []types.CoagentSourcePacket) ([]types.WorkItemRecord, error) {
 	seenTrajectories := map[string]bool{}
 	var out []types.WorkItemRecord
 	for _, update := range updates {
@@ -383,7 +380,7 @@ func workItemIDsForMetadata(workItems []types.WorkItemRecord) []string {
 	return ids
 }
 
-func buildCoagentBacklogPrompt(updates []types.WorkerUpdateRecord, workItems []types.WorkItemRecord) string {
+func buildCoagentBacklogPrompt(updates []types.CoagentSourcePacket, workItems []types.WorkItemRecord) string {
 	updatePrompt := buildCoagentUpdatePrompt(updates)
 	if len(workItems) == 0 {
 		return updatePrompt
@@ -398,7 +395,7 @@ func buildCoagentBacklogPrompt(updates []types.WorkerUpdateRecord, workItems []t
 	return updatePrompt + "\n\n" + workPrompt
 }
 
-func buildCoagentUpdatePrompt(updates []types.WorkerUpdateRecord) string {
+func buildCoagentUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
 	b.WriteString("Process the pending update_coagent records addressed to you.\n")
 	b.WriteString("Respond with the appropriate tool or final result for your role; report blockers with update_coagent when you cannot proceed.\n")
@@ -413,9 +410,9 @@ func buildCoagentUpdatePrompt(updates []types.WorkerUpdateRecord) string {
 			b.WriteString(" from=")
 			b.WriteString(update.AgentID)
 		}
-		if update.Kind != "" {
+		if kind := coagentPacketKind(update.Packet); kind != "" {
 			b.WriteString(" kind=")
-			b.WriteString(update.Kind)
+			b.WriteString(kind)
 		}
 		b.WriteString(":\n")
 		b.WriteString(strings.TrimSpace(update.Content))
@@ -454,7 +451,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)
 		}
-		fresh := make([]types.WorkerUpdateRecord, 0, len(updates))
+		fresh := make([]types.CoagentSourcePacket, 0, len(updates))
 		updateIDs := make([]string, 0, len(updates))
 		for _, update := range updates {
 			id := strings.TrimSpace(update.UpdateID)
@@ -579,7 +576,7 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 	if err != nil {
 		return messages, fmt.Errorf("list pending coagent updates for cold delivery: %w", err)
 	}
-	fresh := make([]types.WorkerUpdateRecord, 0, len(updates))
+	fresh := make([]types.CoagentSourcePacket, 0, len(updates))
 	updateIDs := make([]string, 0, len(updates))
 	for _, update := range updates {
 		id := strings.TrimSpace(update.UpdateID)
@@ -614,7 +611,7 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	return len(coagentUpdateIDsForRun(rec)) > 0
 }
 
-func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.WorkerUpdateRecord) {
+func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentSourcePacket) {
 	if rt == nil || rt.store == nil {
 		return
 	}

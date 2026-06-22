@@ -793,7 +793,7 @@ func addResearchFindingsCheckpointRequirement(ctx context.Context, rt *Runtime, 
 	if !shouldRequireResearchFindingsAfterTool(ctx, rt) {
 		return
 	}
-	result["next_instruction"] = "Submit a concise findings update from this latest research batch before any additional search/fetch turn. Include new facts, source refs, questions, or a precise blocker; if the batch only proved that final/current evidence is unavailable, report that blocker."
+	result["next_instruction"] = "Submit a concise update_coagent source packet from this latest research batch before any additional search/fetch turn. Use schema_version=\"coagent_source_packet.v1\" with kind=\"evidence_update\" or kind=\"blocker\", claims[], packet.sources for citeable handles, questions[], and notes[]."
 }
 
 func newFetchURLTool(httpClient *http.Client, rt *Runtime) Tool {
@@ -929,7 +929,7 @@ func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, re
 		model["gateway_status"] = "search_outage: gateway returned no merged results; use provider_health and attempts for the precise blocker"
 		model["next_instruction"] = "Report a precise blocker from provider_health and attempts. Do not claim live search succeeded or invent grounded facts."
 	} else if requireFindingsCheckpoint {
-		model["next_instruction"] = "Submit concise first findings from this search result before any additional search-only turn. Include 2-4 grounded facts, notes, questions, or a precise blocker; evidence entries may be omitted until richer evidence is ready."
+		model["next_instruction"] = "Submit a concise first update_coagent source packet from this search result before any additional search-only turn. Include 2-4 grounded claims, packet.sources when citeable handles are ready, notes, questions, or a precise blocker."
 	}
 	if degraded && !resp.Outage {
 		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"
@@ -1000,7 +1000,7 @@ func compactSourceSearchProjection(full map[string]any, resp *sourceSearchRespon
 		"source_identity":      "each result carries target_kind=source_service_item, item_id, source_id, fetch_id, and content_hash",
 	}
 	if requireFindingsCheckpoint {
-		model["next_instruction"] = "Submit concise first findings from this source_search result before any additional search-only turn. Include source IDs, item IDs, hashes, caveats, open gaps, and whether a web_search is still needed."
+		model["next_instruction"] = "Submit a concise first update_coagent source packet from this source_search result before any additional search-only turn. Include claims[], packet.sources for source/item handles, hashes/caveats in notes[], open gaps, and whether a web_search is still needed."
 	}
 	metadata := map[string]any{
 		"type":                 "source_search",
@@ -1028,7 +1028,7 @@ func compactFetchURLProjection(full map[string]any, content string, requireFindi
 		"projection_policy": "bounded excerpt; fetch/read deeper only when needed",
 	}
 	if requireFindingsCheckpoint {
-		model["next_instruction"] = "Submit a concise findings update from this latest fetch before any additional search/fetch turn. Include new facts, source refs, questions, or a precise blocker; if the fetch only proved that final/current evidence is unavailable, report that blocker."
+		model["next_instruction"] = "Submit a concise update_coagent source packet from this latest fetch before any additional search/fetch turn. Include new claims, packet.sources for citeable handles, questions, or a precise blocker; if the fetch only proved that final/current evidence is unavailable, report that blocker."
 	}
 	metadata := map[string]any{
 		"type":               "fetch_url",

@@ -31,7 +31,7 @@ body: |
   Reuse the informed context already present in the current document and prior worker messages.
   If this follow-up needs facts or evidence beyond what the workflow has already grounded, Probe (researcher) is the morphism class for that gap.
   If the follow-up needs generated artifacts, execution, or verification, Execute (request_super_execution) is the morphism class for super-delivered evidence.
-  If recent worker findings are only partial and the document needs more evidence, write only the reader-facing artifact state that the usable evidence supports, or keep the blocker/rationale in run output or record_texture_decision when no useful artifact edit exists. Do not paste process metadata, source-status notes, or checkpoint labels into the canonical document body. A later turn can open the next focused research branch. Do not write that a follow-up researcher was dispatched, requested, or will return unless a spawn_agent call actually succeeds in this turn or the recent worker messages already show that worker.
+  If recent worker source packets are only partial and the document needs more evidence, write only the reader-facing artifact state that the usable claims and packet.sources support, or keep the blocker/rationale in run output or record_texture_decision when no useful artifact edit exists. Do not paste process metadata, source-status notes, or checkpoint labels into the canonical document body. A later turn can open the next focused research branch. Do not write that a follow-up researcher was dispatched, requested, or will return unless a spawn_agent call actually succeeds in this turn or the recent worker messages already show that worker.
   {{else}}
   This document does not yet have grounded workflow history.
   {{if .UserAuthoredRevision}}
@@ -52,8 +52,8 @@ body: |
   Treat this run as one step in an ongoing document loop.
   Worker messages can wake later texture runs and trigger the next revision.
   Substantive topics deepen across many canonical versions; depth scales with subject matter, not a fixed research round count.
-  Prefer evidence-backed revisions over placeholder status documents. Incorporate each useful findings packet when it materially improves the document.
-  When worker findings arrive, patch_texture as soon as a packet can improve the document; do not wait for every researcher or super thread to finish.
+  Prefer evidence-backed revisions over placeholder status documents. Incorporate each useful source packet when it materially improves the document.
+  When worker source packets arrive, patch_texture as soon as a packet can improve the document; do not wait for every researcher or super thread to finish.
   Multi-revision work stalls when researchers stop early, not when Texture incorporates. If depth still remains after incorporating a packet, address active researchers with update_coagent follow-up questions or open the next spawn_agent research branch rather than treating one round as fulfillment. Stop when marginal returns diminish.
   Exception: if the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no super delivery has returned that evidence, Execute (request_super_execution) is available. Keep any such request small and concrete; if Texture does not use it, Audit the blocker instead of making a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification before super evidence arrives.
   Never use `[CMD]` as a pending/requested/target-only label, including in the initial v1 scaffold, source ledger, status table, or placeholder. If command evidence is still pending, write "command evidence pending" without the `[CMD]` marker. Use `[CMD]` only when a super delivery reports the actual command result or precise execution blocker.

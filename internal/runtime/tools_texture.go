@@ -485,7 +485,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 	if runRec := ctxRunRecord(ctx); runRec != nil {
 		trajectoryID = trajectoryIDForRun(runRec)
 	}
-	update := types.WorkerUpdateRecord{
+	update := types.CoagentSourcePacket{
 		UpdateID:      uuid.NewString(),
 		OwnerID:       ownerID,
 		AgentID:       requesterAgentID,
@@ -493,8 +493,13 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
 		Role:          AgentProfileTexture,
-		Kind:          "assignment",
-		Summary:       objective,
+		Packet: newCoagentPacket("execution_request", objective, nil, nil, []types.CoagentPacketAction{
+			coagentAction("request_worker", objective, map[string]any{"requested_by_run_id": requesterRunID}, nil, types.CoagentPacketActionSafety{
+				MutationClass: "red",
+				Network:       "allowed",
+				FileMutation:  "allowed",
+			}),
+		}, nil, nil),
 		CreatedAt:     now,
 	}
 	update.Content = buildWorkerUpdateMessage(update)

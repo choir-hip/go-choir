@@ -362,15 +362,7 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	role              VARCHAR(64) NOT NULL DEFAULT '',
 	kind              VARCHAR(64) NOT NULL DEFAULT '',
 	summary           LONGTEXT NOT NULL DEFAULT '',
-	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
-	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
-	artifacts_json    LONGTEXT NOT NULL DEFAULT '[]',
-	refs_json         LONGTEXT NOT NULL DEFAULT '[]',
-	tests_json        LONGTEXT NOT NULL DEFAULT '[]',
-	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
-	proposals_json    LONGTEXT NOT NULL DEFAULT '[]',
-	capability_requests_json LONGTEXT NOT NULL DEFAULT '[]',
-	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
+	packet_json       LONGTEXT NOT NULL DEFAULT '{}',
 	content           LONGTEXT NOT NULL DEFAULT '',
 	created_at        DATETIME NOT NULL,
 	delivered_to_loop_id VARCHAR(255) NOT NULL DEFAULT '',
@@ -649,7 +641,7 @@ func (s *Store) bootstrap() error {
 		{"browser_sessions", "candidate_trace_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"worker_updates", "kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
 		{"worker_updates", "summary", "LONGTEXT NOT NULL DEFAULT ''"},
-		{"worker_updates", "capability_requests_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
+		{"worker_updates", "packet_json", "LONGTEXT NOT NULL DEFAULT '{}'"},
 		{"worker_updates", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"worker_updates", "delivered_at", "DATETIME"},
 	} {
@@ -1875,7 +1867,7 @@ func (s *Store) ListResearchFindingsByTrajectory(ctx context.Context, ownerID, t
 }
 
 // GetWorkerUpdate returns a previously dispatched structured worker update.
-func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.WorkerUpdateRecord, error) {
+func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
 	row := s.db.QueryRowContext(ctx,
 		workerUpdateSelectSQL()+` WHERE owner_id = ? AND update_id = ?`,
 		ownerID, updateID,
@@ -1885,7 +1877,7 @@ func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (
 
 // ListWorkerUpdatesByTrajectory returns structured worker updates for one
 // trajectory ordered by creation time ascending.
-func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.WorkerUpdateRecord, error) {
+func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 500
 	}
@@ -1903,7 +1895,7 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 	}
 	defer func() { _ = rows.Close() }()
 
-	var updates []types.WorkerUpdateRecord
+	var updates []types.CoagentSourcePacket
 	for rows.Next() {
 		rec, err := scanWorkerUpdate(rows)
 		if err != nil {
@@ -1920,7 +1912,7 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 // ListPendingWorkerUpdates returns undelivered update_coagent records for one
 // target actor. These records are the durable wake backlog; channel_messages is
 // only the audit/replay surface.
-func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.WorkerUpdateRecord, error) {
+func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -1938,7 +1930,7 @@ func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAge
 		return nil, fmt.Errorf("query pending worker updates: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var updates []types.WorkerUpdateRecord
+	var updates []types.CoagentSourcePacket
 	for rows.Next() {
 		rec, err := scanWorkerUpdate(rows)
 		if err != nil {
@@ -1954,7 +1946,7 @@ func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAge
 
 // ListPendingWorkerUpdatesAll returns undelivered update_coagent records across
 // targets. Runtime boot sweep uses this as the cold-actor backlog oracle.
-func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]types.WorkerUpdateRecord, error) {
+func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 500
 	}
@@ -1968,7 +1960,7 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 		return nil, fmt.Errorf("query pending worker updates: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var updates []types.WorkerUpdateRecord
+	var updates []types.CoagentSourcePacket
 	for rows.Next() {
 		rec, err := scanWorkerUpdate(rows)
 		if err != nil {
@@ -1985,7 +1977,7 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 // ListCoagentMailboxBacklog returns update_coagent records after the durable
 // actor mailbox cursor. delivered_at is audit compatibility; the contiguous
 // cursor is the actor-facing processing boundary.
-func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.WorkerUpdateRecord, error) {
+func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -2015,7 +2007,7 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var updates []types.WorkerUpdateRecord
+	var updates []types.CoagentSourcePacket
 	for rows.Next() {
 		rec, err := scanWorkerUpdate(rows)
 		if err != nil {
@@ -2031,7 +2023,7 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 
 // ListCoagentMailboxBacklogAll returns actor mailbox backlog rows across
 // targets for boot-time re-warm sweeps.
-func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]types.WorkerUpdateRecord, error) {
+func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 500
 	}
@@ -2050,7 +2042,7 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var updates []types.WorkerUpdateRecord
+	var updates []types.CoagentSourcePacket
 	for rows.Next() {
 		rec, err := scanWorkerUpdate(rows)
 		if err != nil {
@@ -2335,10 +2327,10 @@ func (s *Store) DispatchResearchFinding(ctx context.Context, finding types.Resea
 // addressed channel audit message. The worker_updates row is the durable wake
 // backlog; the update_id is idempotent per owner, so retries can return the
 // existing update without duplicating delivery.
-func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpdateRecord, message *types.ChannelMessage) (types.WorkerUpdateRecord, bool, error) {
+func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("begin worker update transaction: %w", err)
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("begin worker update transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -2350,7 +2342,7 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 		return existing, false, nil
 	}
 	if !errors.Is(err, ErrNotFound) {
-		return types.WorkerUpdateRecord{}, false, err
+		return types.CoagentSourcePacket{}, false, err
 	}
 
 	row := tx.QueryRowContext(ctx,
@@ -2358,7 +2350,7 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 		message.ChannelID,
 	)
 	if err := row.Scan(&message.Seq); err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("query next worker update message sequence: %w", err)
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("query next worker update message sequence: %w", err)
 	}
 	if message.Timestamp.IsZero() {
 		message.Timestamp = time.Now().UTC()
@@ -2385,49 +2377,17 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 		message.Timestamp.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update channel message: %w", err)
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("insert worker update channel message: %w", err)
 	}
 
-	findingsJSON, err := marshalStringSliceJSON(update.Findings)
+	packetJSON, err := json.Marshal(update.Packet)
 	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update findings: %w", err)
-	}
-	evidenceIDsJSON, err := marshalStringSliceJSON(update.EvidenceIDs)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update evidence ids: %w", err)
-	}
-	artifactsJSON, err := marshalStringSliceJSON(update.Artifacts)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update artifacts: %w", err)
-	}
-	refsJSON, err := marshalStringSliceJSON(update.Refs)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update refs: %w", err)
-	}
-	testsJSON, err := marshalStringSliceJSON(update.Tests)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update tests: %w", err)
-	}
-	questionsJSON, err := marshalStringSliceJSON(update.Questions)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update questions: %w", err)
-	}
-	proposalsJSON, err := marshalStringSliceJSON(update.Proposals)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update proposals: %w", err)
-	}
-	capabilityRequestsJSON, err := json.Marshal(update.CapabilityRequests)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update capability requests: %w", err)
-	}
-	notesJSON, err := marshalStringSliceJSON(update.Notes)
-	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("marshal worker update notes: %w", err)
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("marshal coagent source packet: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, findings_json, evidence_ids_json, artifacts_json, refs_json, tests_json, questions_json, proposals_json, capability_requests_json, notes_json, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, packet_json, content, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		update.OwnerID,
 		update.UpdateID,
 		update.AgentID,
@@ -2436,25 +2396,17 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.WorkerUpd
 		update.MessageSeq,
 		update.TrajectoryID,
 		update.Role,
-		update.Kind,
-		update.Summary,
-		string(findingsJSON),
-		string(evidenceIDsJSON),
-		string(artifactsJSON),
-		string(refsJSON),
-		string(testsJSON),
-		string(questionsJSON),
-		string(proposalsJSON),
-		string(capabilityRequestsJSON),
-		string(notesJSON),
+		update.Packet.Kind,
+		update.Packet.Summary,
+		string(packetJSON),
 		update.Content,
 		update.CreatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("insert worker update record: %w", err)
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("insert worker update record: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return types.WorkerUpdateRecord{}, false, fmt.Errorf("commit worker update transaction: %w", err)
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("commit worker update transaction: %w", err)
 	}
 	return update, true, nil
 }
@@ -2701,20 +2653,14 @@ func scanResearchFinding(row interface{ Scan(...any) error }) (types.ResearchFin
 	return rec, nil
 }
 
-func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRecord, error) {
+func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.CoagentSourcePacket, error) {
 	var (
-		rec                    types.WorkerUpdateRecord
-		findingsJSON           string
-		evidenceIDsJSON        string
-		artifactsJSON          string
-		refsJSON               string
-		testsJSON              string
-		questionsJSON          string
-		proposalsJSON          string
-		capabilityRequestsJSON string
-		notesJSON              string
-		createdAt              string
-		deliveredAt            sql.NullString
+		rec         types.CoagentSourcePacket
+		kind        string
+		summary     string
+		packetJSON  string
+		createdAt   string
+		deliveredAt sql.NullString
 	)
 	err := row.Scan(
 		&rec.OwnerID,
@@ -2725,17 +2671,9 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 		&rec.MessageSeq,
 		&rec.TrajectoryID,
 		&rec.Role,
-		&rec.Kind,
-		&rec.Summary,
-		&findingsJSON,
-		&evidenceIDsJSON,
-		&artifactsJSON,
-		&refsJSON,
-		&testsJSON,
-		&questionsJSON,
-		&proposalsJSON,
-		&capabilityRequestsJSON,
-		&notesJSON,
+		&kind,
+		&summary,
+		&packetJSON,
 		&rec.Content,
 		&createdAt,
 		&rec.DeliveredToRunID,
@@ -2743,42 +2681,28 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return types.WorkerUpdateRecord{}, ErrNotFound
+			return types.CoagentSourcePacket{}, ErrNotFound
 		}
-		return types.WorkerUpdateRecord{}, fmt.Errorf("scan worker update: %w", err)
+		return types.CoagentSourcePacket{}, fmt.Errorf("scan worker update: %w", err)
 	}
-	for _, item := range []struct {
-		name string
-		raw  string
-		dst  *[]string
-	}{
-		{"findings", findingsJSON, &rec.Findings},
-		{"evidence_ids", evidenceIDsJSON, &rec.EvidenceIDs},
-		{"artifacts", artifactsJSON, &rec.Artifacts},
-		{"refs", refsJSON, &rec.Refs},
-		{"tests", testsJSON, &rec.Tests},
-		{"questions", questionsJSON, &rec.Questions},
-		{"proposals", proposalsJSON, &rec.Proposals},
-		{"notes", notesJSON, &rec.Notes},
-	} {
-		if err := json.Unmarshal([]byte(item.raw), item.dst); err != nil {
-			return types.WorkerUpdateRecord{}, fmt.Errorf("decode worker update %s: %w", item.name, err)
+	if strings.TrimSpace(packetJSON) != "" && strings.TrimSpace(packetJSON) != "{}" {
+		if err := json.Unmarshal([]byte(packetJSON), &rec.Packet); err != nil {
+			return types.CoagentSourcePacket{}, fmt.Errorf("decode coagent source packet: %w", err)
 		}
 	}
-	if strings.TrimSpace(capabilityRequestsJSON) == "" {
-		capabilityRequestsJSON = "[]"
-	}
-	if err := json.Unmarshal([]byte(capabilityRequestsJSON), &rec.CapabilityRequests); err != nil {
-		return types.WorkerUpdateRecord{}, fmt.Errorf("decode worker update capability_requests: %w", err)
+	if strings.TrimSpace(rec.Packet.SchemaVersion) == "" && strings.TrimSpace(kind) != "" {
+		rec.Packet.SchemaVersion = types.CoagentSourcePacketSchemaV1
+		rec.Packet.Kind = strings.TrimSpace(kind)
+		rec.Packet.Summary = strings.TrimSpace(summary)
 	}
 	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
-		return types.WorkerUpdateRecord{}, fmt.Errorf("parse worker update created_at: %w", err)
+		return types.CoagentSourcePacket{}, fmt.Errorf("parse worker update created_at: %w", err)
 	}
 	if deliveredAt.Valid {
 		t, err := time.Parse(time.RFC3339Nano, deliveredAt.String)
 		if err != nil {
-			return types.WorkerUpdateRecord{}, fmt.Errorf("parse worker update delivered_at: %w", err)
+			return types.CoagentSourcePacket{}, fmt.Errorf("parse worker update delivered_at: %w", err)
 		}
 		rec.DeliveredAt = &t
 	}
@@ -2787,10 +2711,8 @@ func scanWorkerUpdate(row interface{ Scan(...any) error }) (types.WorkerUpdateRe
 
 func workerUpdateSelectSQL() string {
 	return `SELECT owner_id, update_id, agent_id, target_agent_id, channel_id,
-	       message_seq, trajectory_id, role, kind, summary, findings_json,
-	       evidence_ids_json, artifacts_json, refs_json, tests_json,
-	       questions_json, proposals_json, capability_requests_json,
-	       notes_json, content, created_at, delivered_to_loop_id, delivered_at
+	       message_seq, trajectory_id, role, kind, summary, packet_json,
+	       content, created_at, delivered_to_loop_id, delivered_at
 	  FROM worker_updates`
 }
 

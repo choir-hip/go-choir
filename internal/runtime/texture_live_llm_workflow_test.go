@@ -171,7 +171,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 		"objective":%q,
 		"channel_id":%q,
 		"model":%q
-	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call update_coagent without update_id, with artifacts ['artifacts/live-evolution-ca.txt'], tests ['test -f artifacts/live-evolution-ca.txt && grep -q verified artifacts/live-evolution-ca.txt'], and one proposal for the parent texture agent. Do not finish until update_coagent returns.", decision.DocID, model)))
+	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call update_coagent without update_id as schema_version coagent_source_packet.v1, kind execution_result, a concise summary, sources for the file_artifact and test_run, and one revise_texture action for the parent texture agent. Do not finish until update_coagent returns.", decision.DocID, model)))
 	if err != nil {
 		t.Fatalf("request live super execution: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	if err != nil {
 		t.Fatalf("list live worker updates: %v", err)
 	}
-	var superUpdate *types.WorkerUpdateRecord
+	var superUpdate *types.CoagentSourcePacket
 	for i := range updates {
 		if updates[i].Role == "super" {
 			superUpdate = &updates[i]
@@ -205,8 +205,8 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	if superUpdate.TargetAgentID != "texture:"+decision.DocID {
 		t.Fatalf("live super update targeted %q, want texture:%s; update=%+v result=%q", superUpdate.TargetAgentID, decision.DocID, superUpdate, superDone.Result)
 	}
-	if len(superUpdate.Artifacts) == 0 || len(superUpdate.Tests) == 0 {
-		t.Fatalf("live super update missing artifact/test fields: %+v", superUpdate)
+	if len(liveCoagentPacketSourceURIs(superUpdate.Packet, "file_artifact")) == 0 || len(liveCoagentPacketSourceURIs(superUpdate.Packet, "test_run")) == 0 {
+		t.Fatalf("live super update missing artifact/test packet sources: %+v", superUpdate)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "artifacts", "live-evolution-ca.txt")); err != nil {
 		t.Fatalf("live super did not create artifact file: %v", err)
@@ -407,6 +407,25 @@ func liveSuccessfulBashResult(events []types.EventRecord) bool {
 		}
 	}
 	return false
+}
+
+func liveCoagentPacketSourceURIs(packet types.CoagentSourcePacketPayload, kinds ...string) []string {
+	want := map[string]bool{}
+	for _, kind := range kinds {
+		if kind = strings.TrimSpace(kind); kind != "" {
+			want[kind] = true
+		}
+	}
+	out := []string{}
+	for _, source := range packet.Sources {
+		if len(want) > 0 && !want[strings.TrimSpace(source.Kind)] {
+			continue
+		}
+		if uri := strings.TrimSpace(source.Target.URI); uri != "" {
+			out = append(out, uri)
+		}
+	}
+	return out
 }
 
 func postLiveJSON(t *testing.T, handler http.HandlerFunc, method, path string, body any) map[string]any {

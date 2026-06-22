@@ -116,7 +116,7 @@ func delegateWorkerUpdateTarget(rec *types.RunRecord) (string, string, bool) {
 	return channelID, targetAgentID, true
 }
 
-func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.RunRecord, update types.WorkerUpdateRecord) (types.WorkerUpdateRecord, bool, error) {
+func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.RunRecord, update types.CoagentSourcePacket) (types.CoagentSourcePacket, bool, error) {
 	update.Content = buildWorkerUpdateMessage(update)
 	message := &types.ChannelMessage{
 		ChannelID:    update.ChannelID,
@@ -131,7 +131,7 @@ func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.
 	}
 	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
 	if err != nil {
-		return types.WorkerUpdateRecord{}, false, err
+		return types.CoagentSourcePacket{}, false, err
 	}
 	if created {
 		message.Seq = stored.MessageSeq
@@ -140,7 +140,7 @@ func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.
 	return stored, created, nil
 }
 
-func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, rec *types.RunRecord, update types.WorkerUpdateRecord, output map[string]any, source string) error {
+func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, rec *types.RunRecord, update types.CoagentSourcePacket, output map[string]any, source string) error {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
@@ -158,7 +158,7 @@ func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, r
 		return nil
 	}
 	now := time.Now().UTC()
-	continuationUpdate := types.WorkerUpdateRecord{
+	continuationUpdate := types.CoagentSourcePacket{
 		UpdateID:      uuid.NewString(),
 		OwnerID:       ownerID,
 		AgentID:       agentIDForRun(rec),
@@ -166,11 +166,10 @@ func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, r
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryIDForRun(rec),
 		Role:          "runtime-supervision",
-		Kind:          "directive",
-		Summary:       "Runtime supervision continuation required for an active worker delegation.",
-		Content:       content,
+		Packet:        newCoagentPacket("execution_request", "Runtime supervision continuation required for an active worker delegation.", nil, nil, []types.CoagentPacketAction{coagentAction("request_worker", content, map[string]any{"source": source}, nil, types.CoagentPacketActionSafety{MutationClass: "red", Network: "allowed", FileMutation: "allowed"})}, nil, []string{content}),
 		CreatedAt:     now,
 	}
+	continuationUpdate.Content = buildWorkerUpdateMessage(continuationUpdate)
 	message := &types.ChannelMessage{
 		ChannelID:    channelID,
 		From:         rec.RunID,
@@ -197,7 +196,7 @@ func (rt *Runtime) enqueueDelegateWorkerSuperContinuation(ctx context.Context, r
 	return nil
 }
 
-func buildDelegateWorkerSuperContinuationMessage(update types.WorkerUpdateRecord, output map[string]any, source string) string {
+func buildDelegateWorkerSuperContinuationMessage(update types.CoagentSourcePacket, output map[string]any, source string) string {
 	workerRunID := firstNonEmpty(stringMapValue(output, "worker_run_id"), stringMapValue(output, "loop_id"))
 	if workerRunID == "" {
 		return ""
@@ -295,7 +294,7 @@ func delegateWorkerContinuationRequired(output map[string]any) bool {
 	return false
 }
 
-func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.EventRecord, output map[string]any, targetAgentID, channelID string, now time.Time) types.WorkerUpdateRecord {
+func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.EventRecord, output map[string]any, targetAgentID, channelID string, now time.Time) types.CoagentSourcePacket {
 	status := stringMapValue(output, "status")
 	state := stringMapValue(output, "state")
 	workerLoopID := stringMapValue(output, "loop_id")
@@ -352,8 +351,9 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		notes = append(notes, fmt.Sprintf("worker_event_count=%d", eventCount))
 	}
 	notes = append(notes, provenance.Notes...)
+	sources := coagentSourcesFromRefs(trimDedupeNonEmpty(append(append(evidenceIDs, refs...), artifacts...)))
 
-	return types.WorkerUpdateRecord{
+	return types.CoagentSourcePacket{
 		UpdateID:      "delegate-worker-vm-" + sanitizeExportPart(rec.RunID),
 		OwnerID:       rec.OwnerID,
 		AgentID:       agentIDForRun(rec),
@@ -361,19 +361,17 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
 		Role:          AgentProfileSuper,
-		Findings:      trimDedupeNonEmpty(findings),
-		EvidenceIDs:   trimDedupeNonEmpty(evidenceIDs),
-		Artifacts:     trimDedupeNonEmpty(artifacts),
-		Refs:          trimDedupeNonEmpty(refs),
-		Proposals: []string{
-			"Continue with a termination/package probe that makes vsuper call publish_app_change_package or update_coagent before delegation timeout.",
-		},
-		Notes:     trimDedupeNonEmpty(notes),
+		Packet: newCoagentPacket("blocker", "Runtime fallback: worker delegation evidence was preserved after Super failure.",
+			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), sources),
+			sources,
+			[]types.CoagentPacketAction{coagentAction("request_worker", "Continue with a termination/package probe that makes vsuper call publish_app_change_package or update_coagent before delegation timeout.", nil, nil, types.CoagentPacketActionSafety{MutationClass: "red", Network: "allowed", FileMutation: "allowed"})},
+			nil,
+			trimDedupeNonEmpty(notes)),
 		CreatedAt: now,
 	}
 }
 
-func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any, targetAgentID, channelID, source string, now time.Time) types.WorkerUpdateRecord {
+func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any, targetAgentID, channelID, source string, now time.Time) types.CoagentSourcePacket {
 	status := stringMapValue(output, "status")
 	state := stringMapValue(output, "state")
 	workerLoopID := stringMapValue(output, "loop_id")
@@ -435,7 +433,9 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 	}
 	notes = append(notes, provenance.Notes...)
 	updateKey := delegateWorkerCheckpointUpdateKey(output, source)
-	return types.WorkerUpdateRecord{
+	artifacts := trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...))
+	sources := coagentSourcesFromRefs(trimDedupeNonEmpty(append(append(evidenceIDs, refs...), artifacts...)))
+	return types.CoagentSourcePacket{
 		UpdateID:      delegateWorkerCheckpointUpdateID(rec, output, updateKey),
 		OwnerID:       rec.OwnerID,
 		AgentID:       agentIDForRun(rec),
@@ -443,19 +443,17 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
 		Role:          AgentProfileSuper,
-		Findings:      trimDedupeNonEmpty(findings),
-		EvidenceIDs:   trimDedupeNonEmpty(evidenceIDs),
-		Artifacts:     trimDedupeNonEmpty(append(exportArtifactRefs(output), provenance.Artifacts...)),
-		Refs:          trimDedupeNonEmpty(refs),
-		Proposals: []string{
-			"Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or update_coagent before delegate timeout.",
-		},
-		Notes:     trimDedupeNonEmpty(notes),
+		Packet: newCoagentPacket("evidence_update", "Worker delegation checkpoint preserved.",
+			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), sources),
+			sources,
+			[]types.CoagentPacketAction{coagentAction("request_worker", "Continue with a termination/package probe that prevents candidate checkout races and requires publish_app_change_package or update_coagent before delegate timeout.", nil, nil, types.CoagentPacketActionSafety{MutationClass: "red", Network: "allowed", FileMutation: "allowed"})},
+			nil,
+			trimDedupeNonEmpty(notes)),
 		CreatedAt: now,
 	}
 }
 
-func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun []types.EventRecord, targetAgentID, channelID string, now time.Time) types.WorkerUpdateRecord {
+func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun []types.EventRecord, targetAgentID, channelID string, now time.Time) types.CoagentSourcePacket {
 	successfulTools := successfulToolNames(eventsForRun)
 	toolSummary := "no successful tools"
 	if len(successfulTools) > 0 {
@@ -488,7 +486,7 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 		notes = append(notes, fmt.Sprintf("super_event_count=%d", len(eventsForRun)))
 	}
 
-	return types.WorkerUpdateRecord{
+	return types.CoagentSourcePacket{
 		UpdateID:      "super-failure-checkpoint-" + sanitizeExportPart(rec.RunID),
 		OwnerID:       rec.OwnerID,
 		AgentID:       agentIDForRun(rec),
@@ -496,15 +494,12 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
 		Role:          AgentProfileSuper,
-		Kind:          "blocker",
-		Summary:       "Runtime fallback: Super failed before worker delegation/package evidence reached Texture.",
-		Findings:      trimDedupeNonEmpty(findings),
-		EvidenceIDs:   []string{"run:" + rec.RunID},
-		Refs:          trimDedupeNonEmpty(refs),
-		Proposals: []string{
-			"Resume with a smaller control step: either call request_worker_vm/start_worker_delegation immediately with the mission objective, or update_coagent with the exact blocker before further repo exploration.",
-		},
-		Notes:     trimDedupeNonEmpty(notes),
+		Packet: newCoagentPacket("blocker", "Runtime fallback: Super failed before worker delegation/package evidence reached Texture.",
+			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), nil),
+			coagentSourcesFromRefs(trimDedupeNonEmpty(refs)),
+			[]types.CoagentPacketAction{coagentAction("request_worker", "Resume with a smaller control step: either call request_worker_vm/start_worker_delegation immediately with the mission objective, or update_coagent with the exact blocker before further repo exploration.", nil, nil, types.CoagentPacketActionSafety{MutationClass: "red", Network: "allowed", FileMutation: "allowed"})},
+			nil,
+			trimDedupeNonEmpty(notes)),
 		CreatedAt: now,
 	}
 }

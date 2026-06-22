@@ -149,48 +149,18 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Runtime, ownerID, 
 	}
 }
 
-func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.WorkerUpdateRecord) []textureSourceEntity {
+func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.CoagentSourcePacket) []textureSourceEntity {
 	if len(updates) == 0 {
 		return nil
 	}
-	seenEvidence := map[string]bool{}
 	entities := []textureSourceEntity{}
 	seenEntity := map[string]bool{}
 	for _, update := range updates {
 		if ownerID != "" && strings.TrimSpace(update.OwnerID) != strings.TrimSpace(ownerID) {
 			continue
 		}
-		for _, evidenceID := range update.EvidenceIDs {
-			evidenceID = strings.TrimSpace(evidenceID)
-			if evidenceID == "" || seenEvidence[evidenceID] {
-				continue
-			}
-			seenEvidence[evidenceID] = true
-			if rt == nil || rt.store == nil {
-				continue
-			}
-			rec, err := rt.store.GetEvidence(ctx, evidenceID, ownerID)
-			if err != nil {
-				continue
-			}
-			entity := evidenceRecordToSourceEntity(rec)
-			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" || seenEntity[key] {
-				continue
-			}
-			seenEntity[key] = true
-			entities = append(entities, entity)
-		}
-		for _, ref := range workerUpdateSourceRefCandidates(update) {
-			entity := sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, ref)
-			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" || seenEntity[key] {
-				continue
-			}
-			seenEntity[key] = true
-			entities = append(entities, entity)
-		}
-		for _, entity := range workerUpdateDirectSourceEntities(update) {
+		for _, packetSource := range update.Packet.Sources {
+			entity := sourceEntityFromCoagentPacketSource(ctx, rt, ownerID, packetSource, update)
 			key := sourceEntityKey(entity)
 			if entity.EntityID == "" || key == "" || seenEntity[key] {
 				continue
@@ -202,47 +172,74 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, 
 	return entities
 }
 
-func workerUpdateSourceRefCandidates(update types.WorkerUpdateRecord) []string {
-	out := make([]string, 0, len(update.Refs)+len(update.Artifacts)+len(update.Tests))
-	out = append(out, update.Refs...)
-	for _, artifact := range update.Artifacts {
-		artifact = strings.TrimSpace(artifact)
-		if artifact == "" {
-			continue
-		}
-		if key, _ := splitTypedWorkerUpdateRef(artifact); key != "" {
-			out = append(out, artifact)
-			continue
-		}
-		if looksLikeArtifactPath(artifact) {
-			out = append(out, "file_artifact:"+artifact)
+func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Runtime, ownerID string, source types.CoagentPacketSource, update types.CoagentSourcePacket) textureSourceEntity {
+	uri := strings.TrimSpace(source.Target.URI)
+	kind := strings.TrimSpace(source.Kind)
+	var entity textureSourceEntity
+	if uri != "" {
+		entity = sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, uri)
+		if entity.EntityID == "" && isHTTPURL(uri) {
+			entity = textureSourceEntity{
+				EntityID:  stableSourceEntityID("content_item", uri),
+				Kind:      "content_item",
+				Label:     firstNonEmpty(strings.TrimSpace(source.Target.Title), uri),
+				Target:    textureSourceEntityTarget{TargetKind: "content_item", URL: uri, CanonicalURL: uri},
+				Selectors: []textureSourceEntitySelector{{SelectorKind: sourcecontract.SelectorKindWholeResource}},
+				Display: textureSourceEntityDisplay{
+					InlineMode:       "collapsed_citation",
+					ExpandedMode:     "source_card",
+					OpenSurface:      sourcecontract.OpenSurfaceSource,
+					DefaultCollapsed: true,
+				},
+				Evidence: textureSourceEntityEvidence{State: sourcecontract.EvidenceStateAvailable, ResearchState: "represented"},
+				Provenance: textureSourceEntityProvenance{
+					CreatedBy:           firstNonEmpty(strings.TrimSpace(update.AgentID), "coagent"),
+					RightsScope:         "private_user_source",
+					UntrustedSourceText: true,
+				},
+			}
 		}
 	}
-	for _, test := range update.Tests {
-		test = strings.TrimSpace(test)
-		if test == "" {
-			continue
+	if entity.EntityID == "" {
+		identity := strings.TrimSpace(source.SourceID)
+		if identity == "" {
+			identity = strings.TrimSpace(source.Target.Title)
 		}
-		if key, _ := splitTypedWorkerUpdateRef(test); key != "" {
-			out = append(out, test)
+		if executionTargetKind(kind) && identity != "" {
+			entity = executionEvidenceSourceEntity(kind, identity, firstNonEmpty(source.Target.Title, identity), firstNonEmpty(update.AgentID, update.Role))
 		}
 	}
-	return out
-}
-
-func workerUpdateDirectSourceEntities(update types.WorkerUpdateRecord) []textureSourceEntity {
-	out := []textureSourceEntity{}
-	for _, test := range update.Tests {
-		test = strings.TrimSpace(test)
-		if test == "" {
-			continue
-		}
-		if key, _ := splitTypedWorkerUpdateRef(test); key != "" {
-			continue
-		}
-		out = append(out, executionEvidenceSourceEntity("test_run", stableSourceEntityID("test_run_text", test), test, firstNonEmpty(update.AgentID, update.Role)))
+	if entity.EntityID == "" {
+		return textureSourceEntity{}
 	}
-	return out
+	if label := strings.TrimSpace(source.Target.Title); label != "" {
+		entity.Label = label
+	}
+	if len(source.Selectors) > 0 {
+		selectors := make([]textureSourceEntitySelector, 0, len(source.Selectors))
+		for _, selector := range source.Selectors {
+			switch strings.TrimSpace(selector.Kind) {
+			case sourcecontract.SelectorKindTextQuote:
+				if quote := strings.TrimSpace(selector.Quote); quote != "" {
+					selectors = append(selectors, textureSourceEntitySelector{SelectorKind: sourcecontract.SelectorKindTextQuote, TextQuote: quote})
+				}
+			case sourcecontract.SelectorKindWholeResource, "":
+				selectors = append(selectors, textureSourceEntitySelector{SelectorKind: sourcecontract.SelectorKindWholeResource})
+			default:
+				selectors = append(selectors, textureSourceEntitySelector{SelectorKind: strings.TrimSpace(selector.Kind)})
+			}
+		}
+		if len(selectors) > 0 {
+			entity.Selectors = selectors
+		}
+	}
+	if state := strings.TrimSpace(source.Evidence.State); state != "" {
+		entity.Evidence.State = state
+	}
+	if rights := strings.TrimSpace(source.Evidence.RightsScope); rights != "" {
+		entity.Provenance.RightsScope = rights
+	}
+	return entity
 }
 
 func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context, ownerID, targetAgentID string, updateIDs []string, limit int) []textureSourceEntity {
@@ -257,7 +254,7 @@ func (rt *Runtime) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context
 	if limit <= 0 || limit > len(updateIDs) {
 		limit = len(updateIDs)
 	}
-	updates := make([]types.WorkerUpdateRecord, 0, limit)
+	updates := make([]types.CoagentSourcePacket, 0, limit)
 	seen := map[string]bool{}
 	for _, updateID := range updateIDs {
 		updateID = strings.TrimSpace(updateID)

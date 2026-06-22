@@ -1954,26 +1954,14 @@ func (h *APIHandler) HandleTextureBlame(w http.ResponseWriter, r *http.Request) 
 // ----- Texture revise -----
 
 type testTextureResearchFindingsRequest struct {
-	DocID     string                         `json:"doc_id"`
-	FindingID string                         `json:"finding_id"`
-	Findings  []string                       `json:"findings,omitempty"`
-	Evidence  []researchFindingEvidenceInput `json:"evidence,omitempty"`
-	Notes     []string                       `json:"notes,omitempty"`
-	Questions []string                       `json:"questions,omitempty"`
+	DocID string `json:"doc_id"`
+	types.CoagentSourcePacketPayload
 }
 
 type testTextureWorkerUpdateRequest struct {
-	DocID       string   `json:"doc_id"`
-	UpdateID    string   `json:"update_id"`
-	Role        string   `json:"role,omitempty"`
-	Findings    []string `json:"findings,omitempty"`
-	EvidenceIDs []string `json:"evidence_ids,omitempty"`
-	Artifacts   []string `json:"artifacts,omitempty"`
-	Refs        []string `json:"refs,omitempty"`
-	Tests       []string `json:"tests,omitempty"`
-	Questions   []string `json:"questions,omitempty"`
-	Proposals   []string `json:"proposals,omitempty"`
-	Notes       []string `json:"notes,omitempty"`
+	DocID string `json:"doc_id"`
+	Role  string `json:"role,omitempty"`
+	types.CoagentSourcePacketPayload
 }
 
 // HandleTestTextureResearchFindings is a local-only dry-run browser test seam that
@@ -1997,14 +1985,15 @@ func (h *APIHandler) HandleTestTextureResearchFindings(w http.ResponseWriter, r 
 	}
 
 	var req testTextureResearchFindingsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
 	req.DocID = strings.TrimSpace(req.DocID)
-	req.FindingID = strings.TrimSpace(req.FindingID)
-	if req.DocID == "" || req.FindingID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "doc_id and finding_id are required"})
+	if req.DocID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "doc_id is required"})
 		return
 	}
 
@@ -2056,15 +2045,10 @@ func (h *APIHandler) HandleTestTextureResearchFindings(w http.ResponseWriter, r 
 		return
 	}
 
-	rawArgs, err := json.Marshal(map[string]any{
-		"update_id":  req.FindingID,
-		"kind":       "findings",
-		"agent_id":   targetAgentID,
-		"channel_id": req.DocID,
-		"findings":   req.Findings,
-		"evidence":   req.Evidence,
-		"notes":      req.Notes,
-		"questions":  req.Questions,
+	rawArgs, err := json.Marshal(submitCoagentUpdateArgs{
+		AgentID:                    targetAgentID,
+		ChannelID:                  req.DocID,
+		CoagentSourcePacketPayload: req.CoagentSourcePacketPayload,
 	})
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
@@ -2107,14 +2091,15 @@ func (h *APIHandler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *htt
 	}
 
 	var req testTextureWorkerUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
 	req.DocID = strings.TrimSpace(req.DocID)
-	req.UpdateID = strings.TrimSpace(req.UpdateID)
-	if req.DocID == "" || req.UpdateID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "doc_id and update_id are required"})
+	if req.DocID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "doc_id is required"})
 		return
 	}
 
@@ -2177,19 +2162,10 @@ func (h *APIHandler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *htt
 		return
 	}
 
-	rawArgs, err := json.Marshal(map[string]any{
-		"update_id":    req.UpdateID,
-		"kind":         "status",
-		"agent_id":     targetAgentID,
-		"channel_id":   req.DocID,
-		"findings":     req.Findings,
-		"evidence_ids": req.EvidenceIDs,
-		"artifacts":    req.Artifacts,
-		"refs":         req.Refs,
-		"tests":        req.Tests,
-		"questions":    req.Questions,
-		"proposals":    req.Proposals,
-		"notes":        req.Notes,
+	rawArgs, err := json.Marshal(submitCoagentUpdateArgs{
+		AgentID:                    targetAgentID,
+		ChannelID:                  req.DocID,
+		CoagentSourcePacketPayload: req.CoagentSourcePacketPayload,
 	})
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})

@@ -156,8 +156,8 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
 				return report, fmt.Errorf("research coagent update %s is not routed to Texture document %s", update.UpdateID, doc.DocID)
 			}
-			if len(update.Findings) == 0 && len(update.EvidenceIDs) == 0 && len(update.Notes) == 0 && len(update.Questions) == 0 && len(update.CapabilityRequests) == 0 {
-				return report, fmt.Errorf("research coagent update %s has no structured result fields", update.UpdateID)
+			if coagentPacketPayloadEmpty(update.Packet) {
+				return report, fmt.Errorf("research coagent update %s has no source packet payload", update.UpdateID)
 			}
 		}
 		if researchUpdateCount == 0 {
@@ -175,8 +175,8 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 				continue
 			}
 			workerUpdateCount++
-			if len(update.Artifacts) == 0 && len(update.Tests) == 0 && len(update.Refs) == 0 && len(update.Proposals) == 0 && len(update.Findings) == 0 {
-				return report, fmt.Errorf("worker update %s has no structured result fields", update.UpdateID)
+			if coagentPacketPayloadEmpty(update.Packet) {
+				return report, fmt.Errorf("worker update %s has no source packet payload", update.UpdateID)
 			}
 		}
 		if workerUpdateCount == 0 {
@@ -247,8 +247,8 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 	return nil
 }
 
-func workerUpdatesForTextureDoc(updates []types.WorkerUpdateRecord, docID string) []types.WorkerUpdateRecord {
-	out := []types.WorkerUpdateRecord{}
+func workerUpdatesForTextureDoc(updates []types.CoagentSourcePacket, docID string) []types.CoagentSourcePacket {
+	out := []types.CoagentSourcePacket{}
 	for _, update := range updates {
 		if textureAgentIDMatchesDoc(update.TargetAgentID, docID) && update.ChannelID == docID && update.MessageSeq > 0 {
 			out = append(out, update)
@@ -390,7 +390,7 @@ func eventsContainSuccessfulBashVerification(events []types.EventRecord) bool {
 	return false
 }
 
-func verifyArtifactWritesCoverWorkerUpdates(events []types.EventRecord, updates []types.WorkerUpdateRecord) error {
+func verifyArtifactWritesCoverWorkerUpdates(events []types.EventRecord, updates []types.CoagentSourcePacket) error {
 	artifacts := workerUpdateArtifacts(updates)
 	if len(artifacts) == 0 {
 		return fmt.Errorf("artifact write required but no structured worker artifact was reported")
@@ -416,7 +416,7 @@ func verifyArtifactWritesCoverWorkerUpdates(events []types.EventRecord, updates 
 	return fmt.Errorf("successful file write paths %v do not match reported artifacts %v", written, artifacts)
 }
 
-func verifyBashCoversWorkerUpdateTests(events []types.EventRecord, updates []types.WorkerUpdateRecord) error {
+func verifyBashCoversWorkerUpdateTests(events []types.EventRecord, updates []types.CoagentSourcePacket) error {
 	tests := workerUpdateTests(updates)
 	artifacts := workerUpdateArtifacts(updates)
 	for _, payload := range successfulToolResultPayloads(events, "bash") {
@@ -445,12 +445,15 @@ func verifyBashCoversWorkerUpdateTests(events []types.EventRecord, updates []typ
 	return fmt.Errorf("successful bash commands do not cover reported tests/artifacts")
 }
 
-func workerUpdateArtifacts(updates []types.WorkerUpdateRecord) []string {
+func workerUpdateArtifacts(updates []types.CoagentSourcePacket) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, update := range updates {
-		for _, artifact := range update.Artifacts {
+		for _, artifact := range coagentPacketSourceURIs(update.Packet, "file_artifact", "patch", "screenshot", "video_artifact", "benchmark_log") {
 			artifact = strings.TrimSpace(filepathSlash(artifact))
+			if key, value := splitTypedWorkerUpdateRef(artifact); key != "" {
+				artifact = value
+			}
 			if artifact != "" && !seen[artifact] {
 				seen[artifact] = true
 				out = append(out, artifact)
@@ -460,12 +463,15 @@ func workerUpdateArtifacts(updates []types.WorkerUpdateRecord) []string {
 	return out
 }
 
-func workerUpdateTests(updates []types.WorkerUpdateRecord) []string {
+func workerUpdateTests(updates []types.CoagentSourcePacket) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, update := range updates {
-		for _, test := range update.Tests {
+		for _, test := range coagentPacketSourceURIs(update.Packet, "test_run") {
 			test = strings.TrimSpace(test)
+			if key, value := splitTypedWorkerUpdateRef(test); key != "" {
+				test = value
+			}
 			if test != "" && !seen[test] {
 				seen[test] = true
 				out = append(out, test)
@@ -540,7 +546,7 @@ func toolResultOutputLoopID(events []types.EventRecord, runID, tool, loopID stri
 	return false
 }
 
-func verifyTextureRevisionCausality(revisions []types.Revision, events []types.EventRecord, updates []types.WorkerUpdateRecord, requireWorkerConsumption bool) error {
+func verifyTextureRevisionCausality(revisions []types.Revision, events []types.EventRecord, updates []types.CoagentSourcePacket, requireWorkerConsumption bool) error {
 	if len(revisions) == 0 {
 		return fmt.Errorf("texture document has no revisions")
 	}

@@ -6,7 +6,7 @@ comments:
   - Worker-message policy appended to revision requests when recent worker texts exist.
 body: |
   {{if .IntegrateWorkerFindings}}
-  This Texture run was woken by worker findings. Make those findings visible with patch_texture as this turn's next document revision before spawning additional workers.
+  This Texture run was woken by worker source packets. Make the useful claims and packet.sources visible with patch_texture as this turn's next document revision before spawning additional workers.
   If the worker evidence is partial, blocked, or inconclusive, do not paste process metadata, source-status notes, or checkpoint labels into the reader-facing document. Write only a useful reader-facing artifact state from the evidence that is actually usable, and keep blocker/rationale text in run output or record_texture_decision.
   Only spawn another researcher before editing if the worker message is unusable for any reader-facing revision; if so, name the precise blocker in the run output.
   {{end}}{{if and .NeedsSuperExecution (not .HasSuperDelivery)}}
