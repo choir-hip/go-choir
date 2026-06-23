@@ -3013,6 +3013,7 @@ var durableMetadataKeys = []string{
 	"selected_style_rationale",
 	runMetadataOwnerEmail,
 	runMetadataLLMPolicyOverlayID,
+	textureAvailableSourceEntitiesKey,
 }
 
 // buildAppagentRevisionMetadata constructs the metadata JSON for an
@@ -3072,6 +3073,10 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 	for key, value := range workerUpdateMeta {
 		meta[key] = value
 	}
+	// Available source entities are run-time prompt context, not durable revision metadata.
+	// Keep them out of the persisted revision so they do not leak into the next run's parent
+	// revision projection and are recomputed from the actual revision's source_entities.
+	delete(meta, textureAvailableSourceEntitiesKey)
 
 	data, err := json.Marshal(meta)
 	if err != nil {
