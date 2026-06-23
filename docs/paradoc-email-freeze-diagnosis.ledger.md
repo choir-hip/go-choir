@@ -20,3 +20,12 @@
 - Evidence class: build proof plus blocked local browser regression; not staging repair proof.
 - Open edge: independent verifier has not reviewed the diff; affected-account freeze remains unreproduced.
 
+## 2026-06-23 Pass 3
+
+- Claim: the branch-level mission can settle if an independent verifier accepts the local hardening and the remaining affected-account/staging edges are named rather than hidden.
+- Move: prover + settle.
+- Expected delta V: -3 by obtaining verifier verdict, incorporating it into state, and accepting remaining edges by name.
+- Actual delta V: -3. Verifier thread `019ef323-c1a8-7640-bb77-a8e64c774160` reviewed `6706ae02` and returned `accept` with no blocking findings. It confirmed generation guards, one bootstrap path, whole-operation timeout via `Promise.race`, tests for duplicate bootstrap/stale response, and honest evidence boundaries.
+- Receipts: verifier thread `019ef323-c1a8-7640-bb77-a8e64c774160`; branch head `6706ae02`; `npm run build`.
+- Evidence class: branch-level independent review plus build proof; not staging repair proof.
+- Open edge: affected-account hard freeze remains unreproduced; focused Playwright requires a clean local auth-origin harness or deployed proof.
