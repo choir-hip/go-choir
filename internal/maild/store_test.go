@@ -24,7 +24,7 @@ func newTestStore(t *testing.T) (*Store, *Config) {
 	if err := cfg.EnsureDirs(); err != nil {
 		t.Fatalf("EnsureDirs: %v", err)
 	}
-	store, err := OpenStore(cfg.DBPath)
+	store, err := OpenStore(cfg.DBPath, cfg.StorageRoot)
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -89,7 +89,11 @@ func TestEnsureSchemaRepairsActiveApprovalTokensForSentDrafts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateDraftApprovalToken: %v", err)
 	}
-	if _, err := store.db.ExecContext(context.Background(), `UPDATE email_drafts SET status = 'sent' WHERE id = ?`, draft.ID); err != nil {
+	mbDB, err := store.mailboxForOwner("user-root")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	if _, err := mbDB.ExecContext(context.Background(), `UPDATE email_drafts SET status = 'sent' WHERE id = ?`, draft.ID); err != nil {
 		t.Fatalf("force sent draft: %v", err)
 	}
 

@@ -16,7 +16,7 @@ func main() {
 		log.Fatalf("maild dirs: %v", err)
 	}
 
-	store, err := maild.OpenStore(cfg.DBPath)
+	store, err := maild.OpenStore(cfg.DBPath, cfg.StorageRoot)
 	if err != nil {
 		log.Fatalf("maild store: %v", err)
 	}

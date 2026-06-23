@@ -45,7 +45,11 @@ func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string,
 	if err != nil {
 		return err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	db, err := s.mailboxForOwner(alias.TargetID)
+	if err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin inbound message tx: %w", err)
 	}
@@ -127,6 +131,9 @@ func (s *Store) StoreInboundMessage(ctx context.Context, providerEventID string,
 		return fmt.Errorf("commit inbound message tx: %w", err)
 	}
 	tx = nil
+	if err := s.recordProviderMessageIndex(ctx, providerResend, record.ProviderMessageID, record.MailboxOwnerID); err != nil {
+		return fmt.Errorf("record provider message index: %w", err)
+	}
 	return nil
 }
 
