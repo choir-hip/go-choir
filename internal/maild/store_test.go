@@ -2,6 +2,7 @@ package maild
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -33,6 +34,294 @@ func newTestStore(t *testing.T) (*Store, *Config) {
 		t.Fatalf("EnsureSchema: %v", err)
 	}
 	return store, cfg
+}
+
+func TestLegacySharedMailboxMigration(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "mail.db")
+	storageRoot := filepath.Join(dir, "mail")
+
+	// Create a legacy shared database (pre-multi-tenancy schema) with all tables
+	// in the single DBPath database.
+	legacyDB, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	defer legacyDB.Close()
+
+	legacySchema := []string{
+		`CREATE TABLE IF NOT EXISTS email_messages (
+			id text primary key,
+			provider text not null,
+			provider_message_id text,
+			provider_event_id text,
+			direction text not null,
+			mailbox_owner_id text not null,
+			alias_id text,
+			from_address text not null,
+			from_display text,
+			subject text not null,
+			text_body text,
+			html_body text,
+			raw_headers_json text,
+			raw_message_ref text,
+			authentication_results_json text,
+			trust_status text not null,
+			read_at text,
+			received_at text,
+			sent_at text,
+			created_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_message_recipients (
+			id text primary key,
+			message_id text not null,
+			kind text not null,
+			address text not null,
+			display text
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_attachments (
+			id text primary key,
+			message_id text not null,
+			provider_attachment_id text,
+			filename text not null,
+			content_type text not null,
+			content_disposition text,
+			content_id text,
+			size_bytes integer,
+			storage_ref text,
+			status text not null,
+			created_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_source_packets (
+			id text primary key,
+			message_id text not null,
+			attachment_id text,
+			trust_label text not null,
+			provenance_json text not null,
+			text_ref text,
+			created_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_ingress_events (
+			id text primary key,
+			message_id text not null,
+			source_packet_id text,
+			owner_id text not null,
+			conductor_submission_id text,
+			status text not null,
+			created_at text not null,
+			completed_at text
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_drafts (
+			id text primary key,
+			owner_id text not null,
+			from_alias_id text not null,
+			from_address text not null,
+			to_json text not null,
+			cc_json text,
+			bcc_json text,
+			subject text not null,
+			text_body text,
+			html_body text,
+			reply_to_message_id text,
+			source_kind text,
+			source_ref text,
+			status text not null,
+			version integer not null,
+			version_hash text not null,
+			sent_message_id text,
+			provider_message_id text,
+			created_at text not null,
+			updated_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_draft_approval_events (
+			id text primary key,
+			draft_id text not null,
+			owner_id text not null,
+			version integer not null,
+			version_hash text not null,
+			event_type text not null,
+			provider_message_id text,
+			created_at text not null
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_draft_approval_tokens (
+			id text primary key,
+			token text not null unique,
+			draft_id text not null,
+			owner_id text not null,
+			version integer not null,
+			version_hash text not null,
+			approval_email text not null,
+			status text not null,
+			provider_message_id text,
+			created_at text not null,
+			expires_at text not null,
+			used_at text
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_risk_alerts (
+			id text primary key,
+			owner_id text not null,
+			risk_kind text not null,
+			source_ref text,
+			snippet text,
+			provider_message_id text,
+			created_at text not null
+		)`,
+	}
+	for _, stmt := range legacySchema {
+		if _, err := legacyDB.Exec(stmt); err != nil {
+			t.Fatalf("create legacy schema: %v", err)
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	// Insert legacy rows for two owners.
+	for _, owner := range []string{"user-a", "user-b"} {
+		msgID := "msg-" + owner
+		_, err = legacyDB.Exec(`INSERT INTO email_messages (
+			id, provider, provider_message_id, provider_event_id, direction,
+			mailbox_owner_id, alias_id, from_address, from_display, subject,
+			text_body, html_body, raw_headers_json, raw_message_ref,
+			authentication_results_json, trust_status, read_at, received_at,
+			sent_at, created_at
+		) VALUES (?, 'resend', ?, ?, 'inbound', ?, 'alias-1', 'sender@example.com', 'Sender', 'Hello', 'text body', 'html body', '{}', 'raw-ref', '{}', 'untrusted', NULL, ?, NULL, ?)`,
+			msgID, "provider-"+msgID, "event-"+msgID, owner, now, now)
+		if err != nil {
+			t.Fatalf("insert message for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_message_recipients (
+			id, message_id, kind, address, display
+		) VALUES (?, ?, 'to', 'recipient@example.com', 'Recipient')`,
+			"recipient-"+msgID, msgID)
+		if err != nil {
+			t.Fatalf("insert recipient for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_attachments (
+			id, message_id, provider_attachment_id, filename, content_type,
+			content_disposition, content_id, size_bytes, storage_ref, status, created_at
+		) VALUES (?, ?, 'att-1', 'file.txt', 'text/plain', 'attachment', 'cid-1', 42, 'attachments/file.txt', 'quarantined', ?)`,
+			"attachment-"+msgID, msgID, now)
+		if err != nil {
+			t.Fatalf("insert attachment for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_source_packets (
+			id, message_id, attachment_id, trust_label, provenance_json, text_ref, created_at
+		) VALUES (?, ?, ?, 'UNTRUSTED_EXTERNAL_EMAIL', '{"provider":"resend"}', 'text-ref', ?)`,
+			"source-"+msgID, msgID, "attachment-"+msgID, now)
+		if err != nil {
+			t.Fatalf("insert source packet for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_ingress_events (
+			id, message_id, source_packet_id, owner_id, conductor_submission_id, status, created_at, completed_at
+		) VALUES (?, ?, ?, ?, 'sub-1', 'completed', ?, ?)`,
+			"ingress-"+msgID, msgID, "source-"+msgID, owner, now, now)
+		if err != nil {
+			t.Fatalf("insert ingress event for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_drafts (
+			id, owner_id, from_alias_id, from_address, to_json, cc_json, bcc_json,
+			subject, text_body, html_body, reply_to_message_id, source_kind,
+			source_ref, status, version, version_hash, sent_message_id,
+			provider_message_id, created_at, updated_at
+		) VALUES (?, ?, 'alias-1', '000@choir.news', '["to@example.com"]', '', '',
+			'Draft', 'draft body', '', '', '', '', 'draft', 1,
+			'hash-1', '', '', ?, ?)`,
+			"draft-"+owner, owner, now, now)
+		if err != nil {
+			t.Fatalf("insert draft for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_draft_approval_events (
+			id, draft_id, owner_id, version, version_hash, event_type, provider_message_id, created_at
+		) VALUES (?, ?, ?, 1, 'hash-1', 'sent', NULL, ?)`,
+			"approval-event-"+owner, "draft-"+owner, owner, now)
+		if err != nil {
+			t.Fatalf("insert approval event for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_draft_approval_tokens (
+			id, token, draft_id, owner_id, version, version_hash, approval_email,
+			status, provider_message_id, created_at, expires_at, used_at
+		) VALUES (?, ?, ?, ?, 1, 'hash-1', 'owner@example.com', 'active', NULL, ?, ?, NULL)`,
+			"token-"+owner, "token-value-"+owner, "draft-"+owner, owner, now, now)
+		if err != nil {
+			t.Fatalf("insert approval token for %s: %v", owner, err)
+		}
+		_, err = legacyDB.Exec(`INSERT INTO email_risk_alerts (
+			id, owner_id, risk_kind, source_ref, snippet, provider_message_id, created_at
+		) VALUES (?, ?, 'UNTRUSTED_LINK', 'ref-1', 'suspicious link', 'provider-1', ?)`,
+			"risk-"+owner, owner, now)
+		if err != nil {
+			t.Fatalf("insert risk alert for %s: %v", owner, err)
+		}
+	}
+
+	legacyDB.Close()
+
+	// Now open the same database with the multi-tenant store. EnsureSchema
+	// should run the migration.
+	cfg := &Config{
+		Port:             DefaultPort,
+		DBPath:           dbPath,
+		StorageRoot:      storageRoot,
+		PrimaryDomain:    "choir.news",
+		RootOwnerID:      "user-root",
+		ResendBaseURL:    DefaultResendBaseURL,
+		WebhookMaxBytes:  DefaultWebhookMaxBody,
+		APIMaxBytes:      DefaultAPIMaxBody,
+		ProviderMaxBytes: DefaultProviderMaxBody,
+	}
+	if err := cfg.EnsureDirs(); err != nil {
+		t.Fatalf("EnsureDirs: %v", err)
+	}
+	store, err := OpenStore(cfg.DBPath, cfg.StorageRoot)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer store.Close()
+	if err := store.EnsureSchema(cfg); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+
+	// Verify each owner can see their migrated data via the new API.
+	for _, owner := range []string{"user-a", "user-b"} {
+		msgs, err := store.ListMessages(context.Background(), owner, "inbox", 10)
+		if err != nil {
+			t.Fatalf("ListMessages %s: %v", owner, err)
+		}
+		if len(msgs) != 1 {
+			t.Fatalf("owner %s messages = %d, want 1", owner, len(msgs))
+		}
+		if msgs[0].Subject != "Hello" {
+			t.Fatalf("owner %s subject = %q, want Hello", owner, msgs[0].Subject)
+		}
+		draft, err := store.GetDraft(context.Background(), owner, "draft-"+owner)
+		if err != nil {
+			t.Fatalf("GetDraft %s: %v", owner, err)
+		}
+		if draft.Subject != "Draft" {
+			t.Fatalf("owner %s draft subject = %q, want Draft", owner, draft.Subject)
+		}
+	}
+
+	// Verify migration is recorded.
+	var migrationCompleted string
+	if err := store.routingDB.QueryRow(`SELECT completed_at FROM maild_migrations WHERE name = 'shared_to_per_owner_mailbox'`).Scan(&migrationCompleted); err != nil {
+		t.Fatalf("migration record missing: %v", err)
+	}
+	if migrationCompleted == "" {
+		t.Fatalf("migration completed_at empty")
+	}
+
+	// Verify idempotency: running EnsureSchema again does not fail.
+	if err := store.EnsureSchema(cfg); err != nil {
+		t.Fatalf("EnsureSchema second pass: %v", err)
+	}
+	msgs, err := store.ListMessages(context.Background(), "user-a", "inbox", 10)
+	if err != nil {
+		t.Fatalf("ListMessages after idempotency: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("user-a messages after idempotency = %d, want 1", len(msgs))
+	}
 }
 
 func TestEnsureSchemaSeedsRootAlias(t *testing.T) {

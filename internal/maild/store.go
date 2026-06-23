@@ -3,6 +3,7 @@ package maild
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -365,7 +366,251 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 	if err := s.seedDefaults(cfg); err != nil {
 		return err
 	}
+	if err := s.migrateLegacySharedMailbox(); err != nil {
+		return fmt.Errorf("migrate legacy shared mailbox: %w", err)
+	}
 	return s.repairCachedMailboxes()
+}
+
+// migrateLegacySharedMailbox copies per-owner data from a pre-multi-tenancy
+// shared mail.db into per-owner mailbox databases.
+//
+// Before the multi-tenancy refactor, all messages, drafts, attachments, and
+// other owner-scoped rows lived in the single DBPath database alongside the
+// routing tables. After the refactor, those rows live in per-owner databases
+// under <storageRoot>/users/<ownerID>/mail.db.
+//
+// This migration is idempotent: it records completion in a
+// maild_migrations tracking table in the routing database and skips work if
+// the migration has already run. It also becomes a no-op if the routing
+// database does not contain the legacy per-owner tables.
+func (s *Store) migrateLegacySharedMailbox() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Create migration tracking table.
+	if _, err := s.routingDB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS maild_migrations (
+		name text primary key,
+		completed_at text not null
+	)`); err != nil {
+		return fmt.Errorf("create migrations table: %w", err)
+	}
+
+	var completedAt string
+	err := s.routingDB.QueryRowContext(ctx,
+		`SELECT completed_at FROM maild_migrations WHERE name = 'shared_to_per_owner_mailbox'`).Scan(&completedAt)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("check migration status: %w", err)
+	}
+
+	// Detect whether the routing database contains the legacy per-owner tables.
+	var messagesTable int
+	if err := s.routingDB.QueryRowContext(ctx,
+		`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'email_messages'`).Scan(&messagesTable); err != nil {
+		return fmt.Errorf("detect legacy messages table: %w", err)
+	}
+	if messagesTable == 0 {
+		// Fresh install or already migrated-and-dropped; record completion.
+		_, err := s.routingDB.ExecContext(ctx,
+			`INSERT OR REPLACE INTO maild_migrations (name, completed_at) VALUES (?, ?)`,
+			"shared_to_per_owner_mailbox", time.Now().UTC().Format(time.RFC3339Nano))
+		return err
+	}
+
+	// Collect distinct owner IDs from all legacy per-owner tables.
+	ownerRows, err := s.routingDB.QueryContext(ctx, `
+		SELECT owner_id FROM (
+			SELECT DISTINCT mailbox_owner_id AS owner_id FROM email_messages
+			UNION
+			SELECT DISTINCT owner_id FROM email_ingress_events
+			UNION
+			SELECT DISTINCT owner_id FROM email_drafts
+			UNION
+			SELECT DISTINCT owner_id FROM email_draft_approval_events
+			UNION
+			SELECT DISTINCT owner_id FROM email_draft_approval_tokens
+			UNION
+			SELECT DISTINCT owner_id FROM email_risk_alerts
+		)
+		WHERE owner_id IS NOT NULL AND owner_id != ''
+		ORDER BY owner_id`)
+	if err != nil {
+		return fmt.Errorf("list legacy owners: %w", err)
+	}
+	var ownerIDs []string
+	for ownerRows.Next() {
+		var ownerID string
+		if err := ownerRows.Scan(&ownerID); err != nil {
+			ownerRows.Close()
+			return fmt.Errorf("scan owner id: %w", err)
+		}
+		ownerIDs = append(ownerIDs, ownerID)
+	}
+	if err := ownerRows.Err(); err != nil {
+		ownerRows.Close()
+		return fmt.Errorf("iterate owner ids: %w", err)
+	}
+	ownerRows.Close()
+
+	// Migrate each owner into their own mailbox database.
+	for _, ownerID := range ownerIDs {
+		if err := s.migrateOwnerFromLegacySharedDB(ctx, ownerID); err != nil {
+			return fmt.Errorf("migrate owner %s: %w", ownerID, err)
+		}
+	}
+
+	// Record completion.
+	_, err = s.routingDB.ExecContext(ctx,
+		`INSERT OR REPLACE INTO maild_migrations (name, completed_at) VALUES (?, ?)`,
+		"shared_to_per_owner_mailbox", time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return fmt.Errorf("record migration completion: %w", err)
+	}
+	return nil
+}
+
+// migrateOwnerFromLegacySharedDB copies all owner-scoped rows for ownerID from
+// the routing database (legacy shared tables) into the owner's per-owner
+// mailbox database.
+func (s *Store) migrateOwnerFromLegacySharedDB(ctx context.Context, ownerID string) error {
+	mbDB, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return fmt.Errorf("open mailbox for owner %s: %w", ownerID, err)
+	}
+
+	tx, err := mbDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin per-owner tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			// Log and continue; best-effort rollback.
+		}
+	}()
+
+	// Disable foreign keys during the bulk copy so we can insert in any order.
+	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disable foreign keys: %w", err)
+	}
+
+	// Helper to copy rows from a legacy table into the same-named table in the
+	// per-owner database. columnOrder is the explicit column list for both the
+	// source SELECT and the target INSERT.
+	copyRows := func(tableName, ownerColumn, columnOrder string, ownerFilter string) error {
+		where := ownerFilter
+		query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", columnOrder, tableName, where)
+		rows, err := s.routingDB.QueryContext(ctx, query, ownerID)
+		if err != nil {
+			return fmt.Errorf("select %s: %w", tableName, err)
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			return fmt.Errorf("columns %s: %w", tableName, err)
+		}
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(cols)), ",")
+		insert := fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES (%s)", tableName, columnOrder, placeholders)
+
+		for rows.Next() {
+			values := make([]any, len(cols))
+			valuePtrs := make([]any, len(cols))
+			for i := range values {
+				valuePtrs[i] = &values[i]
+			}
+			if err := rows.Scan(valuePtrs...); err != nil {
+				return fmt.Errorf("scan %s row: %w", tableName, err)
+			}
+			if _, err := tx.ExecContext(ctx, insert, values...); err != nil {
+				return fmt.Errorf("insert %s row: %w", tableName, err)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate %s rows: %w", tableName, err)
+		}
+		return nil
+	}
+
+	// Order matters: tables referenced by foreign keys must be inserted first.
+	// We disable foreign keys above, but keep a sensible order for clarity.
+	migrations := []struct {
+		table       string
+		ownerColumn string
+		columns     string
+		filter      string
+	}{
+		{
+			table:       "email_messages",
+			ownerColumn: "mailbox_owner_id",
+			columns:     "id, provider, provider_message_id, provider_event_id, direction, mailbox_owner_id, alias_id, from_address, from_display, subject, text_body, html_body, raw_headers_json, raw_message_ref, authentication_results_json, trust_status, read_at, received_at, sent_at, created_at",
+			filter:      "mailbox_owner_id = ?",
+		},
+		{
+			table:       "email_message_recipients",
+			ownerColumn: "message_id",
+			columns:     "id, message_id, kind, address, display",
+			filter:      "message_id IN (SELECT id FROM email_messages WHERE mailbox_owner_id = ?)",
+		},
+		{
+			table:       "email_attachments",
+			ownerColumn: "message_id",
+			columns:     "id, message_id, provider_attachment_id, filename, content_type, content_disposition, content_id, size_bytes, storage_ref, status, created_at",
+			filter:      "message_id IN (SELECT id FROM email_messages WHERE mailbox_owner_id = ?)",
+		},
+		{
+			table:       "email_source_packets",
+			ownerColumn: "message_id",
+			columns:     "id, message_id, attachment_id, trust_label, provenance_json, text_ref, created_at",
+			filter:      "message_id IN (SELECT id FROM email_messages WHERE mailbox_owner_id = ?)",
+		},
+		{
+			table:       "email_ingress_events",
+			ownerColumn: "owner_id",
+			columns:     "id, message_id, source_packet_id, owner_id, conductor_submission_id, status, created_at, completed_at",
+			filter:      "owner_id = ?",
+		},
+		{
+			table:       "email_drafts",
+			ownerColumn: "owner_id",
+			columns:     "id, owner_id, from_alias_id, from_address, to_json, cc_json, bcc_json, subject, text_body, html_body, reply_to_message_id, source_kind, source_ref, status, version, version_hash, sent_message_id, provider_message_id, created_at, updated_at",
+			filter:      "owner_id = ?",
+		},
+		{
+			table:       "email_draft_approval_events",
+			ownerColumn: "owner_id",
+			columns:     "id, draft_id, owner_id, version, version_hash, event_type, provider_message_id, created_at",
+			filter:      "owner_id = ?",
+		},
+		{
+			table:       "email_draft_approval_tokens",
+			ownerColumn: "owner_id",
+			columns:     "id, token, draft_id, owner_id, version, version_hash, approval_email, status, provider_message_id, created_at, expires_at, used_at",
+			filter:      "owner_id = ?",
+		},
+		{
+			table:       "email_risk_alerts",
+			ownerColumn: "owner_id",
+			columns:     "id, owner_id, risk_kind, source_ref, snippet, provider_message_id, created_at",
+			filter:      "owner_id = ?",
+		},
+	}
+
+	for _, m := range migrations {
+		if err := copyRows(m.table, m.ownerColumn, m.columns, m.filter); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		return fmt.Errorf("re-enable foreign keys: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit per-owner migration: %w", err)
+	}
+	return nil
 }
 
 // repairCachedMailboxes runs per-user repairs on all already-opened mailbox
