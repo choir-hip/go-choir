@@ -12,7 +12,7 @@ func TestOpenStoreCreatesSchema(t *testing.T) {
 	store := TestStore(t)
 
 	// Verify that all tables exist by querying them.
-	tables := []string{"users", "credentials", "challenge_state", "refresh_sessions"}
+	tables := []string{"users", "credentials", "challenge_state", "refresh_sessions", "desktop_exchange_codes"}
 	for _, table := range tables {
 		var name string
 		err := store.DB().QueryRow(
@@ -1084,5 +1084,76 @@ func TestRefreshRotationWorksAfterAuthRestart(t *testing.T) {
 	}
 	if foundUser.Email != "rotation-tester@example.com" {
 		t.Errorf("user after rotation: got email %q, want %q", foundUser.Email, "rotation-tester@example.com")
+	}
+}
+
+// --- DesktopExchangeCode CRUD ---
+
+func TestCreateAndConsumeDesktopExchangeCode(t *testing.T) {
+	store := TestStore(t)
+
+	user, err := store.CreateUser("user-ex-1", "exchange@example.com")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	now := time.Now().UTC()
+	code := &DesktopExchangeCode{
+		Code:         "test-code-1",
+		UserID:       user.ID,
+		AccessToken:  "access-token-1",
+		RefreshToken: "refresh-token-1",
+		CreatedAt:    now,
+		ExpiresAt:    now.Add(60 * time.Second),
+	}
+	if err := store.CreateDesktopExchangeCode(code); err != nil {
+		t.Fatalf("CreateDesktopExchangeCode: %v", err)
+	}
+
+	consumed, err := store.ConsumeDesktopExchangeCode("test-code-1")
+	if err != nil {
+		t.Fatalf("ConsumeDesktopExchangeCode: %v", err)
+	}
+	if consumed.UserID != user.ID {
+		t.Errorf("UserID: got %q, want %q", consumed.UserID, user.ID)
+	}
+	if consumed.AccessToken != "access-token-1" {
+		t.Errorf("AccessToken: got %q, want %q", consumed.AccessToken, "access-token-1")
+	}
+	if consumed.RefreshToken != "refresh-token-1" {
+		t.Errorf("RefreshToken: got %q, want %q", consumed.RefreshToken, "refresh-token-1")
+	}
+
+	// Second consume should fail (code is deleted).
+	_, err = store.ConsumeDesktopExchangeCode("test-code-1")
+	if err == nil {
+		t.Error("expected error on second consume, got nil")
+	}
+}
+
+func TestConsumeExpiredDesktopExchangeCode(t *testing.T) {
+	store := TestStore(t)
+
+	user, err := store.CreateUser("user-ex-2", "expired@example.com")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	now := time.Now().UTC()
+	code := &DesktopExchangeCode{
+		Code:         "expired-code-1",
+		UserID:       user.ID,
+		AccessToken:  "access-token-2",
+		RefreshToken: "refresh-token-2",
+		CreatedAt:    now.Add(-2 * time.Minute),
+		ExpiresAt:    now.Add(-1 * time.Minute), // already expired
+	}
+	if err := store.CreateDesktopExchangeCode(code); err != nil {
+		t.Fatalf("CreateDesktopExchangeCode: %v", err)
+	}
+
+	_, err = store.ConsumeDesktopExchangeCode("expired-code-1")
+	if err == nil {
+		t.Error("expected error for expired code, got nil")
 	}
 }

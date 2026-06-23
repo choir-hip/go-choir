@@ -120,6 +120,26 @@ such as:
 - Podcast and media apps for source and playback workflows
 - Compute Monitor, Settings, and supporting desktop APIs
 
+### Native macOS App
+
+Choir also has a native macOS desktop app built with
+[Wails v3](https://v3.wails.io/). The app wraps the Svelte frontend in a
+native macOS window with a transparent title bar, tetramark app icon, and
+`ASWebAuthenticationSession` for passkey auth via Safari. It launches in
+cloud mode by default (connecting to `choir.news`) and can optionally run
+the full local service stack via `CHOIR_MODE=local`.
+
+```bash
+cd cmd/desktop
+task package    # build .app bundle
+task sign       # ad-hoc sign for local testing
+```
+
+See [cmd/desktop/README.md](cmd/desktop/README.md) for setup, build, and
+auth bridge details, and
+[docs/spec-choir-desktop-wails-v3-2026-06-22.md](docs/spec-choir-desktop-wails-v3-2026-06-22.md)
+for the full build spec and phase plan.
+
 Trace is not a normal user-facing app. It is the causal/evidence substrate for
 agentic tracing, run bundles, acceptance records, and diagnosis artifacts. Raw
 Terminal is not a user app either; shell-like repair access is mediated through
@@ -369,6 +389,8 @@ Start here:
 - [docs/legacy-promotion-experiments-learnings.md](docs/legacy-promotion-experiments-learnings.md): consolidated lessons from pruned patchset-promotion experiments.
 - [docs/implementation-scope.md](docs/implementation-scope.md): near-term scope and non-goals.
 - [docs/north-star.md](docs/north-star.md): longer product direction.
+- [cmd/desktop/README.md](cmd/desktop/README.md): native macOS app setup, build, and auth bridge docs.
+- [docs/spec-choir-desktop-wails-v3-2026-06-22.md](docs/spec-choir-desktop-wails-v3-2026-06-22.md): desktop app build spec and phase plan.
 
 Many stale dated proof files have been pruned. Preserve their reusable lessons
 in consolidated docs instead of keeping obsolete success paths alive.
@@ -377,6 +399,7 @@ in consolidated docs instead of keeping obsolete success paths alive.
 
 ```text
 cmd/                 service entrypoints
+cmd/desktop/         native macOS app (Wails v3)
 internal/auth/       passkey/JWT auth
 internal/proxy/      auth-gated proxy and VM routing
 internal/vmctl/      VM ownership/lifecycle API

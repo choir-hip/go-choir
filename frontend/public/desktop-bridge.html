@@ -8,7 +8,6 @@
   :root {
     --choir-bg: #050912;
     --choir-panel: #0D1628;
-    --choir-panel-strong: #09101F;
     --choir-fg: #F7FAFF;
     --choir-muted: #9AA9C0;
     --choir-subtle: #65748D;
@@ -50,14 +49,8 @@
     box-shadow: 0 0 24px rgba(109, 141, 255, 0.3);
   }
   .logo svg { width: 26px; height: 26px; }
-  h1 {
-    font-size: 1.35rem; font-weight: 600;
-    margin-bottom: 6px; letter-spacing: -0.01em;
-  }
-  p {
-    color: var(--choir-muted);
-    margin-bottom: 28px; font-size: 0.9rem; line-height: 1.5;
-  }
+  h1 { font-size: 1.35rem; font-weight: 600; margin-bottom: 6px; letter-spacing: -0.01em; }
+  p { color: var(--choir-muted); margin-bottom: 28px; font-size: 0.9rem; line-height: 1.5; }
   input {
     width: 100%; padding: 13px 18px;
     border-radius: var(--choir-radius-control);
@@ -68,57 +61,32 @@
     transition: border-color 120ms ease, box-shadow 120ms ease;
   }
   input::placeholder { color: var(--choir-subtle); }
-  input:focus {
-    border-color: var(--choir-accent);
-    box-shadow: 0 0 0 3px rgba(109, 141, 255, 0.15);
-  }
+  input:focus { border-color: var(--choir-accent); box-shadow: 0 0 0 3px rgba(109, 141, 255, 0.15); }
   button {
     width: 100%; padding: 13px;
     border-radius: var(--choir-radius-control);
     border: none; font-size: 0.95rem; font-weight: 600;
     cursor: pointer; margin-bottom: 10px;
-    transition: all 120ms ease;
-    font-family: inherit;
+    transition: all 120ms ease; font-family: inherit;
   }
   .btn-primary {
-    background: var(--choir-accent);
-    color: #fff;
+    background: var(--choir-accent); color: #fff;
     box-shadow: 0 4px 16px rgba(109, 141, 255, 0.25);
   }
-  .btn-primary:hover {
-    background: #7d9dff;
-    box-shadow: 0 6px 20px rgba(109, 141, 255, 0.35);
-  }
+  .btn-primary:hover { background: #7d9dff; box-shadow: 0 6px 20px rgba(109, 141, 255, 0.35); }
   .btn-secondary {
-    background: transparent;
-    color: var(--choir-fg);
+    background: transparent; color: var(--choir-fg);
     border: 1px solid var(--choir-border);
   }
-  .btn-secondary:hover {
-    background: var(--choir-selected);
-    border-color: var(--choir-accent);
-  }
+  .btn-secondary:hover { background: var(--choir-selected); border-color: var(--choir-accent); }
   .status {
     margin-top: 18px; padding: 14px 16px;
     border-radius: var(--choir-radius-control);
-    font-size: 0.88rem; line-height: 1.4;
-    text-align: left;
+    font-size: 0.88rem; line-height: 1.4; text-align: left;
   }
-  .status.success {
-    background: rgba(32, 214, 134, 0.1);
-    color: var(--choir-success);
-    border: 1px solid rgba(32, 214, 134, 0.2);
-  }
-  .status.error {
-    background: rgba(255, 91, 107, 0.1);
-    color: var(--choir-danger);
-    border: 1px solid rgba(255, 91, 107, 0.2);
-  }
-  .status.info {
-    background: var(--choir-selected);
-    color: var(--choir-accent2);
-    border: 1px solid var(--choir-border);
-  }
+  .status.success { background: rgba(32, 214, 134, 0.1); color: var(--choir-success); border: 1px solid rgba(32, 214, 134, 0.2); }
+  .status.error { background: rgba(255, 91, 107, 0.1); color: var(--choir-danger); border: 1px solid rgba(255, 91, 107, 0.2); }
+  .status.info { background: var(--choir-selected); color: var(--choir-accent2); border: 1px solid var(--choir-border); }
   .hidden { display: none; }
 </style>
 </head>
@@ -294,13 +262,16 @@ async function loginPasskey(email) {
   return finishRes.json();
 }
 
-async function completeAuth() {
-  try {
-    await fetch('/desktop-auth/complete', {
-      method: 'POST',
-      credentials: 'include',
-    });
-  } catch (_e) { /* ignore */ }
+async function exchangeTokens() {
+  const res = await fetch('/auth/desktop/exchange', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Token exchange failed');
+  }
+  return res.json();
 }
 
 async function handleRegister() {
@@ -311,8 +282,7 @@ async function handleRegister() {
     await registerPasskey(email);
     showStatus('Passkey created! Returning to Choir...', 'success');
     document.getElementById('auth-form').classList.add('hidden');
-    await completeAuth();
-    window.location.href = 'choir-desktop://auth-complete';
+    window.location.href = '/auth/desktop/exchange-redirect';
   } catch (err) {
     showStatus(err.message || 'Registration failed', 'error');
   }
@@ -326,14 +296,12 @@ async function handleLogin() {
     await loginPasskey(email);
     showStatus('Signed in! Returning to Choir...', 'success');
     document.getElementById('auth-form').classList.add('hidden');
-    await completeAuth();
-    window.location.href = 'choir-desktop://auth-complete';
+    window.location.href = '/auth/desktop/exchange-redirect';
   } catch (err) {
     showStatus(err.message || 'Login failed', 'error');
   }
 }
 
-// Pre-fill email from query param.
 const params = new URLSearchParams(window.location.search);
 const emailParam = params.get('email');
 if (emailParam) {
@@ -342,6 +310,28 @@ if (emailParam) {
 
 document.getElementById('register-btn').addEventListener('click', handleRegister);
 document.getElementById('login-btn').addEventListener('click', handleLogin);
+
+// Auto-detect existing Safari session — if user is already signed in on choir.news,
+// skip WebAuthn and exchange tokens immediately.
+(async function autoCheckSession() {
+  try {
+    const res = await fetch('/auth/session', {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (res.ok) {
+      const session = await res.json();
+      if (session && session.authenticated) {
+        showStatus('Already signed in as ' + (session.user?.email || 'user') + ' — returning to Choir...', 'success');
+        document.getElementById('auth-form').classList.add('hidden');
+        window.location.href = '/auth/desktop/exchange-redirect';
+        return;
+      }
+    }
+  } catch (e) {
+    // No session or error — show the auth form normally
+  }
+})();
 </script>
 </body>
 </html>

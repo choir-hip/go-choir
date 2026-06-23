@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>choir-desktop</string>
+    <string>Choir</string>
     <key>CFBundleIconFile</key>
     <string>icons.icns</string>
     <key>CFBundleInfoDictionaryVersion</key>

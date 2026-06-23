@@ -44,6 +44,8 @@ Current state:
 
 - Deployed web desktop, auth, proxy, gateway, vmctl, runtime service, Svelte UI,
   app surfaces, and VText exist.
+- Native macOS app (Wails v3) wraps the Svelte frontend with cloud-mode-by-default
+  and ASWebAuthenticationSession passkey auth via Safari.
 - Prompt-bar routing, worker delegation, run memory, worker export, promotion
   queue, and run-acceptance records exist in partial/product-slice form.
 - Background/candidate computers and promotion are not yet first-class enough to
@@ -158,7 +160,12 @@ or chat wrapper:
   Trace, and related VTexts can open beside the current essay without collapsing
   the user's place or task context;
 - theme creation/editing as a user-facing demonstration of local computer
-  divergence and personal promotion.
+  divergence and personal promotion;
+- native macOS app (Wails v3) wrapping the Svelte frontend with
+  `ASWebAuthenticationSession` for passkey auth, transparent title bar, and
+  cloud-mode-by-default launch — see
+  [cmd/desktop/README.md](../cmd/desktop/README.md)
+  and [spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
 
 Apps do not need to become appagents immediately. They become appagents when
 they need durable domain ownership, prompts, dynamic UI, or semantic memory.

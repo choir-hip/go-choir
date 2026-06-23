@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   APP_NAME: Choir
-  BINARY_NAME: choir-desktop
+  BINARY_NAME: Choir
   BIN_DIR: bin
   REPO_BIN_DIR: ../../bin
   FRONTEND_DIR: ../../frontend
@@ -49,7 +49,7 @@ tasks:
 
   # Dev build — builds frontend and runs the app (local mode by default)
   dev:
-    desc: Run Choir Desktop in local dev mode
+    desc: Run Choir in local dev mode
     deps: [copy:frontend, build:services]
     cmds:
       - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
@@ -57,7 +57,7 @@ tasks:
 
   # Cloud mode — connects to staging, no local services
   cloud:
-    desc: Run Choir Desktop in cloud mode (connects to staging)
+    desc: Run Choir in cloud mode (connects to staging)
     deps: [copy:frontend]
     cmds:
       - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
@@ -65,20 +65,39 @@ tasks:
 
   # Production build
   build:
-    desc: Build Choir Desktop binary
+    desc: Build Choir binary
     deps: [copy:frontend]
     cmds:
       - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=0.1.0 -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
 
+  # Generate macOS .icns from the source appicon.png
+  icon:
+    desc: Generate macOS app icon (.icns) from appicon.png
+    cmds:
+      - mkdir -p "{{.BUILD_DIR}}/darwin/icon.iconset"
+      - "sips -s format png -z 16 16     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_16x16.png'"
+      - "sips -s format png -z 32 32     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_16x16@2x.png'"
+      - "sips -s format png -z 32 32     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_32x32.png'"
+      - "sips -s format png -z 64 64     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_32x32@2x.png'"
+      - "sips -s format png -z 128 128   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_128x128.png'"
+      - "sips -s format png -z 256 256   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_128x128@2x.png'"
+      - "sips -s format png -z 256 256   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_256x256.png'"
+      - "sips -s format png -z 512 512   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_256x256@2x.png'"
+      - "sips -s format png -z 512 512   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_512x512.png'"
+      - "sips -s format png -z 1024 1024 '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_512x512@2x.png'"
+      - "iconutil -c icns '{{.BUILD_DIR}}/darwin/icon.iconset' -o '{{.BUILD_DIR}}/darwin/icons.icns'"
+      - echo "Icon generated at {{.BUILD_DIR}}/darwin/icons.icns"
+
   # Package as .app bundle
   package:
-    desc: Package Choir Desktop as macOS .app bundle
-    deps: [build]
+    desc: Package Choir as macOS .app bundle
+    deps: [build, icon]
     cmds:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.BINARY_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/"
       - cp "{{.BUILD_DIR}}/darwin/Info.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/"
+      - cp "{{.BUILD_DIR}}/darwin/icons.icns" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources/"
       - echo "Packaged to {{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   # Ad-hoc sign the app bundle for local testing

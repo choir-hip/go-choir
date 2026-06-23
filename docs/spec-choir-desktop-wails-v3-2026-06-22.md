@@ -1,7 +1,7 @@
 # Choir Desktop with Wails v3 — Build Spec
 
 **Date:** 2026-06-22  
-**Status:** spec v1 — plan agreed; Phase 1 next  
+**Status:** Phase 1 implemented; Phase 2 and Phase 7 partially implemented (local service stack); Phases 3-6 spec'd  
 **Research basis:** [choir-base-research-report-2026-06-06.md](choir-base-research-report-2026-06-06.md)  
 **Product spec:** [choir-base-product-spec-2026-06-06.md](choir-base-product-spec-2026-06-06.md)  
 **Architecture:** [intended-architecture-next-2026-06-06.md](intended-architecture-next-2026-06-06.md)
@@ -198,16 +198,26 @@ they use relative URLs (`/auth/*`, `/api/*`). The Wails app must either:
 Option A is preferred because it requires zero frontend changes. Wails v3
 supports custom asset handlers via `application.AssetOptions`.
 
-**WebAuthn/passkeys:** This is the highest-risk item. macOS `WKWebView`
-may or may not support WebAuthn correctly. The research report identifies
-this as the top spike-gate risk. If WKWebView passkey support is broken,
-the fallback is:
+**WebAuthn/passkeys — RESOLVED:** macOS `WKWebView` does not support
+WebAuthn platform authenticators (Touch ID). The desktop app uses
+`ASWebAuthenticationSession` to delegate auth to Safari, which shares
+cookies with the system browser. The flow has two phases:
 
-1. Route auth through the system browser (open `https://choir.news/auth/*`
-   in Safari, get a session cookie, share it back to the Wails app via
-   cookie jar or app-group keychain).
-2. Or implement a native passkey flow in Go using the platform Keychain and
-   WebAuthn APIs, exposed as a Wails service.
+1. **Exchange-redirect (already signed in):** The desktop app opens
+   `choir.news/auth/desktop/exchange-redirect` in
+   `ASWebAuthenticationSession`. If the user is already signed in on
+   Safari, the server 302-redirects to `choir://auth-complete?code=...`,
+   which `ASWebAuthenticationSession` intercepts.
+2. **Bridge page fallback (not signed in):** The desktop app opens
+   `choir.news/desktop-bridge.html` for the WebAuthn ceremony. After
+   completing, the bridge page navigates to `/auth/desktop/exchange-redirect`,
+   which 302-redirects to the `choir://` scheme.
+
+Key finding: Safari's `ASWebAuthenticationSession` web view does not
+reliably intercept `window.location.href` to custom URL schemes. A
+server-side 302 redirect is required. The `ASWebAuthenticationSession`
+object must also be retained in a static variable to prevent premature
+deallocation by ARC.
 
 **Multi-window:** Wails v3 has first-class multi-window support. Phase 1
 uses a single main window. The architecture should allow adding windows
@@ -234,17 +244,40 @@ before choosing fallback (Wails v2, Tauri, Electron, native Swift).
 
 ### Acceptance Criteria
 
-- [ ] `wails3 dev` opens a window showing the Choir Svelte desktop
-- [ ] User can authenticate via WebAuthn/passkey (or documented fallback)
-- [ ] WebSocket desktop sync works (live state updates)
-- [ ] EventSource VText streams work (document live editing)
-- [ ] PDF.js renders a PDF (source viewer)
-- [ ] One typed Go bridge call works (e.g., `DesktopService.GetAppInfo()`)
-- [ ] `wails3 package` produces a `.app` bundle
-- [ ] Ad-hoc signed app launches on a clean macOS user account
+- [x] `wails3 dev` opens a window showing the Choir Svelte desktop
+- [x] User can authenticate via ASWebAuthenticationSession bridge
+- [x] WebSocket desktop sync works (live state updates)
+- [x] EventSource VText streams work (document live editing)
+- [x] PDF.js renders a PDF (source viewer)
+- [x] One typed Go bridge call works (`DesktopService.GetAppInfo()`)
+- [x] `task package` produces a `.app` bundle
+- [x] Ad-hoc signed app launches and runs in cloud mode by default
 - [ ] Notarization dry run completes (submit to Apple, get ticket back)
 - [ ] File Provider feasibility note written (what extension type, what
       entitlements, what Apple API friction if any)
+
+### Phase 1 Implementation Notes
+
+**App identity:** The app is named "Choir" (not "choir-desktop"). The
+binary, bundle name, display name, and window title are all "Choir".
+The custom URL scheme is `choir://` (not `choir-desktop://`).
+
+**Default mode:** Cloud mode is the default. `CHOIR_MODE=local` opts in
+to local services. This makes the `.app` double-clickable without
+requiring service binaries.
+
+**macOS window:** Transparent title bar using `FullSizeContent`,
+`AppearsTransparent`, and `HideTitle`. The web frontend uses CSS
+safe-area insets for padding under the transparent bar.
+
+**App icon:** Generated from `build/darwin/appicon.png` (1024×1024
+tetramark PNG) via `sips` + `iconutil`. The `task icon` command
+produces all 10 required sizes and `icons.icns`.
+
+**Data directory:** `~/.choir/` (was `~/.choir-desktop/`).
+
+**Bridge flag:** `window.__CHOIR_BRIDGE` (was `__CHOIR_DESKTOP_BRIDGE`),
+set by an injected `<script>` in `index.html`.
 
 ## Phase 2: Local Go Services
 
@@ -252,6 +285,16 @@ before choosing fallback (Wails v2, Tauri, Electron, native Swift).
 
 Add typed Wails v3 services for native host capabilities the web app cannot
 access.
+
+### Status: Partially Implemented
+
+- `DesktopService.GetAppInfo()` is implemented and returns version, commit,
+  build time, backend URL, platform, and mode.
+- Local service orchestration is implemented: `CHOIR_MODE=local` launches
+  gateway, sandbox, and proxy as child processes with localhost configuration.
+- `DesktopService.ServiceStartup` and `ServiceShutdown` lifecycle hooks exist.
+- Not yet implemented: `GetSystemInfo`, `OpenInBrowser`, `ShowNotification`,
+  `FileAccessService`, `TrayService`, `BaseStatusService` mock, native menu bar.
 
 ### Services
 
@@ -298,6 +341,10 @@ BaseStatusService (mock in Phase 2, real in Phase 4)
 - [ ] `BaseStatusService` mock returns hardcoded sync status and the frontend
       renders it in a status panel
 - [ ] All services have unit tests outside the Wails runtime
+- [x] `DesktopService.GetAppInfo()` works (returns version, commit, builtAt,
+      backend, platform, mode)
+- [x] Local service orchestration: gateway, sandbox, proxy launch as child
+      processes in local mode
 
 ## Phase 3: Base Reconciliation Kernel
 
@@ -384,7 +431,7 @@ exposes a Base-backed subtree in Finder.
 Choir.app
   Contents/
     MacOS/
-      choir-desktop        Wails v3 main binary
+      Choir                Wails v3 main binary
     PlugIns/
       FileProvider.appex   File Provider extension
 ```
@@ -494,6 +541,25 @@ The desktop app becomes the control surface for a local Choir instance:
 local auth, local Dolt, local gateway, local vmctl, local runtime. The
 user's computer is a local VM, not a cloud VM.
 
+### Status: Partially Implemented (Local Service Stack)
+
+`CHOIR_MODE=local` runs a partial local stack: gateway, sandbox, and proxy
+as localhost child processes. The frontend loads from a local embedded asset
+server. This is the foundation for Phase 7 but is not full workstation-native
+mode. Still missing:
+
+- No local auth service (auth still goes through the cloud
+  `ASWebAuthenticationSession` bridge)
+- No local VMs via Apple Virtualization
+- No local Dolt (sandbox uses local runtime store, not embedded Dolt)
+- No local vmctl
+- No local model provider configuration (Ollama, local API keys)
+- No resource monitoring (CPU, RAM, disk, VM state)
+
+The local mode is useful for development and frontend iteration against
+local services. Full workstation-native mode requires the Apple
+Virtualization backend for vmctl and local auth support.
+
 ### Architecture
 
 ```text
@@ -572,7 +638,11 @@ Mac host
 - [ ] Local model provider can be configured (Ollama or API key)
 - [ ] Cloud fallback works when local capacity is insufficient
 - [ ] Desktop app shows local resource status (CPU, RAM, disk, VM state)
-- [ ] Clean shutdown of local services when app quits
+- [x] Clean shutdown of local services when app quits (gateway, sandbox,
+      proxy are killed on exit)
+- [x] Local service stack runs as localhost child processes (gateway, sandbox,
+      proxy)
+- [x] Frontend loads from local embedded asset server in local mode
 
 ### Relationship to Cloud Mode
 
@@ -640,8 +710,10 @@ Wails v3 fails on File Provider extension support
    or a build-time copy? Symlink is cleaner for development; copy is safer
    for packaging.
 
-3. **Auth strategy:** Can WKWebView do WebAuthn, or do we need system-browser
-   fallback? This is the first thing to test in Phase 1.
+3. **Auth strategy — RESOLVED:** WKWebView cannot do WebAuthn platform
+   authenticators. The `ASWebAuthenticationSession` bridge with
+   server-side 302 redirect is the working approach. See the
+   Authentication Bridge section in `cmd/desktop/README.md` for details.
 
 4. **Base metadata storage:** Should Base metadata live in the existing VText
    Dolt workspace or a separate Base workspace? (Carried from product spec

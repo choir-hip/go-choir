@@ -1083,3 +1083,157 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 
 	return key, nil
 }
+
+// --- Desktop token exchange ---
+
+// DesktopExchangeTTL is how long a one-time exchange code is valid.
+const DesktopExchangeTTL = 60 * time.Second
+
+// desktopExchangeResponse is the JSON response for POST /auth/desktop/exchange.
+type desktopExchangeResponse struct {
+	Code string `json:"code"`
+}
+
+// HandleDesktopExchange handles POST /auth/desktop/exchange.
+// It reads the auth cookies from the request (set by Safari during the
+// WebAuthn ceremony), creates a one-time exchange code, and returns it.
+// The bridge page redirects to choir://auth-complete?code=<code>.
+// The desktop app then calls POST /auth/desktop/redeem with the code to
+// get the actual tokens.
+func (h *Handler) HandleDesktopExchange(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	// Extract access token from cookie.
+	accessCookie, err := r.Cookie(AccessTokenCookieName)
+	if err != nil || accessCookie.Value == "" {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "no access token cookie"})
+		return
+	}
+
+	// Validate the access JWT to get the user ID.
+	userID, err := h.ValidateAccessToken(accessCookie.Value)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "invalid access token"})
+		return
+	}
+
+	// Extract refresh token from cookie.
+	refreshCookie, err := r.Cookie(RefreshTokenCookieName)
+	if err != nil || refreshCookie.Value == "" {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "no refresh token cookie"})
+		return
+	}
+
+	// Create a one-time exchange code.
+	code := uuid.NewString()
+	now := time.Now().UTC()
+	exchange := &DesktopExchangeCode{
+		Code:         code,
+		UserID:       userID,
+		AccessToken:  accessCookie.Value,
+		RefreshToken: refreshCookie.Value,
+		CreatedAt:    now,
+		ExpiresAt:    now.Add(DesktopExchangeTTL),
+	}
+	if err := h.store.CreateDesktopExchangeCode(exchange); err != nil {
+		log.Printf("[auth] operation=desktop_exchange user_id=%s result=error step=create_code error=%q", userID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create exchange code"})
+		return
+	}
+
+	log.Printf("[auth] operation=desktop_exchange user_id=%s result=success", userID)
+	writeJSON(w, http.StatusOK, desktopExchangeResponse{Code: code})
+}
+
+// HandleDesktopExchangeRedirect handles GET /auth/desktop/exchange-redirect.
+// It works like HandleDesktopExchange but returns a 302 redirect to the
+// choir:// custom scheme instead of JSON. This is more reliable
+// in ASWebAuthenticationSession's web view, where JS window.location.href
+// to a custom scheme may not trigger the callback.
+func (h *Handler) HandleDesktopExchangeRedirect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	accessCookie, err := r.Cookie(AccessTokenCookieName)
+	if err != nil || accessCookie.Value == "" {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "no access token cookie"})
+		return
+	}
+
+	userID, err := h.ValidateAccessToken(accessCookie.Value)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "invalid access token"})
+		return
+	}
+
+	refreshCookie, err := r.Cookie(RefreshTokenCookieName)
+	if err != nil || refreshCookie.Value == "" {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "no refresh token cookie"})
+		return
+	}
+
+	code := uuid.NewString()
+	now := time.Now().UTC()
+	exchange := &DesktopExchangeCode{
+		Code:         code,
+		UserID:       userID,
+		AccessToken:  accessCookie.Value,
+		RefreshToken: refreshCookie.Value,
+		CreatedAt:    now,
+		ExpiresAt:    now.Add(DesktopExchangeTTL),
+	}
+	if err := h.store.CreateDesktopExchangeCode(exchange); err != nil {
+		log.Printf("[auth] operation=desktop_exchange_redirect user_id=%s result=error step=create_code error=%q", userID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create exchange code"})
+		return
+	}
+
+	log.Printf("[auth] operation=desktop_exchange_redirect user_id=%s result=success", userID)
+	http.Redirect(w, r, "choir://auth-complete?code="+code, http.StatusFound)
+}
+
+// desktopRedeemResponse is the JSON response for POST /auth/desktop/redeem.
+type desktopRedeemResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// HandleDesktopRedeem handles POST /auth/desktop/redeem.
+// It takes a one-time exchange code and returns the access and refresh
+// tokens. The code is consumed (deleted) after use.
+func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	if req.Code == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "code is required"})
+		return
+	}
+
+	exchange, err := h.store.ConsumeDesktopExchangeCode(req.Code)
+	if err != nil {
+		log.Printf("[auth] operation=desktop_redeem result=error step=consume_code error=%q", err)
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid or expired exchange code"})
+		return
+	}
+
+	log.Printf("[auth] operation=desktop_redeem user_id=%s result=success", exchange.UserID)
+	writeJSON(w, http.StatusOK, desktopRedeemResponse{
+		AccessToken:  exchange.AccessToken,
+		RefreshToken: exchange.RefreshToken,
+	})
+}

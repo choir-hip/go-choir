@@ -3,10 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"embed"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io/fs"
 	"log"
@@ -18,18 +16,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"golang.org/x/crypto/ssh"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
-
-//go:embed bridge.html
-var bridgeHTML []byte
 
 // appInfo holds build-time metadata injected via ldflags.
 var (
@@ -41,14 +34,23 @@ var (
 // Service ports for local mode.
 const (
 	localProxyPort    = "8082"
-	localAuthPort     = "8081"
 	localGatewayPort  = "8084"
 	localSandboxPort  = "8085"
 	localFrontendPort = "3000"
 )
 
 // dataDir is the base directory for local service state.
-const dataDir = "/tmp/choir-desktop"
+// During dev we use ~/.choir so state persists across restarts.
+// For distribution: ~/Library/Application Support/Choir (macOS standard).
+var dataDir string
+
+func init() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
+	dataDir = filepath.Join(home, ".choir")
+}
 
 // DesktopService exposes app metadata and local status to the frontend.
 type DesktopService struct {
@@ -79,120 +81,6 @@ func (d *DesktopService) ServiceShutdown() error {
 	return nil
 }
 
-// ─── Session-aware proxy (cookie bridge) ────────────────────────────────
-
-// cookieStore is a thread-safe store for auth cookies. It captures Set-Cookie
-// headers from auth service responses and injects them into all proxied
-// requests. This bridges Safari's cookie jar with WKWebView's — Safari
-// performs the WebAuthn ceremony and the resulting session cookies are shared
-// with WKWebView through this store.
-type cookieStore struct {
-	mu      sync.Mutex
-	cookies map[string]string
-}
-
-func newCookieStore() *cookieStore {
-	return &cookieStore{cookies: make(map[string]string)}
-}
-
-func (c *cookieStore) Set(name, value string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if value != "" {
-		c.cookies[name] = value
-	} else {
-		delete(c.cookies, name)
-	}
-}
-
-func (c *cookieStore) All() map[string]string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	result := make(map[string]string, len(c.cookies))
-	for k, v := range c.cookies {
-		result[k] = v
-	}
-	return result
-}
-
-// newSessionAwareProxy creates a reverse proxy that captures Set-Cookie headers
-// from upstream responses into the cookieStore and injects stored cookies into
-// all requests. This allows Safari and WKWebView to share auth state.
-func newSessionAwareProxy(target string, store *cookieStore) *httputil.ReverseProxy {
-	u, err := url.Parse(target)
-	if err != nil {
-		log.Fatalf("invalid proxy target %q: %v", target, err)
-	}
-	proxy := httputil.NewSingleHostReverseProxy(u)
-
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Host = u.Host
-
-		// Inject stored cookies. We merge with any existing cookies on the
-		// request by clearing and re-adding, so stored cookies take
-		// precedence (they are the latest from upstream).
-		stored := store.All()
-		if len(stored) > 0 {
-			req.Header.Del("Cookie")
-			for name, value := range stored {
-				req.AddCookie(&http.Cookie{Name: name, Value: value})
-			}
-		}
-	}
-
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		for _, cookie := range resp.Cookies() {
-			store.Set(cookie.Name, cookie.Value)
-		}
-		return nil
-	}
-
-	return proxy
-}
-
-// ─── Safari bridge state ─────────────────────────────────────────────────
-
-// bridgeState tracks the Safari auth bridge completion status. The WKWebView
-// polls /desktop-auth/status while Safari performs the WebAuthn ceremony.
-type bridgeState struct {
-	mu       sync.Mutex
-	status   string // "idle", "pending", "complete", "error"
-	email    string
-	authType string
-}
-
-func newBridgeState() *bridgeState {
-	return &bridgeState{status: "idle"}
-}
-
-func (b *bridgeState) SetPending(email, authType string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.status = "pending"
-	b.email = email
-	b.authType = authType
-}
-
-func (b *bridgeState) SetComplete() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.status = "complete"
-}
-
-func (b *bridgeState) SetError() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.status = "error"
-}
-
-func (b *bridgeState) Status() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.status
-}
-
 // ─── Local service manager ──────────────────────────────────────────────
 
 // serviceProcess wraps a child process with metadata for cleanup.
@@ -201,68 +89,17 @@ type serviceProcess struct {
 	cmd  *exec.Cmd
 }
 
-// ensureSigningKey generates an Ed25519 key pair in OpenSSH format if the
-// private key file does not exist. The public key is written alongside it
-// with a .pub suffix so the proxy can load it.
-func ensureSigningKey(keyPath string) error {
-	if _, err := os.Stat(keyPath); err == nil {
-		return nil
-	}
-
-	_, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		return fmt.Errorf("generate ed25519 key: %w", err)
-	}
-
-	block, err := ssh.MarshalPrivateKey(priv, "choir-desktop")
-	if err != nil {
-		return fmt.Errorf("marshal private key: %w", err)
-	}
-	privData := pem.EncodeToMemory(block)
-	if err := os.WriteFile(keyPath, privData, 0o600); err != nil {
-		return fmt.Errorf("write private key: %w", err)
-	}
-
-	pubKey, err := ssh.NewPublicKey(priv.Public())
-	if err != nil {
-		return fmt.Errorf("derive public key: %w", err)
-	}
-	pubData := ssh.MarshalAuthorizedKey(pubKey)
-	if err := os.WriteFile(keyPath+".pub", pubData, 0o600); err != nil {
-		return fmt.Errorf("write public key: %w", err)
-	}
-
-	log.Printf("Generated Ed25519 signing key at %s", keyPath)
-	return nil
-}
-
-// startLocalServices launches auth, gateway, sandbox, and proxy as child
+// startLocalServices launches gateway, sandbox, and proxy as child
 // processes with environment configured for localhost operation.
 func startLocalServices(binDir string) ([]*serviceProcess, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	// Generate Ed25519 signing key if not present.
-	keyPath := filepath.Join(dataDir, "auth-signing-key")
-	if err := ensureSigningKey(keyPath); err != nil {
-		return nil, fmt.Errorf("generate signing key: %w", err)
-	}
-
 	// Common environment for all services.
 	baseEnv := []string{
 		"SERVER_HOST=127.0.0.1",
 	}
-
-	// Auth service env.
-	authEnv := append(baseEnv,
-		fmt.Sprintf("AUTH_PORT=%s", localAuthPort),
-		fmt.Sprintf("AUTH_DB_PATH=%s/auth.db", dataDir),
-		"AUTH_RP_ID=localhost",
-		fmt.Sprintf("AUTH_RP_ORIGINS=http://localhost:%s", localFrontendPort),
-		fmt.Sprintf("AUTH_JWT_PRIVATE_KEY_PATH=%s/auth-signing-key", dataDir),
-		"AUTH_COOKIE_SECURE=false",
-	)
 
 	// Gateway service env.
 	gatewayEnv := append(baseEnv,
@@ -284,7 +121,6 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 	proxyEnv := append(baseEnv,
 		fmt.Sprintf("PROXY_PORT=%s", localProxyPort),
 		fmt.Sprintf("PROXY_SANDBOX_URL=http://127.0.0.1:%s", localSandboxPort),
-		fmt.Sprintf("PROXY_AUTH_PUBLIC_KEY_PATH=%s/auth-signing-key.pub", dataDir),
 	)
 
 	services := []struct {
@@ -292,7 +128,6 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 		bin  string
 		env  []string
 	}{
-		{"auth", "auth", authEnv},
 		{"gateway", "gateway", gatewayEnv},
 		{"sandbox", "sandbox", sandboxEnv},
 		{"proxy", "proxy", proxyEnv},
@@ -336,7 +171,6 @@ func startLocalServices(binDir string) ([]*serviceProcess, error) {
 func waitForServices(procs []*serviceProcess) error {
 	client := &http.Client{Timeout: 2 * time.Second}
 	ports := map[string]string{
-		"auth":    localAuthPort,
 		"gateway": localGatewayPort,
 		"sandbox": localSandboxPort,
 		"proxy":   localProxyPort,
@@ -392,111 +226,23 @@ func stopLocalServices(procs []*serviceProcess) {
 // ─── Local frontend server ──────────────────────────────────────────────
 
 // startLocalFrontendServer serves embedded frontend assets on localhost and
-// proxies /auth/* and /api/* to the local services. It uses a session-aware
-// proxy that captures and injects auth cookies, so Safari and WKWebView share
-// auth state. It also serves the Safari bridge page and status endpoints.
-func startLocalFrontendServer() (*http.Server, error) {
-	store := newCookieStore()
-	bridge := newBridgeState()
-
+// proxies /api/* to the local proxy service. In local mode there is no auth
+// service — device access is ownership. The /desktop-auth/start-session
+// endpoint opens the cloud auth bridge via ASWebAuthenticationSession.
+func startLocalFrontendServer(backend string) (*http.Server, error) {
 	mux := http.NewServeMux()
 
-	// Session-aware auth proxy — captures Set-Cookie, injects stored cookies.
-	authProxy := newSessionAwareProxy("http://127.0.0.1:"+localAuthPort, store)
-	mux.HandleFunc("/auth/", authProxy.ServeHTTP)
-
-	// Session-aware API proxy — injects auth cookies so /api/* requests
-	// from WKWebView are authenticated after Safari completes the ceremony.
-	apiProxy := newSessionAwareProxy("http://127.0.0.1:"+localProxyPort, store)
+	// API proxy — routes /api/* to the local proxy service.
+	apiProxy := httputil.NewSingleHostReverseProxy(&url.URL{
+		Scheme: "http",
+		Host:   "127.0.0.1:" + localProxyPort,
+	})
 	mux.HandleFunc("/api/", apiProxy.ServeHTTP)
 
-	// Safari bridge page — performs the WebAuthn ceremony in Safari.
-	mux.HandleFunc("/desktop-auth/bridge", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(bridgeHTML)
-	})
-
-	// Open Safari to the bridge page (legacy polling-based approach).
-	mux.HandleFunc("/desktop-auth/open-bridge", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var req struct {
-			Email    string `json:"email"`
-			AuthType string `json:"authType"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-
-		bridge.SetPending(req.Email, req.AuthType)
-
-		bridgeURL := fmt.Sprintf("http://localhost:%s/desktop-auth/bridge?email=%s",
-			localFrontendPort, url.QueryEscape(req.Email))
-		log.Printf("Opening Safari for %s auth: %s", req.AuthType, bridgeURL)
-
-		// Open Safari (not default browser — must be Safari for Touch ID).
-		cmd := exec.Command("open", "-a", "Safari", bridgeURL)
-		if err := cmd.Run(); err != nil {
-			log.Printf("Failed to open Safari: %v", err)
-			bridge.SetError()
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to open Safari"})
-			return
-		}
-
-		writeJSON(w, http.StatusOK, map[string]string{"status": "opened"})
-	})
-
-	// Start an ASWebAuthenticationSession — the native macOS API for
-	// WebAuthn. This opens the default browser (Safari/Chrome) to the
-	// bridge page and blocks until the ceremony completes and the browser
-	// redirects to the choir-desktop:// callback scheme. The session-aware
-	// proxy captures auth cookies from the ceremony responses.
+	// Desktop auth session — opens the cloud auth bridge via
+	// ASWebAuthenticationSession, redeems the exchange code for tokens.
 	mux.HandleFunc("/desktop-auth/start-session", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var req struct {
-			Email    string `json:"email"`
-			AuthType string `json:"authType"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-
-		bridge.SetPending(req.Email, req.AuthType)
-
-		bridgeURL := fmt.Sprintf("http://localhost:%s/desktop-auth/bridge?email=%s",
-			localFrontendPort, url.QueryEscape(req.Email))
-		log.Printf("Starting ASWebAuthenticationSession for %s auth: %s", req.AuthType, bridgeURL)
-
-		callbackURL, err := startWebAuthSession(bridgeURL, "choir-desktop")
-		if err != nil {
-			log.Printf("ASWebAuthenticationSession error: %v", err)
-			bridge.SetError()
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-
-		log.Printf("ASWebAuthenticationSession completed: %s", callbackURL)
-		bridge.SetComplete()
-		writeJSON(w, http.StatusOK, map[string]string{"status": "complete"})
-	})
-
-	// Poll status from WKWebView.
-	mux.HandleFunc("/desktop-auth/status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": bridge.Status()})
-	})
-
-	// Called by the bridge page in Safari when the ceremony completes.
-	mux.HandleFunc("/desktop-auth/complete", func(w http.ResponseWriter, r *http.Request) {
-		bridge.SetComplete()
-		log.Printf("Safari auth bridge completed")
-		writeJSON(w, http.StatusOK, map[string]string{"status": "complete"})
+		handleDesktopAuthSession(w, r, backend)
 	})
 
 	// Frontend assets with bridge script injection.
@@ -556,9 +302,10 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// injectBridgeScript injects a <script> tag into the HTML that patches
-// navigator.credentials and fetch to use the Safari bridge when running
-// inside WKWebView (which doesn't support WebAuthn platform authenticators).
+// injectBridgeScript injects a <script> tag into the HTML that sets a flag
+// so auth.js knows to route WebAuthn ceremonies through the desktop bridge
+// (ASWebAuthenticationSession) instead of calling navigator.credentials
+// (which doesn't support platform authenticators in WKWebView).
 func injectBridgeScript(html []byte) []byte {
 	script := `<script>` + bridgeScript + `</script>`
 	// Insert before </head> if present, otherwise before </body>.
@@ -578,20 +325,18 @@ func injectBridgeScript(html []byte) []byte {
 
 // bridgeScript is the JavaScript injected into index.html when served by the
 // local frontend server. It sets a flag that auth.js checks to route
-// WebAuthn ceremonies through the Safari bridge instead of calling
-// navigator.credentials (which doesn't support platform authenticators
-// in WKWebView).
+// WebAuthn ceremonies through the ASWebAuthenticationSession bridge.
 const bridgeScript = `
 (function() {
-  window.__CHOIR_DESKTOP_BRIDGE = true;
-  console.log('[choir-bridge] Desktop bridge flag set');
+  window.__CHOIR_BRIDGE = true;
+  console.log('[choir] Desktop bridge flag set');
 })();
 `
 
 // ─── Main ───────────────────────────────────────────────────────────────
 
 func main() {
-	localMode := os.Getenv("CHOIR_MODE") != "cloud"
+	localMode := os.Getenv("CHOIR_MODE") == "local"
 	backend := os.Getenv("CHOIR_BACKEND")
 	if backend == "" {
 		backend = "https://choir.news"
@@ -602,12 +347,28 @@ func main() {
 	var windowURL string
 
 	if localMode {
-		log.Printf("Choir Desktop starting in LOCAL mode — version: %s", appVersion)
+		log.Printf("Choir starting in LOCAL mode — version: %s", appVersion)
 
-		binDir := filepath.Join(filepath.Dir(os.Args[0]), "..", "..", "..", "bin")
-		if abs, err := filepath.Abs(binDir); err == nil {
-			binDir = abs
+		binDir := os.Getenv("CHOIR_BIN_DIR")
+		if binDir == "" {
+			candidates := []string{
+				filepath.Join(filepath.Dir(os.Args[0]), "..", "..", "..", "bin"),
+				filepath.Join(filepath.Dir(os.Args[0]), "..", "..", "..", "..", "..", "bin"),
+				filepath.Join(dataDir, "bin"),
+			}
+			for _, c := range candidates {
+				if abs, err := filepath.Abs(c); err == nil {
+					if _, err := os.Stat(filepath.Join(abs, "gateway")); err == nil {
+						binDir = abs
+						break
+					}
+				}
+			}
 		}
+		if binDir == "" {
+			log.Fatalf("Failed to find service binaries. Set CHOIR_BIN_DIR or build with: task build:services")
+		}
+		log.Printf("Using service binaries from: %s", binDir)
 
 		var err error
 		procs, err = startLocalServices(binDir)
@@ -616,7 +377,7 @@ func main() {
 		}
 		defer stopLocalServices(procs)
 
-		frontendSrv, err = startLocalFrontendServer()
+		frontendSrv, err = startLocalFrontendServer(backend)
 		if err != nil {
 			log.Fatalf("Failed to start frontend server: %v", err)
 		}
@@ -628,7 +389,7 @@ func main() {
 
 		windowURL = fmt.Sprintf("http://localhost:%s", localFrontendPort)
 	} else {
-		log.Printf("Choir Desktop starting in CLOUD mode — backend: %s, version: %s", backend, appVersion)
+		log.Printf("Choir starting in CLOUD mode — backend: %s, version: %s", backend, appVersion)
 		windowURL = "/"
 	}
 
@@ -657,18 +418,28 @@ func main() {
 		MinWidth:  900,
 		MinHeight: 600,
 		URL:       windowURL,
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+			InvisibleTitleBarHeight: 28,
+		},
 	})
 
 	_ = window
 
 	if err := app.Run(); err != nil {
-		log.Fatal(fmt.Errorf("Choir Desktop exited with error: %w", err))
+		log.Fatal(fmt.Errorf("Choir exited with error: %w", err))
 	}
 }
 
 // assetHandler serves embedded frontend assets and proxies /auth/* and
 // /api/* to the staging backend. Used only in cloud mode — in local mode,
 // the window loads from the local frontend server which handles all routing.
+// It also handles /desktop-auth/start-session for the ASWebAuthenticationSession
+// flow and injects the bridge script into index.html.
 func assetHandler(backend string) http.Handler {
 	embedded := application.AssetFileServerFS(assets)
 
@@ -685,6 +456,11 @@ func assetHandler(backend string) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Desktop auth session — same handler as local mode.
+		if r.URL.Path == "/desktop-auth/start-session" {
+			handleDesktopAuthSession(w, r, backend)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/api/") {
 			proxy.ServeHTTP(w, r)
 			return
@@ -694,6 +470,8 @@ func assetHandler(backend string) http.Handler {
 }
 
 // serveEmbedded serves embedded frontend assets with SPA fallback.
+// Injects the bridge script into index.html so the frontend knows it's
+// running in desktop bridge mode.
 func serveEmbedded(w http.ResponseWriter, r *http.Request, embedded http.Handler) {
 	path := r.URL.Path
 	if path == "/" {
@@ -702,8 +480,109 @@ func serveEmbedded(w http.ResponseWriter, r *http.Request, embedded http.Handler
 	stripped := strings.TrimPrefix(path, "/")
 	if _, err := assets.ReadFile("frontend/dist/" + stripped); err != nil {
 		r.URL.Path = "/"
+		path = "/index.html"
+	}
+	if path == "/index.html" {
+		data, err := assets.ReadFile("frontend/dist/index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		injected := injectBridgeScript(data)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(injected)
+		return
 	}
 	embedded.ServeHTTP(w, r)
+}
+
+// handleDesktopAuthSession opens choir.news via ASWebAuthenticationSession.
+// It first tries /auth/desktop/exchange-redirect — if the user is already
+// signed in on Safari, the server immediately 302-redirects to choir://auth-complete?code=...,
+// which ASWebAuthenticationSession reliably intercepts (unlike JS window.location.href).
+// If that fails (user not signed in), it falls back to the bridge page for WebAuthn.
+func handleDesktopAuthSession(w http.ResponseWriter, r *http.Request, backend string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Email    string `json:"email"`
+		AuthType string `json:"authType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Phase 1: Try exchange-redirect directly (works if user is already signed in on Safari).
+	redirectURL := fmt.Sprintf("%s/auth/desktop/exchange-redirect", backend)
+	log.Printf("Starting ASWebAuthenticationSession (exchange-redirect): %s", redirectURL)
+
+	callbackURL, err := startWebAuthSession(redirectURL, "choir")
+	if err == nil {
+		log.Printf("ASWebAuthenticationSession completed via exchange-redirect: %s", callbackURL)
+	} else {
+		// Phase 2: Fall back to bridge page for WebAuthn ceremony.
+		log.Printf("Exchange-redirect failed (%v), falling back to bridge page", err)
+		bridgeURL := fmt.Sprintf("%s/desktop-bridge.html?email=%s",
+			backend, url.QueryEscape(req.Email))
+		log.Printf("Starting ASWebAuthenticationSession (bridge): %s", bridgeURL)
+
+		callbackURL, err = startWebAuthSession(bridgeURL, "choir")
+		if err != nil {
+			log.Printf("ASWebAuthenticationSession error: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		log.Printf("ASWebAuthenticationSession completed via bridge: %s", callbackURL)
+	}
+
+	// Parse the callback URL to extract the exchange code.
+	cbURL, err := url.Parse(callbackURL)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid callback URL"})
+		return
+	}
+	code := cbURL.Query().Get("code")
+	if code == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no code in callback"})
+		return
+	}
+
+	// Redeem the code for tokens.
+	redeemBody, _ := json.Marshal(map[string]string{"code": code})
+	redeemRes, err := http.Post(
+		backend+"/auth/desktop/redeem",
+		"application/json",
+		bytes.NewReader(redeemBody),
+	)
+	if err != nil {
+		log.Printf("Token redeem error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to redeem token"})
+		return
+	}
+	defer redeemRes.Body.Close()
+
+	if redeemRes.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(redeemRes.Body).Decode(&errResp)
+		log.Printf("Token redeem failed: %s", errResp["error"])
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": errResp["error"]})
+		return
+	}
+
+	var tokens struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(redeemRes.Body).Decode(&tokens); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to parse tokens"})
+		return
+	}
+
+	log.Printf("Token redeem succeeded, returning tokens to frontend")
+	writeJSON(w, http.StatusOK, tokens)
 }
 
 func init() {

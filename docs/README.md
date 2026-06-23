@@ -177,6 +177,11 @@ explicitly promotes one as source form.
   outlier breakdown.
 - `docs/implementation-scope.md` - near-term implementation scope.
 - `docs/north-star.md` - long-range product direction.
+- `docs/spec-choir-desktop-wails-v3-2026-06-22.md` - native macOS desktop app
+  build spec: Wails v3 shell, ASWebAuthenticationSession auth bridge, phase
+  plan (Phase 1 implemented, Phase 2 and 7 partially implemented, Phases 3-6 spec'd).
+- `cmd/desktop/README.md` - native macOS app setup, build, auth bridge docs,
+  and configuration reference.
 - `docs/mission-campaign-compiler-selfdev-v0.md` - retained Choir-in-Choir
   benchmark input. Do not treat it as the current spine when the portfolio
   names an architecture-spine mission.

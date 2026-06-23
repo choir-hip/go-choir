@@ -34,6 +34,12 @@ static const char *startWebAuthSessionSync(const char *urlStr, const char *schem
         ctx = [[AuthPresentationContext alloc] init];
     }
 
+    // Keep a strong reference to the session so it isn't deallocated
+    // while waiting for the callback. Without this, ARC may release
+    // the session before ASWebAuthenticationSession fires its completion.
+    static ASWebAuthenticationSession *activeSession = nil;
+    activeSession = nil;
+
     __block const char *result = NULL;
     __block const char *errMsg = NULL;
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -41,7 +47,7 @@ static const char *startWebAuthSessionSync(const char *urlStr, const char *schem
     NSURL *url = [NSURL URLWithString:[NSString stringWithUTF8String:urlStr]];
     NSString *scheme = [NSString stringWithUTF8String:schemeStr];
 
-    ASWebAuthenticationSession *session = [[ASWebAuthenticationSession alloc]
+    activeSession = [[ASWebAuthenticationSession alloc]
         initWithURL:url
         callbackURLScheme:scheme
         completionHandler:^(NSURL *callbackURL, NSError *error) {
@@ -50,22 +56,27 @@ static const char *startWebAuthSessionSync(const char *urlStr, const char *schem
             } else {
                 result = strdup([[callbackURL absoluteString] UTF8String]);
             }
+            activeSession = nil; // release reference
             dispatch_semaphore_signal(semaphore);
         }];
 
-    session.presentationContextProvider = ctx;
-    session.prefersEphemeralWebBrowserSession = NO;
+    activeSession.presentationContextProvider = ctx;
+    activeSession.prefersEphemeralWebBrowserSession = NO;
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        BOOL started = [session start];
+        BOOL started = [activeSession start];
         if (!started) {
             if (!errMsg) errMsg = strdup("Failed to start authentication session");
+            activeSession = nil;
             dispatch_semaphore_signal(semaphore);
         }
     });
 
-    long waitResult = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 120 * NSEC_PER_SEC));
+    long waitResult = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC));
     if (waitResult != 0) {
+        // Cancel the session on timeout.
+        [activeSession cancel];
+        activeSession = nil;
         if (errOut) *errOut = strdup("Authentication session timed out");
         return NULL;
     }

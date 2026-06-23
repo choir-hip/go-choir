@@ -96,10 +96,14 @@ higher-level frame and [glossary.md](glossary.md) for the current
 Community Cloud / Private Cloud / Wire vocabulary.
 
 The Automatic Computer already exists in deployed form: a web desktop, backend
-services, appagents, and NixOS-on-NixOS VM infrastructure. The product object is
-a persistent user **computer**, not a disposable sandbox. The current work is not
-to invent the product from scratch. The current work is to stabilize the
-deployed system around the right causal model.
+services, appagents, and NixOS-on-NixOS VM infrastructure. A native macOS app
+(Wails v3) wraps the web desktop with `ASWebAuthenticationSession` for passkey
+auth, transparent title bar, and cloud-mode-by-default. See
+[cmd/desktop/README.md](../cmd/desktop/README.md) and
+[spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
+The product object is a persistent user **computer**, not a disposable sandbox.
+The current work is not to invent the product from scratch. The current work is
+to stabilize the deployed system around the right causal model.
 
 Choir is not chat and not a generic coding-agent runner. The visible product is
 a web desktop with apps. Some apps grow into appagents; most apps can remain
