@@ -136,19 +136,28 @@
 
   async function fetchEmailWithTimeout(url, options = {}) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), EMAIL_REQUEST_TIMEOUT_MS);
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Mail request timed out'));
+      }, EMAIL_REQUEST_TIMEOUT_MS);
+    });
     try {
-      return await fetchWithRenewal(url, {
-        ...options,
-        signal: controller.signal,
-      });
+      return await Promise.race([
+        fetchWithRenewal(url, {
+          ...options,
+          signal: controller.signal,
+        }),
+        timeoutPromise,
+      ]);
     } catch (err) {
       if (err?.name === 'AbortError') {
         throw new Error('Mail request timed out');
       }
       throw err;
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
     }
   }
 
