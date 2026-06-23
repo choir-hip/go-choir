@@ -10,3 +10,13 @@
 - Evidence class: staging smoke/diagnosis, not fix proof.
 - Open edge: affected-account freeze remains unreproduced; no stack trace or console exception was observed.
 
+## 2026-06-23 Pass 2
+
+- Claim: hardening Email bootstrap/request ownership can repair the confirmed duplicate-load and stale-response hazard without claiming the unreproduced affected-account freeze is fixed.
+- Move: construct.
+- Expected delta V: -3 by replacing dual bootstrap with a single guarded bootstrap, adding latest-request guards and timeout, adding focused regression coverage, and running focused verification.
+- Actual delta V: -2. Source patch and regression spec landed locally; `npm run build` passed. Focused Playwright execution is blocked by local harness/auth-origin mismatch before Email opens.
+- Receipts: `frontend/src/lib/EmailApp.svelte`, `frontend/tests/email-app-state.spec.js`; `npm run build`; failed local commands `npm run e2e -- tests/email-app-state.spec.js --project=chromium --workers=1 --reporter=list` and `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npm run e2e -- tests/email-app-state.spec.js --project=chromium --workers=1 --reporter=list`.
+- Evidence class: build proof plus blocked local browser regression; not staging repair proof.
+- Open edge: independent verifier has not reviewed the diff; affected-account freeze remains unreproduced.
+

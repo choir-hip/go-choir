@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { previewEmailMessages } from './public-preview-data';
   import { mediaRouteForFileName } from './media-utils.js';
@@ -16,6 +16,7 @@
     { id: 'sent', label: 'Sent' },
     { id: 'quarantine', label: 'Quarantine' },
   ];
+  const EMAIL_REQUEST_TIMEOUT_MS = 15000;
 
   let aliases = [];
   let activeFolder = normalizeFolder(appContext?.activeFolder) || 'inbox';
@@ -37,6 +38,12 @@
   let detailPaneOpen = Boolean(appContext?.detailPaneOpen);
   let openedContextDraftId = '';
   let appStateEmitTimer: ReturnType<typeof setTimeout> | null = null;
+  let mounted = false;
+  let bootstrappedAuthState: boolean | null = null;
+  let mailboxBootstrapStarted = false;
+  let aliasLoadGeneration = 0;
+  let messageLoadGeneration = 0;
+  let detailLoadGeneration = 0;
 
   $: selectedMessage = messages.find((message) => message.id === selectedId) || null;
   $: activeAddress = aliases[0]?.address || '';
@@ -53,29 +60,25 @@
   }
 
   onMount(() => {
-    if (!authenticated) {
-      loadPreviewMailbox();
-    } else {
-      void loadAliases();
-      void loadMessages(activeFolder, {
-        openPane: detailPaneOpen,
-        selectedId,
-        persist: false,
-      });
-    }
+    mounted = true;
   });
 
   onDestroy(() => {
+    mounted = false;
+    invalidateEmailRequests();
     if (appStateEmitTimer) clearTimeout(appStateEmitTimer);
   });
 
-  $: if (authenticated && !loadedOnce && !loading) {
-    void loadAliases();
-    void loadMessages(activeFolder, {
-      openPane: detailPaneOpen,
-      selectedId,
-      persist: false,
-    });
+  $: if (mounted && authenticated !== bootstrappedAuthState) {
+    bootstrappedAuthState = authenticated;
+    mailboxBootstrapStarted = false;
+    invalidateEmailRequests();
+    loadedOnce = false;
+    if (!authenticated) {
+      loadPreviewMailbox();
+    } else {
+      void bootstrapMailbox();
+    }
   }
 
   function normalizeFolder(value) {
@@ -95,6 +98,58 @@
       draftId,
       windowTitle: 'Email',
     };
+  }
+
+  function invalidateEmailRequests() {
+    aliasLoadGeneration += 1;
+    messageLoadGeneration += 1;
+    detailLoadGeneration += 1;
+    loading = false;
+    detailLoading = false;
+  }
+
+  function isLatestAliasLoad(requestId) {
+    return requestId === aliasLoadGeneration;
+  }
+
+  function isLatestMessageLoad(requestId) {
+    return requestId === messageLoadGeneration;
+  }
+
+  function isLatestDetailLoad(requestId, ownerMessageLoad = 0) {
+    return requestId === detailLoadGeneration &&
+      (!ownerMessageLoad || ownerMessageLoad === messageLoadGeneration);
+  }
+
+  async function bootstrapMailbox() {
+    if (mailboxBootstrapStarted) return;
+    mailboxBootstrapStarted = true;
+    await Promise.all([
+      loadAliases(),
+      loadMessages(activeFolder, {
+        openPane: detailPaneOpen,
+        selectedId,
+        persist: false,
+      }),
+    ]);
+  }
+
+  async function fetchEmailWithTimeout(url, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EMAIL_REQUEST_TIMEOUT_MS);
+    try {
+      return await fetchWithRenewal(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw new Error('Mail request timed out');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   function scheduleAppStateEmit() {
@@ -120,16 +175,18 @@
   }
 
   async function loadAliases() {
+    const requestId = ++aliasLoadGeneration;
     try {
-      const res = await fetchWithRenewal('/api/email/aliases');
+      const res = await fetchEmailWithTimeout('/api/email/aliases');
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
         throw new Error('Could not load addresses');
       }
       const data = await res.json();
+      if (!isLatestAliasLoad(requestId)) return;
       aliases = data.aliases || [];
     } catch (err) {
-      handleError(err);
+      if (isLatestAliasLoad(requestId)) handleError(err);
     }
   }
 
@@ -148,6 +205,7 @@
   }
 
   async function loadMessages(folder, options = {}) {
+    const requestId = ++messageLoadGeneration;
     const nextFolder = normalizeFolder(folder) || 'inbox';
     if (!authenticated) {
       loadPreviewMailbox();
@@ -157,6 +215,8 @@
       if (options.persist !== false) scheduleAppStateEmit();
       return;
     }
+    detailLoadGeneration += 1;
+    detailLoading = false;
     loading = true;
     error = '';
     activeFolder = nextFolder;
@@ -164,15 +224,16 @@
     if (options.persist !== false) emitAppState();
     try {
       if (nextFolder === 'drafts') {
-        await loadDrafts(options);
+        await loadDrafts(options, requestId);
         return;
       }
-      const res = await fetchWithRenewal(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}`);
+      const res = await fetchEmailWithTimeout(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
         throw new Error('Could not load mail');
       }
       const data = await res.json();
+      if (!isLatestMessageLoad(requestId)) return;
       loadedOnce = true;
       messages = data.messages || [];
       if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
@@ -183,23 +244,30 @@
         detail = null;
       }
       if (selectedId) {
-        await loadDetail(selectedId, { openPane: Boolean(options.openPane), persist: false });
+        await loadDetail(selectedId, {
+          openPane: Boolean(options.openPane),
+          persist: false,
+          ownerMessageLoad: requestId,
+        });
       }
     } catch (err) {
-      handleError(err);
+      if (isLatestMessageLoad(requestId)) handleError(err);
     } finally {
-      loading = false;
-      if (options.persist !== false) scheduleAppStateEmit();
+      if (isLatestMessageLoad(requestId)) {
+        loading = false;
+        if (options.persist !== false) scheduleAppStateEmit();
+      }
     }
   }
 
-  async function loadDrafts(options = {}) {
-    const res = await fetchWithRenewal('/api/email/drafts');
+  async function loadDrafts(options = {}, requestId = messageLoadGeneration) {
+    const res = await fetchEmailWithTimeout('/api/email/drafts');
     if (!res.ok) {
       if (res.status === 401) throw new AuthRequiredError();
       throw new Error('Could not load drafts');
     }
     const data = await res.json();
+    if (!isLatestMessageLoad(requestId)) return;
     loadedOnce = true;
     messages = (data.drafts || []).map(draftListItem);
     if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
@@ -210,7 +278,11 @@
       detail = null;
     }
     if (selectedId) {
-      await loadDetail(selectedId, { openPane: Boolean(options.openPane), persist: false });
+      await loadDetail(selectedId, {
+        openPane: Boolean(options.openPane),
+        persist: false,
+        ownerMessageLoad: requestId,
+      });
     }
   }
 
@@ -223,6 +295,8 @@
   }
 
   async function loadDetail(id, options = {}) {
+    const requestId = ++detailLoadGeneration;
+    const ownerMessageLoad = options.ownerMessageLoad || 0;
     selectedId = id;
     detailLoading = true;
     actionStatus = '';
@@ -233,26 +307,31 @@
     }
     try {
       if (activeFolder === 'drafts') {
-        const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(id)}`);
+        const res = await fetchEmailWithTimeout(`/api/email/drafts/${encodeURIComponent(id)}`);
         if (!res.ok) {
           if (res.status === 401) throw new AuthRequiredError();
           throw new Error('Could not open draft');
         }
         const draft = await res.json();
+        if (!isLatestDetailLoad(requestId, ownerMessageLoad)) return;
         detail = draftDetail(draft);
         return;
       }
-      const res = await fetchWithRenewal(`/api/email/messages/${encodeURIComponent(id)}`);
+      const res = await fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(id)}`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
         throw new Error('Could not open message');
       }
-      detail = await res.json();
+      const data = await res.json();
+      if (!isLatestDetailLoad(requestId, ownerMessageLoad)) return;
+      detail = data;
     } catch (err) {
-      handleError(err);
+      if (isLatestDetailLoad(requestId, ownerMessageLoad)) handleError(err);
     } finally {
-      detailLoading = false;
-      if (options.persist !== false) scheduleAppStateEmit();
+      if (isLatestDetailLoad(requestId, ownerMessageLoad)) {
+        detailLoading = false;
+        if (options.persist !== false) scheduleAppStateEmit();
+      }
     }
   }
 
@@ -265,7 +344,7 @@
     sending = true;
     actionStatus = '';
     try {
-      const res = await fetchWithRenewal('/api/email/drafts', {
+      const res = await fetchEmailWithTimeout('/api/email/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,7 +383,7 @@
     sending = true;
     actionStatus = '';
     try {
-      const res = await fetchWithRenewal('/api/email/drafts', {
+      const res = await fetchEmailWithTimeout('/api/email/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -345,7 +424,7 @@
     sending = true;
     actionStatus = '';
     try {
-      const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(draftId)}/send`, {
+      const res = await fetchEmailWithTimeout(`/api/email/drafts/${encodeURIComponent(draftId)}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -375,7 +454,7 @@
     sending = true;
     actionStatus = '';
     try {
-      const res = await fetchWithRenewal(`/api/email/drafts/${encodeURIComponent(draftId)}/approval-email`, {
+      const res = await fetchEmailWithTimeout(`/api/email/drafts/${encodeURIComponent(draftId)}/approval-email`, {
         method: 'POST',
       });
       if (!res.ok) {

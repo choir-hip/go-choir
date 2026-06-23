@@ -110,7 +110,38 @@ The function most directly responsible for recovery risk is `loadMessages`: it o
 4. Keep `fetchWithRenewal` as a one-renewal helper; do not add a renewal loop.
 5. Add a focused Playwright regression that asserts initial Email open performs one aliases request and one message-list request, and that a stale slow response cannot overwrite a newer folder selection.
 
+## Implementation Pass
+
+Implemented locally after the first diagnosis commit:
+
+- `EmailApp.svelte` now has a single guarded authenticated mailbox bootstrap rather than `onMount` plus a reactive `!loadedOnce` loader.
+- Email aliases, message-list, and detail loads use monotonically increasing request generations so stale responses cannot overwrite newer state.
+- Starting a new mailbox load invalidates any previous detail load.
+- Email fetches use a 15s abort timeout through `fetchEmailWithTimeout`; `fetchWithRenewal` remains the one-renewal auth helper.
+- `frontend/tests/email-app-state.spec.js` covers one initial aliases/message request and stale slower mailbox response behavior.
+
+Verification:
+
+```text
+npm run build
+```
+
+passed.
+
+Focused Playwright execution was attempted against the local Nix service stack:
+
+```text
+npm run e2e -- tests/email-app-state.spec.js --project=chromium --workers=1 --reporter=list
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npm run e2e -- tests/email-app-state.spec.js --project=chromium --workers=1 --reporter=list
+```
+
+Both attempts failed before Email opened. The first used an already-bound stale
+local auth service on `127.0.0.1:8081` and failed WebAuthn registration with
+`registration verification failed: Error validating origin`. The second used
+`127.0.0.1` and failed browser WebAuthn with `SecurityError: This is an invalid
+domain`. This is local harness/auth-origin evidence, not Email behavior
+evidence.
+
 ## Evidence Boundary
 
-This pass supports a fix plan for Email bootstrap hardening. It does not prove the reported hard freeze's exact affected-account root cause, and it does not prove a fix. The next implementation pass should either obtain affected-account staging reproduction evidence first or explicitly treat the bootstrap hardening as a preventive repair for the confirmed request-state hazard.
-
+This pass supports a fix plan and local source repair for Email bootstrap hardening. It does not prove the reported hard freeze's exact affected-account root cause, and it does not prove a staging fix. The hardening should be treated as a preventive repair for the confirmed request-state hazard unless affected-account staging reproduction evidence shows the same failure mode.
