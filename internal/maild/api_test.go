@@ -12,7 +12,11 @@ import (
 func seedMessage(t *testing.T, store *Store, ownerID, messageID, trustStatus string) {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := store.db.Exec(`INSERT INTO email_messages (
+	db, err := store.mailboxForOwner(ownerID)
+	if err != nil {
+		t.Fatalf("open mailbox for seed: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO email_messages (
 		id, provider, provider_message_id, provider_event_id, direction,
 		mailbox_owner_id, alias_id, from_address, subject, text_body,
 		trust_status, received_at, created_at
@@ -22,7 +26,7 @@ func seedMessage(t *testing.T, store *Store, ownerID, messageID, trustStatus str
 	if err != nil {
 		t.Fatalf("seed message: %v", err)
 	}
-	_, err = store.db.Exec(`INSERT INTO email_source_packets (
+	_, err = db.Exec(`INSERT INTO email_source_packets (
 		id, message_id, trust_label, provenance_json, text_ref, created_at
 	) VALUES (?, ?, 'UNTRUSTED_EXTERNAL_EMAIL', '{"provider":"resend"}', ?, ?)`,
 		"source-"+messageID, messageID, "message:"+messageID, now)
@@ -91,7 +95,11 @@ func TestHandleMessagesListsOwnerInbox(t *testing.T) {
 func TestHandleMessagesListsAttachmentIndicator(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "quarantined")
-	if _, err := store.db.Exec(`INSERT INTO email_attachments (
+	mbDB, err := store.mailboxForOwner("user-1")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	if _, err := mbDB.Exec(`INSERT INTO email_attachments (
 		id, message_id, filename, content_type, size_bytes, status, created_at
 	) VALUES ('att-1', 'msg-1', 'brief.pdf', 'application/pdf', 1024, 'quarantined', ?)`,
 		time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
@@ -118,7 +126,11 @@ func TestHandleMessagesListsAttachmentIndicator(t *testing.T) {
 func TestHandleMessageDetailIncludesRawHeaders(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")
-	if _, err := store.db.Exec(`UPDATE email_messages SET raw_headers_json = ? WHERE id = ?`,
+	mbDB, err := store.mailboxForOwner("user-1")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	if _, err := mbDB.Exec(`UPDATE email_messages SET raw_headers_json = ? WHERE id = ?`,
 		`{"message_id":"<provider@example.com>","authentication-results":"spf=pass"}`, "msg-1"); err != nil {
 		t.Fatalf("update raw headers: %v", err)
 	}
@@ -146,7 +158,11 @@ func TestHandleMessageDetailIncludesRawHeaders(t *testing.T) {
 func TestHandleMessageDetailIncludesStoredRecipients(t *testing.T) {
 	store, cfg := newTestStore(t)
 	seedMessage(t, store, "user-1", "msg-1", "untrusted")
-	_, err := store.db.Exec(`INSERT INTO email_message_recipients (id, message_id, kind, address, display)
+	mbDB, err := store.mailboxForOwner("user-1")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	_, err = mbDB.Exec(`INSERT INTO email_message_recipients (id, message_id, kind, address, display)
 		VALUES
 		('recipient-to-1', 'msg-1', 'to', '000+read@choir.news', ''),
 		('recipient-cc-1', 'msg-1', 'cc', 'copy@example.com', 'Copy Person')`)

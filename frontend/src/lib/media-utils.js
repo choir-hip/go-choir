@@ -7,6 +7,8 @@ export const MEDIA_FILE_ROUTES = [
   { appId: 'video', mediaType: 'video/mp4', extensions: ['mp4', 'm4v', 'webm', 'mov', 'avi', 'mkv'] },
   { appId: 'pdf', mediaType: 'application/pdf', extensions: ['pdf'] },
   { appId: 'epub', mediaType: 'application/epub+zip', extensions: ['epub'] },
+  { appId: 'slides', mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extensions: ['pptx', 'html', 'htm'] },
+  { appId: 'calendar', mediaType: 'text/calendar', extensions: ['ics'] },
 ];
 
 export function appTitle(kind) {

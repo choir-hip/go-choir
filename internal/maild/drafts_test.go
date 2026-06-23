@@ -643,7 +643,11 @@ func TestApprovalReplyDenyRejectsDraftWithoutSending(t *testing.T) {
 		t.Fatalf("token status = %q, want rejected", used.Status)
 	}
 	var eventType string
-	if err := store.db.QueryRowContext(nilSafeContext(), `SELECT event_type FROM email_draft_approval_events WHERE draft_id = ?`, draft.ID).Scan(&eventType); err != nil {
+	mbDB, err := store.mailboxForOwner("user-root")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	if err := mbDB.QueryRowContext(nilSafeContext(), `SELECT event_type FROM email_draft_approval_events WHERE draft_id = ?`, draft.ID).Scan(&eventType); err != nil {
 		t.Fatalf("approval event lookup: %v", err)
 	}
 	if eventType != "email_reply_rejected" {
@@ -788,7 +792,11 @@ func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) 
 		t.Fatalf("old token status = %q, want edited", used.Status)
 	}
 	var activeTokenCount int
-	if err := store.db.QueryRowContext(nilSafeContext(), `SELECT count(*) FROM email_draft_approval_tokens WHERE draft_id = ? AND status = 'active' AND version_hash = ?`, draft.ID, updated.VersionHash).Scan(&activeTokenCount); err != nil {
+	mbDB, err := store.mailboxForOwner("user-root")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	if err := mbDB.QueryRowContext(nilSafeContext(), `SELECT count(*) FROM email_draft_approval_tokens WHERE draft_id = ? AND status = 'active' AND version_hash = ?`, draft.ID, updated.VersionHash).Scan(&activeTokenCount); err != nil {
 		t.Fatalf("active token count query: %v", err)
 	}
 	if activeTokenCount != 1 {

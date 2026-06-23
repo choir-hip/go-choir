@@ -437,6 +437,8 @@
     if (mediaRoute?.appId === 'video') return '🎬';
     if (mediaRoute?.appId === 'pdf') return '📄';
     if (mediaRoute?.appId === 'epub') return '📚';
+    if (mediaRoute?.appId === 'slides') return '🖥️';
+    if (mediaRoute?.appId === 'calendar') return '📅';
     return '📄';
   }
 

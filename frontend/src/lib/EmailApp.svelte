@@ -2,6 +2,7 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { previewEmailMessages } from './public-preview-data';
+  import { mediaRouteForFileName } from './media-utils.js';
 
   export let authenticated = false;
   export let appContext = {};
@@ -493,6 +494,106 @@
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
+
+  let bodyViewMode = 'html';
+  let emailIframe = null;
+  let iframeLoadToken = 0;
+
+  $: hasHtmlBody = Boolean(detail?.html_body && detail.html_body.trim());
+  $: effectiveBodyMode = hasHtmlBody ? bodyViewMode : 'text';
+  $: if (detail?.html_body && bodyViewMode === 'html') {
+    void tick().then(renderEmailIframe);
+  }
+
+  function buildIframeContent(html) {
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #fff;
+    margin: 0;
+    padding: 16px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  img { max-width: 100%; height: auto; }
+  table { max-width: 100%; }
+  a { color: #2563eb; }
+  pre { overflow-x: auto; }
+  blockquote {
+    border-left: 3px solid #ddd;
+    margin: 0;
+    padding: 8px 16px;
+    color: #666;
+  }
+</style>
+</head>
+<body>${html}</body>
+</html>`;
+  }
+
+  function renderEmailIframe() {
+    if (!emailIframe || !hasHtmlBody) return;
+    const token = ++iframeLoadToken;
+    const doc = emailIframe.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(buildIframeContent(detail.html_body));
+    doc.close();
+  }
+
+  function handleIframeLoad() {
+    if (iframeLoadToken === 0) renderEmailIframe();
+  }
+
+  function attachmentIcon(attachment) {
+    const name = String(attachment?.filename || '').toLowerCase();
+    const type = String(attachment?.content_type || '').toLowerCase();
+    if (type.startsWith('text/calendar') || name.endsWith('.ics')) return '📅';
+    if (type.startsWith('image/')) return '🖼️';
+    if (type.includes('pdf') || name.endsWith('.pdf')) return '📄';
+    if (name.endsWith('.docx') || name.endsWith('.doc')) return '📝';
+    if (name.endsWith('.pptx') || name.endsWith('.ppt')) return '🖥️';
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) return '📊';
+    if (type.startsWith('audio/')) return '🎧';
+    if (type.startsWith('video/')) return '🎬';
+    if (type.startsWith('text/')) return '📃';
+    return '📎';
+  }
+
+  function isCalendarAttachment(attachment) {
+    const name = String(attachment?.filename || '').toLowerCase();
+    const type = String(attachment?.content_type || '').toLowerCase();
+    return type.startsWith('text/calendar') || name.endsWith('.ics');
+  }
+
+  function handleAddToCalendar(attachment) {
+    dispatch('launchapp', {
+      appId: 'calendar',
+      appName: 'Calendar',
+      icon: '📅',
+      appContext: {
+        windowTitle: 'Calendar',
+        icsAttachmentId: attachment.id,
+        icsFilename: attachment.filename,
+        sourceMessageId: detail?.message?.id || '',
+      },
+    });
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 </script>
 
 <section class="email-app" data-email-app>
@@ -624,7 +725,26 @@
         <strong>{formatTime(detail.message.received_at || detail.message.created_at)}</strong>
       </div>
 
-      <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
+      {#if effectiveBodyMode === 'html' && hasHtmlBody}
+        <div class="body-html-container">
+          <iframe
+            class="body-html-iframe"
+            bind:this={emailIframe}
+            sandbox="allow-same-origin"
+            title="Email body"
+            on:load={handleIframeLoad}
+          ></iframe>
+        </div>
+        <div class="body-toggle">
+          <button class:active={bodyViewMode === 'html'} on:click={() => (bodyViewMode = 'html')}>HTML</button>
+          <button class:active={bodyViewMode === 'text'} on:click={() => (bodyViewMode = 'text')}>Plain text</button>
+        </div>
+        {#if bodyViewMode === 'text'}
+          <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
+        {/if}
+      {:else}
+        <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
+      {/if}
 
       <details class="message-details" data-email-headers>
         <summary>Details</summary>
@@ -664,11 +784,26 @@
 
       {#if detail.attachments?.length}
         <div class="attachments">
-          <h3>Attachments</h3>
+          <h3>Attachments ({detail.attachments.length})</h3>
           {#each detail.attachments as attachment}
-            <div class="attachment">
-              <span>{attachment.filename}</span>
-              <strong>{attachment.status}</strong>
+            <div class="attachment-card" data-status={attachment.status}>
+              <span class="attachment-icon">{attachmentIcon(attachment)}</span>
+              <div class="attachment-info">
+                <span class="attachment-name">{attachment.filename}</span>
+                <span class="attachment-meta">
+                  {formatFileSize(attachment.size_bytes)}
+                  {#if attachment.status && attachment.status !== 'trusted'}
+                    · {trustLabel(attachment.status)}
+                  {/if}
+                </span>
+              </div>
+              {#if isCalendarAttachment(attachment)}
+                <button
+                  type="button"
+                  class="attachment-action"
+                  on:click={() => handleAddToCalendar(attachment)}
+                >Add to Calendar</button>
+              {/if}
             </div>
           {/each}
         </div>
@@ -936,6 +1071,45 @@
     line-height: 1.55;
   }
 
+  .body-html-container {
+    margin: 18px 20px 0;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .body-html-iframe {
+    width: 100%;
+    min-height: 300px;
+    border: none;
+    display: block;
+  }
+
+  .body-toggle {
+    display: flex;
+    gap: 2px;
+    margin: 0 20px;
+    margin-top: 8px;
+  }
+
+  .body-toggle button {
+    padding: 4px 12px;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--choir-text-accent);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .body-toggle button.active {
+    background: var(--choir-state-selected);
+    font-weight: 600;
+  }
+
   .message-details {
     border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
@@ -981,17 +1155,64 @@
     color: var(--choir-text-accent);
   }
 
-  .attachment {
+  .attachment-card {
     display: flex;
-    justify-content: space-between;
+    align-items: center;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 10px 14px;
     border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
   }
 
-  .attachment strong {
-    color: var(--choir-status-warning);
+  .attachment-card[data-status='quarantined'] {
+    border-color: var(--choir-status-warning, rgba(255, 193, 7, 0.3));
+  }
+
+  .attachment-icon {
+    flex: none;
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .attachment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .attachment-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .attachment-meta {
+    font-size: 0.75rem;
+    color: var(--choir-text-accent);
+    opacity: 0.7;
+  }
+
+  .attachment-action {
+    flex: none;
+    padding: 6px 12px;
+    border: 1px solid rgba(124, 158, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(124, 158, 255, 0.12);
+    color: #7c9eff;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .attachment-action:hover {
+    background: rgba(124, 158, 255, 0.2);
   }
 
   .actions {
@@ -1202,7 +1423,7 @@
     .detail-header p,
     .body-text,
     .message-details dd,
-    .attachment span {
+    .attachment-card span {
       overflow-wrap: anywhere;
     }
 
@@ -1230,7 +1451,7 @@
       gap: 3px;
     }
 
-    .attachment {
+    .attachment-card {
       align-items: flex-start;
       flex-direction: column;
     }

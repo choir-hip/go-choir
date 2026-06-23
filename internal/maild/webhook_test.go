@@ -278,7 +278,11 @@ func TestHandleResendWebhookFetchesAndStoresInboundMessage(t *testing.T) {
 		t.Fatalf("provider ids = provider=%q message=%q event=%q", msg.Provider, msg.ProviderMessageID, msg.ProviderEventID)
 	}
 	var rawMessageRef string
-	if err := store.db.QueryRowContext(req.Context(), `SELECT coalesce(raw_message_ref, '') FROM email_messages WHERE id = ?`, msg.ID).Scan(&rawMessageRef); err != nil {
+	mbDB, err := store.mailboxForOwner("user-root")
+	if err != nil {
+		t.Fatalf("open mailbox: %v", err)
+	}
+	if err := mbDB.QueryRowContext(req.Context(), `SELECT coalesce(raw_message_ref, '') FROM email_messages WHERE id = ?`, msg.ID).Scan(&rawMessageRef); err != nil {
 		t.Fatalf("query raw_message_ref: %v", err)
 	}
 	if rawMessageRef != "" {
@@ -645,14 +649,14 @@ func TestHandleResendWebhookRejectsStaleTimestamp(t *testing.T) {
 func seedTrustedUploadAlias(t *testing.T, store *Store, whitelist bool) {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := store.db.Exec(`INSERT INTO email_receive_policies (
+	if _, err := store.routingDB.Exec(`INSERT INTO email_receive_policies (
 		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
 		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
 		allow_auto_outbound_send, quarantine_by_default, created_at
 	) VALUES ('policy-trusted-upload-test', 'trusted upload test', 0, 1, 1, 1, 1, 0, 0, 1, ?)`, now); err != nil {
 		t.Fatalf("insert trusted policy: %v", err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO email_aliases (
+	if _, err := store.routingDB.Exec(`INSERT INTO email_aliases (
 		id, domain, local_part, canonical_number, target_type, target_id,
 		visibility, receive_policy_id, created_at
 	) VALUES ('alias-trusted-upload-test', 'choir.news', '000+upload-secret', 0, 'user', 'user-root', 'unlisted', 'policy-trusted-upload-test', ?)`, now); err != nil {
@@ -661,7 +665,7 @@ func seedTrustedUploadAlias(t *testing.T, store *Store, whitelist bool) {
 	if !whitelist {
 		return
 	}
-	if _, err := store.db.Exec(`INSERT INTO email_sender_whitelist (
+	if _, err := store.routingDB.Exec(`INSERT INTO email_sender_whitelist (
 		id, owner_id, alias_id, sender_address, created_at
 	) VALUES ('whitelist-trusted-upload-test', 'user-root', 'alias-trusted-upload-test', 'sender@example.com', ?)`, now); err != nil {
 		t.Fatalf("insert sender whitelist: %v", err)

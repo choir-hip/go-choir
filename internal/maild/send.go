@@ -293,7 +293,11 @@ func cleanAddresses(values []string) []string {
 func (s *Store) StoreOutboundMessage(ctx context.Context, ownerID string, alias EmailAlias, providerMessageID string, in sendEmailRequest) (EmailMessage, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	messageID := messageRowID("outbound:" + providerMessageID)
-	tx, err := s.db.BeginTx(ctx, nil)
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailMessage{}, err
+	}
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return EmailMessage{}, fmt.Errorf("begin outbound message tx: %w", err)
 	}

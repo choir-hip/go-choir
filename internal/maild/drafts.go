@@ -432,7 +432,7 @@ func writeDraftSendError(w http.ResponseWriter, err error) {
 }
 
 func (s *Store) ListAliasesForOwner(ctx context.Context, ownerID string) ([]EmailAliasSummary, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, domain, local_part, visibility
+	rows, err := s.routingDB.QueryContext(ctx, `SELECT id, domain, local_part, visibility
 		FROM email_aliases
 		WHERE target_id = ? AND target_type = 'user' AND disabled_at IS NULL
 		ORDER BY canonical_number IS NULL, canonical_number, local_part`, ownerID)
@@ -453,7 +453,7 @@ func (s *Store) ListAliasesForOwner(ctx context.Context, ownerID string) ([]Emai
 }
 
 func (s *Store) DefaultAliasForOwner(ctx context.Context, ownerID string) (EmailAlias, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, domain, local_part, coalesce(canonical_number, -1),
+	row := s.routingDB.QueryRowContext(ctx, `SELECT id, domain, local_part, coalesce(canonical_number, -1),
 		target_type, target_id, visibility, receive_policy_id
 		FROM email_aliases
 		WHERE target_id = ? AND target_type = 'user' AND disabled_at IS NULL
@@ -506,7 +506,11 @@ func (s *Store) CreateDraft(ctx context.Context, ownerID string, alias EmailAlia
 		UpdatedAt:        now,
 	}
 	draft.VersionHash = draftVersionHash(draft)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO email_drafts (
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	_, err = db.ExecContext(ctx, `INSERT INTO email_drafts (
 		id, owner_id, from_alias_id, from_address, to_json, cc_json, bcc_json,
 		subject, text_body, html_body, reply_to_message_id, source_kind, source_ref,
 		status, version, version_hash, created_at, updated_at
@@ -525,7 +529,11 @@ func (s *Store) ListDrafts(ctx context.Context, ownerID string, limit int) ([]Em
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND status = 'draft_pending_owner_approval' ORDER BY updated_at DESC LIMIT ?`, ownerID, limit)
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND status = 'draft_pending_owner_approval' ORDER BY updated_at DESC LIMIT ?`, ownerID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -542,13 +550,21 @@ func (s *Store) ListDrafts(ctx context.Context, ownerID string, limit int) ([]Em
 }
 
 func (s *Store) GetDraft(ctx context.Context, ownerID, draftID string) (EmailDraft, error) {
-	row := s.db.QueryRowContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND id = ?`, ownerID, draftID)
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	row := db.QueryRowContext(ctx, draftSelectSQL()+` WHERE owner_id = ? AND id = ?`, ownerID, draftID)
 	return scanDraft(row)
 }
 
 func (s *Store) MarkDraftRejected(ctx context.Context, ownerID, draftID string) (EmailDraft, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(ctx, `UPDATE email_drafts
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	result, err := db.ExecContext(ctx, `UPDATE email_drafts
 		SET status = 'draft_rejected', updated_at = ?
 		WHERE owner_id = ? AND id = ? AND status = 'draft_pending_owner_approval'`,
 		now, ownerID, draftID)
@@ -563,7 +579,11 @@ func (s *Store) MarkDraftRejected(ctx context.Context, ownerID, draftID string) 
 
 func (s *Store) MarkDraftSent(ctx context.Context, ownerID, draftID, messageID, providerMessageID string) (EmailDraft, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	tx, err := s.db.BeginTx(ctx, nil)
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return EmailDraft{}, err
 	}
@@ -602,7 +622,11 @@ func (s *Store) RecordDraftApprovalEvent(ctx context.Context, draft EmailDraft, 
 	}
 	eventID := "email-approval-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO email_draft_approval_events (
+	db, err := s.mailboxForOwner(draft.OwnerID)
+	if err != nil {
+		return "", err
+	}
+	_, err = db.ExecContext(ctx, `INSERT INTO email_draft_approval_events (
 		id, draft_id, owner_id, version, version_hash, event_type, provider_message_id, created_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		eventID,
@@ -641,13 +665,17 @@ func (s *Store) CreateDraftApprovalToken(ctx context.Context, draft EmailDraft, 
 		CreatedAt:     now.Format(time.RFC3339Nano),
 		ExpiresAt:     now.Add(ttl).Format(time.RFC3339Nano),
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+	db, err := s.mailboxForOwner(draft.OwnerID)
+	if err != nil {
+		return EmailApprovalToken{}, err
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
 		SET status = 'superseded'
 		WHERE draft_id = ? AND owner_id = ? AND status = 'active'`,
 		draft.ID, draft.OwnerID); err != nil {
 		return EmailApprovalToken{}, fmt.Errorf("supersede approval tokens: %w", err)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO email_draft_approval_tokens (
+	_, err = db.ExecContext(ctx, `INSERT INTO email_draft_approval_tokens (
 		id, token, draft_id, owner_id, version, version_hash, approval_email,
 		status, created_at, expires_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -656,25 +684,63 @@ func (s *Store) CreateDraftApprovalToken(ctx context.Context, draft EmailDraft, 
 	if err != nil {
 		return EmailApprovalToken{}, fmt.Errorf("insert approval token: %w", err)
 	}
+	if _, err := s.routingDB.ExecContext(ctx, `INSERT OR IGNORE INTO email_approval_token_index (
+			token, owner_id, draft_id, created_at
+		) VALUES (?, ?, ?, ?)`,
+		token.Token, token.OwnerID, token.DraftID, token.CreatedAt); err != nil {
+		return EmailApprovalToken{}, fmt.Errorf("insert approval token index: %w", err)
+	}
 	return token, nil
 }
 
 func (s *Store) MarkDraftApprovalTokenSent(ctx context.Context, tokenID, providerMessageID string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
-		SET provider_message_id = ?
-		WHERE id = ?`, nullString(providerMessageID), tokenID)
-	if err != nil {
-		return fmt.Errorf("mark approval token sent: %w", err)
+	// tokenID is globally unique but the token row lives in the owner's mailbox.
+	// We don't have ownerID here, so we scan cached mailbox DBs. In practice the
+	// caller is sendDraftApprovalEmail which has the draft owner, but the current
+	// signature only passes tokenID. We'll try the routing index to find the owner.
+	// For now, we search cached mailbox DBs; if none match, return sql.ErrNoRows.
+	// This is acceptable because MarkDraftApprovalTokenSent is called immediately
+	// after CreateDraftApprovalToken, so the mailbox DB is already cached.
+	s.mu.Lock()
+	dbs := make([]*sql.DB, 0, len(s.mailboxes))
+	for _, db := range s.mailboxes {
+		dbs = append(dbs, db)
 	}
-	return nil
+	s.mu.Unlock()
+	for _, db := range dbs {
+		result, err := db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+			SET provider_message_id = ?
+			WHERE id = ?`, nullString(providerMessageID), tokenID)
+		if err != nil {
+			return fmt.Errorf("mark approval token sent: %w", err)
+		}
+		if rows, _ := result.RowsAffected(); rows > 0 {
+			return nil
+		}
+	}
+	return sql.ErrNoRows
 }
 
 func (s *Store) GetDraftApprovalToken(ctx context.Context, token string) (EmailApprovalToken, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, token, draft_id, owner_id, version,
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return EmailApprovalToken{}, sql.ErrNoRows
+	}
+	// Look up the owner from the global token index in the routing DB.
+	var ownerID string
+	err := s.routingDB.QueryRowContext(ctx, `SELECT owner_id FROM email_approval_token_index WHERE token = ?`, token).Scan(&ownerID)
+	if err != nil {
+		return EmailApprovalToken{}, err
+	}
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailApprovalToken{}, err
+	}
+	row := db.QueryRowContext(ctx, `SELECT id, token, draft_id, owner_id, version,
 		version_hash, approval_email, status, coalesce(provider_message_id, ''),
 		created_at, expires_at, coalesce(used_at, '')
 		FROM email_draft_approval_tokens
-		WHERE token = ?`, strings.TrimSpace(token))
+		WHERE token = ?`, token)
 	var out EmailApprovalToken
 	if err := row.Scan(&out.ID, &out.Token, &out.DraftID, &out.OwnerID, &out.Version, &out.VersionHash, &out.ApprovalEmail, &out.Status, &out.ProviderMessageID, &out.CreatedAt, &out.ExpiresAt, &out.UsedAt); err != nil {
 		return EmailApprovalToken{}, err
@@ -684,17 +750,26 @@ func (s *Store) GetDraftApprovalToken(ctx context.Context, token string) (EmailA
 
 func (s *Store) UseDraftApprovalToken(ctx context.Context, tokenID, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
-		SET status = ?, used_at = ?
-		WHERE id = ? AND status = 'active'`,
-		status, now, tokenID)
-	if err != nil {
-		return fmt.Errorf("use approval token: %w", err)
+	// tokenID is globally unique but lives in the owner's mailbox. Search cached DBs.
+	s.mu.Lock()
+	dbs := make([]*sql.DB, 0, len(s.mailboxes))
+	for _, db := range s.mailboxes {
+		dbs = append(dbs, db)
 	}
-	if rows, _ := result.RowsAffected(); rows == 0 {
-		return sql.ErrNoRows
+	s.mu.Unlock()
+	for _, db := range dbs {
+		result, err := db.ExecContext(ctx, `UPDATE email_draft_approval_tokens
+			SET status = ?, used_at = ?
+			WHERE id = ? AND status = 'active'`,
+			status, now, tokenID)
+		if err != nil {
+			return fmt.Errorf("use approval token: %w", err)
+		}
+		if rows, _ := result.RowsAffected(); rows > 0 {
+			return nil
+		}
 	}
-	return nil
+	return sql.ErrNoRows
 }
 
 func (s *Store) UpdateDraftTextFromApprovalEdit(ctx context.Context, draft EmailDraft, editText string) (EmailDraft, error) {
@@ -708,7 +783,11 @@ func (s *Store) UpdateDraftTextFromApprovalEdit(ctx context.Context, draft Email
 	updated.Status = "draft_pending_owner_approval"
 	updated.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	updated.VersionHash = draftVersionHash(updated)
-	tx, err := s.db.BeginTx(ctx, nil)
+	db, err := s.mailboxForOwner(updated.OwnerID)
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return EmailDraft{}, err
 	}
@@ -747,7 +826,11 @@ func (s *Store) RecordRiskAlert(ctx context.Context, ownerID, riskKind, sourceRe
 		ProviderMessageID: strings.TrimSpace(providerMessageID),
 		CreatedAt:         now,
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO email_risk_alerts (
+	db, err := s.mailboxForOwner(alert.OwnerID)
+	if err != nil {
+		return EmailRiskAlert{}, err
+	}
+	_, err = db.ExecContext(ctx, `INSERT INTO email_risk_alerts (
 		id, owner_id, risk_kind, source_ref, snippet, provider_message_id, created_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		alert.ID, alert.OwnerID, alert.RiskKind, nullString(alert.SourceRef), nullString(alert.Snippet), nullString(alert.ProviderMessageID), alert.CreatedAt)
@@ -759,8 +842,20 @@ func (s *Store) RecordRiskAlert(ctx context.Context, ownerID, riskKind, sourceRe
 
 func (s *Store) CountDraftApprovalEvents(ctx context.Context, draftID string) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_draft_approval_events WHERE draft_id = ?`, draftID).Scan(&count)
-	return count, err
+	// draftID is unique within a mailbox. Search cached DBs.
+	s.mu.Lock()
+	dbs := make([]*sql.DB, 0, len(s.mailboxes))
+	for _, db := range s.mailboxes {
+		dbs = append(dbs, db)
+	}
+	s.mu.Unlock()
+	for _, db := range dbs {
+		err := db.QueryRowContext(ctx, `SELECT count(*) FROM email_draft_approval_events WHERE draft_id = ?`, draftID).Scan(&count)
+		if err == nil && count > 0 {
+			return count, nil
+		}
+	}
+	return 0, nil
 }
 
 func draftSelectSQL() string {

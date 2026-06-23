@@ -14,6 +14,7 @@ import (
 )
 
 const defaultNodeBDBPath = "/var/lib/go-choir/mail/mail.db"
+const defaultNodeStorageRoot = "/var/lib/go-choir/mail"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -27,7 +28,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	cmd := args[0]
 	fs := flag.NewFlagSet("maildctl "+cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	dbPath := fs.String("db", defaultDBPath(), "maild SQLite database path")
+	dbPath := fs.String("db", defaultDBPath(), "maild routing SQLite database path")
+	storageRoot := fs.String("storage-root", defaultStorageRoot(), "maild storage root for per-user mailboxes")
 	limit := fs.Int("limit", 50, "maximum rows to return")
 	ownerID := fs.String("owner", "", "mailbox owner id")
 	messageID := fs.String("message", "", "message id")
@@ -40,7 +42,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	ctx := context.Background()
-	store, err := maild.OpenStore(*dbPath)
+	store, err := maild.OpenStore(*dbPath, *storageRoot)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "maildctl: open store: %v\n", err)
 		return 1
@@ -153,6 +155,13 @@ func defaultDBPath() string {
 		return filepath.Join(v, "mail.db")
 	}
 	return defaultNodeBDBPath
+}
+
+func defaultStorageRoot() string {
+	if v := strings.TrimSpace(os.Getenv("MAILD_STORAGE_ROOT")); v != "" {
+		return v
+	}
+	return defaultNodeStorageRoot
 }
 
 func printUsage(w io.Writer) {

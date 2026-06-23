@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -16,9 +19,16 @@ const (
 	DefaultRootAliasID             = "alias-choir-news-000"
 )
 
-// Store is maild's SQLite-backed durable state.
+// Store is maild's SQLite-backed durable state. It maintains a global routing
+// database for aliases, policies, whitelists, and webhook events, plus a
+// per-user mailbox database for messages, attachments, drafts, and risk
+// alerts. This enforces storage-level isolation between users.
 type Store struct {
-	db *sql.DB
+	routingDB *sql.DB
+
+	mu          sync.Mutex
+	mailboxes   map[string]*sql.DB
+	storageRoot string
 }
 
 // EmailAlias is a resolved local-part alias.
@@ -204,28 +214,87 @@ type StoreStats struct {
 	IngressEvents          int `json:"ingress_events"`
 }
 
-// OpenStore opens a maild SQLite store.
-func OpenStore(dbPath string) (*Store, error) {
+// OpenStore opens a maild store with a global routing database. Per-user
+// mailbox databases are opened on demand via mailboxForOwner.
+func OpenStore(dbPath string, storageRoot string) (*Store, error) {
 	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
+		return nil, fmt.Errorf("open routing sqlite: %w", err)
 	}
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("ping sqlite: %w", err)
+		return nil, fmt.Errorf("ping routing sqlite: %w", err)
 	}
-	return &Store{db: db}, nil
+	return &Store{
+		routingDB:   db,
+		mailboxes:   make(map[string]*sql.DB),
+		storageRoot: storageRoot,
+	}, nil
 }
 
-// Close closes the store.
+// Close closes the routing database and all cached mailbox databases.
 func (s *Store) Close() error {
-	if s == nil || s.db == nil {
+	if s == nil {
 		return nil
 	}
-	return s.db.Close()
+	var firstErr error
+	s.mu.Lock()
+	for ownerID, db := range s.mailboxes {
+		if err := db.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		delete(s.mailboxes, ownerID)
+	}
+	s.mu.Unlock()
+	if s.routingDB != nil {
+		if err := s.routingDB.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
-// EnsureSchema creates the v0 schema and seeds the founder/root alias.
+// mailboxForOwner returns the per-user mailbox database for the given owner,
+// opening and caching it on first access.
+func (s *Store) mailboxForOwner(ownerID string) (*sql.DB, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("owner_id is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if db, ok := s.mailboxes[ownerID]; ok {
+		return db, nil
+	}
+	dir := filepath.Join(s.storageRoot, "users", ownerID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create mailbox dir for %s: %w", ownerID, err)
+	}
+	dbPath := filepath.Join(dir, "mail.db")
+	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	if err != nil {
+		return nil, fmt.Errorf("open mailbox sqlite for %s: %w", ownerID, err)
+	}
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping mailbox sqlite for %s: %w", ownerID, err)
+	}
+	if err := ensureMailboxSchema(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ensure mailbox schema for %s: %w", ownerID, err)
+	}
+	s.mailboxes[ownerID] = db
+	return db, nil
+}
+
+// MailboxForOwner returns the per-user mailbox database for the given owner.
+// It is exported for use by external tooling (e.g. maildctl tests).
+func (s *Store) MailboxForOwner(ownerID string) (*sql.DB, error) {
+	return s.mailboxForOwner(ownerID)
+}
+
+// EnsureSchema creates the routing schema and seeds defaults. Per-user
+// mailbox schemas are created on demand when a mailbox is opened.
 func (s *Store) EnsureSchema(cfg *Config) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS email_receive_policies (
@@ -274,6 +343,57 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			received_at text not null,
 			unique(provider, provider_event_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS email_provider_message_index (
+			provider text not null,
+			provider_message_id text not null,
+			owner_id text not null,
+			created_at text not null,
+			UNIQUE(provider, provider_message_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS email_approval_token_index (
+			token text primary key,
+			owner_id text not null,
+			draft_id text not null,
+			created_at text not null
+		)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.routingDB.Exec(stmt); err != nil {
+			return fmt.Errorf("routing schema migration: %w", err)
+		}
+	}
+	if err := s.seedDefaults(cfg); err != nil {
+		return err
+	}
+	return s.repairCachedMailboxes()
+}
+
+// repairCachedMailboxes runs per-user repairs on all already-opened mailbox
+// databases. This is called after EnsureSchema so that a subsequent
+// EnsureSchema call (e.g. in tests or on restart) repairs already-opened
+// mailboxes.
+func (s *Store) repairCachedMailboxes() error {
+	s.mu.Lock()
+	dbs := make([]*sql.DB, 0, len(s.mailboxes))
+	for _, db := range s.mailboxes {
+		dbs = append(dbs, db)
+	}
+	s.mu.Unlock()
+	for _, db := range dbs {
+		if err := repairSentDraftApprovalTokens(db); err != nil {
+			return err
+		}
+		if err := repairRejectedDrafts(db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureMailboxSchema creates per-user tables in a mailbox database and runs
+// per-user repairs.
+func ensureMailboxSchema(db *sql.DB) error {
+	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS email_messages (
 			id text primary key,
 			provider text not null,
@@ -392,22 +512,19 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 		)`,
 	}
 	for _, stmt := range stmts {
-		if _, err := s.db.Exec(stmt); err != nil {
-			return fmt.Errorf("schema migration: %w", err)
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("mailbox schema migration: %w", err)
 		}
 	}
-	if err := s.seedDefaults(cfg); err != nil {
+	if err := repairSentDraftApprovalTokens(db); err != nil {
 		return err
 	}
-	if err := s.repairSentDraftApprovalTokens(); err != nil {
-		return err
-	}
-	return s.repairRejectedDrafts()
+	return repairRejectedDrafts(db)
 }
 
-func (s *Store) repairSentDraftApprovalTokens() error {
+func repairSentDraftApprovalTokens(db *sql.DB) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.Exec(`UPDATE email_draft_approval_tokens
+	_, err := db.Exec(`UPDATE email_draft_approval_tokens
 		SET status = 'stale_sent', used_at = coalesce(used_at, ?)
 		WHERE status = 'active'
 			AND EXISTS (
@@ -422,9 +539,9 @@ func (s *Store) repairSentDraftApprovalTokens() error {
 	return nil
 }
 
-func (s *Store) repairRejectedDrafts() error {
+func repairRejectedDrafts(db *sql.DB) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.Exec(`UPDATE email_drafts
+	_, err := db.Exec(`UPDATE email_drafts
 		SET status = 'draft_rejected', updated_at = ?
 		WHERE status = 'draft_pending_owner_approval'
 			AND EXISTS (
@@ -451,7 +568,7 @@ func (s *Store) repairRejectedDrafts() error {
 
 func (s *Store) seedDefaults(cfg *Config) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO email_receive_policies (
+	if _, err := s.routingDB.Exec(`INSERT OR IGNORE INTO email_receive_policies (
 		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
 		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
 		allow_auto_outbound_send, quarantine_by_default, created_at
@@ -459,21 +576,21 @@ func (s *Store) seedDefaults(cfg *Config) error {
 		DefaultPublicPolicyID, "public numeric inbound", now); err != nil {
 		return fmt.Errorf("seed public policy: %w", err)
 	}
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO email_aliases (
+	if _, err := s.routingDB.Exec(`INSERT OR IGNORE INTO email_aliases (
 		id, domain, local_part, canonical_number, target_type, target_id,
 		visibility, receive_policy_id, created_at
 	) VALUES (?, ?, '000', 0, 'user', ?, 'public', ?, ?)`,
 		DefaultRootAliasID, cfg.PrimaryDomain, cfg.RootOwnerID, DefaultPublicPolicyID, now); err != nil {
 		return fmt.Errorf("seed 000 alias: %w", err)
 	}
-	if _, err := s.db.Exec(`UPDATE email_aliases
+	if _, err := s.routingDB.Exec(`UPDATE email_aliases
 		SET domain = ?, local_part = '000', canonical_number = 0, target_type = 'user',
 			target_id = ?, visibility = 'public', receive_policy_id = ?, disabled_at = NULL
 		WHERE id = ?`,
 		cfg.PrimaryDomain, cfg.RootOwnerID, DefaultPublicPolicyID, DefaultRootAliasID); err != nil {
 		return fmt.Errorf("reconcile 000 alias: %w", err)
 	}
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO email_receive_policies (
+	if _, err := s.routingDB.Exec(`INSERT OR IGNORE INTO email_receive_policies (
 		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
 		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
 		allow_auto_outbound_send, quarantine_by_default, created_at
@@ -500,7 +617,7 @@ func (s *Store) ConfigureTrustedWorkflowAlias(ctx context.Context, config Truste
 	if _, _, ok := splitEmailAddress(senderAddress); !ok {
 		return EmailAlias{}, fmt.Errorf("sender address is invalid")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.routingDB.BeginTx(ctx, nil)
 	if err != nil {
 		return EmailAlias{}, fmt.Errorf("begin trusted workflow alias tx: %w", err)
 	}
@@ -551,7 +668,7 @@ func (s *Store) ConfigureTrustedWorkflowAlias(ctx context.Context, config Truste
 // ResolveAlias resolves a domain/local_part pair.
 func (s *Store) ResolveAlias(ctx context.Context, domain, localPart string) (EmailAlias, error) {
 	var alias EmailAlias
-	err := s.db.QueryRowContext(ctx, `SELECT
+	err := s.routingDB.QueryRowContext(ctx, `SELECT
 		id, domain, local_part, canonical_number, target_type, target_id, visibility, receive_policy_id
 		FROM email_aliases
 		WHERE domain = ? AND local_part = ? AND disabled_at IS NULL`,
@@ -577,7 +694,7 @@ func (s *Store) GetReceivePolicy(ctx context.Context, policyID string) (EmailRec
 	var allowPublicInbound, allowAttachments, requireSenderWhitelist int
 	var requireSecretAlias, allowAutoAgentRead, allowAutoAgentWrite int
 	var allowAutoOutboundSend, quarantineByDefault int
-	err := s.db.QueryRowContext(ctx, `SELECT
+	err := s.routingDB.QueryRowContext(ctx, `SELECT
 		id, name, allow_public_inbound, allow_attachments, require_sender_whitelist,
 		require_secret_alias, allow_auto_agent_read, allow_auto_agent_write,
 		allow_auto_outbound_send, quarantine_by_default
@@ -615,7 +732,7 @@ func (s *Store) IsSenderWhitelisted(ctx context.Context, ownerID, aliasID, sende
 		return false, nil
 	}
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*)
+	if err := s.routingDB.QueryRowContext(ctx, `SELECT count(*)
 		FROM email_sender_whitelist
 		WHERE owner_id = ? AND alias_id = ? AND sender_address = ? AND disabled_at IS NULL`,
 		ownerID, aliasID, senderAddress).Scan(&count); err != nil {
@@ -626,7 +743,7 @@ func (s *Store) IsSenderWhitelisted(ctx context.Context, ownerID, aliasID, sende
 
 // ListAliases returns configured aliases for operator inspection.
 func (s *Store) ListAliases(ctx context.Context) ([]EmailAlias, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT
+	rows, err := s.routingDB.QueryContext(ctx, `SELECT
 		id, domain, local_part, coalesce(canonical_number, 0), target_type,
 		target_id, visibility, receive_policy_id
 		FROM email_aliases
@@ -660,7 +777,7 @@ func (s *Store) ListAliases(ctx context.Context) ([]EmailAlias, error) {
 
 // RecordWebhookEvent stores a verified webhook event idempotently.
 func (s *Store) RecordWebhookEvent(ctx context.Context, event WebhookEvent) (bool, error) {
-	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO email_webhook_events (
+	result, err := s.routingDB.ExecContext(ctx, `INSERT OR IGNORE INTO email_webhook_events (
 		id, provider, provider_event_id, provider_message_id, event_type, raw_payload, received_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID,
@@ -684,26 +801,46 @@ func (s *Store) RecordWebhookEvent(ctx context.Context, event WebhookEvent) (boo
 // CountWebhookEvents returns the number of stored webhook event rows.
 func (s *Store) CountWebhookEvents(ctx context.Context) (int, error) {
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_webhook_events`).Scan(&count); err != nil {
+	if err := s.routingDB.QueryRowContext(ctx, `SELECT count(*) FROM email_webhook_events`).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
 // HasProviderMessage reports whether a provider message was already stored.
+// Uses the global provider message index in the routing database so the
+// webhook flow can check without knowing the owner.
 func (s *Store) HasProviderMessage(ctx context.Context, provider, providerMessageID string) (bool, error) {
 	providerMessageID = strings.TrimSpace(providerMessageID)
 	if providerMessageID == "" {
 		return false, nil
 	}
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*)
-		FROM email_messages
+	if err := s.routingDB.QueryRowContext(ctx, `SELECT count(*)
+		FROM email_provider_message_index
 		WHERE provider = ? AND provider_message_id = ?`,
 		provider, providerMessageID).Scan(&count); err != nil {
-		return false, fmt.Errorf("check provider message: %w", err)
+		return false, fmt.Errorf("check provider message index: %w", err)
 	}
 	return count > 0, nil
+}
+
+// recordProviderMessageIndex records that a provider message was stored for an
+// owner in the global routing index.
+func (s *Store) recordProviderMessageIndex(ctx context.Context, provider, providerMessageID, ownerID string) error {
+	providerMessageID = strings.TrimSpace(providerMessageID)
+	if providerMessageID == "" || strings.TrimSpace(ownerID) == "" {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.routingDB.ExecContext(ctx, `INSERT OR IGNORE INTO email_provider_message_index (
+			provider, provider_message_id, owner_id, created_at
+		) VALUES (?, ?, ?, ?)`,
+		provider, providerMessageID, ownerID, now)
+	if err != nil {
+		return fmt.Errorf("record provider message index: %w", err)
+	}
+	return nil
 }
 
 // ListWebhookEvents returns recent provider webhook receipts without raw payloads.
@@ -711,7 +848,7 @@ func (s *Store) ListWebhookEvents(ctx context.Context, limit int) ([]WebhookEven
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT
+	rows, err := s.routingDB.QueryContext(ctx, `SELECT
 		id, provider, provider_event_id, coalesce(provider_message_id, ''), event_type, '', received_at
 		FROM email_webhook_events
 		ORDER BY received_at DESC
@@ -750,22 +887,15 @@ func (s *Store) ListWebhookEvents(ctx context.Context, limit int) ([]WebhookEven
 	return events, nil
 }
 
-// Stats returns non-sensitive mailbox counters for service health.
+// Stats returns non-sensitive routing counters for service health. Per-user
+// mailbox counts (messages, attachments, ingress events) are not aggregated
+// across all mailbox databases.
 func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
 	var stats StoreStats
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_aliases`).Scan(&stats.Aliases); err != nil {
+	if err := s.routingDB.QueryRowContext(ctx, `SELECT count(*) FROM email_aliases`).Scan(&stats.Aliases); err != nil {
 		return StoreStats{}, err
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_messages`).Scan(&stats.Messages); err != nil {
-		return StoreStats{}, err
-	}
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_attachments WHERE status = 'quarantined'`).Scan(&stats.QuarantinedAttachments); err != nil {
-		return StoreStats{}, err
-	}
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_webhook_events`).Scan(&stats.WebhookEvents); err != nil {
-		return StoreStats{}, err
-	}
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM email_ingress_events`).Scan(&stats.IngressEvents); err != nil {
+	if err := s.routingDB.QueryRowContext(ctx, `SELECT count(*) FROM email_webhook_events`).Scan(&stats.WebhookEvents); err != nil {
 		return StoreStats{}, err
 	}
 	return stats, nil
@@ -773,6 +903,10 @@ func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
 
 // ListMessages returns owner-visible messages for a simple v0 folder.
 func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit int) ([]EmailMessage, error) {
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -789,7 +923,7 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 		return nil, fmt.Errorf("unsupported folder %q", folder)
 	}
 	args = append(args, limit)
-	rows, err := s.db.QueryContext(ctx, `SELECT
+	rows, err := db.QueryContext(ctx, `SELECT
 		id, provider, coalesce(provider_message_id, ''), coalesce(provider_event_id, ''),
 		direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
@@ -821,7 +955,11 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 
 // GetMessage returns an owner-visible message by id.
 func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (EmailMessage, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailMessage{}, err
+	}
+	row := db.QueryRowContext(ctx, `SELECT
 		id, provider, coalesce(provider_message_id, ''), coalesce(provider_event_id, ''),
 		direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
@@ -836,7 +974,11 @@ func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (Emai
 
 // ListRecipients returns stored recipients for an owner-visible message.
 func (s *Store) ListRecipients(ctx context.Context, ownerID, messageID string) ([]EmailRecipient, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.kind, r.address, coalesce(r.display, '')
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, `SELECT r.kind, r.address, coalesce(r.display, '')
 		FROM email_message_recipients r
 		JOIN email_messages m ON m.id = r.message_id
 		WHERE m.mailbox_owner_id = ? AND r.message_id = ?
@@ -861,7 +1003,11 @@ func (s *Store) ListRecipients(ctx context.Context, ownerID, messageID string) (
 
 // ListAttachments returns attachment metadata for an owner-visible message.
 func (s *Store) ListAttachments(ctx context.Context, ownerID, messageID string) ([]EmailAttachment, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, `SELECT
 		a.id, a.message_id, coalesce(a.provider_attachment_id, ''), a.filename,
 		a.content_type, coalesce(a.size_bytes, 0), coalesce(a.storage_ref, ''),
 		a.status, a.created_at
@@ -893,8 +1039,12 @@ func (s *Store) GetSourcePacketForMessage(ctx context.Context, ownerID, messageI
 	if err != nil {
 		return EmailSourcePacket{}, EmailMessage{}, err
 	}
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return EmailSourcePacket{}, EmailMessage{}, err
+	}
 	var packet EmailSourcePacket
-	err = s.db.QueryRowContext(ctx, `SELECT
+	err = db.QueryRowContext(ctx, `SELECT
 		id, message_id, trust_label, provenance_json, coalesce(text_ref, ''), created_at
 		FROM email_source_packets
 		WHERE message_id = ?
@@ -908,6 +1058,10 @@ func (s *Store) GetSourcePacketForMessage(ctx context.Context, ownerID, messageI
 
 // ListIngressEvents returns read-only owner-visible MAS handoff records.
 func (s *Store) ListIngressEvents(ctx context.Context, ownerID, messageID string, limit int) ([]EmailIngressEvent, error) {
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return nil, err
+	}
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -918,7 +1072,7 @@ func (s *Store) ListIngressEvents(ctx context.Context, ownerID, messageID string
 		args = append(args, messageID)
 	}
 	args = append(args, limit)
-	rows, err := s.db.QueryContext(ctx, `SELECT
+	rows, err := db.QueryContext(ctx, `SELECT
 		id, message_id, coalesce(source_packet_id, ''), owner_id,
 		coalesce(conductor_submission_id, ''), status, created_at, coalesce(completed_at, '')
 		FROM email_ingress_events
@@ -954,7 +1108,11 @@ func (s *Store) ListIngressEvents(ctx context.Context, ownerID, messageID string
 
 // RecordIngressEvent stores an owner-triggered MAS handoff receipt.
 func (s *Store) RecordIngressEvent(ctx context.Context, event EmailIngressEvent) error {
-	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO email_ingress_events (
+	db, err := s.mailboxForOwner(event.OwnerID)
+	if err != nil {
+		return err
+	}
+	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO email_ingress_events (
 		id, message_id, source_packet_id, owner_id, conductor_submission_id,
 		status, created_at, completed_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -978,7 +1136,7 @@ func (s *Store) RecordIngressEvent(ctx context.Context, event EmailIngressEvent)
 		return nil
 	}
 	var existing EmailIngressEvent
-	err = s.db.QueryRowContext(ctx, `SELECT
+	err = db.QueryRowContext(ctx, `SELECT
 		id, message_id, coalesce(source_packet_id, ''), owner_id,
 		coalesce(conductor_submission_id, ''), status, created_at, coalesce(completed_at, '')
 		FROM email_ingress_events
@@ -1006,7 +1164,11 @@ func (s *Store) RecordIngressEvent(ctx context.Context, event EmailIngressEvent)
 
 // MarkMessageRead marks a message read for its owner.
 func (s *Store) MarkMessageRead(ctx context.Context, ownerID, messageID string, readAt time.Time) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE email_messages SET read_at = ? WHERE mailbox_owner_id = ? AND id = ?`, readAt.UTC().Format(time.RFC3339Nano), ownerID, messageID)
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return err
+	}
+	result, err := db.ExecContext(ctx, `UPDATE email_messages SET read_at = ? WHERE mailbox_owner_id = ? AND id = ?`, readAt.UTC().Format(time.RFC3339Nano), ownerID, messageID)
 	if err != nil {
 		return fmt.Errorf("mark read: %w", err)
 	}
