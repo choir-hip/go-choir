@@ -335,7 +335,7 @@ func TestTexturePromptUsesStructuredPatchTextureOperationContract(t *testing.T) 
 		`"op":"update_block_text"`,
 		`"block_id":"block id from the structured outline"`,
 		`"op":"append_block"`,
-		"To attach evidence from a listed source entity, use insert_source_ref or insert_source_embed with the exact source_entity_id value",
+		"To attach evidence from a listed source entity, use insert_source_ref with the exact source_entity_id value and place it after the text it supports",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("structured patch prompt missing %q:\n%s", want, request)
@@ -459,8 +459,8 @@ func TestTexturePromptDoesNotPreserveLegacyInlineSourceLinks(t *testing.T) {
 		"Detected Texture source entities:",
 		"video Demo clip entity_id=src-youtube-demo",
 		"Preserve existing source_entity_id values exactly",
-		"call patch_texture with insert_source_ref or insert_source_embed operations",
-		"do not write markdown links, source inventories, or Source: lines as substitutes",
+		"call patch_texture with insert_source_ref using the listed entity_id/source_entity_id value",
+		"Do not write markdown links, source inventories, or Source: lines as substitutes",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("source-ref prompt missing %q:\n%s", want, request)

@@ -843,12 +843,18 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 		if len(current.Content) >= 12000 && strings.TrimSpace(edit.Rationale) == "" {
 			return materializedTextureEdit{}, fmt.Errorf("replace_all on long Texture documents requires rationale; use apply_edits for ordinary section or line changes")
 		}
-		doc = plainStructuredTextureToolDoc(edit.DocID, uuid.NewString(), cleanTextureToolContent(edit.Content))
+		doc, err = structuredTextureToolDocFromMarkdown(edit.DocID, uuid.NewString(), cleanTextureToolContent(edit.Content))
+		if err != nil {
+			return materializedTextureEdit{}, err
+		}
 		entities = nil
 		editCount = 1
 	case "apply_edits":
 		if len(edit.StructuredEdits) == 0 {
 			return materializedTextureEdit{}, fmt.Errorf("apply_edits requires at least one edit")
+		}
+		if err := validateStructuredTextureEditBatch(edit.StructuredEdits); err != nil {
+			return materializedTextureEdit{}, err
 		}
 		for i, structuredEdit := range edit.StructuredEdits {
 			if err := applyStructuredTextureEdit(&doc, &entities, structuredEdit); err != nil {
@@ -929,6 +935,45 @@ func plainStructuredTextureToolDoc(docID, revisionID, content string) texturedoc
 	}
 }
 
+func structuredTextureToolDocFromMarkdown(docID, revisionID, content string) (texturedoc.StructuredTextureDoc, error) {
+	parseInline := func(text string) ([]texturedoc.Node, error) {
+		if markdownLineageSourceLinkOrMarkerRE.MatchString(text) {
+			return nil, fmt.Errorf("rewrite_texture content must not contain markdown source links or numeric citation markers; use patch_texture insert_source_ref for native citations")
+		}
+		return plainTextureToolInlineNodes(text), nil
+	}
+	nextSeq := 0
+	nextBlockID := func(prefix string) string {
+		nextSeq++
+		return textureToolNodeID(prefix, docID, revisionID, fmt.Sprintf("%d", nextSeq))
+	}
+	paragraphNode := func(text string) (texturedoc.Node, bool, error) {
+		nodes, err := parseInline(strings.TrimSpace(text))
+		if err != nil {
+			return texturedoc.Node{}, false, err
+		}
+		if len(nodes) == 0 {
+			return texturedoc.Node{}, false, nil
+		}
+		return texturedoc.Node{Type: "paragraph", Attrs: map[string]any{"id": nextBlockID("p")}, Content: nodes}, true, nil
+	}
+	blocks, err := markdownLineageBodyDocBlocks(content, parseInline, nextBlockID, paragraphNode)
+	if err != nil {
+		return texturedoc.StructuredTextureDoc{}, err
+	}
+	if len(blocks) == 0 {
+		return texturedoc.StructuredTextureDoc{}, fmt.Errorf("rewrite_texture content must not be empty")
+	}
+	return texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:    "doc",
+			Attrs:   map[string]any{"id": textureToolNodeID("doc", docID, revisionID, "root")},
+			Content: blocks,
+		},
+	}, nil
+}
+
 func plainTextureToolInlineNodes(content string) []texturedoc.Node {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
@@ -958,6 +1003,21 @@ func textureToolNodeID(prefix, docID, revisionID, suffix string) string {
 	return strings.Join(parts, "-")
 }
 
+func validateStructuredTextureEditBatch(edits []textureStructuredEdit) error {
+	seenSourceOffsets := map[string]int{}
+	for i, edit := range edits {
+		if strings.TrimSpace(edit.Op) != "insert_source_ref" || edit.Offset == nil {
+			continue
+		}
+		key := strings.TrimSpace(edit.BlockID) + "\x00" + fmt.Sprintf("%d", *edit.Offset)
+		if first, ok := seenSourceOffsets[key]; ok {
+			return fmt.Errorf("insert_source_ref edits %d and %d target the same block_id and offset; source refs must be distributed next to the claims they support", first, i)
+		}
+		seenSourceOffsets[key] = i
+	}
+	return nil
+}
+
 func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *[]texturedoc.SourceEntity, edit textureStructuredEdit) error {
 	switch strings.TrimSpace(edit.Op) {
 	case "update_block_text":
@@ -971,6 +1031,9 @@ func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *
 		}
 		if block.Type != "paragraph" && block.Type != "heading" {
 			return fmt.Errorf("update_block_text supports paragraph or heading blocks, got %q", block.Type)
+		}
+		if textureToolTextLooksLikeMarkdownDocument(edit.Text) {
+			return fmt.Errorf("update_block_text is a single-block operation and cannot accept whole-document markdown; use insert_block/append_block for structured sections or rewrite_texture for an audited full-document rewrite")
 		}
 		preservedRefs := collectDirectSourceRefNodes(block.Content)
 		block.Content = append(plainTextureToolInlineNodes(cleanTextureToolContent(edit.Text)), preservedRefs...)
@@ -1021,6 +1084,9 @@ func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *
 				"display_mode":     "numbered_ref",
 			},
 		}
+		if edit.Offset != nil && *edit.Offset == 0 && structuredInlineTextLen(block.Content) > 0 {
+			return fmt.Errorf("insert_source_ref offset 0 would place the citation before existing text; omit offset to append to the block or set offset after the supported clause")
+		}
 		block.Content = insertInlineNodeAtOffset(block.Content, ref, edit.Offset)
 		return nil
 	case "insert_source_embed":
@@ -1051,6 +1117,45 @@ func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *
 	default:
 		return fmt.Errorf("op = %q, want update_block_text, insert_block, append_block, delete_node, insert_source_ref, or insert_source_embed", edit.Op)
 	}
+}
+
+func textureToolTextLooksLikeMarkdownDocument(text string) bool {
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	lines := strings.Split(normalized, "\n")
+	nonEmpty := 0
+	blankSeen := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if nonEmpty > 0 {
+				blankSeen = true
+			}
+			continue
+		}
+		nonEmpty++
+		if markdownLineageHeadingRE.MatchString(trimmed) ||
+			markdownLineageBulletRE.MatchString(trimmed) ||
+			markdownLineageOrderedRE.MatchString(trimmed) {
+			return true
+		}
+	}
+	return blankSeen && nonEmpty > 1
+}
+
+func structuredInlineTextLen(nodes []texturedoc.Node) int {
+	total := 0
+	for _, node := range nodes {
+		switch node.Type {
+		case "text":
+			total += len([]rune(node.Text))
+		case "hard_break":
+			total++
+		default:
+			total += structuredInlineTextLen(node.Content)
+		}
+	}
+	return total
 }
 
 func structuredBlockFromEdit(edit textureStructuredEdit) (texturedoc.Node, error) {

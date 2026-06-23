@@ -8014,6 +8014,13 @@ func TestTextureStreamEventMapsProgressSeparatelyFromStarted(t *testing.T) {
 	if !ok || progress.Kind != "synth_progress" {
 		t.Fatalf("progress event = %+v, ok=%v, want synth_progress", progress, ok)
 	}
+	parked, ok := textureStreamEventFromRecord(types.EventRecord{
+		Kind:    types.EventTextureAgentRevisionProgress,
+		Payload: json.RawMessage(`{"doc_id":"doc-1","loop_id":"run-1","phase":"park_wait_started"}`),
+	})
+	if !ok || parked.Kind != "synth_completed" || parked.Phase != "park_wait_started" {
+		t.Fatalf("park wait event = %+v, ok=%v, want synth_completed phase", parked, ok)
+	}
 }
 
 func TestTextureStreamEventMapsTexturePassivationToSynthCompleted(t *testing.T) {
@@ -9802,7 +9809,7 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 	if strings.Contains(run.Prompt, "Detected durable media source refs") ||
 		strings.Contains(run.Prompt, "Media source refs") ||
 		!strings.Contains(run.Prompt, "Detected Texture source entities") ||
-		!strings.Contains(run.Prompt, "insert_source_ref or insert_source_embed operations") ||
+		!strings.Contains(run.Prompt, "call patch_texture with insert_source_ref using the listed entity_id/source_entity_id value") ||
 		strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
 		t.Fatalf("compiled prompt missing media source contract: %q", run.Prompt)
 	}
@@ -9926,7 +9933,7 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 	}
 	if !strings.Contains(run.Prompt, "Detected Texture source entities") ||
 		!strings.Contains(run.Prompt, "content_id=content-cloud-audit") ||
-		!strings.Contains(run.Prompt, "insert_source_ref or insert_source_embed operations") ||
+		!strings.Contains(run.Prompt, "call patch_texture with insert_source_ref using the listed entity_id/source_entity_id value") ||
 		strings.Contains(run.Prompt, "Canonical inline Source Entity syntax is [label](source:ENTITY_ID)") {
 		t.Fatalf("compiled prompt missing content source entity contract: %q", run.Prompt)
 	}

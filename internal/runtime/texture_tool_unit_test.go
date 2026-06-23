@@ -94,6 +94,46 @@ func TestMaterializeTextureToolEditRequiresRationaleForLongRewrite(t *testing.T)
 	}
 }
 
+func TestRewriteTextureParsesMarkdownIntoStructuredBlocks(t *testing.T) {
+	current := types.Revision{RevisionID: "rev-markdown", DocID: "doc-markdown"}
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          "doc-markdown",
+		BaseRevisionID: "rev-markdown",
+		Operation:      "replace_all",
+		Content: strings.Join([]string{
+			"# Music brief",
+			"",
+			"Lead paragraph.",
+			"",
+			"## Signals",
+			"",
+			"- Touring revenue",
+			"- Label licensing",
+			"",
+			"1. Watch releases",
+			"2. Watch regulation",
+		}, "\n"),
+	}, current)
+	if err != nil {
+		t.Fatalf("replace_all markdown: %v", err)
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(got.BodyDoc, &doc); err != nil {
+		t.Fatalf("unmarshal body_doc: %v", err)
+	}
+	for _, nodeType := range []string{"heading", "paragraph", "bullet_list", "ordered_list"} {
+		if !structuredDocHasType(doc.Doc, nodeType) {
+			t.Fatalf("body_doc missing %s: %s", nodeType, got.BodyDoc)
+		}
+	}
+	if len(doc.Doc.Content) == 0 || doc.Doc.Content[0].Type != "heading" {
+		t.Fatalf("first structured block = %#v, want heading", doc.Doc.Content)
+	}
+	if firstText := structuredDocFirstText(doc.Doc.Content[0]); strings.Contains(firstText, "#") {
+		t.Fatalf("heading text retained raw markdown marker: %q", firstText)
+	}
+}
+
 func TestTextureToolStructuredUpdatePreservesSourceRefs(t *testing.T) {
 	current := structuredTextureToolRevision(t)
 	got, err := materializeTextureToolEdit(editTextureArgs{
@@ -234,6 +274,64 @@ func TestTextureToolSourceRefOffsetNormalizesOutOfWord(t *testing.T) {
 	}
 	if !strings.Contains(got.Content, "shipping[1],") {
 		t.Fatalf("source ref did not normalize to word boundary: %q", got.Content)
+	}
+}
+
+func TestTextureToolRejectsWholeMarkdownInUpdateBlockText(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	_, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:      "update_block_text",
+			BlockID: "p-1",
+			Text:    "# Music brief\n\nLead paragraph.",
+		}},
+	}, current)
+	if err == nil || !strings.Contains(err.Error(), "whole-document markdown") {
+		t.Fatalf("update_block_text markdown err = %v, want whole-document markdown rejection", err)
+	}
+}
+
+func TestTextureToolRejectsOffsetZeroSourceRefInNonEmptyBlock(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	offset := 0
+	_, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op:             "insert_source_ref",
+			BlockID:        "p-1",
+			SourceEntityID: "src-web",
+			Offset:         &offset,
+		}},
+		AvailableSources: []texturedoc.SourceEntity{textureToolAvailableSource("src-web")},
+	}, current)
+	if err == nil || !strings.Contains(err.Error(), "offset 0") {
+		t.Fatalf("source ref offset zero err = %v, want offset 0 rejection", err)
+	}
+}
+
+func TestTextureToolRejectsDuplicateSourceRefOffsets(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	offset := len([]rune("Start"))
+	_, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{
+			{Op: "insert_source_ref", BlockID: "p-1", SourceEntityID: "src-web-1", Offset: &offset},
+			{Op: "insert_source_ref", BlockID: "p-1", SourceEntityID: "src-web-2", Offset: &offset},
+		},
+		AvailableSources: []texturedoc.SourceEntity{
+			textureToolAvailableSource("src-web-1"),
+			textureToolAvailableSource("src-web-2"),
+		},
+	}, current)
+	if err == nil || !strings.Contains(err.Error(), "same block_id and offset") {
+		t.Fatalf("duplicate source ref offset err = %v, want rejection", err)
 	}
 }
 
@@ -560,6 +658,17 @@ func structuredTextureToolPayload(t *testing.T) (json.RawMessage, json.RawMessag
 	return bodyDoc, sourceEntities
 }
 
+func textureToolAvailableSource(sourceEntityID string) texturedoc.SourceEntity {
+	return texturedoc.SourceEntity{
+		SourceEntityID: sourceEntityID,
+		Target:         texturedoc.SourceTarget{Kind: "web_url", URI: "https://example.com/story"},
+		Selectors:      []texturedoc.SourceSelector{{Kind: sourcecontract.SelectorKindWholeResource}},
+		Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Example story"},
+		Evidence:       texturedoc.SourceEvidence{State: sourcecontract.EvidenceStateConfirms, OpenSurface: sourcecontract.OpenSurfaceSource},
+		Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "runtime", SourceSystem: "test"},
+	}
+}
+
 func structuredDocHasType(node texturedoc.Node, nodeType string) bool {
 	if node.Type == nodeType {
 		return true
@@ -570,6 +679,18 @@ func structuredDocHasType(node texturedoc.Node, nodeType string) bool {
 		}
 	}
 	return false
+}
+
+func structuredDocFirstText(node texturedoc.Node) string {
+	if node.Type == "text" {
+		return node.Text
+	}
+	for _, child := range node.Content {
+		if text := structuredDocFirstText(child); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func structuredDocHasNode(node texturedoc.Node, nodeType, nodeID string) bool {

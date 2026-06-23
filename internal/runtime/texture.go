@@ -182,6 +182,7 @@ type textureDocumentStreamEvent struct {
 	RevisionID        string `json:"revision_id,omitempty"`
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 	Pending           bool   `json:"pending,omitempty"`
+	Phase             string `json:"phase,omitempty"`
 	Error             string `json:"error,omitempty"`
 }
 
@@ -1704,13 +1705,19 @@ func textureStreamEventFromRecord(rec types.EventRecord) (textureDocumentStreamE
 		LoopID:            metadataStringValue(payload, "loop_id"),
 		RevisionID:        metadataStringValue(payload, "revision_id"),
 		CurrentRevisionID: metadataStringValue(payload, "current_revision_id"),
+		Phase:             metadataStringValue(payload, "phase"),
 		Error:             metadataStringValue(payload, "error"),
 	}
 	switch rec.Kind {
 	case types.EventTextureAgentRevisionStarted:
 		event.Kind = "synth_started"
 	case types.EventTextureAgentRevisionProgress:
-		event.Kind = "synth_progress"
+		switch event.Phase {
+		case "park_wait_started", "park_wait_finished":
+			event.Kind = "synth_completed"
+		default:
+			event.Kind = "synth_progress"
+		}
 	case types.EventTextureAgentRevisionCompleted:
 		event.Kind = "synth_completed"
 	case types.EventRunPassivated:

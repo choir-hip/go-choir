@@ -494,7 +494,7 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 		} else {
 			b.WriteString("y")
 		}
-		b.WriteString(" in reader-facing article prose through structured patch_texture insert_source_ref or insert_source_embed operations. Source ids that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement.")
+		b.WriteString(" in reader-facing article prose through structured patch_texture insert_source_ref operations placed after the supported sentence or clause. Use insert_source_embed only for a local visible excerpt/card immediately adjacent to the supported claim. Source ids that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement.")
 	}
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use patch_texture to write the canonical Texture revision; do not leave the article only in the run result.")

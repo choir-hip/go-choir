@@ -25,13 +25,41 @@ runs, and existing user computer state.
 
 ## Current Repo State
 
-Local branch state at handoff:
+**Updated 2026-06-22 22:00 -- post-merge state.**
 
-- `origin/main`: `5bc13afb runtime: hydrate imported source text`
-- local `HEAD`: `ab9d305a docs: record Texture patch structure blocker`
-- local branch is ahead of origin by one docs-only problem checkpoint.
-- there are uncommitted investigation/runtime edits in the worktree. They are
-  not landed and should be treated as a draft, not as accepted architecture.
+Two feature branches were merged into main after this handoff was written:
+
+- Desktop app branch (Wails v3, auth bridge, cloud mode, icon) -- 8 commits,
+  touched `cmd/desktop/`, `frontend/`, `internal/auth/`, docs. No runtime or
+  texture files changed.
+- Maild/apps branch (multi-tenancy, Calendar, Slides, email UX) -- 4 commits,
+  touched `cmd/maild/`, `internal/maild/`, `frontend/`. No runtime or texture
+  files changed.
+
+Three merge conflicts occurred in `internal/runtime/super_controller.go`,
+`internal/runtime/tools_worker_update.go`, and `internal/store/texture_test.go`
+because both the desktop branch and main had divergent changes to those files.
+All conflicts were resolved keeping main's version (the Codex texture work),
+which was correct.
+
+**Main is now at `8bd58daa`** (merge commit). `origin/main` is still at
+`8685e299` -- main has not been pushed yet.
+
+Recent relevant commits on main:
+
+- `8685e299 docs: hand off Texture structured document legacy surfaces`
+- `ab9d305a docs: record Texture patch structure blocker`
+- `5bc13afb runtime: hydrate imported source text`
+- `3fc60e1b runtime: preserve coagent source text for transclusion`
+- `e86673a4 docs: record imported source text gap`
+
+The source text work means the system is no longer merely title/URL fallback in
+all cases. `update_coagent` packet sources and imported content can preserve
+bounded source text for transclusion. That is the correct direction. The
+remaining failure is not "URL-only sources should show title and URL"; the
+desired behavior is that URL-backed sources keep URL identity while displaying
+the source text that researchers/importers actually read whenever that text is
+available.
 
 Recent relevant commits:
 
@@ -141,27 +169,73 @@ treated as a derived cache/projection from `body_doc`, never as source of truth.
 
 ## Current Draft Patch In The Worktree
 
-There are uncommitted investigation edits. They should be reviewed or discarded
-deliberately. The rough intent of the draft is:
+**Updated 2026-06-22 22:00 -- the draft was lost and rewritten from memory.**
 
-- map Texture `park_wait_started` / `park_wait_finished` stream progress events
-  to `synth_completed` so the UI stops showing active "Revising..." while the
-  actor is parked;
-- make `rewrite_texture` parse common markdown headings/lists/paragraphs into
-  structured `body_doc` blocks instead of one plain paragraph;
-- reject `update_block_text` when it contains whole-document markdown;
-- reject `insert_source_ref` at `offset: 0` in a non-empty block;
-- reject multiple `insert_source_ref` edits at the same block/offset;
-- tighten Texture prompts to say source refs belong after the supported
-  sentence/clause and source embeds are local excerpts/cards, not source dumps.
+The original uncommitted draft was accidentally discarded during the merge
+process (`git checkout -- .` was run on the main worktree). Codex rewrote the
+changes from memory. The rewritten draft is present as 11 uncommitted modified
+files in `/Users/wiz/go-choir`. It implements the following:
 
-Focused tool tests for the new boundary passed locally. A comprehensive tagged
-idle-passivation test exposed a fixture/loop interaction after the stricter
-patch contract: the fixture provider kept writing and did not passivate within
-the test timeout. That must be resolved before the draft patch can be landed.
+- `structuredTextureToolDocFromMarkdown()` in `tools_texture.go` -- parses
+  markdown headings/lists/paragraphs into structured `body_doc` blocks instead
+  of one plain paragraph (addresses the v3 failure);
+- `validateStructuredTextureEditBatch()` in `tools_texture.go` -- rejects
+  multiple `insert_source_ref` edits at the same block/offset;
+- `textureToolTextLooksLikeMarkdownDocument()` in `tools_texture.go` -- rejects
+  `update_block_text` when content looks like a whole markdown document;
+- `structuredInlineTextLen()` in `tools_texture.go` -- helper for offset-0 guard;
+- `insert_source_ref` offset-0 guard: rejects placing citations before existing
+  text in a non-empty block;
+- Prompt overlay refinements in `revision_policy.yaml`,
+  `revision_source_entities_intro.yaml`, `run_system.yaml` -- source refs belong
+  after the supported sentence/clause, `insert_source_embed` is for local
+  excerpts only;
+- `tools_coagent.go` prompt string updated to match;
+- Test updates in `texture_tool_unit_test.go` (+121 lines), `texture_test.go`,
+  `texture_prompt_unit_test.go`, `agent_tools_test.go`, `runtime_test.go` --
+  tests for the new validation guards and updated prompt string assertions.
+
+**Verified 2026-06-22 22:15 -- the `park_wait` mapping IS present.**
+
+The `park_wait_started` / `park_wait_finished` stream progress event mapping to
+`synth_completed` is present in `internal/runtime/texture.go` in the rewritten
+draft. The earlier claim that it was lost was incorrect. The test
+`TestTextureStreamEventMapsProgressSeparatelyFromStarted` in `texture_test.go`
+covers this mapping and passes with the `comprehensive` build tag.
+
+**Known test issues:**
+
+1. A comprehensive tagged idle-passivation test exposed a fixture/loop
+   interaction after the stricter patch contract: the fixture provider kept
+   writing and did not passivate within the test timeout. This must be resolved
+   before the draft patch can be landed. The rewritten `runtime_test.go` only
+   updates prompt string assertions -- it does NOT fix the passivation fixture.
+
+2. Four comprehensive tests fail identically with and without the draft patch
+   (pre-existing on `8bd58daa`):
+   - `TestProcessorAndReconcilerProfilesDelegateToTextureOnly` -- source_entities nil
+   - `TestTextureAgentRevisionRegistersMediaSourceEntities` -- source_entities nil
+   - `TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities` -- source_entities nil
+   - `TestSystemPromptForUniversalWireTextureRunsRequiresArticleHead` -- missing "evidence-grounded author" policy in ordinary prompt
+
+   These are not caused by the draft and should not block landing it.
+
+3. Two test assertion capitalization fixes were applied to match the draft's
+   yaml overlay changes (lowercase to uppercase after punctuation):
+   - `texture_prompt_unit_test.go`: "do not write markdown links" -> "Do not write markdown links"
+   - `runtime_test.go`: "source ids only" -> "Source ids only"
+
+**Verification summary (2026-06-22 22:15):**
+
+- `go build ./internal/runtime/...` -- clean
+- 12 non-comprehensive texture tool tests -- all PASS
+- 10 non-comprehensive texture prompt tests -- all PASS
+- `TestTextureStreamEventMapsProgressSeparatelyFromStarted` (comprehensive) -- PASS
+- `TestTextureStreamEventMapsTexturePassivationToSynthCompleted` (comprehensive) -- PASS
 
 Do not treat this draft as complete. It is useful evidence for the likely
-repair, not a reviewed fix.
+repair, not a reviewed fix. Verify the rewritten code matches the intent
+described here before committing.
 
 ## Work Required Before Another Landing
 
@@ -324,15 +398,28 @@ patch-boundary/status repair so new runs stop creating malformed structured
 documents. Then run a focused review. After that lands, open a separate hard
 cutover for `Revision.Content` and the remaining legacy read/render paths.
 
+**Note: main has not been pushed yet.** The merged branches (desktop + maild)
+are in local main but not on origin. Push main before starting new work, or
+coordinate with the user on push timing.
+
 Recommended order:
 
-1. Review the current uncommitted draft patch and decide whether to keep it.
-2. Repair the comprehensive passivation test or adjust the fixture to the new
-   tool contract.
-3. Commit the runtime repair after focused tests.
-4. Push, monitor CI/deploy, verify staging identity.
-5. Run deployed acceptance on `yusefnathanson@me.com` and `d@a.com`.
-6. Only then start the broader `content` deletion/backfill slice.
+1. ~~Review the rewritten uncommitted draft patch (`git diff` in
+   `/Users/wiz/go-choir`). Verify it matches the intent described above. Pay
+   attention to whether the `park_wait` stream mapping was lost.~~ **Done
+   2026-06-22 22:15.** The draft matches intent. The `park_wait` mapping is
+   present in `texture.go`. Two test assertion capitalization fixes applied.
+2. ~~Re-implement the `park_wait_started` / `park_wait_finished` to
+   `synth_completed` stream mapping if it is missing.~~ **Not needed -- already
+   present.**
+3. Repair the comprehensive passivation test or adjust the fixture to the new
+   tool contract. (The four pre-existing comprehensive failures are not caused
+   by the draft and should not block landing.)
+4. Commit the runtime repair after focused tests.
+5. Push main (includes the merged desktop + maild branches + this fix),
+   monitor CI/deploy, verify staging identity.
+6. Run deployed acceptance on `yusefnathanson@me.com` and `d@a.com`.
+7. Only then start the broader `content` deletion/backfill slice.
 
 ## Residual Risk
 
