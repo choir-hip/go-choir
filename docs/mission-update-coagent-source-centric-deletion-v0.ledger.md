@@ -675,3 +675,66 @@ target behavior.
 Heresy delta: `discovered` for the imported content-item source text gap and
 internal typed-ref title leak. `introduced`: none in this checkpoint.
 `repaired`: none until a later code/test commit.
+
+## 2026-06-23 - Pass 12 - Structured Patch Misuse: Markdown Collapse And Source Ref Bunching
+
+Claim: the source-centric pipeline is still not owner-readable while
+`patch_texture` permits whole-document markdown to be written through a single
+`update_block_text` paragraph and then permits multiple native `source_ref`
+operations at offset `0`. This creates a formally structured revision whose
+visible document is still a collapsed markdown blob and whose citations are
+bunched at the beginning rather than distributed next to the claims they
+support.
+
+Move: document first. The owner created a new staging account `d@a.com`, mapped
+on Node B to owner id `45ea050f-9824-4614-8bf0-02e595136a69` and active VM
+`vm-1f73393c7a5b70a315cac61be0e79a1e` at `http://10.200.235.2:8085`.
+The prompt `whats new in music this week?` created Texture document
+`eb3ac586-ad4a-48a4-af9c-da5d50bb5e69`, current head
+`342a4f9b-1d6e-42c0-a2ea-ced4a498d170`, version `v3`. Product APIs showed the
+trajectory `cb5d740a-5f29-4227-b6b6-5b0f5df9a370` was `passivated` and
+`live=false`; the Texture run `7ae64428-de7b-4f2c-b370-b76b7dca93b9`
+passivated at `2026-06-23T00:00:45Z` with `passivated_reason=idle_deadline`
+and `actor_sleep_state=idle`. The observed "Revising..." stall is therefore a
+presentation/lifecycle boundary problem around actor park/passivation, not a
+live worker still running.
+
+The same v3 head showed the structural content defect. The stored `body_doc`
+had one paragraph, zero heading/list blocks, nine `source_ref` nodes, and zero
+`source_embed` nodes. The Trace event for `patch_texture` shows Texture called
+`update_block_text` with a complete markdown article beginning
+`# What’s new in music this week` and then called four `insert_source_ref`
+operations against the same block with `offset: 0`. V2 had the same shape with
+five `source_ref` nodes at the start of a single paragraph. This explains both
+literal markdown tokens in the reader surface and citation points bunched at
+the beginning of the Texture body.
+
+Mutation class: green for this checkpoint. The intended repair is red because
+it changes Texture canonical write-tool validation and visible revision
+structure. Protected surfaces: `patch_texture`, `rewrite_texture`, structured
+`body_doc`, native `source_ref` placement, Texture stream/passivation status,
+and source-centric source display.
+
+Conjecture delta: having native source entities is not enough. The write API
+must make the correct shape the easiest path and reject or normalize tool calls
+that would collapse document structure or detach citations from the claims they
+support. A sleeping durable Texture actor is valid, but the owner-facing editor
+must not present a parked/passivated actor as actively revising.
+
+Admissible evidence class for repair: focused tests proving whole-document
+markdown is parsed into structured heading/list/paragraph blocks when using a
+whole-document rewrite path; `update_block_text` rejects markdown-document
+payloads instead of storing them as one paragraph; `insert_source_ref` rejects
+offset-zero placement into non-empty text; duplicate source refs cannot be
+stacked at the same block/offset; passivated Texture stream events clear the
+frontend revising state; and no markdown source links, metadata
+`source_entities`, or legacy citation sidecars are reintroduced.
+
+Rollback path: revert the follow-up code/test repair commit(s) while preserving
+this checkpoint. Do not roll back to clickable markdown links, source sidecars,
+or title/URL-only source display.
+
+Heresy delta: `discovered` for collapsed markdown document writes, offset-zero
+source-ref bunching, and parked Texture actor status being experienced as a
+stall. `introduced`: none in this checkpoint. `repaired`: none until a later
+code/test commit.
