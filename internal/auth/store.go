@@ -61,6 +61,16 @@ CREATE INDEX IF NOT EXISTS idx_challenge_state_expires_at ON challenge_state(exp
 CREATE INDEX IF NOT EXISTS idx_refresh_sessions_user_id ON refresh_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_sessions_expires_at ON refresh_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_refresh_sessions_token_hash ON refresh_sessions(token_hash);
+
+CREATE TABLE IF NOT EXISTS desktop_exchange_codes (
+	code        TEXT PRIMARY KEY,
+	user_id     TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	access_token  TEXT  NOT NULL,
+	refresh_token TEXT  NOT NULL,
+	created_at  DATETIME NOT NULL,
+	expires_at  DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_desktop_exchange_expires_at ON desktop_exchange_codes(expires_at);
 `
 
 // schemaMigrations contains DDL statements that add columns to existing tables
@@ -536,6 +546,67 @@ func (s *Store) CleanExpiredRefreshSessions() (int64, error) {
 	res, err := s.db.Exec("DELETE FROM refresh_sessions WHERE expires_at < ?", time.Now().UTC())
 	if err != nil {
 		return 0, fmt.Errorf("clean expired refresh sessions: %w", err)
+	}
+	return res.RowsAffected()
+}
+
+// DesktopExchangeCode represents a one-time code for desktop token exchange.
+type DesktopExchangeCode struct {
+	Code         string
+	UserID       string
+	AccessToken  string
+	RefreshToken string
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+}
+
+// CreateDesktopExchangeCode inserts a new one-time exchange code.
+func (s *Store) CreateDesktopExchangeCode(c *DesktopExchangeCode) error {
+	_, err := s.db.Exec(
+		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+		c.Code, c.UserID, c.AccessToken, c.RefreshToken, c.CreatedAt, c.ExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("create desktop exchange code: %w", err)
+	}
+	return nil
+}
+
+// ConsumeDesktopExchangeCode atomically retrieves and deletes a code.
+// Returns sql.ErrNoRows if the code does not exist or is expired.
+func (s *Store) ConsumeDesktopExchangeCode(code string) (*DesktopExchangeCode, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRow(
+		"SELECT code, user_id, access_token, refresh_token, created_at, expires_at FROM desktop_exchange_codes WHERE code = ?",
+		code,
+	)
+	c := &DesktopExchangeCode{}
+	if err := row.Scan(&c.Code, &c.UserID, &c.AccessToken, &c.RefreshToken, &c.CreatedAt, &c.ExpiresAt); err != nil {
+		return nil, err
+	}
+	if time.Now().UTC().After(c.ExpiresAt) {
+		_, _ = tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", code)
+		return nil, fmt.Errorf("exchange code expired")
+	}
+	if _, err := tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", code); err != nil {
+		return nil, fmt.Errorf("delete exchange code: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return c, nil
+}
+
+// CleanExpiredDesktopExchangeCodes removes expired exchange codes.
+func (s *Store) CleanExpiredDesktopExchangeCodes() (int64, error) {
+	res, err := s.db.Exec("DELETE FROM desktop_exchange_codes WHERE expires_at < ?", time.Now().UTC())
+	if err != nil {
+		return 0, fmt.Errorf("clean expired desktop exchange codes: %w", err)
 	}
 	return res.RowsAffected()
 }

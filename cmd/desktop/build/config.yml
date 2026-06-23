@@ -1,0 +1,12 @@
+name: Choir
+version: 0.1.0
+description: "Choir — your automatic computer, native on macOS"
+homepage: "https://choir.news"
+author: "Choir"
+copyright: "2026 Choir"
+
+# macOS-specific
+mac:
+  bundle_id: "news.choir.desktop"
+  category: "public.app-category.productivity"
+  minimum_version: "12.0"

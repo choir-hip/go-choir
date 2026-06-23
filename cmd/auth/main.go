@@ -52,6 +52,9 @@ func main() {
 	s.HandleFunc("/auth/login/finish", handler.HandleLoginFinish)
 	s.HandleFunc("/auth/session", handler.HandleSession)
 	s.HandleFunc("/auth/logout", handler.HandleLogout)
+	s.HandleFunc("/auth/desktop/exchange", handler.HandleDesktopExchange)
+	s.HandleFunc("/auth/desktop/exchange-redirect", handler.HandleDesktopExchangeRedirect)
+	s.HandleFunc("/auth/desktop/redeem", handler.HandleDesktopRedeem)
 
 	s.Start()
 }

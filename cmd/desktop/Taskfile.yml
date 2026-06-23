@@ -1,0 +1,122 @@
+version: '3'
+
+vars:
+  APP_NAME: Choir
+  BINARY_NAME: Choir
+  BIN_DIR: bin
+  REPO_BIN_DIR: ../../bin
+  FRONTEND_DIR: ../../frontend
+  BUILD_DIR: build
+
+tasks:
+  # Build the frontend Svelte assets into frontend/dist
+  build:frontend:
+    desc: Build the Svelte frontend
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run build
+    sources:
+      - "{{.FRONTEND_DIR}}/src/**/*"
+      - "{{.FRONTEND_DIR}}/package.json"
+      - "{{.FRONTEND_DIR}}/svelte.config.js"
+      - "{{.FRONTEND_DIR}}/vite.config.js"
+    generates:
+      - "{{.FRONTEND_DIR}}/dist/**/*"
+
+  # Copy frontend build output into the desktop module's embed directory
+  copy:frontend:
+    desc: Copy frontend dist into embed directory
+    deps: [build:frontend]
+    cmds:
+      - rm -rf frontend/dist
+      - cp -r "{{.FRONTEND_DIR}}/dist" frontend/dist
+    sources:
+      - "{{.FRONTEND_DIR}}/dist/**/*"
+    generates:
+      - frontend/dist/**/*
+
+  # Build the Choir backend service binaries (auth, gateway, sandbox, proxy)
+  build:services:
+    desc: Build Choir backend services for local mode
+    dir: ../..
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/auth ./cmd/auth
+      - go build -o bin/gateway ./cmd/gateway
+      - go build -o bin/sandbox ./cmd/sandbox
+      - go build -o bin/proxy ./cmd/proxy
+      - echo "Services built to bin/"
+
+  # Dev build — builds frontend and runs the app (local mode by default)
+  dev:
+    desc: Run Choir in local dev mode
+    deps: [copy:frontend, build:services]
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+      - "{{.BIN_DIR}}/{{.BINARY_NAME}}"
+
+  # Cloud mode — connects to staging, no local services
+  cloud:
+    desc: Run Choir in cloud mode (connects to staging)
+    deps: [copy:frontend]
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=dev -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+      - CHOIR_MODE=cloud "{{.BIN_DIR}}/{{.BINARY_NAME}}"
+
+  # Production build
+  build:
+    desc: Build Choir binary
+    deps: [copy:frontend]
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} -ldflags "-X main.appVersion=0.1.0 -X main.appCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.appBuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+
+  # Generate macOS .icns from the source appicon.png
+  icon:
+    desc: Generate macOS app icon (.icns) from appicon.png
+    cmds:
+      - mkdir -p "{{.BUILD_DIR}}/darwin/icon.iconset"
+      - "sips -s format png -z 16 16     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_16x16.png'"
+      - "sips -s format png -z 32 32     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_16x16@2x.png'"
+      - "sips -s format png -z 32 32     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_32x32.png'"
+      - "sips -s format png -z 64 64     '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_32x32@2x.png'"
+      - "sips -s format png -z 128 128   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_128x128.png'"
+      - "sips -s format png -z 256 256   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_128x128@2x.png'"
+      - "sips -s format png -z 256 256   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_256x256.png'"
+      - "sips -s format png -z 512 512   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_256x256@2x.png'"
+      - "sips -s format png -z 512 512   '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_512x512.png'"
+      - "sips -s format png -z 1024 1024 '{{.BUILD_DIR}}/darwin/appicon.png' --out '{{.BUILD_DIR}}/darwin/icon.iconset/icon_512x512@2x.png'"
+      - "iconutil -c icns '{{.BUILD_DIR}}/darwin/icon.iconset' -o '{{.BUILD_DIR}}/darwin/icons.icns'"
+      - echo "Icon generated at {{.BUILD_DIR}}/darwin/icons.icns"
+
+  # Package as .app bundle
+  package:
+    desc: Package Choir as macOS .app bundle
+    deps: [build, icon]
+    cmds:
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
+      - cp "{{.BIN_DIR}}/{{.BINARY_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/"
+      - cp "{{.BUILD_DIR}}/darwin/Info.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/"
+      - cp "{{.BUILD_DIR}}/darwin/icons.icns" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources/"
+      - echo "Packaged to {{.BIN_DIR}}/{{.APP_NAME}}.app"
+
+  # Ad-hoc sign the app bundle for local testing
+  sign:
+    desc: Ad-hoc sign the .app bundle
+    deps: [package]
+    cmds:
+      - codesign --force --deep --entitlements "{{.BUILD_DIR}}/darwin/entitlements.plist" --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - echo "Ad-hoc signed {{.BIN_DIR}}/{{.APP_NAME}}.app"
+
+  # Clean build artifacts
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+      - rm -rf frontend/dist
+
+  # Run go mod tidy
+  deps:
+    desc: Download and tidy Go dependencies
+    cmds:
+      - go mod tidy

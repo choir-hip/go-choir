@@ -56,7 +56,42 @@ function bufferToBase64url(buffer) {
  * @returns {Promise<{ok: boolean, user?: object}>}
  * @throws {Error} On network failure, server error, or ceremony cancellation
  */
+function isDesktopBridge() {
+  return typeof window !== 'undefined' && window.__CHOIR_BRIDGE === true;
+}
+
+async function startDesktopAuthSession(email, authType) {
+  const res = await fetch('/desktop-auth/start-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, authType }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Auth session failed (${res.status})`);
+  }
+
+  // The desktop app returns raw access and refresh tokens. We inject them
+  // as cookies into the WKWebView so subsequent /auth/* and /api/* calls
+  // are authenticated. The auth service normally sets these as HttpOnly
+  // cookies, but since we received raw tokens we set them from JS.
+  const tokens = await res.json();
+  if (tokens.access_token) {
+    document.cookie = `choir_access=${tokens.access_token}; path=/; max-age=300; samesite=lax`;
+  }
+  if (tokens.refresh_token) {
+    document.cookie = `choir_refresh=${tokens.refresh_token}; path=/auth; max-age=2592000; samesite=lax`;
+  }
+}
+
 export async function registerPasskey(email) {
+  // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
+  // WKWebView doesn't support platform authenticators, so we delegate.
+  if (isDesktopBridge()) {
+    await startDesktopAuthSession(email, 'register');
+    return { ok: true, user: { id: '', email, createdAt: '' } };
+  }
+
   // Step 1: Begin registration.
   const beginRes = await fetch('/auth/register/begin', {
     method: 'POST',
@@ -139,6 +174,13 @@ export async function registerPasskey(email) {
  * @throws {Error} On network failure, server error, or ceremony cancellation
  */
 export async function loginPasskey(email) {
+  // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
+  // WKWebView doesn't support platform authenticators, so we delegate.
+  if (isDesktopBridge()) {
+    await startDesktopAuthSession(email, 'login');
+    return { ok: true, user: { id: '', email, createdAt: '' } };
+  }
+
   // Step 1: Begin login.
   const beginRes = await fetch('/auth/login/begin', {
     method: 'POST',

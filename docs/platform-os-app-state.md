@@ -160,6 +160,12 @@ session/viewport presentation state. Mobile is intended to use the same
 overlapping desktop model as desktop, with tighter geometry and better overview
 controls rather than a separate phone-mode navigation stack.
 
+A native macOS app (`cmd/desktop/`) wraps the same Svelte frontend in a Wails v3
+window with `ASWebAuthenticationSession` for passkey auth via Safari. It launches
+in cloud mode by default (connecting to `choir.news`). See
+[cmd/desktop/README.md](../cmd/desktop/README.md) and
+[docs/spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
+
 Current capabilities:
 
 - signed-out users can enter a public desktop projection without hydrating a
