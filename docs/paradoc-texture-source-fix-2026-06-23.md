@@ -15,7 +15,7 @@
 
 ## Parallax State
 
-status: working
+status: blocked
 mission conjecture: if the source_embed removal and source_ref expansion
 satisfy the staging witness under the tri-state source invariant and the
 no-prompt-control-flow invariant, then the deeper goal of style-shaped
@@ -89,28 +89,32 @@ heresy delta: discovered (source_embed as citation crutch, WireTexture as
   none expected; repaired: source_embed removal, WireTexture removal, prompt
   flattening.
 position / live conjectures / open edges:
-  Position: design docs complete, cognitive transforms applied, ready to
-  construct. Can see the full file list and change spec cheaply. Cannot see
-  staging model behavior until deployed.
-  Conjecture 1 (active, load-bearing): style texture as source entity is the
-    target, but unconditional prompt text is the bridge. The model produces
-    article-format output when it receives positive writing guidance. Bridge:
-    add unconditional article-format guidance to base prompt, register style
-    texture as source entity in same PR or tight follow-up. Falsifier: model
-    still produces Q&A with unconditional guidance.
-  Conjecture 2 (proposed): expanded_ref as display mode is sufficient. Model
-    will use it for block excerpts. Falsifier: model never uses expanded_ref.
-  Conjecture 3 (proposed): mark_source_unused is necessary for validator
-    coherence. Falsifier: validator accepts uncited sources without it.
-  Conjecture 4 (proposed): {{else}} research guidance is correct as
-    unconditional text. Falsifier: unconditional text changes non-Wire
-    behavior.
-  Open edge: staging model behavior unobservable until deployed.
-next move: batch construct — create styles/default.style.texture, edit
-  schema.go, edit tools_texture.go, edit run_system.yaml, edit
-  tool_profiles.go, edit tools_coagent.go, edit frontend rendering, update
-  tests, update core docs. Predicted ΔV = 46. Tripwire: any surprise or
-  deviation returns to full circuit pass.
+  Position: code landed (078f7018), CI green, staging deployed. Staging QA
+  revealed: article-format guidance works (no Q&A), but source entities are
+  not being minted from research results. source_entities_len=0,
+  source_ref count=0. Model named sources in prose (Reuters, BBC) but never
+  called insert_source_ref. Grep clean for source_embed and WireTexture.
+  Can now see staging model behavior. The gap is in source entity minting,
+  not in prompt guidance or schema.
+  Conjecture 1 (weakened): unconditional article-format guidance produces
+    article-format output (supported on staging). But the bridge does not
+    produce source citations — the model needs source entities in the run
+    context to cite them. The style texture registration deferral is not the
+    only gap; research result → source entity minting is also missing.
+  Conjecture 2 (untested): expanded_ref not tested because no source_ref
+    was produced.
+  Conjecture 3 (untested): mark_source_unused not tested because no source
+    entities were stored.
+  Conjecture 4 (supported): {{else}} research guidance as unconditional text
+    did not cause non-Wire regression. Research ran successfully (16 results).
+  Open edge: why are research results not minted as source entities? Is the
+    minting code path broken, or was it never wired for this flow?
+next move: investigate root cause — why are research results not converted
+  to source entities in the Texture revision? Check
+  internal/runtime/texture_evidence_sources.go, tools_worker_update.go,
+  and the coagent revision flow. The model cannot cite sources that are not
+  registered as source entities. Predicted ΔV = unknown until root cause
+  identified.
 ledger file: docs/paradoc-texture-source-fix-2026-06-23.ledger.md
 version / lineage: spawned from triage session 2026-06-23. Parent:
   docs/triage-next-steps-2026-06-23.md (Priority 1). Related:
