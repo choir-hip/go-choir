@@ -210,9 +210,9 @@ func TestTextureToolStructuredSourceInsertionWritesBodyNodesAndTopLevelEntities(
 				},
 			},
 			{
-				Op:           "insert_source_embed",
-				AfterBlockID: "p-1",
-				DisplayMode:  "image_preview",
+				Op:           "insert_source_ref",
+				BlockID:      "p-1",
+				DisplayMode:  "expanded_ref",
 				SourceEntity: &texturedoc.SourceEntity{
 					Target:  texturedoc.SourceTarget{Kind: "image", URI: "https://example.com/image.png"},
 					Display: texturedoc.SourceDisplay{Title: "Launch image"},
@@ -227,8 +227,8 @@ func TestTextureToolStructuredSourceInsertionWritesBodyNodesAndTopLevelEntities(
 	if err := json.Unmarshal(got.BodyDoc, &doc); err != nil {
 		t.Fatalf("unmarshal body_doc: %v", err)
 	}
-	if !structuredDocHasType(doc.Doc, "source_ref") || !structuredDocHasType(doc.Doc, "source_embed") {
-		t.Fatalf("body_doc missing inserted source nodes: %s", got.BodyDoc)
+	if !structuredDocHasType(doc.Doc, "source_ref") {
+		t.Fatalf("body_doc missing inserted source_ref nodes: %s", got.BodyDoc)
 	}
 	var entities []texturedoc.SourceEntity
 	if err := json.Unmarshal(got.SourceEntities, &entities); err != nil {
@@ -241,6 +241,50 @@ func TestTextureToolStructuredSourceInsertionWritesBodyNodesAndTopLevelEntities(
 		if strings.TrimSpace(entity.SourceEntityID) == "" || strings.Contains(entity.SourceEntityID, "example.com") {
 			t.Fatalf("runtime did not mint opaque source id: %#v", entity)
 		}
+	}
+}
+
+func TestTextureToolMarkSourceUnusedAllowsUncitedEntity(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	available := []texturedoc.SourceEntity{
+		textureToolAvailableSource("src-cited"),
+		textureToolAvailableSource("src-unused"),
+	}
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{
+			{Op: "insert_source_ref", BlockID: "p-1", SourceEntityID: "src-cited"},
+			{Op: "mark_source_unused", SourceEntityID: "src-unused", Rationale: "Duplicate of src-cited; no distinct claim."},
+		},
+		AvailableSources: available,
+	}, current)
+	if err != nil {
+		t.Fatalf("materialize mark_source_unused: %v", err)
+	}
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(got.SourceEntities, &entities); err != nil {
+		t.Fatalf("unmarshal source_entities: %v", err)
+	}
+	if len(entities) != 2 {
+		t.Fatalf("source_entities len = %d, want 2 (cited + marked-unused): %#v", len(entities), entities)
+	}
+}
+
+func TestTextureToolMarkSourceUnusedRequiresRationale(t *testing.T) {
+	current := plainTextureToolRevision(t, "Start")
+	_, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{
+			{Op: "mark_source_unused", SourceEntityID: "src-web"},
+		},
+		AvailableSources: []texturedoc.SourceEntity{textureToolAvailableSource("src-web")},
+	}, current)
+	if err == nil || !strings.Contains(err.Error(), "requires a rationale") {
+		t.Fatalf("mark_source_unused without rationale err = %v, want rationale rejection", err)
 	}
 }
 

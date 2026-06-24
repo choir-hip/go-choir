@@ -6,31 +6,22 @@ import (
 )
 
 type Projection struct {
-	Text         string
-	SourceRefs   []ProjectedSourceRef
-	SourceEmbeds []ProjectedSourceEmbed
+	Text       string
+	SourceRefs []ProjectedSourceRef
 }
 
 type ProjectedSourceRef struct {
 	Number         int
 	NodeID         string
 	SourceEntityID string
+	DisplayMode    string
 	Label          string
 	Title          string
 	TargetKind     string
 }
 
-type ProjectedSourceEmbed struct {
-	Number         int
-	NodeID         string
-	SourceEntityID string
-	DisplayMode    string
-	Title          string
-	TargetKind     string
-}
-
-func Project(doc StructuredTextureDoc, entities []SourceEntity) (Projection, error) {
-	if err := Validate(doc, entities); err != nil {
+func Project(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEntityIDs ...string) (Projection, error) {
+	if err := Validate(doc, entities, unusedSourceEntityIDs...); err != nil {
 		return Projection{}, err
 	}
 	entityByID := make(map[string]SourceEntity, len(entities))
@@ -48,9 +39,8 @@ func Project(doc StructuredTextureDoc, entities []SourceEntity) (Projection, err
 		}
 	}
 	return Projection{
-		Text:         strings.TrimRight(projector.builder.String(), "\n"),
-		SourceRefs:   projector.refs,
-		SourceEmbeds: projector.embeds,
+		Text:       strings.TrimRight(projector.builder.String(), "\n"),
+		SourceRefs: projector.refs,
 	}, nil
 }
 
@@ -59,7 +49,6 @@ type projector struct {
 	entities map[string]SourceEntity
 	numbers  map[string]int
 	refs     []ProjectedSourceRef
-	embeds   []ProjectedSourceEmbed
 }
 
 func (p *projector) renderBlock(node Node, depth int) {
@@ -114,7 +103,6 @@ func (p *projector) renderBlock(node Node, depth int) {
 			}
 		}
 		p.refs = append(p.refs, nested.refs...)
-		p.embeds = append(p.embeds, nested.embeds...)
 	case "code_block":
 		language := stringAttr(node, "language")
 		p.builder.WriteString("```")
@@ -129,26 +117,6 @@ func (p *projector) renderBlock(node Node, depth int) {
 		p.builder.WriteString("\n```")
 	case "horizontal_rule":
 		p.builder.WriteString("---")
-	case "source_embed":
-		sourceEntityID := stringAttr(node, "source_entity_id")
-		entity := p.entities[sourceEntityID]
-		number := p.numberFor(sourceEntityID)
-		title := sourceTitle(entity)
-		displayMode := stringAttr(node, "display_mode")
-		p.builder.WriteString(fmt.Sprintf("[source %d: %s", number, title))
-		if displayMode != "" {
-			p.builder.WriteString(" | ")
-			p.builder.WriteString(displayMode)
-		}
-		p.builder.WriteByte(']')
-		p.embeds = append(p.embeds, ProjectedSourceEmbed{
-			Number:         number,
-			NodeID:         nodeID(node),
-			SourceEntityID: sourceEntityID,
-			DisplayMode:    displayMode,
-			Title:          title,
-			TargetKind:     entity.Target.Kind,
-		})
 	}
 }
 
@@ -174,11 +142,18 @@ func (p *projector) renderInlineContent(nodes []Node) {
 			sourceEntityID := stringAttr(node, "source_entity_id")
 			entity := p.entities[sourceEntityID]
 			number := p.numberFor(sourceEntityID)
-			p.builder.WriteString(fmt.Sprintf("[%d]", number))
+			displayMode := stringAttr(node, "display_mode")
+			if displayMode == "expanded_ref" {
+				title := sourceTitle(entity)
+				p.builder.WriteString(fmt.Sprintf("[source %d: %s]", number, title))
+			} else {
+				p.builder.WriteString(fmt.Sprintf("[%d]", number))
+			}
 			p.refs = append(p.refs, ProjectedSourceRef{
 				Number:         number,
 				NodeID:         nodeID(node),
 				SourceEntityID: sourceEntityID,
+				DisplayMode:    displayMode,
 				Label:          stringAttr(node, "label"),
 				Title:          sourceTitle(entity),
 				TargetKind:     entity.Target.Kind,

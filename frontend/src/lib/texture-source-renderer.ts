@@ -375,16 +375,26 @@ export function renderSourceTransclusionBody(entity: any, { compact = false } = 
   </div>`;
 }
 
-export function renderInlineSourceRef(label: string, entityID: string, sourceEntities: any[] = []): string {
+export function renderInlineSourceRef(label: string, entityID: string, sourceEntities: any[] = [], displayMode: string = 'numbered_ref'): string {
   const entity = findSourceEntity(sourceEntities, entityID);
   const displayLabel = label || entity?.label || 'source';
+  const expanded = displayMode === 'expanded_ref';
   if (!entity) {
-    return `<span class="texture-source-ref texture-source-ref--missing" data-texture-source-ref data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
+    return `<span class="texture-source-ref texture-source-ref--missing${expanded ? ' texture-source-ref--expanded' : ''}" data-texture-source-ref data-source-display-mode="${escapeHTML(expanded ? 'expanded_ref' : 'numbered_ref')}" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" contenteditable="false">${escapeHTML(displayLabel)}</span>`;
   }
   const title = sourceEntityTitle(entity);
   const marker = sourceEntities.indexOf(entity) + 1 || '';
   const expansionSurface = sourceEntityExpansionSurface(entity);
-  return `<span class="texture-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+  if (expanded) {
+    return `<span class="texture-source-ref texture-source-ref--expanded" data-texture-source-ref data-texture-citation-transclusion data-source-display-mode="expanded_ref" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+      <span class="texture-source-ref-block">
+        <strong>${escapeHTML(title)}</strong>
+        ${renderSourceTransclusionBody(entity)}
+        <span class="texture-source-ref-marker">[${escapeHTML(marker || displayLabel)}]</span>
+      </span>
+    </span>`;
+  }
+  return `<span class="texture-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-display-mode="numbered_ref" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
     <span class="texture-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
     <span class="texture-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>

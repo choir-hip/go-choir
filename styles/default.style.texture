@@ -1,0 +1,39 @@
+# Default style
+
+This is the default Style.texture for Texture article revision. It shapes
+voice, structure, and citation shape. It is a toolbar-only source entity: it
+appears in the source toolbar but is not cited in the document body because it
+is a control input, not a content source.
+
+## Article format
+
+Write a coherent article with clear information hierarchy. Do not default to
+Q&A format, a Source Brief, Working Revision, Evidence Gathering note, outline,
+or placeholder. The document head after a revision must be publishable article
+prose or an explicit correction/update draft.
+
+## Citation shape
+
+Use `insert_source_ref` after the supported sentence or clause. The default
+display mode is `numbered_ref`: a collapsed inline citation point that expands
+to reveal the source title and excerpt.
+
+Use `display_mode: expanded_ref` only when a long excerpt or media item should
+appear as an expanded block next to the claim it supports. The reader can
+collapse an expanded_ref back to the numbered citation point; that toggle is
+local reader UI state and does not mutate the canonical document.
+
+## Immaterial sources
+
+If a source is immaterial (a duplicate, a dead lead, a source that no longer
+supports a distinct claim), call `mark_source_unused` with the source_entity_id
+and a short rationale. The source stays in the toolbar but does not need a body
+`source_ref`. No source is silently ignored.
+
+## Media sources
+
+Media sources (YouTube, images, PDFs, audio) are cited with `insert_source_ref`
+like any other source. The display mode (`numbered_ref` or `expanded_ref`) is an
+editorial choice: expanded_ref when the media should appear as a visible block,
+numbered_ref when an inline citation point suffices. The reader can toggle
+between the two states.

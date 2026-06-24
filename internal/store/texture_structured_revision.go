@@ -19,7 +19,7 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		err      error
 	)
 	if hasBodyDoc {
-		doc, entities, err = decodeStructuredTextureRevision(rev.BodyDoc, rev.SourceEntities)
+		doc, entities, err = decodeStructuredTextureRevision(rev.BodyDoc, rev.SourceEntities, rev.Metadata)
 		if err != nil {
 			return types.Revision{}, "", "", err
 		}
@@ -37,7 +37,8 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		return types.Revision{}, "", "", err
 	}
 
-	projection, err := texturedoc.Project(doc, entities)
+	unusedIDs := textureRevisionUnusedSourceEntityIDs(rev.Metadata)
+	projection, err := texturedoc.Project(doc, entities, unusedIDs...)
 	if err != nil {
 		return types.Revision{}, "", "", fmt.Errorf("%w: %v", ErrInvalidTextureRevision, err)
 	}
@@ -59,7 +60,7 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 	return rev, string(bodyDocJSON), string(sourceEntitiesJSON), nil
 }
 
-func decodeStructuredTextureRevision(bodyDocRaw, sourceEntitiesRaw json.RawMessage) (texturedoc.StructuredTextureDoc, []texturedoc.SourceEntity, error) {
+func decodeStructuredTextureRevision(bodyDocRaw, sourceEntitiesRaw json.RawMessage, metadataRaw ...json.RawMessage) (texturedoc.StructuredTextureDoc, []texturedoc.SourceEntity, error) {
 	var doc texturedoc.StructuredTextureDoc
 	if err := json.Unmarshal(bodyDocRaw, &doc); err != nil {
 		return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("%w: body_doc must be valid StructuredTextureDoc JSON: %v", ErrInvalidTextureRevision, err)
@@ -73,15 +74,50 @@ func decodeStructuredTextureRevision(bodyDocRaw, sourceEntitiesRaw json.RawMessa
 		return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("%w: source_entities must be a valid SourceEntity array: %v", ErrInvalidTextureRevision, err)
 	}
 
-	if err := texturedoc.Validate(doc, entities); err != nil {
+	var unusedIDs []string
+	if len(metadataRaw) > 0 {
+		unusedIDs = textureRevisionUnusedSourceEntityIDs(metadataRaw[0])
+	}
+	if err := texturedoc.Validate(doc, entities, unusedIDs...); err != nil {
 		return texturedoc.StructuredTextureDoc{}, nil, fmt.Errorf("%w: %v", ErrInvalidTextureRevision, err)
 	}
 	return doc, entities, nil
 }
 
+// textureRevisionUnusedSourceEntityIDs reads the unused_source_entity_ids list
+// from revision metadata so the tri-state source invariant round-trips through
+// the store's v2 revision preparation.
+func textureRevisionUnusedSourceEntityIDs(metadataRaw json.RawMessage) []string {
+	if len(strings.TrimSpace(string(metadataRaw))) == 0 {
+		return nil
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(metadataRaw, &meta); err != nil {
+		return nil
+	}
+	value, ok := meta["unused_source_entity_ids"]
+	if !ok {
+		return nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s := strings.TrimSpace(fmt.Sprint(item)); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 func rejectLegacySourceSidecars(rev types.Revision) error {
 	if rawJSONCarriesData(rev.Citations, "[]") {
-		return fmt.Errorf("%w: citations_json is legacy source identity; use body_doc source_ref/source_embed nodes plus top-level source_entities", ErrInvalidTextureRevision)
+		return fmt.Errorf("%w: citations_json is legacy source identity; use body_doc source_ref nodes plus top-level source_entities", ErrInvalidTextureRevision)
 	}
 	metadata := map[string]json.RawMessage{}
 	if len(strings.TrimSpace(string(rev.Metadata))) > 0 {
@@ -94,7 +130,7 @@ func rejectLegacySourceSidecars(rev types.Revision) error {
 		if !ok || !rawJSONCarriesData(raw, "{}") {
 			continue
 		}
-		return fmt.Errorf("%w: metadata.%s is legacy source identity; use body_doc source_ref/source_embed nodes plus top-level source_entities", ErrInvalidTextureRevision, key)
+		return fmt.Errorf("%w: metadata.%s is legacy source identity; use body_doc source_ref nodes plus top-level source_entities", ErrInvalidTextureRevision, key)
 	}
 	return nil
 }

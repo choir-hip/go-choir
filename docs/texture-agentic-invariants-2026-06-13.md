@@ -326,6 +326,50 @@ doc is re-woken rather than silently dropping the findings.
   wakes;
 - a no-write integrate still leaves worker updates pending for re-wake.
 
+## Source entity tri-state and citation display mode (2026-06-23)
+
+Source citation is tri-state. Every source entity on a revision is in exactly
+one of three states:
+
+- **cited**: a `source_ref` node in the body references the entity;
+- **toolbar-only**: a Style.texture style source that shapes the document but is
+  intentionally not cited in the body (it is a control input, not a content
+  source);
+- **marked-unused**: the model called `mark_source_unused` with the
+  `source_entity_id` and a rationale, recorded in revision metadata under
+  `unused_source_entity_ids`.
+
+No source is silently ignored. The schema validator requires every material
+source entity to be referenced by a `source_ref` node, with the marked-unused
+list as the explicit audit exception.
+
+Citation shape is a display mode, not a separate node type. The former
+`source_embed` block node is removed. All citations are `source_ref` nodes:
+
+- `display_mode: numbered_ref` — collapsed inline citation point that expands to
+  reveal the source title and excerpt (default).
+- `display_mode: expanded_ref` — expanded block showing the title and excerpt.
+
+The reader can toggle any `source_ref` between expanded and collapsed. The
+toggle is local reader UI state and does not mutate the canonical document.
+
+There is no `WireTexture` prompt control-flow branch. Article-format and
+citation guidance is unconditional for every Texture run, driven by the default
+Style.texture (`styles/default.style.texture`). See Choir Doctrine I15 and I16.
+
+### Required tests for this contract
+
+- schema rejects `source_embed` nodes and `display_mode` values outside
+  `numbered_ref`/`expanded_ref`;
+- `mark_source_unused` allows an uncited source entity when its id is in the
+  unused list, and rejects it otherwise;
+- `patch_texture` rejects `insert_source_embed` and accepts `mark_source_unused`
+  only with a rationale;
+- `expanded_ref` `source_ref` nodes project as an expanded block marker and
+  render as a block in the frontend;
+- prompt generation contains no `insert_source_embed` string and no
+  `{{if .WireTexture}}` branch.
+
 ## Regression From M3
 
 During M3, the deployed restart proof required Trace to show conductor, Texture,

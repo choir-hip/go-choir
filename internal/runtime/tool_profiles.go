@@ -430,13 +430,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}))
 	}
 	if profile == AgentProfileTexture {
-		isWireTexture := metadataString(rec.Metadata, "source_network_cycle_id") != "" ||
-			metadataString(rec.Metadata, "ingestion_handoff_cycle_id") != "" ||
-			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "universal_wire_") ||
-			strings.HasPrefix(metadataString(rec.Metadata, "request_intent"), "ingestion_handoff_")
-		b.WriteString(textureprompts.RunOverlay(textureprompts.RunOverlayOptions{
-			WireTexture: isWireTexture,
-		}))
+		b.WriteString(textureprompts.RunOverlay())
 	}
 	if profile == AgentProfileProcessor {
 		b.WriteString(runtimeprompts.ProcessorRuntimeOverlay())

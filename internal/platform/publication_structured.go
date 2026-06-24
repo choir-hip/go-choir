@@ -31,7 +31,7 @@ func normalizePublishTextureStructuredFields(content *string, bodyDoc *json.RawM
 	sourceEntitiesText := strings.TrimSpace(string(*sourceEntities))
 	if bodyDocText == "" {
 		if sourceEntitiesText != "" && sourceEntitiesText != "null" && sourceEntitiesText != "[]" {
-			return fmt.Errorf("source_entities require body_doc source_ref/source_embed nodes")
+			return fmt.Errorf("source_entities require body_doc source_ref nodes")
 		}
 		return nil
 	}

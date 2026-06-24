@@ -331,7 +331,7 @@ func TestTexturePromptUsesStructuredPatchTextureOperationContract(t *testing.T) 
 		"- heading id=heading-brief level=2 text=\"Brief\"",
 		"- paragraph id=paragraph-claim text=\"The claim needs source-backed revision.\"",
 		"- source_ref id=ref-claim source_entity_id=src-claim display_mode=numbered_ref",
-		"patch_texture accepts structured document operations only: update_block_text, insert_block, append_block, delete_node, insert_source_ref, and insert_source_embed",
+		"patch_texture accepts structured document operations only: update_block_text, insert_block, append_block, delete_node, insert_source_ref, and mark_source_unused",
 		`"op":"update_block_text"`,
 		`"block_id":"block id from the structured outline"`,
 		`"op":"append_block"`,

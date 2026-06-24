@@ -100,7 +100,7 @@ func buildPublicationSourceMetadata(req PublishTextureRequest) (publicationSourc
 		return metadata, nil
 	}
 	if strings.TrimSpace(string(req.BodyDoc)) == "" {
-		return metadata, fmt.Errorf("source_entities require body_doc source_ref/source_embed nodes")
+		return metadata, fmt.Errorf("source_entities require body_doc source_ref nodes")
 	}
 	entityValues, ok := rawEntities.([]any)
 	if !ok {

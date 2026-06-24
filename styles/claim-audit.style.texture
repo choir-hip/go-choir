@@ -1,0 +1,29 @@
+# Style.texture: Claim Audit
+
+Claim-audit treatment. Foreground what is verified, what is disputed, who says
+so, and what evidence would change the story. Selected when a brief centers
+correction, contradiction, disputed claims, or verification risk.
+
+## Article format
+
+Structure around the claim and its evidentiary status. Make the verification
+state legible: which sources confirm, which dispute, which are silent. Do not
+flatten contested evidence into a single confident assertion.
+
+## Citation shape
+
+Cite every material source with `insert_source_ref` after the claim it supports.
+Default display mode is `numbered_ref`. Use `display_mode: expanded_ref` for a
+contested quote or excerpt that must be visible in context next to the claim
+under audit.
+
+## Immaterial sources
+
+Mark immaterial sources with `mark_source_unused` and a short rationale. They
+remain in the source toolbar without a body citation.
+
+## Verification
+
+Name the evidence that would change the assessment. Distinguish "confirmed by
+multiple independent sources" from "single-source" from "disputed". Do not
+upgrade a single-source claim to settled fact.

@@ -118,38 +118,45 @@ test('structured docs render source refs as native non-link citation atoms', () 
   expect(html).not.toContain('source:src-1');
 });
 
-test('structured docs render source embeds with preserved source text', () => {
+test('structured docs render expanded_ref source refs as a block with preserved source text', () => {
   const bodyDoc = {
     schema: 'choir.texture_doc.v1',
     doc: {
       type: 'doc',
-      attrs: { id: 'doc-source-embed-render' },
+      attrs: { id: 'doc-source-expanded-ref-render' },
       content: [{
-        type: 'source_embed',
-        attrs: {
-          id: 'embed-1',
-          source_entity_id: 'src-embed',
-        },
+        type: 'paragraph',
+        attrs: { id: 'p-expanded-ref' },
+        content: [{
+          type: 'source_ref',
+          attrs: {
+            id: 'ref-expanded',
+            source_entity_id: 'src-expanded',
+            display_mode: 'expanded_ref',
+          },
+        }],
       }],
     },
   };
   const entity = {
-    ...sourceEntity('src-embed'),
+    ...sourceEntity('src-expanded'),
     selectors: [{
       kind: 'text_quote',
-      data: { exact: 'Embedded source excerpt should be visible.' },
+      data: { exact: 'Expanded source excerpt should be visible.' },
     }],
     reader_snapshot: {
-      text_content: 'Embedded source excerpt should be visible.\n\nFull source viewer text remains available separately.',
+      text_content: 'Expanded source excerpt should be visible.\n\nFull source viewer text remains available separately.',
     },
   };
 
   const html = renderStructuredTextureDocHTML(bodyDoc, [entity]);
 
-  expect(html).toContain('data-texture-source-embed');
+  expect(html).toContain('data-texture-source-ref');
+  expect(html).toContain('data-source-display-mode="expanded_ref"');
   expect(html).toContain('Carrier service advisory');
-  expect(html).toContain('Embedded source excerpt should be visible.');
-  expect(html).not.toContain('source:src-embed');
+  expect(html).toContain('Expanded source excerpt should be visible.');
+  expect(html).not.toContain('source:src-expanded');
+  expect(html).not.toContain('data-texture-source-embed');
 });
 
 test('structured doc source entities keep only attached entities', () => {

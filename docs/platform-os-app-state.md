@@ -1,7 +1,7 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-06-11
+**Last updated:** 2026-06-23
 **Changelog:** Reconciled the App Catalog and Apps & Changes/Features entries
 with the shipped `features` app (frontend/src/lib/FeaturesApp.svelte) after
 the 2026-05-28/31 frontend redesign cutover, the 2026-06-11 owner-approval
@@ -220,7 +220,7 @@ Known gaps:
 | App | Current state | Known gaps / next realism axis |
 | --- | --- | --- |
 | **Files** | First-class file browser with navigation, upload, text-to-Texture open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
-| **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested Textures. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
+| **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Source citation is tri-state: every source entity is cited (`source_ref` in the body), toolbar-only (a Style.texture style source), or marked-unused (`mark_source_unused` with rationale). The former `source_embed` block node is removed; all citations are `source_ref` with `display_mode` (`numbered_ref` \| `expanded_ref`). There is no `WireTexture` prompt control-flow branch; article-format guidance is unconditional, driven by the default Style.texture. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested Textures. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, Texture reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
 | **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and candidate-computer inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
 | **Super Console** | Target replacement for Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
@@ -332,6 +332,15 @@ behavior.
   synchronization.
 - Existing Texture and Trace SSE streams remain valid scoped transports where
   they preserve stronger revision/trajectory catch-up semantics.
+- Texture source entities are tri-state: every source entity is cited
+  (`source_ref` in the body with `display_mode` `numbered_ref` or
+  `expanded_ref`), toolbar-only (a Style.texture style source that shapes
+  writing but is not cited in the body), or marked-unused
+  (`mark_source_unused` with a rationale in revision metadata). No source is
+  silently ignored. The former `source_embed` block node is removed. There is
+  no `WireTexture` prompt control-flow branch; article-format and citation
+  guidance is unconditional, driven by the default Style.texture registered as
+  a source entity.
 
 ## Current Proof Anchors
 

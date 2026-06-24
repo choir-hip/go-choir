@@ -18,14 +18,16 @@ func TestDefaultSystemPromptIsNonEmpty(t *testing.T) {
 	}
 }
 
-func TestRunOverlayIncludesWireBranch(t *testing.T) {
-	general := RunOverlay(RunOverlayOptions{WireTexture: false})
-	wire := RunOverlay(RunOverlayOptions{WireTexture: true})
-	if !strings.Contains(general, "Probe (researcher) is the morphism class for world knowledge") {
-		t.Fatalf("general overlay missing probe guidance: %q", general)
+func TestRunOverlayIncludesArticleAndProbeGuidance(t *testing.T) {
+	overlay := RunOverlay()
+	if !strings.Contains(overlay, "Probe (researcher) is the morphism class for world knowledge") {
+		t.Fatalf("overlay missing probe guidance: %q", overlay)
 	}
-	if !strings.Contains(wire, "Universal Wire article revision runs") {
-		t.Fatalf("wire overlay missing wire guidance: %q", wire)
+	if !strings.Contains(overlay, "Write a coherent article with clear information hierarchy") {
+		t.Fatalf("overlay missing unconditional article-format guidance: %q", overlay)
+	}
+	if strings.Contains(overlay, "insert_source_embed") {
+		t.Fatalf("overlay should not reference removed insert_source_embed: %q", overlay)
 	}
 }
 
@@ -39,13 +41,17 @@ func TestRevisionPolicyOverlayIncludesPatchExample(t *testing.T) {
 	}
 }
 
-func TestRunOverlayWireBranchTemplate(t *testing.T) {
-	general := RunOverlay(RunOverlayOptions{WireTexture: false})
-	wire := RunOverlay(RunOverlayOptions{WireTexture: true})
-	if strings.Contains(general, "Universal Wire article revision runs") {
-		t.Fatalf("general overlay should not include wire branch: %q", general)
+func TestRunOverlayHasNoWireBranch(t *testing.T) {
+	overlay := RunOverlay()
+	if strings.Contains(overlay, "Universal Wire article revision runs") {
+		t.Fatalf("overlay should not include removed Wire branch: %q", overlay)
 	}
-	if !strings.Contains(wire, "Universal Wire article revision runs") {
-		t.Fatalf("wire overlay missing wire branch: %q", wire)
+	if strings.Contains(overlay, "Source ids only in source inventories") {
+		t.Fatalf("overlay should not include removed negative phrasing: %q", overlay)
+	}
+	if strings.Contains(overlay, "mark_source_unused") {
+		// mark_source_unused is expected in the overlay now.
+	} else {
+		t.Fatalf("overlay missing mark_source_unused guidance: %q", overlay)
 	}
 }

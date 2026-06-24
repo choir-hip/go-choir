@@ -141,8 +141,6 @@ func publicationBlocksFromStructuredNode(node texturedoc.Node, entityTitles map[
 		return []publicationDocumentBlock{{Kind: "paragraph", Inlines: []publicationInline{{Kind: "text", Text: publicationCodeBlockText(node)}}}}
 	case "horizontal_rule":
 		return []publicationDocumentBlock{{Kind: "rule"}}
-	case "source_embed":
-		return []publicationDocumentBlock{{Kind: "paragraph", Inlines: []publicationInline{publicationStructuredSourceInline(node, entityTitles)}}}
 	default:
 		return nil
 	}
@@ -166,8 +164,6 @@ func publicationStructuredBlockInlines(node texturedoc.Node, entityTitles map[st
 	switch node.Type {
 	case "paragraph", "heading":
 		return publicationStructuredInlines(node.Content, entityTitles)
-	case "source_embed":
-		return []publicationInline{publicationStructuredSourceInline(node, entityTitles)}
 	default:
 		var inlines []publicationInline
 		for _, child := range node.Content {

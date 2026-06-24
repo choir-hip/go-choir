@@ -466,7 +466,7 @@ func wireArticleCollectVisibleStructuredSourceRefs(node texturedoc.Node, refs ma
 		if wireArticleArticleLineStartsInventorySection(wireArticleStructuredNodeText(child)) {
 			return true
 		}
-		if child.Type == "source_ref" || child.Type == "source_embed" {
+		if child.Type == "source_ref" {
 			if id := textureNodeStringAttr(child, "source_entity_id"); id != "" {
 				refs[id] = true
 			}

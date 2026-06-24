@@ -110,7 +110,7 @@ func textureRevisionSourceMarkerCount(rev types.Revision) int {
 
 func countStructuredTextureSourceNodes(node texturedoc.Node) int {
 	count := 0
-	if node.Type == "source_ref" || node.Type == "source_embed" {
+	if node.Type == "source_ref" {
 		count++
 	}
 	for _, child := range node.Content {

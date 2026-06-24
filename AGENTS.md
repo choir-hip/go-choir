@@ -278,6 +278,25 @@ explicit human approval before landing it. Divergence is acceptable only when it
 protects correctness, security, authority boundaries, or resource isolation in a
 way that cannot be represented cleanly as policy or prompt contract.
 
+## Prompt Control-Flow Antipattern
+
+Prompts provide data and invariants, not boolean branches that switch behavior.
+A prompt should name the style texture, the available sources, the run context,
+and the invariants (cite sources, no model priors as grounded, canonical
+revisions via tools). It must not branch on runtime metadata to switch behavior
+(`{{if .WireTexture}}`, first-owner-prompt special cases, worker-finding gates).
+Unconditional invariant text is not control flow. Decisions that used to live in
+prompt branches belong in the style texture, the run context, or tool
+availability. See `docs/prompt-revisions-needed-2026-06-23.md` for the
+flattening plan and `docs/choir-doctrine.md` invariant I16.
+
+Source citation is tri-state and citation shape is a display mode, not a
+separate node type (Choir Doctrine I15). Every source entity is cited
+(`source_ref` in the body), toolbar-only (a Style.texture style source), or
+marked-unused (`mark_source_unused` with a rationale). The former
+`source_embed` block node is removed; all citations are `source_ref` with
+`display_mode` (`numbered_ref` | `expanded_ref`).
+
 ## Runtime Configuration
 
 Provider secrets and platform model catalogs are platform-owned. Per-computer

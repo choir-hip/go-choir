@@ -161,7 +161,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "source_entities require body_doc source_ref/source_embed nodes"})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "source_entities require body_doc source_ref nodes"})
 		h.lifecycle.record("platform_publish.private_read", "detached_source_entities", time.Since(started))
 		return
 	}
@@ -243,7 +243,7 @@ func (h *Handler) gatherTextureRevisionHistory(r *http.Request, sandboxURL, user
 			return nil, fmt.Errorf("revision %s does not belong to authenticated user", rev.RevisionID)
 		}
 		if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
-			return nil, fmt.Errorf("revision %s source_entities require body_doc source_ref/source_embed nodes", rev.RevisionID)
+			return nil, fmt.Errorf("revision %s source_entities require body_doc source_ref nodes", rev.RevisionID)
 		}
 		history = append(history, platform.PublishTextureRevision{
 			RevisionID:       rev.RevisionID,

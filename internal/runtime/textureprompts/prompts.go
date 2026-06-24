@@ -23,14 +23,9 @@ func DefaultSystemPrompt() string {
 	return doc.BodyText()
 }
 
-// RunOverlayOptions selects run-scoped Texture system overlay text.
-type RunOverlayOptions struct {
-	WireTexture bool
-}
-
 // RunOverlay returns the per-run Texture system overlay appended after the role prompt.
-func RunOverlay(opts RunOverlayOptions) string {
-	return mustRenderOverlay("run_system", opts)
+func RunOverlay() string {
+	return mustRenderOverlay("run_system", nil)
 }
 
 // RevisionWorkerFindingsOptions selects worker-findings overlay text for revision requests.

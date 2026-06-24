@@ -96,6 +96,14 @@ versions. Workers do not write canonical `texture` text and do not send patches 
 `texture`. They emit updates: findings, evidence, source refs, artifacts,
 branches/commits, previews, tests, questions, constraints, or proposals.
 
+Texture source citation is tri-state (Choir Doctrine I15). Source citations are
+`source_ref` nodes only; the `source_embed` node type is removed. `display_mode`
+(`numbered_ref` | `expanded_ref`) is a reader-toggleable presentation choice on
+the `source_ref` node, not a separate operation. Immaterial sources are marked
+with `mark_source_unused` rather than silently dropped. Texture prompts carry no
+boolean control-flow branches (Choir Doctrine I16); article-format and citation
+guidance is unconditional, driven by the default Style.texture.
+
 `researcher` reads local context and the web, writes findings/evidence to Dolt,
 and does not own document text.
 

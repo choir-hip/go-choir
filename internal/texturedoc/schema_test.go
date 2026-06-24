@@ -7,7 +7,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
-func TestValidDocProjectsNumberedRefsAndEmbeds(t *testing.T) {
+func TestValidDocProjectsNumberedAndExpandedRefs(t *testing.T) {
 	doc := validDoc()
 	entities := validEntities()
 
@@ -18,14 +18,17 @@ func TestValidDocProjectsNumberedRefsAndEmbeds(t *testing.T) {
 	if !strings.Contains(projection.Text, "The claim is grounded[1].") {
 		t.Fatalf("projection text missing numbered ref: %q", projection.Text)
 	}
-	if !strings.Contains(projection.Text, "[source 2: Launch photo | image_preview]") {
-		t.Fatalf("projection text missing source embed: %q", projection.Text)
+	if !strings.Contains(projection.Text, "[source 2: Launch photo]") {
+		t.Fatalf("projection text missing expanded ref: %q", projection.Text)
 	}
-	if len(projection.SourceRefs) != 1 || projection.SourceRefs[0].SourceEntityID != "src-web" || projection.SourceRefs[0].Number != 1 {
-		t.Fatalf("source refs = %#v", projection.SourceRefs)
+	if len(projection.SourceRefs) != 2 {
+		t.Fatalf("source refs = %#v, want 2", projection.SourceRefs)
 	}
-	if len(projection.SourceEmbeds) != 1 || projection.SourceEmbeds[0].SourceEntityID != "src-image" || projection.SourceEmbeds[0].TargetKind != "image" {
-		t.Fatalf("source embeds = %#v", projection.SourceEmbeds)
+	if projection.SourceRefs[0].SourceEntityID != "src-web" || projection.SourceRefs[0].Number != 1 {
+		t.Fatalf("first source ref = %#v", projection.SourceRefs[0])
+	}
+	if projection.SourceRefs[1].SourceEntityID != "src-image" || projection.SourceRefs[1].DisplayMode != "expanded_ref" {
+		t.Fatalf("expanded source ref = %#v", projection.SourceRefs[1])
 	}
 }
 
@@ -69,7 +72,7 @@ func TestValidatorRejectsUnsupportedLinkMark(t *testing.T) {
 	}
 }
 
-func TestSourceRefsAndEmbedsMustResolveEntities(t *testing.T) {
+func TestSourceRefsMustResolveEntities(t *testing.T) {
 	doc := validDoc()
 	doc.Doc.Content[0].Content[1].Attrs["source_entity_id"] = "missing"
 
@@ -79,10 +82,10 @@ func TestSourceRefsAndEmbedsMustResolveEntities(t *testing.T) {
 	}
 
 	doc = validDoc()
-	doc.Doc.Content[1].Attrs["source_entity_id"] = "missing"
+	doc.Doc.Content[1].Content[0].Attrs["source_entity_id"] = "missing"
 	err = Validate(doc, validEntities())
 	if err == nil || !strings.Contains(err.Error(), "does not resolve") {
-		t.Fatalf("Validate() error = %v, want unresolved source embed", err)
+		t.Fatalf("Validate() error = %v, want unresolved expanded source ref", err)
 	}
 
 	doc = validDoc()
@@ -93,7 +96,19 @@ func TestSourceRefsAndEmbedsMustResolveEntities(t *testing.T) {
 	}
 }
 
-func TestSourceEmbedMustBeLeafBlock(t *testing.T) {
+func TestMarkSourceUnusedAllowsUncitedEntities(t *testing.T) {
+	doc := validDoc()
+	entities := append(validEntities(), sourceEntity("src-detached", "web_url", "Detached", "numbered_ref", sourcecontract.OpenSurfaceSource))
+	if err := Validate(doc, entities); err == nil || !strings.Contains(err.Error(), "src-detached") {
+		t.Fatalf("Validate() error = %v, want detached rejection without unused declaration", err)
+	}
+	// Marking the detached source as unused suppresses the orphan check.
+	if err := Validate(doc, entities, "src-detached"); err != nil {
+		t.Fatalf("Validate() with mark_source_unused rejected a valid unused declaration: %v", err)
+	}
+}
+
+func TestSourceRefMustBeAtomLeaf(t *testing.T) {
 	cases := []struct {
 		name   string
 		mutate func(*Node)
@@ -121,11 +136,11 @@ func TestSourceEmbedMustBeLeafBlock(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := validDoc()
-			embed := &doc.Doc.Content[1]
-			tc.mutate(embed)
+			ref := &doc.Doc.Content[1].Content[0]
+			tc.mutate(ref)
 			err := Validate(doc, validEntities())
-			if err == nil || !strings.Contains(err.Error(), "source_embed must be a leaf block") {
-				t.Fatalf("Validate() error = %v, want source_embed leaf rejection", err)
+			if err == nil || !strings.Contains(err.Error(), "source_ref must be an atom leaf") {
+				t.Fatalf("Validate() error = %v, want source_ref atom leaf rejection", err)
 			}
 		})
 	}
@@ -214,33 +229,35 @@ func TestImageRegionSelectorIsAccepted(t *testing.T) {
 func TestMultimediaTargetsUseSourceEntitiesNotBodySyntaxes(t *testing.T) {
 	entities := validEntities()
 	entities = append(entities,
-		sourceEntity("src-video", "video", "Demo video", "player", sourcecontract.OpenSurfaceVideo),
-		sourceEntity("src-audio", "audio", "Podcast clip", "player", sourcecontract.OpenSurfaceAudio),
-		sourceEntity("src-pdf", "pdf", "Report PDF", "pdf_pages", sourcecontract.OpenSurfacePDF),
-		sourceEntity("src-transcript", "transcript", "Transcript", "transcript", sourcecontract.OpenSurfaceTranscript),
-		sourceEntity("src-file", "file_artifact", "Attachment", "source_window", sourcecontract.OpenSurfaceFile),
+		sourceEntity("src-video", "video", "Demo video", "numbered_ref", sourcecontract.OpenSurfaceVideo),
+		sourceEntity("src-audio", "audio", "Podcast clip", "numbered_ref", sourcecontract.OpenSurfaceAudio),
+		sourceEntity("src-pdf", "pdf", "Report PDF", "numbered_ref", sourcecontract.OpenSurfacePDF),
+		sourceEntity("src-transcript", "transcript", "Transcript", "numbered_ref", sourcecontract.OpenSurfaceTranscript),
+		sourceEntity("src-file", "file_artifact", "Attachment", "numbered_ref", sourcecontract.OpenSurfaceFile),
 	)
 	doc := validDoc()
 	doc.Doc.Content = append(doc.Doc.Content,
-		sourceEmbed("embed-video", "src-video", "player"),
-		sourceEmbed("embed-audio", "src-audio", "player"),
-		sourceEmbed("embed-pdf", "src-pdf", "pdf_pages"),
-		sourceEmbed("embed-transcript", "src-transcript", "transcript"),
-		sourceEmbed("embed-file", "src-file", "source_window"),
+		paragraphWithSourceRefs([]sourceRefSpec{
+			{"ref-video", "src-video"},
+			{"ref-audio", "src-audio"},
+			{"ref-pdf", "src-pdf"},
+			{"ref-transcript", "src-transcript"},
+			{"ref-file", "src-file"},
+		}),
 	)
 
 	projection, err := Project(doc, entities)
 	if err != nil {
 		t.Fatalf("Project() error = %v", err)
 	}
-	if len(projection.SourceEmbeds) != 6 {
-		t.Fatalf("source embeds = %#v", projection.SourceEmbeds)
+	if len(projection.SourceRefs) != 7 {
+		t.Fatalf("source refs = %#v, want 7", projection.SourceRefs)
 	}
-	for _, embed := range projection.SourceEmbeds {
-		switch embed.TargetKind {
-		case "image", "video", "audio", "pdf", "transcript", "file_artifact":
+	for _, ref := range projection.SourceRefs {
+		switch ref.TargetKind {
+		case "image", "video", "audio", "pdf", "transcript", "file_artifact", "web_url":
 		default:
-			t.Fatalf("unexpected multimedia embed target kind %q in %#v", embed.TargetKind, projection.SourceEmbeds)
+			t.Fatalf("unexpected multimedia ref target kind %q in %#v", ref.TargetKind, projection.SourceRefs)
 		}
 	}
 
@@ -274,10 +291,12 @@ func TestExecutionEvidenceTargetsUseSourceEntities(t *testing.T) {
 		{"src-benchmark", "benchmark_log", "benchmark log", sourcecontract.OpenSurfaceFile},
 	}
 	doc := validDoc()
+	specs := []sourceRefSpec{}
 	for _, target := range executionTargets {
-		entities = append(entities, sourceEntity(target.id, target.targetKind, target.title, "source_window", target.openSurface))
-		doc.Doc.Content = append(doc.Doc.Content, sourceEmbed("embed-"+target.id, target.id, "source_window"))
+		entities = append(entities, sourceEntity(target.id, target.targetKind, target.title, "numbered_ref", target.openSurface))
+		specs = append(specs, sourceRefSpec{"ref-" + target.id, target.id})
 	}
+	doc.Doc.Content = append(doc.Doc.Content, paragraphWithSourceRefs(specs))
 	if err := Validate(doc, entities); err != nil {
 		t.Fatalf("Validate() rejected execution source targets: %v", err)
 	}
@@ -287,14 +306,14 @@ func TestExecutionEvidenceTargetsUseSourceEntities(t *testing.T) {
 	}
 	for _, target := range executionTargets {
 		found := false
-		for _, embed := range projection.SourceEmbeds {
-			if embed.SourceEntityID == target.id && embed.TargetKind == target.targetKind {
+		for _, ref := range projection.SourceRefs {
+			if ref.SourceEntityID == target.id && ref.TargetKind == target.targetKind {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Fatalf("projection missing execution source target %#v in %#v", target, projection.SourceEmbeds)
+			t.Fatalf("projection missing execution source target %#v in %#v", target, projection.SourceRefs)
 		}
 	}
 }
@@ -322,7 +341,7 @@ func validDoc() StructuredTextureDoc {
 						{Type: "text", Text: "."},
 					},
 				},
-				sourceEmbed("embed-1", "src-image", "image_preview"),
+				paragraphWithSourceRefs([]sourceRefSpec{{"ref-image", "src-image"}}),
 			},
 		},
 	}
@@ -354,7 +373,7 @@ func validEntities() []SourceEntity {
 				SourceSystem: "test",
 			},
 		},
-		sourceEntity("src-image", "image", "Launch photo", "image_preview", sourcecontract.OpenSurfaceImage),
+		sourceEntity("src-image", "image", "Launch photo", "expanded_ref", sourcecontract.OpenSurfaceImage),
 	}
 }
 
@@ -383,13 +402,29 @@ func sourceEntity(id, targetKind, title, displayMode, openSurface string) Source
 	}
 }
 
-func sourceEmbed(nodeID, sourceEntityID, displayMode string) Node {
+type sourceRefSpec struct {
+	NodeID   string
+	EntityID string
+}
+
+// paragraphWithSourceRefs builds a paragraph node containing expanded_ref
+// source_ref nodes for each spec, used where tests previously appended
+// source_embed block nodes.
+func paragraphWithSourceRefs(specs []sourceRefSpec) Node {
+	content := make([]Node, 0, len(specs))
+	for _, spec := range specs {
+		content = append(content, Node{
+			Type: "source_ref",
+			Attrs: map[string]any{
+				"id":               spec.NodeID,
+				"source_entity_id": spec.EntityID,
+				"display_mode":     "expanded_ref",
+			},
+		})
+	}
 	return Node{
-		Type: "source_embed",
-		Attrs: map[string]any{
-			"id":               nodeID,
-			"source_entity_id": sourceEntityID,
-			"display_mode":     displayMode,
-		},
+		Type:    "paragraph",
+		Attrs:   map[string]any{"id": "p-refs"},
+		Content: content,
 	}
 }

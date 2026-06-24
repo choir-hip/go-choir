@@ -280,6 +280,27 @@ source-handle inventories, or "Source:" lines are not acceptable substitutes for
 source-backed claims and must not be accepted as proof that a source/citation
 path works.
 
+`I15` Source citation is tri-state and citation shape is a display mode, not a
+separate node type. Every source entity is cited (`source_ref` in the body),
+toolbar-only (a Style.texture style source that shapes the document but is not
+cited in the body), or marked-unused (`mark_source_unused` with a rationale in
+revision metadata). No source is silently ignored. The former `source_embed`
+block node type is removed: all citations are `source_ref` nodes, and
+`display_mode` (`numbered_ref` collapsed inline point, or `expanded_ref`
+expanded block) is a reader-toggleable presentation choice on the same node.
+Style textures are source entities in the toolbar, not body citations. There is
+no `WireTexture` prompt control-flow branch: article-format and citation
+guidance is unconditional, driven by the default Style.texture.
+
+`I16` Prompts provide data and invariants, not boolean control flow. A prompt
+should name the style texture, the available sources, the run context, and the
+invariants (cite sources, no model priors as grounded, canonical revisions via
+tools). It must not branch on runtime metadata to switch behavior
+(`{{if .WireTexture}}`, first-owner-prompt special cases, worker-finding gates).
+Unconditional invariant text is not control flow. Decisions that used to live in
+prompt branches belong in the style texture, the run context, or tool
+availability.
+
 ## Proof-Carrying Autonomy
 
 Autonomy increases at the mutation layer only when accountability increases at

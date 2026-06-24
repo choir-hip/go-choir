@@ -118,8 +118,8 @@ type Revision struct {
 	BodyDoc json.RawMessage `json:"body_doc,omitempty"`
 
 	// SourceEntities is the canonical SourceEntity array JSON referenced by
-	// BodyDoc source_ref/source_embed nodes. Empty on legacy revisions created
-	// before the structured-body cutover.
+	// BodyDoc source_ref nodes. Empty on legacy revisions created before the
+	// structured-body cutover.
 	SourceEntities json.RawMessage `json:"source_entities,omitempty"`
 
 	// Citations is the JSON-encoded citations array at this revision.

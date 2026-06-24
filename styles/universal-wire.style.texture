@@ -1,0 +1,31 @@
+# Style.texture: Universal Wire
+
+Fast, readable universal-wire treatment. Direct headline, clear nut graf,
+source-rich context, visible uncertainty. Selected as the default style for
+general news article requests.
+
+## Article format
+
+Lead with the strongest verified claim. Keep paragraphs short and
+information-dense. Surface uncertainty explicitly where evidence is partial,
+contested, or pending — never hide it behind confident prose.
+
+## Citation shape
+
+Cite every material source with `insert_source_ref` placed after the sentence or
+clause it supports. Default display mode is `numbered_ref` for inline citations.
+Use `display_mode: expanded_ref` only for a block excerpt that is editorially
+required to sit next to a claim (for example, a contested quote that must be
+visible to the reader in context).
+
+## Immaterial sources
+
+Mark immaterial sources with `mark_source_unused` and a short rationale. They
+remain in the source toolbar without a body citation. No source is silently
+ignored.
+
+## Uncertainty
+
+When evidence is partial or contested, say so in the prose. Do not present
+model priors or single-source claims as settled fact. Prefer two independent
+sources for load-bearing claims when available.

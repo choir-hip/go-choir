@@ -1,4 +1,4 @@
-import { escapeHTML, findSourceEntity, renderInlineSourceRef, renderSourceTransclusionBody, sourceEntityID, sourceEntityTitle } from './texture-source-renderer';
+import { escapeHTML, renderInlineSourceRef, sourceEntityID } from './texture-source-renderer';
 
 export const TEXTURE_DOC_SCHEMA = 'choir.texture_doc.v1';
 
@@ -79,12 +79,13 @@ function serializeInlineNodes(node: any, nextID: (kind: string) => string, marks
   if (matches(node, '[data-texture-source-ref]')) {
     const sourceEntityID = getAttr(node, 'data-source-entity-id');
     if (!sourceEntityID) return [];
+    const displayMode = getAttr(node, 'data-source-display-mode') === 'expanded_ref' ? 'expanded_ref' : 'numbered_ref';
     return [{
       type: 'source_ref',
       attrs: {
         id: getAttr(node, 'data-texture-source-node-id') || nextID('source-ref'),
         source_entity_id: sourceEntityID,
-        display_mode: 'numbered_ref',
+        display_mode: displayMode,
       },
     }];
   }
@@ -189,7 +190,8 @@ function renderInlineNode(node: StructuredNode, sourceEntities: any[] = []): str
   if (node.type === 'source_ref') {
     const entityID = String(node.attrs?.source_entity_id || '').trim();
     const entity = sourceEntities.find((item) => sourceEntityID(item) === entityID);
-    const html = renderInlineSourceRef(sourceEntityLabel(entity, entityID || 'source'), entityID, sourceEntities);
+    const displayMode = String(node.attrs?.display_mode || 'numbered_ref').trim();
+    const html = renderInlineSourceRef(sourceEntityLabel(entity, entityID || 'source'), entityID, sourceEntities, displayMode);
     const nodeID = String(node.attrs?.id || '').trim();
     return nodeID ? html.replace(' data-texture-source-ref', ` data-texture-source-ref data-texture-source-node-id="${escapeHTML(nodeID)}"`) : html;
   }
@@ -220,13 +222,6 @@ function renderBlockNode(node: StructuredNode, sourceEntities: any[] = []): stri
       return `<pre><code>${escapeHTML((node.content || []).map((item) => item.text || '').join('\n'))}</code></pre>`;
     case 'horizontal_rule':
       return '<hr>';
-    case 'source_embed': {
-      const entityID = String(node.attrs?.source_entity_id || '').trim();
-      const entity = findSourceEntity(sourceEntities, entityID);
-      return `<aside class="texture-source-embed" data-texture-source-embed data-source-entity-id="${escapeHTML(entityID)}">
-        ${entity ? `<h4>${escapeHTML(sourceEntityTitle(entity))}</h4>${renderSourceTransclusionBody(entity)}` : ''}
-      </aside>`;
-    }
     default:
       return '';
   }
@@ -268,12 +263,6 @@ function projectBlockNode(node: StructuredNode, sourceNumbers: Map<string, numbe
       return `\`\`\`\n${(node.content || []).map((child) => child.text || '').join('\n')}\n\`\`\``;
     case 'horizontal_rule':
       return '---';
-    case 'source_embed': {
-      const entityID = String(node.attrs?.source_entity_id || '').trim();
-      if (!entityID) return '';
-      if (!sourceNumbers.has(entityID)) sourceNumbers.set(entityID, sourceNumbers.size + 1);
-      return `[source ${sourceNumbers.get(entityID)}]`;
-    }
     default:
       return '';
   }
@@ -287,7 +276,7 @@ export function projectStructuredTextureDocText(bodyDoc: any): string {
 }
 
 function collectSourceEntityIDsFromNode(node: StructuredNode, ids: Set<string>) {
-  if (node.type === 'source_ref' || node.type === 'source_embed') {
+  if (node.type === 'source_ref') {
     const entityID = String(node.attrs?.source_entity_id || '').trim();
     if (entityID) ids.add(entityID);
   }

@@ -95,7 +95,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		}
 	}
 	if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "source_entities require body_doc source_ref/source_embed nodes"})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "source_entities require body_doc source_ref nodes"})
 		return
 	}
 

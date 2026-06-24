@@ -86,7 +86,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 						},
 						"excerpt": map[string]any{
 							"type":        "string",
-							"description": "Bounded source text to show in Texture inline/source_embed transclusions. Use this for the short source stub when the researcher has read source content.",
+							"description": "Bounded source text to show in Texture source_ref transclusions. Use this for the short source stub when the researcher has read source content.",
 						},
 						"reader_snapshot": map[string]any{
 							"type": "object",

@@ -82,12 +82,28 @@ type SourceEntityProvenance struct {
 type Validator struct {
 	entities map[string]SourceEntity
 	refs     map[string]bool
+	unused   map[string]bool
 }
 
-func Validate(doc StructuredTextureDoc, entities []SourceEntity) error {
+// Validate checks that the structured Texture document is well-formed and that
+// every material source entity is referenced by a source_ref node. Source
+// entities listed in unusedSourceEntityIDs are treated as intentionally
+// uncited (mark_source_unused); they remain in the source toolbar but do not
+// require a body source_ref.
+func Validate(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEntityIDs ...string) error {
 	validator, err := newValidator(entities)
 	if err != nil {
 		return err
+	}
+	for _, id := range unusedSourceEntityIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, exists := validator.entities[id]; !exists {
+			return fmt.Errorf("unused source_entity_id %q is not present in source_entities", id)
+		}
+		validator.unused[id] = true
 	}
 	if strings.TrimSpace(doc.Schema) != SchemaV1 {
 		return fmt.Errorf("schema %q is not %q", doc.Schema, SchemaV1)
@@ -108,7 +124,13 @@ func Validate(doc StructuredTextureDoc, entities []SourceEntity) error {
 	}
 	for sourceEntityID := range validator.entities {
 		if !validator.refs[sourceEntityID] {
-			return fmt.Errorf("source_entity_id %q is not referenced by a source_ref or source_embed node", sourceEntityID)
+			if validator.unused[sourceEntityID] {
+				// mark_source_unused declares the entity is intentionally not cited
+				// in the body (immaterial source). It still appears in the source
+				// toolbar but does not require a source_ref node.
+				continue
+			}
+			return fmt.Errorf("source_entity_id %q is not referenced by a source_ref node; cite it with a source_ref or mark it unused", sourceEntityID)
 		}
 	}
 	return nil
@@ -118,6 +140,7 @@ func newValidator(entities []SourceEntity) (*Validator, error) {
 	validator := &Validator{
 		entities: make(map[string]SourceEntity, len(entities)),
 		refs:     make(map[string]bool),
+		unused:   make(map[string]bool),
 	}
 	for i, entity := range entities {
 		if err := validateSourceEntity(entity); err != nil {
@@ -233,25 +256,6 @@ func (v *Validator) validateBlock(node Node, path string) error {
 		if len(node.Content) != 0 || node.Text != "" {
 			return fmt.Errorf("%s.horizontal_rule must be a leaf block", path)
 		}
-	case "source_embed":
-		if err := requireNodeID(node, path); err != nil {
-			return err
-		}
-		sourceEntityID := stringAttr(node, "source_entity_id")
-		if sourceEntityID == "" {
-			return fmt.Errorf("%s.source_embed attrs.source_entity_id is required", path)
-		}
-		if _, ok := v.entities[sourceEntityID]; !ok {
-			return fmt.Errorf("%s.source_embed source_entity_id %q does not resolve", path, sourceEntityID)
-		}
-		displayMode := stringAttr(node, "display_mode")
-		if !validDisplayMode(displayMode) || displayMode == "numbered_ref" || displayMode == "inline_chip" {
-			return fmt.Errorf("%s.source_embed attrs.display_mode %q is not a block display mode", path, displayMode)
-		}
-		if len(node.Content) != 0 || node.Text != "" || len(node.Marks) != 0 {
-			return fmt.Errorf("%s.source_embed must be a leaf block without text, content, or marks", path)
-		}
-		v.refs[sourceEntityID] = true
 	default:
 		return fmt.Errorf("%s unsupported block node type %q", path, node.Type)
 	}
@@ -283,8 +287,12 @@ func (v *Validator) validateInline(node Node, path string) error {
 		if _, ok := v.entities[sourceEntityID]; !ok {
 			return fmt.Errorf("%s.source_ref source_entity_id %q does not resolve", path, sourceEntityID)
 		}
-		if displayMode := stringAttr(node, "display_mode"); displayMode != "numbered_ref" {
-			return fmt.Errorf("%s.source_ref attrs.display_mode must be numbered_ref, got %q", path, displayMode)
+		displayMode := stringAttr(node, "display_mode")
+		if displayMode == "" {
+			displayMode = "numbered_ref"
+		}
+		if displayMode != "numbered_ref" && displayMode != "expanded_ref" {
+			return fmt.Errorf("%s.source_ref attrs.display_mode must be numbered_ref or expanded_ref, got %q", path, displayMode)
 		}
 		if len(node.Content) != 0 || node.Text != "" || len(node.Marks) != 0 {
 			return fmt.Errorf("%s.source_ref must be an atom leaf without marks", path)
@@ -321,7 +329,7 @@ var legacySourceSyntaxes = []struct {
 func validateTextPayload(text, path string) error {
 	for _, syntax := range legacySourceSyntaxes {
 		if syntax.re.MatchString(text) {
-			return fmt.Errorf("%s contains legacy %s syntax; use source_ref or source_embed nodes", path, syntax.name)
+			return fmt.Errorf("%s contains legacy %s syntax; use a source_ref node", path, syntax.name)
 		}
 	}
 	return nil
@@ -402,8 +410,7 @@ func validSelectorKind(kind string) bool {
 
 func validDisplayMode(mode string) bool {
 	switch strings.TrimSpace(mode) {
-	case "numbered_ref", "inline_chip", "block_embed", "excerpt", "player", "image_preview",
-		"pdf_pages", "transcript", "source_window":
+	case "numbered_ref", "expanded_ref":
 		return true
 	default:
 		return false

@@ -1,0 +1,28 @@
+# Style.texture: Market Brief
+
+Market-brief treatment. Explain price, policy, institutional, and second-order
+effects without hiding uncertainty. Selected when a brief centers market,
+policy, inflation, rates, or financial transmission.
+
+## Article format
+
+Lead with the move or the decision. Explain the mechanism: what moved, why, and
+what the second-order effects are likely to be. Quantify where the data
+supports it; flag vintage and revision risk where it does not.
+
+## Citation shape
+
+Cite every material source with `insert_source_ref` after the figure or claim it
+supports. Default display mode is `numbered_ref`. Use `display_mode:
+expanded_ref` only for a table excerpt, a central-bank statement, or a data
+release that must be visible as a block next to the claim.
+
+## Immaterial sources
+
+Mark immaterial sources with `mark_source_unused` and a short rationale. They
+remain in the source toolbar without a body citation.
+
+## Data vintage
+
+Name the data source and its vintage. Flag series subject to revision. Do not
+present a preliminary print as a final figure without saying so.

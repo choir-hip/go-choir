@@ -641,7 +641,7 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 	}
 }
 
-func TestSystemPromptForUniversalWireTextureRunsRequiresArticleHead(t *testing.T) {
+func TestSystemPromptForUniversalWireTextureRunsUsesUnconditionalArticleGuidance(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 
@@ -665,24 +665,26 @@ func TestSystemPromptForUniversalWireTextureRunsRequiresArticleHead(t *testing.T
 	if err != nil {
 		t.Fatalf("systemPromptForRun Universal Wire Texture: %v", err)
 	}
+	// The WireTexture branch was removed; article-format guidance is now
+	// unconditional for every Texture run.
 	for _, want := range []string{
-		"For Universal Wire article revision runs",
-		"processor or reconciler handoff is newsroom source context",
-		"first patch_texture call must write a publishable article",
-		"not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder",
-		"Use uncertainty and native Texture source/transclusion operations in reader-facing article prose",
-		"reference a bounded set of distinct listed source entities by calling patch_texture with insert_source_ref operations placed after the sentence or clause they support",
-		"Source ids only in source inventories, Source: lines, markdown web links, or metadata sections do not count",
-		"Use selected Style.texture sources to shape voice, structure, and editorial judgment",
-		"do not name the selected Style.texture, style rationale, source inventory, or handoff mechanics in reader-facing prose",
-		"do not end the run with the document head still at a brief or status checkpoint",
+		"Write a coherent article with clear information hierarchy",
+		"insert_source_ref operations placed after the sentence or clause they support",
+		"mark_source_unused",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("Universal Wire Texture prompt missing %q in %q", want, prompt)
 		}
 	}
-	if strings.Contains(prompt, "first call patch_texture with a short owner-readable working response") {
-		t.Fatalf("Universal Wire Texture prompt should not use generic working-response rule: %q", prompt)
+	for _, forbidden := range []string{
+		"For Universal Wire article revision runs",
+		"processor or reconciler handoff is newsroom source context",
+		"Source ids only in source inventories, Source: lines",
+		"insert_source_embed",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("Universal Wire Texture prompt should not contain removed %q: %q", forbidden, prompt)
+		}
 	}
 
 	ordinaryRec := &types.RunRecord{
@@ -705,8 +707,9 @@ func TestSystemPromptForUniversalWireTextureRunsRequiresArticleHead(t *testing.T
 	if !strings.Contains(ordinaryPrompt, "evidence-grounded author") {
 		t.Fatalf("ordinary Texture prompt should preserve grounded-author policy: %q", ordinaryPrompt)
 	}
-	if strings.Contains(ordinaryPrompt, "processor or reconciler handoff is newsroom source context") {
-		t.Fatalf("ordinary Texture prompt should not get Universal Wire article-head rule: %q", ordinaryPrompt)
+	// Ordinary runs now receive the same unconditional article-format guidance.
+	if !strings.Contains(ordinaryPrompt, "Write a coherent article with clear information hierarchy") {
+		t.Fatalf("ordinary Texture prompt should receive unconditional article guidance: %q", ordinaryPrompt)
 	}
 }
 
