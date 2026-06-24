@@ -878,6 +878,13 @@ func coagentSourceFromTypedEvidenceRef(ref string) (types.CoagentPacketSource, b
 	}
 	key, value := splitTypedWorkerUpdateRef(ref)
 	uri := ref
+	if key == "" && isHTTPURL(ref) {
+		sourceID := "src-" + sanitizeExportPart(ref)
+		if sourceID == "src-" {
+			return types.CoagentPacketSource{}, false
+		}
+		return coagentSourceFromURI(sourceID, "web_url", ref, ""), true
+	}
 	if key == "" && looksLikeArtifactPath(ref) {
 		key = "file_artifact"
 		value = ref

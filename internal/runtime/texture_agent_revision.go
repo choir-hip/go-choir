@@ -372,26 +372,16 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	if currentRevisionLoaded {
-		// Source entities are collated from the current revision's top-level
-		// structured source_entities, deterministic media ingestion, typed
-		// coagent findings handed to this revision request, and (on worker
-		// integration) typed evidence records attached to pending researcher
-		// update_coagent deliveries. Researcher prose is no longer regex-scraped
-		// into sources; evidence-backed content items become native source
-		// entities, and only explicit quote selectors become text_quote bindings
-		// that the citation/quote validator checks at write time.
 		currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
 		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
-		if workerWake {
-			evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
-			if len(evidenceEntities) > 0 {
-				var changedEvidenceEntities bool
-				sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
-				changedSourceEntities = changedSourceEntities || changedEvidenceEntities
-			}
-			mergeCoagentSourceRejectionsIntoMetadata(metadata, sourceRejections)
+		evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
+		if len(evidenceEntities) > 0 {
+			var changedEvidenceEntities bool
+			sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
+			changedSourceEntities = changedSourceEntities || changedEvidenceEntities
 		}
+		mergeCoagentSourceRejectionsIntoMetadata(metadata, sourceRejections)
 		if len(sourceEntities) > 0 {
 			metadata[textureAvailableSourceEntitiesKey] = sourceEntities
 			if changedSourceEntities || addedMediaSourceEntities {

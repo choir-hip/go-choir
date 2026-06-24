@@ -1043,6 +1043,24 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 	if !strings.Contains(deliveries[0].Content, "Runtime fallback") || !strings.Contains(deliveries[0].Content, "web_search") {
 		t.Fatalf("delivery content = %q, want runtime web_search fallback", deliveries[0].Content)
 	}
+	sourceURIs := coagentPacketSourceURIs(deliveries[0].Packet)
+	if len(sourceURIs) == 0 {
+		t.Fatalf("delivery packet sources empty, want at least one URL source: %+v", deliveries[0].Packet)
+	}
+	foundBoxURL := false
+	for _, uri := range sourceURIs {
+		if uri == "https://example.com/box" {
+			foundBoxURL = true
+			break
+		}
+	}
+	if !foundBoxURL {
+		t.Fatalf("delivery source URIs = %+v, want https://example.com/box", sourceURIs)
+	}
+	sourceEntities := rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, deliveries)
+	if len(sourceEntities) == 0 {
+		t.Fatalf("source entities len = 0, want at least 1 from web_search URL: %+v", deliveries[0].Packet)
+	}
 	events, err := s.ListEvents(ctx, researcher.RunID, 20)
 	if err != nil {
 		t.Fatalf("list events: %v", err)
