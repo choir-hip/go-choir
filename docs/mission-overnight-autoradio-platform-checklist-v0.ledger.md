@@ -4760,3 +4760,64 @@ Open edge: read worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` after it reports progress or final
 candidate; if it produces a commit/checkpoint, create an independent verifier
 thread before root incorporation.
+
+## 2026-06-26 - O4 Phase 10b Worker Returned Harness Blocker
+
+Claim: O4 Phase 10b returned no proof candidate. It produced useful observer
+evidence: the smallest plausible native Texture `source_ref` reader-artifact
+test tightening exists, but the focused browser harness could not be made
+runnable in the worker worktree without a separate harness/dependency repair.
+
+Move: read the worker final report, perform limited orchestration probes to
+classify the local browser harness failure, stop local services, and update the
+mission state. No verifier was launched because there is no candidate commit or
+checkpoint to review.
+
+Expected Delta V: 0. A no-candidate worker callback and harness diagnosis do
+not close the native Texture citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
+  Proof Replacement`).
+- Worker cwd/branch/head:
+  `/Users/wiz/.codex/worktrees/013f/go-choir`,
+  `codex/o4-phase10b-native-texture-source-ref-proof-or-blocker`, head
+  `24382118438db5eaa33f7e896a1cdbb9437fb10b`.
+- Worker final result:
+  no commits, no changed files, clean tracked/ignored status after cleanup.
+- Worker candidate observation:
+  the existing graph-wrapper Texture test used the same text for inline
+  selector/excerpt and graph object body; separating those strings could force
+  Source Viewer assertions to prove body-derived stored reader artifact text
+  rather than inline citation-note text.
+- Worker/probe command results:
+  focused `npx playwright test tests/texture-source-entities.spec.js -g
+  "Texture renders and opens graph-wrapper sources when legacy revision source
+  entities are absent" --timeout=120000` did not reach the changed assertions;
+  first it lacked `@playwright/test`, then failed without a server at
+  `localhost:4173`, then timed out on missing shared Playwright auth state.
+  `npm run build` passed with existing Svelte/a11y/chunk warnings. Full
+  `nix develop -c ./start-services.sh` failed at `platformd failed` because
+  platformd could not read
+  `/tmp/go-choir-m2/platform-dolt/platform/.dolt/repo_state.json`.
+  `CHOIR_ENABLE_PLATFORMD=0 nix develop -c ./start-services.sh` reached
+  auth/sandbox/proxy but failed frontend startup because pnpm refused ignored
+  build scripts for `esbuild@0.21.5`.
+- Orchestration cleanup:
+  stopped worker-local service/frontend listeners; subsequent port checks for
+  4173, 8081, 8082, and 8083 showed no listeners.
+
+Evidence boundary: local worker/orchestration harness diagnosis only. No worker
+commit, no verifier, no root incorporation, no push, PR, CI, deploy, staging
+product acceptance, native Texture body `source_ref` citation-opening proof,
+publication/export, Qdrant, provider/gateway/search, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: decide whether the next O4 move should be a Problem Documentation
+First checkpoint for the native Texture browser harness blocker, or a bounded
+harness worker whose only goal is making the existing Texture source-ref
+Playwright proof runnable without changing product behavior.
