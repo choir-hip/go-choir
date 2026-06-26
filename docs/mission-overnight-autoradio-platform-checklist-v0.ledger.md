@@ -1283,3 +1283,53 @@ Open edge: wait for worker thread `019f02ed-7ce9-7d30-906b-f497a95ecc6d` to
 finish, then send verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b` a
 follow-up with worker id/cwd, docs checkpoint, implementation commits, exact
 tests, dirty-path classification, and non-claims.
+
+## 2026-06-26 - O3 Phase 4 Worker Complete Pending Verifier
+
+Claim: The O3 Phase 4 worker produced an additive Texture API read candidate
+that exposes graph-backed source wrappers while preserving legacy revision
+`source_entities` behavior.
+
+Move: read the completed worker thread, record its commits/tests/dirty-path
+classification in the orchestration paradoc, and prepare independent verifier
+review.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread: `019f02ed-7ce9-7d30-906b-f497a95ecc6d`
+  (`O3 worker - Source API Phase 4`).
+- Worker cwd: `/Users/wiz/.codex/worktrees/ba60/go-choir`.
+- Docs checkpoint commit: `cc0de09e checkpoint O3 phase4 texture API source
+  wrappers`.
+- Implementation commit: `9ab4a810 expose texture source graph wrappers in
+  revision APIs`.
+- Evidence commit: `b74f5a87 record O3 phase4 source wrapper evidence`.
+- Additive shape: keep legacy revision `source_entities`; graph-backed
+  revisions also return `source_entity_objects` and `source_refs` wrapper
+  arrays.
+- Duplicate-normalization repair: two legacy source IDs that normalize to the
+  same graph source entity resolve to the shared graph record in the selected
+  Texture tool graph write set.
+- Passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`.
+- Passed:
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`.
+- Passed: `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`.
+- Passed: `nix develop -c go test ./internal/store -count=1`.
+- Passed: `git diff --check`.
+- Worker dirty-path classification: clean worktree.
+
+Evidence boundary: worker branch-level implementation and tests only. No
+independent verifier acceptance yet, no root incorporation yet, and no
+O3-complete, main, staging, product, deploy, source-open, frontend rendering,
+Qdrant, publication/export, public producer, auth/session, gateway/provider,
+graph-first enforcement, promotion, or rollback claim.
+
+Open edge: send verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b` the
+worker id/cwd, commits, exact tests, dirty-path classification, and non-claims.
+If accepted, incorporate the implementation commit into this orchestration
+branch and rerun root checks before updating the checklist state.

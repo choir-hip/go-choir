@@ -519,20 +519,32 @@ code/test/verifier acceptance only; no O3-complete, main, staging, product,
 deployment, public producer, source-open, Qdrant, graph-first read, auth,
 gateway/provider, or deploy claim exists yet.
 
-next move: Wait for O3 Phase 4 worker thread
-`019f02ed-7ce9-7d30-906b-f497a95ecc6d` (`O3 worker - Source API Phase 4`) in
-`/Users/wiz/.codex/worktrees/ba60/go-choir` to finish. The earlier pending
-worktree handle `local:71935a66-7f54-4564-82ce-cca26dc682fa` has
-materialized. At last read the worker was active at `a5583088` with
-documentation WIP in `docs/paradoc-source-entity-migration.md`, this paradoc,
-and the ledger, and no implementation commit or final report yet. Phase 4
-assignment remains `O3-phase4-texture-api-source-object-wrappers`: return
-`source_entities` and `source_refs` object-wrapper records from Texture APIs
-while preserving legacy fields and without switching product behavior to
-graph-first reads. Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
-(`O3 verifier - Source API Phase 4`) returned `blocked` because no worker final
-report exists yet; treat that as stale launch-order evidence and reawaken it
-after the worker final report.
+O3 Phase 4 worker thread `019f02ed-7ce9-7d30-906b-f497a95ecc6d`
+(`O3 worker - Source API Phase 4`) completed cleanly in
+`/Users/wiz/.codex/worktrees/ba60/go-choir`. Worker docs checkpoint
+`cc0de09e` chose the additive Texture API read shape:
+keep legacy revision `source_entities` unchanged and add explicit
+`source_entity_objects` plus `source_refs` graph wrapper arrays to Texture
+revision responses when graph records exist. Worker implementation commit
+`9ab4a810` adds revision-scoped graph reads, enriches existing Texture revision
+responses with those wrapper arrays, preserves legacy fields, and repairs the
+Phase 3 residual duplicate-normalization risk with a focused two-legacy-ID
+regression test. Worker evidence commit `b74f5a87` records exact test evidence
+and leaves the worktree clean.
+
+Worker-reported checks passed:
+`nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`;
+`nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`;
+`nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`;
+`nix develop -c go test ./internal/store -count=1`; and `git diff --check`.
+
+next move: Reawaken verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
+(`O3 verifier - Source API Phase 4`) with the worker commits and tests. If it
+accepts, incorporate the accepted implementation into this orchestration branch
+and rerun the root checks. Do not claim O3 complete, main, staging, source-open
+frontend behavior, Qdrant projection, publication/export, graph-first
+enforcement, auth/session, gateway/provider, promotion, deploy, or rollback
+proof from this branch-level worker evidence.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
