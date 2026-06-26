@@ -7904,3 +7904,68 @@ blocker; `introduced` only for an explicitly named temporary limitation.
 Expected Delta V: 1 if the worker returns a committed branch-local proof and an
 independent verifier later accepts it. Actual Delta V: 0 for this orchestration
 move; it only starts the next observer/construct.
+
+## 2026-06-26 - O4 Deployed Wire Article Surface Failure Checkpoint
+
+Claim: the current deployed Universal Wire product still does not satisfy the
+owner's News/Universal Wire target, even after the narrow non-empty synthesis
+slice. This is a problem checkpoint before any repair.
+
+Evidence: owner screenshots from authenticated Chrome at about 18:30 ET show
+`https://choir.news` Universal Wire rendering only `1 article`, with headline
+`Universal Wire live synthesis: Telegram Post from Metropoles Telegram` and body
+copy beginning `Universal Wire selected 24 graph-backed source captures...`.
+Clicking the headline opens a Texture window titled with the same headline, but
+the editor is blank and shows `Get document failed (404)`.
+
+Code evidence: `internal/runtime/sourcecycled_web_captures.go` currently
+generates the headline and third-person/meta body copy in the runtime-owned live
+sourcecycled synthesis trigger. `frontend/src/lib/UniversalWireApp.svelte` opens
+the story headline using `story_texture_doc_id` with `platformRead`.
+`frontend/src/lib/TextureEditor.svelte` pushes the Universal Wire platform read
+owner before loading such documents. `internal/runtime/universal_wire.go`
+resolves cross-owner Texture reads only if the requested document exists under
+the platform owner and the current platform `universal-wire/Wire.texture`
+edition transcludes the same doc id. Existing frontend tests mock
+`/api/texture/*`, so they do not prove the deployed cross-owner article read
+path.
+
+Belief state: the odd prose/title is confirmed as deterministic helper output,
+not article-quality synthesis. The headline 404 is narrowed to the deployed
+Universal Wire -> platform-owned Texture read boundary, likely a mismatch among
+the story DTO `story_texture_doc_id`, current Wire edition transclusion state,
+and `resolveUniversalWireTextureReadOwner` gating. Authenticated staging API JSON
+was not captured in this pass because Chrome automation was blocked by another
+extension UI, so this ledger entry does not claim the exact stored DTO or
+edition-head contents.
+
+Mutation class / protected surfaces for next repair: green documentation first
+is complete in this checkpoint. Any fix is orange runtime/frontend/API behavior
+plus yellow tests. Protected surfaces are Universal Wire story DTOs, runtime
+synthesis/article materialization, Texture platform-read document access,
+platform-owned Wire edition linkage, source entity/source_ref projection, and
+the headline/article publication surface. Auth/session renewal, vmctl,
+deployment routing, provider/gateway credentials, Qdrant, promotion/rollback,
+run acceptance, and publication/export outside existing Wire edition helpers are
+out of scope.
+
+Heresy delta: `discovered` for headline-to-Texture 404 and deployed synthesis
+copy being platform meta-prose rather than a reader-facing news synthesis.
+Previously accepted source-opening evidence remains scoped to Source
+Viewer/reader artifact opening, not headline-to-article Texture readability.
+
+Rollback refs: current root docs state is `9a6866e408753d8cc069fb42bcb07e318080e29e`.
+Current deployed behavior identity remains
+`a2a5a74910be1c189cd9d9f090695169bf729561`; reverting that returns to the
+pre-synthesis deployed behavior and is not by itself a product repair.
+
+Next move: open an independent verifier for worker thread
+`019f060c-0c60-7b92-af55-8ec14711886b`, worktree
+`/Users/wiz/.codex/worktrees/b99b/go-choir`, commit
+`1e3e72bed659c7992aa09d4bfd6fcd3a84176d39`, then use the verifier result to
+decide whether to incorporate that branch-local world-model/same-article-update
+slice before repairing and deploying the newly documented article-surface
+failure.
+
+Actual Delta V: 0. This checkpoint improves the problem model but does not
+repair product behavior.
