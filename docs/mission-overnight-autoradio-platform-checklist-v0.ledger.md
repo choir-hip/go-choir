@@ -5778,3 +5778,56 @@ or run-acceptance record is claimed.
 
 Open edge: await deploy/auth authority for O4, or explicit owner authorization
 to continue to O5 with O4 carried as an open handoff edge.
+
+## 2026-06-26 - O4 Staging Deploy Failure Documented
+
+Claim: Deploy/auth authority was granted and the O4 line was pushed to
+`origin/main`, but staging deploy failed before the O4 deployed/live proof could
+run. This entry documents the problem before any repair attempt.
+
+Move: pushed current mission head to `origin/main`, monitored CI, observed deploy
+failure, inspected deploy logs, and recorded the failure under Problem
+Documentation First.
+
+Expected Delta V: 1 if deploy and authenticated source-opening proof succeeded.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pushed commit:
+  `a52fb233bbfa0c64346634b87cebe13f9797cbd5`
+  (`record O4 open handoff`) to `origin/main`.
+- GitHub Actions run:
+  `28247304935` (`CI`) for `main` push.
+- Passing jobs:
+  Go non-runtime tests, integration-tagged smoke, runtime shards 0-3, Go vet and
+  build, frontend build, TLA+ model check, docs truth check, deploy-impact
+  detection, and aggregate Go vet/test/build all completed successfully.
+- Failing job:
+  `Deploy to Staging (Node B)` failed.
+- Deploy failure:
+  remote Node B checkout reset to `origin/main` at `a52fb233`, disk preflight
+  passed, frontend Nix build passed, then host NixOS closure build failed while
+  building `sandbox-0.1.0` for `./cmd/sandbox`.
+- Error:
+  `internal/runtime/objectgraph_runtime.go:9:2: cannot find module providing
+  package github.com/yusefmosiah/go-choir/internal/objectgraph: import lookup
+  disabled by -mod=vendor`.
+- Staging identity after failed deploy:
+  `https://choir.news/health` still reports deployed commit
+  `06e3225f02f60f113340309a2766c5face134395`.
+
+Mutation class / protected surfaces: this entry is green documentation. The
+next repair will be deployment/build packaging behavior, touching staging
+deployment readiness and therefore must be treated as behavior-changing for
+landing-loop purposes even if the code change is packaging-only.
+
+Evidence boundary: CI/deploy log evidence only. No fix, redeploy, staging
+acceptance, authenticated source-opening proof, rollback, promotion, or
+run-acceptance record is claimed.
+
+Open edge: repair the Nix package/source/vendor boundary that leaves
+`internal/objectgraph` unavailable to the `cmd/sandbox` host build under
+`-mod=vendor`, push the repair to `origin/main`, rerun CI/deploy, verify staging
+commit identity, then run authenticated source-opening QA in logged-in Chrome.

@@ -380,7 +380,7 @@ remaining audio transport gap precisely.
 
 ## Parallax State
 
-status: open_handoff
+status: working
 
 mission conjecture: If an orchestration thread uses this checklist to preserve
 current WIP, land or hand off the object graph substrate, then advance News,
@@ -960,7 +960,17 @@ advance `origin/main` to a commit containing `9f54fd5e` and `b13ba881`, verify
 an authenticated Playwright storage state, then run or add the smallest
 read-only staging source-opening proof over an existing source-backed artifact.
 O5 resume condition: owner accepts O4 as an open handoff edge and authorizes
-the next worker assignment for Choir-in-Choir self-development. O4
+the next worker assignment for Choir-in-Choir self-development. Deploy/auth
+authority was granted on 2026-06-26 and orchestration pushed
+`a52fb233bbfa0c64346634b87cebe13f9797cbd5` to `origin/main`, but CI run
+`28247304935` failed in `Deploy to Staging (Node B)` after all test/build jobs
+passed. Failure: the remote NixOS host closure build for `cmd/sandbox` cannot
+resolve `github.com/yusefmosiah/go-choir/internal/objectgraph` under
+`-mod=vendor`, so staging remains on deployed commit
+`06e3225f02f60f113340309a2766c5face134395`. Next move is to repair the Nix
+package/source/vendor boundary that excludes `internal/objectgraph` from the
+sandbox host build, then push a fix to `origin/main` and rerun CI/deploy before
+attempting authenticated staging QA. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
@@ -1187,13 +1197,12 @@ when the mission proves or falsifies thread-native orchestration, object graph
 as substrate, News as self-development payload, or Autoradio as forcing
 benchmark.
 
-settlement: `open_handoff`. Full settlement still requires thread-native
+settlement: not settled. Full settlement still requires thread-native
 orchestration receipts, independent verifier verdicts, landed code/docs where
 behavior changed, CI, deploy identity, and staging/product acceptance for any
-staging claim. Current handoff is O4 source/citation deployed/live proof:
-remaining V is 31; resume requires either deploy/auth authority for the O4
-proof path or explicit owner authorization to continue to O5 with this O4 edge
-named.
+staging claim. Current active blocker is the staging deploy failure in CI run
+`28247304935`; remaining V is 31 until deploy identity and deployed/live O4
+source-opening proof are established.
 
 ## Suggested Goal String
 
