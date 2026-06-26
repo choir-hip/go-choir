@@ -6959,3 +6959,62 @@ Open edge: reauthenticate the Chrome session and replay authenticated
 `/api/universal-wire/stories` plus UI proof. Then implement the first real
 Universal Wire synthesis slice through Texture rather than expanding the
 diagnostic graph-capture fallback.
+
+## 2026-06-26 - O4 Synthesis Slice Worker Started
+
+Claim: the next Parallax move should construct the first real Universal Wire
+synthesis slice through a separate Codex worker thread, not continue improving
+the now-diagnostic graph capture fallback.
+
+Move: use exposed Codex app thread tools as the thread-native observer/construct
+path. `tool_search` confirmed `list_projects`, `create_thread`, `read_thread`,
+`send_message_to_thread`, `handoff_thread`, `get_handoff_status`, and thread
+hygiene tools are available. `list_projects` found project
+`/Users/wiz/go-choir`. A project worktree thread was requested from the current
+working tree for work item `O4-synthesis-slice-source-cluster-texture-article`.
+
+Worker handle: `create_thread` returned pending worktree id
+`local:0ad74215-d320-41df-80ac-abec1083a014`. A stable thread id was not yet
+visible through `list_threads`; orchestration must poll/read once the worktree
+materializes. Callback target is this orchestration thread by `read_thread`
+inspection unless the worker can identify and use `send_message_to_thread`.
+
+Expected Delta V: 1-2 if the worker produces branch/local proof that at least
+two source captures/items are clustered into one English synthesis Texture
+article, that the article body uses native structured `source_ref` citations
+with durable source reader context, and that `/api/universal-wire/stories`
+returns the article through `universal-wire/Wire.texture` as
+`universal-wire-edition-texture` rather than as an `objectgraph-web-capture`
+projection. Actual Delta V for this orchestration pass: 0; it bought a
+thread-native construct handle and compacted Parallax State.
+
+Worker contract:
+
+- Mutation class: orange for runtime/API/product behavior and yellow for tests.
+- Protected surfaces: Universal Wire route semantics, Texture canonical
+  revisions/source_refs, objectgraph source capture/source_entity provenance,
+  autonomous Wire publication/edition linkage.
+- Explicit non-authorized surfaces without a new checkpoint: auth/session
+  renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+  promotion/rollback, and publication/export outside existing Wire helpers.
+- Admissible evidence: focused branch/local tests under `nix develop`,
+  `git diff --check`, commit SHA if committed, dirty-path classification,
+  residual risks, and exact non-claims.
+- Stop condition: branch/local proof and commit only. No push to `origin/main`,
+  no deploy, and no staging/product acceptance claim.
+- Verdict format: `ready_for_verifier`, `revise_before_verify`, or `blocked`,
+  with findings first if any.
+
+Observer shift: this uses a fresh Codex thread/worktree as the implementation
+observer. It is not yet an independent verifier. If the worker returns
+`ready_for_verifier`, orchestration must create a separate verifier thread over
+the worker commit before considering incorporation.
+
+State compaction: rewrote the Parallax State in
+`docs/mission-overnight-autoradio-platform-checklist-v0.md` to remove embedded
+ledger history and leave a compact current picture: V=31, active worker pending
+id, auth blocker, protected surfaces, and next read/verify move.
+
+Open edge: resolve the pending worktree id to a thread id, read the worker
+result, and either create a verifier thread for the worker commit or record the
+precise blocker/narrowed slice.

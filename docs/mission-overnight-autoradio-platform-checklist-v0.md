@@ -417,178 +417,92 @@ remaining audio transport gap precisely.
 
 status: working
 
-mission conjecture: If an orchestration thread uses this checklist to preserve
-current WIP, land or hand off the object graph substrate, then advance News,
-self-development, Nucleus, Base, and Autoradio in dependency order with worker
-and verifier threads, then Choir will materially advance toward an Autoradio
-product benchmark without losing evidence or conflating local proxies with
-staging/product proof.
+mission conjecture: If this orchestration thread preserves evidence, uses
+thread-native workers/verifiers, and advances O4-O8 in dependency order without
+weakening staging/product proof, then Choir materially advances toward the
+Autoradio benchmark.
 
-deeper goal (G): Make Autoradio the concrete product benchmark for Choir's
+deeper goal (G): Autoradio should become the concrete benchmark for Choir's
 self-improving mainframe: source-grounded information, durable artifacts,
-self-development, sandboxed work, file-like persistence, and realtime audio
-should converge into one usable experience.
+self-development, sandboxed work, persistent file-like state, and realtime audio
+converge into one usable product.
 
-witness/spec (A/S): This paradoc, its ledger, thread callbacks, worker branches,
+witness/spec (A/S): this paradoc and ledger, thread callbacks, worker branches,
 verifier verdicts, landed commits, CI/deploy/staging receipts, accepted blockers,
 and successor paradocs.
 
 invariants / qualities / domain ramp (I/Q/D): Follow Choir Doctrine and
-`AGENTS.md`; use Problem Documentation First for new platform behavior problems;
-preserve authority boundaries; use Codex thread tools for independent
-worker/verifier evidence when available; never treat same-context review as an
-independent prover; Source Viewer/reader artifacts are the default durable source
-surface and Web Lens is explicit live/original inspection. Domain ramp:
-docs/checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
+`AGENTS.md`; document behavior problems before fixes; use Codex thread tools
+for independent worker/verifier evidence when exposed; never treat same-context
+review as independent proof; Source Viewer/reader artifacts are the durable
+source surface and Web Lens is explicit live/original inspection. Domain ramp:
+checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
 product acceptance.
 
-variant (ranking function) V: 73 total obligations = 9 WIP-preservation + 8
-object graph + 7 Qdrant + 8 source-entity + 13 News/Universal Wire + 7
-self-development + 7 Nucleus + 6 Choir Base + 8 Autoradio/Pipecat obligations.
-Current value: 31. Last variant change: +5 open Universal Wire product
-obligations after owner clarification that graph-backed capture projections are
-not the product benchmark. Latest Delta V: 0 for the deployed Universal Wire
-diagnostic-boundary repair: commits `73f0a888385a15a01a84eb726255b39662627b4d`
-and `0975eea990a0de44f99a55ae0e5fb5aee2416bbd` stop publishing raw
-`choir.web_capture` graph captures as public Wire articles and update the stale
-sourcecycled proof, but they do not yet create English synthesis Texture
-articles, update a live world model, or complete authenticated browser
-acceptance because the accessible Chrome session is not authenticated to Choir.
-Prior Delta V: 0 for the deployed O5 handoff repair
-attempt: commit `c6bddff039636971727e9d05d5c267caa82e6d4b` repaired the
-apparent channel-local mailbox cursor bug and deployed successfully, but the
-post-deploy authenticated Chrome acceptance probe is blocked at passkey sign-in,
-so no new O5 checklist obligation is closed yet. Earlier Delta V: 2 for starting
-O5 through the authenticated staging product path: prompt bar created Texture doc
-`d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`, trajectory
-`2f331a8d-3228-42da-9afb-238b33e2a7b9`, and Texture run
-`0fe24855-e1f6-4f01-9230-51b5983cbb18`; Texture wrote v1 mission narrative
-`b4afd7f0-1be6-43ab-87fd-38dc50cbd721` and requested Super execution, but no
-Super run, worker/candidate evidence, AppChangePackage, or final
-Texture-visible blocker has appeared yet.
+variant (ranking function) V: 73 total obligations. Current value: 31. O4 was
+reopened by +5 after owner clarification that graph-backed capture projections
+are substrate, not the Universal Wire product. Latest actual Delta V: 0 for
+deployed diagnostic-boundary repair `73f0a888`/`0975eea9`, which prevents raw
+`choir.web_capture` projections from being public Wire articles but does not
+create English synthesis Texture articles, update a world model, or pass
+authenticated browser acceptance. Current expected Delta V: 1-2 if worker item
+`O4-synthesis-slice-source-cluster-texture-article` proves clustered source
+inputs -> English Texture article with native `source_ref` citations ->
+`universal-wire/Wire.texture` -> non-empty edition story.
 
-budget: Overnight budget is already partially spent; solvency is feasible only
-for bounded O4 follow-through plus explicit open handoff of the broader O5-O8
-mission unless the owner grants a new long run.
+budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
+for broader O5-O8 unless the owner grants a new long run.
 
-authority / bounds: Orchestration may create worker/verifier Codex threads,
+authority / bounds: Orchestration may create Codex worker/verifier threads,
 inspect worktrees, make docs/checkpoint commits, and land reviewed code through
-the repo's normal loop. Behavior-changing work must declare mutation class,
+the repo loop. User granted staging deploy by pushing to `origin/main` and
+authenticated Chrome QA on `choir.news`, but current accessible Chrome is not
+authenticated to Choir. Behavior-changing work must name mutation class,
 protected surfaces, admissible evidence, rollback path, conjecture delta, and
-heresy delta before editing. User granted staging deploy authority by pushing to
-`origin/main` and authenticated Chrome QA on `choir.news`.
+heresy delta before editing.
 
-mutation class / protected surfaces: Current repo move is green evidence
-documentation. The deployed Universal Wire diagnostic-boundary repair was an
-orange runtime/API behavior change touching `/api/universal-wire/stories` and
-sourcecycled/runtime tests; it deliberately did not touch Texture canonical
-writes, provider/gateway calls, publication/export, Qdrant, promotion/rollback,
-run acceptance, vmctl, or deployment routing beyond the normal staging deploy.
-The landed O5 repair was orange/red-adjacent runtime/store behavior touching
-coagent mailbox backlog selection and Texture-to-Super wake routing evidence,
-with protected surfaces around coagent wake, Texture/Super routing, Trace
-evidence, worker/candidate delegation, run acceptance, and auth/session because
-staging proof depends on an authenticated browser. The earlier staging product
-probe was a red-adjacent product-state mutation through authenticated prompt
-bar, Texture canonical revision creation, Trace/channel message evidence, and
-Super-request routing.
+mutation class / protected surfaces: Current move is green documentation and
+thread orchestration. Active worker scope is orange/yellow: runtime/API behavior
+and tests around Universal Wire, Texture canonical revisions/source_refs,
+objectgraph capture/source_entity provenance, and edition linkage. Protected
+surfaces not authorized for the worker without a new checkpoint: auth/session
+renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, and publication/export beyond existing Wire helpers.
 
-evidence packet: Behavior-changing landings require pushed commit SHA, CI run,
-deploy status, staging health/build identity, deployed acceptance proof, verifier
+evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
+deploy status, staging health/build identity, deployed acceptance, verifier
 thread id/verdict, rollback refs, mutation class, protected surfaces, heresy
-delta, conjecture delta, residual risks, and next realism axis. Docs-only moves
-require diff hygiene, docs truth workflow after push when pushed, and clear
-non-claims.
+delta, conjecture delta, residual risks, and next realism axis. Branch/local
+worker proof may stop at focused tests, `git diff --check`, commit SHA, dirty
+classification, residual risks, and non-claims. Docs-only moves need diff
+hygiene and Docs Truth Check if pushed.
 
-heresy delta: `repaired` for the discovered stale-client asset problem at the
-route/product-evidence level. Remaining evidence cap: the QA setup navigated the
-Chrome tab after deploy, so this is not a pure preserved-tab-across-deploy proof;
-the direct old-chunk 200 plus product source-open proof is the accepted evidence
-for this pass.
+heresy delta: `discovered` remains open for the missing Universal Wire
+synthesis/world-model pipeline. `repaired` is scoped only to raw capture
+projection publication as public Wire articles.
 
-position / live conjectures / open edges: O0 preservation, O1 objectgraph, O2
-Qdrant derived index, O3 source entity phases, and the O4 capture-projection
-substrate are recorded in the ledger with worker/verifier thread ids, accepted
-commits, CI receipts, deploy identity, and staging/product evidence. Staging O4 runtime
-repair `5b61fdc4fda5376d1fc39b119f12687944d41427` made sourcecycled project
-3,833 web captures into the public platform VM graph, and the active VM returned
-12 Universal Wire graph-backed stories. Follow-up deploy/static-asset repair
-`b0f646d41301a57daae334264ca67e20d4aa2218` passed CI run `28260381195`, Node B
-deploy job `83734770344`, and health identity `b0f646d4` deployed at
-`2026-06-26T19:29:51Z`. The deploy smoke verified the public frontend asset
-route, and staging serves both the current asset and the exact old failing chunk
-`/assets/BrowserApp-BACPaCdk.js` with immutable asset headers. Authenticated
-Chrome as `yusefnathanson@me.com` showed 12 Universal Wire articles;
-`OPEN SOURCE` opened a Source Viewer reader artifact for `Our 36 favorite gaming
-deals on Prime Day for Switch, PS5, and Xbox`, and `WEB LENS` opened
-`https://www.theverge.com/gadgets/951901/prime-day-video-games-switch-playstation-xbox-pc-deal-sale`
-with a source reader snapshot. Final O4 verifier thread
-`019f0570-cab8-78e1-8dca-2f058ecf7e13` accepted closure for this
-graph-backed capture-projection News benchmark scope. Non-O4 realism axes remain
-open: native Texture body `source_ref` citation carry-forward,
-publication/export, Qdrant projection, provider/search freshness, run
-acceptance, promotion/rollback, and preserved-tab-across-deploy proof beyond one
-previous asset URL resolving. Owner clarification on `2026-06-26` reopens the
-actual Universal Wire product benchmark: the deployed screenshot showed
-Portuguese individual-source cards titled `Telegram Post from Metropoles
-Telegram`, repeated per capture, with card text explicitly saying the cards are
-capture projections and not Texture article publications or native
-`source_ref` citations. The intended product is multilingual ingestion ->
-object-graph/Texture processing -> English synthesis Texture articles -> live
-world model -> article updates on new relevant information. A bounded
-diagnostic-boundary repair landed after that clarification: commit
-`73f0a888385a15a01a84eb726255b39662627b4d` changes Universal Wire so graph
-captures remain diagnostic substrate and the public story list stays empty until
-a Texture synthesis edition exists; commit
-`0975eea990a0de44f99a55ae0e5fb5aee2416bbd` repairs the stale sourcecycled proof.
-Push CI run `28263422604` passed but skipped deploy because the head diff was
-test-only, so a manual `workflow_dispatch` with `force_staging_deploy=true`
-ran CI/deploy as run `28263687466`. That run passed and Node B deploy job
-`83745803112` succeeded. Staging `/health` reports proxy and sandbox deployed
-commit `0975eea990a0de44f99a55ae0e5fb5aee2416bbd`, deployed at
-`2026-06-26T20:37:16Z`. Unauthenticated `/api/universal-wire/stories` returns
-401 as expected, and adding `X-Authenticated-User` from curl still returns 401,
-so public auth cannot be bypassed with that header. The accessible Chrome window
-also returns `{"error":"authentication required"}` for the API, so deployed
-authenticated acceptance is blocked until the owner reauthenticates the usable
-Chrome profile/session. O5 has now started through the product path:
-authenticated Chrome as `yusefnathanson@me.com` submitted
-`O5_PRODUCT_PATH_PROBE_20260626` through prompt bar at `2026-06-26T19:45:58Z`.
-The product created Texture doc `d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`,
-trajectory `2f331a8d-3228-42da-9afb-238b33e2a7b9`, and Texture run
-`0fe24855-e1f6-4f01-9230-51b5983cbb18`. Texture wrote v1
-`b4afd7f0-1be6-43ab-87fd-38dc50cbd721` as a mission narrative, invoked
-`request_super_execution` with update
-`33cb84e5-d9a3-4144-8bce-eda258125b07`, and emitted a channel message to
-`super:5bd6de97-3b58-408c-bf89-c42c81b083de`. A second Super request was
-deduped with `dedupe_reason=texture_run_already_requested_super`. By
-`2026-06-26T19:50:23Z`, the trajectory still listed only conductor and Texture
-agents, no Super loop id/state, no worker/candidate evidence, no
-AppChangePackage, no new revision after v1, and no final Texture-visible
-blocker; Texture passivated at `2026-06-26T19:48:40Z` with
-`reason=idle_deadline`. O5 repair commit
-`c6bddff039636971727e9d05d5c267caa82e6d4b` changes the coagent mailbox backlog
-query so undelivered channel messages are visible even when a persistent actor's
-prior processed cursor is higher than the new channel-local sequence. CI run
-`28262237653`, FlakeHub run `28262237683`, and Node B deploy job `83740978086`
-all succeeded. Staging health reports proxy and sandbox deployed commit
-`c6bddff039636971727e9d05d5c267caa82e6d4b`, deployed at
-`2026-06-26T20:07:06Z`. The post-deploy Chrome proof attempted to submit
-`O5_HANDOFF_REPAIR_PROOF_20260626`, but the product required passkey sign-in
-before accepting the durable prompt. Chrome then reported that the passkey UI
-was blocking automation. This is an acceptance blocker, not proof that the
-handoff repair works on staging.
+position / live conjectures / open edges: O0-O3 are accepted from prior ledger
+evidence. O4 capture-projection substrate and source opening were accepted by
+verifier thread `019f0570-cab8-78e1-8dca-2f058ecf7e13`, then owner clarification
+reopened the real product target: multilingual ingestion -> graph/Texture
+processing -> English synthesis Texture articles -> live world model -> updates
+to existing articles. Runtime route repair `0975eea9` is deployed to staging
+and health reports proxy/sandbox `0975eea9`, but authenticated deployed proof is
+blocked because Chrome returns `authentication required`. O5 product path
+started through prompt bar/Texture/Super request, and repair `c6bddff0` deployed,
+but post-deploy O5 acceptance is also blocked by usable Choir auth.
 
-next move: Problem Documentation First is satisfied for the clarified Universal
-Wire product gap by this paradoc/ledger update, and the immediate bad fallback
-has been repaired so raw graph captures are diagnostic-only rather than public
-articles. Next, design a bounded Universal Wire synthesis slice: choose a
-multilingual source cluster, create or update a Texture article in English with
-native `source_ref` citations and Source Viewer artifacts, expose that article
-through Universal Wire, and record the remaining world-model/update gap. The O5
-post-deploy handoff proof is still useful, but it should not distract from the
-fact that the product target is synthesis through Texture rather than capture
-projection.
+Active thread-native worker: `O4-synthesis-slice-source-cluster-texture-article`
+was requested through `create_thread` from current working tree; pending worktree
+id `local:0ad74215-d320-41df-80ac-abec1083a014`. Callback target is this
+orchestration thread via `read_thread` polling unless the worker can identify
+and use `send_message_to_thread`. Stop condition: branch/local proof and commit
+only, no push/deploy/staging claim.
+
+next move: Resolve the pending worker thread id, then read/incorporate its
+verdict. If it returns `ready_for_verifier`, create an independent verifier
+thread over its commit before any main push. If it is blocked, record the
+precise O4 synthesis blocker and either narrow the slice or hand off.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -596,20 +510,12 @@ version / lineage: v0 created after email-freeze landing. It supersedes loose
 queue ordering from `docs/worktree-review-2026-06-23.md` for overnight execution
 order while preserving that report as evidence.
 
-learning state: Thread-native orchestration is now proved usable in this Codex
-environment through `codex_app` thread tools. The current shared learning is that
-local/branch graph proofs did not settle O4 until staging auth, deploy identity,
-sourcecycled readback, active platform VM API, and authenticated browser product
-QA all agreed, but even that did not settle the actual Universal Wire product.
-The graph-backed capture projection is useful substrate evidence and bad product
-evidence. The diagnostic-boundary repair improves the product by removing that
-bad evidence from the public article list, but it is not the synthesis pipeline.
-O5's first product-path probe improved the belief state: prompt bar
-and Texture materialization work on staging for a self-development mission, and
-Texture can issue a Super execution request, but the observed request did not
-wake a visible Super loop or produce downstream worker/package evidence. The
-local root cause is plausibly repaired and deployed, but product acceptance is
-blocked until Chrome is re-authenticated with passkey.
+learning state: Thread tools are exposed and usable in this environment. The
+key O4 learning is that a graph-backed capture projection can prove substrate
+and source opening while still being bad product evidence. The next proof must
+be Texture synthesis, not a better capture card. The key O5 learning is that
+prompt bar and Texture materialization work, but Texture-to-Super acceptance
+still needs authenticated staging replay.
 
 settlement: not settled. O4 News/Universal Wire is accepted only at the
 graph-backed capture-projection substrate scope plus the deployed
@@ -626,5 +532,5 @@ remaining V and next assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for an overnight, thread-native mission. One orchestration thread owns the checklist, ledger, worker/verifier thread creation, dependency order, worktree hygiene, and evidence synthesis. Current Codex thread tools are available through codex_app after tool discovery: list_projects/create_thread to start bounded project-scoped implementation and verifier threads, send_message_to_thread for follow-ups and explicit callbacks, read_thread/list_threads to reconnect verdicts, handoff_thread/get_handoff_status for ownership-transfer cases, and set_thread_title/set_thread_pinned/set_thread_archived for operator hygiene. If thread tools are not exposed in a later execution environment, record that as a blocker to thread-native settlement and do not treat same-context review as independent proof. Execute in order: O0 preserve WIP, O1 object graph, O2 Qdrant derived index, O3 source entities, O4 News/Universal Wire, O5 Choir-in-Choir self-development, O6 Nucleus capsules, O7 Choir Base, O8 Autoradio/Pipecat vertical slice. Each worker assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md: Problem Documentation First for new behavior problems; behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded, with remaining V and next thread assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=31. O4 News/Universal Wire is reopened beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. The immediate raw-capture publication bug is repaired and deployed at 0975eea9, but authenticated Chrome acceptance is blocked by missing Choir auth. Current active move: resolve pending worker worktree local:0ad74215-d320-41df-80ac-abec1083a014 for work item O4-synthesis-slice-source-cluster-texture-article, then read its verdict with read_thread/list_threads. If it returns ready_for_verifier, create a separate verifier thread before any main push; if blocked, record the precise blocker and narrowed next slice. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
