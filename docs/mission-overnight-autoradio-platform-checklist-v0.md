@@ -391,7 +391,8 @@ PPTX learning/prototype `4a687522` on
 thread: `019f0279-b855-7e52-b830-70a8eb4bbfe8` (`O1 worker - Object Graph
 Foundation`) in `/Users/wiz/.codex/worktrees/3026/go-choir`. O1 verifier
 thread: `019f027a-3434-7ef2-b813-f3f21213167f` (`O1 verifier - Object Graph
-Foundation`). O1 is active but no O1 obligation is complete yet.
+Foundation`). The verifier returned `blocked` because the worker had no final
+report or diff yet. O1 is active but no O1 obligation is complete yet.
 
 next move: Use `read_thread` on the O1 worker until it produces its objectgraph
 decision/implementation report, then use or follow up the O1 verifier for

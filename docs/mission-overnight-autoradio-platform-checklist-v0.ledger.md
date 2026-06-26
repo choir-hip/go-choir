@@ -225,3 +225,26 @@ Receipts:
 
 Open edge: Read the O1 worker report, then incorporate verifier verdict before
 marking any O1 checklist item complete.
+
+## 2026-06-26 - O1 Verifier Blocked Pending Worker Report
+
+Claim: O1 cannot be evaluated until the objectgraph worker produces a completed
+report and diff.
+
+Move: probe independent verifier thread.
+
+Expected Delta V: 0; decide whether O1 has evidence ready for review.
+
+Actual Delta V: 0. Verifier verdict was `blocked`.
+
+Receipts:
+
+- O1 verifier thread `019f027a-3434-7ef2-b813-f3f21213167f` returned
+  verdict `blocked`.
+- Verifier finding: O1 worker thread `019f0279-b855-7e52-b830-70a8eb4bbfe8`
+  was still `inProgress`.
+- Verifier finding: worker cwd `/Users/wiz/.codex/worktrees/3026/go-choir`
+  had no finished diff at verification time.
+
+Open edge: Wait for the O1 worker report, then re-run verifier against the
+completed worker branch/diff/tests.
