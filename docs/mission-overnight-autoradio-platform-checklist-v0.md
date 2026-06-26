@@ -801,8 +801,10 @@ relocated the proof into `cmd/sourcecycled/main_test.go`, and produced candidate
 commit `e406ca23 test O4 sourcecycled Wire API graph path`; external checks
 show a single test-file change, `git show --check --oneline e406ca23` passes,
 and the worker worktree is clean. A final-report prompt was sent after the
-commit; the next orchestration move is to read that report and launch an
-independent verifier for `e406ca23`. The worker replaces pending handle
+commit, and independent verifier worktree handle
+`local:fda573a5-c918-4c70-9b9e-4f4e6b843960` was queued for `e406ca23`; the next
+orchestration move is to resolve that handle into a readable verifier thread,
+then read the verdict. The worker replaces pending handle
 `local:b9a89dc6-e09f-4eec-8617-7706221de218` for orchestration purposes. The
 assignment is an authenticated Universal Wire product-API proof slice: show,
 through product-visible evidence if feasible, that configured sourcecycled

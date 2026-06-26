@@ -3573,3 +3573,49 @@ claim.
 
 Open edge: read the worker final report, then launch an independent verifier for
 candidate commit `e406ca23`.
+
+## 2026-06-26 - O4 Phase 6 Verifier Launch
+
+Claim: O4 Phase 6 candidate has a queued independent verifier. This is verifier
+launch only, not verifier acceptance.
+
+Move: create a worktree verifier against candidate branch
+`codex/o4-phase6-authenticated-universal-wire-product-api-proof` and commit
+`e406ca23`.
+
+Expected Delta V: 0. Verifier launch does not close an obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Pending verifier worktree handle:
+  `local:fda573a5-c918-4c70-9b9e-4f4e6b843960`.
+- Candidate under review:
+  `e406ca23 test O4 sourcecycled Wire API graph path`.
+- Worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Verification scope:
+  test-only `cmd/sourcecycled/main_test.go` proof that sourcecycled derives the
+  runtime objectgraph DB path from `RUNTIME_STORE_PATH`, writes graph-backed
+  `choir.web_capture` objects through sourcecycled ingestion, then reads those
+  captures through authenticated `GET /api/universal-wire/stories` using
+  registered public runtime routes.
+- Suggested verifier commands:
+  `git status --short --ignored`;
+  `git show --check --oneline e406ca23`;
+  `git diff --check e406ca23^..e406ca23`;
+  `git diff --name-status e406ca23^..e406ca23`;
+  `nix develop -c go test ./cmd/sourcecycled -run '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1 -timeout=60s`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(FallsBackToGraphBackedWebCaptures|RequiresAuth)$' -count=1 -timeout=60s`;
+  `nix develop -c go test ./internal/cycle -run '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1 -timeout=60s`.
+
+Evidence boundary: verifier queued only. No verifier verdict, root
+incorporation, main push, PR, CI, deploy, staging product acceptance, Texture
+native `source_ref`, publication/export, Qdrant, provider/gateway,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: resolve pending verifier handle
+`local:fda573a5-c918-4c70-9b9e-4f4e6b843960` into a readable thread, title/pin
+it, and read the verdict when complete.
