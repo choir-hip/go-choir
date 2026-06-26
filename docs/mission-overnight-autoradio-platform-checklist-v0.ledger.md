@@ -7565,3 +7565,66 @@ Evidence boundary: local focused runtime tests only. No push to `origin/main`,
 CI, deploy, staging identity, authenticated product acceptance, provider/search
 freshness, Qdrant behavior, publication/export, run acceptance, promotion, or
 rollback proof is claimed.
+
+## 2026-06-26 - O4 Deployed Live Trigger Still Leaves Wire Empty
+
+Claim: deployed commit `4918c507` proves the live sourcecycled trigger slice is
+landed, but authenticated staging product QA discovers a new
+backfill/materialization gap: existing graph captures do not become a Universal
+Wire Texture edition.
+
+Problem documented before fix: the previous branch-local proof covered a
+transition where sourcecycled ingestion happens after the new trigger exists.
+Staging already had graph-backed sourcecycled captures. After deploying
+`4918c507`, the owner-visible Universal Wire UI still had no Texture edition
+article, so the system has no read/startup/backfill materialization path for
+already-present eligible captures.
+
+Landing evidence:
+
+- Root incorporated worker commit `43741e72` as
+  `4918c5077b287d81658accffda9f1b698bc12e2f` and pushed it to `origin/main`.
+- GitHub CI run `28266963884` completed successfully. The run included
+  successful Go runtime shards, non-runtime tests, vet/build, Docs Truth Check,
+  TLA+ model check, deploy-impact detection, and Node B staging deploy. The
+  frontend build job was skipped by deploy-impact classification.
+- Auxiliary workflows for the same SHA also succeeded: Docs Truth Check
+  `28266963876` and FlakeHub publish `28266963871`.
+- `https://choir.news/health` reported proxy and sandbox `deployed_commit`
+  `4918c5077b287d81658accffda9f1b698bc12e2f`, deployed at
+  `2026-06-26T21:47:56Z`.
+- Unauthenticated `curl -i https://choir.news/api/universal-wire/stories`
+  returned HTTP 401 with `{"error":"authentication required"}`, as expected for
+  the raw API without the owner session.
+- Authenticated Chrome product QA on the visible owner session showed Universal
+  Wire with `0 articles`, heading `No Wire edition articles yet`, no Universal
+  Wire Texture edition alias `(0 candidates, 0 stories)`, graph-backed web
+  captures available only as diagnostic substrate `(12 candidates, 12 stories)`,
+  and no Texture synthesis source provenance `(0 candidates, 0 stories)`.
+
+Conjecture delta: the live-trigger slice was necessary but insufficient. The
+next viable O4 move is not another raw capture projection; it is a narrow
+runtime materialization/backfill path that can synthesize a Wire Texture edition
+from existing eligible sourcecycled graph captures without publishing raw
+capture cards.
+
+Mutation class / protected surfaces for the next repair: orange runtime
+behavior. Candidate protected surfaces are Universal Wire route/read semantics,
+runtime-owned objectgraph capture selection, Texture canonical revision creation
+through the existing synthesis helper, source entity/source_ref projection, and
+existing Wire edition linkage. Do not touch auth/session renewal, vmctl,
+deployment routing, provider/gateway credentials, Qdrant, promotion/rollback,
+run acceptance, or publication/export outside existing Wire edition helpers.
+
+Heresy delta: `discovered` for deployed backfill/materialization gap. Prior
+`repaired` claims still stand only for raw-capture diagnostic honesty, the
+source-cluster synthesis helper, and the newly ingested sourcecycled trigger
+path.
+
+Rollback path: revert the upcoming repair commit if read-time/backfill
+materialization creates duplicate editions, unsafe Texture revisions, or
+regresses Universal Wire diagnostic honesty. `4918c507` is the current deployed
+rollback reference for the trigger-only state.
+
+Actual Delta V: 0. The mission has better evidence but no product-visible
+Universal Wire article yet.

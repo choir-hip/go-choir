@@ -458,9 +458,12 @@ Texture synthesis article -> `universal-wire/Wire.texture` route slice with
 native `source_ref` citations. This is still substrate-level: it does not prove
 live cluster selection, live article creation, world-model updates, existing
 article updates, or authenticated deployed story data. Latest actual Delta V: 0
-for the 2026-06-26 authenticated Chrome UI replay: the owner-visible app shell
-is authenticated and shows the repaired empty/diagnostic state, but staging has
-no Universal Wire Texture edition alias or synthesized article.
+for deployed commit `4918c507`: the live sourcecycled trigger is verified and
+deployed, but the 2026-06-26 authenticated Chrome UI replay still shows `0`
+articles, no Universal Wire Texture edition alias, and `12` graph captures only
+as diagnostic substrate. This discovers a backfill/materialization gap: existing
+staging captures do not become a Wire Texture edition unless a sourcecycled
+ingestion transition runs after the trigger exists.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -475,15 +478,15 @@ for a non-empty product result. Behavior-changing work must name mutation class,
 protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green documentation after
-thread-native worker launch for the next orange/yellow O4 construct. Commit
-`a648b31d` touched Universal Wire route/manifest behavior, Texture source entity
-projection, existing Wire edition linkage, tests, and ledger evidence. The
-active worker assignment is allowed to touch Universal Wire route semantics,
-Texture canonical writes/revisions, source entity/source_ref projection, and
-existing Wire edition linkage, but not auth/session renewal, vmctl, deployment
-routing, provider/gateway credentials, Qdrant, promotion/rollback, run
-acceptance, or publication/export outside existing Wire edition helpers.
+mutation class / protected surfaces: Current move is green documentation before
+the next orange O4 repair. Commit `4918c507` touched internal sourcecycled
+capture ingestion, Universal Wire route semantics, Texture canonical
+writes/revisions through the existing synthesis helper, source entity/source_ref
+projection, and existing Wire edition linkage. The next repair may touch the
+same Universal Wire runtime/read/materialization path, but not auth/session
+renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, or publication/export outside existing Wire
+edition helpers.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -494,10 +497,11 @@ classification, residual risks, and non-claims. Docs-only moves need diff
 hygiene and Docs Truth Check if pushed.
 
 heresy delta: `repaired` for raw capture projection publication as public Wire
-articles and for the missing first branch-local/deployed synthesis article route
-slice. `discovered` remains open for production cluster selection, provider
-freshness, live world-model maintenance, update-existing-article semantics, and
-deployed non-empty staging product proof.
+articles and for the first branch-local/deployed synthesis article route slice.
+`discovered` now includes the deployed backfill/materialization gap for
+already-present sourcecycled graph captures, plus production cluster selection,
+provider freshness, live world-model maintenance, update-existing-article
+semantics, and deployed non-empty staging product proof.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
 evidence. O4 capture-projection substrate and source opening were accepted by
@@ -552,10 +556,22 @@ route goes objectgraph projection -> runtime-owned live synthesis trigger ->
 existing Texture synthesis helper -> `universal-wire/Wire.texture`, and capped
 the evidence at branch-local proof.
 
-next move: incorporate worker commit `43741e72` into the orchestration checkout
-and run the behavior-changing landing loop: focused root tests, push to
-`origin/main`, monitor CI/deploy, verify staging identity, and run deployed
-acceptance against `choir.news`.
+Landing result for that move: orchestration incorporated worker commit
+`43741e72` as `4918c5077b287d81658accffda9f1b698bc12e2f` and pushed it to
+`origin/main`. GitHub CI run `28266963884` succeeded, including Node B staging
+deploy. Health on `https://choir.news/health` reported proxy and sandbox
+`deployed_commit` `4918c5077b287d81658accffda9f1b698bc12e2f`, deployed at
+`2026-06-26T21:47:56Z`. Unauthenticated
+`/api/universal-wire/stories` returned HTTP 401 as expected. Authenticated
+Chrome product QA on the visible owner session still showed Universal Wire with
+`0 articles`, `No Wire edition articles yet`, no Texture edition alias, `12`
+graph captures as diagnostic substrate, and no Texture synthesis source
+provenance. The deployed trigger is therefore necessary but insufficient for
+the current product state.
+
+next move: repair the smallest runtime materialization path that can synthesize
+a Wire Texture edition from existing eligible sourcecycled graph captures,
+verify locally, land to staging, and rerun authenticated product QA.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -566,11 +582,13 @@ order while preserving that report as evidence.
 learning state: Thread tools are exposed and usable in this environment. The
 key O4 learning is that a graph-backed capture projection can prove substrate
 and source opening while still being bad product evidence. The first bounded
-Texture synthesis route now exists and is deployed, but it is not yet the live
-Universal Wire product because cluster selection, world-model reconciliation,
-article update semantics, and non-empty deployed story proof remain open. The
-authenticated Chrome replay confirms that the owner-visible product is now
-honestly empty rather than misleadingly populated by raw captures.
+Texture synthesis route and live sourcecycled trigger now exist and are
+deployed, but they are not yet the live Universal Wire product because existing
+staging graph captures are not materialized/backfilled into a Wire Texture
+edition, and cluster selection, world-model reconciliation, article update
+semantics, and non-empty deployed story proof remain open. The authenticated
+Chrome replay confirms that the owner-visible product is honestly empty rather
+than misleadingly populated by raw captures.
 The key O5 learning is that prompt bar and Texture materialization work, but
 Texture-to-Super acceptance still needs authenticated staging replay.
 
