@@ -8,6 +8,7 @@ import {
   readerArtifactStateLabel,
   sourceSelectorList,
   sourceOpenPlan,
+  sourceEntityID,
   sourceEntityInlineExcerptText,
   sourceEntityReaderSnapshotText,
   sourceEntityReaderFallbackText,
@@ -271,6 +272,222 @@ test('revisions do not synthesize source entities from legacy media refs', () =>
       metadata: { media_source_refs: [legacyRef] },
     },
   })).toEqual([]);
+});
+
+test('revision source entities prefer publication bundle sources over revision wrappers', () => {
+  const entities = revisionSourceEntities({
+    revision: {
+      source_entities: [{ source_entity_id: 'src-legacy-revision', label: 'Legacy revision source' }],
+      source_entity_objects: [{
+        canonical_id: 'choir.source_entity:user-1:graph-wrapper',
+        version_id: 'ver-graph-wrapper',
+        legacy_source_entity_id: 'src-graph-wrapper',
+        metadata: {
+          source_kind: 'web_url',
+          target: { kind: 'web_url', identity: 'https://example.com/graph-wrapper', uri: 'https://example.com/graph-wrapper' },
+          display: { title: 'Graph wrapper source' },
+          evidence: { state: 'available', open_surface: 'source' },
+        },
+      }],
+    },
+    bundle: {
+      route: { path: '/pub/texture/source-priority' },
+      source_entities: [{
+        source_entity_id: 'src-published-priority',
+        kind: 'source_service_item',
+        target_kind: 'source_service_item',
+        target_id: 'source-item-published-priority',
+        entity: {
+          entity_id: 'src-published-priority',
+          kind: 'source_service_item',
+          label: 'Published priority source',
+          target: { target_kind: 'source_service_item', item_id: 'source-item-published-priority' },
+          display: { title: 'Published priority source' },
+        },
+      }],
+    },
+  });
+
+  expect(entities.map((entity) => sourceEntityID(entity))).toEqual(['src-published-priority']);
+  expect(entities[0].publication_route_path).toBe('/pub/texture/source-priority');
+});
+
+test('revision source entities preserve legacy revision fallback before graph wrappers', () => {
+  const legacyEntity = {
+    source_entity_id: 'src-legacy-fallback',
+    target: { kind: 'web_url', uri: 'https://example.com/legacy-fallback' },
+    display: { title: 'Legacy fallback source' },
+    evidence: { state: 'available', open_surface: 'source' },
+  };
+  const entities = revisionSourceEntities({
+    revision: {
+      source_entities: [legacyEntity],
+      source_entity_objects: [{
+        canonical_id: 'choir.source_entity:user-1:graph-fallback',
+        version_id: 'ver-graph-fallback',
+        legacy_source_entity_id: 'src-graph-fallback',
+        metadata: {
+          source_kind: 'web_url',
+          target: { kind: 'web_url', identity: 'https://example.com/graph-fallback', uri: 'https://example.com/graph-fallback' },
+          display: { title: 'Graph fallback source' },
+          evidence: { state: 'available', open_surface: 'source' },
+        },
+      }],
+    },
+  });
+
+  expect(entities).toEqual([legacyEntity]);
+});
+
+test('revision source entities derive openable local entities from graph wrappers', () => {
+  const entities = revisionSourceEntities({
+    revision: {
+      source_entity_objects: [{
+        object_kind: 'choir.source_entity',
+        canonical_id: 'choir.source_entity:user-1:graph-open',
+        version_id: 'ver-graph-open',
+        content_hash: 'sha256:graph-open',
+        owner_id: 'user-1',
+        body: 'Graph-backed reader snapshot supports the cited claim.',
+        legacy_source_entity_id: 'src-graph-open',
+        metadata: {
+          schema_version: 'choir.source_entity.v1',
+          legacy_entity_id: 'src-graph-open',
+          source_kind: 'web_url',
+          target: {
+            kind: 'web_url',
+            identity: 'https://example.com/graph-open',
+            uri: 'https://example.com/graph-open',
+          },
+          display: {
+            title: 'Graph-backed source',
+            label: '1',
+            display_mode: 'excerpt',
+          },
+          evidence: {
+            state: 'available',
+            open_surface: 'source',
+          },
+          selectors: [{
+            kind: 'text_quote',
+            data: { text_quote: 'Graph-backed reader snapshot supports the cited claim.' },
+          }],
+        },
+      }],
+      source_refs: [{
+        object_kind: 'choir.source_ref',
+        canonical_id: 'choir.source_ref:user-1:graph-ref-open',
+        version_id: 'ver-graph-ref-open',
+        legacy_source_entity_id: 'src-graph-open',
+        source_entity_canonical_id: 'choir.source_entity:user-1:graph-open',
+        source_entity_version_id: 'ver-graph-open',
+        body_node_id: 'ref-graph-open',
+        display_mode: 'numbered_ref',
+        citation_state: 'cited',
+      }],
+    },
+  });
+
+  expect(entities).toHaveLength(1);
+  expect(sourceEntityID(entities[0])).toBe('src-graph-open');
+  expect(entities[0]).toMatchObject({
+    kind: 'web_url',
+    target: {
+      kind: 'web_url',
+      target_kind: 'web_url',
+      uri: 'https://example.com/graph-open',
+      canonical_url: 'https://example.com/graph-open',
+    },
+    reader_snapshot: {
+      text_content: 'Graph-backed reader snapshot supports the cited claim.',
+      source_url: 'https://example.com/graph-open',
+    },
+    graph: {
+      canonical_id: 'choir.source_entity:user-1:graph-open',
+      version_id: 'ver-graph-open',
+    },
+    source_ref: {
+      body_node_id: 'ref-graph-open',
+      display_mode: 'numbered_ref',
+    },
+  });
+  expect(sourceEntityOpenPlan(entities[0])).toMatchObject({
+    appId: 'content',
+    mode: 'source_reader',
+    readerMode: true,
+  });
+  const payload = sourceEntityLaunchPayload(entities[0]);
+  expect(payload.appContext.sourceUrl).toBe('https://example.com/graph-open');
+  expect(payload.appContext.contentId).toBe('');
+  expect(payload.appContext.sourceReaderMode).toBe(true);
+  expect(payload.appContext.singletonKey).toBe('source:src-graph-open');
+});
+
+test('revision source entities use source_refs to preserve body source ids for shared graph entities', () => {
+  const revision = {
+    source_entity_objects: [{
+      object_kind: 'choir.source_entity',
+      canonical_id: 'choir.source_entity:user-1:graph-shared',
+      version_id: 'ver-graph-shared',
+      content_hash: 'sha256:graph-shared',
+      owner_id: 'user-1',
+      body: 'Shared graph source body.',
+      legacy_source_entity_id: 'src-a',
+      metadata: {
+        schema_version: 'choir.source_entity.v1',
+        legacy_entity_id: 'src-a',
+        source_kind: 'web_url',
+        target: {
+          kind: 'web_url',
+          identity: 'https://example.com/shared-graph-source',
+          uri: 'https://example.com/shared-graph-source',
+        },
+        display: { title: 'Shared graph source', label: 'shared' },
+        evidence: { state: 'available', open_surface: 'source' },
+      },
+    }],
+    source_refs: [
+      {
+        object_kind: 'choir.source_ref',
+        canonical_id: 'choir.source_ref:user-1:graph-ref-a',
+        version_id: 'ver-graph-ref-a',
+        legacy_source_entity_id: 'src-a',
+        source_entity_canonical_id: 'choir.source_entity:user-1:graph-shared',
+        source_entity_version_id: 'ver-graph-shared',
+        body_node_id: 'ref-a',
+        display_mode: 'numbered_ref',
+        citation_state: 'cited',
+      },
+      {
+        object_kind: 'choir.source_ref',
+        canonical_id: 'choir.source_ref:user-1:graph-ref-b',
+        version_id: 'ver-graph-ref-b',
+        legacy_source_entity_id: 'src-b',
+        source_entity_canonical_id: 'choir.source_entity:user-1:graph-shared',
+        source_entity_version_id: 'ver-graph-shared',
+        body_node_id: 'ref-b',
+        display_mode: 'expanded_ref',
+        citation_state: 'cited',
+      },
+    ],
+  };
+
+  const entities = revisionSourceEntities({ revision });
+  expect(entities.map((entity) => sourceEntityID(entity))).toEqual(['src-a', 'src-b']);
+  expect(entities.map((entity) => entity.graph.canonical_id)).toEqual([
+    'choir.source_entity:user-1:graph-shared',
+    'choir.source_entity:user-1:graph-shared',
+  ]);
+  expect(entities[1]).toMatchObject({
+    entity_id: 'src-b',
+    source_entity_id: 'src-b',
+    source_ref: {
+      body_node_id: 'ref-b',
+      display_mode: 'expanded_ref',
+      source_entity_canonical_id: 'choir.source_entity:user-1:graph-shared',
+    },
+  });
+  expect(sourceEntityLaunchPayload(entities[1]).appContext.singletonKey).toBe('source:src-b');
 });
 
 test('multimedia source entities render transcluded media without clickable links', () => {
