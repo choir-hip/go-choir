@@ -5972,3 +5972,80 @@ Open edge: configure `go-choir-sourcecycled` to derive the sandbox-visible
 objectgraph sidecar from `/var/lib/go-choir/runtime/runtime.db`, give it the
 necessary runtime directory write access, deploy, then verify that sourcecycled
 projects captures and Universal Wire exposes source-backed cards.
+
+## 2026-06-26 - O4 Universal Wire Graph Projection Deployed, Empty-Cycle Backfill Gap Documented
+
+Claim: Node B now deploys sourcecycled with the sandbox-visible objectgraph
+sidecar configured, but the live empty-feed issue may persist because existing
+stored source items are not backfilled when source cycles return no new items.
+
+Move: deployed the sourcecycled graph-projection configuration repair, verified
+CI/deploy identity, then continued the empty-feed investigation through code and
+authenticated visual product evidence.
+
+Expected Delta V: 0 for problem documentation before the next behavior repair.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Problem documentation commit before config repair:
+  `b0461de3 document Universal Wire graph projection config gap`.
+- Config repair commit:
+  `f658af08 configure sourcecycled graph projection on Node B`.
+- Config repair content:
+  `nix/node-b.nix` sets
+  `SOURCE_SERVICE_RUNTIME_STORE_PATH=/var/lib/go-choir/runtime/runtime.db` for
+  `go-choir-sourcecycled`, adds `/var/lib/go-choir/runtime` to its
+  `ReadWritePaths`, and asserts both invariants in Nix.
+- Local checks before push:
+  `git diff --check` passed; `nix flake check --no-build` passed; focused tests
+  passed for `cmd/sourcecycled`
+  `TestRunCycleWritesSourceItemsToObjectGraphWebCaptures`,
+  `internal/runtime`
+  `TestHandleUniversalWireStories(FallsBackToGraphBackedWebCaptures|IncludesGraphSourceEntityContext|RequiresAuth)`,
+  and `internal/cycle`
+  `TestWriteWebCaptureGraphObjectsProjectsSourceItems`.
+- CI/deploy:
+  GitHub Actions run `28254559588` for
+  `f658af08664b21151991d02a0f1d0a762a8214e8` completed successfully, including
+  `Deploy to Staging (Node B)`.
+- Staging identity:
+  `https://choir.news/health` reported proxy and sandbox `commit` /
+  `deployed_commit` `f658af08664b21151991d02a0f1d0a762a8214e8`, deployed at
+  `2026-06-26T17:35:56Z`.
+- Authenticated visual evidence:
+  Computer Use observed the owner's Chrome session authenticated in Choir with
+  the durable desktop, existing app windows, Compute Monitor, and Email visible.
+  The Chrome automation bridge remained blocked by an extension UI overlay, so
+  an authenticated scripted `/api/universal-wire/stories` response is not
+  claimed.
+- Backfill evidence:
+  `cmd/sourcecycled/main.go` calls `cycle.WriteWebCaptureGraphObjects` only
+  after `len(items) > 0`. When `len(items) == 0`, it records
+  `cycle_completed_empty`, drains queued handoffs, finishes the cycle, and
+  returns before graph projection.
+- Idempotence boundary:
+  `internal/objectgraph` stores objects by deterministic `canonical_id` and
+  upserts on conflict, but repeatedly projecting the same items would refresh
+  object `updated_at`; a repair should backfill only when the Universal Wire
+  graph has no existing `choir.web_capture` objects.
+
+Mutation class / protected surfaces: this entry is green documentation. The
+next repair is orange source ingestion/runtime behavior because it changes how
+empty source cycles project stored source items into graph state visible to the
+Universal Wire read path. It does not require Texture canonical writes,
+provider/gateway calls, auth/session renewal, Qdrant, publication/export,
+promotion/rollback, or run acceptance.
+
+Evidence boundary: config deploy and staging identity are claimed for
+`f658af08`. Authenticated visual Chrome access is claimed, but authenticated
+scripted API proof is blocked by Chrome extension UI. No live source card,
+source-opening proof, publication/export, run acceptance, promotion, or rollback
+is claimed.
+
+Open edge: implement the narrow empty-cycle backfill: when a source cycle has
+no new items and graph projection is configured, project a bounded recent item
+set only if the Universal Wire platform graph has no existing non-tombstoned
+web captures. Then push, monitor CI/deploy, and rerun authenticated product
+proof.

@@ -991,10 +991,25 @@ items into graph captures when `SOURCE_SERVICE_OBJECTGRAPH_DB_PATH` or
 currently gives `go-choir-sourcecycled` neither variable and only permits writes
 under `/var/lib/go-choir/source-service`. The host sandbox reads runtime graph
 state from the sidecar of `RUNTIME_STORE_PATH=/var/lib/go-choir/runtime/runtime.db`.
-Nix eval confirmed sourcecycled has no graph DB env and sandbox has the runtime
-store env. Next move is to fix the Node B sourcecycled service to use the same
-runtime store sidecar path and allow writes to the runtime directory, then push,
-deploy, and rerun authenticated or server-observable Universal Wire proof. O4
+Nix eval confirmed sourcecycled had no graph DB env and sandbox has the runtime
+store env. Root documented the gap in `b0461de3 document Universal Wire graph
+projection config gap`, repaired Node B sourcecycled configuration in
+`f658af08 configure sourcecycled graph projection on Node B`, and pushed
+`f658af08664b21151991d02a0f1d0a762a8214e8` to `origin/main`. CI run
+`28254559588` passed all jobs, including `Deploy to Staging (Node B)`;
+`https://choir.news/health` reports proxy and sandbox build/deployed commit
+`f658af08664b21151991d02a0f1d0a762a8214e8`, deployed at
+`2026-06-26T17:35:56Z`.
+
+The next investigation found a second empty-feed gap: the deployed sourcecycled
+projection only runs after a fresh cycle returns non-empty `items`. If a Node B
+cycle has no new items, `cmd/sourcecycled/main.go` records
+`cycle_completed_empty` and returns before graph projection. That means the
+last couple weeks of already-stored sourcecycled items are not automatically
+backfilled into `choir.web_capture` after the config repair. A narrow repair
+should, on an empty source cycle, backfill a bounded set of recent stored items
+only when the Universal Wire graph has no existing web captures; otherwise it
+should skip to avoid repeatedly refreshing graph object `updated_at`. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
@@ -1224,12 +1239,14 @@ benchmark.
 settlement: not settled. Full settlement still requires thread-native
 orchestration receipts, independent verifier verdicts, landed code/docs where
 behavior changed, CI, deploy identity, and staging/product acceptance for any
-staging claim. Staging now deploys `6a203e54` successfully, but Universal Wire
-is still empty because sourcecycled is not configured to project host source
-items into the sandbox-visible objectgraph sidecar. Remaining V is 31 until that
-configuration gap is repaired and authenticated Chrome/Playwright proof can
-observe an existing source-backed artifact and verify Source Viewer default plus
-explicit Web Lens opening on `https://choir.news`.
+staging claim. Staging now deploys `f658af08` successfully with sourcecycled
+configured to write the sandbox-visible objectgraph sidecar, but Universal Wire
+may still be empty until either a fresh source cycle yields new items or an
+empty-cycle backfill projects existing stored source items into graph captures.
+Remaining V is 31 until the backfill gap is repaired or falsified and
+authenticated Chrome/Playwright proof can observe an existing source-backed
+artifact and verify Source Viewer default plus explicit Web Lens opening on
+`https://choir.news`.
 
 ## Suggested Goal String
 
