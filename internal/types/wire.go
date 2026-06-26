@@ -14,23 +14,24 @@ type WireStyleSource struct {
 
 // WireSourceItem is a source handle surfaced in a Wire story projection.
 type WireSourceItem struct {
-	ID                  string `json:"id"`
-	ContentID           string `json:"content_id,omitempty"`
-	Title               string `json:"title"`
-	Standing            string `json:"standing"`
-	Role                string `json:"role"`
-	SourceID            string `json:"source_id,omitempty"`
-	FetchID             string `json:"fetch_id,omitempty"`
-	CanonicalURL        string `json:"canonical_url,omitempty"`
-	SourceKind          string `json:"source_kind,omitempty"`
-	TargetKind          string `json:"target_kind,omitempty"`
-	ObjectKind          string `json:"object_kind,omitempty"`
-	CanonicalID         string `json:"canonical_id,omitempty"`
-	VersionID           string `json:"version_id,omitempty"`
-	ContentHash         string `json:"content_hash,omitempty"`
-	OpenSurface         string `json:"open_surface,omitempty"`
-	LiveOpenSurface     string `json:"live_open_surface,omitempty"`
-	ReaderArtifactState string `json:"reader_artifact_state,omitempty"`
+	ID                  string                             `json:"id"`
+	ContentID           string                             `json:"content_id,omitempty"`
+	Title               string                             `json:"title"`
+	Standing            string                             `json:"standing"`
+	Role                string                             `json:"role"`
+	SourceID            string                             `json:"source_id,omitempty"`
+	FetchID             string                             `json:"fetch_id,omitempty"`
+	CanonicalURL        string                             `json:"canonical_url,omitempty"`
+	SourceKind          string                             `json:"source_kind,omitempty"`
+	TargetKind          string                             `json:"target_kind,omitempty"`
+	ObjectKind          string                             `json:"object_kind,omitempty"`
+	CanonicalID         string                             `json:"canonical_id,omitempty"`
+	VersionID           string                             `json:"version_id,omitempty"`
+	ContentHash         string                             `json:"content_hash,omitempty"`
+	OpenSurface         string                             `json:"open_surface,omitempty"`
+	LiveOpenSurface     string                             `json:"live_open_surface,omitempty"`
+	ReaderArtifactState string                             `json:"reader_artifact_state,omitempty"`
+	ReaderSnapshot      *CoagentPacketSourceReaderSnapshot `json:"reader_snapshot,omitempty"`
 }
 
 // WireSourceManifest groups source handles by editorial role for the Wire app.

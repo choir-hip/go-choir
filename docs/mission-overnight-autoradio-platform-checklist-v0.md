@@ -282,8 +282,12 @@ Checklist:
   with Source Viewer default and explicit Web Lens source opening.
 - [ ] Verify source/citation links open to real source artifacts or Source
   Viewer/reader artifacts. O4 Phase 4 proves frontend routing for graph-backed
-  fallback cards, but native Texture `source_ref` citation carry-forward and
-  deployed/live source artifact proof remain open.
+  fallback cards. O4 Phase 9 worker candidate adds branch-level API/UI proof
+  that graph-backed capture source handles carry durable reader snapshots and
+  open Source Viewer/reader artifact text by default while Web Lens remains an
+  explicit live/original action. Native Texture `source_ref` citation
+  carry-forward, independent verifier acceptance, and deployed/live source
+  artifact proof remain open.
 - [ ] Open independent verifier thread before claiming News benchmark.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and

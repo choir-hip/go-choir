@@ -342,6 +342,7 @@ func wireStoryFromWebCaptureObject(obj objectgraph.Object) (types.WireStory, boo
 				OpenSurface:         sourcecontract.OpenSurfaceSource,
 				LiveOpenSurface:     sourcecontract.OpenSurfaceWebLens,
 				ReaderArtifactState: sourcecontract.ReaderArtifactStateReady,
+				ReaderSnapshot:      wireReaderSnapshot(body, canonicalURL),
 			}},
 		},
 		Claims: []string{
@@ -459,7 +460,29 @@ func wireSourceItemFromGraphSourceEntity(obj objectgraph.Object) (types.WireSour
 		OpenSurface:         openSurface,
 		LiveOpenSurface:     liveOpenSurface,
 		ReaderArtifactState: readerState,
+		ReaderSnapshot:      wireReaderSnapshot(string(obj.Body), canonicalURL),
 	}, true
+}
+
+func wireReaderSnapshot(text, sourceURL string) *types.CoagentPacketSourceReaderSnapshot {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	const maxRunes = 12000
+	truncated := false
+	if len([]rune(text)) > maxRunes {
+		text = truncateRunes(text, maxRunes)
+		truncated = true
+	}
+	return &types.CoagentPacketSourceReaderSnapshot{
+		TextContent:  text,
+		SnapshotKind: "cleaned_reader_markdown",
+		MediaType:    "text/markdown",
+		SourceURL:    strings.TrimSpace(sourceURL),
+		AccessScope:  "private_user_source",
+		Truncated:    truncated,
+	}
 }
 
 func wireStringFromMap(values map[string]any, key string) string {

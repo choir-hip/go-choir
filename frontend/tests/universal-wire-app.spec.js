@@ -297,6 +297,13 @@ test('Universal Wire opens graph capture sources through Source Viewer by defaul
         open_surface: 'source',
         live_open_surface: 'web_lens',
         reader_artifact_state: 'reader_snapshot_ready',
+        reader_snapshot: {
+          text_content: 'Durable graph capture reader text proves the Source Viewer opened the stored artifact, not only the original URL.',
+          snapshot_kind: 'cleaned_reader_markdown',
+          media_type: 'text/markdown',
+          source_url: sourceURL,
+          access_scope: 'private_user_source',
+        },
       }],
       supporting: [],
       contrary: [],
@@ -376,8 +383,8 @@ test('Universal Wire opens graph capture sources through Source Viewer by defaul
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
-  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('O4 graph capture source');
-  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText(sourceURL);
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Durable graph capture reader text');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('stored artifact');
   await expect(page.locator('[data-browser-app]')).toHaveCount(0);
 
   await page.locator('[data-window-app-id="universal-wire"]').last().click({ position: { x: 24, y: 24 } });

@@ -209,6 +209,9 @@
     if (readerArtifactState) {
       entity.reader_snapshot_status = { state: readerArtifactState };
     }
+    if (item.reader_snapshot && typeof item.reader_snapshot === 'object') {
+      entity.reader_snapshot = item.reader_snapshot;
+    }
     return entity;
   }
 

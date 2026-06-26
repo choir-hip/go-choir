@@ -355,7 +355,12 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 		lead.TargetKind != "web_url" ||
 		lead.OpenSurface != sourcecontract.OpenSurfaceSource ||
 		lead.LiveOpenSurface != sourcecontract.OpenSurfaceWebLens ||
-		lead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady {
+		lead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+		lead.ReaderSnapshot == nil ||
+		!strings.Contains(lead.ReaderSnapshot.TextContent, "Emergency crews reopened the rail corridor") ||
+		lead.ReaderSnapshot.SnapshotKind != "cleaned_reader_markdown" ||
+		lead.ReaderSnapshot.MediaType != "text/markdown" ||
+		lead.ReaderSnapshot.SourceURL != "https://example.test/rail" {
 		t.Fatalf("graph-backed capture manifest did not carry source-open graph identity: %+v", lead)
 	}
 	storyJSON, err := json.Marshal(story)
@@ -368,6 +373,8 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 		`"content_hash":"` + newer.ContentHash + `"`,
 		`"open_surface":"source"`,
 		`"live_open_surface":"web_lens"`,
+		`"reader_snapshot"`,
+		`"text_content":"PARIS -- Emergency crews reopened the rail corridor`,
 	} {
 		if !strings.Contains(string(storyJSON), want) {
 			t.Fatalf("graph-backed capture story JSON missing %s: %s", want, string(storyJSON))
@@ -500,7 +507,9 @@ func TestHandleUniversalWireStoriesCarriesCapturedFromSourceEntityContext(t *tes
 		contextItem.ContentHash != sourceEntity.ContentHash ||
 		contextItem.OpenSurface != sourcecontract.OpenSurfaceSource ||
 		contextItem.LiveOpenSurface != sourcecontract.OpenSurfaceWebLens ||
-		contextItem.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady {
+		contextItem.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+		contextItem.ReaderSnapshot == nil ||
+		!strings.Contains(contextItem.ReaderSnapshot.TextContent, "river watch after gauges fell") {
 		t.Fatalf("captured_from source entity context = %+v", contextItem)
 	}
 	storyJSON, err := json.Marshal(story)
