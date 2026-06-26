@@ -7858,3 +7858,49 @@ semantic multi-story clustering, provider/search freshness, model synthesis
 quality, Qdrant projection, publication/export beyond existing Wire edition
 helpers, run acceptance, promotion/rollback, live world-model reconciliation, or
 automatic updates to existing articles when later facts arrive.
+
+## 2026-06-26 - O4 World-Model Same-Article Worker Assignment
+
+Claim: after the deployed non-empty Wire Texture synthesis slice, the next O4
+descent should target identity over time rather than another rendering repair.
+
+Move: compacted Parallax State, corrected current staging evidence, marked the
+native `source_ref`/Source Viewer obligation complete for the narrow deployed
+slice, and created a bounded Codex worker thread for
+`O4-world-model-same-article-update-slice`.
+
+Worker handle: pending Codex worktree
+`local:49006eec-5e90-4ed8-b742-4e0f2dbc4840`.
+
+Assignment summary: implement a branch-local proof for durable Universal Wire
+story/world-model cluster state plus same-article revision when later relevant
+source captures arrive. The worker must preserve raw `choir.web_capture`
+projections as diagnostic-only, stop at `ready_for_verifier`, commit locally,
+leave a clean worktree, and not push or deploy.
+
+Mutation class / protected surfaces: orange runtime behavior, yellow tests, and
+green docs are authorized inside the worker. Protected surfaces are limited to
+Universal Wire cluster/world-model state, existing article revision/upsert
+semantics, Texture revisions through existing runtime helpers, source
+entity/source_ref projection, and existing Wire edition linkage. Auth/session
+renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, staging deploy, and publication/export
+outside existing Wire edition helpers are explicitly out of scope.
+
+Admissible evidence: branch-local focused Go tests over `internal/runtime` and
+any touched package, `git diff --check`, committed SHA, clean worktree
+classification, residual risks, and non-claims. CI, deploy, staging product
+acceptance, provider freshness, semantic clustering, Qdrant, promotion, rollback
+execution, and full News settlement remain orchestration-level or future
+evidence.
+
+Rollback path: revert the worker commit(s). Current root rollback references are
+`c1b45606` for docs evidence state and `a2a5a749` for deployed behavior.
+
+Heresy delta: expected `repaired` for update-existing-article/world-model
+identity semantics if proven; `discovered` if the worker finds a narrower
+blocker; `introduced` only for an explicitly named temporary limitation.
+
+Expected Delta V: 1 if the worker returns a committed branch-local proof and an
+independent verifier later accepts it. Actual Delta V: 0 for this orchestration
+move; it only starts the next observer/construct.

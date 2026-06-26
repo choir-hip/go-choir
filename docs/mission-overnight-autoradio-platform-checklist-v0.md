@@ -514,13 +514,15 @@ record with product evidence. O5 product path has started through prompt
 bar/Texture/Super request, but O5 acceptance has not been replayed after the
 latest O4 work.
 
-next move: create a bounded O4 worker thread to design and implement the next
-branch-local slice: durable Universal Wire story/world-model cluster state plus
-same-article revision when later relevant source captures arrive. Expected
-Delta V: 1 if it creates focused tests and a committed branch-local proof that a
-new relevant source updates an existing synthesis article/world-model record
-instead of duplicating an edition story. It must stop at `ready_for_verifier`
-without push/deploy.
+next move: worker pending in Codex worktree
+`local:49006eec-5e90-4ed8-b742-4e0f2dbc4840` for O4
+world-model/same-article-update slice. The assignment is to design and implement
+durable Universal Wire story/world-model cluster state plus same-article
+revision when later relevant source captures arrive. Expected Delta V: 1 if it
+creates focused tests and a committed branch-local proof that a new relevant
+source updates an existing synthesis article/world-model record instead of
+duplicating an edition story. It must stop at `ready_for_verifier` without
+push/deploy.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
