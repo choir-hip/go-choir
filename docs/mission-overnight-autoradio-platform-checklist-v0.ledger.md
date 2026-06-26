@@ -5014,3 +5014,84 @@ Open edge: resolve verifier pending handle
 `local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`, title/pin the verifier thread,
 and wait for verdict on worker commit `6995feb8`; only after `accept` should
 orchestration consider root incorporation.
+
+## 2026-06-26 - O4 Phase 10c Harness Repair Accepted And Incorporated
+
+Claim: O4 Phase 10c repairs the local browser harness/dependency setup blocker
+for the existing Texture graph-wrapper source-open Playwright proof. This is
+accepted branch-level harness evidence only; it does not close the remaining
+native Texture body `source_ref` citation-opening obligation or any staging
+News benchmark claim.
+
+Move: read verifier thread
+`019f0418-d9b9-72d1-b3ba-10086ccc8cde`, incorporate accepted worker commit
+`6995feb8`, rerun root checks, stop services, remove generated proof artifacts,
+and update live Parallax State.
+
+Expected Delta V: 0. Repairing the harness enables the next proof but does not
+itself prove the stricter native Texture body `source_ref` reader-artifact
+assertion or deployed source artifact behavior.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f0410-f4d9-7ee1-a1db-76ea71095b88`
+  (`O4 worker - Phase 10c Texture Browser Harness`).
+- Verifier thread:
+  `019f0418-d9b9-72d1-b3ba-10086ccc8cde`
+  (`O4 verifier - Phase 10c Texture Browser Harness`), titled and pinned.
+- Worker commit:
+  `6995feb89964af984cbc2afc66fef62e70d500e3`
+  (`Fix frontend pnpm build approval for harness`).
+- Root incorporation:
+  `40d83b3c Fix frontend pnpm build approval for harness`.
+- Accepted diff:
+  only `frontend/package.json` and `frontend/pnpm-workspace.yaml`; the patch
+  removes obsolete package-level pnpm build approval and approves only
+  `esbuild` in workspace-level config.
+- Verifier verdict:
+  `accept`, no blocking findings. The verifier reran/read: governing docs,
+  Parallax State, latest O4 ledger entries, checkpoint, worker diff,
+  `git status --short --ignored`, `git show --check --oneline 6995feb8`,
+  `git diff --check 83fcbdef..6995feb8`, diff name-status/patch inspection,
+  `npm ci`, `npm run build`, `pnpm install --frozen-lockfile`,
+  `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  ./start-services.sh`, the exact focused Playwright proof, service stop, and
+  no listeners on `4173`, `8081`, `8082`, or `8083`.
+- Root checks:
+  `git show --check --oneline HEAD` passed;
+  `git diff --check HEAD~1..HEAD` passed;
+  `npm run build` passed with existing Svelte/a11y/chunk warnings;
+  initial root `CHOIR_ENABLE_PLATFORMD=0` stack rerun exposed a local
+  noninteractive pnpm purge issue because root already had
+  `frontend/node_modules/`; retry with `CI=true CHOIR_ENABLE_PLATFORMD=0
+  CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh` reached
+  `Services started successfully`;
+  `npx playwright test tests/texture-source-entities.spec.js -g "Texture
+  renders and opens graph-wrapper sources when legacy revision source entities
+  are absent" --timeout=120000` passed; services were stopped; no listeners
+  remained on `4173`, `8081`, `8082`, or `8083`.
+- Root cleanup:
+  removed generated `frontend/dist/`, `frontend/playwright/`, and
+  `frontend/test-results/`.
+
+Dirty/generated artifact classification: tracked root status is clean after
+the root incorporation commit. Remaining ignored artifacts are local
+environment/log/dependency artifacts: `.DS_Store`, `.direnv/`, `.env`,
+`.gstack/`, `auth.db`, `auth.log`, `doccheck-report.md`, `doccheck.json`,
+`docs/.DS_Store`, `docs/evidence/.DS_Store`, `frontend/frontend.log`,
+`frontend/node_modules/`, `gateway.log`, `proxy`, `proxy.log`, `sandbox`,
+`sandbox.log`, `skills/.DS_Store`, `sourcecycled`, and `vmctl.log`.
+
+Evidence boundary: local branch-level harness/dependency repair, verifier
+acceptance, and root rerun evidence only. No push, PR, CI, deploy, staging
+product acceptance, platformd/Dolt proof, native Texture body `source_ref`
+assertion-tightening, publication/export, Qdrant, provider/search,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: use the repaired harness for the next O4 Phase 10d proof: tighten
+the native Texture body `source_ref` Source Viewer/reader-artifact assertion so
+the test distinguishes inline citation note/excerpt text from graph object
+reader body text, then verify independently before root incorporation.

@@ -829,7 +829,8 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-O4 Phase 10c harness worker completed with a candidate. Pending handle
+O4 Phase 10c browser harness repair is accepted and incorporated at branch
+level. Pending handle
 `local:68462d14-f17c-45c0-a1e5-3b719a5eec5b` resolved to thread
 `019f0410-f4d9-7ee1-a1db-76ea71095b88`
 (`O4 worker - Phase 10c Texture Browser Harness`), titled and pinned, in
@@ -846,14 +847,28 @@ artifacts, `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
 ./start-services.sh` reached `Services started successfully`; the exact focused
 Playwright proof passed; `npm run build` passed with existing warnings;
 `git diff --check`, `git show --check HEAD`, clean status, and port cleanup for
-4173/8081/8082/8083 passed. Independent verifier launch returned pending
-worktree handle `local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`, not yet a
-resolved verifier thread id.
+4173/8081/8082/8083 passed. Independent verifier pending handle
+`local:5703fec1-9e3a-4495-93b2-8fbf340c72a4` resolved to thread
+`019f0418-d9b9-72d1-b3ba-10086ccc8cde`
+(`O4 verifier - Phase 10c Texture Browser Harness`) in
+`/Users/wiz/.codex/worktrees/182d/go-choir`; it returned `accept` after
+rerunning diff hygiene, `npm ci`, `npm run build`, `pnpm install
+--frozen-lockfile`, `CHOIR_ENABLE_PLATFORMD=0` stack startup, the exact focused
+Playwright proof, and port cleanup. Root incorporated the worker commit as
+`40d83b3c Fix frontend pnpm build approval for harness`; root checks passed:
+`git show --check --oneline HEAD`, `git diff --check HEAD~1..HEAD`, `npm run
+build`, `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix
+develop -c ./start-services.sh`, the exact focused Playwright proof, and port
+cleanup. Root generated proof outputs `frontend/dist/`, `frontend/playwright/`,
+and `frontend/test-results/` were removed. This repairs the local browser
+harness blocker but does not close V because the later native Texture
+body-`source_ref` assertion-tightening and deployed/staging proof remain open.
 
-next move: resolve pending verifier handle
-`local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`, title/pin the verifier thread,
-and wait for its verdict on worker commit `6995feb8`. Do not incorporate the
-candidate into root or decrement V before independent verifier acceptance. O4
+next move: launch or execute the next narrow O4 Phase 10d proof that uses the
+now-runnable browser harness to tighten the native Texture body `source_ref`
+Source Viewer/reader-artifact assertion, specifically separating inline
+citation note/excerpt text from graph object reader body text, without changing
+product behavior unless a new behavior problem is documented first. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
