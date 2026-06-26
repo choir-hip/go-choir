@@ -603,21 +603,31 @@ func buildStructuredAppagentRevisionProvenance(rec *types.RunRecord, sourceEntit
 
 func provenanceSourceEntityFromStructured(entity texturedoc.SourceEntity) types.SourceEntity {
 	targetKind := strings.TrimSpace(entity.Target.Kind)
+	targetMetadata := entity.Target.Metadata
+	readerSnapshotStatus := copyStringAnyMap(entity.ReaderSnapshotStatus)
+	readerArtifactState := strings.TrimSpace(entity.Evidence.ReaderArtifactState)
+	if len(readerSnapshotStatus) == 0 && readerArtifactState != "" {
+		readerSnapshotStatus = map[string]any{"state": readerArtifactState}
+	}
 	return types.SourceEntity{
 		EntityID: strings.TrimSpace(entity.SourceEntityID),
 		Kind:     targetKind,
 		Label:    strings.TrimSpace(firstNonEmpty(entity.Display.Title, entity.Display.Label, entity.Target.ID, entity.Target.URI)),
 		Target: types.SourceEntityTarget{
 			TargetKind:   targetKind,
-			ItemID:       strings.TrimSpace(entity.Target.ID),
-			ContentID:    strings.TrimSpace(entity.Target.ID),
-			URL:          strings.TrimSpace(entity.Target.URI),
-			CanonicalURL: strings.TrimSpace(entity.Target.URI),
+			ItemID:       firstNonEmpty(metadataString(targetMetadata, "item_id"), strings.TrimSpace(entity.Target.ID)),
+			SourceID:     metadataString(targetMetadata, "source_id"),
+			FetchID:      metadataString(targetMetadata, "fetch_id"),
+			ContentID:    firstNonEmpty(metadataString(targetMetadata, "content_id"), strings.TrimSpace(entity.Target.ID)),
+			URL:          firstNonEmpty(metadataString(targetMetadata, "url"), strings.TrimSpace(entity.Target.URI)),
+			CanonicalURL: firstNonEmpty(metadataString(targetMetadata, "canonical_url"), metadataString(targetMetadata, "url"), strings.TrimSpace(entity.Target.URI)),
 		},
-		Selectors:  provenanceSourceSelectorsFromStructured(entity.Selectors),
-		Display:    provenanceSourceDisplayFromStructured(entity.Display, entity.Evidence),
-		Evidence:   types.SourceEntityEvidence{State: strings.TrimSpace(entity.Evidence.State)},
-		Provenance: types.SourceEntityProvenance{CreatedBy: strings.TrimSpace(entity.Provenance.CreatedBy)},
+		Selectors:            provenanceSourceSelectorsFromStructured(entity.Selectors),
+		Display:              provenanceSourceDisplayFromStructured(entity.Display, entity.Evidence),
+		Evidence:             types.SourceEntityEvidence{State: strings.TrimSpace(entity.Evidence.State), ReaderSnapshot: len(entity.ReaderSnapshot) > 0, SourceRepresentationID: readerArtifactState},
+		Provenance:           types.SourceEntityProvenance{CreatedBy: strings.TrimSpace(entity.Provenance.CreatedBy)},
+		ReaderSnapshot:       copyStringAnyMap(entity.ReaderSnapshot),
+		ReaderSnapshotStatus: readerSnapshotStatus,
 	}
 }
 
@@ -1610,6 +1620,15 @@ func structuredSourceEntityFromRuntimeSource(entity textureSourceEntity) texture
 				entity.Target.RevisionID,
 				entity.EntityID,
 			)),
+			Metadata: pruneEmptyMap(map[string]any{
+				"target_kind":   strings.TrimSpace(entity.Target.TargetKind),
+				"item_id":       strings.TrimSpace(entity.Target.ItemID),
+				"source_id":     strings.TrimSpace(entity.Target.SourceID),
+				"fetch_id":      strings.TrimSpace(entity.Target.FetchID),
+				"content_id":    strings.TrimSpace(entity.Target.ContentID),
+				"canonical_url": strings.TrimSpace(entity.Target.CanonicalURL),
+				"url":           strings.TrimSpace(entity.Target.URL),
+			}),
 		},
 		Selectors:            structuredSourceSelectorsFromRuntime(entity.Selectors),
 		Display:              texturedoc.SourceDisplay{Mode: displayMode, Title: strings.TrimSpace(entity.Label)},

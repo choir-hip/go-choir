@@ -860,13 +860,22 @@ func wireArticleManifestFromSourceEntities(entities []textureSourceEntity) types
 			continue
 		}
 		item := types.WireSourceItem{
-			ID:           id,
-			Title:        wireArticleSourceEntityManifestTitle(entity),
-			Standing:     wireArticleSourceEntityManifestStanding(entity),
-			Role:         "lead",
-			SourceID:     strings.TrimSpace(entity.Target.SourceID),
-			FetchID:      strings.TrimSpace(entity.Target.FetchID),
-			CanonicalURL: firstNonEmpty(entity.Target.CanonicalURL, entity.Target.URL),
+			ID:                  id,
+			ContentID:           firstNonEmpty(strings.TrimSpace(entity.Target.ContentID), strings.TrimSpace(entity.Target.ItemID)),
+			Title:               wireArticleSourceEntityManifestTitle(entity),
+			Standing:            wireArticleSourceEntityManifestStanding(entity),
+			Role:                "lead",
+			SourceID:            strings.TrimSpace(entity.Target.SourceID),
+			FetchID:             strings.TrimSpace(entity.Target.FetchID),
+			CanonicalURL:        firstNonEmpty(entity.Target.CanonicalURL, entity.Target.URL),
+			SourceKind:          strings.TrimSpace(entity.Kind),
+			TargetKind:          strings.TrimSpace(entity.Target.TargetKind),
+			OpenSurface:         sourcecontract.NormalizeOpenSurface(entity.Display.OpenSurface),
+			ReaderArtifactState: sourcecontract.NormalizeReaderArtifactState(entity.Evidence.SourceRepresentationID),
+			ReaderSnapshot:      wireSourceEntityReaderSnapshot(entity),
+		}
+		if item.OpenSurface == "" {
+			item.OpenSurface = sourcecontract.OpenSurfaceSource
 		}
 		if i >= 3 {
 			item.Role = "context"
@@ -896,6 +905,25 @@ func wireArticleSourceEntityManifestStanding(entity textureSourceEntity) string 
 		return "related Texture"
 	default:
 		return firstNonEmpty(entity.Kind, "source handle")
+	}
+}
+
+func wireSourceEntityReaderSnapshot(entity textureSourceEntity) *types.CoagentPacketSourceReaderSnapshot {
+	text := metadataString(entity.ReaderSnapshot, "text_content")
+	if text == "" {
+		text = metadataString(entity.ReaderSnapshot, "text")
+	}
+	if text == "" {
+		return nil
+	}
+	return &types.CoagentPacketSourceReaderSnapshot{
+		TextContent:       text,
+		SnapshotKind:      firstNonEmpty(metadataString(entity.ReaderSnapshot, "snapshot_kind"), "cleaned_reader_markdown"),
+		MediaType:         firstNonEmpty(metadataString(entity.ReaderSnapshot, "media_type"), "text/markdown"),
+		OriginalMediaType: metadataString(entity.ReaderSnapshot, "original_media_type"),
+		SourceURL:         firstNonEmpty(metadataString(entity.ReaderSnapshot, "source_url"), entity.Target.CanonicalURL, entity.Target.URL),
+		AccessScope:       firstNonEmpty(metadataString(entity.ReaderSnapshot, "access_scope"), "private_user_source"),
+		Truncated:         metadataBoolValue(entity.ReaderSnapshot, "truncated"),
 	}
 }
 

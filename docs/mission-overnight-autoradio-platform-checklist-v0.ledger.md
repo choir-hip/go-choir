@@ -7019,6 +7019,63 @@ Open edge: resolve the pending worktree id to a thread id, read the worker
 result, and either create a verifier thread for the worker commit or record the
 precise blocker/narrowed slice.
 
+## 2026-06-26 - O4 Bounded Universal Wire Synthesis Slice Local Proof
+
+Claim: a bounded local runtime slice now records a clustered source set as one
+platform-owned English Universal Wire Texture article, cites at least two source
+items with native structured `source_ref` nodes, links the article into
+`universal-wire/Wire.texture`, and lets `/api/universal-wire/stories` return the
+edition Texture story instead of graph capture substrate.
+
+Move: implement a narrow runtime helper for source-cluster synthesis rather than
+the full production reconciler/world-model pipeline. The helper creates or
+reuses a stable `universal-wire/articles/<cluster>.texture` document, writes a
+canonical Texture article revision with source item metadata and reader
+snapshots, ensures the Wire edition document/alias exists, and reuses the
+existing edition linkage helper. The public story manifest now carries
+structured-source open surface, reader artifact state, and reader snapshot
+context forward from `source_entities`.
+
+Expected Delta V: 1 branch-level decrease for the first synthesis article route
+slice if local proof shows clustered inputs -> Texture article + source refs ->
+edition route story, while raw capture publication remains suppressed without a
+synthesis article. Actual Delta V is capped at branch/local evidence only; no
+staging/product obligation is closed here.
+
+Evidence:
+
+- Local focused tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics' -count=1`.
+- Broader Wire-focused runtime tests passed:
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`.
+- `git diff --check` passed.
+
+Mutation class / protected surfaces: orange runtime/API behavior plus yellow
+tests and green ledger evidence. Touched Universal Wire route semantics,
+Texture revision/source entity projection into Wire manifests, and autonomous
+Wire edition linkage. Did not touch auth/session renewal, vmctl, deployment
+routing, provider/gateway credentials, Qdrant, promotion/rollback, run
+acceptance, staging deploy, or publication/export outside the existing Wire
+edition helper.
+
+Conjecture delta: the public Universal Wire route can now be driven by a
+Texture edition article produced from a small source cluster, so the next O4
+gap is no longer "no local synthesis article shape exists." The helper is still
+not the full product pipeline because it does not select clusters from the live
+object graph autonomously, does not call models/search/providers, does not
+maintain a world model, and does not update existing articles when relevant
+new source arrivals appear.
+
+Heresy delta: `repaired` for the missing branch-level first synthesis slice;
+`discovered` remains open for production cluster selection, live world-model
+semantics, article update policy, provider freshness, and staging acceptance.
+
+Rollback refs: revert the local implementation commit for this entry to remove
+the synthesis helper, manifest carry-forward, and tests. The previous
+diagnostic-boundary behavior remains represented by existing tests that keep
+raw graph captures out of the public `stories` array when no synthesis article
+exists.
+
 ## 2026-06-26 - O4 Synthesis Slice Worker Ready, Verifier Pending
 
 Claim: the O4 synthesis worker resolved to a concrete Codex thread and returned

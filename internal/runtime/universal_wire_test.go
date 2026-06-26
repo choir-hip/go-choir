@@ -357,6 +357,138 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	}
 }
 
+func TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 26, 21, 10, 0, 0, time.UTC)
+	seedUniversalWireWebCaptureFixture(t, handler,
+		"Raw capture should remain diagnostic",
+		"https://example.test/raw-capture",
+		"This raw capture exists only to prove the synthesized Texture article wins the public route.",
+		now.Add(-time.Hour))
+
+	doc, rev, editionRef, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+		ClusterID: "cluster-rail-flooding-20260626",
+		Headline:  "Flooding disruption around the rail corridor becomes a regional transport story",
+		Summary:   "Two multilingual source items describe the same developing transport disruption from different angles, so Universal Wire publishes one English synthesis rather than separate raw capture cards.",
+		Tension:   "The next update should revise this article if later source arrivals change the reopening timeline.",
+		Sources: []universalWireSynthesisSource{
+			{
+				ItemID:       "srcitem-portuguese-rail",
+				SourceID:     "rss:pt-transport",
+				FetchID:      "fetch-pt-rail",
+				Title:        "Corredor ferroviario reabre parcialmente apos enchentes",
+				URL:          "https://example.test/pt/rail",
+				CanonicalURL: "https://example.test/pt/rail",
+				Language:     "pt",
+				Body:         "Equipes de emergencia informaram que o corredor ferroviario reabriu parcialmente depois das enchentes, com inspecoes ainda em andamento.",
+				FetchedAt:    now.Add(-20 * time.Minute),
+			},
+			{
+				ItemID:       "srcitem-spanish-commuters",
+				SourceID:     "rss:es-commuters",
+				FetchID:      "fetch-es-commuters",
+				Title:        "Autoridades advierten demoras para pasajeros regionales",
+				URL:          "https://example.test/es/commuters",
+				CanonicalURL: "https://example.test/es/commuters",
+				Language:     "es",
+				Body:         "Las autoridades regionales pidieron a los pasajeros prever demoras mientras continuaban las revisiones de seguridad en las estaciones afectadas.",
+				FetchedAt:    now.Add(-15 * time.Minute),
+			},
+		},
+		Now: now,
+	})
+	if err != nil {
+		t.Fatalf("synthesize Universal Wire cluster: %v", err)
+	}
+	if doc.OwnerID != universalWirePlatformOwnerID() || doc.CurrentRevisionID != rev.RevisionID || editionRef == "" {
+		t.Fatalf("synthesis doc/revision/edition = %+v/%+v/%q, want platform article linked into edition", doc, rev, editionRef)
+	}
+	if !strings.Contains(rev.Content, "[1]") || !strings.Contains(rev.Content, "[2]") ||
+		strings.Contains(rev.Content, "source:") ||
+		strings.Contains(rev.Content, "Equipes de emergencia informaram") {
+		t.Fatalf("synthesis revision content did not project native source_refs without copying source body: %q", rev.Content)
+	}
+	var structured []texturedoc.SourceEntity
+	if err := json.Unmarshal(rev.SourceEntities, &structured); err != nil {
+		t.Fatalf("decode synthesis source_entities: %v", err)
+	}
+	if len(structured) != 2 {
+		t.Fatalf("source_entities len = %d, want two cited source entities: %#v", len(structured), structured)
+	}
+	for _, entity := range structured {
+		if entity.Evidence.OpenSurface != sourcecontract.OpenSurfaceSource ||
+			entity.Evidence.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+			metadataString(entity.ReaderSnapshot, "text_content") == "" ||
+			metadataString(entity.Target.Metadata, "source_id") == "" ||
+			metadataString(entity.Target.Metadata, "fetch_id") == "" {
+			t.Fatalf("structured source entity missing Source Viewer/reader context: %#v", entity)
+		}
+	}
+	var bodyDoc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(rev.BodyDoc, &bodyDoc); err != nil {
+		t.Fatalf("decode synthesis body_doc: %v", err)
+	}
+	visible := wireArticleVisibleStructuredSourceEntities(rev)
+	if len(visible) != 2 {
+		t.Fatalf("visible structured sources = %#v, want two source_ref-cited entities", visible)
+	}
+	if bodyDoc.Doc.Type != "doc" || !strings.Contains(string(rev.BodyDoc), `"source_ref"`) {
+		t.Fatalf("synthesis body_doc missing native source_ref nodes: %s", string(rev.BodyDoc))
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	if resp.Source != "universal-wire-edition-texture" || resp.Diagnostics != nil {
+		t.Fatalf("response source/diagnostics = %q/%+v, want non-empty edition Texture route", resp.Source, resp.Diagnostics)
+	}
+	if resp.Edition == nil || !slices.Contains(resp.Edition.IncludedDocIDs, doc.DocID) {
+		t.Fatalf("edition = %+v, want synthesized article included", resp.Edition)
+	}
+	if len(resp.Stories) != 1 {
+		t.Fatalf("stories len = %d, want one synthesized article: %+v", len(resp.Stories), resp.Stories)
+	}
+	story := resp.Stories[0]
+	if story.SourceState != "universal-wire-edition-texture" ||
+		story.StoryTextureDoc != doc.DocID ||
+		story.ID != "source-network-texture-"+doc.DocID ||
+		strings.Contains(story.SourceState, "objectgraph-web-capture") {
+		t.Fatalf("story is not the synthesized Texture article: %+v", story)
+	}
+	if !strings.Contains(story.TextureContent, "one English synthesis") || !strings.Contains(story.TextureContent, "[1]") || !strings.Contains(story.TextureContent, "[2]") {
+		t.Fatalf("story texture content did not carry synthesized cited prose: %q", story.TextureContent)
+	}
+	if len(story.Manifest.Lead) != 2 {
+		t.Fatalf("manifest lead len = %d, want two cited source handles: %+v", len(story.Manifest.Lead), story.Manifest)
+	}
+	firstLead := story.Manifest.Lead[0]
+	if firstLead.ID != "srcitem-portuguese-rail" ||
+		firstLead.SourceID != "rss:pt-transport" ||
+		firstLead.FetchID != "fetch-pt-rail" ||
+		firstLead.CanonicalURL != "https://example.test/pt/rail" ||
+		firstLead.OpenSurface != sourcecontract.OpenSurfaceSource ||
+		firstLead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+		firstLead.ReaderSnapshot == nil ||
+		!strings.Contains(firstLead.ReaderSnapshot.TextContent, "corredor ferroviario") {
+		t.Fatalf("manifest did not carry source-open reader context for cited source: %+v", firstLead)
+	}
+	storyJSON, err := json.Marshal(story)
+	if err != nil {
+		t.Fatalf("marshal story: %v", err)
+	}
+	if strings.Contains(string(storyJSON), `"source_state":"objectgraph-web-capture"`) ||
+		!strings.Contains(string(storyJSON), `"story_texture_doc_id":"`+doc.DocID+`"`) ||
+		!strings.Contains(string(storyJSON), `"reader_snapshot"`) {
+		t.Fatalf("story JSON did not expose Texture article with reader-backed sources: %s", string(storyJSON))
+	}
+}
+
 func TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
