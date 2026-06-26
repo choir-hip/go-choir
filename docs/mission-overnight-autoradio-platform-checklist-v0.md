@@ -364,10 +364,11 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 2 worker launch and thread resolution. O4 Phase 1 closed the first O4
-checklist obligation by adding a tested `choir.web_capture` objectgraph
-foundation, but O4 Phase 2 has not yet proved Universal Wire graph-backed feed
-reads, sourcecycled ingestion, staging, deploy, or product acceptance.
+Phase 2 worker completion report. O4 Phase 1 closed the first O4 checklist
+obligation by adding a tested `choir.web_capture` objectgraph foundation. O4
+Phase 2 worker evidence now proposes a bounded Universal Wire graph-backed
+web-capture read path, but verifier review, root incorporation, staging, deploy,
+sourcecycled ingestion, and product acceptance remain open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -719,13 +720,28 @@ Capture Read`) resolved from pending worktree handle
 2026-06-26. Early worker trace reports a runtime-owned objectgraph service gap
 and is following Problem Documentation First before any route behavior change.
 No O4 Phase 2 final report, verifier, root incorporation, or acceptance exists
-yet.
+yet. The worker later completed on branch
+`codex/o4-phase2-universal-wire-web-capture-read` at
+`77b3f251c8e41b552efa41a577e81fa10baab7d9`, after checkpoint commit
+`b264e8e766c1f1accb1578aa76a0dbf92aabf5ea`. The worker-reported diff adds
+`docs/o4-universal-wire-web-capture-read-checkpoint-2026-06-26.md`,
+`internal/runtime/objectgraph_runtime.go`, and updates
+`internal/runtime/runtime.go`, `internal/runtime/test_helpers_test.go`,
+`internal/runtime/universal_wire.go`, and
+`internal/runtime/universal_wire_test.go`. Worker-reported checks passed:
+`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`,
+`nix develop -c go test ./internal/objectgraph`,
+`git diff --check f3272233..HEAD`, and `git show --check --oneline HEAD` plus
+`HEAD~1`. Worker tracked/ignored status was clean/no output. Evidence boundary
+is worker-local branch-level focused tests only.
 
 next move: reconnect to O4 Phase 2 worker
-`019f035c-2a13-7f20-abd9-960b9866189b`. If it emits a final report, record the
-report, then create an independent verifier thread before incorporation. If it
-documents a behavior problem, preserve that checkpoint as the first
-post-discovery artifact before any fix.
+`019f035c-2a13-7f20-abd9-960b9866189b` and create an independent verifier
+thread against worker commits `b264e8e7` and `77b3f251` before incorporation.
+The verifier should check the checkpoint-before-code sequence, runtime-owned
+objectgraph service boundary, Universal Wire empty-state/Texture-precedence
+honesty, graph-backed `choir.web_capture` projection, focused tests, and
+non-claims.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

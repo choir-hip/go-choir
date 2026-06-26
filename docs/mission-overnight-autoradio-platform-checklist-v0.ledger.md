@@ -2266,3 +2266,62 @@ Open edge: read worker thread
 `019f035c-2a13-7f20-abd9-960b9866189b` after it completes. If it has a final
 report, record the report and create an independent verifier thread before
 incorporating any O4 Phase 2 commits.
+
+## 2026-06-26 - O4 Phase 2 Worker Completed
+
+Claim: the O4 Phase 2 worker produced a verifier-ready branch-level candidate
+for a bounded Universal Wire graph-backed `choir.web_capture` read path.
+
+Move: read the completed worker thread, inspect the worker branch identity and
+changed-file list, and update Parallax State with worker evidence while keeping
+acceptance pending on independent verifier review.
+
+Expected Delta V: 0. Worker completion creates candidate evidence but does not
+close the O4 feed-read obligation until independent verifier acceptance and
+root incorporation.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Worker thread:
+  `019f035c-2a13-7f20-abd9-960b9866189b`
+  (`O4 worker - Universal Wire Web Capture Read`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/5f31/go-choir`.
+- Worker branch:
+  `codex/o4-phase2-universal-wire-web-capture-read`.
+- Worker commits:
+  `b264e8e766c1f1accb1578aa76a0dbf92aabf5ea`
+  (`checkpoint O4 web capture read gap`);
+  `77b3f251c8e41b552efa41a577e81fa10baab7d9`
+  (`add Universal Wire web capture read path`).
+- Changed files:
+  `docs/o4-universal-wire-web-capture-read-checkpoint-2026-06-26.md`,
+  `internal/runtime/objectgraph_runtime.go`,
+  `internal/runtime/runtime.go`,
+  `internal/runtime/test_helpers_test.go`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- Worker-reported checks passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`;
+  `nix develop -c go test ./internal/objectgraph`;
+  `git diff --check f3272233..HEAD`;
+  `git show --check --oneline HEAD`;
+  `git show --check --oneline HEAD~1`.
+- Worker-reported dirty state:
+  `git status --short --ignored` had no output.
+
+Evidence boundary: worker-local branch-level focused tests and hygiene only.
+No independent verifier verdict, root incorporation, Universal Wire staging
+proof, sourcecycled ingestion, Texture publication/export, main, push, CI,
+deploy, product acceptance, auth/session, provider/gateway, promotion, rollback,
+or run-acceptance claim.
+
+Heresy delta: worker reports `discovered` for the missing runtime-owned
+objectgraph service boundary for Universal Wire reads, `repaired` for the
+bounded graph-backed `choir.web_capture` public-route fallback, and
+`introduced` none known. This remains a candidate claim until verifier review.
+
+Open edge: create an independent O4 Phase 2 verifier thread against commits
+`b264e8e7` and `77b3f251` before root incorporation.
