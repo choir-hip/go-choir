@@ -6797,3 +6797,70 @@ next worker/checker should inspect why `request_super_execution` returned a
 persistent Super update with empty `loop_id`/`state` and no subsequent visible
 Super agent in Trace, then either repair wake/delegation or document the precise
 blocker before attempting a self-development AppChangePackage.
+
+## 2026-06-26 - Universal Wire Product Target Reopened
+
+Claim: the deployed Universal Wire capture-projection UI is not the intended
+Universal Wire product. The prior O4 verifier acceptance remains useful only for
+the graph-backed capture/source-opening substrate, not for the full News product
+benchmark.
+
+Move: incorporate owner screenshot feedback from
+`/var/folders/28/gwvkv0wn6lq64jvqvmny5xnw0000gn/T/TemporaryItems/NSIRD_screencaptureui_JA16Zn/Screenshot 2026-06-26 at 16.09.54.png`
+and update the paradoc before attempting a behavior fix.
+
+Expected Delta V: none. Actual variant change: +5 open obligations, raising
+current V from 26 to 31, because the product target was under-specified. The
+new open O4 obligations are multilingual source clustering, Texture-mediated
+English synthesis article creation, native citation/source artifact attachment,
+live world-model/article updates on new relevant information, and app rendering
+of the Texture article/world-model publication surface instead of raw capture
+projection cards.
+
+Evidence:
+
+- The screenshot shows Universal Wire with `12 articles`, but the visible cards
+  are repeated source-capture projections headed `Telegram Post from Metropoles
+  Telegram`.
+- The visible summaries are individual Portuguese source headlines such as
+  `PT envia Edinho a Minas para convencer Marília a disputar governo`,
+  `Flávio faz queixa ao STF contra Janones por injúria e pede R$ 200 mil`, and
+  `Kim Kataguiri aciona PGR contra Romário por propaganda de bets`.
+- The cards themselves disclose the narrowed substrate state: Universal Wire is
+  reading durable `choir.web_capture` objects and the cards are capture
+  projections, not Texture article publications or native `source_ref`
+  citations.
+- Owner clarification: Universal Wire should ingest many multilingual news
+  stories, process them into the object graph through Texture, produce new
+  English synthesis Texture articles rather than copies of individual articles,
+  maintain a live updating world model, and update existing articles when new
+  relevant information arrives.
+
+Mutation class / protected surfaces: green documentation and product target
+clarification. This records a behavior problem before any code fix. Future
+repairs will likely be orange/red-adjacent because they touch Universal Wire
+processor/reconciler routing, Texture canonical article writes, source
+citations, objectgraph world-model semantics, publication/export surfaces, and
+possibly provider/gateway calls.
+
+Conjecture delta: the graph-backed capture projection repaired the empty-feed
+and source-opening substrate, but it can now be classified as a diagnostic
+fallback rather than the desired product. The deeper goal requires a synthesis
+pipeline: multilingual capture clusters -> graph/world-model objects -> Texture
+article drafts/revisions -> source-cited English Wire articles -> update
+existing articles as the source graph changes.
+
+Heresy delta: `discovered` for the mismatch between the narrowed O4 acceptance
+scope and the owner-intended Universal Wire product. This is not counted as a
+regression in the capture substrate; it is a corrected product bar.
+
+Rollback refs: none for this docs-only clarification. The prior O4 code remains
+useful substrate. Any future product repair should keep raw capture projection
+available only as diagnostic evidence until the synthesis path is accepted.
+
+Open edge: create the next bounded Universal Wire synthesis slice. A good first
+slice is to select one multilingual source cluster, create or update one English
+Texture article with native `source_ref` citations and Source Viewer artifacts,
+serve that Texture article through `/api/universal-wire/stories`, and record
+the remaining world-model/update semantics as explicit blockers if they do not
+fit in the slice.
