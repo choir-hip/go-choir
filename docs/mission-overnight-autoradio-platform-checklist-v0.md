@@ -149,9 +149,8 @@ parallel source of truth.
 Checklist:
 
 - [x] Review the Qdrant prototype for alias-switch correctness.
-- [ ] Verify against a real local Qdrant instance. Current worker probe found
-  no local service at `127.0.0.1:6333`; hermetic tests cover the package until a
-  local Qdrant instance is available.
+- [x] Verify against a real local Qdrant instance. Nix Qdrant `1.18.1` ran on
+  `localhost:6333`; uncached live build/switch/rollback test passed.
 - [x] Replace sample objects with object-service-backed inputs or explicitly
   defer that edge.
 - [x] Keep deterministic hash embedding only as a test embedder.
@@ -321,8 +320,8 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 45. Last Delta V: 1 for O2
-independent verifier acceptance of the branch-level Qdrant implementation.
++ 8 Autoradio/Pipecat obligations. Current value: 44. Last Delta V: 1 for O2
+live local-Qdrant build/switch/rollback proof.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -369,8 +368,9 @@ accepted for O2. The implementation switches/rolls back with one alias
 transaction containing delete/create alias actions, keeps Qdrant derived from
 objectgraph objects, and keeps deterministic hash embedding test-only. O2
 verifier thread `019f0285-e660-7cd1-a468-554e9b175825` returned `accept` for
-branch-level continuation. Real local Qdrant verification remains open because
-`localhost:6333` refused connections on 2026-06-26. News depends on source/web
+branch-level continuation. Real local Qdrant verification was later discharged
+with Nix Qdrant `1.18.1` on `localhost:6333`; the uncached live
+build/switch/rollback test passed. News depends on source/web
 objects. Choir-in-Choir should use News as its real
 payload. Nucleus follows once there is a concrete worker/verifier isolation
 need. Choir Base starts as local reconciliation kernel. Autoradio is the final
@@ -418,14 +418,13 @@ thread: `019f0285-e660-7cd1-a468-554e9b175825` (`O2 verifier - Qdrant Derived
 Index`). The verifier first returned `blocked` because the worker turn was
 still `inProgress` and no final Qdrant report/diff/tests existed yet. After
 worker completion, the verifier returned `accept` for branch-level
-continuation, with the live local-Qdrant proof still open. O2 is not complete
-until that local service proof passes.
+continuation, with the live local-Qdrant proof still open. That proof passed
+after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
+The same verifier returned `accept` on the final O2 completion readback. O2 is
+complete at branch level, with no main/staging/platform settlement claim.
 
-next move: Start `docker-compose.qdrant.yml` or another safe local Qdrant
-service and rerun
-`nix develop -c go test -v ./internal/qdrant -run TestLocalQdrantBuildAndSwitchIfAvailable`.
-If it passes, record O2 completion and proceed to O3 source entities; if it
-fails, record the precise blocker before changing code.
+next move: Commit the O2 completion evidence, then launch O3 source entities
+with a bounded worker/verifier thread pair.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

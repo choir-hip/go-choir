@@ -487,3 +487,72 @@ promotion, or rollback claim.
 Open edge: O2 has one remaining obligation: start a safe local Qdrant service
 and pass the live build/switch/rollback integration test before marking O2
 complete or proceeding to O3.
+
+## 2026-06-26 - O2 Live Local Qdrant Proof Passed
+
+Claim: The Qdrant derived-index package can build, switch, and roll back
+against a real local Qdrant instance.
+
+Move: start a disposable local Qdrant service through Nix and rerun the live
+integration proof uncached.
+
+Expected Delta V: 1 for the remaining O2 live local-Qdrant obligation.
+
+Actual Delta V: 1. Current V is 44.
+
+Receipts:
+
+- Docker Desktop was initially unavailable; `open -a Docker` started the daemon,
+  but Docker image acquisition for `qdrant/qdrant:latest` and
+  `qdrant/qdrant:v1.13.6` hung without creating an image. This did not block
+  the proof because Nix provided Qdrant directly.
+- `nix shell nixpkgs#qdrant -c qdrant --version` returned `qdrant 1.18.1`.
+- Started Qdrant `1.18.1` with telemetry disabled and storage under
+  `/tmp/choir-qdrant-o2-proof`, outside the repo:
+  `QDRANT__STORAGE__STORAGE_PATH=/tmp/choir-qdrant-o2-proof QDRANT__SERVICE__HTTP_PORT=6333 QDRANT__SERVICE__GRPC_PORT=6334 nix shell nixpkgs#qdrant -c qdrant --disable-telemetry`.
+- `curl -fsS http://localhost:6333/healthz` returned `healthz check passed`.
+- `nix develop -c go test -count=1 -v ./internal/qdrant -run TestLocalQdrantBuildAndSwitchIfAvailable`
+  passed.
+- `nix develop -c go test -count=1 ./internal/objectgraph ./internal/qdrant`
+  passed.
+
+Evidence boundary: local Qdrant service proof only. No main, CI, deploy,
+staging, provider, gateway, runtime route, product, promotion, or rollback
+claim.
+
+Open edge: Request independent verifier readback over this O2 completion
+evidence before launching O3.
+
+## 2026-06-26 - O2 Completion Verifier Accepted
+
+Claim: O2 can be treated as branch-level complete.
+
+Move: independent verifier readback over the live local-Qdrant evidence and
+mission-state update.
+
+Expected Delta V: 0; the live-proof obligation was already counted, and this
+entry records the independent readback needed before launching O3.
+
+Actual Delta V: 0. Current V remains 44.
+
+Receipts:
+
+- O2 verifier thread `019f0285-e660-7cd1-a468-554e9b175825` returned verdict
+  `accept` for the final O2 completion readback.
+- Verifier confirmed the mission doc and ledger scope the claim to local
+  branch-level proof and explicitly exclude main, CI, deploy, staging,
+  provider, gateway, runtime route, product, promotion, and rollback claims.
+- Verifier reran
+  `nix develop -c go test -count=1 -v ./internal/qdrant -run TestLocalQdrantBuildAndSwitchIfAvailable`
+  and `nix develop -c go test -count=1 ./internal/objectgraph ./internal/qdrant`;
+  both passed.
+- Verifier confirmed the running service was Nix Qdrant `1.18.1`, listening on
+  `6333/6334`, with `QDRANT__STORAGE__STORAGE_PATH=/tmp/choir-qdrant-o2-proof`.
+- Verifier checked that Qdrant had no leftover collections or aliases after
+  the tests.
+
+Evidence boundary: branch-level O2 completion only. No main, CI, deploy,
+staging, provider, gateway, runtime route, product, promotion, or rollback
+claim.
+
+Open edge: Launch O3 source entities with a bounded worker/verifier pair.
