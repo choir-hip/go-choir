@@ -341,3 +341,36 @@ Open edge: Wait for the O2 worker final report with branch/commit handles,
 tests run, local Qdrant status or blocker, alias-switch decision,
 objectgraph-input boundary, embedder/provider boundary, and rebuild/rollback
 documentation. Then re-run verifier against the actual diff and evidence.
+
+## 2026-06-26 - O2 Prototype Review And Documentation Checkpoint
+
+Claim: O2 can reuse the preserved Qdrant prototype only after correcting its
+alias-switch shape and replacing sample-only objects with objectgraph-backed
+inputs.
+
+Move: probe plus documentation checkpoint before orange implementation.
+
+Expected Delta V: 1 for reviewing the Qdrant prototype alias-switch
+correctness, with implementation obligations still open.
+
+Actual Delta V: 1. Current V is 50.
+
+Receipts:
+
+- O2 worker branch: `codex/o2-qdrant-derived-index` in
+  `/Users/wiz/.codex/worktrees/fb93/go-choir`.
+- Preserved Qdrant prototype reviewed at
+  `preserve/o0-qdrant-prototype-2026-06-26` (`4c1b28be`) from
+  `/Users/wiz/.windsurf/worktrees/go-choir/go-choir-87c664e7`.
+- Prototype finding: alias switch used an `update_alias` action shape. O2 will
+  implement switch/rollback with one Qdrant alias transaction containing
+  `delete_alias` for the old mapping plus `create_alias` for the new mapping.
+- `docs/paradoc-qdrant-indexing-pipeline.md` now records the narrowed O2
+  source-of-truth, embedder-boundary, rebuild, and rollback path.
+
+Evidence boundary: branch-level docs checkpoint only. No Qdrant runtime,
+provider, staging, or product claim.
+
+Open edge: Implement `internal/qdrant` as a derived index over
+`internal/objectgraph.Object`, keep deterministic embedding test-only, and
+probe local Qdrant availability before final worker report.

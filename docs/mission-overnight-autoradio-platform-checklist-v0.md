@@ -148,7 +148,7 @@ parallel source of truth.
 
 Checklist:
 
-- [ ] Review the Qdrant prototype for alias-switch correctness.
+- [x] Review the Qdrant prototype for alias-switch correctness.
 - [ ] Verify against a real local Qdrant instance.
 - [ ] Replace sample objects with object-service-backed inputs or explicitly
   defer that edge.
@@ -319,10 +319,9 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 51. Last Delta V: 8 for
-branch-level O1 objectgraph foundation accepted by verifier and merged into
-this mission branch. Variant total corrected from 67 to 68 because O0 contains
-nine checklist obligations.
++ 8 Autoradio/Pipecat obligations. Current value: 50. Last Delta V: 1 for O2
+prototype review and documentation checkpoint before implementation. Variant
+total corrected from 67 to 68 because O0 contains nine checklist obligations.
 
 budget: overnight run, target 8-12 hours wall-clock, with orchestration
 checkpoints at least every major work item and before any behavior-changing
@@ -357,8 +356,15 @@ truth fragmentation, `discovered` for new blockers found by workers/verifiers,
 and `introduced` only if a reviewer explicitly finds a new doctrine or behavior
 regression.
 
-position / live conjectures / open edges: Email is done. Object graph is next.
-News depends on source/web objects. Choir-in-Choir should use News as its real
+position / live conjectures / open edges: Email and O1 objectgraph foundation are
+done at branch level. O2 is working on branch
+`codex/o2-qdrant-derived-index` in
+`/Users/wiz/.codex/worktrees/fb93/go-choir`. Qdrant prototype
+`4c1b28be` was reviewed: its `update_alias` action shape is not accepted for
+O2; implementation must switch/rollback with one alias transaction containing
+delete/create alias actions, keep Qdrant derived from objectgraph objects, and
+keep deterministic hash embedding test-only. News depends on source/web objects.
+Choir-in-Choir should use News as its real
 payload. Nucleus follows once there is a concrete worker/verifier isolation
 need. Choir Base starts as local reconciliation kernel. Autoradio is the final
 product forcing function, but Pipecat is an open implementation edge and not
@@ -406,10 +412,9 @@ Index`). The verifier returned `blocked` because the worker turn was still
 `inProgress` and no final Qdrant report/diff/tests existed yet. O2 is active
 but no O2 obligation is complete yet.
 
-next move: Use `read_thread` on the O2 worker until it produces its Qdrant
-derived-index decision/implementation report, then use or follow up the O2
-verifier for verdict `accept`, `revise_before_continue`, `blocked`, or
-`supersede`. Incorporate that verdict before claiming any O2 checklist
+next move: Incorporate the completed O2 worker implementation and independent
+verifier verdict into this orchestration branch, then record whether O2 is
+branch-level accepted or still needs correction before claiming any checklist
 progress.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
