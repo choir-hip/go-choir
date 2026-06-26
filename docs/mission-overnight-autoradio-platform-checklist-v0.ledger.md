@@ -8212,3 +8212,86 @@ guarded story -> Texture read path.
 Expected Delta V: 1 if an independent verifier accepts `4c467cff` and
 orchestration incorporates it. Actual Delta V: 0 for this ready-for-verifier
 record.
+
+## 2026-06-26 - O4 Article-Surface Repair Verifier Accepted And Incorporated
+
+Claim: independent verifier thread
+`019f0628-819d-72a0-9328-ab461101a408` accepted worker commit
+`4c467cffba108b1eae3ef7e72fd9893539b3dc92`, and orchestration incorporated it
+as root commit `01b4b7c826e881e24b7f63e745f96a0bfbf365e1`.
+
+Verifier findings: none blocking. The verifier found that the commit adds
+real public-route proof that a `/api/universal-wire/stories` story opens through
+Texture document and revision endpoints using `story_texture_doc_id` plus
+`read_owner=universal-wire-platform`; that those endpoints exercise the same
+resolver path used by Texture reads; that the legacy repair hook is narrow and
+only triggers for old meta-copy strings before reusing the existing deterministic
+synthesis path; and that deterministic copy is now article-facing rather than
+platform meta-copy.
+
+Verifier commands/results:
+
+- `git status --short --ignored` in worker worktree: clean.
+- `git diff --check 4c467cff^..4c467cff`: passed.
+- `git show --check --oneline 4c467cff`: passed.
+- `git diff --name-status 4c467cff^..4c467cff`: four expected runtime files
+  only.
+- Focused runtime acceptance test command: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 6.464s`.
+- Broader `UniversalWire|WireProcessor|WireStory|WirePublication` selector:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 12.041s`.
+
+Orchestration incorporation: cherry-picked worker commit `4c467cff` into root as
+`01b4b7c826e881e24b7f63e745f96a0bfbf365e1`. The incorporated commit changes only
+the expected runtime files:
+
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/universal_wire.go`
+- `internal/runtime/universal_wire_test.go`
+- `internal/runtime/wire_synthesis.go`
+
+Root post-incorporation commands/results:
+
+- `git diff --check HEAD^..HEAD`: passed.
+- `git show --check --oneline HEAD`: passed,
+  `01b4b7c8 Repair Universal Wire article surface`.
+- `git status --short --branch`: clean tracked state on
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
+  5.134s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 10.884s`.
+
+Evidence boundary/non-claims: accepted branch-local incorporation only. This
+does not claim push, CI, deploy, staging identity, authenticated product QA,
+provider/search freshness, semantic clustering, Qdrant, promotion/rollback, run
+acceptance, publication/export, or full News settlement. The original deployed
+404 has not yet been replayed on staging after this repair.
+
+Mutation class / protected surfaces touched: orange runtime behavior and yellow
+tests. Touched Universal Wire sourcecycled synthesis copy, Universal Wire story
+route read-time repair, existing Wire edition linkage, public Texture read-owner
+resolution for platform-owned Wire articles, and tests. Red surfaces remain out
+of scope: auth/session renewal, vmctl, deployment routing, provider/gateway
+credentials, Qdrant, promotion/rollback, run acceptance, candidate computers,
+and publication/export outside existing Wire edition helpers.
+
+Rollback path: revert `01b4b7c826e881e24b7f63e745f96a0bfbf365e1`. If the later
+landing loop exposes a staging regression, roll back by reverting the deployed
+main commit(s) that include this change. Current deployed behavior identity
+remains `a2a5a74910be1c189cd9d9f090695169bf729561` until orchestration pushes
+and deploys.
+
+Heresy delta: `repaired` for branch-local headline-to-Texture readability proof
+and deterministic article-facing copy. `discovered` remains for product/staging
+replay after deploy, semantic multi-story clustering, provider-quality
+synthesis, Qdrant, run acceptance, and full live world-model maintenance.
+
+Actual Delta V: 1. V is now 27. Next move is the required behavior-changing
+landing loop: commit this evidence update, push the reviewed head to
+`origin/main`, monitor CI/deploy, verify staging build identity, and run
+authenticated Chrome product acceptance for Universal Wire article copy and
+headline-to-Texture readability.
