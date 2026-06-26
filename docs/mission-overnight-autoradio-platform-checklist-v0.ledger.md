@@ -7282,3 +7282,50 @@ Next construct: use Problem Documentation First for the next behavior-changing
 O4 move, then implement or delegate the missing live source-cluster -> Texture
 synthesis article/upsert -> Wire edition publication path. The deployed proof
 must show a non-empty Universal Wire article surface, not raw capture cards.
+
+## 2026-06-26 - O4 Live Synthesis Trigger Worker Launched
+
+Claim: the next highest-value O4 move is a thread-native implementation worker
+for the missing live source-cluster -> Texture synthesis/upsert -> Wire edition
+path, because the problem has already been documented and the authenticated UI
+now proves staging is honestly empty.
+
+Move: discovered Codex app thread tools (`list_projects`, `create_thread`,
+`read_thread`, `send_message_to_thread`, `handoff_thread`, and hygiene tools)
+and used `create_thread` against project `/Users/wiz/go-choir` with a new
+worktree from `main`. The created work item is
+`O4-live-synthesis-trigger-texture-edition-slice`; pending worktree handle:
+`local:a6914a8c-5c7a-419c-8825-1eb43d96f9d6`.
+
+Worker assignment boundary:
+
+- Mutation class: orange runtime/API behavior plus yellow tests and green
+  docs/evidence.
+- Protected surfaces authorized: Universal Wire route semantics, Texture
+  canonical writes/revisions, source entity/source_ref projection, and existing
+  Wire edition linkage.
+- Protected surfaces excluded: auth/session renewal, vmctl, deployment routing,
+  provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, and
+  publication/export outside existing Wire edition helpers.
+- Admissible evidence: branch-local focused tests under `nix develop`,
+  `git diff --check`, clean worktree classification, and a clear final report.
+- Rollback path: revert worker branch commit(s).
+- Heresy delta: expected `repaired` for the missing live source-cluster ->
+  Texture synthesis/upsert route slice; `discovered` if a deeper blocker is
+  found.
+- Stop condition: commit worker changes and report `ready_for_verifier` with
+  SHA, changed files, tests, dirty classification, residual risks, non-claims,
+  and evidence boundary; or report `blocked` with code-path evidence.
+
+Expected Delta V: 1 if the worker returns a commit that an independent verifier
+accepts as a real branch-local product-path slice. Actual Delta V for this
+orchestration pass: 0; a pending worker launch is not proof.
+
+Evidence boundary: thread tool launch only. No worker commit, verifier verdict,
+root incorporation, push, CI, deploy, staging acceptance, provider/search,
+world-model update semantics, publication/export, Qdrant projection, run
+acceptance, promotion, rollback, or live product settlement is claimed.
+
+Open edge: resolve the pending worktree handle to a worker thread/result, read
+the final report, and create a separate verifier thread before any code is
+incorporated into the orchestration checkout.
