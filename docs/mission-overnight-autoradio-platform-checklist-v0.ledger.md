@@ -3845,3 +3845,94 @@ provider/gateway, no promotion/rollback, and no run-acceptance claim.
 Open edge: read the worker final report when complete. If it returns candidate
 commits, inspect hygiene/readiness and launch an independent verifier before any
 root incorporation.
+
+## 2026-06-26 - O4 Phase 7 Worker Candidate And Verifier Queue
+
+Claim: O4 Phase 7 has a completed worker candidate and a resolved independent
+verifier thread. This is not verifier acceptance, root incorporation, or News
+benchmark closure.
+
+Move: read worker thread `019f03c9-2c8f-73b1-bfca-ed7badd4383f`, inspect the
+worker worktree, create an independent project-scoped verifier thread from
+candidate branch `codex/o4-phase7-news-wire-graph-source-ref-feed`, and
+title/pin the resolved verifier.
+
+Expected Delta V: 0. Worker candidate evidence and verifier queueing do not
+close the feed obligation until the verifier accepts and root incorporates the
+candidate.
+
+Actual Delta V: 0. Current V remains 33.
+
+Receipts:
+
+- Worker thread:
+  `019f03c9-2c8f-73b1-bfca-ed7badd4383f`
+  (`O4 worker - Graph Source-Ref Feed`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/6c59/go-choir`.
+- Worker branch:
+  `codex/o4-phase7-news-wire-graph-source-ref-feed`.
+- Worker HEAD:
+  `8a0a69d1b1af5bafbf1aca5724c4a16b3be2919e`.
+- Worker commits:
+  `35420443 checkpoint O4 graph source-ref feed gap` and
+  `8a0a69d1 carry Wire graph source entity provenance`.
+- Worker changed files:
+  `docs/o4-news-wire-graph-source-ref-feed-checkpoint-2026-06-26.md`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- Worker final-report claim:
+  Universal Wire graph fallback now reads live `captured_from` edges from
+  `choir.web_capture` objects to graph `choir.source_entity` provenance objects
+  and exposes those source entities in Wire manifest context. It preserves
+  Texture-edition priority, honest empty state, non-tombstoned capture
+  filtering, source/open identity fields, and does not mint or serialize native
+  Texture `source_ref` citation claims.
+- Worker reported checks:
+  `nix develop -c go test ./internal/runtime -run
+  '^TestHandleUniversalWireStories' -count=1 -timeout=90s`;
+  `nix develop -c go test ./internal/cycle -run
+  '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1
+  -timeout=60s`;
+  `nix develop -c go test ./cmd/sourcecycled -run
+  '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1
+  -timeout=60s`;
+  `git show --check --oneline 35420443`;
+  `git show --check --oneline 8a0a69d1`; and
+  `git diff --check c24dc9af..HEAD`.
+- Orchestration spot-checks:
+  worker `git status --short --ignored` produced no output; worker branch was
+  `codex/o4-phase7-news-wire-graph-source-ref-feed`; worker HEAD was
+  `8a0a69d1b1af5bafbf1aca5724c4a16b3be2919e`; `git diff --name-status
+  c24dc9af..HEAD` showed only the checkpoint doc and the two Universal Wire
+  runtime files; `git show --check --oneline 35420443` and `git show --check
+  --oneline 8a0a69d1` passed.
+- Verifier pending worktree handle:
+  `local:c13e83a2-d7dc-4371-b583-495207ddc8ba`.
+- Resolved verifier thread:
+  `019f03d1-0071-7371-bdd6-a3bd840c9e76`
+  (`O4 verifier - Graph Source-Ref Feed`).
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/51cf/go-choir`.
+- Verifier work item:
+  `O4-phase7-news-wire-graph-source-ref-feed-verifier`.
+- Verifier requested verdict:
+  accept, revise_before_continue, reject, blocked, or supersede, with findings,
+  exact commands/results, dirty-path classification, evidence boundary,
+  residual risks, and an explicit incorporation recommendation.
+
+Evidence boundary: worker branch/local evidence and verifier launch only. No
+independent verifier verdict yet, no root incorporation, no push, PR, CI,
+deploy, staging product acceptance, native Texture body `source_ref` citation
+carry-forward, publication/export, Qdrant, provider/gateway, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Residual risks: the worker candidate is still a local graph fallback projection
+over provenance edges, not a production News pipeline or Texture publication
+flow. Broader source ranking, staging daemon/store configuration, native body
+citation carry-forward, export, and deployed browser/product evidence remain
+open.
+
+Open edge: wait for verifier thread
+`019f03d1-0071-7371-bdd6-a3bd840c9e76` to complete, then read the verifier
+verdict before incorporating worker commits.
