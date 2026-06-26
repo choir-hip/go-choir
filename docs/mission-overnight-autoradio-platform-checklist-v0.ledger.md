@@ -5095,3 +5095,47 @@ Open edge: use the repaired harness for the next O4 Phase 10d proof: tighten
 the native Texture body `source_ref` Source Viewer/reader-artifact assertion so
 the test distinguishes inline citation note/excerpt text from graph object
 reader body text, then verify independently before root incorporation.
+
+## 2026-06-26 - O4 Phase 10d Reader-Body Proof Worker Launch
+
+Claim: O4 Phase 10d has been launched as the next narrow worker to use the
+repaired browser harness for a native Texture body `source_ref`
+Source Viewer/reader-artifact assertion. This is pending worker launch evidence
+only, not worker evidence, verifier acceptance, root incorporation, or checklist
+descent.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item
+`O4-phase10d-native-texture-source-ref-reader-body-proof`.
+
+Expected Delta V: 0. Launching the worker does not close the native Texture
+citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:1e43828a-9ce3-4a57-bd83-62a92d90d85d`.
+- Starting orchestration branch/head:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `35d0e350 record O4 harness repair acceptance`.
+- Worker objective:
+  keep the change test-only if possible, separate inline source_ref note/excerpt
+  text from graph object reader body text in the existing focused Texture
+  graph-wrapper source-open test, assert Source Viewer default opening displays
+  the graph object reader body text, preserve explicit Web Lens routing and the
+  legacy media refs non-synthesis invariant, and return a precise blocker if
+  product behavior changes would be required.
+
+Evidence boundary: worker queued/pending only. No readable worker thread yet,
+no worker worktree/cwd/branch/HEAD, no candidate commit, no verifier, no root
+incorporation, push, PR, CI, deploy, staging product acceptance, native Texture
+body `source_ref` assertion proof, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: resolve pending handle
+`local:1e43828a-9ce3-4a57-bd83-62a92d90d85d` into a readable worker
+thread/worktree, title and pin it, inspect starting status, then wait for a
+candidate or no-candidate callback.
