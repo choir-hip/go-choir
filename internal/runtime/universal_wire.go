@@ -25,6 +25,7 @@ type universalWireStoriesResponse struct {
 	StyleSources []types.WireStyleSource       `json:"style_sources"`
 	Source       string                        `json:"source"`
 	Edition      *universalWireEditionResponse `json:"edition,omitempty"`
+	Diagnostics  *universalWireFeedDiagnostics `json:"diagnostics,omitempty"`
 }
 
 type universalWireEditionResponse struct {
@@ -34,6 +35,21 @@ type universalWireEditionResponse struct {
 	Title          string   `json:"title"`
 	IncludedDocIDs []string `json:"included_doc_ids"`
 	UpdatedAt      string   `json:"updated_at,omitempty"`
+}
+
+type universalWireFeedDiagnostics struct {
+	Status     string                                 `json:"status"`
+	Summary    string                                 `json:"summary"`
+	Substrates []universalWireFeedSubstrateDiagnostic `json:"substrates"`
+}
+
+type universalWireFeedSubstrateDiagnostic struct {
+	Substrate      string `json:"substrate"`
+	State          string `json:"state"`
+	CandidateCount int    `json:"candidate_count"`
+	StoryCount     int    `json:"story_count"`
+	FilteredCount  int    `json:"filtered_count,omitempty"`
+	Reason         string `json:"reason"`
 }
 
 const universalWireEditionSourcePath = "universal-wire/Wire.texture"
@@ -54,8 +70,13 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 	styleSources := []types.WireStyleSource{}
 	source := "universal-wire-texture-index"
 	var edition *universalWireEditionResponse
+	diagnostics := universalWireFeedDiagnostics{
+		Status:  "empty",
+		Summary: "Universal Wire found no publishable Texture edition stories or graph-backed capture cards.",
+	}
 	if editionStories, editionResp, err := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); err == nil {
 		edition = editionResp
+		diagnostics.Substrates = append(diagnostics.Substrates, universalWireEditionDiagnostic(editionResp, len(editionStories)))
 		if len(editionStories) > 0 {
 			stories = editionStories
 			source = "universal-wire-edition-texture"
@@ -64,23 +85,47 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		}
 	} else if err != nil {
 		log.Printf("universal wire: edition unavailable: %v", err)
+		diagnostics.Substrates = append(diagnostics.Substrates, universalWireFeedSubstrateDiagnostic{
+			Substrate: "texture_edition",
+			State:     "unavailable",
+			Reason:    "Texture edition state could not be read through the public Wire route.",
+		})
 	}
 	if len(stories) == 0 {
-		if captureStories, err := h.universalWireWebCaptureStories(r.Context(), 12); err == nil && len(captureStories) > 0 {
+		if captureStories, captureDiagnostic, err := h.universalWireWebCaptureStories(r.Context(), 12); err == nil && len(captureStories) > 0 {
 			stories = captureStories
 			source = "universal-wire-web-capture-graph"
 		} else if err != nil {
 			log.Printf("universal wire: web capture graph unavailable: %v", err)
+			diagnostics.Substrates = append(diagnostics.Substrates, universalWireFeedSubstrateDiagnostic{
+				Substrate: "web_capture_graph",
+				State:     "unavailable",
+				Reason:    "Graph-backed web capture state could not be read through the public Wire route.",
+			})
+		} else {
+			diagnostics.Substrates = append(diagnostics.Substrates, captureDiagnostic)
 		}
+	}
+	if len(stories) == 0 {
+		diagnostics.Substrates = append(diagnostics.Substrates, universalWireFeedSubstrateDiagnostic{
+			Substrate: "source_provenance",
+			State:     "not_applicable",
+			Reason:    "No graph capture card was available to inspect for captured_from source provenance.",
+		})
 	}
 	for i := range stories {
 		stories[i] = normalizeWireStoryPresentation(stories[i])
+	}
+	var emptyDiagnostics *universalWireFeedDiagnostics
+	if len(stories) == 0 {
+		emptyDiagnostics = &diagnostics
 	}
 	writeAPIJSON(w, http.StatusOK, universalWireStoriesResponse{
 		Stories:      stories,
 		StyleSources: styleSources,
 		Source:       source,
 		Edition:      edition,
+		Diagnostics:  emptyDiagnostics,
 	})
 }
 
@@ -163,13 +208,18 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 	return stories, edition, nil
 }
 
-func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit int) ([]types.WireStory, error) {
+func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit int) ([]types.WireStory, universalWireFeedSubstrateDiagnostic, error) {
+	diagnostic := universalWireFeedSubstrateDiagnostic{
+		Substrate: "web_capture_graph",
+		State:     "unavailable",
+		Reason:    "Object graph state is not available for this runtime.",
+	}
 	if h == nil || h.rt == nil {
-		return nil, nil
+		return nil, diagnostic, nil
 	}
 	graph := h.rt.ObjectGraph()
 	if graph == nil {
-		return nil, nil
+		return nil, diagnostic, nil
 	}
 	notTombstoned := false
 	objects, err := graph.ListObjects(ctx, objectgraph.ListFilter{
@@ -179,7 +229,23 @@ func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit i
 		Tombstone: &notTombstoned,
 	})
 	if err != nil {
-		return nil, err
+		return nil, diagnostic, err
+	}
+	diagnostic.State = "empty"
+	diagnostic.CandidateCount = len(objects)
+	diagnostic.Reason = "No non-tombstoned choir.web_capture objects were found for the Universal Wire platform."
+	if len(objects) == 0 {
+		tombstoned := true
+		if filtered, err := graph.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:      objectgraph.WebCaptureObjectKind,
+			OwnerID:   universalWirePlatformOwnerID(),
+			Limit:     limit,
+			Tombstone: &tombstoned,
+		}); err == nil && len(filtered) > 0 {
+			diagnostic.State = "filtered"
+			diagnostic.FilteredCount = len(filtered)
+			diagnostic.Reason = "Only tombstoned choir.web_capture objects were found for the Universal Wire platform."
+		}
 	}
 	stories := make([]types.WireStory, 0, len(objects))
 	for _, obj := range objects {
@@ -189,13 +255,48 @@ func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit i
 		}
 		sourceContext, err := wireCaptureSourceEntityContext(ctx, graph, obj)
 		if err != nil {
-			return nil, err
+			return nil, diagnostic, err
 		}
 		story.Manifest.Context = append(story.Manifest.Context, sourceContext...)
 		story.Prominence = 100 - len(stories)
 		stories = append(stories, story)
 	}
-	return stories, nil
+	diagnostic.StoryCount = len(stories)
+	switch {
+	case len(stories) > 0:
+		diagnostic.State = "available"
+		diagnostic.Reason = "Non-tombstoned graph-backed web captures produced Wire cards."
+	case len(objects) > 0:
+		diagnostic.State = "filtered"
+		diagnostic.FilteredCount = len(objects)
+		diagnostic.Reason = "Graph-backed web capture candidates were present, but none had publishable metadata and extracted text for a Wire card."
+	}
+	return stories, diagnostic, nil
+}
+
+func universalWireEditionDiagnostic(edition *universalWireEditionResponse, storyCount int) universalWireFeedSubstrateDiagnostic {
+	diagnostic := universalWireFeedSubstrateDiagnostic{
+		Substrate:  "texture_edition",
+		StoryCount: storyCount,
+	}
+	switch {
+	case edition == nil:
+		diagnostic.State = "missing"
+		diagnostic.Reason = "No Universal Wire Texture edition alias is present."
+	case storyCount > 0:
+		diagnostic.State = "available"
+		diagnostic.CandidateCount = len(edition.IncludedDocIDs)
+		diagnostic.Reason = "The Universal Wire Texture edition produced publishable story cards."
+	case len(edition.IncludedDocIDs) > 0:
+		diagnostic.State = "filtered"
+		diagnostic.CandidateCount = len(edition.IncludedDocIDs)
+		diagnostic.FilteredCount = len(edition.IncludedDocIDs)
+		diagnostic.Reason = "The Universal Wire Texture edition exists, but no transcluded Texture story is currently publishable."
+	default:
+		diagnostic.State = "empty"
+		diagnostic.Reason = "The Universal Wire Texture edition exists but does not transclude any Texture stories."
+	}
+	return diagnostic
 }
 
 func wireStoryFromWebCaptureObject(obj objectgraph.Object) (types.WireStory, bool) {

@@ -48,6 +48,36 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	if len(resp.StyleSources) != 0 {
 		t.Fatalf("style_sources length = %d, want no seeded style sources", len(resp.StyleSources))
 	}
+	if resp.Diagnostics == nil {
+		t.Fatal("diagnostics = nil, want empty-feed diagnostics")
+	}
+	if resp.Diagnostics.Status != "empty" || len(resp.Diagnostics.Substrates) != 3 {
+		t.Fatalf("diagnostics = %+v, want empty status with three substrate entries", resp.Diagnostics)
+	}
+	textureDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "texture_edition")
+	if textureDiag.State != "missing" || textureDiag.StoryCount != 0 || !strings.Contains(textureDiag.Reason, "Texture edition alias") {
+		t.Fatalf("texture diagnostic = %+v, want missing edition alias", textureDiag)
+	}
+	graphDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "web_capture_graph")
+	if graphDiag.State != "empty" || graphDiag.CandidateCount != 0 || graphDiag.StoryCount != 0 || !strings.Contains(graphDiag.Reason, "No non-tombstoned") {
+		t.Fatalf("graph diagnostic = %+v, want empty non-tombstoned graph captures", graphDiag)
+	}
+	provenanceDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "source_provenance")
+	if provenanceDiag.State != "not_applicable" || strings.Contains(strings.ToLower(provenanceDiag.Reason), "/api/agent") || strings.Contains(strings.ToLower(provenanceDiag.Reason), "/internal/") {
+		t.Fatalf("source provenance diagnostic = %+v, want safe unavailable provenance reason", provenanceDiag)
+	}
+}
+
+func universalWireDiagnosticForSubstrate(diag *universalWireFeedDiagnostics, substrate string) universalWireFeedSubstrateDiagnostic {
+	if diag == nil {
+		return universalWireFeedSubstrateDiagnostic{}
+	}
+	for _, item := range diag.Substrates {
+		if item.Substrate == substrate {
+			return item
+		}
+	}
+	return universalWireFeedSubstrateDiagnostic{}
 }
 
 func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handler *APIHandler, docID string, published bool) types.Document {
@@ -213,6 +243,9 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	if resp.Source != "universal-wire-edition-texture" {
 		t.Fatalf("source = %q, want edition Texture index", resp.Source)
 	}
+	if resp.Diagnostics != nil {
+		t.Fatalf("diagnostics = %+v, want omitted diagnostics for non-empty Texture edition response", resp.Diagnostics)
+	}
 	if resp.Edition == nil || resp.Edition.DocID != edition.DocID || resp.Edition.SourcePath != universalWireEditionSourcePath {
 		t.Fatalf("edition = %+v, want %s", resp.Edition, universalWireEditionSourcePath)
 	}
@@ -289,6 +322,9 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 	if resp.Edition != nil {
 		t.Fatalf("edition = %+v, want no Texture edition for graph fallback", resp.Edition)
 	}
+	if resp.Diagnostics != nil {
+		t.Fatalf("diagnostics = %+v, want omitted diagnostics for non-empty graph fallback response", resp.Diagnostics)
+	}
 	if len(resp.Stories) != 2 {
 		t.Fatalf("stories length = %d, want graph-backed captures: %+v", len(resp.Stories), resp.Stories)
 	}
@@ -347,6 +383,39 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 	if !strings.Contains(claims, "choir.web_capture") ||
 		!strings.Contains(claims, "not a Texture article publication") {
 		t.Fatalf("graph-backed capture claims did not bound the projection: %+v", story.Claims)
+	}
+}
+
+func TestHandleUniversalWireStoriesDiagnosticsForFilteredGraphCaptureCandidates(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	seedUniversalWireWebCaptureFixture(t, handler,
+		"Empty capture body",
+		"https://example.test/empty-capture",
+		"",
+		now)
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	if len(resp.Stories) != 0 {
+		t.Fatalf("stories length = %d, want filtered empty response: %+v", len(resp.Stories), resp.Stories)
+	}
+	if resp.Diagnostics == nil {
+		t.Fatal("diagnostics = nil, want filtered graph diagnostic")
+	}
+	graphDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "web_capture_graph")
+	if graphDiag.State != "filtered" || graphDiag.CandidateCount != 1 || graphDiag.StoryCount != 0 || graphDiag.FilteredCount != 1 {
+		t.Fatalf("graph diagnostic = %+v, want one filtered graph candidate", graphDiag)
+	}
+	if strings.Contains(strings.ToLower(graphDiag.Reason), "sqlite") ||
+		strings.Contains(graphDiag.Reason, "/") {
+		t.Fatalf("graph diagnostic leaked internal detail: %+v", graphDiag)
 	}
 }
 

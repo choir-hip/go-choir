@@ -178,6 +178,96 @@ test('Universal Wire retries authenticated story loads after transient route fai
   }
 });
 
+test('Universal Wire renders empty feed diagnostics without synthetic stories', async ({ page }) => {
+  await page.route('**/auth/session', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authenticated: true,
+        user: {
+          id: 'user-o4-wire-empty-diagnostics',
+          email: 'o4-wire-empty-diagnostics@example.com',
+        },
+      }),
+    });
+  });
+  await page.route('**/api/shell/bootstrap**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sandbox_id: 'sandbox-dev' }),
+    });
+  });
+  await page.route('**/api/desktop/state**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, updated_at: '2026-06-26T00:00:00Z' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ owner_id: 'user-o4-wire-empty-diagnostics', windows: [], active_window_id: '' }),
+    });
+  });
+  await page.route('**/api/universal-wire/stories', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        source: 'universal-wire-texture-index',
+        stories: [],
+        diagnostics: {
+          status: 'empty',
+          summary: 'Universal Wire found no publishable Texture edition stories or graph-backed capture cards.',
+          substrates: [
+            {
+              substrate: 'texture_edition',
+              state: 'missing',
+              candidate_count: 0,
+              story_count: 0,
+              reason: 'No Universal Wire Texture edition alias is present.',
+            },
+            {
+              substrate: 'web_capture_graph',
+              state: 'empty',
+              candidate_count: 0,
+              story_count: 0,
+              reason: 'No non-tombstoned choir.web_capture objects were found for the Universal Wire platform.',
+            },
+            {
+              substrate: 'source_provenance',
+              state: 'not_applicable',
+              candidate_count: 0,
+              story_count: 0,
+              reason: 'No graph capture card was available to inspect for captured_from source provenance.',
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  await page.goto(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173');
+  await expect(page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')).toBeVisible({ timeout: 10000 });
+  await openDeskApp(page, 'universal-wire');
+
+  const app = page.locator('[data-universal-wire-app]');
+  await expect(app.locator('[data-universal-wire-story]')).toHaveCount(0);
+  await expect(app.locator('[data-universal-wire-empty-state]')).toBeVisible();
+  await expect(app.locator('[data-universal-wire-empty-diagnostics]')).toBeVisible();
+  await expect(app.locator('[data-universal-wire-empty-diagnostic="texture_edition"]')).toContainText('No Universal Wire Texture edition alias is present.');
+  await expect(app.locator('[data-universal-wire-empty-diagnostic="web_capture_graph"]')).toContainText('0 candidates');
+  await expect(app.locator('[data-universal-wire-empty-diagnostic="source_provenance"]')).toContainText('captured_from source provenance');
+  await expect(app.locator('text=/\\/internal\\//')).toHaveCount(0);
+  await expect(app.locator('text=/\\/api\\/agent\\//')).toHaveCount(0);
+  await expect(app.locator('text=story_texture_doc_id')).toHaveCount(0);
+});
+
 test('Universal Wire opens graph capture sources through Source Viewer by default and Web Lens explicitly', async ({ page }) => {
   const sourceURL = 'https://example.com/o4-wire-capture-source';
   const graphCaptureStory = {

@@ -10,6 +10,8 @@
   let stories = [];
   let selectedStoryId = '';
   let dataSource = 'universal-wire-texture-index';
+  let feedDiagnostics = null;
+  let visibleDiagnostics = [];
   let loadError = '';
   let lastSuccessfulLoadKey = '';
   let loadInFlight = false;
@@ -17,6 +19,7 @@
   let refreshTimer = null;
 
   $: selectedStory = stories.find((story) => story.id === selectedStoryId) || stories[0] || null;
+  $: visibleDiagnostics = diagnosticRows(feedDiagnostics);
 
   onMount(() => {
     loadUniversalWireTextures({ force: true });
@@ -57,6 +60,7 @@
       stories = [];
       selectedStoryId = '';
       dataSource = 'universal-wire-texture-index';
+      feedDiagnostics = null;
       lastSuccessfulLoadKey = loadKey;
       return;
     }
@@ -69,6 +73,7 @@
       if (Array.isArray(payload.stories)) {
         stories = payload.stories;
         dataSource = payload.source || 'universal-wire-texture-index';
+        feedDiagnostics = payload.diagnostics || null;
         if (stories.length && !stories.some((story) => story.id === selectedStoryId)) selectedStoryId = stories[0].id;
         if (!stories.length) selectedStoryId = '';
       }
@@ -250,6 +255,33 @@
       relatedTextures: storyRelatedTextures(story),
     });
   }
+
+  function diagnosticRows(diagnostics) {
+    const rows = Array.isArray(diagnostics?.substrates) ? diagnostics.substrates : [];
+    return rows.filter((item) => firstString(item?.substrate, item?.state, item?.reason));
+  }
+
+  function diagnosticLabel(substrate) {
+    switch (substrate) {
+      case 'texture_edition':
+        return 'Texture edition';
+      case 'web_capture_graph':
+        return 'Graph captures';
+      case 'source_provenance':
+        return 'Source provenance';
+      default:
+        return 'Feed substrate';
+    }
+  }
+
+  function diagnosticText(item) {
+    const reason = firstString(item?.reason);
+    const counts = [];
+    if (Number.isFinite(item?.candidate_count)) counts.push(`${item.candidate_count} candidates`);
+    if (Number.isFinite(item?.story_count)) counts.push(`${item.story_count} stories`);
+    if (Number.isFinite(item?.filtered_count) && item.filtered_count > 0) counts.push(`${item.filtered_count} filtered`);
+    return counts.length ? `${reason} (${counts.join(', ')})` : reason;
+  }
 </script>
 
 <section class="universal-wire" data-universal-wire-app data-universal-wire-data-source={dataSource}>
@@ -318,6 +350,16 @@
         <section class="wire-empty-state" data-universal-wire-empty-state>
           <h1>No Wire edition articles yet</h1>
           <p>Universal Wire will show Texture-owned articles here after platform source processing and Texture authoring publish an edition.</p>
+          {#if visibleDiagnostics.length}
+            <div class="empty-diagnostics" data-universal-wire-empty-diagnostics aria-label="Feed diagnostics">
+              {#each visibleDiagnostics as item}
+                <p data-universal-wire-empty-diagnostic={item.substrate}>
+                  <strong>{diagnosticLabel(item.substrate)}</strong>
+                  <span>{diagnosticText(item)}</span>
+                </p>
+              {/each}
+            </div>
+          {/if}
         </section>
       {/if}
     </section>
@@ -426,6 +468,30 @@
     color: var(--choir-text-secondary);
     font-size: 1rem;
     line-height: 1.55;
+  }
+
+  .empty-diagnostics {
+    display: grid;
+    gap: 10px;
+    max-width: 760px;
+    margin-top: 26px;
+    padding-top: 18px;
+    border-top: 1px solid var(--choir-border-subtle);
+  }
+
+  .empty-diagnostics p {
+    display: grid;
+    grid-template-columns: minmax(128px, 0.25fr) minmax(0, 1fr);
+    gap: 14px;
+    max-width: none;
+    color: var(--choir-text-muted);
+    font-size: 0.92rem;
+  }
+
+  .empty-diagnostics strong {
+    color: var(--choir-text-primary);
+    font-size: 0.78rem;
+    text-transform: uppercase;
   }
 
   .wire-article {
@@ -572,6 +638,11 @@
 
     .wire-state strong {
       font-size: 1.05rem;
+    }
+
+    .empty-diagnostics p {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 3px;
     }
 
     .article-meta {
