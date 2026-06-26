@@ -3213,3 +3213,40 @@ renewal, promotion/rollback, or run-acceptance claim.
 Open edge: resolve pending verifier worktree handle
 `local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c` into a readable thread, title/pin
 it, and read its verdict.
+
+## 2026-06-26 - O4 Phase 5 Readable Verifier Replacement
+
+Claim: O4 Phase 5 now has a readable independent verifier thread. The earlier
+pending worktree verifier handle remains unresolved and is superseded for
+orchestration purposes.
+
+Move: after `list_threads` did not surface pending verifier handle
+`local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c`, create a local project-scoped
+verifier with strict instructions not to mutate the shared orchestration
+checkout and to inspect the worker branch/worktree.
+
+Expected Delta V: 0. Verifier creation is not verifier acceptance.
+
+Actual Delta V: 0. Current V remains 35.
+
+Receipts:
+
+- Superseded unresolved verifier worktree handle:
+  `local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c`.
+- Readable replacement verifier thread:
+  `019f03b0-6a16-79b0-888d-b8a48e6a378f`
+  (`O4 verifier - Web Capture Ingestion`).
+- Candidate under review:
+  `4395c251 checkpoint O4 sourcecycled web capture ingestion`;
+  `543c6742 write sourcecycled web captures to objectgraph`.
+- Shared checkout protection:
+  verifier was instructed not to edit tracked files or switch the shared
+  orchestration branch.
+
+Evidence boundary: verifier launch/title/pin only. No verifier verdict, root
+incorporation, main, push, PR, CI, deploy, staging product acceptance, Texture
+native source_ref, publication/export, Qdrant, provider/gateway, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: read verifier thread
+`019f03b0-6a16-79b0-888d-b8a48e6a378f` after completion.

@@ -771,10 +771,13 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: resolve pending verifier worktree handle
-`local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c` into a readable O4 Phase 5
-verifier thread, then read the verdict before incorporating or rejecting worker
-commits `4395c251` and `543c6742`. O4 Phase 5 worker thread
+next move: read O4 Phase 5 verifier thread
+`019f03b0-6a16-79b0-888d-b8a48e6a378f` (`O4 verifier - Web Capture
+Ingestion`) after it completes, then incorporate or reject worker commits
+`4395c251` and `543c6742` based on the verdict. Earlier pending verifier handle
+`local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c` did not resolve in
+`list_threads` and is superseded for orchestration by the readable replacement
+verifier. O4 Phase 5 worker thread
 `019f039f-9dd6-7881-a4ec-8607c9a4bb34` (`O4 worker - Web Capture Ingestion`)
 completed on branch
 `codex/o4-phase5-sourcecycled-web-capture-ingestion-replacement` in
