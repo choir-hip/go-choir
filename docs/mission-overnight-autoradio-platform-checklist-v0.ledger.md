@@ -2162,3 +2162,65 @@ proof, main, staging, product acceptance, deploy, or promotion/rollback claim.
 Open edge: read verifier thread
 `019f0353-95c0-7020-8047-2e7d6fab7e66`; incorporate its repaired-head verdict
 before moving code.
+
+## 2026-06-26 - O4 Phase 1 Accepted And Incorporated
+
+Claim: O4 Phase 1 web-capture object foundation is accepted at local
+branch-level and incorporated into the orchestration branch.
+
+Move: accept the repaired-head verifier verdict, cherry-pick worker commits
+`ae0fb49f`, `7e9418af`, and `b79251db` into root, rerun bounded objectgraph and
+diff hygiene checks, cleanly update the O4 checklist/variant, and record the
+evidence boundary.
+
+Expected Delta V: -1. The move should close the first O4 checklist obligation:
+implement or wire `choir.web_capture`.
+
+Actual Delta V: -1. Current V decreases from 37 to 36.
+
+Receipts:
+
+- Verifier thread:
+  `019f0353-95c0-7020-8047-2e7d6fab7e66`
+  (`O4 verifier - Web Capture Object Foundation`) returned `accept` with no
+  findings for repaired worker head
+  `b79251db69d22b00d69676187ff6f989ec7fcc1c`.
+- Verifier commands/results:
+  `git status --short --ignored` clean/no output;
+  `git rev-parse --abbrev-ref HEAD` returned
+  `codex/o4-phase1-web-capture-object-foundation`;
+  `git rev-parse HEAD` returned
+  `b79251db69d22b00d69676187ff6f989ec7fcc1c`;
+  `git show --check --oneline b79251db` passed;
+  `git diff --check 68cfb026..HEAD` passed;
+  `nix develop -c go test ./internal/objectgraph` passed;
+  `git diff --name-status 68cfb026..HEAD` listed only
+  `docs/o4-web-capture-foundation-checkpoint-2026-06-26.md`,
+  `internal/objectgraph/objectgraph_test.go`, and
+  `internal/objectgraph/web_capture.go`;
+  `git diff --name-only 68cfb026..HEAD -- internal/runtime internal/proxy internal/store internal/texturedoc internal/cycle internal/sandbox frontend`
+  returned no output.
+- Root incorporated commits:
+  `cc031a79 checkpoint O4 web capture foundation gap`;
+  `a77fd21d add web capture objectgraph foundation`;
+  `99f68b56 fix O4 checkpoint trailing blank line`.
+- Root checks passed:
+  `git diff --check 68cfb026..HEAD`;
+  `git show --check --oneline HEAD`;
+  `nix develop -c go test ./internal/objectgraph`.
+- Root tracked status after checks: clean. Ignored local env/log/dependency
+  artifacts remain unrelated.
+
+Evidence boundary: branch-level local objectgraph implementation/test/verifier
+acceptance. No Universal Wire graph-backed feed proof, sourcecycled ingestion,
+Qdrant projection, main, push, CI, deploy, staging, product acceptance,
+auth/session, provider/gateway, publication/export, promotion, or rollback
+claim.
+
+Residual risks: the web-capture helper is now graph-native and tested, but
+Universal Wire still reads the Texture edition path rather than graph-backed
+captures. Feed query behavior, sourcecycled ingestion, citation rendering from
+web captures, and staging product proof remain open.
+
+Open edge: create the next bounded O4 worker for Universal Wire graph-backed
+web-capture read/query proof or a precise blocker.

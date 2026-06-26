@@ -232,7 +232,10 @@ web-capture objects.
 
 Checklist:
 
-- [ ] Implement or wire `choir.web_capture`.
+- [x] Implement or wire `choir.web_capture`. O4 Phase 1 adds a typed
+  `choir.web_capture.v1` objectgraph metadata contract, validation,
+  `Service.CreateWebCapture`, object body storage for extracted text, and
+  focused objectgraph tests. Universal Wire feed reads remain open.
 - [ ] Ingest sourcecycled/web/source items into graph objects.
 - [ ] Build News/Wire feed from graph objects and source refs.
 - [ ] Keep empty feed honest but diagnostic.
@@ -360,12 +363,11 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
-Phase 6 verifier acceptance and root incorporation. The pass bought local
-browser/product evidence that the Texture UI consumes graph-only revision
-wrappers for native source refs and Source Viewer/Web Lens routing, but it did
-not close another counted checklist obligation; broader O3 News-path acceptance
-and any staging claim remain open.
++ 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: -1 for O4
+Phase 1 verifier acceptance and root incorporation. The pass closed the first
+O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
+foundation, but it did not prove Universal Wire graph-backed feed reads,
+sourcecycled ingestion, staging, deploy, or product acceptance.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -661,8 +663,8 @@ product acceptance, deploy, backend graph-wrapper production, Qdrant
 projection, publication/export, auth/session, gateway/provider, graph-first
 enforcement, promotion, or rollback claim exists.
 
-O4 Phase 1 web-capture foundation worker has completed and awaits independent
-verification. Pending worktree handle
+O4 Phase 1 web-capture foundation is accepted and incorporated at branch level.
+Pending worktree handle
 `local:3a8578f8-9c76-4572-bca1-2c3b2d02b638` resolved to thread
 `019f034d-ebc1-75a3-9c4b-269e8b9d6be7`
 (`O4 worker - Web Capture Object Foundation`) in
@@ -694,18 +696,29 @@ worker branch `codex/o4-phase1-web-capture-object-foundation` HEAD
 passed: `git diff --check 68cfb026..HEAD`, `git show --check HEAD`,
 `nix develop -c go test ./internal/objectgraph`, and `git status --short --ignored`
 with no output. The same verifier thread
-`019f0353-95c0-7020-8047-2e7d6fab7e66` has been asked to re-review the repaired
-head. Evidence remains worker-local until verifier acceptance and root
-incorporation.
-
-next move: read verifier thread `019f0353-95c0-7020-8047-2e7d6fab7e66` for the
-re-review verdict. If it accepts, incorporate worker commits `ae0fb49f`,
-`7e9418af`, and `b79251db` into the orchestration branch and run bounded root
-checks. If it returns another `revise_before_continue`, `blocked`, or
-`supersede`, record the finding before moving code. No accepted O4 web-capture
-foundation, Universal Wire feed proof, main, staging, product acceptance,
+`019f0353-95c0-7020-8047-2e7d6fab7e66` re-reviewed the repaired head and
+returned `accept` with no findings. The verifier reran
+`nix develop -c go test ./internal/objectgraph`, `git diff --check
+68cfb026..HEAD`, `git show --check b79251db`, checked the candidate file list,
+and confirmed no unintended runtime, proxy, store, Texture, sourcecycled,
+sandbox, or frontend path changes. Accepted worker commits were incorporated
+into this orchestration branch as `cc031a79 checkpoint O4 web capture
+foundation gap`, `a77fd21d add web capture objectgraph foundation`, and
+`99f68b56 fix O4 checkpoint trailing blank line`. Root checks passed:
+`git diff --check 68cfb026..HEAD`, `git show --check --oneline HEAD`, and
+`nix develop -c go test ./internal/objectgraph`. Tracked root status is clean;
+ignored local env/log/dependency artifacts remain unrelated. Evidence class is
+branch-level local test/verifier/root-rerun acceptance only. No Universal Wire
+feed proof, sourcecycled ingestion, Qdrant, main, staging, product acceptance,
 deploy, publication/export, auth/session, gateway/provider, promotion, or
-rollback claim exists yet.
+rollback claim exists.
+
+next move: choose the next bounded O4 worker assignment for Universal Wire to
+read or prove graph-backed web captures without weakening empty-state honesty.
+The likely next slice is a focused API/read-path design or implementation that
+queries `choir.web_capture` objects and preserves cited source refs. If reliable
+staging/product evidence reveals a new behavior problem, apply Problem
+Documentation First before any fix.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
