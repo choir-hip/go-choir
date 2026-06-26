@@ -423,10 +423,13 @@ after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
 The same verifier returned `accept` on the final O2 completion readback. O2 is
 complete at branch level, with no main/staging/platform settlement claim.
 
-next move: Read O3 design-review thread `019f02a7-11d9-7573-885c-d91b7cffe8be`
-(`O3 reviewer - Source Entity Migration design`) for verdict on whether the
-existing source-entity migration design is safe enough to proceed into a
-bounded implementation worker.
+next move: Send O3 design-review thread `019f02a7-11d9-7573-885c-d91b7cffe8be`
+the revised `docs/paradoc-source-entity-migration.md`. The first verdict was
+`revise_before_continue`: the old root design was too thin, and the preserved
+O0 design was stale because it still referenced removed `source_embed`
+semantics. The revised root design now removes `source_embed`, models
+tri-state citation, accounts for landed objectgraph/Qdrant packages, and names
+the Texture transaction/version boundary before implementation.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

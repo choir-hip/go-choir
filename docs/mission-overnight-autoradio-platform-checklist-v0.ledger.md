@@ -588,3 +588,39 @@ implementation, runtime, staging, product, or landing claim.
 
 Open edge: Read the O3 reviewer verdict and incorporate it before launching
 any O3 implementation worker.
+
+## 2026-06-26 - O3 Design Review Required Revision
+
+Claim: O3 cannot safely proceed into implementation from the old root design.
+
+Move: read the O3 independent design-review verdict and revise the root source
+entity paradoc.
+
+Expected Delta V: 0; this is a correction pass before the independent-review
+obligation can be counted complete.
+
+Actual Delta V: 0. Current V remains 44.
+
+Receipts:
+
+- O3 reviewer thread `019f02a7-11d9-7573-885c-d91b7cffe8be` returned verdict
+  `revise_before_continue`.
+- Reviewer finding: root `docs/paradoc-source-entity-migration.md` was only a
+  thin outline and did not carry the preserved detailed design.
+- Reviewer finding: preserved commit `7a355806` was useful but stale because it
+  still referenced removed `source_embed` semantics; current Choir Doctrine
+  requires `source_ref.display_mode` and tri-state citation.
+- Reviewer finding: preserved design predated landed `internal/objectgraph` and
+  `internal/qdrant`, so the design needed to account for O1/O2 reality.
+- Revised root `docs/paradoc-source-entity-migration.md` to define
+  `choir.source_entity`, `choir.source_ref`, tri-state citation, Texture
+  transaction/version boundaries, producer/consumer mapping, Qdrant and
+  publication/export projections, phased rollout, verifier tests, rollback, and
+  independent review state.
+
+Evidence boundary: docs/design correction only. No source-entity runtime,
+Texture, API, staging, product, or landing claim.
+
+Open edge: Send the revised design back to the O3 reviewer and wait for
+`accept`, `revise_before_continue`, `blocked`, or `supersede` before launching
+implementation.
