@@ -1429,3 +1429,48 @@ graph-first enforcement, promotion, or rollback claim.
 
 Open edge: reawaken verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
 against revised commit `f9a23cea`.
+
+## 2026-06-26 - O3 Phase 4 Accepted And Incorporated
+
+Claim: O3 Phase 4 is accepted and incorporated at branch level: Texture revision
+read APIs expose additive graph-backed source wrapper arrays while preserving
+legacy `source_entities`, and revision-list reads use a batched graph-wrapper
+path instead of per-listed-revision owner-wide scans.
+
+Move: accept verifier verdict, cherry-pick accepted worker commits, and rerun
+root checks.
+
+Expected Delta V: 0; this closes an uncounted graph-read wrapper API gap but
+does not close source-open/frontend integration or broader O3 product proof.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread: `019f02ed-7ce9-7d30-906b-f497a95ecc6d`
+  (`O3 worker - Source API Phase 4`).
+- Verifier thread: `019f02ed-d05e-78f1-975c-1de2df51451b`
+  (`O3 verifier - Source API Phase 4`).
+- Final verifier verdict: `accept`.
+- Worker implementation commit `9ab4a810 expose texture source graph wrappers
+  in revision APIs` incorporated into root as `3eddef63`.
+- Worker repair commit `f9a23cea batch texture source graph wrappers for
+  revision lists` incorporated into root as `03346092`.
+- Root passed:
+  `nix develop -c go test ./internal/store -run 'TestListTextureSourceGraphForRevisionsBatchesRevisionScopedWrappers|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`.
+- Root passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase|TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity' -count=1`.
+- Root passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`.
+- Root passed: `nix develop -c go test ./internal/store -count=1`.
+- Root passed: `git diff --check`.
+- Root worktree was clean after incorporation and checks.
+
+Evidence boundary: branch-level code/test/verifier acceptance only. No
+O3-complete, main, staging, product, deploy, source-open, frontend rendering,
+Qdrant, publication/export, public producer, auth/session, gateway/provider,
+graph-first enforcement, promotion, or rollback claim.
+
+Open edge: choose the next O3 slice: source-open/frontend resolution through the
+accepted `source_ref` / source wrapper read path, or a narrower
+publication/Qdrant read projection slice.

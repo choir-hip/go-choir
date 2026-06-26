@@ -205,11 +205,15 @@ Checklist:
 - [x] Verify that source refs are native objects, not prose links. Phase 1 adds
   `texture_source_refs` records behind objectgraph-compatible IDs; Phase 3
   makes the selected Texture tool path shadow-write pinned `choir.source_ref`
-  records. Graph-read API/source-open integration remains future O3 work.
+  records. Phase 4 exposes graph-backed `source_entity_objects` and
+  `source_refs` wrapper arrays additively on Texture revision reads; source-open
+  integration remains future O3 work.
 - [x] Open a verifier thread before any red/orange landing claim. Phase 1
   verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`;
   Phase 3 verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` returned
-  `accept` for branch-level continuation.
+  `accept` for branch-level continuation; Phase 4 verifier thread
+  `019f02ed-d05e-78f1-975c-1de2df51451b` returned `accept` after a
+  revision-list batching repair.
 
 Acceptance: source entity persistence and source refs survive the relevant
 Texture/News path with focused tests, plus staging proof if behavior-changing
@@ -351,11 +355,11 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
-Phase 3 verifier acceptance and root incorporation of the selected Texture
-tool source_ref graph-edge shadow-write path. The pass bought branch-level
-evidence and closed the selected producer source_ref edge gap, but it did not
-close another counted checklist obligation; graph-read API/source-open
-integration remains open.
+Phase 4 verifier acceptance and root incorporation of the additive Texture
+source wrapper read path. The pass bought branch-level evidence and closed the
+graph-read wrapper API gap, but it did not close another counted checklist
+obligation; source-open/frontend integration and broader O3 product proof remain
+open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -560,12 +564,24 @@ tests, `internal/runtime -run TestTextureTool`, full `internal/store`, and
 entities once per revision-list response to preserve entity-only shadow-write
 wrappers; it no longer repeats that scan per listed revision.
 
-next move: Reawaken verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
-against revised commit `f9a23cea`. If it accepts, incorporate the accepted Phase
-4 commits into this orchestration branch and rerun the root checks. Do not claim
-O3 complete, main, staging, source-open frontend behavior, Qdrant projection,
-publication/export, graph-first enforcement, auth/session, gateway/provider,
-promotion, deploy, or rollback proof from this branch-level worker evidence.
+Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b` accepted the repaired
+Phase 4 candidate. Accepted worker commits were incorporated into this
+orchestration branch as `3eddef63 expose texture source graph wrappers in
+revision APIs` and `03346092 batch texture source graph wrappers for revision
+lists`. Root checks passed: focused store batch/graph tests, focused runtime
+duplicate/API tests, `internal/runtime -run TestTextureTool`, full
+`internal/store`, and `git diff --check`. Evidence class remains branch-level
+code/test/verifier acceptance only; no O3-complete, main, staging,
+source-open/frontend behavior, Qdrant projection, publication/export,
+graph-first enforcement, auth/session, gateway/provider, promotion, deploy, or
+rollback proof exists.
+
+next move: Continue O3 with a narrow source-open/frontend resolution through
+the accepted `source_ref` / source wrapper read path, or defer that and launch a
+separate publication/Qdrant read projection slice. The next worker assignment
+must keep the same mutation contract: protected Texture canonical/read DTO
+compatibility, source-open routing, Qdrant source-of-truth boundaries,
+auth/session, gateway/provider, and staging/deploy claims.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
