@@ -8295,3 +8295,26 @@ landing loop: commit this evidence update, push the reviewed head to
 `origin/main`, monitor CI/deploy, verify staging build identity, and run
 authenticated Chrome product acceptance for Universal Wire article copy and
 headline-to-Texture readability.
+
+## 2026-06-26 - Deployed Texture Read Regression Discovered After O4 Repair Deploy
+
+Claim: deployed product QA for pushed commit `d15ef3fb53f26b2c80d3641cc181ff67f500e557` repaired the visible Universal Wire article copy, but did not repair Texture document loading. The owner then reported the broader symptom that all Texture documents fail to load.
+
+Evidence:
+
+- Root pushed `d15ef3fb53f26b2c80d3641cc181ff67f500e557` to `origin/main`.
+- GitHub Actions run `28270291702` passed; staging deploy job `83766509767` passed.
+- Public `curl https://choir.news/health` reported proxy and sandbox both at `d15ef3fb53f26b2c80d3641cc181ff67f500e557`, deployed at `2026-06-26T23:13:14Z`.
+- Authenticated Chrome/Computer Use QA showed Universal Wire still renders `1 article`, now with repaired article-facing headline `Multiple reports converge on Telegram Post from TASS Telegram` and body copy beginning `24 incoming reports point to the same developing story...` rather than the older `Universal Wire selected...` meta-copy.
+- Clicking that headline opened a Texture window for the article title, but the editor remained blank and showed `Get document failed (404)`.
+- The owner immediately reported the broader observation: all Texture documents fail to load now.
+
+Problem statement: the latest deployed failure is not honestly bounded to Universal Wire copy or one story-link. Treat it as a deployed authenticated Texture document-read regression until proven narrower. O4 cannot claim deployed article-surface acceptance, and O5 Texture-dependent acceptance is suspect, while this read path returns 404.
+
+Mutation class / protected surfaces for this checkpoint: green documentation only. The next repair will be orange/red depending on root cause because it may touch Texture document read APIs, cross-owner read-owner resolution, frontend document-open routing, Universal Wire story DTOs, or auth/computer routing. Protected surfaces that must remain out of scope unless explicitly justified: auth/session renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, and publication/export outside existing helpers.
+
+Rollback path: revert this documentation checkpoint for wording only. Runtime rollback for the deployed regression is still unknown; a code rollback candidate is reverting the deployed main commits after `db6073e7dfc9c14f8282be5b51936d21347e3641`, but do not execute that before root cause inspection because the symptom may expose an existing routing/read-owner bug rather than a simple bad commit.
+
+Heresy delta: `discovered` for deployed global Texture document-read failure after the O4 article-surface repair deploy. The article-copy half of the repair is live; document readability is not repaired.
+
+Actual Delta V: +3. V is now 30. Next move: inspect deployed/root diffs and Texture read routing, reproduce ordinary Texture 404 with the least invasive authenticated product evidence available, repair the read path, then reland through CI/deploy/staging acceptance.
