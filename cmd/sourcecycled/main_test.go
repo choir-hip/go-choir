@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
@@ -92,6 +94,94 @@ func TestUniversalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.
 		if !seen[required] {
 			t.Fatalf("missing required newly validated source %q", required)
 		}
+	}
+}
+
+func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	t.Cleanup(func() { sourcefetch.SetAllowPrivateNetworkForTests(previous) })
+	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", "")
+	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
+	t.Setenv("RUNTIME_STORE_PATH", "")
+	graphPath := filepath.Join(t.TempDir(), "runtime.objectgraph.db")
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_DB_PATH", graphPath)
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID", "universal-wire-platform")
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "computer-universal-wire-platform")
+
+	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Wire Test Feed</title>
+    <item>
+      <guid>wire-graph-1</guid>
+      <title>Graph ingest story</title>
+      <link>` + "https://example.com/wire-graph-1#frag" + `</link>
+      <description>Sourcecycled persisted this feed item and projected it into objectgraph.</description>
+      <pubDate>Fri, 26 Jun 2026 12:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer feedServer.Close()
+
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+	registry := &sources.Registry{
+		UserAgent: "ChoirTest/1.0",
+		Sources: []sources.Source{{
+			ID:        "rss:wire-test",
+			Type:      sources.SourceTypeRSS,
+			Name:      "Wire Test",
+			URL:       feedServer.URL,
+			Verticals: []string{"wire"},
+			Regions:   []string{"global"},
+		}},
+	}
+	if err := store.SaveSources(registry); err != nil {
+		t.Fatalf("save sources: %v", err)
+	}
+	engine = nil
+	t.Cleanup(func() { engine = nil })
+
+	runCycle(context.Background(), registry, store)
+
+	graphStore, err := objectgraph.NewSQLiteStore(graphPath)
+	if err != nil {
+		t.Fatalf("open objectgraph store: %v", err)
+	}
+	graph := objectgraph.NewService(objectgraph.Config{SQLite: graphStore})
+	defer graph.Close()
+	notTombstoned := false
+	captures, err := graph.ListObjects(context.Background(), objectgraph.ListFilter{
+		Kind:      objectgraph.WebCaptureObjectKind,
+		OwnerID:   "universal-wire-platform",
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		t.Fatalf("list web captures: %v", err)
+	}
+	if len(captures) != 1 {
+		t.Fatalf("captures = %d, want 1: %+v", len(captures), captures)
+	}
+	meta, err := objectgraph.WebCaptureMetadataFromObject(captures[0])
+	if err != nil {
+		t.Fatalf("decode capture metadata: %v", err)
+	}
+	if meta.Title != "Graph ingest story" || meta.CanonicalURL != "https://example.com/wire-graph-1" ||
+		!strings.Contains(string(captures[0].Body), "Sourcecycled persisted this feed item") {
+		t.Fatalf("capture metadata/body = %+v body=%q", meta, captures[0].Body)
+	}
+	edges, err := graph.ListEdges(context.Background(), objectgraph.EdgeFilter{FromID: captures[0].CanonicalID, Kind: "captured_from"})
+	if err != nil {
+		t.Fatalf("list captured_from edges: %v", err)
+	}
+	if len(edges) != 1 {
+		t.Fatalf("captured_from edges = %+v, want one source item edge", edges)
 	}
 }
 

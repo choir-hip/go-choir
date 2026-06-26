@@ -349,6 +349,7 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 		t.Fatalf("graph-backed capture claims did not bound the projection: %+v", story.Claims)
 	}
 }
+
 func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()

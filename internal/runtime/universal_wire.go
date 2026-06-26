@@ -239,7 +239,7 @@ func wireStoryFromWebCaptureObject(obj objectgraph.Object) (types.WireStory, boo
 		},
 		Claims: []string{
 			"Universal Wire is reading a durable choir.web_capture object from the object graph.",
-			"This card is a capture projection, not a Texture article publication or sourcecycled ingestion claim.",
+			"This card is a capture projection, not a Texture article publication or native source_ref citation.",
 		},
 		Projections:    map[string]string{"wire-style": projection},
 		SourceState:    "objectgraph-web-capture",

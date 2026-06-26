@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
@@ -206,6 +207,52 @@ func sourceServiceConfigPath() string {
 		return strings.TrimSpace(configPath)
 	}
 	return filepath.Join("configs", "sources.json")
+}
+
+func sourceServiceObjectGraphDBPath() string {
+	if dbPath := firstEnv("SOURCE_SERVICE_OBJECTGRAPH_DB_PATH", "SOURCECYCLED_OBJECTGRAPH_DB_PATH"); strings.TrimSpace(dbPath) != "" {
+		return strings.TrimSpace(dbPath)
+	}
+	runtimeStorePath := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_STORE_PATH", "RUNTIME_STORE_PATH"))
+	if runtimeStorePath == "" {
+		return ""
+	}
+	if runtimeStorePath == ":memory:" {
+		return ":memory:"
+	}
+	return filepath.Join(filepath.Dir(runtimeStorePath), filepath.Base(runtimeStorePath)+".objectgraph.db")
+}
+
+func sourceServiceObjectGraphOwnerID() string {
+	ownerID := strings.TrimSpace(firstEnv(
+		"SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID",
+		"SOURCECYCLED_OBJECTGRAPH_OWNER_ID",
+		"SOURCE_SERVICE_RUNTIME_OWNER_ID",
+		"SOURCECYCLED_RUNTIME_OWNER_ID",
+	))
+	if ownerID == "" {
+		ownerID = "universal-wire-platform"
+	}
+	return ownerID
+}
+
+func sourceServiceObjectGraphComputerID() string {
+	return strings.TrimSpace(firstEnv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "SOURCECYCLED_OBJECTGRAPH_COMPUTER_ID"))
+}
+
+func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, error) {
+	dbPath := sourceServiceObjectGraphDBPath()
+	if strings.TrimSpace(dbPath) == "" {
+		return nil, "", nil
+	}
+	sqliteStore, err := objectgraph.NewSQLiteStore(dbPath)
+	if err != nil {
+		return nil, dbPath, err
+	}
+	return objectgraph.NewService(objectgraph.Config{
+		Memory: objectgraph.NewMemoryStore(),
+		SQLite: sqliteStore,
+	}), dbPath, nil
 }
 
 func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
@@ -1041,6 +1088,37 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		return
 	}
 	now := time.Now().UTC()
+	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
+	if err != nil {
+		log.Printf("Failed to initialize sourcecycled objectgraph projection: %v", err)
+		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
+		return
+	}
+	if graph != nil {
+		result, err := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
+			OwnerID:    sourceServiceObjectGraphOwnerID(),
+			ComputerID: sourceServiceObjectGraphComputerID(),
+			Now:        now,
+		})
+		closeErr := graph.Close()
+		if err != nil {
+			log.Printf("Failed to write sourcecycled web captures to objectgraph: %v", err)
+			_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
+			return
+		}
+		if closeErr != nil {
+			log.Printf("Failed to close sourcecycled objectgraph projection: %v", closeErr)
+			_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), closeErr)
+			return
+		}
+		_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_written", "source items projected to objectgraph web captures", map[string]any{
+			"objectgraph_db_path": graphPath,
+			"capture_count":       len(result.Captures),
+			"source_entity_count": len(result.SourceEntities),
+			"captured_from_edges": result.EdgeCount,
+			"skipped_item_count":  result.Skipped,
+		})
+	}
 	ingestionEvents := cycle.BuildIngestionEventsFromItems(cycleID, items, now)
 	if err := store.SaveIngestionEvents(ctx, ingestionEvents); err != nil {
 		log.Printf("Failed to save ingestion events: %v", err)
