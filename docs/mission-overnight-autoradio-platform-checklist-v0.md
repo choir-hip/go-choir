@@ -928,11 +928,16 @@ and the absence of an existing deployed no-mutation source-opening proof path.
 Current V remains 31 because this verifies the blocker rather than the
 deployed/live source artifact proof.
 
-next move: choose an admissible O4 continuation that can actually reach the
-remaining source/citation domain edge: either prepare an authenticated
-read-only staging proof against a deployed commit containing the accepted O4
-local proof line, or document the deploy/auth authority blocker as the current
-handoff edge. O4
+next move: resolve Phase 12 worker thread
+`019f043c-2f29-7302-ad9b-453b7757fffd`
+(`O4 worker - Phase 12 Deployed Source Proof Path`) in
+`/Users/wiz/.codex/worktrees/dd88/go-choir`, launched from pending handle
+`local:9d6ecc0f-b36e-4f20-9c3b-3db569c5b7bc` at root head
+`5cc5093b record O4 deployed blocker verifier`. The worker is read-only unless
+it needs a docs-only checkpoint and must determine the exact deploy line,
+whether an authenticated non-mutating staging source-opening proof path already
+exists, and whether the remaining O4 edge is within orchestration authority or
+requires deploy/auth handoff. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no

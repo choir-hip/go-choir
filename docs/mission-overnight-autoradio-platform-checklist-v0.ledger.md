@@ -5561,3 +5561,51 @@ Open edge: O4 source/citation proof still needs an admissible authenticated
 read-only staging proof on a deployed commit containing the accepted O4 local
 proof line, or an explicit handoff that names deploy/auth authority as the next
 blocker.
+
+## 2026-06-26 - O4 Phase 12 Proof-Path Worker Launch
+
+Claim: The next O4 move is not another local source-opening proof. It is a
+thread-native worker pass to determine the exact deploy/auth proof path or the
+precise handoff condition for the remaining deployed/live source artifact edge.
+
+Move: created a project-scoped Codex worktree thread from
+`preserve/o0-autoradio-mission-state-2026-06-26` at root head
+`5cc5093b record O4 deployed blocker verifier`, then resolved, titled, and
+pinned the worker thread.
+
+Expected Delta V: 0 at launch. A worker launch buys observer evidence and
+resumability, but cannot close the source/citation checklist item before a
+final report and independent verification.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker pending handle:
+  `local:9d6ecc0f-b36e-4f20-9c3b-3db569c5b7bc`.
+- Worker thread:
+  `019f043c-2f29-7302-ad9b-453b7757fffd`
+  (`O4 worker - Phase 12 Deployed Source Proof Path`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/dd88/go-choir`.
+- Worker starting head:
+  detached `5cc5093baf9bbb7b78f5ca166f4e60317c8b90cf`
+  (`record O4 deployed blocker verifier`).
+- Worker assignment:
+  answer which commit line must be deployed, whether an existing authenticated
+  read-only staging test can prove Source Viewer reader artifact opening and
+  explicit Web Lens routing without creating staging content, and whether the
+  remaining move is inside orchestration authority or requires deploy/auth
+  handoff.
+- Root launch hygiene:
+  root tracked status was clean before launch; ignored local env/log/dependency
+  artifacts remained unrelated.
+
+Evidence boundary: launch/worktree identity only. No worker final report,
+verifier verdict, candidate commit, push, deploy, auth/session renewal, staging
+product acceptance, deployed/live source artifact proof, publication/export,
+Qdrant, provider/gateway/search, promotion/rollback, or run-acceptance claim.
+
+Open edge: wait for Phase 12 worker final report, then either create an
+independent verifier for the proposed proof path/handoff finding or record a
+precise revise/blocker before continuing.
