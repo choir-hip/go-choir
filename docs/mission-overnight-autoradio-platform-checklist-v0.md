@@ -529,19 +529,25 @@ focused and broader Wire runtime tests passed; GitHub CI run `28265293557`,
 Docs Truth Check `28265293534`, and FlakeHub publish `28265293621` succeeded;
 Node B deploy succeeded inside CI.
 
-Active next O4 construct: created a Codex project worktree worker for
-`O4-live-synthesis-trigger-texture-edition-slice` with pending worktree handle
-`local:a6914a8c-5c7a-419c-8825-1eb43d96f9d6`. The worker is assigned to produce
-a branch-local commit proving live source-cluster selection/triggering can
-create or upsert an English Texture synthesis article into
-`universal-wire/Wire.texture` with native source refs and non-empty
-`universal-wire-edition-texture` route output, while raw captures remain
-diagnostic only. Expected Delta V: 1 if accepted by an independent verifier.
+Active next O4 construct: worker thread
+`019f05d3-8f1a-7963-a863-89ea12661ace` in worktree
+`/Users/wiz/.codex/worktrees/ba01/go-choir` returned `ready_for_verifier` for
+commit `43741e7209c1d3f24b5af40923d3e6b63b8075b9` (`Trigger Universal Wire
+synthesis from sourcecycled captures`). The branch-local slice wires internal
+sourcecycled web-capture ingestion to select the current live sourcecycled graph
+capture cluster, require at least two eligible captures, call the existing
+Texture synthesis helper, link or revise a platform-owned article in
+`universal-wire/Wire.texture`, return a non-empty `universal-wire-edition-texture`
+story, and keep raw `choir.web_capture` projections diagnostic only. It also
+adds focused proof that a later relevant source revises the same live synthesis
+article instead of duplicating the edition transclusion. Expected Delta V: 1
+only if an independent verifier accepts this as a real branch-local
+product-path slice.
 
-next move: wait for the O4 worker result, then launch a separate verifier thread
-over the returned commit before incorporation. If the worker blocks, incorporate
-the blocker as a documented O4 edge instead of patching around it in the
-orchestration checkout.
+next move: launch and read a separate verifier thread over worker commit
+`43741e72` before incorporation. If accepted, incorporate the commit into the
+orchestration checkout and run the behavior-changing landing loop. If rejected
+or blocked, record the finding as the next O4 edge.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -576,5 +582,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=30. O4 News/Universal Wire remains open beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Deployed commit a648b31d45a3495d28ad295232cc848e37a69a2a adds the first verified source-cluster -> English Texture article -> Wire edition route slice with native source_ref citations; CI run 28265293557 and staging health/deploy identity succeeded. Authenticated Chrome UI replay after owner login reaches the app shell and shows Universal Wire honestly empty: 0 articles, no Wire Texture edition alias, 12 graph captures only as diagnostic substrate, and no Texture synthesis source provenance. Direct raw /api/universal-wire/stories navigation still returns 401, so use UI evidence for the authenticated product finding. Active worker: O4-live-synthesis-trigger-texture-edition-slice, pending worktree handle local:a6914a8c-5c7a-419c-8825-1eb43d96f9d6, assigned to implement a branch-local product-path source cluster/Texture synthesis trigger or upsert so staging can eventually create a non-empty English synthesis Texture article in universal-wire/Wire.texture with native source_ref citations; raw graph-capture publication remains forbidden. Next move: read the worker result, then create an independent verifier thread before incorporating any code. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=30. O4 News/Universal Wire remains open beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Deployed commit a648b31d45a3495d28ad295232cc848e37a69a2a adds the first verified source-cluster -> English Texture article -> Wire edition route slice with native source_ref citations; CI run 28265293557 and staging health/deploy identity succeeded. Authenticated Chrome UI replay after owner login reaches the app shell and shows Universal Wire honestly empty: 0 articles, no Wire Texture edition alias, 12 graph captures only as diagnostic substrate, and no Texture synthesis source provenance. Worker thread 019f05d3-8f1a-7963-a863-89ea12661ace returned ready_for_verifier for commit 43741e7209c1d3f24b5af40923d3e6b63b8075b9 in /Users/wiz/.codex/worktrees/ba01/go-choir: a branch-local sourcecycled capture trigger/upsert slice for non-empty Wire Texture article creation, with raw graph-capture publication still forbidden. Next move: create/read an independent verifier thread over 43741e72 before incorporating any code. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

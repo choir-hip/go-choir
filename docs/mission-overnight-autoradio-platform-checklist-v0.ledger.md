@@ -7329,3 +7329,78 @@ acceptance, promotion, rollback, or live product settlement is claimed.
 Open edge: resolve the pending worktree handle to a worker thread/result, read
 the final report, and create a separate verifier thread before any code is
 incorporated into the orchestration checkout.
+
+## 2026-06-26 - O4 Live Synthesis Trigger Worker Ready For Verifier
+
+Claim: the live source-cluster -> Texture synthesis/upsert route has a
+branch-local worker candidate ready for independent verification.
+
+Move: reconnected pending worktree handle
+`local:a6914a8c-5c7a-419c-8825-1eb43d96f9d6` to worker thread
+`019f05d3-8f1a-7963-a863-89ea12661ace` in
+`/Users/wiz/.codex/worktrees/ba01/go-choir`. The worker returned
+`ready_for_verifier` for commit
+`43741e7209c1d3f24b5af40923d3e6b63b8075b9` (`Trigger Universal Wire synthesis
+from sourcecycled captures`).
+
+Candidate changed files:
+
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/universal_wire_test.go`
+- `internal/sourcegraph/web_capture_graph.go`
+- `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
+
+Worker-reported behavior:
+
+- Internal sourcecycled web-capture ingestion now triggers a runtime-owned
+  Universal Wire live synthesis path after objectgraph projection.
+- The trigger selects the current live sourcecycled graph capture cluster,
+  requires at least two eligible source captures, and calls the existing Texture
+  synthesis helper to create or revise a platform-owned article.
+- The article is linked into `universal-wire/Wire.texture` and returned by
+  `/api/universal-wire/stories` as `universal-wire-edition-texture`.
+- Raw `choir.web_capture` projections remain diagnostic/substrate only and are
+  not public articles.
+- Source entity language/region metadata is carried forward from sourcecycled
+  items.
+- A focused proof covers a later relevant source revising the same live
+  synthesis article instead of duplicating the edition transclusion.
+
+Worker-reported commands:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles'
+  -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime
+  4.141s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed:
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 8.712s`.
+- `nix develop -c go test ./internal/sourcegraph -count=1` passed:
+  `? github.com/yusefmosiah/go-choir/internal/sourcegraph [no test files]`.
+- `git diff --check` passed.
+
+Dirty/generated artifact classification: worker final `git status --short` is
+clean after commit. Intentional source paths are
+`internal/runtime/sourcecycled_web_captures.go` and
+`internal/sourcegraph/web_capture_graph.go`; intentional test path is
+`internal/runtime/universal_wire_test.go`; durable evidence path is this ledger.
+No temporary proof output, generated artifacts, or unrelated WIP were reported.
+
+Expected Delta V: 1 if an independent verifier accepts commit `43741e72` as a
+real branch-local product-path slice. Actual Delta V for this orchestration
+pass: 0; worker proof remains untrusted until verified.
+
+Evidence boundary/non-claims: worker-local focused tests, broader Universal Wire
+runtime filter, sourcegraph package compile, diff hygiene, and clean committed
+worker worktree only. No root incorporation, push, CI, deploy, staging identity,
+authenticated product proof, run acceptance, promotion/rollback, Qdrant,
+auth/session, vmctl, gateway/provider credential, provider/search freshness, or
+world-model semantics claim.
+
+Residual risks: cluster selection is a stable live sourcecycled cluster over
+recent platform graph captures rather than semantic multi-story clustering or a
+world model; synthesis prose remains deterministic helper prose rather than
+model/provider synthesis quality; deployed non-empty staging proof remains open.
+
+Open edge: launch an independent verifier thread over worker commit `43741e72`
+before any root incorporation.
