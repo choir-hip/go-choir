@@ -3793,3 +3793,55 @@ no run-acceptance claim.
 Open edge: resolve pending handle
 `local:663a63bc-ccdc-4ccf-a8b5-967ea9729c74` into a readable worker thread,
 title/pin it, and read the worker report when complete.
+
+## 2026-06-26 - O4 Phase 7 Worker Thread Resolution
+
+Claim: O4 Phase 7 now has a readable active worker thread and checkpoint-first
+evidence. This is not a final worker candidate, verifier acceptance, or root
+incorporation.
+
+Move: resolve the pending worker handle into a Codex thread, title/pin it, read
+current worker progress, and inspect the worker worktree state.
+
+Expected Delta V: 0. Worker resolution and checkpoint-before-code evidence do
+not close the feed obligation.
+
+Actual Delta V: 0. Current V remains 33.
+
+Receipts:
+
+- Resolved worker thread:
+  `019f03c9-2c8f-73b1-bfca-ed7badd4383f`
+  (`O4 worker - Graph Source-Ref Feed`).
+- Resolved-from pending handle:
+  `local:663a63bc-ccdc-4ccf-a8b5-967ea9729c74`.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/6c59/go-choir`.
+- Worker branch:
+  `codex/o4-phase7-news-wire-graph-source-ref-feed`.
+- Worker observed HEAD:
+  `35420443 checkpoint O4 graph source-ref feed gap`.
+- Worker status:
+  active. Direct worker worktree status reported no dirty paths before the
+  current code-editing phase.
+- Worker progress:
+  read doctrine/paradoc/checkpoints, classified the likely runtime/API feed
+  mutation as orange, created a scoped branch, identified that existing fallback
+  exposes the `choir.web_capture` identity but ignores `captured_from` edges to
+  graph `choir.source_entity` records, and committed a checkpoint doc before
+  the intended behavior change.
+- Checkpoint boundary:
+  the checkpoint names the honest route: provenance source entities can be
+  surfaced from graph edges into feed/source manifest context now; native body
+  `source_ref` citation carry-forward still requires Texture/publication work
+  and must not be faked in the feed projection.
+
+Evidence boundary: worker thread/worktree progress only. No final worker
+report, no implementation commit reviewed by orchestration, no verifier, no
+root incorporation, no push, no CI, no deploy, no staging product acceptance,
+no Texture native citation carry-forward, no publication/export, no Qdrant, no
+provider/gateway, no promotion/rollback, and no run-acceptance claim.
+
+Open edge: read the worker final report when complete. If it returns candidate
+commits, inspect hygiene/readiness and launch an independent verifier before any
+root incorporation.
