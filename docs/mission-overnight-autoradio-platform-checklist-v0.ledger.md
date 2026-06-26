@@ -8407,6 +8407,26 @@ Commands/results:
   0.309s`.
 - `git diff --check`: passed.
 
+Post-deploy refinement: after `378ab05b8f9d28a37ce9d20178180c28c8250c95`
+deployed, authenticated staging proof showed ordinary Texture reads were
+repaired (`GET /api/texture/documents/48853696-ac1d-481a-9232-af134effac71`
+returned 200), but Universal Wire intentionally rendered no stories because all
+edition candidates were filtered as not platformd-readable. This narrowed the
+remaining gap further: staging runtime was using the direct `RUNTIME_PLATFORMD_URL`
+publication path, which published the public article record but still did not
+sync the Texture document/revision rows that `/api/texture/documents/{id}` reads.
+Root added runtime-side direct platformd Texture sync after successful direct
+publication. Follow-up commands:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
+  4.322s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 21.885s`.
+- `git diff --check`: passed.
+
 Mutation class / protected surfaces touched: orange runtime/API behavior,
 frontend product behavior, and yellow tests/docs. Protected surfaces touched are
 Universal Wire story readiness, platform publish/sync behavior, platform Texture

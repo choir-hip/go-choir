@@ -29,6 +29,24 @@ type wirePlatformPublishRequest struct {
 	RunMetadata    json.RawMessage `json:"run_metadata,omitempty"`
 }
 
+type wirePlatformTextureSyncRequest struct {
+	DocID     string                            `json:"doc_id"`
+	OwnerID   string                            `json:"owner_id"`
+	Title     string                            `json:"title"`
+	Revisions []wirePlatformTextureSyncRevision `json:"revisions"`
+}
+
+type wirePlatformTextureSyncRevision struct {
+	RevisionID       string          `json:"revision_id"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	AuthorKind       string          `json:"author_kind,omitempty"`
+	AuthorLabel      string          `json:"author_label,omitempty"`
+	Content          string          `json:"content"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt        time.Time       `json:"created_at,omitempty"`
+}
+
 func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
 	if rt == nil {
 		return nil, fmt.Errorf("runtime unavailable")
@@ -46,9 +64,71 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 	platformdURL := strings.TrimSpace(rt.cfg.PlatformdURL)
 	if platformdURL != "" {
 		req := wirepublish.BuildAutonomousPublishRequest(doc, rev, rec, rev.Metadata)
-		return wirepublish.PostPlatformPublication(ctx, nil, platformdURL, req)
+		resp, err := wirepublish.PostPlatformPublication(ctx, nil, platformdURL, req)
+		if err != nil {
+			return nil, err
+		}
+		if err := rt.syncWireTextureDocumentToPlatformd(ctx, platformdURL, doc); err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
 	return nil, fmt.Errorf("wire publish is not configured")
+}
+
+func (rt *Runtime) syncWireTextureDocumentToPlatformd(ctx context.Context, platformdURL string, doc types.Document) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("runtime store unavailable")
+	}
+	platformdURL = strings.TrimRight(strings.TrimSpace(platformdURL), "/")
+	if platformdURL == "" {
+		return fmt.Errorf("platformd URL is required")
+	}
+	revs, err := rt.store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10000)
+	if err != nil {
+		return fmt.Errorf("list wire texture revisions for sync: %w", err)
+	}
+	if len(revs) == 0 {
+		return fmt.Errorf("wire texture %s has no revisions to sync", doc.DocID)
+	}
+	payload := wirePlatformTextureSyncRequest{
+		DocID:   doc.DocID,
+		OwnerID: doc.OwnerID,
+		Title:   doc.Title,
+	}
+	for _, rev := range revs {
+		payload.Revisions = append(payload.Revisions, wirePlatformTextureSyncRevision{
+			RevisionID:       rev.RevisionID,
+			ParentRevisionID: rev.ParentRevisionID,
+			AuthorKind:       string(rev.AuthorKind),
+			AuthorLabel:      rev.AuthorLabel,
+			Content:          rev.Content,
+			Citations:        rev.Citations,
+			Metadata:         rev.Metadata,
+			CreatedAt:        rev.CreatedAt,
+		})
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal wire texture sync: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, platformdURL+"/internal/platform/texture/sync", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("build wire texture sync request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("call wire texture sync: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("wire texture sync status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
 func fallbackWirePublishURLFromEnv() string {

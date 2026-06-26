@@ -491,6 +491,9 @@ document loading still 404ed. Root then found and locally repaired two read
 boundary failures: a frontend global `read_owner=universal-wire-platform` scope
 that tainted ordinary Texture reads, and a Universal Wire synthesis path that
 advertised story Texture doc ids before platformd had a readable synced copy.
+The follow-up direct-platformd refinement syncs Texture document/revision rows
+when the runtime publishes straight to `RUNTIME_PLATFORMD_URL`, matching the
+proxy-mediated publish path's sync behavior.
 Remaining O4 variant is deployed Texture document readability,
 headline-to-Texture readability after platform publish/sync, cross-source/world-model
 clustering, article-quality synthesis, and authenticated product evidence

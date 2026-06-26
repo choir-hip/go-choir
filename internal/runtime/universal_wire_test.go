@@ -295,6 +295,8 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 	var publishedMu sync.Mutex
 	publishedDocs := map[string]types.Document{}
 	publishedRevs := map[string]types.Revision{}
+	publishCount := 0
+	syncCount := 0
 	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("platformd internal header = %q, want true", r.Header.Get("X-Internal-Caller"))
@@ -302,6 +304,37 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 		publishedMu.Lock()
 		defer publishedMu.Unlock()
 		switch {
+		case r.URL.Path == "/internal/platform/publications/texture":
+			publishCount++
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(wirepublish.PublishTextureResponse{
+				PublicationID:        "pub-direct",
+				PublicationVersionID: "pubv-direct",
+				RoutePath:            "wire/direct",
+			})
+		case r.URL.Path == "/internal/platform/texture/sync":
+			var req struct {
+				DocID     string `json:"doc_id"`
+				OwnerID   string `json:"owner_id"`
+				Title     string `json:"title"`
+				Revisions []struct {
+					RevisionID string `json:"revision_id"`
+					Content    string `json:"content"`
+				} `json:"revisions"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode platformd sync: %v", err)
+			}
+			if req.DocID == "" || req.OwnerID != universalWirePlatformOwnerID() || len(req.Revisions) == 0 {
+				t.Fatalf("platformd sync request = %+v, want platform document with revisions", req)
+			}
+			syncCount++
+			publishedDocs[req.DocID] = types.Document{DocID: req.DocID, OwnerID: req.OwnerID, Title: req.Title}
+			for _, rev := range req.Revisions {
+				publishedRevs[rev.RevisionID] = types.Revision{RevisionID: rev.RevisionID, DocID: req.DocID, OwnerID: req.OwnerID, Content: rev.Content}
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": req.DocID, "revision_count": len(req.Revisions)})
 		case strings.HasPrefix(r.URL.Path, "/internal/platform/texture/documents/"):
 			docID := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents/")
 			if _, ok := publishedDocs[docID]; !ok {
@@ -325,19 +358,6 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 	defer platformd.Close()
 	t.Setenv("RUNTIME_PLATFORMD_URL", platformd.URL)
 	handler.rt.cfg.PlatformdURL = platformd.URL
-	publishCount := 0
-	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
-		publishedMu.Lock()
-		defer publishedMu.Unlock()
-		publishCount++
-		publishedDocs[doc.DocID] = doc
-		publishedRevs[rev.RevisionID] = rev
-		return &wirepublish.PublishTextureResponse{
-			PublicationID:        "pub-" + doc.DocID,
-			PublicationVersionID: "pubv-" + rev.RevisionID,
-			RoutePath:            "wire/" + doc.DocID,
-		}, nil
-	}
 	items := []sources.Item{
 		universalWireSourcecycledTestItem("srcitem-backfill-pt", "rss:pt-wire", "fetch-backfill-pt", "Chuvas interrompem corredor logistico", "https://example.com/pt/logistics", "pt", "Relatorios locais disseram que as chuvas interromperam um corredor logistico e atrasaram entregas regionais.", now.Add(-25*time.Minute)),
 		universalWireSourcecycledTestItem("srcitem-backfill-en", "rss:en-wire", "fetch-backfill-en", "Regional logistics delays follow heavy rain", "https://example.com/en/logistics", "en", "Transport agencies reported regional delays after heavy rain damaged inspection points along the logistics corridor.", now.Add(-18*time.Minute)),
@@ -381,6 +401,9 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 	}
 	if publishCount != 1 {
 		t.Fatalf("publish count = %d, want one platform publish before advertising story", publishCount)
+	}
+	if syncCount != 1 {
+		t.Fatalf("sync count = %d, want one platform texture sync before advertising story", syncCount)
 	}
 	firstDoc, err := handler.rt.Store().GetDocument(ctx, firstStory.StoryTextureDoc, universalWirePlatformOwnerID())
 	if err != nil {
