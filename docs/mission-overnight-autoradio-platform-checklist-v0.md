@@ -589,6 +589,21 @@ deployed, and authenticated staging QA shows a non-empty Wire Texture edition.
 next move: push accepted repair `9523273f` to `origin/main`, monitor CI/deploy,
 verify staging identity, and rerun authenticated Universal Wire product QA.
 
+Deployed materialization result: `8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b`
+was pushed to `origin/main`; CI run `28267745069`, Docs Truth Check
+`28267745080`, and FlakeHub publish `28267745062` succeeded; health reported
+proxy/sandbox deployed commit `8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b`,
+deployed at `2026-06-26T22:05:54Z`. Authenticated Chrome QA no longer shows
+"missing edition alias"; it shows the Universal Wire Texture edition exists but
+has `1` candidate, `0` stories, and `1` filtered candidate. Graph captures
+remain diagnostic-only `(12 candidates, 12 stories)`. Actual Delta V is still
+0 because the owner-visible feed remains `0 articles`.
+
+next move: repair the narrow publishability/filter gate for runtime-owned
+`universal_wire_synthesis` articles transcluded in `universal-wire/Wire.texture`,
+without letting non-synthesis platform Textures or raw graph capture projections
+become public Wire articles.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

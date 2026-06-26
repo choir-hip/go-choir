@@ -7684,3 +7684,58 @@ Orchestration may push/deploy `9523273f` for the behavior-changing landing loop.
 
 Actual Delta V: 0 until deployed authenticated Universal Wire product QA shows
 a non-empty Wire Texture edition from existing captures.
+
+## 2026-06-26 - O4 Deployed Materialization Still Filtered From Feed
+
+Claim: deployed commit `8abe5cb1` repairs edition materialization from existing
+captures enough to create a Wire edition candidate, but authenticated staging QA
+discovers a second gate: the synthesized Texture article is filtered from the
+public Universal Wire story feed.
+
+Problem documented before fix: after pushing accepted repair `9523273f` plus
+docs evidence as `8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b`, GitHub CI run
+`28267745069` succeeded, including Node B staging deploy. `https://choir.news/health`
+reported proxy and sandbox deployed commit
+`8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b`, deployed at
+`2026-06-26T22:05:54Z`. Unauthenticated
+`/api/universal-wire/stories` still returned HTTP 401 as expected. Authenticated
+Chrome QA after refresh showed:
+
+- Universal Wire: `0 articles`.
+- Texture edition diagnostic: "The Universal Wire Texture edition exists, but
+  no transcluded Texture story is currently publishable. (1 candidates, 0
+  stories, 1 filtered)".
+- Graph captures diagnostic: raw graph-backed web captures remain diagnostic
+  substrate only `(12 candidates, 12 stories)`.
+- Source provenance diagnostic: no Texture synthesis article is available for
+  source citation provenance `(0 candidates, 0 stories)`.
+
+Belief state: the read-time materialization transition now creates
+`universal-wire/Wire.texture` and transcludes one article candidate on staging,
+but the story-read path filters that candidate. The leading code-path hypothesis
+is the staging-only platformd publication verification gate inside
+`universalWireEditionTextureStories`: local branch tests run without that gate,
+while staging appears to require platformd visibility before returning a
+platform-owned Texture story. If the synthesized Universal Wire article is
+canonical in the runtime store but not mirrored into platformd, the public feed
+will remain empty despite successful materialization.
+
+Conjecture delta: O4 now needs a publishability repair for runtime-owned
+Universal Wire synthesis articles, not another materialization/backfill repair.
+The repair should be narrow enough to keep non-synthesis platform Texture
+filtering honest while allowing runtime-owned `universal_wire_synthesis`
+articles linked through `universal-wire/Wire.texture` to render as Wire stories.
+
+Mutation class / protected surfaces for the next repair: orange runtime
+behavior. Candidate protected surfaces are Universal Wire edition story
+filtering, platform-owned Texture read semantics, runtime/platformd boundary,
+and source_ref/source entity projection. Do not touch auth/session renewal,
+vmctl, provider/gateway credentials, Qdrant, promotion/rollback, run
+acceptance, or publication/export outside existing Wire edition helpers.
+
+Rollback path: revert the upcoming filter repair if staging starts rendering
+non-synthesis platform Textures, broken Texture links, duplicate stories, or raw
+capture cards as articles. `8abe5cb1` is the deployed rollback reference for
+"edition exists but story filtered".
+
+Actual Delta V: 0. The product-visible Universal Wire remains empty.
