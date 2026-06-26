@@ -7018,3 +7018,49 @@ id, auth blocker, protected surfaces, and next read/verify move.
 Open edge: resolve the pending worktree id to a thread id, read the worker
 result, and either create a verifier thread for the worker commit or record the
 precise blocker/narrowed slice.
+
+## 2026-06-26 - O4 Synthesis Slice Worker Ready, Verifier Pending
+
+Claim: the O4 synthesis worker resolved to a concrete Codex thread and returned
+a local branch proof candidate, but the candidate is not accepted until an
+independent verifier reviews it.
+
+Move: reconnected the worker through Codex thread tools. `list_threads` resolved
+the pending worker worktree to thread
+`019f05b1-b329-7c33-a3b1-b093f11ac660`, title `Implement wire synthesis slice`,
+cwd `/Users/wiz/.codex/worktrees/95a3/go-choir`. The worker final callback
+reported verdict `ready_for_verifier` for commit
+`daec537c5afe6377b3b6a4460f13b57548cffc92` (`Add Universal Wire synthesis
+slice`).
+
+Worker claim summary: branch/local commit `daec537c` adds a narrow runtime helper
+that records a source cluster as one platform-owned Universal Wire Texture
+article, writes canonical structured `body_doc` with native `source_ref`
+citations over at least two source items, creates or reuses
+`universal-wire/articles/<cluster>.texture`, ensures
+`universal-wire/Wire.texture` exists, links the article through the existing Wire
+edition helper, and preserves reader/source artifact metadata in the public Wire
+manifest. Worker tests reportedly prove two multilingual source items -> English
+synthesis Texture article -> edition story `universal-wire-edition-texture`,
+with raw capture fallback still diagnostic/suppressed.
+
+Verifier launch: created an independent verifier thread request scoped to
+read-only review of worker commit `daec537c`. `create_thread` returned pending
+worktree id `local:700b0e22-464d-4ee9-a131-c44a52f8c622`; the stable verifier
+thread id is not yet resolved.
+
+Expected Delta V: 1 if the verifier accepts the branch-local slice as an honest
+first O4 synthesis proof. Actual Delta V for this orchestration pass: 0; the
+candidate is pending verification and not incorporated into main.
+
+Evidence boundary: worker callback plus visible worker thread/worktree state and
+pending verifier launch only. No independent verifier verdict, root
+incorporation, main push, CI, deploy, staging identity, authenticated product
+acceptance, provider/search freshness, world-model update semantics,
+publication/export, Qdrant projection, run acceptance, promotion, rollback, or
+live backend cluster selection is claimed.
+
+Open edge: resolve verifier pending handle
+`local:700b0e22-464d-4ee9-a131-c44a52f8c622`, read the verifier verdict, and
+then either incorporate worker commit `daec537c` through the behavior-changing
+landing loop or return to the worker branch for revision.

@@ -492,17 +492,29 @@ blocked because Chrome returns `authentication required`. O5 product path
 started through prompt bar/Texture/Super request, and repair `c6bddff0` deployed,
 but post-deploy O5 acceptance is also blocked by usable Choir auth.
 
-Active thread-native worker: `O4-synthesis-slice-source-cluster-texture-article`
-was requested through `create_thread` from current working tree; pending worktree
-id `local:0ad74215-d320-41df-80ac-abec1083a014`. Callback target is this
-orchestration thread via `read_thread` polling unless the worker can identify
-and use `send_message_to_thread`. Stop condition: branch/local proof and commit
-only, no push/deploy/staging claim.
+Active thread-native worker result:
+`O4-synthesis-slice-source-cluster-texture-article` resolved to worker thread
+`019f05b1-b329-7c33-a3b1-b093f11ac660` in
+`/Users/wiz/.codex/worktrees/95a3/go-choir`. The worker returned
+`ready_for_verifier` for local commit
+`daec537c5afe6377b3b6a4460f13b57548cffc92`, claiming a branch-local slice that
+records at least two multilingual source items as one English synthesis Texture
+article with native `source_ref` citations, links it into
+`universal-wire/Wire.texture`, and returns it as
+`universal-wire-edition-texture`. This is not yet accepted evidence.
 
-next move: Resolve the pending worker thread id, then read/incorporate its
-verdict. If it returns `ready_for_verifier`, create an independent verifier
-thread over its commit before any main push. If it is blocked, record the
-precise O4 synthesis blocker and either narrow the slice or hand off.
+Active verifier: independent verifier launch requested through `create_thread`
+with pending worktree id `local:700b0e22-464d-4ee9-a131-c44a52f8c622`; stable
+thread id not yet resolved. Scope is read-only review of worker commit
+`daec537c5afe6377b3b6a4460f13b57548cffc92`, focused runtime tests, diff
+hygiene, dirty-path classification, protected-surface audit, and non-claims.
+
+next move: Resolve the pending verifier thread id, read its verdict, and only
+then decide whether to incorporate worker commit `daec537c` into main. If the
+verifier accepts, land through the behavior-changing loop: commit/push main,
+monitor CI/deploy, verify staging identity, run deployed acceptance proof, then
+record evidence and residual risks. If it requests revision, return to the
+worker branch or narrow the slice.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -532,5 +544,5 @@ remaining V and next assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=31. O4 News/Universal Wire is reopened beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. The immediate raw-capture publication bug is repaired and deployed at 0975eea9, but authenticated Chrome acceptance is blocked by missing Choir auth. Current active move: resolve pending worker worktree local:0ad74215-d320-41df-80ac-abec1083a014 for work item O4-synthesis-slice-source-cluster-texture-article, then read its verdict with read_thread/list_threads. If it returns ready_for_verifier, create a separate verifier thread before any main push; if blocked, record the precise blocker and narrowed next slice. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=31. O4 News/Universal Wire is reopened beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. The immediate raw-capture publication bug is repaired and deployed at 0975eea9, but authenticated Chrome acceptance is blocked by missing Choir auth. Current active move: resolve pending verifier worktree local:700b0e22-464d-4ee9-a131-c44a52f8c622 for worker commit daec537c5afe6377b3b6a4460f13b57548cffc92 from thread 019f05b1-b329-7c33-a3b1-b093f11ac660. If the verifier accepts, incorporate through the behavior-changing landing loop before claiming product/staging evidence; if it requests revision, return to the worker branch or narrow the slice. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
