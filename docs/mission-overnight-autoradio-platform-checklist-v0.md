@@ -1009,7 +1009,24 @@ last couple weeks of already-stored sourcecycled items are not automatically
 backfilled into `choir.web_capture` after the config repair. A narrow repair
 should, on an empty source cycle, backfill a bounded set of recent stored items
 only when the Universal Wire graph has no existing web captures; otherwise it
-should skip to avoid repeatedly refreshing graph object `updated_at`. O4
+should skip to avoid repeatedly refreshing graph object `updated_at`. Root
+documented that gap in `42d4080c document Universal Wire empty-cycle backfill
+gap`, repaired it in `bbca43c5 backfill sourcecycled graph captures on empty
+cycles`, and pushed `bbca43c5d7d3d79b7d8e0901459f45b7bdb44efb` to
+`origin/main`. CI run `28255445491` passed all jobs, including `Deploy to
+Staging (Node B)`; `https://choir.news/health` reports proxy and sandbox
+build/deployed commit `bbca43c5d7d3d79b7d8e0901459f45b7bdb44efb`, deployed at
+`2026-06-26T17:52:46Z`. After the service-pointer deploy restarted
+`go-choir-sourcecycled` at `2026-06-26T17:52:54Z`, root waited past the next
+15-minute scheduled sourcecycled cycle and rechecked the owner's authenticated
+Chrome session at `2026-06-26T18:10Z`; Universal Wire still showed 0 articles,
+no Universal Wire Texture edition alias, 0 graph-capture candidates, and no
+non-tombstoned `choir.web_capture` objects for `universal-wire-platform`.
+Current evidence therefore repairs two necessary backend/deploy gaps but does
+not close the live Universal Wire product issue. The next realism axis is Node
+B sourcecycled runtime evidence: cycle events/journal must distinguish no
+stored source items, no eligible HTTP/body-bearing source items, cycle failure
+before backfill, or a still-mismatched active graph store. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no

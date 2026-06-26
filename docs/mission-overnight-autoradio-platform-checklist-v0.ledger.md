@@ -6049,3 +6049,78 @@ no new items and graph projection is configured, project a bounded recent item
 set only if the Universal Wire platform graph has no existing non-tombstoned
 web captures. Then push, monitor CI/deploy, and rerun authenticated product
 proof.
+
+## 2026-06-26 - O4 Empty-Cycle Backfill Deployed, Live Feed Still Empty
+
+Claim: the second identified Universal Wire backend/deploy gap is repaired and
+deployed, but authenticated staging evidence still shows no live Universal Wire
+graph captures.
+
+Move: documented the empty-cycle backfill problem, implemented a bounded
+idempotent backfill on empty source cycles, pushed to `origin/main`, monitored
+CI/deploy, verified staging build identity, waited past the next scheduled
+sourcecycled cycle, and rechecked Universal Wire in the owner's authenticated
+Chrome session.
+
+Expected Delta V: 1 if deployed backfill produced graph-backed Universal Wire
+cards. Actual Delta V: 0 because staging remains empty. Current V remains 31.
+
+Receipts:
+
+- Problem documentation commit before repair:
+  `42d4080c document Universal Wire empty-cycle backfill gap`.
+- Repair commit:
+  `bbca43c5 backfill sourcecycled graph captures on empty cycles`.
+- Repair content:
+  `cmd/sourcecycled/main.go` now backfills recent stored source items into the
+  configured objectgraph only when an empty source cycle finds no existing
+  non-tombstoned Universal Wire `choir.web_capture` objects; it records explicit
+  backfill, empty, and skip cycle events. `cmd/sourcecycled/main_test.go` adds
+  `TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph`.
+- Local checks before push:
+  `git diff --check` passed; focused tests passed for `cmd/sourcecycled`
+  `TestRunCycle(WritesSourceItemsToObjectGraphWebCaptures|BackfillsStoredSourceItemsToEmptyObjectGraph)`,
+  `internal/runtime`
+  `TestHandleUniversalWireStories(FallsBackToGraphBackedWebCaptures|IncludesGraphSourceEntityContext|RequiresAuth)`,
+  and `internal/cycle`
+  `TestWriteWebCaptureGraphObjectsProjectsSourceItems`; full
+  `nix develop -c go test ./cmd/sourcecycled -count=1 -timeout=120s` passed.
+- CI/deploy:
+  GitHub Actions run `28255445491` for
+  `bbca43c5d7d3d79b7d8e0901459f45b7bdb44efb` completed successfully, including
+  `Deploy to Staging (Node B)`.
+- Deploy log:
+  service-pointer deploy built sourcecycled, updated `sourcecycled` and
+  `sandbox`, and restarted `go-choir-sourcecycled.service` at
+  `2026-06-26T17:52:54Z`.
+- Staging identity:
+  `https://choir.news/health` reported proxy and sandbox `commit` /
+  `deployed_commit` `bbca43c5d7d3d79b7d8e0901459f45b7bdb44efb`, deployed at
+  `2026-06-26T17:52:46Z`.
+- Authenticated visual evidence:
+  Computer Use in the owner's logged-in Chrome session showed Universal Wire
+  opening after reload, but still displaying 0 articles. At
+  `2026-06-26T18:10Z`, after waiting past the 15-minute sourcecycled ticker and
+  refreshing the app, Feed diagnostics still reported no Universal Wire Texture
+  edition alias, 0 graph-capture candidates, and no non-tombstoned
+  `choir.web_capture` objects for `universal-wire-platform`.
+
+Mutation class / protected surfaces: orange source ingestion/runtime behavior
+plus green documentation. Touched `cmd/sourcecycled` behavior and tests plus
+mission docs. Did not touch Texture canonical writes, Trace/evidence,
+candidate computers, auth/session renewal, vmctl, gateway/provider calls,
+Qdrant, publication/export, promotion/rollback, or run acceptance.
+
+Evidence boundary: backend configuration and empty-cycle backfill are repaired
+and deployed, but no live Universal Wire source cards, source-opening proof,
+publication/export, run acceptance, promotion, or rollback proof is claimed.
+Chrome automation did not provide a scripted authenticated API response; the
+claim is authenticated visual product evidence.
+
+Open edge: the next repair needs Node B sourcecycled runtime evidence, not a
+third speculative code patch. Journal/cycle events should distinguish: no
+stored source items; stored items exist but are skipped because they lack HTTP
+URLs or body text; source cycle fails before backfill; sourcecycled writes to a
+different graph DB than the sandbox reads; or the product route reads a
+different active computer/objectgraph than the host sandbox health identity
+suggests.
