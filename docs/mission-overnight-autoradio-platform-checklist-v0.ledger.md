@@ -7969,3 +7969,54 @@ failure.
 
 Actual Delta V: 0. This checkpoint improves the problem model but does not
 repair product behavior.
+
+## 2026-06-26 - O4 World-Model Same-Article Update Slice Ready For Verifier
+
+Claim: the bounded O4 worker implemented the next branch-local Universal Wire
+identity-over-time slice. Runtime synthesis now upserts a durable
+`choir.universal_wire_story_cluster` object keyed by the existing live
+sourcecycled cluster identity, stamps synthesis revisions with that cluster
+object id, and links the cluster object to source capture objects. The focused
+test proves that a later relevant source arrival revises the same Texture
+article/document, keeps one Wire edition transclusion, and updates the same
+story-cluster object from two to three source captures instead of duplicating a
+stale article/card.
+
+Mutation class / protected surfaces touched: orange runtime behavior, yellow
+tests, green ledger documentation. Touched Universal Wire cluster/world-model
+state, existing synthesis article revision/upsert semantics, Texture revisions
+through the existing synthesis helper, source entity/source_ref projection, and
+existing Wire edition linkage. Did not touch auth/session renewal, vmctl,
+deployment routing, provider/gateway credentials, Qdrant, promotion/rollback,
+run acceptance, staging deploy, or publication/export outside existing Wire
+edition helpers.
+
+Local commands/results:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
+  4.916s`.
+- `nix develop -c go test ./internal/objectgraph -run
+  'TestDefaultRegistryIncludesNewsAndAutoradioKinds|TestServiceExternalIdentityKeepsIDWhileContentChanges'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/objectgraph
+  0.296s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 10.796s`.
+- `nix develop -c go test ./internal/objectgraph -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/objectgraph 0.256s`.
+
+Evidence boundary/non-claims: branch-local tests and diff hygiene only. This
+does not claim CI, deploy, staging/product acceptance, provider/search
+freshness, semantic clustering, Qdrant projection, promotion/rollback, run
+acceptance, publication/export beyond existing Wire edition helpers, or full
+live world-model reconciliation. It repairs only the local durable
+story-cluster identity/update proof for the current deterministic
+`sourcecycled-live` synthesis path.
+
+Rollback path: revert the worker commit(s). The current root rollback
+references remain `c1b45606` for docs state and `a2a5a749` for deployed
+behavior. Heresy delta: `repaired` for branch-local same-article/world-model
+identity semantics; `discovered` remains for production semantic clustering and
+deployed authenticated product proof.

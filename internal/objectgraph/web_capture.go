@@ -12,6 +12,9 @@ import (
 const (
 	WebCaptureObjectKind    ObjectKind = "choir.web_capture"
 	WebCaptureSchemaVersion            = "choir.web_capture.v1"
+
+	UniversalWireStoryClusterObjectKind    ObjectKind = "choir.universal_wire_story_cluster"
+	UniversalWireStoryClusterSchemaVersion            = "choir.universal_wire_story_cluster.v1"
 )
 
 type WebCaptureMetadata struct {

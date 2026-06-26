@@ -49,6 +49,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.source_entity", Store: StoreTypeSQLite, IdentityMode: IdentityContentHash},
 		{Kind: "choir.source_ref", Store: StoreTypeSQLite, IdentityMode: IdentityContentHash},
 		{Kind: "choir.web_capture", Store: StoreTypeSQLite, IdentityMode: IdentityContentHash},
+		{Kind: "choir.universal_wire_story_cluster", Store: StoreTypeSQLite, IdentityMode: IdentityExternalKey, Versioned: true},
 		{Kind: "choir.media_item", Store: StoreTypeSQLite, IdentityMode: IdentityContentHash},
 		{Kind: "choir.audio_recording", Store: StoreTypeSQLite, IdentityMode: IdentityContentHash},
 		{Kind: "choir.transcript", Store: StoreTypeSQLite, IdentityMode: IdentityContentHash},

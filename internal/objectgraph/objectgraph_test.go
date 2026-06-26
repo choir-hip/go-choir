@@ -44,6 +44,7 @@ func TestDefaultRegistryIncludesNewsAndAutoradioKinds(t *testing.T) {
 		"choir.source_entity",
 		"choir.source_ref",
 		"choir.web_capture",
+		"choir.universal_wire_story_cluster",
 		"choir.media_item",
 		"choir.audio_recording",
 		"choir.transcript",

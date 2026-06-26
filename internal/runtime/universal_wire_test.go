@@ -146,6 +146,8 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if firstProjection.SynthesisStatus != "ok" ||
 		firstProjection.SynthesisDocID == "" ||
 		firstProjection.SynthesisRevisionID == "" ||
+		firstProjection.SynthesisClusterID != universalWireLiveSourcecycledClusterID ||
+		firstProjection.SynthesisClusterObjectID == "" ||
 		firstProjection.SynthesisSourceCount != 2 ||
 		firstProjection.SynthesisEditionRef == "" {
 		t.Fatalf("first projection synthesis = %+v, want two-source Texture synthesis", firstProjection)
@@ -193,6 +195,40 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if !strings.Contains(string(firstRev.BodyDoc), `"source_ref"`) {
 		t.Fatalf("first synthesis body_doc missing native source_ref citations: %s", string(firstRev.BodyDoc))
 	}
+	var firstRevMeta map[string]any
+	if err := json.Unmarshal(firstRev.Metadata, &firstRevMeta); err != nil {
+		t.Fatalf("decode first synthesis revision metadata: %v", err)
+	}
+	if metadataString(firstRevMeta, "universal_wire_story_cluster_id") != universalWireLiveSourcecycledClusterID ||
+		metadataString(firstRevMeta, "universal_wire_story_cluster_object_id") != firstProjection.SynthesisClusterObjectID {
+		t.Fatalf("first synthesis revision cluster metadata = %#v, want %s/%s", firstRevMeta, universalWireLiveSourcecycledClusterID, firstProjection.SynthesisClusterObjectID)
+	}
+	firstCluster, err := handler.rt.ObjectGraph().GetObject(context.Background(), firstProjection.SynthesisClusterObjectID)
+	if err != nil {
+		t.Fatalf("load first Universal Wire story cluster object: %v", err)
+	}
+	var firstClusterMeta map[string]any
+	if err := json.Unmarshal(firstCluster.Metadata, &firstClusterMeta); err != nil {
+		t.Fatalf("decode first story cluster metadata: %v", err)
+	}
+	if firstCluster.ObjectKind != objectgraph.UniversalWireStoryClusterObjectKind ||
+		metadataString(firstClusterMeta, "schema_version") != objectgraph.UniversalWireStoryClusterSchemaVersion ||
+		metadataString(firstClusterMeta, "cluster_id") != universalWireLiveSourcecycledClusterID ||
+		metadataString(firstClusterMeta, "article_doc_id") != firstProjection.SynthesisDocID ||
+		metadataString(firstClusterMeta, "article_revision_id") != firstProjection.SynthesisRevisionID ||
+		int(firstClusterMeta["source_count"].(float64)) != 2 {
+		t.Fatalf("first story cluster = %+v metadata=%#v, want durable two-source cluster for article", firstCluster, firstClusterMeta)
+	}
+	firstClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
+		FromID: firstCluster.CanonicalID,
+		Kind:   "contains",
+	})
+	if err != nil {
+		t.Fatalf("list first story cluster source edges: %v", err)
+	}
+	if len(firstClusterEdges) != 2 {
+		t.Fatalf("first story cluster edges len = %d, want two source captures: %#v", len(firstClusterEdges), firstClusterEdges)
+	}
 
 	secondBatch := []sources.Item{
 		universalWireSourcecycledTestItem("srcitem-live-fr", "rss:fr-rail", "fetch-live-fr", "La reprise reste partielle sur le corridor ferroviaire", "https://example.com/fr/rail", "fr", "Les exploitants ferroviaires ont confirme que la reprise restait partielle et que de nouvelles inspections etaient prevues avant le soir.", now.Add(8*time.Minute)),
@@ -210,6 +246,32 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if updatedDoc.CurrentRevisionID != secondProjection.SynthesisRevisionID {
 		t.Fatalf("updated doc current revision = %q, want %q", updatedDoc.CurrentRevisionID, secondProjection.SynthesisRevisionID)
+	}
+	secondCluster, err := handler.rt.ObjectGraph().GetObject(context.Background(), firstProjection.SynthesisClusterObjectID)
+	if err != nil {
+		t.Fatalf("load updated Universal Wire story cluster object: %v", err)
+	}
+	if secondCluster.CanonicalID != firstCluster.CanonicalID || secondCluster.ContentHash == firstCluster.ContentHash {
+		t.Fatalf("updated story cluster identity/hash = %s/%s, first = %s/%s; want same object identity with revised state", secondCluster.CanonicalID, secondCluster.ContentHash, firstCluster.CanonicalID, firstCluster.ContentHash)
+	}
+	var secondClusterMeta map[string]any
+	if err := json.Unmarshal(secondCluster.Metadata, &secondClusterMeta); err != nil {
+		t.Fatalf("decode updated story cluster metadata: %v", err)
+	}
+	if metadataString(secondClusterMeta, "article_doc_id") != firstProjection.SynthesisDocID ||
+		metadataString(secondClusterMeta, "article_revision_id") != secondProjection.SynthesisRevisionID ||
+		int(secondClusterMeta["source_count"].(float64)) != 3 {
+		t.Fatalf("updated story cluster metadata = %#v, want same article updated to three sources", secondClusterMeta)
+	}
+	secondClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
+		FromID: firstCluster.CanonicalID,
+		Kind:   "contains",
+	})
+	if err != nil {
+		t.Fatalf("list updated story cluster source edges: %v", err)
+	}
+	if len(secondClusterEdges) != 3 {
+		t.Fatalf("updated story cluster edges len = %d, want three source captures: %#v", len(secondClusterEdges), secondClusterEdges)
 	}
 	secondStories := getUniversalWireStoriesForTest(t, handler)
 	if len(secondStories.Stories) != 1 ||

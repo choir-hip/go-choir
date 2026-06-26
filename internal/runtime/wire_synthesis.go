@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -25,15 +26,16 @@ type universalWireSynthesisClusterRequest struct {
 }
 
 type universalWireSynthesisSource struct {
-	ItemID       string
-	SourceID     string
-	FetchID      string
-	Title        string
-	URL          string
-	CanonicalURL string
-	Language     string
-	Body         string
-	FetchedAt    time.Time
+	CaptureObjectID string
+	ItemID          string
+	SourceID        string
+	FetchID         string
+	Title           string
+	URL             string
+	CanonicalURL    string
+	Language        string
+	Body            string
+	FetchedAt       time.Time
 }
 
 func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx context.Context, req universalWireSynthesisClusterRequest) (types.Document, types.Revision, string, error) {
@@ -62,6 +64,7 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
+	storyClusterObjectID := universalWireStoryClusterObjectID(ownerID, clusterID)
 
 	revisionID := uuid.NewString()
 	sourceEntities := universalWireSynthesisSourceEntities(sources, now)
@@ -83,21 +86,24 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 		routePath = "/pub/texture/universal-wire/" + universalWireSlug(clusterID)
 	}
 	meta, _ := json.Marshal(map[string]any{
-		"source":                         "edit_texture",
-		"revision_role":                  textureRevisionRoleCanonical,
-		"artifact_kind":                  "article_revision",
-		"texture_version_stage":          "article_revision",
-		"source_network_cycle_id":        clusterID,
-		"ingestion_handoff_cycle_id":     clusterID,
-		"ingestion_handoff_request_id":   "universal-wire-synthesis-cluster:" + clusterID,
-		"ingestion_handoff_request_kind": "synthesis_cluster",
-		"universal_wire_synthesis":       true,
-		"synthesis_source_count":         len(sources),
-		"synthesis_languages":            languages,
-		"source_item_ids":                sourceItemIDs,
-		"selected_style_sources":         []map[string]any{{"title": "Style.texture: Universal Wire"}},
-		"selected_style_rationale":       "Bounded local Universal Wire synthesis slice over clustered source captures.",
-		"platformd_route_path":           routePath,
+		"source":                                 "edit_texture",
+		"revision_role":                          textureRevisionRoleCanonical,
+		"artifact_kind":                          "article_revision",
+		"texture_version_stage":                  "article_revision",
+		"source_network_cycle_id":                clusterID,
+		"ingestion_handoff_cycle_id":             clusterID,
+		"ingestion_handoff_request_id":           "universal-wire-synthesis-cluster:" + clusterID,
+		"ingestion_handoff_request_kind":         "synthesis_cluster",
+		"universal_wire_synthesis":               true,
+		"universal_wire_story_cluster_id":        clusterID,
+		"universal_wire_story_cluster_object_id": storyClusterObjectID,
+		"universal_wire_article_alias_path":      aliasPath,
+		"synthesis_source_count":                 len(sources),
+		"synthesis_languages":                    languages,
+		"source_item_ids":                        sourceItemIDs,
+		"selected_style_sources":                 []map[string]any{{"title": "Style.texture: Universal Wire"}},
+		"selected_style_rationale":               "Bounded local Universal Wire synthesis slice over clustered source captures.",
+		"platformd_route_path":                   routePath,
 	})
 	rev := types.Revision{
 		RevisionID:       revisionID,
@@ -128,7 +134,80 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
+	if err := rt.upsertUniversalWireStoryCluster(ctx, clusterID, aliasPath, doc, rev, editionRef, sources, now); err != nil {
+		return types.Document{}, types.Revision{}, "", err
+	}
 	return doc, rev, editionRef, nil
+}
+
+func (rt *Runtime) upsertUniversalWireStoryCluster(ctx context.Context, clusterID, aliasPath string, doc types.Document, rev types.Revision, editionRef string, sources []universalWireSynthesisSource, now time.Time) error {
+	if rt == nil || rt.ObjectGraph() == nil {
+		return nil
+	}
+	clusterID = strings.TrimSpace(clusterID)
+	if clusterID == "" {
+		return fmt.Errorf("universal wire story cluster id is required")
+	}
+	sourceItemIDs := make([]string, 0, len(sources))
+	captureObjectIDs := make([]string, 0, len(sources))
+	languages := make([]string, 0, len(sources))
+	for _, source := range sources {
+		if source.ItemID != "" {
+			sourceItemIDs = append(sourceItemIDs, source.ItemID)
+		}
+		if source.CaptureObjectID != "" {
+			captureObjectIDs = append(captureObjectIDs, source.CaptureObjectID)
+		}
+		if source.Language != "" && !containsWireString(languages, source.Language) {
+			languages = append(languages, source.Language)
+		}
+	}
+	body, _ := json.Marshal(map[string]any{
+		"headline": strings.TrimSuffix(doc.Title, ".texture"),
+		"summary":  fmt.Sprintf("Universal Wire story cluster %s currently synthesizes %d source captures into one Texture article.", clusterID, len(sources)),
+	})
+	cluster, err := rt.ObjectGraph().CreateObject(ctx, objectgraph.CreateObjectRequest{
+		Kind:        objectgraph.UniversalWireStoryClusterObjectKind,
+		OwnerID:     universalWirePlatformOwnerID(),
+		IdentityKey: clusterID,
+		Body:        body,
+		Metadata: map[string]any{
+			"schema_version":      objectgraph.UniversalWireStoryClusterSchemaVersion,
+			"cluster_id":          clusterID,
+			"cluster_kind":        "live_sourcecycled_story",
+			"article_doc_id":      doc.DocID,
+			"article_revision_id": rev.RevisionID,
+			"article_alias_path":  aliasPath,
+			"wire_edition_ref":    editionRef,
+			"source_count":        len(sources),
+			"source_item_ids":     sourceItemIDs,
+			"source_capture_ids":  captureObjectIDs,
+			"synthesis_languages": languages,
+			"updated_at":          now.UTC().Format(time.RFC3339Nano),
+		},
+		Now: now,
+	})
+	if err != nil {
+		return fmt.Errorf("upsert universal wire story cluster: %w", err)
+	}
+	for _, captureObjectID := range captureObjectIDs {
+		if _, err := rt.ObjectGraph().PutEdge(ctx, cluster.CanonicalID, captureObjectID, "contains", map[string]any{
+			"schema_version": objectgraph.UniversalWireStoryClusterSchemaVersion,
+			"relation":       "cluster_source_capture",
+			"cluster_id":     clusterID,
+		}); err != nil {
+			return fmt.Errorf("link universal wire story cluster source capture: %w", err)
+		}
+	}
+	return nil
+}
+
+func universalWireStoryClusterObjectID(ownerID, clusterID string) string {
+	id, err := objectgraph.BuildCanonicalID(objectgraph.UniversalWireStoryClusterObjectKind, strings.TrimSpace(ownerID), objectgraph.StableSuffixFromKey(strings.TrimSpace(clusterID)))
+	if err != nil {
+		return ""
+	}
+	return id
 }
 
 func (rt *Runtime) getOrCreateUniversalWireSynthesisDocument(ctx context.Context, ownerID, aliasPath, headline string, now time.Time) (types.Document, error) {
@@ -210,6 +289,7 @@ func normalizedUniversalWireSynthesisSources(inputs []universalWireSynthesisSour
 	out := make([]universalWireSynthesisSource, 0, len(inputs))
 	seen := map[string]bool{}
 	for _, input := range inputs {
+		input.CaptureObjectID = strings.TrimSpace(input.CaptureObjectID)
 		input.Title = strings.TrimSpace(input.Title)
 		input.Body = strings.TrimSpace(input.Body)
 		input.URL = strings.TrimSpace(input.URL)
