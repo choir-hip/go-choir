@@ -2040,3 +2040,38 @@ deploy, or promotion/rollback claim.
 
 Open edge: launch an independent verifier thread against worker commits
 `ae0fb49f` and `7e9418af`; record its verdict before incorporation.
+
+## 2026-06-26 - O4 Phase 1 Verifier Launched
+
+Claim: O4 Phase 1 now has an independent verifier thread reviewing the
+committed worker artifact.
+
+Move: create a project-local verifier thread after committing the worker final
+report checkpoint, then title and pin it for orchestration hygiene.
+
+Expected Delta V: 0. Verifier launch is observer setup, not acceptance.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Verifier thread:
+  `019f0353-95c0-7020-8047-2e7d6fab7e66`
+  (`O4 verifier - Web Capture Object Foundation`).
+- Verifier target:
+  worker commits `ae0fb49f` and `7e9418af` in
+  `/Users/wiz/.codex/worktrees/b850/go-choir`.
+- Verifier prompt asks for findings first, file/line references, exact verdict
+  `accept`, `revise_before_continue`, `blocked`, or `supersede`, command
+  receipts, evidence boundary, dirty-path classification, residual risks, and
+  whether orchestration may incorporate worker commits `ae0fb49f` and
+  `7e9418af`.
+- Thread titled and pinned.
+
+Evidence boundary: verifier launch only. No verifier verdict, root
+incorporation, accepted O4 web-capture foundation, Universal Wire feed proof,
+main, staging, product acceptance, deploy, or promotion/rollback claim.
+
+Open edge: read verifier thread
+`019f0353-95c0-7020-8047-2e7d6fab7e66`; incorporate the verdict into Parallax
+State before moving code.

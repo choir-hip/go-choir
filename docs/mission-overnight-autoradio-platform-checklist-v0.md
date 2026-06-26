@@ -675,12 +675,17 @@ contract, validation, `Service.CreateWebCapture`, extracted-text object body
 storage, deterministic identity tests, required-field/URL validation tests,
 SQLite durability tests, and `captured_from` edge persistence tests. Worker
 checks passed: `nix develop -c go test ./internal/objectgraph`,
-`git diff --check`, and clean tracked status. Evidence remains worker-local
-until independent verifier acceptance and root incorporation.
+`git diff --check`, and clean tracked status. Independent verifier thread
+`019f0353-95c0-7020-8047-2e7d6fab7e66`
+(`O4 verifier - Web Capture Object Foundation`) has been launched against
+worker commits `ae0fb49f` and `7e9418af`, titled, and pinned. Evidence remains
+worker-local until independent verifier acceptance and root incorporation.
 
-next move: create an independent verifier thread against O4 worker commits
-`ae0fb49f` and `7e9418af`, their checkpoint/code diff, and the exact reported
-commands before incorporation. No accepted O4 web-capture foundation,
+next move: read verifier thread `019f0353-95c0-7020-8047-2e7d6fab7e66` and
+incorporate its verdict into Parallax State. If it accepts, incorporate worker
+commits `ae0fb49f` and `7e9418af` into the orchestration branch and run bounded
+root checks. If it returns `revise_before_continue`, `blocked`, or `supersede`,
+record the finding before moving code. No accepted O4 web-capture foundation,
 Universal Wire feed proof, main, staging, product acceptance, deploy,
 publication/export, auth/session, gateway/provider, promotion, or rollback
 claim exists yet.
