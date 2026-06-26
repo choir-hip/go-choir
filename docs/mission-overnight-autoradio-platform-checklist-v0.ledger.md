@@ -2827,3 +2827,68 @@ Open edge: read worker thread
 `019f037f-41d4-7fa2-8ff7-d4a01ff78a64` after it completes. If it has a final
 report, record it and create an independent verifier before incorporating any
 O4 Phase 4 commits.
+
+## 2026-06-26 - O4 Phase 4 Worker Commit And Verifier Launch
+
+Claim: O4 Phase 4 now has a worker-produced frontend/browser proof candidate
+and a queued independent verifier. This is verifier-ready, not accepted.
+
+Move: read the active worker thread and inspect the shared checkout after the
+worker committed. The replacement worker had been created in the local checkout,
+so its branch temporarily occupied `/Users/wiz/go-choir`; after confirming
+tracked status was clean, switch back to the orchestration branch and launch a
+separate worktree verifier from the worker branch.
+
+Expected Delta V: 0. Worker completion plus verifier launch does not close an
+obligation until the verifier accepts and the accepted commit is incorporated
+into the orchestration branch.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Worker thread:
+  `019f037f-41d4-7fa2-8ff7-d4a01ff78a64`
+  (`O4 worker - Universal Wire Source Open Browser`).
+- Worker branch:
+  `codex/o4-phase4-universal-wire-source-open-browser-proof-replacement`.
+- Worker commit:
+  `d49a19bd prove Wire graph capture source opening`.
+- Worker diff relative to orchestration launch commit `407bddce`:
+  `frontend/src/lib/UniversalWireApp.svelte` and
+  `frontend/tests/universal-wire-app.spec.js`.
+- Worker-reported proof:
+  focused Playwright browser proof for Universal Wire graph-backed capture
+  source opening passed; `npm run build` passed; generated
+  `frontend/test-results/` and `frontend/dist/` were removed before commit.
+- Worker-reported behavior:
+  Universal Wire graph-backed capture cards consume Phase 3 manifest source/open
+  identity fields, route durable opening to Source Viewer by default through
+  existing source launcher policy, and expose Web Lens only as an explicit
+  live/original action.
+- Worker boundary:
+  no sourcecycled ingestion, native Texture `source_ref`, publication/export,
+  staging, deploy, Qdrant, provider/gateway, auth/session renewal, promotion,
+  rollback, or run-acceptance claim.
+- Shared checkout status before returning to orchestration:
+  tracked files clean on the worker branch; ignored local artifacts included
+  `.DS_Store`, `.direnv/`, `.env`, `.gstack/`, `auth.db`, service logs,
+  `frontend/node_modules/`, and local service binaries/directories.
+- Independent verifier pending worktree handle:
+  `local:5cdd17ec-f3ed-489f-8339-37caa04201c4`.
+- Verifier assignment:
+  inspect commit `d49a19bd`, review source/test diff, run diff hygiene,
+  focused browser proof if feasible, `npm run build` if feasible, and return an
+  accept/revise/reject verdict with evidence and residual risks.
+
+Evidence boundary: thread/readback and local git inspection plus worker-reported
+evidence only. The independent verifier has been queued but has not yet returned
+a readable thread id or verdict. No root incorporation, main, push, PR, CI,
+deploy, staging product acceptance, sourcecycled ingestion, native Texture
+citation carry-forward, publication/export, Qdrant, provider/gateway,
+auth/session renewal, promotion, rollback, or run-acceptance claim.
+
+Open edge: resolve verifier pending worktree handle
+`local:5cdd17ec-f3ed-489f-8339-37caa04201c4` into a readable thread, title/pin
+it, read its verdict, then incorporate or reject commit `d49a19bd` according to
+that verifier result.

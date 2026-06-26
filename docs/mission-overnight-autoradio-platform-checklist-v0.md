@@ -370,7 +370,7 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 3 verifier acceptance and root incorporation. O4 Phase 1 closed the first
+Phase 4 worker completion and verifier launch. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
@@ -379,7 +379,10 @@ sourcecycled ingestion, native Texture `source_ref` citation carry-forward,
 browser rendering/opening, staging, deploy, and product acceptance remain open.
 O4 Phase 3 adds an accepted and incorporated additive DTO source/open identity
 slice for graph capture cards; it does not claim native Texture `source_ref`,
-frontend opening, or staging proof.
+frontend opening, or staging proof. O4 Phase 4 worker commit `d49a19bd` adds a
+verifier-ready frontend/browser source-open proof on a separate `codex/` branch,
+but no obligation closes until independent verifier acceptance and root
+incorporation.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -760,15 +763,26 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: read O4 Phase 4 worker thread
-`019f037f-41d4-7fa2-8ff7-d4a01ff78a64` (`O4 worker - Universal Wire Source
-Open Browser`) after it completes, then create an independent verifier before
-incorporating any commits. The earlier pending worker handle
-`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` did not resolve in
-`list_threads` and is superseded for orchestration by the readable replacement
-worker. The worker assignment targets frontend/browser proof that Universal
-Wire cards consume the accepted graph source/open identity and route to Source
-Viewer/Web Lens correctly. Independent verifier thread
+next move: resolve pending verifier worktree handle
+`local:5cdd17ec-f3ed-489f-8339-37caa04201c4` into a readable O4 Phase 4
+verifier thread, then read its verdict before incorporating commit `d49a19bd`.
+O4 Phase 4 worker thread `019f037f-41d4-7fa2-8ff7-d4a01ff78a64` (`O4 worker -
+Universal Wire Source Open Browser`) produced branch
+`codex/o4-phase4-universal-wire-source-open-browser-proof-replacement` at
+`d49a19bd prove Wire graph capture source opening`. The worker reports a narrow
+orange frontend proof in `frontend/src/lib/UniversalWireApp.svelte` and
+`frontend/tests/universal-wire-app.spec.js`: Universal Wire graph-backed capture
+cards map accepted source/open identity fields into existing Source
+Viewer/Web Lens launch policy, keep Source Viewer as the default durable source
+open action, expose Web Lens only as an explicit live/original action, and avoid
+native Texture `source_ref`, publication/export, sourcecycled ingestion,
+staging, deploy, Qdrant, provider/gateway, auth/session renewal, promotion,
+rollback, and run-acceptance claims. Worker-reported focused browser proof and
+`npm run build` passed; tracked status is clean on the worker branch, with only
+ignored local logs/dependencies remaining. The earlier pending worker handle
+`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` did not resolve in `list_threads`
+and is superseded for orchestration by the readable replacement worker.
+Independent verifier thread
 `019f0376-a32c-74b3-b1bc-35b9823e648f` (`O4 verifier - Universal Wire Source
 Identity`) returned `accept` with no blocking findings. Earlier verifier
 creation returned unresolved pending worktree handle
