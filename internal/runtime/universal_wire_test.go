@@ -69,7 +69,7 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	}
 }
 
-func TestHandleInternalSourcecycledWebCapturesProjectsReadableWireStories(t *testing.T) {
+func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 18, 40, 0, 0, time.UTC)
 	item := sources.Item{
@@ -116,11 +116,18 @@ func TestHandleInternalSourcecycledWebCapturesProjectsReadableWireStories(t *tes
 	if err := json.NewDecoder(storiesW.Body).Decode(&stories); err != nil {
 		t.Fatalf("decode stories: %v", err)
 	}
-	if stories.Source != "universal-wire-web-capture-graph" || len(stories.Stories) != 1 {
-		t.Fatalf("stories source/count = %q/%d, want graph fallback with one story", stories.Source, len(stories.Stories))
+	if stories.Source != "universal-wire-texture-index" || len(stories.Stories) != 0 {
+		t.Fatalf("stories source/count = %q/%d, want empty Texture article feed", stories.Source, len(stories.Stories))
 	}
-	if stories.Stories[0].Headline != "Runtime-projected sourcecycled story" {
-		t.Fatalf("headline = %q", stories.Stories[0].Headline)
+	if stories.Diagnostics == nil {
+		t.Fatal("diagnostics = nil, want graph capture diagnostic")
+	}
+	graphDiag := universalWireDiagnosticForSubstrate(stories.Diagnostics, "web_capture_graph")
+	if graphDiag.State != "diagnostic_only" ||
+		graphDiag.CandidateCount != 1 ||
+		graphDiag.StoryCount != 1 ||
+		!strings.Contains(graphDiag.Reason, "does not publish raw capture projections") {
+		t.Fatalf("graph diagnostic = %+v, want diagnostic-only graph capture", graphDiag)
 	}
 }
 
@@ -350,7 +357,7 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	}
 }
 
-func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.T) {
+func TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
 	older := seedUniversalWireWebCaptureFixture(t, handler,
@@ -372,19 +379,37 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode stories response: %v", err)
 	}
-	if resp.Source != "universal-wire-web-capture-graph" {
-		t.Fatalf("source = %q, want graph-backed web capture source", resp.Source)
+	if resp.Source != "universal-wire-texture-index" {
+		t.Fatalf("source = %q, want Texture index source until synthesis articles exist", resp.Source)
 	}
 	if resp.Edition != nil {
-		t.Fatalf("edition = %+v, want no Texture edition for graph fallback", resp.Edition)
+		t.Fatalf("edition = %+v, want no Texture edition", resp.Edition)
 	}
-	if resp.Diagnostics != nil {
-		t.Fatalf("diagnostics = %+v, want omitted diagnostics for non-empty graph fallback response", resp.Diagnostics)
+	if resp.Diagnostics == nil {
+		t.Fatal("diagnostics = nil, want diagnostic-only graph capture response")
 	}
-	if len(resp.Stories) != 2 {
-		t.Fatalf("stories length = %d, want graph-backed captures: %+v", len(resp.Stories), resp.Stories)
+	if len(resp.Stories) != 0 {
+		t.Fatalf("stories length = %d, want no raw capture projection articles: %+v", len(resp.Stories), resp.Stories)
 	}
-	story := resp.Stories[0]
+	graphDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "web_capture_graph")
+	if graphDiag.State != "diagnostic_only" ||
+		graphDiag.CandidateCount != 2 ||
+		graphDiag.StoryCount != 2 ||
+		!strings.Contains(graphDiag.Reason, "Texture synthesis has not published an edition yet") {
+		t.Fatalf("graph diagnostic = %+v, want diagnostic-only graph captures", graphDiag)
+	}
+
+	captureStories, captureDiagnostic, err := handler.universalWireWebCaptureStories(context.Background(), 12)
+	if err != nil {
+		t.Fatalf("read graph capture helper: %v", err)
+	}
+	if captureDiagnostic.State != "available" || captureDiagnostic.StoryCount != 2 {
+		t.Fatalf("capture helper diagnostic = %+v, want available substrate stories", captureDiagnostic)
+	}
+	if len(captureStories) != 2 {
+		t.Fatalf("capture helper stories length = %d, want graph-backed captures: %+v", len(captureStories), captureStories)
+	}
+	story := captureStories[0]
 	if story.ID != "web-capture-"+newer.CanonicalID ||
 		story.OwnerID != universalWirePlatformOwnerID() ||
 		story.Headline != "Rail corridor reopens" ||
@@ -439,8 +464,8 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 	if strings.Contains(string(storyJSON), `"source_ref"`) || strings.Contains(string(storyJSON), `"story_texture_doc_id"`) {
 		t.Fatalf("graph-backed capture story JSON should not claim Texture source_ref/publication fields: %s", string(storyJSON))
 	}
-	if resp.Stories[1].ID != "web-capture-"+older.CanonicalID {
-		t.Fatalf("second story id = %q, want older capture %s", resp.Stories[1].ID, older.CanonicalID)
+	if captureStories[1].ID != "web-capture-"+older.CanonicalID {
+		t.Fatalf("second story id = %q, want older capture %s", captureStories[1].ID, older.CanonicalID)
 	}
 	claims := strings.Join(story.Claims, "\n")
 	if !strings.Contains(claims, "choir.web_capture") ||
@@ -531,18 +556,14 @@ func TestHandleUniversalWireStoriesCarriesCapturedFromSourceEntityContext(t *tes
 		t.Fatalf("put captured_from edge: %v", err)
 	}
 
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	captureStories, captureDiagnostic, err := handler.universalWireWebCaptureStories(ctx, 12)
+	if err != nil {
+		t.Fatalf("read graph capture helper: %v", err)
 	}
-	var resp universalWireStoriesResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode stories response: %v", err)
+	if captureDiagnostic.State != "available" || len(captureStories) != 1 {
+		t.Fatalf("capture helper diagnostic/stories = %+v/%d, want one available capture story", captureDiagnostic, len(captureStories))
 	}
-	if resp.Source != "universal-wire-web-capture-graph" || len(resp.Stories) != 1 {
-		t.Fatalf("response source/stories = %q/%d, want graph source with one story: %+v", resp.Source, len(resp.Stories), resp.Stories)
-	}
-	story := resp.Stories[0]
+	story := captureStories[0]
 	if len(story.Manifest.Lead) != 1 || story.Manifest.Lead[0].CanonicalID != capture.CanonicalID {
 		t.Fatalf("lead manifest should remain the web capture object: %+v", story.Manifest.Lead)
 	}

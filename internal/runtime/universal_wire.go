@@ -72,7 +72,7 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 	var edition *universalWireEditionResponse
 	diagnostics := universalWireFeedDiagnostics{
 		Status:  "empty",
-		Summary: "Universal Wire found no publishable Texture edition stories or graph-backed capture cards.",
+		Summary: "Universal Wire found no publishable Texture synthesis articles.",
 	}
 	if editionStories, editionResp, err := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); err == nil {
 		edition = editionResp
@@ -92,10 +92,7 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		})
 	}
 	if len(stories) == 0 {
-		if captureStories, captureDiagnostic, err := h.universalWireWebCaptureStories(r.Context(), 12); err == nil && len(captureStories) > 0 {
-			stories = captureStories
-			source = "universal-wire-web-capture-graph"
-		} else if err != nil {
+		if captureStories, captureDiagnostic, err := h.universalWireWebCaptureStories(r.Context(), 12); err != nil {
 			log.Printf("universal wire: web capture graph unavailable: %v", err)
 			diagnostics.Substrates = append(diagnostics.Substrates, universalWireFeedSubstrateDiagnostic{
 				Substrate: "web_capture_graph",
@@ -103,6 +100,10 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 				Reason:    "Graph-backed web capture state could not be read through the public Wire route.",
 			})
 		} else {
+			if len(captureStories) > 0 {
+				captureDiagnostic.State = "diagnostic_only"
+				captureDiagnostic.Reason = "Graph-backed web captures are available, but Universal Wire does not publish raw capture projections as articles; Texture synthesis has not published an edition yet."
+			}
 			diagnostics.Substrates = append(diagnostics.Substrates, captureDiagnostic)
 		}
 	}
@@ -110,7 +111,7 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		diagnostics.Substrates = append(diagnostics.Substrates, universalWireFeedSubstrateDiagnostic{
 			Substrate: "source_provenance",
 			State:     "not_applicable",
-			Reason:    "No graph capture card was available to inspect for captured_from source provenance.",
+			Reason:    "No Texture synthesis article is available for source citation provenance; raw capture provenance remains diagnostic substrate only.",
 		})
 	}
 	for i := range stories {
