@@ -760,12 +760,15 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: resolve O4 Phase 4 worker pending handle
-`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840`, then read the worker after it
-completes and create an independent verifier before incorporating any commits.
-The worker assignment targets frontend/browser proof that Universal Wire cards
-consume the accepted graph source/open identity and route to Source Viewer/Web
-Lens correctly. Independent verifier thread
+next move: read O4 Phase 4 worker thread
+`019f037f-41d4-7fa2-8ff7-d4a01ff78a64` (`O4 worker - Universal Wire Source
+Open Browser`) after it completes, then create an independent verifier before
+incorporating any commits. The earlier pending worker handle
+`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` did not resolve in
+`list_threads` and is superseded for orchestration by the readable replacement
+worker. The worker assignment targets frontend/browser proof that Universal
+Wire cards consume the accepted graph source/open identity and route to Source
+Viewer/Web Lens correctly. Independent verifier thread
 `019f0376-a32c-74b3-b1bc-35b9823e648f` (`O4 verifier - Universal Wire Source
 Identity`) returned `accept` with no blocking findings. Earlier verifier
 creation returned unresolved pending worktree handle

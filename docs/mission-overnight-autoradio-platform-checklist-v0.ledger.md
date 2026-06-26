@@ -2783,3 +2783,47 @@ deploy, main, push, CI, promotion, rollback, or run-acceptance claim.
 Open edge: resolve pending worker handle
 `local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` to a thread id, title/pin it, and
 read its final report before launching an independent verifier.
+
+## 2026-06-26 - O4 Phase 4 Replacement Worker Active
+
+Claim: O4 Phase 4 now has a readable Codex worker thread. The earlier pending
+worktree handle remains unresolved and is superseded for orchestration purposes.
+
+Move: after repeated `list_threads` polls failed to find pending handle
+`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840`, create a replacement local
+project-scoped worker, title and pin it, then read back its active status.
+
+Expected Delta V: 0. Worker materialization creates an implementation context,
+not a completed proof.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Superseded unresolved pending handle:
+  `local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840`.
+- Replacement worker thread:
+  `019f037f-41d4-7fa2-8ff7-d4a01ff78a64`
+  (`O4 worker - Universal Wire Source Open Browser`).
+- Worker cwd:
+  `/Users/wiz/go-choir`.
+- Worker readback status:
+  active/in progress.
+- Work item:
+  `O4-phase4-universal-wire-source-open-browser-proof`.
+- Assignment scope:
+  smallest frontend/browser proof that Universal Wire graph-backed capture
+  cards consume Phase 3 source/open identity fields and route source opening
+  through existing Source Viewer/Web Lens policy, without claiming sourcecycled
+  ingestion, native Texture `source_ref` citation, publication/export, staging,
+  deploy, Qdrant, provider/gateway, auth/session, promotion, or rollback.
+
+Evidence boundary: worker thread creation/title/pin/readback only. No worker
+final report, verifier verdict, root incorporation, browser proof, sourcecycled
+ingestion, native Texture `source_ref`, staging, deploy, main, push, CI,
+promotion, rollback, or run-acceptance claim.
+
+Open edge: read worker thread
+`019f037f-41d4-7fa2-8ff7-d4a01ff78a64` after it completes. If it has a final
+report, record it and create an independent verifier before incorporating any
+O4 Phase 4 commits.
