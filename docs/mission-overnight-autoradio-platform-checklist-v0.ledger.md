@@ -887,6 +887,54 @@ finish, then send verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` a
 follow-up with the resolved worker id/cwd, docs checkpoint, implementation
 commits, exact tests, dirty-path classification, and non-claims.
 
+## 2026-06-26 - O3 Phase 3 Worker Completed
+
+Claim: O3 Phase 3 source_ref edge shadow-write implementation is complete on
+the worker branch and ready for independent verifier review, but not accepted
+or incorporated.
+
+Move: read the worker final report, record worker commits/tests/non-claims in
+the Parallax State, and prepare a verifier follow-up.
+
+Expected Delta V: 0 until the verifier returns `accept` and accepted commits
+are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker thread `019f02d4-4877-7f82-89bd-ac87addc7bb3`, titled
+  `O3 worker - Source Ref Phase 3`, completed in
+  `/Users/wiz/.codex/worktrees/7935/go-choir`.
+- Worker worktree status: clean detached HEAD.
+- Docs checkpoint commit: `b0ad6de1 checkpoint O3 phase3 texture source ref
+  edges`.
+- Implementation commit: `98e77766 implement O3 phase3 texture source ref
+  edges`.
+- Worker-selected resolution rule: body `source_ref.attrs.source_entity_id`
+  resolves against graph `choir.source_entity` records derived from the same
+  materialized `SourceEntities` array; each `choir.source_ref` pins the
+  Texture revision occurrence to the resolved source entity canonical ID and
+  version ID; unresolved refs fail before document head advancement.
+- Worker found and repaired a duplicate-normalization edge before final report:
+  multiple legacy source IDs can normalize to one graph source entity version,
+  and every legacy ID must still resolve to that shared graph record.
+- Worker-reported checks passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphWritesSourceRefEdgesPinnedToRevisionAndSourceVersion|TestPatchTextureSourceRefFailureDoesNotAdvanceDocumentHead|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase|TestTextureTool' -count=1`,
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `git diff --check`.
+
+Evidence boundary: worker branch evidence only. No independent verifier
+acceptance, root incorporation, O3 Phase 3 checklist descent, API behavior,
+source-open behavior, Qdrant projection, graph-first read, main, staging,
+product, deployment, or landing claim.
+
+Open edge: send verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` the
+resolved worker id/cwd, commits, tests, dirty-path classification, and
+non-claims. On `accept`, incorporate `b0ad6de1` and `98e77766` into the root
+orchestration branch and rerun focused root checks.
+
 ## 2026-06-26 - O3 Phase 2 Worker Resolved, Verifier Blocked Pending Final Report
 
 Claim: The O3 Phase 2 worker thread resolved from its pending worktree handle

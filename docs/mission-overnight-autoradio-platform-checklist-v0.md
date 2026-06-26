@@ -500,25 +500,25 @@ claims. Evidence class is branch-level code/test/verifier acceptance only; no
 main, staging, product, deployment, O3-complete, source ref edge, public
 producer, source-open, Qdrant, or graph-first read claim exists yet.
 
-next move: Wait for O3 Phase 3 worker thread
-`019f02d4-4877-7f82-89bd-ac87addc7bb3` (`O3 worker - Source Ref Phase 3`) in
-`/Users/wiz/.codex/worktrees/7935/go-choir` to finish. The earlier pending
-worktree handle `local:497e4e88-d21d-463d-9f2e-bcaac91c6482` has
-materialized. The worker has created docs checkpoint commit `b0ad6de1`
-(`checkpoint O3 phase3 texture source ref edges`) and is still active at the
-time of this state update. The first verifier pass
-`019f02d4-80e7-7c73-8085-bc1c52beebf2` returned `blocked` before the worker
-thread was discoverable; treat that as stale launch-order evidence, not a
-Phase 3 rejection. After the worker final report, send the verifier a follow-up
-with the resolved worker id/cwd, docs checkpoint, implementation commits,
-tests, dirty-path classification, and non-claims. Phase 3 worker assignment:
-`O3-phase3-texture-tool-source-ref-edges`, same `patch_texture` /
-`rewrite_texture` path, resolve body `source_ref` nodes to graph source entity
-versions and write pinned `choir.source_ref` records transactionally, with a
-failure test proving document head does not advance if a ref cannot resolve.
-Verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` (`O3 verifier - Source
-Ref Phase 3`) is live and pinned; it must be reawakened only after the worker
-has a final report.
+next move: Send Phase 3 worker final report to verifier thread
+`019f02d4-80e7-7c73-8085-bc1c52beebf2` (`O3 verifier - Source Ref Phase 3`)
+and wait for verdict. Worker thread `019f02d4-4877-7f82-89bd-ac87addc7bb3`
+(`O3 worker - Source Ref Phase 3`) completed in
+`/Users/wiz/.codex/worktrees/7935/go-choir` with clean worktree. Worker commits:
+`b0ad6de1` (`checkpoint O3 phase3 texture source ref edges`) and `98e77766`
+(`implement O3 phase3 texture source ref edges`). Chosen resolution rule:
+body `source_ref.attrs.source_entity_id` resolves against graph
+`choir.source_entity` records derived from the same materialized
+`SourceEntities` array; each `choir.source_ref` pins the Texture revision
+occurrence to the resolved source entity canonical ID and version ID; unresolved
+refs fail before document head advancement. Worker-reported checks passed:
+focused Phase 3/Texture runtime tests, focused Phase 1 store boundary tests,
+full `internal/store`, and `git diff --check`. Evidence boundary remains
+worker branch only: no independent verifier acceptance, root incorporation,
+O3-complete, main, staging, product, deployment, public producer, source-open,
+Qdrant, or graph-first read claim. The first verifier pass returned `blocked`
+before the worker thread was discoverable; treat that as stale launch-order
+evidence and reawaken it with this worker report.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
