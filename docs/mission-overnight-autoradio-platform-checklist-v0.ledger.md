@@ -5734,3 +5734,47 @@ deployed/live source-opening acceptance was performed or claimed.
 Open edge: O4 source/citation remains open. Continue only by obtaining
 deploy/auth authority for the specified read-only staging proof path, or by
 leaving O4 as an `open_handoff` edge before any authorized move to O5.
+
+## 2026-06-26 - O4 Open Handoff Recorded
+
+Claim: The current Parallax mission state should exit as `open_handoff` rather
+than continue past O4 in-order. The verified Phase 12 evidence shows the
+remaining O4 source/citation proof requires deploy/auth authority or explicit
+owner authorization to defer the edge while moving to O5.
+
+Move: rewrote Parallax State status and settlement to `open_handoff`, with
+resume conditions for either O4 deploy/auth proof or owner-authorized O5
+continuation.
+
+Expected Delta V: 0. Handoff preserves truth and resumability; it does not
+close the O4 source/citation obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Latest verified O4 handoff evidence:
+  Phase 12 verifier thread `019f043f-03fe-7bc0-b96a-ab5807c688c8` accepted
+  the worker finding that deployed/live source proof requires a deployed commit
+  containing `9f54fd5e` and `b13ba881`, authenticated proof authority, and a
+  read-only staging fixture/proof path.
+- Open checklist item:
+  O4 source/citation links remain unchecked; deployed/live source artifact proof
+  is still open.
+- Resume condition for O4:
+  advance `origin/main` to a commit containing `9f54fd5e` and `b13ba881`, verify
+  `https://choir.news/health` reports that deployed commit, provide or
+  authorize authenticated Playwright storage state, then run or add the
+  smallest read-only staging source-opening proof over an existing
+  source-backed artifact.
+- Resume condition for O5:
+  owner explicitly accepts the O4 deployed/live proof as an open handoff edge
+  and authorizes moving to Choir-in-Choir self-development with the edge named.
+
+Evidence boundary: docs/evidence state update only. No push, deploy,
+auth/session renewal, staging mutation, source-opening acceptance, O5 worker
+launch, publication/export, Qdrant, provider/gateway/search, promotion/rollback,
+or run-acceptance record is claimed.
+
+Open edge: await deploy/auth authority for O4, or explicit owner authorization
+to continue to O5 with O4 carried as an open handoff edge.

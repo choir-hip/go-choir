@@ -380,7 +380,7 @@ remaining audio transport gap precisely.
 
 ## Parallax State
 
-status: working
+status: open_handoff
 
 mission conjecture: If an orchestration thread uses this checklist to preserve
 current WIP, land or hand off the object graph substrate, then advance News,
@@ -952,14 +952,15 @@ source-opening test path, and clean verifier/worker worktrees. Current V
 remains 31 because the remaining O4 source/citation proof now requires
 deploy/auth authority or a documented staging fixture/harness gap.
 
-next move: treat O4 source/citation as an explicit handoff edge unless
-deploy/auth authority is granted. The admissible continuation is: merge or
+next move: resume only when either deploy/auth authority is granted for O4 or
+the mission owner explicitly authorizes moving to O5 with the O4
+source/citation edge still open. O4 deploy/auth resume condition: merge or
 advance `origin/main` to a commit containing `9f54fd5e` and `b13ba881`, verify
 `https://choir.news/health` reports that deployed commit, provide or authorize
 an authenticated Playwright storage state, then run or add the smallest
 read-only staging source-opening proof over an existing source-backed artifact.
-Without that authority, prepare an `open_handoff` state for O4 and continue
-only if the mission owner authorizes moving to O5 with this O4 edge named. O4
+O5 resume condition: owner accepts O4 as an open handoff edge and authorizes
+the next worker assignment for Choir-in-Choir self-development. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
@@ -1186,12 +1187,13 @@ when the mission proves or falsifies thread-native orchestration, object graph
 as substrate, News as self-development payload, or Autoradio as forcing
 benchmark.
 
-settlement: Exit only as `settled`, `open_handoff`, `blocked`, or
-`superseded`. Full settlement requires thread-native orchestration receipts,
-independent verifier verdicts, landed code/docs where behavior changed, CI,
-deploy identity, and staging/product acceptance for any staging claim. Partial
-overnight progress should exit as `open_handoff` with exact remaining V and
-next worker/verifier assignment.
+settlement: `open_handoff`. Full settlement still requires thread-native
+orchestration receipts, independent verifier verdicts, landed code/docs where
+behavior changed, CI, deploy identity, and staging/product acceptance for any
+staging claim. Current handoff is O4 source/citation deployed/live proof:
+remaining V is 31; resume requires either deploy/auth authority for the O4
+proof path or explicit owner authorization to continue to O5 with this O4 edge
+named.
 
 ## Suggested Goal String
 
