@@ -2681,3 +2681,58 @@ into `choir.web_capture`, Source Viewer/Web Lens UI opening, native Texture body
 
 Open edge: cherry-pick accepted worker commits into root and rerun bounded root
 checks before claiming O4 Phase 3 incorporation.
+
+## 2026-06-26 - O4 Phase 3 Accepted And Incorporated
+
+Claim: O4 Phase 3 is accepted and incorporated at branch level as an additive
+source/open identity DTO slice for graph-backed Universal Wire fallback cards.
+
+Move: cherry-pick accepted worker commits `cb461bb8` and `5b6086e1` into root,
+rerun bounded root checks, and update the O4 evidence boundary without checking
+a broader News obligation.
+
+Expected Delta V: 0. The move incorporates useful source/open identity for
+fallback capture cards, but it still does not close sourcecycled ingestion,
+native Texture `source_ref` citation carry-forward, browser opening proof, or
+staging product acceptance.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Root incorporated commits:
+  `07dcb8e4 checkpoint O4 wire source identity gap`;
+  `f7d4a852 carry Wire web capture source identity`.
+- Accepted worker commits:
+  `cb461bb880c63a10dedc7fcfbd55d49cea9ee526`;
+  `5b6086e1d42a990dc9baf1aad71cebdd6fcb5797`.
+- Verifier thread:
+  `019f0376-a32c-74b3-b1bc-35b9823e648f`
+  (`O4 verifier - Universal Wire Source Identity`) returned `accept`.
+- Root checks passed:
+  `git diff --check e18e92c8..HEAD`;
+  `git show --check --oneline 07dcb8e4`;
+  `git show --check --oneline f7d4a852`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
+  `nix develop -c go test ./internal/objectgraph -count=1`.
+- Root dirty-path classification:
+  tracked status clean after cherry-pick and checks. The objectgraph test
+  emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned
+  `ok`.
+
+Evidence boundary: branch-level local verifier acceptance, root incorporation,
+focused Go tests, and diff hygiene only. No frontend/browser proof,
+sourcecycled ingestion, Texture publication/export, native Texture body
+`source_ref` rendering for Universal Wire cards, Qdrant, auth/session renewal,
+gateway/provider calls, vmctl, candidate computers, promotion/rollback,
+staging/deploy, CI, run-acceptance, or production proof.
+
+Residual risks: Universal Wire still lacks live sourcecycled/web ingestion into
+`choir.web_capture`, frontend rendering/opening proof for graph source/open
+identity, source selection/ranking, Texture article creation with citations,
+publication/export, and staging behavior.
+
+Open edge: choose the next bounded O4 worker. Highest-value next slices are:
+sourcecycled/web ingestion into `choir.web_capture`; or browser/UI proof that
+Universal Wire cards consume the graph source/open identity and route to Source
+Viewer/Web Lens correctly.

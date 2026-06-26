@@ -237,9 +237,11 @@ Checklist:
   `Service.CreateWebCapture`, object body storage for extracted text, and
   focused objectgraph tests. O4 Phase 2 adds an accepted branch-level Universal
   Wire fallback projection for existing graph-backed `choir.web_capture`
-  objects through `/api/universal-wire/stories`; sourcecycled ingestion,
-  source_ref citation carry-forward, browser rendering, and staging product
-  proof remain open.
+  objects through `/api/universal-wire/stories`. O4 Phase 3 adds accepted
+  branch-level additive source/open identity fields for graph-backed fallback
+  cards; sourcecycled ingestion, native Texture `source_ref` citation
+  carry-forward, browser rendering/opening, and staging product proof remain
+  open.
 - [ ] Ingest sourcecycled/web/source items into graph objects.
 - [ ] Build News/Wire feed from graph objects and source refs.
 - [ ] Keep empty feed honest but diagnostic.
@@ -368,16 +370,16 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 3 verifier acceptance before root incorporation. O4 Phase 1 closed the first
+Phase 3 verifier acceptance and root incorporation. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
 close the broader News/Wire feed-from-graph-and-source-refs obligation because
-sourcecycled ingestion, source_ref citation carry-forward, browser rendering,
-staging, deploy, and product acceptance remain open. O4 Phase 3 worker output
-adds an unverified additive DTO source-identity carry-forward slice for graph
-capture cards; it is not incorporated into root yet and does not claim native
-Texture `source_ref`, frontend opening, or staging proof.
+sourcecycled ingestion, native Texture `source_ref` citation carry-forward,
+browser rendering/opening, staging, deploy, and product acceptance remain open.
+O4 Phase 3 adds an accepted and incorporated additive DTO source/open identity
+slice for graph capture cards; it does not claim native Texture `source_ref`,
+frontend opening, or staging proof.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -758,9 +760,10 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: incorporate accepted O4 Phase 3 worker commits `cb461bb8` and
-`5b6086e1` into root, rerun bounded root checks, and record the evidence
-boundary. Independent verifier thread
+next move: choose the next bounded O4 worker. The highest-value next slice is
+either sourcecycled/web ingestion into `choir.web_capture` or frontend/browser
+proof that Universal Wire cards consume the accepted graph source/open identity
+and route to Source Viewer/Web Lens correctly. Independent verifier thread
 `019f0376-a32c-74b3-b1bc-35b9823e648f` (`O4 verifier - Universal Wire Source
 Identity`) returned `accept` with no blocking findings. Earlier verifier
 creation returned unresolved pending worktree handle
@@ -773,13 +776,14 @@ Citations`) completed on branch
 `5b6086e1d42a990dc9baf1aad71cebdd6fcb5797`. The worker reports a checkpoint
 commit first, then an additive Universal Wire DTO slice carrying graph/source
 identity for `choir.web_capture` fallback cards without minting native Texture
-`source_ref` citations. Worker-reported checks passed:
+`source_ref` citations. Accepted commits were incorporated into root as
+`07dcb8e4 checkpoint O4 wire source identity gap` and `f7d4a852 carry Wire web
+capture source identity`. Worker/verifier/root checks passed:
 `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
 `nix develop -c go test ./internal/objectgraph -count=1`;
-`git diff --check 03ca986d..HEAD`; `git show --check --oneline HEAD`; and
-`git show --check --oneline HEAD~1`. Worker status is clean with
-`git status --short --ignored` producing no output. Evidence is still
-worker-local branch proof only.
+worker/verifier diff hygiene; root `git diff --check e18e92c8..HEAD`; and
+root `git show --check --oneline` for both incorporated commits. Evidence is
+branch-level local test/verifier/root-rerun proof only.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
