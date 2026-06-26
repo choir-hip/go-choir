@@ -2580,3 +2580,46 @@ main, push, CI, promotion, rollback, or run-acceptance claim.
 Open edge: resolve pending verifier handle
 `local:ebca0ae2-f086-4b63-801b-70f26306a7eb` to a thread id, title/pin it, then
 read the verifier verdict before any O4 Phase 3 incorporation.
+
+## 2026-06-26 - O4 Phase 3 Replacement Verifier Active
+
+Claim: O4 Phase 3 now has a readable independent verifier thread. The earlier
+pending verifier worktree handle remains unresolved and is superseded for
+orchestration purposes by the replacement verifier thread.
+
+Move: after repeated `list_threads` polls failed to find pending handle
+`local:ebca0ae2-f086-4b63-801b-70f26306a7eb`, create a replacement
+project-scoped read-only verifier in the local `/Users/wiz/go-choir` project,
+title and pin it, then read back its active status.
+
+Expected Delta V: 0. Verifier materialization creates an observer, not an
+accepted proof.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Superseded unresolved verifier pending handle:
+  `local:ebca0ae2-f086-4b63-801b-70f26306a7eb`.
+- Replacement verifier thread:
+  `019f0376-a32c-74b3-b1bc-35b9823e648f`
+  (`O4 verifier - Universal Wire Source Identity`).
+- Verifier cwd:
+  `/Users/wiz/go-choir`.
+- Verifier readback status:
+  active/in progress.
+- Verifier scope:
+  read-only review of worker thread
+  `019f036b-3492-7213-b261-00daeee6445e`, worker worktree
+  `/Users/wiz/.codex/worktrees/4aec/go-choir`, branch
+  `codex/o4-phase3-universal-wire-source-ref-citations`, commits
+  `cb461bb8` and `5b6086e1`, candidate base `03ca986d`.
+
+Evidence boundary: verifier thread creation/title/pin/readback only. No
+verdict, worker commit acceptance, root incorporation, browser/UI proof,
+sourcecycled ingestion, Texture publication/export, staging, deploy, main,
+push, CI, promotion, rollback, or run-acceptance claim.
+
+Open edge: read verifier thread
+`019f0376-a32c-74b3-b1bc-35b9823e648f` after completion. Incorporate the
+verdict into Parallax State before deciding whether to cherry-pick O4 Phase 3.

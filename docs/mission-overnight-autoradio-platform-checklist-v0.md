@@ -368,7 +368,7 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 3 worker completion before verifier review. O4 Phase 1 closed the first
+Phase 3 verifier launch/readback. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
@@ -758,12 +758,13 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: resolve the pending independent verifier thread for O4 Phase 3
-worker commits `cb461bb8 checkpoint O4 wire source identity gap` and
-`5b6086e1 carry Wire web capture source identity` before any root
-incorporation. Verifier creation returned pending worktree handle
-`local:ebca0ae2-f086-4b63-801b-70f26306a7eb`; no verifier thread id was visible
-in `list_threads` at the time of this update. O4 Phase 3 worker thread
+next move: read independent verifier thread
+`019f0376-a32c-74b3-b1bc-35b9823e648f` (`O4 verifier - Universal Wire Source
+Identity`) after it completes, then incorporate the verdict before any root
+cherry-pick. Earlier verifier creation returned unresolved pending worktree
+handle `local:ebca0ae2-f086-4b63-801b-70f26306a7eb`; it was not visible in
+`list_threads`, so a replacement local project-scoped read-only verifier was
+created, titled, and pinned. O4 Phase 3 worker thread
 `019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire Source Ref
 Citations`) completed on branch
 `codex/o4-phase3-universal-wire-source-ref-citations` in
