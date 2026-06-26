@@ -3014,3 +3014,43 @@ Residual risks:
 Open edge: continue O4 on sourcecycled/web/source ingestion into graph objects
 or authenticated `/api/universal-wire/stories` acceptance, whichever offers the
 next highest realism gain per budget.
+
+## 2026-06-26 - O4 Phase 5 Sourcecycled Web-Capture Ingestion Worker Launch
+
+Claim: O4 Phase 5 has been queued as the next bounded worker. This is worker
+launch only, not implementation or acceptance.
+
+Move: create a worktree worker from orchestration head `beb9c292` for
+`O4-phase5-sourcecycled-web-capture-ingestion`.
+
+Expected Delta V: 0. Worker creation does not close an obligation.
+
+Actual Delta V: 0. Current V remains 35.
+
+Receipts:
+
+- Pending worktree handle:
+  `local:2848c27e-c530-4401-87fb-709786e6e4b2`.
+- Work item:
+  `O4-phase5-sourcecycled-web-capture-ingestion`.
+- Current orchestration branch/head at launch:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `beb9c292 record O4 source open acceptance`.
+- Assignment scope:
+  identify the current sourcecycled/web/source ingestion path and add the
+  smallest branch-level slice that writes real durable `choir.web_capture`
+  graph objects through the accepted objectgraph helper/service, or document a
+  precise blocker checkpoint-first.
+- Protected boundaries:
+  no native Texture `source_ref` fabrication, publication/export, Qdrant,
+  provider/gateway/model calls, auth/session renewal, staging/deploy,
+  promotion/rollback, or run-acceptance claims.
+
+Evidence boundary: worker creation request and pending handle only. No worker
+thread id, final report, verifier verdict, implementation, root incorporation,
+CI, deploy, staging, product acceptance, promotion, rollback, or
+run-acceptance claim.
+
+Open edge: resolve pending worker handle
+`local:2848c27e-c530-4401-87fb-709786e6e4b2` into a readable thread, title/pin
+it, and read its final report before creating an independent verifier.

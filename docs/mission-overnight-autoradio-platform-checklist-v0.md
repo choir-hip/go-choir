@@ -771,9 +771,11 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: continue O4 with the next smallest graph-backed News/Wire realism
-axis: sourcecycled/web/source ingestion into graph objects or authenticated
-`/api/universal-wire/stories` acceptance, while keeping native Texture
+next move: resolve O4 Phase 5 worker pending worktree handle
+`local:2848c27e-c530-4401-87fb-709786e6e4b2` into a readable thread for
+`O4-phase5-sourcecycled-web-capture-ingestion`. The worker is assigned the next
+smallest graph-backed News/Wire realism axis: sourcecycled/web/source ingestion
+into durable `choir.web_capture` graph objects, while keeping native Texture
 `source_ref` carry-forward, publication/export, staging/deploy, Qdrant,
 provider/gateway, auth/session, promotion, rollback, and run-acceptance claims
 out of scope unless explicitly assigned. O4 Phase 4 verifier thread
