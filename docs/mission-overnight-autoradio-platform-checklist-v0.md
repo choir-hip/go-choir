@@ -758,11 +758,14 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: launch an independent verifier thread for O4 Phase 3 worker commits
-`cb461bb8 checkpoint O4 wire source identity gap` and `5b6086e1 carry Wire web
-capture source identity` before any root incorporation. O4 Phase 3 worker
-thread `019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire
-Source Ref Citations`) completed on branch
+next move: resolve the pending independent verifier thread for O4 Phase 3
+worker commits `cb461bb8 checkpoint O4 wire source identity gap` and
+`5b6086e1 carry Wire web capture source identity` before any root
+incorporation. Verifier creation returned pending worktree handle
+`local:ebca0ae2-f086-4b63-801b-70f26306a7eb`; no verifier thread id was visible
+in `list_threads` at the time of this update. O4 Phase 3 worker thread
+`019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire Source Ref
+Citations`) completed on branch
 `codex/o4-phase3-universal-wire-source-ref-citations` in
 `/Users/wiz/.codex/worktrees/4aec/go-choir` at
 `5b6086e1d42a990dc9baf1aad71cebdd6fcb5797`. The worker reports a checkpoint

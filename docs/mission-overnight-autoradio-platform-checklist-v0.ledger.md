@@ -2533,3 +2533,50 @@ future UI/browser source-opening proof if accepted.
 
 Open edge: create an independent verifier thread for worker commits `cb461bb8`
 and `5b6086e1`; only incorporate after an `accept` verdict.
+
+## 2026-06-26 - O4 Phase 3 Verifier Queued
+
+Claim: O4 Phase 3 verifier creation has been requested through Codex thread
+tools, but the verifier has not yet resolved to a readable thread id.
+
+Move: use `list_projects` and `create_thread` to start a project-scoped
+independent verifier from branch
+`preserve/o0-autoradio-mission-state-2026-06-26` against worker commits
+`cb461bb8` and `5b6086e1`; poll `list_threads` for materialization.
+
+Expected Delta V: 0. Verifier launch does not accept or incorporate the worker
+candidate.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Project selected:
+  `/Users/wiz/go-choir`.
+- Verifier pending worktree handle:
+  `local:ebca0ae2-f086-4b63-801b-70f26306a7eb`.
+- Verifier prompt scope:
+  read-only independent review of
+  `O4-phase3-universal-wire-source-ref-citations-verifier`, worker thread
+  `019f036b-3492-7213-b261-00daeee6445e`, worker worktree
+  `/Users/wiz/.codex/worktrees/4aec/go-choir`, branch
+  `codex/o4-phase3-universal-wire-source-ref-citations`, commits `cb461bb8`
+  and `5b6086e1`.
+- Requested verifier checks:
+  Problem Documentation First, no fake native Texture `source_ref`, additive
+  DTO shape, source/open identity derived from real `choir.web_capture`
+  records and existing source-contract constants, O4 Phase 2 route semantics
+  preserved, excluded surfaces untouched, worker dirty/ignored path
+  classification, focused Go tests, and diff hygiene.
+- Poll result:
+  `list_threads` did not yet show a verifier thread id for the work item or
+  pending handle.
+
+Evidence boundary: verifier creation request and pending handle only. No
+verifier verdict, title/pin, root incorporation, source identity acceptance,
+browser/UI proof, staging, deploy, sourcecycled ingestion, publication/export,
+main, push, CI, promotion, rollback, or run-acceptance claim.
+
+Open edge: resolve pending verifier handle
+`local:ebca0ae2-f086-4b63-801b-70f26306a7eb` to a thread id, title/pin it, then
+read the verifier verdict before any O4 Phase 3 incorporation.
