@@ -3250,3 +3250,58 @@ renewal, promotion/rollback, or run-acceptance claim.
 
 Open edge: read verifier thread
 `019f03b0-6a16-79b0-888d-b8a48e6a378f` after completion.
+
+## 2026-06-26 - O4 Phase 5 Verifier Acceptance And Root Incorporation
+
+Claim: O4 Phase 5 is accepted and incorporated at branch level. Sourcecycled
+web/source rows now have a reviewed local code/test path into durable
+`choir.web_capture` graph objects with source provenance.
+
+Move: read verifier thread `019f03b0-6a16-79b0-888d-b8a48e6a378f`
+(`O4 verifier - Web Capture Ingestion`), accept the verdict, cherry-pick worker
+commits `4395c251` and `543c6742`, and rerun root-focused checks.
+
+Expected Delta V: 1. The dedicated sourcecycled/web/source ingestion obligation
+should close if verifier acceptance and root checks hold.
+
+Actual Delta V: 1. Current V decreases from 35 to 34.
+
+Receipts:
+
+- Verifier verdict: `accept`; no blocking findings.
+- Worker thread:
+  `019f039f-9dd6-7881-a4ec-8607c9a4bb34`
+  (`O4 worker - Web Capture Ingestion`).
+- Verifier thread:
+  `019f03b0-6a16-79b0-888d-b8a48e6a378f`
+  (`O4 verifier - Web Capture Ingestion`).
+- Worker commits incorporated into root:
+  `ca639a9e checkpoint O4 sourcecycled web capture ingestion`;
+  `632919ab write sourcecycled web captures to objectgraph`.
+- Verifier-confirmed properties:
+  checkpoint-before-code; narrow sourcecycled/objectgraph boundary; source
+  entity and `captured_from` provenance coherence; opt-in objectgraph DB wiring
+  in `cmd/sourcecycled`; preserved Universal Wire fallback semantics; no
+  claims over excluded red/product surfaces.
+- Root checks passed:
+  `git diff --check 76d21413..HEAD`;
+  `git show --check --oneline ca639a9e`;
+  `git show --check --oneline 632919ab`;
+  `nix develop -c go test ./internal/objectgraph -count=1`;
+  `nix develop -c go test ./cmd/sourcecycled -count=1`;
+  `nix develop -c go test ./internal/cycle -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`.
+
+Evidence boundary: branch-level local code/test and independent verifier
+evidence only. No main push, PR, CI, deploy, staging product acceptance, Texture
+native `source_ref`, publication/export, Qdrant, provider/gateway,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Residual risk: platform/deploy configuration still has to point sourcecycled at
+the intended runtime objectgraph DB before deployed Universal Wire can consume
+the captured graph objects.
+
+Open edge: run or delegate the next O4 realism axis: authenticated
+`/api/universal-wire/stories` product API evidence over configured
+sourcecycled/objectgraph storage, or a precise blocker if deployed/local product
+configuration cannot yet prove that path.

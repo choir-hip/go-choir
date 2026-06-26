@@ -241,10 +241,16 @@ Checklist:
   branch-level additive source/open identity fields for graph-backed fallback
   cards. O4 Phase 4 adds accepted branch-level frontend/browser proof that
   graph-backed capture cards render source-open controls and route Source
-  Viewer/Web Lens through the existing source policy; sourcecycled ingestion,
-  native Texture `source_ref` citation carry-forward, and staging product proof
-  remain open.
-- [ ] Ingest sourcecycled/web/source items into graph objects.
+  Viewer/Web Lens through the existing source policy. O4 Phase 5 adds accepted
+  branch-level sourcecycled/web/source ingestion into durable `choir.web_capture`
+  graph objects with provenance edges; native Texture `source_ref` citation
+  carry-forward and staging product proof remain open.
+- [x] Ingest sourcecycled/web/source items into graph objects. O4 Phase 5 writes
+  eligible sourcecycled `sources.Item` rows into `choir.web_capture` objects,
+  creates `choir.source_entity` endpoints and `captured_from` provenance edges,
+  and wires `cmd/sourcecycled` to opt-in objectgraph DB paths. This is accepted
+  branch-level local code/test proof only; platform/deploy objectgraph DB
+  configuration and staging product proof remain open.
 - [ ] Build News/Wire feed from graph objects and source refs.
 - [ ] Keep empty feed honest but diagnostic.
 - [ ] Add acceptance for authenticated `/api/universal-wire/stories`.
@@ -376,8 +382,8 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 35. Last Delta V: 1 for O4
-Phase 4 verifier acceptance and root incorporation. O4 Phase 1 closed the first
++ 8 Autoradio/Pipecat obligations. Current value: 34. Last Delta V: 1 for O4
+Phase 5 verifier acceptance and root incorporation. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
@@ -390,7 +396,10 @@ frontend opening, or staging proof. O4 Phase 4 adds accepted and incorporated
 frontend/browser proof that graph-backed capture cards render source controls
 and route Source Viewer/Web Lens through existing source policy; it does not
 claim live ingestion, native Texture citation carry-forward, publication/export,
-or staging proof.
+or staging proof. O4 Phase 5 adds accepted and incorporated sourcecycled
+ingestion into durable `choir.web_capture` objects with source entity provenance
+edges; it does not claim platform/deploy objectgraph DB configuration, staging,
+native Texture citation carry-forward, publication/export, or Qdrant.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -412,9 +421,11 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current Phase 6 change is yellow proof/test-only:
-accepted verifier evidence and root incorporation add a focused browser test,
-not frontend/runtime product behavior.
+session artifacts. The current O4 Phase 5 incorporated change is orange: it
+writes sourcecycled/web/source rows into durable objectgraph web-capture objects
+when sourcecycled is configured with an objectgraph DB path, while preserving
+the stated boundary against staging, publication/export, Qdrant, auth/session,
+provider/gateway, promotion, rollback, and native Texture citation claims.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -771,10 +782,30 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: read O4 Phase 5 verifier thread
+next move: choose the next O4 realism axis after accepted sourcecycled ingestion
+root incorporation. The smallest useful next proof is an authenticated product
+API acceptance slice showing the configured sourcecycled objectgraph DB path and
+`/api/universal-wire/stories` read path working together through product-visible
+evidence, or documenting the precise deploy/config blocker if that path cannot
+yet be exercised. Do not claim News benchmark, staging, native Texture
+`source_ref` carry-forward, publication/export, Qdrant, promotion, rollback, or
+run acceptance from the Phase 5 branch-level proof. O4 Phase 5 verifier thread
 `019f03b0-6a16-79b0-888d-b8a48e6a378f` (`O4 verifier - Web Capture
-Ingestion`) after it completes, then incorporate or reject worker commits
-`4395c251` and `543c6742` based on the verdict. Earlier pending verifier handle
+Ingestion`) returned `accept` with no blocking findings. The verifier confirmed
+checkpoint-before-code, narrow sourcecycled/objectgraph boundaries, provenance
+coherence through source entities and `captured_from` edges, opt-in
+`cmd/sourcecycled` objectgraph DB wiring, preserved Universal Wire fallback
+semantics, and clean candidate worktree status. Accepted worker commits were
+incorporated into this orchestration branch as `ca639a9e checkpoint O4
+sourcecycled web capture ingestion` and `632919ab write sourcecycled web
+captures to objectgraph`. Root checks passed: `git diff --check 76d21413..HEAD`;
+`git show --check --oneline ca639a9e`; `git show --check --oneline 632919ab`;
+`nix develop -c go test ./internal/objectgraph -count=1`;
+`nix develop -c go test ./cmd/sourcecycled -count=1`;
+`nix develop -c go test ./internal/cycle -count=1`; and
+`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`.
+Root tracked status is clean; ignored local env/log/dependency artifacts remain
+unrelated. Earlier pending verifier handle
 `local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c` did not resolve in
 `list_threads` and is superseded for orchestration by the readable replacement
 verifier. O4 Phase 5 worker thread
