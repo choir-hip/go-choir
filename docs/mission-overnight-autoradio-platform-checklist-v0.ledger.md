@@ -8020,3 +8020,70 @@ references remain `c1b45606` for docs state and `a2a5a749` for deployed
 behavior. Heresy delta: `repaired` for branch-local same-article/world-model
 identity semantics; `discovered` remains for production semantic clustering and
 deployed authenticated product proof.
+
+## 2026-06-26 - O4 World-Model Same-Article Verifier Accepted And Incorporated
+
+Claim: independent verifier thread
+`019f0617-f88e-72d3-a71a-c59b8a40e7a7` accepted worker commit
+`1e3e72bed659c7992aa09d4bfd6fcd3a84176d39` for the bounded
+O4 world-model/same-article-update slice, and orchestration incorporated it as
+`8121b4d4ca835d1c334e18144296683098506f59`.
+
+Verifier findings: none blocking. The verifier found that the branch-local slice
+registers `choir.universal_wire_story_cluster` as SQLite-backed,
+external-key/versioned objectgraph state; stamps synthesis revisions with
+cluster ids; reuses the article alias/document; upserts cluster metadata; and
+adds `contains` edges to source capture objects. The focused test proves first
+ingestion creates one Texture article with source refs, one cluster object, and
+two capture edges; second ingestion keeps the same document id, creates a new
+revision, updates the same cluster object/hash, grows to three capture edges,
+and keeps one Wire edition transclusion.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean/no output.
+- `git diff --check HEAD^..HEAD`: passed/no output.
+- `git show --check --oneline
+  1e3e72bed659c7992aa09d4bfd6fcd3a84176d39`: passed,
+  `1e3e72be Add Universal Wire story cluster update state`.
+- Focused runtime test command: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 4.865s`.
+- Broad Universal Wire runtime selector: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 11.670s`.
+- Objectgraph package test: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/objectgraph 0.271s`.
+
+Orchestration incorporation: cherry-picked worker commit with conflict only in
+the mission ledger, preserving both the newer deployed article-surface failure
+checkpoint and the worker ready-for-verifier entry. The incorporated commit
+touches durable documentation/evidence plus intended source/tests:
+`internal/objectgraph/{registry.go,web_capture.go,objectgraph_test.go}` and
+`internal/runtime/{sourcecycled_web_captures.go,wire_synthesis.go,universal_wire_test.go}`.
+
+Evidence boundary/non-claims: accepted branch-local proof only. This does not
+claim CI, push/deploy, staging identity, authenticated product acceptance,
+provider/search freshness, Qdrant, promotion/rollback, run acceptance,
+publication/export beyond existing Wire edition helpers, semantic multi-story
+clustering, article-quality synthesis, stale edge removal when cluster
+membership shrinks, or repair of the deployed headline-to-Texture 404.
+
+Mutation class / protected surfaces touched: orange runtime behavior, yellow
+tests, green docs. Touched Universal Wire story/world-model cluster state,
+existing synthesis article revision/upsert semantics, Texture revisions through
+existing helpers, source entity/source_ref projection, and existing Wire edition
+linkage. Did not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
+publication/export outside existing Wire edition helpers.
+
+Rollback path: revert `8121b4d4ca835d1c334e18144296683098506f59`. Current
+deployed behavior identity remains
+`a2a5a74910be1c189cd9d9f090695169bf729561` until a later push/deploy.
+
+Heresy delta: `repaired` for branch-local same-article/world-model identity over
+time in the deterministic `sourcecycled-live` path. `discovered` remains for the
+deployed article-surface 404, deterministic platform meta-copy, semantic
+multi-story clustering, provider-quality synthesis, and deployed product proof.
+
+Actual Delta V: 1. V is now 28. Next move is a bounded O4 article-surface repair
+worker to fix headline-to-Texture readability and article-facing copy, then
+independent verifier review before any push/deploy claim.
