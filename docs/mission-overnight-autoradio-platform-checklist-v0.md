@@ -394,894 +394,103 @@ self-improving mainframe: source-grounded information, durable artifacts,
 self-development, sandboxed work, file-like persistence, and realtime audio
 should converge into one usable experience.
 
-witness/spec (A/S): This paradoc, its ledger, thread callbacks, implementation
-branches/commits, verifier verdicts, CI/deploy/staging receipts, and any
-accepted blockers or successor paradocs produced during the overnight run.
+witness/spec (A/S): This paradoc, its ledger, thread callbacks, worker branches,
+verifier verdicts, landed commits, CI/deploy/staging receipts, accepted blockers,
+and successor paradocs.
 
 invariants / qualities / domain ramp (I/Q/D): Follow Choir Doctrine and
-`AGENTS.md`; preserve authority boundaries; use Problem Documentation First for
-new platform behavior problems; do not claim local proof for staging-only
-surfaces; never treat same-context review as independent proof; keep Qdrant
-derived and rebuildable; keep Pipecat/audio integrated with artifact graph; keep
-thread messages resumable; use Codex thread tools for independent worker and
-verifier evidence when available. Domain ramp: docs/checkpoint -> branch-level
-tests -> local focused proof -> CI/deploy -> staging product acceptance.
+`AGENTS.md`; use Problem Documentation First for new platform behavior problems;
+preserve authority boundaries; use Codex thread tools for independent
+worker/verifier evidence when available; never treat same-context review as an
+independent prover; Source Viewer/reader artifacts are the default durable source
+surface and Web Lens is explicit live/original inspection. Domain ramp:
+docs/checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
+product acceptance.
 
-variant (ranking function) V: 68 total obligations = 9 WIP-preservation
-obligations + 8 object graph obligations + 7 Qdrant obligations + 8
-source-entity obligations + 8 News/Universal Wire obligations + 7
-self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 30. Last Delta V: 1 for the
-O4 public-platform Universal Wire repair: staging now deploys the
-sourcecycled-to-platform-runtime graph projection, sourcecycled writes
-`choir.web_capture` objects through the runtime API into the
-`universal-wire-platform/platform` VM graph, authenticated Universal Wire shows
-graph-backed cards, Source Viewer opens reader artifacts by default, and Web
-Lens opens explicitly after refreshing the deployed frontend chunk.
-O4 Phase 1 closed the first O4 checklist obligation by adding a tested
-`choir.web_capture` objectgraph
-foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
-graph-backed web captures into `/api/universal-wire/stories`, but it does not
-close the broader News/Wire feed-from-graph-and-source-refs obligation because
-native Texture `source_ref` citation carry-forward, staging, deploy, and product
-acceptance remain open.
-O4 Phase 3 adds an accepted and incorporated additive DTO source/open identity
-slice for graph capture cards; it does not claim native Texture `source_ref`,
-frontend opening, or staging proof. O4 Phase 4 adds accepted and incorporated
-frontend/browser proof that graph-backed capture cards render source controls
-and route Source Viewer/Web Lens through existing source policy; it does not
-claim live ingestion, native Texture citation carry-forward, publication/export,
-or staging proof. O4 Phase 5 adds accepted and incorporated sourcecycled
-ingestion into durable `choir.web_capture` objects with source entity provenance
-edges; it does not claim platform/deploy objectgraph DB configuration, staging,
-native Texture citation carry-forward, publication/export, or Qdrant.
-O4 Phase 7 adds accepted and incorporated graph `captured_from`
-`choir.source_entity` provenance carry-forward into Universal Wire manifest
-context; it does not claim native Texture body `source_ref` citations,
-publication/export, staging, or full News benchmark acceptance.
-O4 Phase 8 adds accepted and incorporated empty-only diagnostics for Universal
-Wire responses plus UI rendering; it does not claim staging, provider/search,
-Qdrant, publication/export, run-acceptance, promotion/rollback, or native
-Texture `source_ref` behavior.
-O4 Phase 9 adds accepted and incorporated branch-level graph-capture Source
-Viewer reader-snapshot proof: checkpoint `42d47423`, implementation
-`fcde783a`, and docs-only provenance repair `f7e8fced` were accepted by
-verifier thread `019f03f2-bb27-7d80-90a1-e172558b9c61`; root incorporated the
-checkpoint as `afe8e70d` and the implementation as `9ac7d6c2`. The repair was
-empty in root because the root ledger already distinguished the worker thread
-from the source/orchestration thread. O4 Phase 9 does not close root V because
-native Texture body `source_ref` citation opening and deployed/live source
-artifact proof remain open, and it does not claim staging, publication/export,
-Qdrant, provider/search, promotion/rollback, or run acceptance.
-Variant total corrected from 67
-to 68 because O0 contains nine checklist obligations.
+variant (ranking function) V: 68 total obligations = 9 WIP-preservation + 8
+object graph + 7 Qdrant + 8 source-entity + 8 News/Universal Wire + 7
+self-development + 7 Nucleus + 6 Choir Base + 8 Autoradio/Pipecat obligations.
+Current value: 30. Last Delta V: 0 for documenting the stale deployed frontend
+chunk problem after the O4 Universal Wire repair. The latest decreasing move was
+Delta V 1 for `5b61fdc4`: sourcecycled now projects graph captures into the
+public `universal-wire-platform/platform` VM graph, the active VM returns 12
+Universal Wire graph-backed stories, and authenticated Chrome shows Universal
+Wire cards with Source Viewer and Web Lens source opening after page reload.
 
-budget: overnight run, target 8-12 hours wall-clock, with orchestration
-checkpoints at least every major work item and before any behavior-changing
-merge. Solvency verdict: feasible only if workers batch bounded constructs and
-verifiers run in separate threads; current thread-tool availability removes the
-authoring-time capability blocker, but it remains unlikely to complete all
-O0-O8 to staging.
+budget: Overnight budget is already partially spent; solvency is feasible only
+for bounded O4 follow-through plus explicit open handoff of the broader O5-O8
+mission unless the owner grants a new long run.
 
-authority / bounds: Orchestration may create worker/verifier threads, inspect
-worktrees, make docs/checkpoint commits, and land reviewed code through the
-repo's normal loop. Behavior-changing work must follow mutation-class
-declarations and landing proof. Protected red surfaces require explicit
-conjecture delta, protected surfaces, admissible evidence, rollback path, and
-heresy delta before editing.
+authority / bounds: Orchestration may create worker/verifier Codex threads,
+inspect worktrees, make docs/checkpoint commits, and land reviewed code through
+the repo's normal loop. Behavior-changing work must declare mutation class,
+protected surfaces, admissible evidence, rollback path, conjecture delta, and
+heresy delta before editing. User granted staging deploy authority by pushing to
+`origin/main` and authenticated Chrome QA on `choir.news`.
 
-mutation class / protected surfaces: This paradoc creation is green. The
-overnight mission will include yellow/orange/red slices: object persistence,
-Texture/source refs, Universal Wire routes, Qdrant derived indexes,
-self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current O4 diagnostic change is orange/yellow: it exposes
-recent sourcecycled cycle events through the existing internal source-service
-handoff summary so staging can distinguish graph backfill ran/skipped/empty
-from source-cycle failure or graph-store mismatch. It does not touch Texture
-canonical writes, Trace/evidence, candidate computers, auth/session renewal,
-vmctl, gateway/provider calls, Qdrant, publication/export, promotion/rollback,
-or run acceptance.
+mutation class / protected surfaces: Current move is green documentation for a
+discovered deploy/static-asset product problem. A repair would likely be orange
+frontend/deployment behavior touching Vite chunk loading, static asset caching or
+release retention, and Source Viewer/Web Lens launch reliability. It must not
+touch Texture canonical writes, Trace/evidence, candidate computers,
+auth/session renewal, vmctl, gateway/provider calls, Qdrant, publication/export,
+promotion/rollback, or run acceptance unless separately documented.
 
-evidence packet: For each landed behavior-changing slice, record pushed commit
-SHA, CI run, deploy status, staging health/build identity, deployed acceptance
-command/result, verifier thread id/verdict, rollback refs, mutation class,
-protected surfaces, heresy delta, conjecture delta, residual risks, and next
-realism axis. For unlanded slices, record branch/stash/worktree handle and
-blocker.
+evidence packet: Behavior-changing landings require pushed commit SHA, CI run,
+deploy status, staging health/build identity, deployed acceptance proof, verifier
+thread id/verdict, rollback refs, mutation class, protected surfaces, heresy
+delta, conjecture delta, residual risks, and next realism axis. Docs-only moves
+require diff hygiene, docs truth workflow after push when pushed, and clear
+non-claims.
 
-heresy delta: initial expected delta is `repaired` for WIP fragility and source
-truth fragmentation, `discovered` for new blockers found by workers/verifiers,
-and `introduced` only if a reviewer explicitly finds a new doctrine or behavior
-regression.
+heresy delta: `discovered` for the stale-client asset problem; `repaired` only
+after a tested/deployed fix proves already-open clients either keep working or
+fail with an intentional reload/recovery path. Do not count discovery as repair.
 
-position / live conjectures / open edges: Email and O1 objectgraph foundation are
-done at branch level. O2 branch `codex/o2-qdrant-derived-index` in
-`/Users/wiz/.codex/worktrees/fb93/go-choir` produced implementation commit
-`d90d8a84`, incorporated into this orchestration branch as `b02d43d5` after
-docs checkpoint `dae88f60`. Qdrant
-prototype `4c1b28be` was reviewed: its `update_alias` action shape is not
-accepted for O2. The implementation switches/rolls back with one alias
-transaction containing delete/create alias actions, keeps Qdrant derived from
-objectgraph objects, and keeps deterministic hash embedding test-only. O2
-verifier thread `019f0285-e660-7cd1-a468-554e9b175825` returned `accept` for
-branch-level continuation. Real local Qdrant verification was later discharged
-with Nix Qdrant `1.18.1` on `localhost:6333`; the uncached live
-build/switch/rollback test passed. News depends on source/web
-objects. Choir-in-Choir should use News as its real
-payload. Nucleus follows once there is a concrete worker/verifier isolation
-need. Choir Base starts as local reconciliation kernel. Autoradio is the final
-product forcing function, but Pipecat is an open implementation edge and not
-yet represented in current code. The original authoring thread lacked visible
-Codex thread primitives; this update confirms the current Codex app surface can
-load `list_projects`, `create_thread`, `read_thread`, `list_threads`,
-`send_message_to_thread`, `handoff_thread`, `get_handoff_status`, and thread
-title/pin/archive controls. Remaining edge: the overnight runner must still
-use actual worker/verifier verdicts as evidence before claiming thread-native
-settlement. O0 worker thread: `019f0270-aad3-7001-a6df-d6bc21aec9ab`
-(`O0 worker - Autoradio WIP inventory`). O0 verifier thread:
-`019f0271-02d9-7391-a564-3ffc2dfce2cd` (`O0 verifier - Autoradio WIP
-inventory`). Both were created project-scoped against `/Users/wiz/go-choir`,
-titled, and pinned on 2026-06-26. The verifier returned `blocked` because the
-worker thread was still `inProgress` and had not emitted its required final O0
-report; the verifier also observed that orchestration edits changed the main
-worktree dirty status during verification, so the worker must refresh dirty
-status before finalizing. After worker refresh, the verifier returned `accept`:
-root dirty state matched durable mission docs only, clean Codex/email-freeze
-heads were contained in `main`, and the four Cascade branch heads were real
-recovery handles not ancestors of `main`. O0 preservation commits created:
-Universal Wire diagnosis `a246ab04` on
-`preserve/o0-universal-wire-diagnosis-2026-06-26`; source-entity migration
-`7a355806` on `preserve/o0-source-entity-migration-2026-06-26`; objectgraph
-prototype `b6b45b60` on `preserve/o0-objectgraph-prototype-2026-06-26`;
-Qdrant prototype `4c1b28be` on `preserve/o0-qdrant-prototype-2026-06-26`;
-PPTX learning/prototype `4a687522` on
-`preserve/o0-pptx-learning-2026-06-26`; docs-checker cleanup `238c7ce2` on
-`preserve/o0-docs-checker-cleanup-2026-06-26`; orchestration mission state on
-`preserve/o0-autoradio-mission-state-2026-06-26`. O0 is complete. O1 worker
-thread: `019f0279-b855-7e52-b830-70a8eb4bbfe8` (`O1 worker - Object Graph
-Foundation`) in `/Users/wiz/.codex/worktrees/3026/go-choir`. O1 verifier
-thread: `019f027a-3434-7ef2-b813-f3f21213167f` (`O1 verifier - Object Graph
-Foundation`). The verifier returned `blocked` because the worker had no final
-report or diff yet. After worker completion, verifier returned `accept` with no
-blocking findings. O1 branch `codex/o1-objectgraph-foundation` produced docs
-checkpoint `fa06b718` and implementation `34ece272`; implementation was
-cherry-picked into this mission branch as `a68bc801`. Focused objectgraph tests
-passed from this branch: `nix develop -c go test ./internal/objectgraph`. O1 is
-complete at branch level, with no main/staging/platform settlement claim. O2
-worker thread: `019f0285-037b-7a21-b352-ece5b84efeca` (`O2 worker - Qdrant
-Derived Index`) in `/Users/wiz/.codex/worktrees/fb93/go-choir`. O2 verifier
-thread: `019f0285-e660-7cd1-a468-554e9b175825` (`O2 verifier - Qdrant Derived
-Index`). The verifier first returned `blocked` because the worker turn was
-still `inProgress` and no final Qdrant report/diff/tests existed yet. After
-worker completion, the verifier returned `accept` for branch-level
-continuation, with the live local-Qdrant proof still open. That proof passed
-after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
-The same verifier returned `accept` on the final O2 completion readback. O2 is
-complete at branch level, with no main/staging/platform settlement claim. O3
-Phase 1 worker thread `019f02af-74d3-73a0-ae15-cf0809739b3b` completed in
-`/Users/wiz/.codex/worktrees/a870/go-choir` and reported clean detached HEAD at
-`017b4113`. The worker first created docs checkpoint `7623b5f1` choosing
-Texture-store source tables behind an objectgraph-compatible contract, then
-implementation commit `017b4113` adding `texture_source_entities`,
-`texture_source_refs`, `CreateRevisionWithSourceGraph`, canonical ID/version
-helpers, and focused tests. Those commits were incorporated into this
-orchestration branch as `7e6874a9` and `3adcd0ae`. The worker resolved the
-accepted P2 by using a single URL-safe `objectgraph.StableSuffixFromKey(...)`
-suffix with no extra colon-separated components. O3 verifier thread
-`019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`: no blocking findings,
-checkpoint-before-code satisfied, transaction/head invariant preserved,
-focused Phase 1 tests passed, `git diff --check` passed, full
-`internal/store` passed, and `internal/objectgraph` passed. Root incorporation
-checks also passed on this branch:
-`nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
-`nix develop -c go test ./internal/objectgraph -count=1`, and
-`nix develop -c go test ./internal/store -count=1`. Evidence boundary:
-branch-level code/test/verifier acceptance only; no API producer path,
-frontend/source-open, Qdrant projection, main, staging, product, deployment, or
-landing claim. O3 Phase 2 was launched through current Codex thread tools as a
-bounded shadow-write producer slice. Worker setup returned pending worktree
-handle `local:c6b79ff4-1a9f-491c-81e5-ea1cdc44df60`, which resolved to worker
-thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489` (`O3 worker - Source Entity
-Phase 2 shadow-write`) in `/Users/wiz/.codex/worktrees/fcf1/go-choir` on
-branch `codex/o3-phase2-shadow-write-producer`. The worker created docs
-checkpoint `caf5b737 checkpoint O3 phase2 shadow-write producer`, choosing the
-`edit_texture` appagent tool path through `commitTextureToolEdit`. The worker
-then completed implementation commit `32a5d338 implement O3 phase2 texture
-tool source shadow writes`: `patch_texture` / `rewrite_texture` now call
-`CreateRevisionWithSourceGraph` in shadow-write mode for `choir.source_entity`
-records derived from structured `SourceEntities`, while legacy revision reads
-and DTOs still use `texture_revisions.source_entities_json`. Worker-reported
-tests passed: focused runtime source-graph/legacy compatibility tests, focused
-Phase 1 store boundary tests, `internal/runtime -run TestTextureTool`, full
-`internal/store`, and `git diff --check`; worker worktree was clean. Verifier
-thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` (`O3 verifier - Source Entity
-Phase 2`) returned `accept` with no blocking findings and reran the same
-focused/broader checks. Worker commits were incorporated into this
-orchestration branch as `fb876caa` and `5d349eaf`; root checks passed:
-focused runtime source-graph/legacy compatibility tests, focused Phase 1 store
-boundary tests, `internal/runtime -run TestTextureTool`, full
-`internal/store`, and `git diff --check`. Mutation class is orange/red-adjacent
-with protected surfaces: Texture canonical writes, source identity/ref edges,
-legacy DTO compatibility, source-open routing, Qdrant source-of-truth
-boundaries, auth/session renewal, gateway/provider calls, and staging/deploy
-claims. O3 Phase 3 completed through worker thread
-`019f02d4-4877-7f82-89bd-ac87addc7bb3` and verifier thread
-`019f02d4-80e7-7c73-8085-bc1c52beebf2`. Worker commits `b0ad6de1` and
-`98e77766` were accepted and incorporated into this branch as `22829e24` and
-`f8769358`. The selected Texture tool path now resolves body
-`source_ref.attrs.source_entity_id` against graph `choir.source_entity` records
-derived from the same materialized `SourceEntities` array, writes pinned
-`choir.source_ref` records, and fails unresolved graph refs before document head
-advancement. Verifier verdict: `accept`, no blocking findings. Residual risk:
-the duplicate-normalization repair at `internal/runtime/tools_texture.go` lacks
-a dedicated two-legacy-IDs regression test. Root checks passed:
-focused Phase 3/Texture runtime tests, focused Phase 1 store boundary tests,
-full `internal/store`, and `git diff --check`. Evidence class is branch-level
-code/test/verifier acceptance only; no O3-complete, main, staging, product,
-deployment, public producer, source-open, Qdrant, graph-first read, auth,
-gateway/provider, or deploy claim exists yet.
+position / live conjectures / open edges: O0 preservation, O1 objectgraph, O2
+Qdrant derived index, O3 source entity phases, and O4 branch-level graph/source
+proofs are recorded in the ledger with worker/verifier thread ids and accepted
+commits. The latest staging O4 repair is on `origin/main`: runtime code deploy
+identity `5b61fdc4fda5376d1fc39b119f12687944d41427`; docs evidence head
+`392c5cb5bacd185db46a9659c664f561f5715d58`. CI run `28259046853` passed and
+Node B health reported `5b61fdc4` deployed at `2026-06-26T19:02:50Z`.
+Sourcecycled cycle `cycle_31ff8e99fc978df53000a511` wrote 3,833 web captures
+through the runtime API into the public platform VM graph. Authenticated Chrome
+as `yusefnathanson@me.com` showed 12 Universal Wire articles. `OPEN SOURCE`
+opened a Source Viewer reader artifact. The first `WEB LENS` click in an
+already-open post-deploy tab failed on stale dynamic import
+`/assets/BrowserApp-BACPaCdk.js`; a full page reload cleared the stale chunk and
+Web Lens opened `https://t.me/pulsenigeria247/1`. Current problem conjecture:
+Choir's deploy/static-asset strategy does not protect already-open SPA clients
+from chunk filename turnover across deploys, so source-open actions can fail
+until manual reload. Remaining open O4/O5+ edges: stale frontend chunk repair,
+native Texture body `source_ref` citation carry-forward, publication/export,
+Qdrant projection, provider/search realism, run acceptance, promotion/rollback,
+and broader O5-O8 settlement.
 
-O3 Phase 4 worker thread `019f02ed-7ce9-7d30-906b-f497a95ecc6d`
-(`O3 worker - Source API Phase 4`) completed cleanly in
-`/Users/wiz/.codex/worktrees/ba60/go-choir`. Worker docs checkpoint
-`cc0de09e` chose the additive Texture API read shape:
-keep legacy revision `source_entities` unchanged and add explicit
-`source_entity_objects` plus `source_refs` graph wrapper arrays to Texture
-revision responses when graph records exist. Worker implementation commit
-`9ab4a810` adds revision-scoped graph reads, enriches existing Texture revision
-responses with those wrapper arrays, preserves legacy fields, and repairs the
-Phase 3 residual duplicate-normalization risk with a focused two-legacy-ID
-regression test. Worker evidence commit `b74f5a87` records exact test evidence
-and leaves the worktree clean.
-
-Worker-reported checks passed:
-`nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`;
-`nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`;
-`nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`;
-`nix develop -c go test ./internal/store -count=1`; and `git diff --check`.
-
-Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
-(`O3 verifier - Source API Phase 4`) returned `revise`. Rerun checks passed:
-the focused runtime duplicate/API check, focused store graph checks,
-`internal/runtime -run TestTextureTool`, full `internal/store`, and
-`git diff --check`. The blocking finding is [P2]: the Phase 4 candidate enriches
-revision listing one revision at a time, and each enrichment calls a graph read
-path that queries refs and then scans all owner source entities. At
-`limit=10000`, an existing revision-list read becomes repeated graph queries
-plus repeated owner-wide source scans.
-
-Worker thread `019f02ed-7ce9-7d30-906b-f497a95ecc6d` repaired the revise
-finding in code-only commit `f9a23cea batch texture source graph wrappers for
-revision lists`. Revision-list responses now batch source graph wrapper reads
-once per list via `ListTextureSourceGraphForRevisions`; single-revision reads
-keep the existing helper. Legacy `source_entities` remains unchanged, and
-`source_entity_objects` plus `source_refs` remain additive. Worker-reported
-checks passed: focused store batch/graph tests, focused runtime duplicate/API
-tests, `internal/runtime -run TestTextureTool`, full `internal/store`, and
-`git diff --check`. Residual risk: the batch helper still scans owner source
-entities once per revision-list response to preserve entity-only shadow-write
-wrappers; it no longer repeats that scan per listed revision.
-
-Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b` accepted the repaired
-Phase 4 candidate. Accepted worker commits were incorporated into this
-orchestration branch as `3eddef63 expose texture source graph wrappers in
-revision APIs` and `03346092 batch texture source graph wrappers for revision
-lists`. Root checks passed: focused store batch/graph tests, focused runtime
-duplicate/API tests, `internal/runtime -run TestTextureTool`, full
-`internal/store`, and `git diff --check`. Evidence class remains branch-level
-code/test/verifier acceptance only; no O3-complete, main, staging,
-source-open/frontend behavior, Qdrant projection, publication/export,
-graph-first enforcement, auth/session, gateway/provider, promotion, deploy, or
-rollback proof exists.
-
-O3 Phase 5 source-open/frontend worker has materialized. Worker pending
-worktree handle `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0` resolved to
-thread `019f031a-6008-7c42-a36a-cc3ffebe707c` (`O3 worker - Source Open
-Phase 5`) in `/Users/wiz/.codex/worktrees/1050/go-choir`. Verifier thread
-`019f031a-9eb9-7301-9db8-62bbb84e727a` (`O3 verifier - Source Open Phase 5`)
-returned `blocked` before the worker materialized; treat that as stale
-launch-order evidence, not a Phase 5 rejection. The bounded slice is
-`O3-phase5-source-open-frontend-wrappers`: adapt frontend source-open derivation
-so Texture revisions can consume graph-backed `source_entity_objects` and
-`source_refs` when legacy `source_entities` is absent, while preserving
-publication bundle priority, legacy `source_entities` fallback, and the rule
-that legacy `metadata.media_source_refs` are not synthesized into source
-entities. Excluded surfaces remain O4 News/Universal Wire, Qdrant projection,
-publication/export, auth/session renewal, gateway/provider calls, staging/deploy,
-graph-first enforcement, promotion, and rollback behavior.
-
-Worker thread `019f031a-6008-7c42-a36a-cc3ffebe707c` finished Phase 5 with
-commit `927d58a68bc36ca8a4d2e82066c8961f60b5587d` (`derive texture sources
-from graph wrappers`). The chosen mapping keeps `revisionSourceEntities`
-priority as publication bundle sources, then legacy revision `source_entities`,
-then graph-backed `source_entity_objects`. Wrapper records are converted into
-the existing local entity shape consumed by `sourceEntityID`,
-`sourceEntityOpenPlan`, and `sourceEntityLaunchPayload`; `source_refs` are used
-only to preserve body-level legacy `source_ref` ids when multiple refs point at
-the same graph entity version. Legacy `metadata.media_source_refs` still do not
-synthesize source entities. Worker checks passed:
-`npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities"`;
-`npm run build` with unrelated existing Svelte/a11y/chunk warnings only; and
-`git diff --check HEAD~1..HEAD`. Worker tracked hygiene was clean; ignored
-artifacts remained `frontend/node_modules/` from `npm ci` and `frontend/dist/`
-from `npm run build`.
-
-Verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` returned `accept` for
-Phase 5. The accepted worker commit was incorporated into this orchestration
-branch as `0189d59a derive texture sources from graph wrappers`. Root checks
-passed:
-`npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities"`
-from `frontend/` (5 tests);
-`npm run build` from `frontend/` with unrelated existing Svelte/a11y/chunk
-warnings only; and `git diff --check HEAD~1..HEAD`. Root proof artifacts
-`frontend/test-results/` and `frontend/dist/` were removed after validation, and
-the tracked worktree was clean.
-
-O3 Phase 6 source-open/browser-product proof is accepted and incorporated at
-branch level. Pending worktree handle
-`local:c0f12b0c-2845-46eb-bb84-8f135082ec9c` resolved to thread
-`019f032c-7960-7563-8b75-c8a681a388f8` (`O3 worker - Source Open Phase 6`) in
-`/Users/wiz/.codex/worktrees/5e10/go-choir`; the thread is pinned. Worker
-branch `codex/o3-phase6-source-open-browser-product-proof` contains commit
-`65a08d44 test O3 phase6 graph wrapper source open path`, changing only
-`frontend/tests/texture-source-entities.spec.js`. The worker proof constructs a
-Texture revision through public Texture APIs, intercepts only
-`GET /api/texture/revisions/{id}` into graph-only `source_entity_objects` plus
-`source_refs` with no legacy `source_entities`, then verifies native
-`source_ref` rendering plus Source Viewer default routing and explicit Web Lens
-routing through the UI. Worker-reported commands passed: the single new focused
-browser proof with `--timeout=120000`, the adjacent Phase 5 regression filter
-plus the new test (6 tests), and `git diff --check`; `npm run build` was not run
-because the change is test-only. Tracked worker hygiene is clean; ignored
-`frontend/node_modules/` and service logs remain confined to the worker
-worktree. Independent verifier thread
-`019f0343-df0b-7442-8d2e-7714b3fd3988` (`O3 verifier - Source Open Phase 6`)
-returned `accept` with no blocking findings after inspecting the diff, rerunning
-the exact focused Phase 6 Playwright proof, rerunning the 6-test regression
-filter, and checking tracked hygiene. The accepted worker commit was
-incorporated into this orchestration branch as `9eeb5115 test O3 phase6 graph
-wrapper source open path`. Root checks passed:
-`npx playwright test tests/texture-source-entities.spec.js -g "Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
-`npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities|Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
-and `git diff --check HEAD~1..HEAD`. Root generated proof outputs
-`frontend/test-results/` and `frontend/playwright/` were removed; ignored
-`frontend/node_modules/` and `frontend/frontend.log` remain as local
-dependency/log artifacts. Evidence class is local branch-level
-test/verifier/root-rerun acceptance only. No O3-complete, main, staging,
-product acceptance, deploy, backend graph-wrapper production, Qdrant
-projection, publication/export, auth/session, gateway/provider, graph-first
-enforcement, promotion, or rollback claim exists.
-
-O4 Phase 1 web-capture foundation is accepted and incorporated at branch level.
-Pending worktree handle
-`local:3a8578f8-9c76-4572-bca1-2c3b2d02b638` resolved to thread
-`019f034d-ebc1-75a3-9c4b-269e8b9d6be7`
-(`O4 worker - Web Capture Object Foundation`) in
-`/Users/wiz/.codex/worktrees/b850/go-choir`; the thread is titled and pinned.
-Worker branch `codex/o4-phase1-web-capture-object-foundation` contains
-checkpoint commit `ae0fb49f checkpoint O4 web capture foundation gap` and
-implementation commit `7e9418af add web capture objectgraph foundation`.
-Worker-reported implementation adds a typed `choir.web_capture.v1` metadata
-contract, validation, `Service.CreateWebCapture`, extracted-text object body
-storage, deterministic identity tests, required-field/URL validation tests,
-SQLite durability tests, and `captured_from` edge persistence tests. Worker
-checks passed: `nix develop -c go test ./internal/objectgraph`,
-`git diff --check`, and clean tracked status. Independent verifier thread
-`019f0353-95c0-7020-8047-2e7d6fab7e66`
-(`O4 verifier - Web Capture Object Foundation`) has been launched against
-worker commits `ae0fb49f` and `7e9418af`, titled, and pinned. The verifier
-returned `revise_before_continue`: focused `internal/objectgraph` tests passed,
-the implementation commit passed `git show --check`, and no code-level blocker
-was found, but `git diff --check 68cfb026..7e9418af` and
-`git show --check ae0fb49f` fail because
-`docs/o4-web-capture-foundation-checkpoint-2026-06-26.md` has a new blank line
-at EOF. Evidence remains worker-local until repair, independent verifier
-acceptance, and root incorporation.
-
-Worker thread `019f034d-ebc1-75a3-9c4b-269e8b9d6be7` repaired the verifier
-finding with commit `b79251db fix O4 checkpoint trailing blank line`, making
-worker branch `codex/o4-phase1-web-capture-object-foundation` HEAD
-`b79251db69d22b00d69676187ff6f989ec7fcc1c`. Worker-reported repair checks
-passed: `git diff --check 68cfb026..HEAD`, `git show --check HEAD`,
-`nix develop -c go test ./internal/objectgraph`, and `git status --short --ignored`
-with no output. The same verifier thread
-`019f0353-95c0-7020-8047-2e7d6fab7e66` re-reviewed the repaired head and
-returned `accept` with no findings. The verifier reran
-`nix develop -c go test ./internal/objectgraph`, `git diff --check
-68cfb026..HEAD`, `git show --check b79251db`, checked the candidate file list,
-and confirmed no unintended runtime, proxy, store, Texture, sourcecycled,
-sandbox, or frontend path changes. Accepted worker commits were incorporated
-into this orchestration branch as `cc031a79 checkpoint O4 web capture
-foundation gap`, `a77fd21d add web capture objectgraph foundation`, and
-`99f68b56 fix O4 checkpoint trailing blank line`. Root checks passed:
-`git diff --check 68cfb026..HEAD`, `git show --check --oneline HEAD`, and
-`nix develop -c go test ./internal/objectgraph`. Tracked root status is clean;
-ignored local env/log/dependency artifacts remain unrelated. Evidence class is
-branch-level local test/verifier/root-rerun acceptance only. No Universal Wire
-feed proof, sourcecycled ingestion, Qdrant, main, staging, product acceptance,
-deploy, publication/export, auth/session, gateway/provider, promotion, or
-rollback claim exists. O4 Phase 2 worker thread
-`019f035c-2a13-7f20-abd9-960b9866189b` (`O4 worker - Universal Wire Web
-Capture Read`) resolved from pending worktree handle
-`local:6462c8b4-ca0f-4c42-bdc5-ad578dda6f15` in
-`/Users/wiz/.codex/worktrees/5f31/go-choir`; it was titled and pinned on
-2026-06-26. Early worker trace reports a runtime-owned objectgraph service gap
-and is following Problem Documentation First before any route behavior change.
-No O4 Phase 2 final report, verifier, root incorporation, or acceptance exists
-yet. The worker later completed on branch
-`codex/o4-phase2-universal-wire-web-capture-read` at
-`77b3f251c8e41b552efa41a577e81fa10baab7d9`, after checkpoint commit
-`b264e8e766c1f1accb1578aa76a0dbf92aabf5ea`. The worker-reported diff adds
-`docs/o4-universal-wire-web-capture-read-checkpoint-2026-06-26.md`,
-`internal/runtime/objectgraph_runtime.go`, and updates
-`internal/runtime/runtime.go`, `internal/runtime/test_helpers_test.go`,
-`internal/runtime/universal_wire.go`, and
-`internal/runtime/universal_wire_test.go`. Worker-reported checks passed:
-`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`,
-`nix develop -c go test ./internal/objectgraph`,
-`git diff --check f3272233..HEAD`, and `git show --check --oneline HEAD` plus
-`HEAD~1`. Worker tracked/ignored status was clean/no output. Evidence boundary
-is worker-local branch-level focused tests only. Verifier thread
-`019f0364-d34d-7270-bcb9-ebefb5cb2ade` (`O4 verifier - Universal Wire Web
-Capture Read`) returned `accept` with no blocking findings. The verifier
-confirmed checkpoint-before-code, the narrow runtime-owned objectgraph service
-boundary, Texture-edition priority, honest empty-state/fallback behavior, and
-focused tests. Accepted worker commits were incorporated into this orchestration
-branch as `4d8b0f95 checkpoint O4 web capture read gap` and `b3d4f646 add
-Universal Wire web capture read path`. Root checks passed:
-`git diff --check d6f0b389..HEAD`; `git show --check --oneline 4d8b0f95`;
-`git show --check --oneline b3d4f646`;
-`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`;
-and `nix develop -c go test ./internal/objectgraph`. The root runtime test
-emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
-Tracked root status is clean; ignored local env/log/dependency artifacts remain
-unrelated.
-
-O4 Phase 10c browser harness repair is accepted and incorporated at branch
-level. Pending handle
-`local:68462d14-f17c-45c0-a1e5-3b719a5eec5b` resolved to thread
-`019f0410-f4d9-7ee1-a1db-76ea71095b88`
-(`O4 worker - Phase 10c Texture Browser Harness`), titled and pinned, in
-`/Users/wiz/.codex/worktrees/eda4/go-choir` on branch
-`codex/o4-phase10c-native-texture-source-ref-browser-harness` from root
-checkpoint `83fcbdef046b2253d823d4cea2136e9a3725f6dd`. Worker commit
-`6995feb89964af984cbc2afc66fef62e70d500e3` (`Fix frontend pnpm build approval
-for harness`) changes only `frontend/package.json` and new
-`frontend/pnpm-workspace.yaml`, moving pnpm `esbuild` build-script approval to
-the current workspace-level format and removing the obsolete package-level
-setting. Worker-reported evidence: reproduced missing `@playwright/test`,
-missing `4173`, and pnpm/esbuild startup failures; repaired config; from cleaned
-artifacts, `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
-./start-services.sh` reached `Services started successfully`; the exact focused
-Playwright proof passed; `npm run build` passed with existing warnings;
-`git diff --check`, `git show --check HEAD`, clean status, and port cleanup for
-4173/8081/8082/8083 passed. Independent verifier pending handle
-`local:5703fec1-9e3a-4495-93b2-8fbf340c72a4` resolved to thread
-`019f0418-d9b9-72d1-b3ba-10086ccc8cde`
-(`O4 verifier - Phase 10c Texture Browser Harness`) in
-`/Users/wiz/.codex/worktrees/182d/go-choir`; it returned `accept` after
-rerunning diff hygiene, `npm ci`, `npm run build`, `pnpm install
---frozen-lockfile`, `CHOIR_ENABLE_PLATFORMD=0` stack startup, the exact focused
-Playwright proof, and port cleanup. Root incorporated the worker commit as
-`40d83b3c Fix frontend pnpm build approval for harness`; root checks passed:
-`git show --check --oneline HEAD`, `git diff --check HEAD~1..HEAD`, `npm run
-build`, `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix
-develop -c ./start-services.sh`, the exact focused Playwright proof, and port
-cleanup. Root generated proof outputs `frontend/dist/`, `frontend/playwright/`,
-and `frontend/test-results/` were removed. This repairs the local browser
-harness blocker but does not close V because the later native Texture
-body-`source_ref` assertion-tightening and deployed/staging proof remain open.
-
-O4 Phase 10d native Texture reader-body proof is accepted and incorporated at
-branch level.
-Worktree `create_thread` returned pending handle
-`local:1e43828a-9ce3-4a57-bd83-62a92d90d85d` for work item
-`O4-phase10d-native-texture-source-ref-reader-body-proof`, starting from this
-orchestration branch at `35d0e350 record O4 harness repair acceptance`; the
-materialized worktree is `/Users/wiz/.codex/worktrees/0f6b/go-choir` on branch
-`codex/o4-phase10d-native-texture-source-ref-reader-body-proof`. The readable
-thread is `019f0425-84ab-7120-99bc-c068a19227a8`
-(`O4 worker - Phase 10d Texture Reader Body Proof`), titled and pinned. Current
-worker commit `5cc0457f6695f43466b714161a56c86b46ed1e3b` (`Tighten graph
-wrapper source reader proof`) changes only
-`frontend/tests/texture-source-entities.spec.js`, separating inline
-`source_ref` selector/note text from graph object reader body text and asserting
-Source Viewer reader content comes from the graph body. Worker-reported
-evidence: exact focused Playwright proof passed, adjacent six-test regression
-filter passed, `git diff --check`, `git show --check`, commit-range diff check,
-service stop, and port cleanup passed. Independent verifier launch returned
-pending handle `local:d292cc59-d088-480f-baef-83c5b2dfc12b`, which resolved to
-thread `019f042a-af35-7411-abee-9adf12c2a664`
-(`O4 verifier - Phase 10d Texture Reader Body Proof`) in
-`/Users/wiz/.codex/worktrees/515b/go-choir`; it returned `accept` with no
-blocking findings after patch inspection, focused Playwright proof, adjacent
-six-test regression filter, service stop, and port cleanup. The requested
-base-range SHA was unavailable in the verifier checkout, so it verified against
-the commit parent present there and called that boundary out. Root incorporated
-the worker commit as `9f54fd5e Tighten graph wrapper source reader proof`; root
-checks passed: `git show --check --oneline HEAD`, `git diff --check
-HEAD~1..HEAD`, `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1
-nix develop -c ./start-services.sh`, the exact focused Playwright proof, the
-adjacent six-test regression filter, service stop, and port cleanup. Generated
-`frontend/playwright/` and `frontend/test-results/` were removed. Current V
-remains 31 because deployed/live source artifact proof remains open.
-
-O4 Phase 11 deployed/live source artifact proof worker returned a verified
-no-code blocker. Pending handle
-`local:d32abcad-6c68-4898-9f1b-f563a0abaa55` resolved to thread
-`019f0432-48be-7d12-bdd6-b7776d6cc1c0`
-(`O4 worker - Phase 11 Deployed Source Proof`) in
-`/Users/wiz/.codex/worktrees/d581/go-choir` on branch
-`codex/o4-phase11-live-source-proof` at `b13ba881 record O4 reader body proof
-acceptance`. Worker commits: none. The worker found the smallest deployed/live
-proof blocker: staging `/health` reports deployed commit
-`06e3225f02f60f113340309a2766c5face134395`, which does not contain O4 local
-proof heads `b13ba881` or `9f54fd5e`; unauthenticated
-`/api/universal-wire/stories` returns authentication required; no normal
-authenticated product session exists in the worker; existing deployed/staging
-tests do not prove source opening read-only; stronger source artifact tests
-create docs/content/publications and are mutating. Verifier pending handle
-`local:db7cea87-c4ef-4e27-a82f-60770e93688e` resolved to thread
-`019f0437-2147-7f32-b4e4-0bf1ddd57759`
-(`O4 verifier - Phase 11 Deployed Source Blocker`) in
-`/Users/wiz/.codex/worktrees/0539/go-choir`; it returned `accept` with no
-blocking findings. The verifier independently confirmed staging deploy identity
-`06e3225f02f60f113340309a2766c5face134395`, 401 unauthenticated Universal Wire
-behavior, non-ancestor status for local proof heads `b13ba881` and `9f54fd5e`,
-and the absence of an existing deployed no-mutation source-opening proof path.
-Current V remains 31 because this verifies the blocker rather than the
-deployed/live source artifact proof.
-
-O4 Phase 12 proof-path worker returned `handoff_required`. Worker thread
-`019f043c-2f29-7302-ad9b-453b7757fffd`
-(`O4 worker - Phase 12 Deployed Source Proof Path`) in
-`/Users/wiz/.codex/worktrees/dd88/go-choir` launched from pending handle
-`local:9d6ecc0f-b36e-4f20-9c3b-3db569c5b7bc` at root head
-`5cc5093b record O4 deployed blocker verifier`; it made no commits and left a
-clean worktree. Findings: staging must deploy a commit containing O4 proof heads
-`9f54fd5e` and `b13ba881`, practically current O4 handoff line `5cc5093b` or
-successor on `origin/main`; no existing authenticated read-only staging test
-proves Source Viewer reader artifact opening by default plus explicit Web Lens
-routing without creating content; the smallest missing piece is a stable
-read-only staging fixture/API path plus staging spec over an existing
-source-backed artifact; next move requires deploy/auth authority. Verifier
-pending handle `local:4e663818-195f-4043-894c-765a77e334ec` resolved to thread
-`019f043f-03fe-7bc0-b96a-ab5807c688c8`
-(`O4 verifier - Phase 12 Deployed Source Proof Path`) in
-`/Users/wiz/.codex/worktrees/cb70/go-choir`; it returned `accept` with no
-blocking discrepancies. The verifier confirmed current staging deploy identity
-`06e3225f02f60f113340309a2766c5face134395`, 401 unauthenticated Universal Wire
-behavior, deploy-from-`origin/main` workflow, missing read-only deployed
-source-opening test path, and clean verifier/worker worktrees. Current V
-remains 31 because the remaining O4 source/citation proof now requires
-deploy/auth authority or a documented staging fixture/harness gap.
-
-next move: deploy the sourcecycled cycle-event diagnostic, verify
-`https://choir.news/health` reports that commit, then read the internal
-source-service handoff/cycle event evidence through an authorized product or
-host path before writing another Universal Wire behavior fix. The discriminator
-must decide whether staging has no stored source items, stored but ineligible
-items, a source-cycle/backfill error, a graph-store mismatch, or a different
-active computer/objectgraph route. O5 remains deferred unless the mission owner
-accepts O4 as an open handoff edge. Deploy/auth authority was granted on
-2026-06-26 and orchestration pushed
-`a52fb233bbfa0c64346634b87cebe13f9797cbd5` to `origin/main`, but CI run
-`28247304935` failed in `Deploy to Staging (Node B)` after all test/build jobs
-passed. Failure: the remote NixOS host closure build for `cmd/sandbox` cannot
-resolve `github.com/yusefmosiah/go-choir/internal/objectgraph` under
-`-mod=vendor`, so staging remains on deployed commit
-`06e3225f02f60f113340309a2766c5face134395`. Root documented that problem in
-`c47afcbb document O4 staging deploy failure`, repaired the Nix service package
-source lists in `6a203e54 include objectgraph in service package sources`, and
-pushed `6a203e549d9adf6cb301e1ac74cc9b1bdd77e943` to `origin/main`. CI run
-`28247864701` passed all jobs, including `Deploy to Staging (Node B)`.
-`https://choir.news/health` reports both proxy and sandbox build/deployed
-commit `6a203e549d9adf6cb301e1ac74cc9b1bdd77e943`, deployed at
-`2026-06-26T15:31:51Z`. Authenticated Chrome QA could not complete the O4
-source-opening proof because the Chrome profile opened Choir as a public
-preview rather than an authenticated computer: `/auth/session` state presented
-the signed-out desktop, `/api/universal-wire/stories` returned 401 when called
-without cookies, the live Universal Wire app opened with
-`data-universal-wire-data-source="universal-wire-texture-index"`, 0 articles,
-and no source-open actions, and the normal Desk sign-in control opened a
-passkey modal requiring account email and local passkey approval. After owner
-reported logging back in, Codex-controlled Chrome still observed
-`data-auth-state="signed_out"`, so that browser profile remains unsuitable for
-authenticated account proof. The deeper Universal Wire empty-feed investigation
-found a host configuration gap: `cmd/sourcecycled` only projects fetched source
-items into graph captures when `SOURCE_SERVICE_OBJECTGRAPH_DB_PATH` or
-`SOURCE_SERVICE_RUNTIME_STORE_PATH` is configured, while `nix/node-b.nix`
-currently gives `go-choir-sourcecycled` neither variable and only permits writes
-under `/var/lib/go-choir/source-service`. The host sandbox reads runtime graph
-state from the sidecar of `RUNTIME_STORE_PATH=/var/lib/go-choir/runtime/runtime.db`.
-Nix eval confirmed sourcecycled had no graph DB env and sandbox has the runtime
-store env. Root documented the gap in `b0461de3 document Universal Wire graph
-projection config gap`, repaired Node B sourcecycled configuration in
-`f658af08 configure sourcecycled graph projection on Node B`, and pushed
-`f658af08664b21151991d02a0f1d0a762a8214e8` to `origin/main`. CI run
-`28254559588` passed all jobs, including `Deploy to Staging (Node B)`;
-`https://choir.news/health` reports proxy and sandbox build/deployed commit
-`f658af08664b21151991d02a0f1d0a762a8214e8`, deployed at
-`2026-06-26T17:35:56Z`.
-
-The next investigation found a second empty-feed gap: the deployed sourcecycled
-projection only runs after a fresh cycle returns non-empty `items`. If a Node B
-cycle has no new items, `cmd/sourcecycled/main.go` records
-`cycle_completed_empty` and returns before graph projection. That means the
-last couple weeks of already-stored sourcecycled items are not automatically
-backfilled into `choir.web_capture` after the config repair. A narrow repair
-should, on an empty source cycle, backfill a bounded set of recent stored items
-only when the Universal Wire graph has no existing web captures; otherwise it
-should skip to avoid repeatedly refreshing graph object `updated_at`. Root
-documented that gap in `42d4080c document Universal Wire empty-cycle backfill
-gap`, repaired it in `bbca43c5 backfill sourcecycled graph captures on empty
-cycles`, and pushed `bbca43c5d7d3d79b7d8e0901459f45b7bdb44efb` to
-`origin/main`. CI run `28255445491` passed all jobs, including `Deploy to
-Staging (Node B)`; `https://choir.news/health` reports proxy and sandbox
-build/deployed commit `bbca43c5d7d3d79b7d8e0901459f45b7bdb44efb`, deployed at
-`2026-06-26T17:52:46Z`. After the service-pointer deploy restarted
-`go-choir-sourcecycled` at `2026-06-26T17:52:54Z`, root waited past the next
-15-minute scheduled sourcecycled cycle and rechecked the owner's authenticated
-Chrome session at `2026-06-26T18:10Z`; Universal Wire still showed 0 articles,
-no Universal Wire Texture edition alias, 0 graph-capture candidates, and no
-non-tombstoned `choir.web_capture` objects for `universal-wire-platform`.
-Current evidence therefore repairs two necessary backend/deploy gaps but does
-not close the live Universal Wire product issue. The next realism axis is Node
-B sourcecycled runtime evidence: cycle events/journal must distinguish no
-stored source items, no eligible HTTP/body-bearing source items, cycle failure
-before backfill, or a still-mismatched active graph store. O4
-Phase 10b replacement worker thread
-`019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
-Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
-candidate and left a clean worktree at
-`24382118 record O4 native citation worker no-candidate`. It identified a
-plausible test-only tightening for native body `source_ref` reader-artifact
-proofs, but reverted it because the focused Playwright harness could not be run
-locally: full `start-services.sh` failed at platformd/Dolt state, the
-`CHOIR_ENABLE_PLATFORMD=0` harness failed frontend startup under pnpm/esbuild
-build-script policy, and preview-only/auth setup failed without the full
-auth/proxy stack. Root documented the blocker in the Phase 10c checkpoint
-before repair.
-O4 Phase 10 worker thread
-`019f03ff-f119-75d3-8bf2-ae3f50af3ab4` (`O4 worker - Native Texture Citation
-Source Open`) resolved in `/Users/wiz/.codex/worktrees/d3ed/go-choir` on branch
-`codex/o4-phase10-native-texture-source-ref-open-proof`, but returned no
-candidate and left the worktree clean at its starting head
-`7b94d220 record O4 source artifact acceptance`. O4 Phase 9 worker thread
-`019f03e9-8fe1-7503-a9a2-f55ee5430c54` completed in
-`/Users/wiz/.codex/worktrees/199d/go-choir`; verifier thread
-`019f03f2-bb27-7d80-90a1-e172558b9c61` accepted the repaired head
-`f7e8fced`. Root incorporated the checkpoint as `afe8e70d` and implementation
-as `9ac7d6c2`; the repair commit was empty in root after conflict resolution
-because root documentation already carried corrected provenance. Root checks
-passed: `git show --check --oneline afe8e70d`;
-`git show --check --oneline 9ac7d6c2`; `git diff --check 617a0a45..HEAD`;
-`nix develop -c go test ./internal/runtime -run
-'^TestHandleUniversalWireStories' -count=1 -timeout=120s`; `npm run build`;
-and focused `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npx playwright test
-tests/universal-wire-app.spec.js -g 'Universal Wire opens graph capture sources
-through Source Viewer by default and Web Lens explicitly' --timeout=120000`.
-Actual Delta V: 0; current V remains 31. O4 Phase 8 worker thread
-`019f03d8-2a15-7a61-ab7f-82ea0213cce2` and verifier thread
-`019f03e1-5342-7b61-a557-917c1ef1c407` accepted worker commits `4975163f` and
-`cbf04485`, which root incorporated as `db46f8fe checkpoint O4 empty feed
-diagnostics gap` and `f510386b add Universal Wire empty feed diagnostics`.
-Root checks passed: `git show --check --oneline db46f8fe`;
-`git show --check --oneline f510386b`; `git diff --check 49b363cc..HEAD`;
-`nix develop -c go test ./internal/runtime -run
-'^TestHandleUniversalWireStories' -count=1 -timeout=120s`; `npm run build`;
-and focused `npx playwright test tests/universal-wire-app.spec.js -g
-'Universal Wire renders empty feed diagnostics without synthetic stories'
---timeout=120000`. Evidence remains branch-local/root-rerun only, not staging
-or full News benchmark proof. O4 Phase 7
-worker thread
-`019f03c9-2c8f-73b1-bfca-ed7badd4383f` (`O4 worker - Graph Source-Ref Feed`)
-and verifier thread `019f03d1-0071-7371-bdd6-a3bd840c9e76` (`O4 verifier -
-Graph Source-Ref Feed`) accepted worker commits `35420443` and `8a0a69d1`,
-which root incorporated as `24f48768 checkpoint O4 graph source-ref feed gap`
-and `62503e67 carry Wire graph source entity provenance`. Root checks passed:
-`git show --check --oneline 24f48768`; `git show --check --oneline 62503e67`;
-`git diff --check 4f67aaf9..HEAD`; `nix develop -c go test ./internal/runtime
--run '^TestHandleUniversalWireStories' -count=1 -timeout=120s`; `nix develop -c
-go test ./internal/cycle -run
-'^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1 -timeout=60s`;
-and `nix develop -c go test ./cmd/sourcecycled -run
-'^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1
--timeout=60s`. Expected Delta V: 1; Actual Delta V: 1. Current V is 32. Do not
-claim full News benchmark, staging, native Texture `source_ref`
-publication/export, Qdrant, promotion, rollback, or run acceptance from this
-branch-level proof. O4 Phase 6 worker thread
-`019f03b9-7d73-7d13-9d58-4bec2361f5c8` (`O4 worker - Authenticated Wire API
-Proof`) in `/Users/wiz/.codex/worktrees/f0b3/go-choir` completed. Orchestration
-observed the worker branch dirty with one focused test change in
-`internal/runtime/universal_wire_test.go` and a long-running
-`go test ./cmd/sourcecycled -run Test.*ObjectGraph|Test.*RuntimeStore|Test.*WebCapture -count=1`
-process, then sent a bounded follow-up asking the worker to classify progress
-or hang and finalize honestly. The worker replied that the long-running command
-completed and that the runtime-package test placement is invalid because it
-creates a Go import-cycle boundary. A later read-only check found no active test
-process but still only the invalid runtime test dirty, so orchestration sent a
-second steering prompt requiring removal of that failed edit before finalizing,
-with either a valid relocated `cmd/sourcecycled` proof commit or a precise
-blocker/no-candidate report. The worker then removed the invalid runtime edit,
-relocated the proof into `cmd/sourcecycled/main_test.go`, and produced candidate
-commit `e406ca23 test O4 sourcecycled Wire API graph path`; external checks
-show a single test-file change, `git show --check --oneline e406ca23` passes,
-and the worker worktree is clean. A final-report prompt was sent after the
-commit. The worker final report confirms branch
-`codex/o4-phase6-authenticated-universal-wire-product-api-proof` at
-`e406ca23`, changed file `cmd/sourcecycled/main_test.go`, clean worker
-worktree status, passed focused sourcecycled/runtime/cycle tests, and
-non-claims for staging/deploy/auth renewal/vmctl/provider/Qdrant/Texture
-canonical writes/publication/export/promotion/rollback/run acceptance.
-Independent verifier worktree handle
-`local:fda573a5-c918-4c70-9b9e-4f4e6b843960` resolved to verifier thread
-`019f03c2-88b6-7481-b570-79190baeeb0b` (`O4 verifier - Authenticated Wire API
-Proof`) in `/Users/wiz/.codex/worktrees/d9c6/go-choir`; the verifier returned
-`accept` with no findings and confirmed the candidate is a one-file test-only
-proof using registered public runtime routes and authenticated
-`X-Authenticated-User`, with no internal/test-only route seeding. Accepted
-worker commit `e406ca23` was incorporated into root as `6dec06b4 test O4
-sourcecycled Wire API graph path`. Root checks passed:
-`git diff --check 413d97c3..HEAD`; `git show --check --oneline 6dec06b4`;
-`nix develop -c go test ./cmd/sourcecycled -run '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1 -timeout=60s`;
-`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(FallsBackToGraphBackedWebCaptures|RequiresAuth)$' -count=1 -timeout=60s`;
-and `nix develop -c go test ./internal/cycle -run '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1 -timeout=60s`.
-The worker replaces pending handle
-`local:b9a89dc6-e09f-4eec-8617-7706221de218` for orchestration purposes. The
-assignment is an authenticated Universal Wire product-API proof slice: show,
-through product-visible evidence if feasible, that configured sourcecycled
-objectgraph storage and `/api/universal-wire/stories` work together, or document
-the precise config/deploy blocker and the narrowest durable improvement.
-Expected Delta V: 1 for authenticated API acceptance after verifier acceptance
-and root incorporation; actual Delta V: 1. Do not claim News benchmark,
-staging, native Texture `source_ref` carry-forward, publication/export, Qdrant,
-promotion, rollback, or run acceptance from this branch-level proof. O4 Phase 5 verifier thread
-`019f03b0-6a16-79b0-888d-b8a48e6a378f` (`O4 verifier - Web Capture
-Ingestion`) returned `accept` with no blocking findings. The verifier confirmed
-checkpoint-before-code, narrow sourcecycled/objectgraph boundaries, provenance
-coherence through source entities and `captured_from` edges, opt-in
-`cmd/sourcecycled` objectgraph DB wiring, preserved Universal Wire fallback
-semantics, and clean candidate worktree status. Accepted worker commits were
-incorporated into this orchestration branch as `ca639a9e checkpoint O4
-sourcecycled web capture ingestion` and `632919ab write sourcecycled web
-captures to objectgraph`. Root checks passed: `git diff --check 76d21413..HEAD`;
-`git show --check --oneline ca639a9e`; `git show --check --oneline 632919ab`;
-`nix develop -c go test ./internal/objectgraph -count=1`;
-`nix develop -c go test ./cmd/sourcecycled -count=1`;
-`nix develop -c go test ./internal/cycle -count=1`; and
-`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`.
-Root tracked status is clean; ignored local env/log/dependency artifacts remain
-unrelated. Earlier pending verifier handle
-`local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c` did not resolve in
-`list_threads` and is superseded for orchestration by the readable replacement
-verifier. O4 Phase 5 worker thread
-`019f039f-9dd6-7881-a4ec-8607c9a4bb34` (`O4 worker - Web Capture Ingestion`)
-completed on branch
-`codex/o4-phase5-sourcecycled-web-capture-ingestion-replacement` in
-`/Users/wiz/.codex/worktrees/o4-phase5-sourcecycled-web-capture-ingestion-replacement`
-with checkpoint commit `4395c251 checkpoint O4 sourcecycled web capture
-ingestion` and implementation commit `543c6742 write sourcecycled web captures
-to objectgraph`. The worker reports a narrow orange slice: `internal/cycle`
-projects eligible sourcecycled `sources.Item` rows into durable
-`choir.web_capture` objects via `objectgraph.Service.CreateWebCapture`, creates
-`choir.source_entity` endpoints and `captured_from` edges for provenance, and
-`cmd/sourcecycled` writes graph captures only when
-`SOURCE_SERVICE_OBJECTGRAPH_DB_PATH`, `SOURCECYCLED_OBJECTGRAPH_DB_PATH`, or a
-derived `RUNTIME_STORE_PATH` objectgraph DB path is configured. Worker-reported
-checks passed: `nix develop -c go test ./cmd/sourcecycled -count=1`;
-`nix develop -c go test ./internal/cycle -count=1`;
-`nix develop -c go test ./internal/objectgraph -count=1`;
-`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
-`git diff --check HEAD~2..HEAD`; and `git show --check --oneline HEAD`.
-Worker worktree status is clean. Evidence boundary is worker-local branch-level
-code/test proof only; no push, CI, deploy, staging, Texture native
-`source_ref`, publication/export, Qdrant, auth/session renewal,
-provider/gateway, promotion/rollback, or run-acceptance claim. Earlier pending
-worktree handle
-`local:2848c27e-c530-4401-87fb-709786e6e4b2` did not resolve in `list_threads`
-and is superseded for orchestration by the readable replacement worker. The
-worker is assigned the next smallest graph-backed News/Wire realism axis:
-sourcecycled/web/source ingestion into durable `choir.web_capture` graph
-objects, while keeping native Texture `source_ref` carry-forward,
-publication/export, staging/deploy, Qdrant, provider/gateway, auth/session,
-promotion, rollback, and run-acceptance claims out of scope unless explicitly
-assigned. O4 Phase 4 verifier thread
-`019f0395-93f6-7ad3-b89f-63aa07d9d5b0` (`O4 verifier - Source Open Browser
-Proof`) returned `accept` with no findings. Earlier pending verifier worktree handles
-`local:5cdd17ec-f3ed-489f-8339-37caa04201c4` and
-`local:05c26241-c132-4699-a101-faa5183bdf45` did not resolve in `list_threads`
-and are superseded for orchestration by the readable local verifier thread,
-which was instructed to inspect the candidate in a detached temporary worktree
-without mutating the shared orchestration checkout.
-O4 Phase 4 worker thread `019f037f-41d4-7fa2-8ff7-d4a01ff78a64` (`O4 worker -
-Universal Wire Source Open Browser`) produced branch
-`codex/o4-phase4-universal-wire-source-open-browser-proof-replacement` at
-`d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4` (`prove Wire graph capture source
-opening`). The worker reports a narrow orange frontend proof in
-`frontend/src/lib/UniversalWireApp.svelte` and
-`frontend/tests/universal-wire-app.spec.js`: Universal Wire graph-backed capture
-cards map accepted source/open identity fields into existing Source
-Viewer/Web Lens launch policy, keep Source Viewer as the default durable source
-open action, expose Web Lens only as an explicit live/original action, and avoid
-native Texture `source_ref`, publication/export, sourcecycled ingestion,
-staging, deploy, Qdrant, provider/gateway, auth/session renewal, promotion,
-rollback, and run-acceptance claims. Worker-reported focused browser proof and
-`npm run build` passed; tracked status is clean on the worker branch, with only
-ignored local logs/dependencies remaining. Verifier checks passed:
-`git status --short --ignored`, `git diff --check 407bddce..HEAD`,
-`git show --check --oneline d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`,
-focused `npx playwright test tests/universal-wire-app.spec.js -g "graph capture sources" --timeout=120000`,
-and `npm run build`; generated verifier artifacts were removed and the detached
-verifier worktree was clean. Accepted worker commit was incorporated into this
-orchestration branch as `2ad415b4 prove Wire graph capture source opening`.
-Root checks passed: `git diff --check 8d52cf14..HEAD`;
-`git show --check --oneline 2ad415b4`; `npm run build`; and focused
-`npx playwright test tests/universal-wire-app.spec.js -g "graph capture sources" --timeout=120000`.
-Root build emitted existing Svelte/a11y/chunk warnings; Vite emitted expected
-proxy connection refusals for unmocked preference/websocket requests while no
-backend proxy was running, but the focused proof passed. The earlier pending worker handle
-`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` did not resolve in `list_threads`
-and is superseded for orchestration by the readable replacement worker.
-Independent verifier thread
-`019f0376-a32c-74b3-b1bc-35b9823e648f` (`O4 verifier - Universal Wire Source
-Identity`) returned `accept` with no blocking findings. Earlier verifier
-creation returned unresolved pending worktree handle
-`local:ebca0ae2-f086-4b63-801b-70f26306a7eb`; that handle is superseded for
-orchestration by the readable replacement verifier. O4 Phase 3 worker thread
-`019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire Source Ref
-Citations`) completed on branch
-`codex/o4-phase3-universal-wire-source-ref-citations` in
-`/Users/wiz/.codex/worktrees/4aec/go-choir` at
-`5b6086e1d42a990dc9baf1aad71cebdd6fcb5797`. The worker reports a checkpoint
-commit first, then an additive Universal Wire DTO slice carrying graph/source
-identity for `choir.web_capture` fallback cards without minting native Texture
-`source_ref` citations. Accepted commits were incorporated into root as
-`07dcb8e4 checkpoint O4 wire source identity gap` and `f7d4a852 carry Wire web
-capture source identity`. Worker/verifier/root checks passed:
-`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
-`nix develop -c go test ./internal/objectgraph -count=1`;
-worker/verifier diff hygiene; root `git diff --check e18e92c8..HEAD`; and
-root `git show --check --oneline` for both incorporated commits. Evidence is
-branch-level local test/verifier/root-rerun proof only.
+next move: inspect frontend/deploy static asset serving and stale dynamic import
+handling, then choose the narrowest repair candidate. Preferred discriminator:
+prove whether old `/assets/*.js` chunks are deleted or cache headers cause
+already-open clients to request unavailable chunks. If repair is nontrivial,
+create a worker thread with this paradoc/ledger and require an independent
+verifier thread before landing.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
-version / lineage: v0 created after email-freeze landing. It supersedes the
-loose queue ordering from `docs/worktree-review-2026-06-23.md` for overnight
-execution order, while preserving that report as evidence.
+version / lineage: v0 created after email-freeze landing. It supersedes loose
+queue ordering from `docs/worktree-review-2026-06-23.md` for overnight execution
+order while preserving that report as evidence.
 
-learning state: Retained here until concrete work lands. Promote outward only
-when the mission proves or falsifies thread-native orchestration, object graph
-as substrate, News as self-development payload, or Autoradio as forcing
-benchmark.
+learning state: Thread-native orchestration is now proved usable in this Codex
+environment through `codex_app` thread tools. The current shared learning is that
+local/branch graph proofs did not settle O4 until staging auth, deploy identity,
+sourcecycled readback, active platform VM API, and authenticated browser product
+QA all agreed.
 
-settlement: not settled. Full settlement still requires thread-native
-orchestration receipts, independent verifier verdicts, landed code/docs where
-behavior changed, CI, deploy identity, and staging/product acceptance for any
-staging claim. Staging now deploys `338589ab` successfully with sourcecycled
-cycle-event diagnostics. The diagnostic readback proves sourcecycled wrote 2,873
-non-tombstoned `choir.web_capture` objects for `universal-wire-platform` into
-the host sandbox runtime objectgraph sidecar at
-`/var/lib/go-choir/runtime/runtime.db.objectgraph.db`, and direct Node B host
-sandbox API reads on `127.0.0.1:8085` return graph-backed Universal Wire
-stories. Authenticated Chrome and the active public platform VM at
-`http://10.200.251.2:8085` still show 0 Universal Wire articles and 0
-graph-capture candidates. The current O4 blocker is therefore a public-platform
-computer graph visibility mismatch: sourcecycled writes the host runtime graph
-while the product route reads the `universal-wire-platform/platform` VM graph.
-Remaining V is now 30. The sourcecycled-to-public-platform graph visibility
-blocker is repaired by `5b61fdc4`: staging health reports proxy and sandbox at
-`5b61fdc4fda5376d1fc39b119f12687944d41427`, sourcecycled cycle
-`cycle_31ff8e99fc978df53000a511` projected 3,833 web captures through the
-runtime API into the public platform VM, the platform VM
-`/api/universal-wire/stories` returns 12 graph-backed stories, and
-authenticated Chrome shows 12 Universal Wire articles with Source Viewer and
-Web Lens source opening. Remaining open work is outside this repaired mismatch:
-stale frontend chunk handling across deploys, native Texture body `source_ref`
-citation carry-forward, publication/export, Qdrant projection, provider/search
-realism, run acceptance, promotion/rollback, and broader O5-O8 mission
-settlement.
+settlement: not settled. The O4 public graph visibility blocker is repaired, but
+this mission remains `working` because stale-client deploy behavior and larger
+O4/O5-O8 obligations remain open. Exit requires `settled`, `open_handoff`,
+`blocked`, or `superseded` with remaining V and next assignment explicit.
 
 ## Suggested Goal String
 

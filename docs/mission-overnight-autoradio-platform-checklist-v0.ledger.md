@@ -6423,3 +6423,55 @@ stale deployed frontend chunk needs its own Problem Documentation First repair.
 Remaining O4/O5+ work includes native Texture citation carry-forward,
 publication/export, Qdrant projection, provider/search realism, run acceptance,
 promotion/rollback evidence, and the broader self-development mission.
+
+## 2026-06-26 - O4 Stale Deployed Frontend Chunk Problem Documented
+
+Claim: The O4 Universal Wire staging repair exposed a separate deploy/static-asset
+problem. An already-open authenticated Chrome client can retain references to old
+Vite chunk filenames after a staging deploy, causing explicit Web Lens source
+opening to fail until a full page reload refreshes the client bundle.
+
+Move: compacted Parallax State back into current-state form and recorded this
+Problem Documentation First checkpoint before any frontend or deploy repair.
+
+Expected Delta V: 0 for problem documentation. Actual Delta V: 0. Current V
+remains 30.
+
+Receipts:
+
+- Runtime code deploy identity for the preceding O4 repair:
+  `5b61fdc4fda5376d1fc39b119f12687944d41427`; docs evidence head:
+  `392c5cb5bacd185db46a9659c664f561f5715d58`.
+- Authenticated Chrome QA as `yusefnathanson@me.com` showed Universal Wire with
+  12 graph-backed articles and Source Viewer reader opening.
+- The first post-deploy `WEB LENS` click in the already-open Chrome session
+  failed on stale dynamic import
+  `https://choir.news/assets/BrowserApp-BACPaCdk.js`.
+- A full page reload cleared the stale chunk reference; retrying `WEB LENS`
+  opened `https://t.me/pulsenigeria247/1` with source reader snapshot content.
+
+Mutation class / protected surfaces: green documentation for a discovered
+frontend/deploy product problem. A repair would likely be orange behavior
+touching frontend chunk loading, static asset cache headers, release asset
+retention, or Web Lens/Source Viewer launch recovery. Excluded surfaces remain
+Texture canonical writes, Trace/evidence, candidate computers, auth/session
+renewal, vmctl, gateway/provider calls, Qdrant, publication/export,
+promotion/rollback, and run acceptance.
+
+Conjecture delta: the Universal Wire empty-feed blocker is repaired, but source
+opening across deploy boundaries is a separate reliability obligation. Product
+acceptance that reloads around a stale bundle is weaker than acceptance in a
+long-lived owner session.
+
+Rollback refs: this docs-only checkpoint can be reverted independently. A future
+repair must name its own rollback commit or config path.
+
+Evidence boundary: this records observed staging behavior from one authenticated
+Chrome session after deploy. It does not prove the exact cache-header or asset
+retention root cause, does not claim a repair, and does not weaken the O4 graph
+projection acceptance after reload.
+
+Open edge: inspect static asset serving and Vite dynamic import failure handling.
+Choose between retaining old chunk files across deploys, changing cache policy,
+or adding an intentional stale-client recovery path, then verify on staging with
+an already-open client if feasible.
