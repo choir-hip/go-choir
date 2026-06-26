@@ -483,10 +483,16 @@ claims. Evidence class is branch-level code/test/verifier acceptance only; no
 main, staging, product, deployment, O3-complete, source ref edge, public
 producer, source-open, Qdrant, or graph-first read claim exists yet.
 
-next move: Continue O3 with a narrow Phase 3 on the same `patch_texture` /
-`rewrite_texture` path: resolve body `source_ref` nodes to graph source entity
+next move: Resolve the O3 Phase 3 worker thread id if pending worktree
+`local:497e4e88-d21d-463d-9f2e-bcaac91c6482` has materialized, then wait for
+its final report. Phase 3 worker assignment:
+`O3-phase3-texture-tool-source-ref-edges`, same `patch_texture` /
+`rewrite_texture` path, resolve body `source_ref` nodes to graph source entity
 versions and write pinned `choir.source_ref` records transactionally, with a
 failure test proving document head does not advance if a ref cannot resolve.
+Verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` (`O3 verifier - Source
+Ref Phase 3`) is live and pinned; it must return `blocked` until the worker has
+a final report.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

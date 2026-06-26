@@ -988,3 +988,55 @@ Open edge: continue O3 with a narrow Phase 3 on the same Texture tool path:
 resolve body `source_ref` nodes to graph source entity versions and write
 pinned `choir.source_ref` records transactionally, including a failure test
 that document head does not advance when a ref cannot resolve.
+
+## 2026-06-26 - O3 Phase 3 Worker And Verifier Launched
+
+Claim: O3 Phase 3 source_ref edge shadow-write work has been routed through
+current Codex thread tools as a bounded worker/verifier pair, but no Phase 3
+implementation evidence or acceptance exists yet.
+
+Move: create a project worktree worker for the selected Texture tool
+`source_ref` graph-edge path and a local verifier thread for independent review.
+
+Expected Delta V: 0 until the worker finishes, the verifier returns `accept`,
+and accepted commits are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker launch returned pending worktree handle
+  `local:497e4e88-d21d-463d-9f2e-bcaac91c6482` from project
+  `/Users/wiz/go-choir`, starting at branch
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- Worker work item id: `O3-phase3-texture-tool-source-ref-edges`.
+- Worker authority: stay on the selected Texture appagent edit-tool path,
+  resolve body `source_ref` nodes to graph source entity versions, write pinned
+  `choir.source_ref` records transactionally, and prove unresolved refs fail
+  before document head advancement.
+- Worker mutation class: orange/red-adjacent.
+- Worker protected surfaces: Texture canonical writes, source identity/ref
+  edges, legacy DTO compatibility, source-open routing, Qdrant derived-index
+  and source-of-truth boundaries, auth/session renewal, gateway/provider calls,
+  and staging/deploy claims.
+- Worker admissible evidence: documentation checkpoint naming the resolution
+  rule and failure mode, implementation commit(s), focused tests proving legacy
+  reads still work while source_ref graph records are created, failure
+  rollback/head-stability test for unresolved refs, and a clean worktree report.
+- Rollback path: revert Phase 3 implementation commit(s), leaving Phase 1 and
+  Phase 2 intact.
+- Heresy delta: `discovered` for newly observed source-ref gaps, `repaired`
+  only for the selected Texture tool source_ref shadow-write path, and
+  `introduced` only if a reviewer finds a regression.
+- Verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2`, titled
+  `O3 verifier - Source Ref Phase 3`, pinned.
+- Verifier authority: read-only review of the worker final report/diff/tests;
+  return `blocked` if the worker thread is unavailable or has no final report.
+
+Evidence boundary: thread launch only. No O3 Phase 3 implementation,
+incorporation, checklist descent, API behavior, source-open behavior, Qdrant
+projection, main, staging, product, deployment, or landing claim.
+
+Open edge: resolve the pending worker thread id if available, read worker and
+verifier results, then either incorporate an accepted worker diff or record the
+precise blocker as `open_handoff`.
