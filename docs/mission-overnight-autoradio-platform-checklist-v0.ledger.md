@@ -7218,3 +7218,67 @@ deployed `/api/universal-wire/stories` and Universal Wire UI acceptance. If the
 Wire edition is empty, the next construct should seed or trigger a product-path
 source cluster through Texture/world-model processing, not reclassify raw graph
 captures as public articles.
+
+## 2026-06-26 - Authenticated Universal Wire UI Replay Shows Empty Edition
+
+Claim: owner login unblocked the deployed product UI observation, and the
+current staging Universal Wire surface is honestly empty. This is not acceptance
+of the News benchmark; it documents the next product gap.
+
+Move: after the owner logged into `choir.news` in Google Chrome, inspected the
+visible Chrome app state and refreshed the `https://choir.news/` app tab. The
+Chrome toolbar shows profile/user `Yusef`, the app shell is live/online, and the
+Universal Wire app is open on the authenticated desktop. The refreshed Universal
+Wire window shows:
+
+- `0 articles`.
+- Heading `No Wire edition articles yet`.
+- Text: `Universal Wire will show Texture-owned articles here after platform
+  source processing and Texture authoring publish an edition.`
+- `TEXTURE EDITION`: no Universal Wire Texture edition alias is present
+  `(0 candidates, 0 stories)`.
+- `GRAPH CAPTURES`: graph-backed web captures are available, but Universal Wire
+  does not publish raw capture projections as articles; Texture synthesis has
+  not published an edition yet `(12 candidates, 12 stories)`.
+- `SOURCE PROVENANCE`: no Texture synthesis article is available for source
+  citation provenance; raw capture provenance remains diagnostic substrate only
+  `(0 candidates, 0 stories)`.
+
+Direct API boundary:
+
+- Visible Chrome direct navigation to
+  `https://choir.news/api/universal-wire/stories` still displays
+  `{"error":"authentication required"}`.
+- Unauthenticated curl to the same route returns HTTP 401 and
+  `{"error":"authentication required"}`.
+- Chrome extension same-origin API extraction was blocked by an open extension
+  UI, so this proof relies on the visible authenticated product UI plus the
+  public unauthenticated API boundary.
+
+Staging identity:
+
+- `https://choir.news/health` reports proxy and sandbox deployed commit
+  `a648b31d45a3495d28ad295232cc848e37a69a2a`, deployed at
+  `2026-06-26T21:10:42Z`.
+
+Conjecture delta: the prior auth blocker is narrowed. The deployed UI can now be
+observed in the owner's Chrome session and it confirms the repaired diagnostic
+boundary: raw captures are not misrepresented as articles. The remaining O4
+problem is product-path creation/upsert of a non-empty English synthesis Texture
+article from source clusters into `universal-wire/Wire.texture`, with native
+`source_ref` citations and later update semantics.
+
+Heresy delta: `discovered` for the deployed empty-edition state after auth was
+available. No repair is claimed in this docs-only pass.
+
+Mutation class / protected surfaces: green documentation/evidence only. No
+runtime, auth/session, vmctl, provider/gateway, Qdrant, promotion/rollback, run
+acceptance, publication/export, or deployment routing changes.
+
+Actual Delta V: 0. The proof removes ambiguity about auth/UI state but does not
+complete any remaining O4 product obligation.
+
+Next construct: use Problem Documentation First for the next behavior-changing
+O4 move, then implement or delegate the missing live source-cluster -> Texture
+synthesis article/upsert -> Wire edition publication path. The deployed proof
+must show a non-empty Universal Wire article surface, not raw capture cards.

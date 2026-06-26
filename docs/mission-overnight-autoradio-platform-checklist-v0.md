@@ -316,6 +316,13 @@ Checklist:
   publication surface; raw `choir.web_capture` projections may remain diagnostic
   only and must not be labeled as the fulfilled product.
 
+Current staging evidence: authenticated Chrome UI replay after owner login on
+2026-06-26 shows the repaired empty state, not the product target: `0 articles`,
+no Universal Wire Texture edition alias, `12` graph captures as diagnostic
+substrate only, and no Texture synthesis source provenance. Direct raw
+`/api/universal-wire/stories` navigation still returns HTTP 401, so the current
+accepted product fact is the UI-visible empty edition rather than API JSON.
+
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty English synthesis Texture articles from multilingual ingested
 source clusters, with native source citations, durable source artifacts, and
@@ -450,7 +457,10 @@ deployed commit `a648b31d`, which adds a bounded source-cluster -> English
 Texture synthesis article -> `universal-wire/Wire.texture` route slice with
 native `source_ref` citations. This is still substrate-level: it does not prove
 live cluster selection, live article creation, world-model updates, existing
-article updates, or authenticated deployed story data.
+article updates, or authenticated deployed story data. Latest actual Delta V: 0
+for the 2026-06-26 authenticated Chrome UI replay: the owner-visible app shell
+is authenticated and shows the repaired empty/diagnostic state, but staging has
+no Universal Wire Texture edition alias or synthesized article.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -458,8 +468,10 @@ for broader O5-O8 unless the owner grants a new long run.
 authority / bounds: Orchestration may create Codex worker/verifier threads,
 inspect worktrees, make docs/checkpoint commits, and land reviewed code through
 the repo loop. User granted staging deploy by pushing to `origin/main` and
-authenticated Chrome QA on `choir.news`, but current accessible Chrome is not
-authenticated to Choir. Behavior-changing work must name mutation class,
+authenticated Chrome QA on `choir.news`. The visible Chrome app shell is now
+authenticated enough for product UI proof, while direct raw navigation to
+`/api/universal-wire/stories` still returns HTTP 401 and should not be mistaken
+for a non-empty product result. Behavior-changing work must name mutation class,
 protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing.
 
@@ -483,7 +495,7 @@ heresy delta: `repaired` for raw capture projection publication as public Wire
 articles and for the missing first branch-local/deployed synthesis article route
 slice. `discovered` remains open for production cluster selection, provider
 freshness, live world-model maintenance, update-existing-article semantics, and
-authenticated staging product proof.
+deployed non-empty staging product proof.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
 evidence. O4 capture-projection substrate and source opening were accepted by
@@ -493,11 +505,19 @@ processing -> English synthesis Texture articles -> live world model -> updates
 to existing articles. Runtime route repair `0975eea9` and synthesis slice
 `a648b31d` are deployed to staging; health reports proxy/sandbox
 `a648b31d45a3495d28ad295232cc848e37a69a2a`, deployed at
-`2026-06-26T21:10:42Z`. Authenticated deployed proof is still blocked: curl and
-visible Chrome both show `/api/universal-wire/stories` returning HTTP 401 /
-`{"error":"authentication required"}`. O5 product path started through prompt
-bar/Texture/Super request, and repair `c6bddff0` deployed, but post-deploy O5
-acceptance is also blocked by usable Choir auth.
+`2026-06-26T21:10:42Z`. Authenticated Chrome UI replay after owner login on
+2026-06-26 reaches the `choir.news` app shell as user Yusef and, after refresh,
+shows Universal Wire with `0 articles`, heading `No Wire edition articles yet`,
+`TEXTURE EDITION` diagnostics saying no Universal Wire Texture edition alias is
+present `(0 candidates, 0 stories)`, `GRAPH CAPTURES` diagnostics saying raw
+captures remain diagnostic substrate only `(12 candidates, 12 stories)`, and
+`SOURCE PROVENANCE` diagnostics saying no Texture synthesis article is available
+`(0 candidates, 0 stories)`. Direct raw browser navigation and unauthenticated
+curl to `/api/universal-wire/stories` still return HTTP 401 /
+`{"error":"authentication required"}`; the product conclusion comes from the
+authenticated UI surface, not direct JSON extraction. O5 product path started
+through prompt bar/Texture/Super request, and repair `c6bddff0` deployed, but
+post-deploy O5 acceptance has not been replayed in this pass.
 
 Completed thread-native O4 synthesis slice: worker thread
 `019f05b1-b329-7c33-a3b1-b093f11ac660` produced local commit `daec537c`; verifier
@@ -507,12 +527,12 @@ focused and broader Wire runtime tests passed; GitHub CI run `28265293557`,
 Docs Truth Check `28265293534`, and FlakeHub publish `28265293621` succeeded;
 Node B deploy succeeded inside CI.
 
-next move: obtain a usable authenticated Choir browser/session, then replay
-deployed `/api/universal-wire/stories` and Universal Wire UI proof. That proof
-must honestly distinguish an empty edition from a non-empty synthesized article.
-If no live synthesis article exists, the next construct move is to product-path
-seed or trigger a source cluster through Texture/world-model processing rather
-than re-enabling raw graph-capture publication.
+next move: document the authenticated empty-edition staging finding, then make
+the next O4 behavior-changing move target the missing live synthesis path:
+product-path source cluster selection/triggering, Texture article creation or
+upsert into `universal-wire/Wire.texture`, and a deployed proof that the UI
+renders a non-empty English synthesis article with native source refs. Do not
+re-enable raw graph-capture publication.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -525,7 +545,9 @@ key O4 learning is that a graph-backed capture projection can prove substrate
 and source opening while still being bad product evidence. The first bounded
 Texture synthesis route now exists and is deployed, but it is not yet the live
 Universal Wire product because cluster selection, world-model reconciliation,
-article update semantics, and authenticated deployed story proof remain open.
+article update semantics, and non-empty deployed story proof remain open. The
+authenticated Chrome replay confirms that the owner-visible product is now
+honestly empty rather than misleadingly populated by raw captures.
 The key O5 learning is that prompt bar and Texture materialization work, but
 Texture-to-Super acceptance still needs authenticated staging replay.
 
@@ -536,9 +558,8 @@ benchmark remains open until multilingual live ingestion produces/upserts
 English synthesis Texture articles and updates the world model/existing
 articles with authenticated deployed product evidence. O5 has started through
 product prompt-bar/Texture/Super-request evidence. The first O5 handoff repair
-is landed and deployed but not product-accepted because Chrome is waiting on
-passkey sign-in or another usable Choir auth session. This mission remains
-`working` because O4 live synthesis/world-model obligations, O5
+is landed and deployed but not product-accepted in this pass. This mission
+remains `working` because O4 live synthesis/world-model obligations, O5
 package/blocker/verifier obligations, and O6-O8 remain open. Exit requires
 `settled`, `open_handoff`, `blocked`, or `superseded` with remaining V and next
 assignment explicit.
@@ -546,5 +567,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=30. O4 News/Universal Wire remains open beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Deployed commit a648b31d45a3495d28ad295232cc848e37a69a2a adds the first verified source-cluster -> English Texture article -> Wire edition route slice with native source_ref citations; CI run 28265293557 and staging health/deploy identity succeeded. Authenticated product proof is blocked because visible Chrome and curl return 401/authentication required for /api/universal-wire/stories. Current active move: obtain usable Choir auth, then replay deployed API/UI proof; if the edition is empty, construct a product-path source cluster/Texture synthesis trigger rather than raw graph-capture publication. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=30. O4 News/Universal Wire remains open beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Deployed commit a648b31d45a3495d28ad295232cc848e37a69a2a adds the first verified source-cluster -> English Texture article -> Wire edition route slice with native source_ref citations; CI run 28265293557 and staging health/deploy identity succeeded. Authenticated Chrome UI replay after owner login reaches the app shell and shows Universal Wire honestly empty: 0 articles, no Wire Texture edition alias, 12 graph captures only as diagnostic substrate, and no Texture synthesis source provenance. Direct raw /api/universal-wire/stories navigation still returns 401, so use UI evidence for the authenticated product finding. Current active move: implement or delegate the missing product-path source cluster/Texture synthesis trigger so staging can create or upsert a non-empty English synthesis Texture article in universal-wire/Wire.texture with native source_ref citations; do not re-enable raw graph-capture publication. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
