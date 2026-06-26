@@ -3439,3 +3439,48 @@ renewal, promotion/rollback, or run-acceptance claim.
 
 Open edge: read worker thread again after it responds to the follow-up or
 finishes; if it returns candidate commits, launch an independent verifier.
+
+## 2026-06-26 - O4 Phase 6 Second Worker Steering
+
+Claim: O4 Phase 6 still has no verifier-ready candidate. The worker has not
+yet removed the invalid runtime-package test edit it identified, so
+orchestration sent a second narrow steering prompt.
+
+Move: read the worker thread and inspect the worker worktree read-only after
+the first follow-up. No active `go test` process remained, but the worktree
+still showed only `M internal/runtime/universal_wire_test.go`, the failed
+runtime-package test placement the worker had already classified as invalid
+because it creates a Go import-cycle boundary problem. Send a second follow-up
+requiring the worker to remove that failed edit before finalizing, then either
+commit a valid relocated `cmd/sourcecycled` proof or return a blocker/no
+candidate report.
+
+Expected Delta V: 0. Steering an active worker does not close an obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/f0b3/go-choir`.
+- Read-only status:
+  `M internal/runtime/universal_wire_test.go`.
+- Read-only process check:
+  no active `go test`, `nix develop`, sourcecycled, or Universal Wire test
+  process remained.
+- Steering instruction:
+  remove the invalid runtime-package edit before finalizing; if relocation into
+  `cmd/sourcecycled/main_test.go` is not ready, return a blocker/no-candidate
+  report with exact clean/dirty state; if ready, commit only the valid focused
+  test and report commands/results/non-claims.
+
+Evidence boundary: orchestration read-only observation and steering only. No
+worker final report, candidate commit, verifier verdict, root incorporation,
+main push, PR, CI, deploy, staging product acceptance, Texture native
+`source_ref`, publication/export, Qdrant, provider/gateway, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: read worker thread after it responds to the second steering prompt.

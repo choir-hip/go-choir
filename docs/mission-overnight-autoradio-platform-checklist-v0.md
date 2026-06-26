@@ -790,7 +790,13 @@ observed the worker branch dirty with one focused test change in
 `internal/runtime/universal_wire_test.go` and a long-running
 `go test ./cmd/sourcecycled -run Test.*ObjectGraph|Test.*RuntimeStore|Test.*WebCapture -count=1`
 process, then sent a bounded follow-up asking the worker to classify progress
-or hang and finalize honestly. The worker replaces pending handle
+or hang and finalize honestly. The worker replied that the long-running command
+completed and that the runtime-package test placement is invalid because it
+creates a Go import-cycle boundary. A later read-only check found no active test
+process but still only the invalid runtime test dirty, so orchestration sent a
+second steering prompt requiring removal of that failed edit before finalizing,
+with either a valid relocated `cmd/sourcecycled` proof commit or a precise
+blocker/no-candidate report. The worker replaces pending handle
 `local:b9a89dc6-e09f-4eec-8617-7706221de218` for orchestration purposes. The
 assignment is an authenticated Universal Wire product-API proof slice: show,
 through product-visible evidence if feasible, that configured sourcecycled
