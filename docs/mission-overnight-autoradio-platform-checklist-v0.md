@@ -763,14 +763,21 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: resolve pending verifier worktree handle
-`local:5cdd17ec-f3ed-489f-8339-37caa04201c4` into a readable O4 Phase 4
-verifier thread, then read its verdict before incorporating commit `d49a19bd`.
+next move: read O4 Phase 4 verifier thread
+`019f0395-93f6-7ad3-b89f-63aa07d9d5b0` (`O4 verifier - Source Open Browser
+Proof`) after it completes, then incorporate or reject commit `d49a19bd` based
+on the verdict. Earlier pending verifier worktree handles
+`local:5cdd17ec-f3ed-489f-8339-37caa04201c4` and
+`local:05c26241-c132-4699-a101-faa5183bdf45` did not resolve in `list_threads`
+and are superseded for orchestration by the readable local verifier thread,
+which was instructed to inspect the candidate in a detached temporary worktree
+without mutating the shared orchestration checkout.
 O4 Phase 4 worker thread `019f037f-41d4-7fa2-8ff7-d4a01ff78a64` (`O4 worker -
 Universal Wire Source Open Browser`) produced branch
 `codex/o4-phase4-universal-wire-source-open-browser-proof-replacement` at
-`d49a19bd prove Wire graph capture source opening`. The worker reports a narrow
-orange frontend proof in `frontend/src/lib/UniversalWireApp.svelte` and
+`d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4` (`prove Wire graph capture source
+opening`). The worker reports a narrow orange frontend proof in
+`frontend/src/lib/UniversalWireApp.svelte` and
 `frontend/tests/universal-wire-app.spec.js`: Universal Wire graph-backed capture
 cards map accepted source/open identity fields into existing Source
 Viewer/Web Lens launch policy, keep Source Viewer as the default durable source

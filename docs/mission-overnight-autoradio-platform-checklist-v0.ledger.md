@@ -2892,3 +2892,48 @@ Open edge: resolve verifier pending worktree handle
 `local:5cdd17ec-f3ed-489f-8339-37caa04201c4` into a readable thread, title/pin
 it, read its verdict, then incorporate or reject commit `d49a19bd` according to
 that verifier result.
+
+## 2026-06-26 - O4 Phase 4 Readable Verifier Replacement
+
+Claim: O4 Phase 4 now has a readable independent verifier thread. Two queued
+worktree verifier handles remain unresolved and are superseded for
+orchestration purposes.
+
+Move: after `list_threads` did not surface either queued worktree verifier,
+create a local project-scoped verifier thread with explicit instructions not to
+mutate the shared orchestration checkout and to inspect/test the candidate in a
+detached temporary worktree at commit
+`d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`.
+
+Expected Delta V: 0. Verifier creation is not verifier acceptance.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Superseded unresolved verifier worktree handles:
+  `local:5cdd17ec-f3ed-489f-8339-37caa04201c4` and
+  `local:05c26241-c132-4699-a101-faa5183bdf45`.
+- Readable replacement verifier thread:
+  `019f0395-93f6-7ad3-b89f-63aa07d9d5b0`
+  (`O4 verifier - Source Open Browser Proof`).
+- Candidate under review:
+  `d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`
+  (`prove Wire graph capture source opening`) on branch
+  `codex/o4-phase4-universal-wire-source-open-browser-proof-replacement`.
+- Verifier instruction:
+  inspect the candidate diff and source/test files, check diff hygiene, run the
+  focused Playwright proof and `npm run build` if feasible, classify dirty paths,
+  and return `accept`, `revise_before_continue`, or `reject`.
+- Shared checkout protection:
+  verifier was explicitly told not to edit tracked files or switch the shared
+  orchestration branch.
+
+Evidence boundary: verifier launch/title/pin only. No verifier verdict, root
+incorporation, main, push, CI, deploy, staging product acceptance, sourcecycled
+ingestion, native Texture citation carry-forward, publication/export, Qdrant,
+provider/gateway, auth/session renewal, promotion, rollback, or run-acceptance
+claim.
+
+Open edge: read verifier thread
+`019f0395-93f6-7ad3-b89f-63aa07d9d5b0` after completion.
