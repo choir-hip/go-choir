@@ -659,3 +659,35 @@ API behavior, staging, product, and landing claims remain open.
 Open edge: Launch O3 Phase 1 worker to choose the safe store route before code
 changes: extend objectgraph into the Texture/Dolt transaction boundary or add
 Texture-store source tables behind the objectgraph contract.
+
+## 2026-06-26 - O3 Phase 1 Worker And Verifier Threads Created
+
+Claim: O3 can proceed from accepted design into a bounded Phase 1 worker/prover
+pair focused on the source-entity store/transaction boundary.
+
+Move: create implementation and verifier threads for O3 Phase 1.
+
+Expected Delta V: 1 for opening the O3 verifier thread before any red/orange
+landing claim.
+
+Actual Delta V: 1. Current V is 40.
+
+Receipts:
+
+- O3 worker thread `019f02af-74d3-73a0-ae15-cf0809739b3b`, titled
+  `O3 worker - Source Entity Phase 1 store boundary`, pinned.
+- O3 worker cwd from thread listing:
+  `/Users/wiz/.codex/worktrees/a870/go-choir`.
+- O3 verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d`, titled
+  `O3 verifier - Source Entity Phase 1`, pinned.
+- Worker authority: own Codex worktree only; first decision must choose the
+  safe Phase 1 store route before code changes and resolve the accepted P2
+  about `source_ref` canonical ID suffix shape.
+- Verifier authority: read-only review of worker report/diff/tests; return
+  `blocked` if the worker has not finished.
+
+Evidence boundary: thread launch only. No O3 implementation, source-entity
+runtime, Texture, API, staging, product, or landing claim.
+
+Open edge: Read worker and verifier results before incorporating any O3 Phase 1
+output.

@@ -180,7 +180,9 @@ Checklist:
   implementation must still prove revision/source graph transactionality.
 - [ ] Add tests that fail on disappearing source entities.
 - [ ] Verify that source refs are native objects, not prose links.
-- [ ] Open a verifier thread before any red/orange landing claim.
+- [x] Open a verifier thread before any red/orange landing claim. Phase 1
+  verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` is open; verdict still
+  required before incorporating worker output.
 
 Acceptance: source entity persistence and source refs survive the relevant
 Texture/News path with focused tests, plus staging proof if behavior-changing
@@ -321,9 +323,8 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 41. Last Delta V: 3 for O3
-accepted design review, source identity/unused handling, and tri-state citation
-design.
++ 8 Autoradio/Pipecat obligations. Current value: 40. Last Delta V: 1 for O3
+Phase 1 verifier thread launch.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -425,13 +426,13 @@ after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
 The same verifier returned `accept` on the final O2 completion readback. O2 is
 complete at branch level, with no main/staging/platform settlement claim.
 
-next move: Launch the O3 Phase 1 implementation worker. O3 design-review thread
-`019f02a7-11d9-7573-885c-d91b7cffe8be` returned `accept` after revision
-`f5149aba`. The worker must start by choosing the safe store route before code
-changes: either extend objectgraph into the Texture/Dolt transaction boundary
-or add Texture-store source tables behind the objectgraph contract. It must
-resolve the accepted P2 about `source_ref` canonical ID suffix shape against
-`objectgraph.BuildCanonicalID` before implementing.
+next move: Read O3 Phase 1 worker thread
+`019f02af-74d3-73a0-ae15-cf0809739b3b` and verifier thread
+`019f02b0-47a4-74b2-b78a-44d13bdd958d`. The worker must first choose the safe
+store route before code changes: either extend objectgraph into the Texture/Dolt
+transaction boundary or add Texture-store source tables behind the objectgraph
+contract. It must resolve the accepted P2 about `source_ref` canonical ID suffix
+shape against `objectgraph.BuildCanonicalID` before implementing.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
