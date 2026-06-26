@@ -3355,3 +3355,38 @@ auth/session renewal, promotion/rollback, or run-acceptance claim.
 Open edge: resolve pending worker handle
 `local:b9a89dc6-e09f-4eec-8617-7706221de218` into a readable thread, title/pin
 it, and read the worker report when complete.
+
+## 2026-06-26 - O4 Phase 6 Readable Worker Resolution
+
+Claim: O4 Phase 6 now has a readable, titled, pinned worker thread. This is
+thread-handle resolution only, not worker completion or product acceptance.
+
+Move: use `list_threads` to resolve pending worktree handle
+`local:b9a89dc6-e09f-4eec-8617-7706221de218`, then title and pin the resolved
+thread for operator hygiene.
+
+Expected Delta V: 0. Worker handle resolution does not close an obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Resolved worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/f0b3/go-choir`.
+- Superseded pending handle:
+  `local:b9a89dc6-e09f-4eec-8617-7706221de218`.
+- Thread status at resolution:
+  `active`.
+
+Evidence boundary: thread discovery/title/pin only. No worker final report,
+candidate commits, verifier verdict, root incorporation, main push, PR, CI,
+deploy, staging product acceptance, Texture native `source_ref`,
+publication/export, Qdrant, provider/gateway, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: read worker thread
+`019f03b9-7d73-7d13-9d58-4bec2361f5c8` after it completes, then create an
+independent verifier if the worker returns candidate commits.
