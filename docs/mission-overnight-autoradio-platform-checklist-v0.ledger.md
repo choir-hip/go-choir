@@ -7372,6 +7372,31 @@ Worker-reported commands:
   'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles'
   -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime
   4.141s`.
+
+## 2026-06-26 - O4 Live Sourcecycled Trigger Creates And Revises Wire Texture Article
+
+Claim: the worker branch repairs the next narrow O4 gap between helper-only
+synthesis and a runtime-owned live source trigger. It does not re-document the
+already recorded empty staging problem and does not claim deployed product
+acceptance.
+
+Move: extended the internal sourcecycled web-capture ingestion path so writing
+eligible platform-owned `choir.web_capture` graph objects selects the current
+live sourcecycled capture cluster and, once at least two source captures are
+available, creates or revises one platform-owned English synthesis Texture
+article. The article is linked into `universal-wire/Wire.texture`, carries
+native `source_ref` body citations, and preserves source-service item identity,
+fetch/source ids, language metadata, and Source Viewer/reader snapshot
+provenance. Single-source ingestion remains diagnostic-only. Raw graph capture
+cards remain substrate diagnostics and are not published as Universal Wire
+articles.
+
+Evidence:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles'
+  -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime
+  4.141s`.
 - `nix develop -c go test ./internal/runtime -run
   'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed:
   `ok github.com/yusefmosiah/go-choir/internal/runtime 8.712s`.
@@ -7515,3 +7540,28 @@ staging acceptance remain orchestration responsibilities after incorporation.
 
 Open edge: incorporate worker commit `43741e72` and run the behavior-changing
 landing loop.
+
+Mutation class / protected surfaces: orange runtime/API behavior plus yellow
+tests and green evidence docs. Touched the Universal Wire internal ingestion
+trigger, Texture canonical revision creation through the existing synthesis
+helper, source entity/source_ref projection, and Wire edition linkage. Did not
+touch auth/session renewal, vmctl, deployment routing, provider/gateway
+credentials, Qdrant, promotion/rollback, run acceptance, or publication/export
+outside existing Wire edition helpers.
+
+Expected Delta V: 1 for proving a live sourcecycled trigger/upsert route at
+branch-local scope. Actual Delta V is candidate-only until verifier review or
+orchestration incorporation.
+
+Heresy delta: `repaired` for missing live sourcecycled trigger -> Texture
+synthesis article/upsert route slice. Residual `discovered` risk remains for
+semantic multi-story clustering, model/provider synthesis quality, world-model
+maintenance, and deployed non-empty authenticated Universal Wire proof.
+
+Rollback path: revert this worker commit to restore the prior helper-only
+synthesis substrate and diagnostic-only sourcecycled ingestion behavior.
+
+Evidence boundary: local focused runtime tests only. No push to `origin/main`,
+CI, deploy, staging identity, authenticated product acceptance, provider/search
+freshness, Qdrant behavior, publication/export, run acceptance, promotion, or
+rollback proof is claimed.

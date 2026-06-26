@@ -116,6 +116,8 @@ func webCaptureGraphRequestsFromItem(item sources.Item, ownerID, computerID stri
 			"fetch_id":      strings.TrimSpace(item.FetchID),
 			"url":           itemURL,
 			"canonical_url": canonicalURL,
+			"language":      strings.TrimSpace(item.Language),
+			"region":        strings.TrimSpace(item.Region),
 		},
 		"display": map[string]any{
 			"title": strings.TrimSpace(item.Title),

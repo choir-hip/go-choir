@@ -107,6 +107,9 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 	if projection.CaptureCount != 1 || projection.SourceEntityCount != 1 || projection.CapturedFromEdges != 1 {
 		t.Fatalf("projection response = %+v, want one capture/source/edge", projection)
 	}
+	if projection.SynthesisStatus != "skipped" || projection.SynthesisSourceCount != 1 {
+		t.Fatalf("projection synthesis = %+v, want skipped one-source cluster", projection)
+	}
 
 	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "reader-1")
 	if storiesW.Code != http.StatusOK {
@@ -129,6 +132,156 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 		!strings.Contains(graphDiag.Reason, "does not publish raw capture projections") {
 		t.Fatalf("graph diagnostic = %+v, want diagnostic-only graph capture", graphDiag)
 	}
+}
+
+func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 26, 22, 5, 0, 0, time.UTC)
+	firstBatch := []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-live-pt", "rss:pt-transport", "fetch-live-pt", "Corredor ferroviario reabre parcialmente", "https://example.com/pt/rail", "pt", "Equipes de emergencia informaram que o corredor ferroviario reabriu parcialmente depois das enchentes, com inspecoes ainda em andamento.", now.Add(-18*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-live-es", "rss:es-commuters", "fetch-live-es", "Autoridades advierten demoras regionales", "https://example.com/es/commuters", "es", "Las autoridades pidieron a los pasajeros prever demoras mientras continuaban las revisiones de seguridad en estaciones afectadas.", now.Add(-12*time.Minute)),
+	}
+	firstProjection := postInternalSourcecycledWebCapturesForTest(t, handler, firstBatch, now)
+	if firstProjection.SynthesisStatus != "ok" ||
+		firstProjection.SynthesisDocID == "" ||
+		firstProjection.SynthesisRevisionID == "" ||
+		firstProjection.SynthesisSourceCount != 2 ||
+		firstProjection.SynthesisEditionRef == "" {
+		t.Fatalf("first projection synthesis = %+v, want two-source Texture synthesis", firstProjection)
+	}
+
+	firstStories := getUniversalWireStoriesForTest(t, handler)
+	if firstStories.Source != "universal-wire-edition-texture" ||
+		firstStories.Diagnostics != nil ||
+		len(firstStories.Stories) != 1 {
+		t.Fatalf("first stories = %+v, want non-empty edition Texture story", firstStories)
+	}
+	firstStory := firstStories.Stories[0]
+	if firstStory.StoryTextureDoc != firstProjection.SynthesisDocID ||
+		firstStory.SourceState != "universal-wire-edition-texture" ||
+		strings.Contains(firstStory.SourceState, "objectgraph-web-capture") ||
+		!strings.Contains(firstStory.TextureContent, "one English synthesis") ||
+		!strings.Contains(firstStory.TextureContent, "[1]") ||
+		!strings.Contains(firstStory.TextureContent, "[2]") {
+		t.Fatalf("first story is not the synthesized Texture article: %+v", firstStory)
+	}
+	if len(firstStory.Manifest.Lead) != 2 {
+		t.Fatalf("manifest lead len = %d, want two source_ref-cited source items: %+v", len(firstStory.Manifest.Lead), firstStory.Manifest)
+	}
+	if firstStory.Manifest.Lead[0].OpenSurface != sourcecontract.OpenSurfaceSource ||
+		firstStory.Manifest.Lead[0].ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+		firstStory.Manifest.Lead[0].ReaderSnapshot == nil ||
+		!strings.Contains(firstStory.Manifest.Lead[0].ReaderSnapshot.TextContent, "corredor ferroviario") {
+		t.Fatalf("first manifest lead lacks Source Viewer reader provenance: %+v", firstStory.Manifest.Lead[0])
+	}
+	captureStories, captureDiagnostic, err := handler.universalWireWebCaptureStories(context.Background(), 12)
+	if err != nil {
+		t.Fatalf("read graph capture helper: %v", err)
+	}
+	if captureDiagnostic.State != "available" ||
+		captureDiagnostic.StoryCount != 2 ||
+		len(captureStories) != 2 ||
+		captureStories[0].SourceState != "objectgraph-web-capture" ||
+		captureStories[0].StoryTextureDoc != "" {
+		t.Fatalf("raw graph captures should remain diagnostic substrate, got diagnostic=%+v stories=%+v", captureDiagnostic, captureStories)
+	}
+	firstRev, err := handler.rt.Store().GetRevision(context.Background(), firstProjection.SynthesisRevisionID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load first synthesis revision: %v", err)
+	}
+	if !strings.Contains(string(firstRev.BodyDoc), `"source_ref"`) {
+		t.Fatalf("first synthesis body_doc missing native source_ref citations: %s", string(firstRev.BodyDoc))
+	}
+
+	secondBatch := []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-live-fr", "rss:fr-rail", "fetch-live-fr", "La reprise reste partielle sur le corridor ferroviaire", "https://example.com/fr/rail", "fr", "Les exploitants ferroviaires ont confirme que la reprise restait partielle et que de nouvelles inspections etaient prevues avant le soir.", now.Add(8*time.Minute)),
+	}
+	secondProjection := postInternalSourcecycledWebCapturesForTest(t, handler, secondBatch, now.Add(10*time.Minute))
+	if secondProjection.SynthesisStatus != "ok" ||
+		secondProjection.SynthesisDocID != firstProjection.SynthesisDocID ||
+		secondProjection.SynthesisRevisionID == firstProjection.SynthesisRevisionID ||
+		secondProjection.SynthesisSourceCount != 3 {
+		t.Fatalf("second projection synthesis = %+v, want same article revised with three sources", secondProjection)
+	}
+	updatedDoc, err := handler.rt.Store().GetDocument(context.Background(), firstProjection.SynthesisDocID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load updated synthesis doc: %v", err)
+	}
+	if updatedDoc.CurrentRevisionID != secondProjection.SynthesisRevisionID {
+		t.Fatalf("updated doc current revision = %q, want %q", updatedDoc.CurrentRevisionID, secondProjection.SynthesisRevisionID)
+	}
+	secondStories := getUniversalWireStoriesForTest(t, handler)
+	if len(secondStories.Stories) != 1 ||
+		secondStories.Stories[0].StoryTextureDoc != firstProjection.SynthesisDocID ||
+		len(secondStories.Stories[0].Manifest.Lead) != 3 ||
+		!slices.Contains(secondStories.Edition.IncludedDocIDs, firstProjection.SynthesisDocID) ||
+		countStrings(secondStories.Edition.IncludedDocIDs, firstProjection.SynthesisDocID) != 1 {
+		t.Fatalf("updated stories = %+v, want one revised article and one edition transclusion", secondStories)
+	}
+}
+
+func universalWireSourcecycledTestItem(id, sourceID, fetchID, title, url, language, body string, fetchedAt time.Time) sources.Item {
+	return sources.Item{
+		ID:           id,
+		SourceID:     sourceID,
+		SourceType:   sources.SourceTypeRSS,
+		FetchID:      fetchID,
+		OriginalID:   url,
+		Title:        title,
+		Body:         body,
+		URL:          url,
+		CanonicalURL: url,
+		Language:     language,
+		FetchedAt:    fetchedAt,
+		ContentHash:  sources.ContentHash(title, body, url, url),
+	}
+}
+
+func postInternalSourcecycledWebCapturesForTest(t *testing.T, handler *APIHandler, items []sources.Item, now time.Time) internalSourcecycledWebCapturesResponse {
+	t.Helper()
+	body, err := json.Marshal(internalSourcecycledWebCapturesRequest{
+		OwnerID: universalWirePlatformOwnerID(),
+		Items:   items,
+		Now:     now.Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		t.Fatalf("marshal sourcecycled request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/internal/runtime/objectgraph/web-captures", strings.NewReader(string(body)))
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalSourcecycledWebCaptures(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST /internal/runtime/objectgraph/web-captures status = %d body=%s", w.Code, w.Body.String())
+	}
+	var projection internalSourcecycledWebCapturesResponse
+	if err := json.NewDecoder(w.Body).Decode(&projection); err != nil {
+		t.Fatalf("decode sourcecycled projection response: %v", err)
+	}
+	return projection
+}
+
+func getUniversalWireStoriesForTest(t *testing.T, handler *APIHandler) universalWireStoriesResponse {
+	t.Helper()
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "reader-1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var stories universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&stories); err != nil {
+		t.Fatalf("decode Universal Wire stories: %v", err)
+	}
+	return stories
+}
+
+func countStrings(values []string, needle string) int {
+	count := 0
+	for _, value := range values {
+		if value == needle {
+			count++
+		}
+	}
+	return count
 }
 
 func universalWireDiagnosticForSubstrate(diag *universalWireFeedDiagnostics, substrate string) universalWireFeedSubstrateDiagnostic {
