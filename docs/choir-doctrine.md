@@ -51,7 +51,7 @@ mission ledgers are evidence. They do not silently override Choir Doctrine.
 Choir is a self-improving mainframe: a persistent-computer system for owned
 learning over versioned artifacts, evidence, provenance, and promotion history.
 
-The primary optimization target is not chat quality, local test passage, or
+The primary optimization target is not retired chat quality, local test passage, or
 short-term product smoothness. The target is:
 
 1. truth from facts;
@@ -96,8 +96,8 @@ of that new debt.
 ## Framing Doctrine
 
 Current framing: Choir is a self-improving mainframe made of persistent
-computers. Older framings such as personal writing system, publishing system, AI
-workspace, sandbox, workflow app, StoryGraph app, or chat interface are
+computers. Older framings such as retired personal writing system, publishing system, AI
+workspace, sandbox, retired workflow app, StoryGraph app, or chat interface are
 historical, surface-specific, or deprecated unless this document explicitly
 promotes them.
 Where those terms reappear below, they are quoted as detector vocabulary or
@@ -119,8 +119,8 @@ Preferred vocabulary:
 - promotion and rollback.
 
 Avoid making these the root frame unless the sentence is explicitly about a
-surface: personal workspace, AI workspace, publishing system, sandbox, workflow,
-chat, StoryGraph, or demo app.
+surface: personal workspace, AI workspace, retired publishing system, sandbox, workflow,
+retired chat, StoryGraph, or demo app.
 
 ## Conjecture Set
 
@@ -133,7 +133,7 @@ Each conjecture is tagged as one of:
 ### Object-Level Conjectures
 
 `C1 asserted` Choir's primary product object is a persistent computer composed
-of multiple ledgers, not a disposable sandbox and not a chat session.
+of multiple ledgers, not a disposable sandbox and not a retired chat session.
 
 `C2 asserted` Canonical user-facing truth is versioned artifact state. Texture is
 the canonical document and artifact control-plane core; other appagents own
@@ -388,8 +388,8 @@ conjecture delta accepts that debt. Discovery alone never counts as repair.
 
 #### H001 - Parent/Child API Residue
 
-`bad pattern:` live API/request/response shapes still make `parent_id` the
-normal way to create work and still serialize `parent_loop_id` / `ParentRunID`
+`bad pattern:` live API/request/response shapes still make retired `parent_id` the
+normal way to create work and still serialize retired `parent_loop_id` / `ParentRunID`
 as ordinary control-facing fields.
 
 `detectors:` `parent_id`, `parent_loop_id`, `ParentRunID`, `StartChildRun`,
@@ -412,7 +412,7 @@ spawn.
 #### H002 - Parent/Child Store Residue
 
 `bad pattern:` durable schema and helper APIs still normalize parent/child
-control queries and slot state around `parent_loop_id`.
+control queries and slot state around retired `parent_loop_id`.
 
 `detectors:` `parent_loop_id`, `CountActiveChildRuns`, `ListChildRuns`, direct
 store helpers that expose child-run control semantics.
@@ -429,7 +429,7 @@ spawn references.
 
 #### H003 - Researcher Parent-Target Routing
 
-`bad pattern:` researcher output routing still dereferences `ParentRunID` to
+`bad pattern:` researcher output routing still dereferences retired `ParentRunID` to
 decide where findings should go.
 
 `detectors:` `resolveFindingsTarget`, parent lookup from researcher runs.
@@ -448,7 +448,7 @@ item.
 
 #### H004 - Trace And Verifier Parent Topology
 
-`bad pattern:` trace and verifier logic still treat `ParentRunID` as live
+`bad pattern:` trace and verifier logic still treat retired `ParentRunID` as live
 causal structure rather than frozen provenance.
 
 `detectors:` verifier checks over parent runs, trace edge inference from root
@@ -468,7 +468,7 @@ rendering the wrong graph, so legacy ontology remains cognitively primary.
 #### H005 - Work Items Modeled As Spawned Child Artifacts
 
 `bad pattern:` work items are created and labeled as spawned-child artifacts,
-including `kind="spawned_child_run"`, `parent_run_id`, `spawned_child:`
+including retired `kind="spawned_child_run"`, `parent_run_id`, `spawned_child:`
 fingerprints, and “spawn_agent child objective” reasoning.
 
 `detectors:` `spawned_child_run`, `spawned_child:`, `spawned_work_item_id`,
@@ -490,12 +490,12 @@ like `requested_by_agent_id` and `requested_by_run_id`.
 #### H006 - Live Continuation Runtime
 
 `bad pattern:` the runtime still has a first-class continuation control plane:
-selection, compaction-before-handoff, bounded authority, lease clamping, dedupe
+selection, compaction-before-handoff, bounded authority, retired lease clamping, dedupe
 by source run, and child-run launch.
 
 `detectors:` `run_continuations`, `RunContinuation`, `ContinuationProposal`,
-`SelectRunContinuation`, `StartRunContinuation`,
-`maybeStartConfiguredContinuation`, `"request_source": "run_continuation"`,
+retired `SelectRunContinuation`, `StartRunContinuation`,
+retired `maybeStartConfiguredContinuation`, `"request_source": "run_continuation"`,
 `request_source.*run_continuation`.
 
 `evidence:` [internal/runtime/continuation.go](../internal/runtime/continuation.go),
@@ -512,11 +512,11 @@ actor wake.
 
 #### H007 - Continuation Product Path
 
-`bad pattern:` `/api/continuations/*` remains blessed in repo-level contracts,
+`bad pattern:` retired `/api/continuations/*` remains blessed in repo-level contracts,
 allowlists, and handlers.
 
 `detectors:` `/api/continuations`, `HandleRunContinuationsRoot`,
-`HandleRunContinuationDetail`, continuation allowlist entries.
+retired `HandleRunContinuationDetail`, continuation allowlist entries.
 
 `evidence:` [AGENTS.md](../AGENTS.md),
 [internal/runtime/tools_product_api.go](../internal/runtime/tools_product_api.go),
@@ -533,7 +533,7 @@ temporary `410 Gone` shims during cutover.
 #### H008 - Continuation Acceptance Semantics
 
 `bad pattern:` acceptance and trace still treat continuation events as proof of
-progress, and `continuation-level` remains a live acceptance concept.
+progress, and retired `continuation-level` remains a live acceptance concept.
 
 `detectors:` `continuation-level`, `continued`, continuation events in
 acceptance synthesis and trace.
@@ -557,8 +557,8 @@ repair.
 
 #### H009 - Generic Required-Next-Tool Trust Channel
 
-`bad pattern:` any successful tool result that emits `next_required_tool` or
-`next_tool` can force exact next-step behavior in the tool loop.
+`bad pattern:` any successful tool result that emits retired `next_required_tool` or
+retired `next_tool` can force exact next-step behavior in the tool loop.
 
 `detectors:` `next_required_tool`, `next_tool`, `required_next_tool`.
 
@@ -578,11 +578,11 @@ bounded mechanical transitions.
 `bad pattern:` `edit_texture` can require `spawn_agent` for researcher follow-up
 after a canonical write.
 
-`detectors:` `requiredContinuationAfterTextureEdit`, `explicitResearcher`,
-`runMetadataExplicitResearcher`, `explicit_researcher_request`,
-`durableMetadataKeys`, `textureEditResearcherIntentText`,
+`detectors:` `required`+`ContinuationAfterTextureEdit`, `explicitResearcher`,
+retired `runMetadataExplicitResearcher`, `explicit_researcher_request`,
+retired `durableMetadataKeys`, `textureEditResearcherIntentText`,
 `textureTrajectoryHasResearcherParticipation`,
-`next_required_tool=spawn_agent`.
+retired `next_required_tool=spawn_agent`.
 
 `evidence:` [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go),
 [internal/runtime/texture_test.go](../internal/runtime/texture_test.go),
@@ -606,7 +606,7 @@ agents.
 
 `detectors:` prompt-bar routing heuristics that select super for Texture-class
 objectives, source/article ingestion paths that create super work before a
-Texture/context artifact exists, `texturePromptNeedsSuperExecution`,
+Texture/context artifact exists, retired `texturePromptNeedsSuperExecution`,
 `prompt_bar_no_worker_decision_route`, no-worker route predicates that patch
 individual prompts instead of removing the direct-super ingress path.
 
@@ -633,8 +633,8 @@ decision/blocker.
 signal.
 
 `detectors:` substring-based intent inference for researcher or super routing,
-`texturePromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`,
-`texturePromptNeedsSuperExecution`, keyword lists that force super execution.
+retired `texturePromptExplicitlyRequestsResearcher`, `promptBarExplicitResearcherIntent`,
+retired `texturePromptNeedsSuperExecution`, keyword lists that force super execution.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
 [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go).
@@ -671,7 +671,7 @@ classes, with hard reporting discipline.
 
 #### H014 - Continuation-Level Without Compaction
 
-`bad pattern:` the code can upgrade to `continuation-level` without the full
+`bad pattern:` the code can upgrade to retired `continuation-level` without the full
 compaction evidence the doctrine requires.
 
 `detectors:` `continuation-level` granted without a compaction gate, including
@@ -777,8 +777,8 @@ for assignment-class messages.
 
 #### H019 - Lease Vocabulary Drift
 
-`bad pattern:` docs and contracts still use lease language even though v1
-explicitly rejects lease as an architectural control concept.
+`bad pattern:` docs and contracts still use retired lease language even though v1
+explicitly rejects retired lease as an architectural control concept.
 
 `detectors:` `lease`, `leased`, `worker lease`, `lease_seconds`.
 
@@ -788,7 +788,7 @@ explicitly rejects lease as an architectural control concept.
 [internal/runtime/continuation.go](../internal/runtime/continuation.go),
 [internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
 
-`why it violates the spec:` it invites agents to smuggle lease-shaped control
+`why it violates the spec:` it invites agents to smuggle retired lease-shaped control
 back into the actor model.
 
 `successor pattern:` activation caps, eviction safety, budget, worker handle,
@@ -882,7 +882,7 @@ loop.
 `bad pattern:` prompt keywords can force Texture's initial tool choice to
 `request_super_execution`.
 
-`detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`,
+`detectors:` `initial`+`TextureToolChoice`, `With`+`InitialToolChoice`,
 `exactRequiredToolChoice`, super-keyword routing lists.
 
 `evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
@@ -903,7 +903,7 @@ wait, and the first write removes or normalizes the owner's instruction without
 recording that research, execution, verification, or other background work is
 underway.
 
-`detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`, first-revision
+`detectors:` `initial`+`TextureToolChoice`, `With`+`InitialToolChoice`, first-revision
 metadata with tiny `delta_chars` after an owner work request, revision rationale
 that "consumes" an instruction-bearing annotation, Trace showing later
 `spawn_agent`/`update_coagent` activity while the Texture revision has no
@@ -977,7 +977,7 @@ trajectory/work-item/update semantics.
 specific semantic workers as a required sequence.
 
 `detectors:` prompt text mandating `spawn_agent` or `request_super_execution`,
-`buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
+retired `buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
 scripts in Texture prompt defaults.
 
 `evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
@@ -1018,8 +1018,8 @@ diagnosis artifacts, and machine-readable causal ledgers; do not expose Trace
 as a normal desktop app.
 
 `deletion gate:` doctrine upgrade plus a Trace-surface cleanup mission: no
-desktop launcher, no "Open Trace" UI copy, and no current docs directing humans
-to use a Trace app.
+desktop launcher, no retired "Open Trace" UI copy, and no current docs directing humans
+to use a retired Trace app.
 
 #### H028 - Raw Terminal App Residue
 
@@ -1028,7 +1028,7 @@ shell workflow.
 
 `detectors:` `Terminal app`, `terminal` app IDs in product-facing registry or
 desktop-state tests, comments that say users open Terminal, routes that keep
-`/api/terminal/ws` as a live product affordance rather than a compatibility
+retired `/api/terminal/ws` as a live product affordance rather than a compatibility
 shim.
 
 `evidence:` [docs/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
@@ -1036,7 +1036,7 @@ shim.
 [frontend/tests/terminal-app.spec.js](../frontend/tests/terminal-app.spec.js),
 [internal/store/desktop_test.go](../internal/store/desktop_test.go).
 
-`why it violates the spec:` nobody should be using a manual terminal as the
+`why it violates the spec:` nobody should be using a retired manual terminal as the
 normal operating model for a persistent computer. Semi-manual diagnosis and
 repair belongs in Super Console, backed by zot as a coding agent inside the
 computer.
@@ -1054,7 +1054,7 @@ route is explicitly compatibility-only or removed.
 source reader for web material.
 
 `detectors:` `Browser for source gathering`, `Browser app`, `BrowserApp`,
-`browser_sessions`, `AppHint: "browser"`, source-open plans that choose Browser
+retired `browser_sessions`, `AppHint: "browser"`, source-open plans that choose Browser
 or Web Lens merely because a URL exists, docs that say users manually browse
 for sources.
 
@@ -1066,7 +1066,7 @@ for sources.
 [internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
 [internal/store/browser.go](../internal/store/browser.go),
 [internal/types/browser.go](../internal/types/browser.go),
-[frontend/src/lib/BrowserApp.svelte](../frontend/src/lib/BrowserApp.svelte),
+retired [frontend/src/lib/BrowserApp.svelte](../frontend/src/lib/BrowserApp.svelte),
 [frontend/src/lib/apps/registry.ts](../frontend/src/lib/apps/registry.ts),
 [frontend/tests/browser-app.spec.js](../frontend/tests/browser-app.spec.js).
 
@@ -1082,18 +1082,18 @@ implementation names until the source/Web Lens contract is renamed.
 
 `deletion gate:` source/Web Lens cleanup mission: default web-source opens use
 Source Viewer/reader artifacts, explicit live/original opens use Web Lens, and
-user-facing docs/tests/copy no longer call this a Browser app or source
+user-facing docs/tests/copy no longer call this a retired Browser app or source
 gathering workflow.
 
 ## Banned Patterns
 
 Agents must not introduce:
 
-1. new `ParentRunID` or `parent_id` control reads;
+1. new retired `ParentRunID` or `parent_id` control reads;
 2. new `spawned_child_*` work-item semantics;
-3. new uses of `run_continuations` or continuation-shaped APIs for active
+3. new uses of retired `run_continuations` or continuation-shaped APIs for active
    control;
-4. new semantic `next_required_tool` or `next_tool` forcing;
+4. new semantic retired `next_required_tool` or `next_tool` forcing;
 5. new semantic first-tool forcing or prompt-pipeline role choreography;
 6. new durable metadata that re-derives a semantic delegation obligation across
    turns;
@@ -1106,7 +1106,7 @@ Agents must not introduce:
    used in settlement reasoning;
 11. new docs that normalize retired ontology without labeling it transitional;
 12. new Trace desktop/app/dashboard surfaces;
-13. new raw Terminal app affordances outside Super Console implementation
+13. new retired raw Terminal app affordances outside Super Console implementation
     internals;
 14. new Browser-as-source-gathering or URL-means-Web-Lens defaults.
 
@@ -1114,7 +1114,7 @@ Agents must not introduce:
 
 Near-term architectural order:
 
-1. M3.1 - remove Texture workflow forcing and document the invariant.
+1. M3.1 - remove Texture fixed-step forcing and document the invariant.
 2. M3 - complete lifecycle cutover, especially parent/child residue and
    rewarm/authority cleanup.
 3. M4 - delete continuation substrate and re-point acceptance semantics.
