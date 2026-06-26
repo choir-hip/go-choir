@@ -8087,3 +8087,55 @@ multi-story clustering, provider-quality synthesis, and deployed product proof.
 Actual Delta V: 1. V is now 28. Next move is a bounded O4 article-surface repair
 worker to fix headline-to-Texture readability and article-facing copy, then
 independent verifier review before any push/deploy claim.
+
+## 2026-06-26 - O4 Article-Surface Repair Worker Assignment
+
+Claim: after accepting and incorporating the branch-local world-model
+same-article-update slice, the next O4 descent should target the owner-observed
+deployed article-surface failure: the Universal Wire headline opens blank
+Texture with `Get document failed (404)`, and the visible article copy is
+deterministic platform meta-prose.
+
+Worker handle: pending Codex worktree
+`local:c735d584-6155-4b09-8f1f-f2a3eda99c78`.
+
+Assignment summary: implement the smallest branch-local repair that makes the
+Universal Wire headline/story open the actual platform-owned Texture article
+document without 404 and replaces `Universal Wire live synthesis...` /
+`Universal Wire selected ...` framing with reader-facing English synthesis copy
+for the deterministic slice. The worker must confirm or falsify the suspected
+boundary among `story_texture_doc_id`, Wire edition transclusion membership, and
+`resolveUniversalWireTextureReadOwner`; add a test that exercises the real
+Universal Wire story -> Texture document read path rather than only mocked
+`/api/texture/*`; preserve source_ref, Source Viewer/reader behavior, raw
+`choir.web_capture` diagnostic-only semantics, and same-article/world-model
+cluster update behavior.
+
+Mutation class / protected surfaces: orange runtime/API/frontend behavior if
+changed, yellow tests, green docs if needed. Authorized protected surfaces are
+Universal Wire story DTOs, runtime synthesis/article materialization, existing
+article revision/upsert semantics, Texture read-only platform document access,
+source entity/source_ref projection, and Wire edition linkage. Auth/session
+renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, candidate computers, and publication/export
+outside existing Wire edition helpers are explicitly out of scope.
+
+Admissible evidence: focused Go tests for backend Universal Wire/Texture
+read-owner behavior; frontend/Playwright proof only if needed and feasible;
+`git diff --check`; `git show --check`; clean dirty-path classification. No CI,
+deploy, staging/product acceptance, provider freshness, semantic clustering,
+Qdrant, promotion, rollback execution, or full News settlement may be claimed by
+the worker.
+
+Rollback path: revert/drop the worker commit(s). Current root rollback for this
+slice is revert `8121b4d4` plus the worker repair commit(s). Current deployed
+behavior identity remains `a2a5a74910be1c189cd9d9f090695169bf729561` until
+orchestration later pushes/deploys.
+
+Heresy delta: expected `repaired` for branch-local headline-to-Texture
+readability and deterministic meta-copy article-surface gap if proven;
+`discovered` if the worker finds a narrower blocker or different root cause;
+`introduced` only if the worker knowingly adds a temporary limitation.
+
+Expected Delta V: 1 if the worker returns a committed branch-local repair proof
+and an independent verifier accepts it. Actual Delta V: 0 for this assignment.
