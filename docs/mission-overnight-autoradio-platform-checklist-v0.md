@@ -308,20 +308,27 @@ Checklist:
 - [ ] Route source clusters through Texture/processor/reconciler workflows to
   create English synthesis Texture articles, not translated or copied individual
   article projections.
-- [ ] Attach native `source_ref` citations and durable Source Viewer/reader
-  artifacts to synthesized Universal Wire Texture articles.
+- [x] Attach native `source_ref` citations and durable Source Viewer/reader
+  artifacts to synthesized Universal Wire Texture articles. O4 deployed
+  acceptance for `a2a5a749` proved one runtime-owned synthesis Texture article
+  with `[1]`/`[2]` source refs and Source Viewer/reader opening on staging. This
+  does not yet prove semantic clustering, world-model reconciliation, or later
+  article updates.
 - [ ] Update existing Universal Wire Texture articles and the live world model
   when new relevant information arrives instead of duplicating stale cards.
 - [ ] Make the Universal Wire app render the current Texture article/world-model
   publication surface; raw `choir.web_capture` projections may remain diagnostic
   only and must not be labeled as the fulfilled product.
 
-Current staging evidence: authenticated Chrome UI replay after owner login on
-2026-06-26 shows the repaired empty state, not the product target: `0 articles`,
-no Universal Wire Texture edition alias, `12` graph captures as diagnostic
-substrate only, and no Texture synthesis source provenance. Direct raw
-`/api/universal-wire/stories` navigation still returns HTTP 401, so the current
-accepted product fact is the UI-visible empty edition rather than API JSON.
+Current staging evidence: authenticated Chrome QA after deploy
+`a2a5a74910be1c189cd9d9f090695169bf729561` on 2026-06-26 shows Universal Wire
+rendering `1 article`, `Universal Wire live synthesis: Telegram Post from
+Metropoles Telegram`, as a `universal-wire-edition-texture` story with `[1]` and
+`[2]` source refs. `OPEN SOURCE` opens the Source Viewer/reader artifact
+`Telegram Post from Metropoles Telegram`, marked `Available source` and `Reader
+snapshot ready`, with original link `t.me/Metropoles/407020`. Direct raw
+unauthenticated `/api/universal-wire/stories` still returns HTTP 401 as
+expected. Raw `choir.web_capture` projections remain diagnostic substrate.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty English synthesis Texture articles from multilingual ingested
@@ -446,24 +453,14 @@ source surface and Web Lens is explicit live/original inspection. Domain ramp:
 checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
 product acceptance.
 
-variant (ranking function) V: 73 total obligations. Current value: 29. O4 was
-reopened by +5 after owner clarification that graph-backed capture projections
-are substrate, not the Universal Wire product. Latest actual Delta V: 0 for
-deployed diagnostic-boundary repair `73f0a888`/`0975eea9`, which prevents raw
-`choir.web_capture` projections from being public Wire articles but does not
-create English synthesis Texture articles, update a world model, or pass
-authenticated browser acceptance. Latest actual Delta V: 1 for verified and
-deployed commit `a648b31d`, which adds a bounded source-cluster -> English
-Texture synthesis article -> `universal-wire/Wire.texture` route slice with
-native `source_ref` citations. This is still substrate-level: it does not prove
-live cluster selection, live article creation, world-model updates, existing
-article updates, or authenticated deployed story data. Latest actual Delta V: 0
-for deployed commit `4918c507`: the live sourcecycled trigger is verified and
-deployed, but the 2026-06-26 authenticated Chrome UI replay still shows `0`
-articles, no Universal Wire Texture edition alias, and `12` graph captures only
-as diagnostic substrate. This discovers a backfill/materialization gap: existing
-staging captures do not become a Wire Texture edition unless a sourcecycled
-ingestion transition runs after the trigger exists.
+variant (ranking function) V: 73 total obligations. Current value: 29 after the
+deployed O4 synthesis/materialization/filter pass. O4 was reopened by +5 after
+owner clarification that graph-backed capture projections are substrate, not the
+Universal Wire product. The latest accepted Delta V is 1: deployed commit
+`a2a5a74910be1c189cd9d9f090695169bf729561` proves one authenticated staging Wire
+Texture synthesis article with native source refs and Source Viewer opening.
+Remaining O4 variant is cross-source/world-model clustering and updating
+existing synthesis articles when later relevant information arrives.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -478,15 +475,14 @@ for a non-empty product result. Behavior-changing work must name mutation class,
 protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green documentation before
-the next orange O4 repair. Commit `4918c507` touched internal sourcecycled
-capture ingestion, Universal Wire route semantics, Texture canonical
-writes/revisions through the existing synthesis helper, source entity/source_ref
-projection, and existing Wire edition linkage. The next repair may touch the
-same Universal Wire runtime/read/materialization path, but not auth/session
-renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
-promotion/rollback, run acceptance, or publication/export outside existing Wire
-edition helpers.
+mutation class / protected surfaces: Current move is green documentation plus a
+thread-native worker assignment. The next O4 worker is authorized only for
+branch-local orange runtime behavior around Universal Wire cluster/world-model
+state, existing article revision/upsert semantics, Texture revisions through
+existing helpers, source entity/source_ref projection, and Wire edition linkage.
+It must not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
+publication/export outside existing Wire edition helpers.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -497,128 +493,34 @@ classification, residual risks, and non-claims. Docs-only moves need diff
 hygiene and Docs Truth Check if pushed.
 
 heresy delta: `repaired` for raw capture projection publication as public Wire
-articles and for the first branch-local/deployed synthesis article route slice.
-`discovered` now includes the deployed backfill/materialization gap for
-already-present sourcecycled graph captures, plus production cluster selection,
-provider freshness, live world-model maintenance, update-existing-article
-semantics, and deployed non-empty staging product proof.
+articles, read-time materialization/backfill for existing sourcecycled captures,
+and the staging platformd filter that hid runtime-owned synthesis stories.
+`discovered` remains for semantic production cluster selection, provider
+freshness, live world-model maintenance, and update-existing-article semantics.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
-evidence. O4 capture-projection substrate and source opening were accepted by
-verifier thread `019f0570-cab8-78e1-8dca-2f058ecf7e13`, then owner clarification
-reopened the real product target: multilingual ingestion -> graph/Texture
-processing -> English synthesis Texture articles -> live world model -> updates
-to existing articles. Runtime route repair `0975eea9` and synthesis slice
-`a648b31d` are deployed to staging; health reports proxy/sandbox
-`a648b31d45a3495d28ad295232cc848e37a69a2a`, deployed at
-`2026-06-26T21:10:42Z`. Authenticated Chrome UI replay after owner login on
-2026-06-26 reaches the `choir.news` app shell as user Yusef and, after refresh,
-shows Universal Wire with `0 articles`, heading `No Wire edition articles yet`,
-`TEXTURE EDITION` diagnostics saying no Universal Wire Texture edition alias is
-present `(0 candidates, 0 stories)`, `GRAPH CAPTURES` diagnostics saying raw
-captures remain diagnostic substrate only `(12 candidates, 12 stories)`, and
-`SOURCE PROVENANCE` diagnostics saying no Texture synthesis article is available
-`(0 candidates, 0 stories)`. Direct raw browser navigation and unauthenticated
-curl to `/api/universal-wire/stories` still return HTTP 401 /
-`{"error":"authentication required"}`; the product conclusion comes from the
-authenticated UI surface, not direct JSON extraction. O5 product path started
-through prompt bar/Texture/Super request, and repair `c6bddff0` deployed, but
-post-deploy O5 acceptance has not been replayed in this pass.
+evidence. O4 now has a deployed, authenticated, non-empty slice:
+`a2a5a74910be1c189cd9d9f090695169bf729561` passed CI/deploy, health identity,
+and Chrome QA with one English synthesis Texture article and Source
+Viewer/reader source opening. Verifier threads accepted the source-cluster slice
+(`019f05ba-e585-7573-a752-851a43364c9e`), live sourcecycled trigger
+(`019f05db-9738-7c82-ad22-06f6763f25c3`), materialization repair
+(`019f05f0-81de-76a2-bb57-c2c66db82272`), and platform verification filter
+repair (`019f05fc-425f-7790-9b73-5527fffa7fc3`). O4 remains open because the
+current route uses a narrow stable `sourcecycled-live` cluster and deterministic
+helper prose; it does not yet maintain durable world-model/story-cluster objects
+or prove that later relevant source arrivals update the same article/world-model
+record with product evidence. O5 product path has started through prompt
+bar/Texture/Super request, but O5 acceptance has not been replayed after the
+latest O4 work.
 
-Completed thread-native O4 synthesis slice: worker thread
-`019f05b1-b329-7c33-a3b1-b093f11ac660` produced local commit `daec537c`; verifier
-thread `019f05ba-e585-7573-a752-851a43364c9e` accepted it with no findings.
-Root incorporated it as `a648b31d45a3495d28ad295232cc848e37a69a2a`; local
-focused and broader Wire runtime tests passed; GitHub CI run `28265293557`,
-Docs Truth Check `28265293534`, and FlakeHub publish `28265293621` succeeded;
-Node B deploy succeeded inside CI.
-
-Active next O4 construct: worker thread
-`019f05d3-8f1a-7963-a863-89ea12661ace` in worktree
-`/Users/wiz/.codex/worktrees/ba01/go-choir` returned `ready_for_verifier` for
-commit `43741e7209c1d3f24b5af40923d3e6b63b8075b9` (`Trigger Universal Wire
-synthesis from sourcecycled captures`). The branch-local slice wires internal
-sourcecycled web-capture ingestion to select the current live sourcecycled graph
-capture cluster, require at least two eligible captures, call the existing
-Texture synthesis helper, link or revise a platform-owned article in
-`universal-wire/Wire.texture`, return a non-empty `universal-wire-edition-texture`
-story, and keep raw `choir.web_capture` projections diagnostic only. It also
-adds focused proof that a later relevant source revises the same live synthesis
-article instead of duplicating the edition transclusion. Expected Delta V: 1
-only if an independent verifier accepts this as a real branch-local
-product-path slice.
-
-Verifier result: independent verifier thread
-`019f05db-9738-7c82-ad22-06f6763f25c3` accepted worker commit `43741e72` with no
-findings requiring revision. The verifier reran the focused runtime proof,
-broader Universal Wire filter, and sourcegraph package check, confirmed the
-route goes objectgraph projection -> runtime-owned live synthesis trigger ->
-existing Texture synthesis helper -> `universal-wire/Wire.texture`, and capped
-the evidence at branch-local proof.
-
-Landing result for that move: orchestration incorporated worker commit
-`43741e72` as `4918c5077b287d81658accffda9f1b698bc12e2f` and pushed it to
-`origin/main`. GitHub CI run `28266963884` succeeded, including Node B staging
-deploy. Health on `https://choir.news/health` reported proxy and sandbox
-`deployed_commit` `4918c5077b287d81658accffda9f1b698bc12e2f`, deployed at
-`2026-06-26T21:47:56Z`. Unauthenticated
-`/api/universal-wire/stories` returned HTTP 401 as expected. Authenticated
-Chrome product QA on the visible owner session still showed Universal Wire with
-`0 articles`, `No Wire edition articles yet`, no Texture edition alias, `12`
-graph captures as diagnostic substrate, and no Texture synthesis source
-provenance. The deployed trigger is therefore necessary but insufficient for
-the current product state.
-
-next move: repair the smallest runtime materialization path that can synthesize
-a Wire Texture edition from existing eligible sourcecycled graph captures,
-verify locally, land to staging, and rerun authenticated product QA.
-
-Branch-local repair result: commit
-`9523273fa43ed2b43dc817516196b12639e599a5` (`Materialize Wire edition from
-existing sourcecycled captures`) adds a read-time materialization attempt only
-when the Wire edition alias is absent, rereads the normal edition route after
-synthesis, and requires sourcecycled source-entity `item_id` metadata before a
-graph capture can feed synthesis. Local focused proof passed, and independent
-verifier thread `019f05f0-81de-76a2-bb57-c2c66db82272` returned `accept` with no
-findings requiring revision. The verifier reran `git diff --check
-9523273f^..9523273f`, `git show --check --oneline 9523273f`, the four-test
-repair/guard filter, and the broader `UniversalWire|WireProcessor|WireStory|WirePublication`
-runtime filter. Evidence remains branch-local until the commit is pushed,
-deployed, and authenticated staging QA shows a non-empty Wire Texture edition.
-
-next move: push accepted repair `9523273f` to `origin/main`, monitor CI/deploy,
-verify staging identity, and rerun authenticated Universal Wire product QA.
-
-Deployed materialization result: `8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b`
-was pushed to `origin/main`; CI run `28267745069`, Docs Truth Check
-`28267745080`, and FlakeHub publish `28267745062` succeeded; health reported
-proxy/sandbox deployed commit `8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b`,
-deployed at `2026-06-26T22:05:54Z`. Authenticated Chrome QA no longer shows
-"missing edition alias"; it shows the Universal Wire Texture edition exists but
-has `1` candidate, `0` stories, and `1` filtered candidate. Graph captures
-remain diagnostic-only `(12 candidates, 12 stories)`. Actual Delta V is still
-0 because the owner-visible feed remains `0 articles`.
-
-next move: repair the narrow publishability/filter gate for runtime-owned
-`universal_wire_synthesis` articles transcluded in `universal-wire/Wire.texture`,
-without letting non-synthesis platform Textures or raw graph capture projections
-become public Wire articles.
-
-Deployed acceptance result: `a2a5a74910be1c189cd9d9f090695169bf729561` was
-pushed to `origin/main`; CI run `28268268801`, Docs Truth Check `28268268803`,
-and FlakeHub publish `28268268809` succeeded; health reported proxy/sandbox
-deployed commit `a2a5a74910be1c189cd9d9f090695169bf729561`, deployed at
-`2026-06-26T22:18:54Z`. Authenticated Chrome QA on the owner session showed
-Universal Wire with `1 article`, titled `Universal Wire live synthesis: Telegram
-Post from Metropoles Telegram`, source `universal-wire-edition-texture`
-rendering as a Texture article with `[1]`/`[2]` source refs. Clicking `OPEN
-SOURCE` opened the Source Viewer/reader artifact `Telegram Post from Metropoles
-Telegram`, marked `Available source` and `Reader snapshot ready`, with `Open
-original` pointing to `t.me/Metropoles/407020` and source evidence/entity
-sections visible. Latest actual Delta V: 1 for deployed non-empty Wire Texture
-edition rendering plus Source Viewer source opening. This still does not prove
-semantic multi-story clustering, provider-quality synthesis, live world-model
-maintenance, or updates to existing articles from later facts.
+next move: create a bounded O4 worker thread to design and implement the next
+branch-local slice: durable Universal Wire story/world-model cluster state plus
+same-article revision when later relevant source captures arrive. Expected
+Delta V: 1 if it creates focused tests and a committed branch-local proof that a
+new relevant source updates an existing synthesis article/world-model record
+instead of duplicating an edition story. It must stop at `ready_for_verifier`
+without push/deploy.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -627,17 +529,14 @@ queue ordering from `docs/worktree-review-2026-06-23.md` for overnight execution
 order while preserving that report as evidence.
 
 learning state: Thread tools are exposed and usable in this environment. The
-key O4 learning is that a graph-backed capture projection can prove substrate
-and source opening while still being bad product evidence. The first bounded
-Texture synthesis route and live sourcecycled trigger now exist and are
-deployed, but they are not yet the live Universal Wire product because existing
-staging graph captures are not materialized/backfilled into a Wire Texture
-edition, and cluster selection, world-model reconciliation, article update
-semantics, and non-empty deployed story proof remain open. The authenticated
-Chrome replay confirms that the owner-visible product is honestly empty rather
-than misleadingly populated by raw captures.
-The key O5 learning is that prompt bar and Texture materialization work, but
-Texture-to-Super acceptance still needs authenticated staging replay.
+key O4 learning is that staging product evidence changed the route twice:
+missing edition materialization and platformd filtering were real product gaps
+that local branch tests did not expose. Universal Wire now has a visible
+synthesis article, but the next realism axis is identity over time: a story or
+world-model object must survive later source arrivals and cause article
+revision, not card duplication. The key O5 learning is that prompt bar and
+Texture materialization work, but Texture-to-Super acceptance still needs
+authenticated staging replay.
 
 settlement: not settled. O4 News/Universal Wire is accepted at graph-backed
 capture-projection substrate scope, deployed diagnostic-boundary repair scope,
@@ -655,5 +554,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=30. O4 News/Universal Wire remains open beyond the accepted capture-projection substrate: the product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Deployed commit a648b31d45a3495d28ad295232cc848e37a69a2a adds the first verified source-cluster -> English Texture article -> Wire edition route slice with native source_ref citations; CI run 28265293557 and staging health/deploy identity succeeded. Authenticated Chrome UI replay after owner login reaches the app shell and shows Universal Wire honestly empty: 0 articles, no Wire Texture edition alias, 12 graph captures only as diagnostic substrate, and no Texture synthesis source provenance. Worker thread 019f05d3-8f1a-7963-a863-89ea12661ace returned ready_for_verifier for commit 43741e7209c1d3f24b5af40923d3e6b63b8075b9 in /Users/wiz/.codex/worktrees/ba01/go-choir: a branch-local sourcecycled capture trigger/upsert slice for non-empty Wire Texture article creation, with raw graph-capture publication still forbidden. Independent verifier thread 019f05db-9738-7c82-ad22-06f6763f25c3 accepted 43741e72 with no findings requiring revision. Next move: incorporate 43741e72 into root and run the behavior-changing landing loop through CI/deploy/staging acceptance. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=29. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles; the current route does not yet maintain durable world-model/story-cluster state or prove that later relevant source information revises the existing article/world-model entry instead of duplicating stale cards. Next move: create/continue a bounded O4 worker thread for durable Universal Wire story/world-model cluster state plus same-article revision on later relevant source arrivals, stopping at ready_for_verifier with branch-local tests and clean worktree. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
