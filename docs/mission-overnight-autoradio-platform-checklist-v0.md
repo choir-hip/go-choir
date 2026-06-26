@@ -361,11 +361,10 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
-Phase 5 verifier acceptance and root incorporation of frontend graph-wrapper
-source derivation. The pass bought branch-level evidence that graph-backed
-`source_entity_objects` plus `source_refs` feed the existing source-open helper
-path, but it did not close another counted checklist obligation; browser/product
-proof and broader O3 Texture/News acceptance remain open.
+Phase 6 worker progress. The worker has a committed local browser proof for the
+graph-wrapper source-open path and has emitted its final report, but no
+independent verifier has accepted it; O3 browser/product proof and broader O3
+Texture/News acceptance remain open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -387,9 +386,10 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current Phase 6 launch is green orchestration; the worker
-assignment is yellow if it only adds browser proof/tests and orange if it must
-change frontend/runtime behavior.
+session artifacts. The current Phase 6 worker change appears yellow
+proof/test-only from orchestration evidence; it remains unincorporated and
+unverified. It would become orange only if later review discovers required
+frontend/runtime behavior changes.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -626,23 +626,30 @@ warnings only; and `git diff --check HEAD~1..HEAD`. Root proof artifacts
 `frontend/test-results/` and `frontend/dist/` were removed after validation, and
 the tracked worktree was clean.
 
-O3 Phase 6 source-open/browser-product proof worker has been launched. Pending
-worktree handle `local:c0f12b0c-2845-46eb-bb84-8f135082ec9c` resolved to
-thread `019f032c-7960-7563-8b75-c8a681a388f8` (`O3 worker - Source Open Phase
-6`) in `/Users/wiz/.codex/worktrees/5e10/go-choir`; the thread is pinned.
-Assignment: prove through a focused browser/product UI path that a Texture
-revision carrying `source_entity_objects` plus `source_refs`, and no legacy
-`source_entities`, renders a native `source_ref` and opens the existing Source
-Viewer/Web Lens surface. The verifier is intentionally deferred until the worker
-has a final report, avoiding the stale launch-order blocker encountered in Phase
-5.
+O3 Phase 6 source-open/browser-product proof worker has reached committed local
+proof and emitted its final report. Pending worktree handle
+`local:c0f12b0c-2845-46eb-bb84-8f135082ec9c` resolved to thread
+`019f032c-7960-7563-8b75-c8a681a388f8` (`O3 worker - Source Open Phase 6`) in
+`/Users/wiz/.codex/worktrees/5e10/go-choir`; the thread is pinned. Worker
+branch `codex/o3-phase6-source-open-browser-product-proof` contains commit
+`65a08d44 test O3 phase6 graph wrapper source open path`, changing only
+`frontend/tests/texture-source-entities.spec.js`. The worker proof constructs a
+Texture revision through public Texture APIs, intercepts only
+`GET /api/texture/revisions/{id}` into graph-only `source_entity_objects` plus
+`source_refs` with no legacy `source_entities`, then verifies native
+`source_ref` rendering plus Source Viewer default routing and explicit Web Lens
+routing through the UI. Worker-reported commands passed: the single new focused
+browser proof with `--timeout=120000`, the adjacent Phase 5 regression filter
+plus the new test (6 tests), and `git diff --check`; `npm run build` was not run
+because the change is test-only. Tracked worker hygiene is clean; ignored
+`frontend/node_modules/` and service logs remain confined to the worker
+worktree. No verifier has accepted the proof yet, so no Phase 6 acceptance is
+claimed.
 
-next move: reconnect to Phase 6 worker thread
-`019f032c-7960-7563-8b75-c8a681a388f8`; if it reports a committed proof/fix,
-create an independent verifier thread against that artifact before
-incorporation. If it reports a reliable new behavior problem, require Problem
-Documentation First before any fix. No Phase 6 proof, O3-complete, main,
-staging, product acceptance, deploy, Qdrant projection, publication/export,
+next move: create an independent verifier thread against worker commit
+`65a08d44`, the test diff, exact reported commands, and the non-claims before
+incorporation. No verified Phase 6 acceptance, O3-complete, main, staging,
+product acceptance, deploy, Qdrant projection, publication/export,
 auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
 claim exists yet.
 

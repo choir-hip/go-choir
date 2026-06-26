@@ -1752,3 +1752,97 @@ claim.
 Open edge: read worker thread `019f032c-7960-7563-8b75-c8a681a388f8` when it
 finishes, then create a verifier thread against the actual diff/report before
 incorporating or claiming Phase 6.
+
+## 2026-06-26 - O3 Phase 6 Worker Proof Reached Commit, Final Report Pending
+
+Claim: O3 Phase 6 has a committed worker-side browser/product proof candidate,
+but orchestration must not treat it as accepted until the worker emits its final
+report and an independent verifier reviews the artifact.
+
+Move: reconnect to Phase 6 worker thread
+`019f032c-7960-7563-8b75-c8a681a388f8`, inspect its live thread state and
+worktree, and record the material progress without launching a verifier
+prematurely.
+
+Expected Delta V: 0. A worker proof candidate without final report and verifier
+acceptance should not close a counted O3 obligation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread:
+  `019f032c-7960-7563-8b75-c8a681a388f8`
+  (`O3 worker - Source Open Phase 6`), still `inProgress` at orchestration
+  readback.
+- Worker cwd: `/Users/wiz/.codex/worktrees/5e10/go-choir`.
+- Worker branch: `codex/o3-phase6-source-open-browser-product-proof`.
+- Worker commit:
+  `65a08d4426f72881b0a509bc2bd453ff5d4f6964`
+  (`test O3 phase6 graph wrapper source open path`).
+- Changed file:
+  `frontend/tests/texture-source-entities.spec.js` with 212 inserted lines.
+- Tracked worker hygiene: `git status --short --branch` showed only the branch
+  header after commit; no tracked dirty paths.
+- Worker-reported proof shape: create the Texture document/revision through
+  public `/api/texture/*` product APIs, intercept the revision snapshot read
+  into graph-only `source_entity_objects` plus `source_refs` with legacy
+  `source_entities` omitted, then prove native `source_ref` rendering and
+  Source Viewer/Web Lens launch through the UI.
+- Worker-reported commands/results: the new focused browser proof passed; the
+  adjacent Phase 5 helper/source-entity regression filter plus the new test
+  passed; whitespace/diff validation passed; local services were stopped.
+- Harness boundary: the worker used `CHOIR_ENABLE_PLATFORMD=0` after a local
+  `/tmp/go-choir-m2/platform-dolt` readiness failure because the proof does
+  not exercise publication/platformd. Dependency/log artifacts stayed in the
+  worker worktree and are not root-tracked mission changes.
+
+Evidence boundary: candidate worker proof only. No worker final report,
+independent verifier verdict, root incorporation, O3-complete, main, staging,
+product acceptance, deploy, Qdrant projection, publication/export,
+auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
+claim.
+
+Open edge: obtain the worker final report or precise thread-tool blocker, then
+launch a verifier against commit `65a08d44` before incorporating the proof into
+the orchestration branch.
+
+## 2026-06-26 - O3 Phase 6 Worker Final Report Received
+
+Claim: the Phase 6 proof candidate is now ready for independent verifier review,
+but not for incorporation or acceptance.
+
+Move: read the completed worker final report and rewrite Parallax State so the
+next observer can start from file state rather than chat memory.
+
+Expected Delta V: 0. Final report receipt enables verifier launch but does not
+itself close the browser/product proof obligation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker final report says branch
+  `codex/o3-phase6-source-open-browser-product-proof` is at
+  `65a08d4426f72881b0a509bc2bd453ff5d4f6964`.
+- Changed file:
+  `frontend/tests/texture-source-entities.spec.js`.
+- Commands reported passed:
+  `npx playwright test tests/texture-source-entities.spec.js -g "Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+  `npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities|Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+  and `git diff --check`.
+- `npm run build` was not run because the worker made a test-only change with
+  no frontend source/build artifact change.
+- Worker non-claims: backend production of graph wrappers, staging, deploy,
+  auth/session renewal, provider/gateway, Qdrant, O4 News, publication/export,
+  promotion, and rollback evidence.
+- Residual risk: the read DTO is mocked in-browser, so the proof covers
+  UI/product-path graph-only revision consumption, not fresh backend wrapper
+  production.
+
+Evidence boundary: worker final report plus committed proof candidate only. No
+independent verifier verdict, root incorporation, O3-complete, main, staging,
+product acceptance, deploy, or promotion/rollback claim.
+
+Open edge: launch an independent verifier thread against commit `65a08d44` and
+record its verdict before incorporation.
