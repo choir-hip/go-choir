@@ -4218,3 +4218,101 @@ empty diagnostics claim.
 Open edge: wait for verifier thread
 `019f03e1-5342-7b61-a557-917c1ef1c407` to complete, then read the verifier
 verdict before incorporating worker commits.
+
+## 2026-06-26 - O4 Phase 8 Empty Feed Diagnostics Accepted And Incorporated
+
+Claim: O4 Phase 8 closes the bounded branch-level `Keep empty feed honest but
+diagnostic` obligation by adding empty-only Universal Wire diagnostics and UI
+rendering without synthesizing stories or source evidence. This is not full
+News benchmark acceptance.
+
+Move: read the independent verifier verdict, incorporate accepted worker commits
+into the orchestration branch, rerun focused root checks, update the O4
+checklist, and decrease V by 1.
+
+Expected Delta V: 1. The accepted slice closes one O4 checklist obligation at
+branch level.
+
+Actual Delta V: 1. Current V moves from 32 to 31.
+
+Receipts:
+
+- Worker thread:
+  `019f03d8-2a15-7a61-ab7f-82ea0213cce2`
+  (`O4 worker - Empty Feed Diagnostics`).
+- Verifier thread:
+  `019f03e1-5342-7b61-a557-917c1ef1c407`
+  (`O4 verifier - Empty Feed Diagnostics`).
+- Worker commits accepted by verifier:
+  `4975163f checkpoint O4 empty feed diagnostics gap` and
+  `cbf04485 add Universal Wire empty feed diagnostics`.
+- Root incorporated commits:
+  `db46f8fe checkpoint O4 empty feed diagnostics gap` and
+  `f510386b add Universal Wire empty feed diagnostics`.
+- Incorporated files:
+  `docs/o4-empty-feed-diagnostics-checkpoint-2026-06-26.md`,
+  `internal/runtime/universal_wire.go`,
+  `internal/runtime/universal_wire_test.go`,
+  `frontend/src/lib/UniversalWireApp.svelte`, and
+  `frontend/tests/universal-wire-app.spec.js`.
+- Verifier verdict:
+  `accept`; findings none. The verifier states orchestration may incorporate
+  `4975163f` and `cbf04485`.
+- Verifier evidence:
+  Problem Documentation First holds because `4975163f` is docs-only and
+  precedes behavior commit `cbf04485`. The implementation is additive and
+  empty-only: `diagnostics` is omitted when Texture or graph stories exist, and
+  the UI renders diagnostics inside the empty state without synthetic story
+  cards.
+- Verifier commands passed:
+  `git status --short --ignored`; `git rev-parse --abbrev-ref HEAD`;
+  `git rev-parse HEAD`; `git show --check --oneline 4975163f`;
+  `git show --check --oneline cbf04485`; `git diff --check 8471418c..HEAD`;
+  `git diff --name-status 8471418c..HEAD`; `nix develop -c go test
+  ./internal/runtime -run '^TestHandleUniversalWireStories' -count=1
+  -timeout=120s`; `npm ci`; `npm run build`; and `npx playwright test
+  tests/universal-wire-app.spec.js -g 'Universal Wire renders empty feed
+  diagnostics without synthetic stories' --timeout=120000`.
+- Root commands passed:
+  `git show --check --oneline db46f8fe`;
+  `git show --check --oneline f510386b`;
+  `git diff --check 49b363cc..HEAD`;
+  `nix develop -c go test ./internal/runtime -run
+  '^TestHandleUniversalWireStories' -count=1 -timeout=120s`;
+  `npm run build`; and `npx playwright test
+  tests/universal-wire-app.spec.js -g 'Universal Wire renders empty feed
+  diagnostics without synthetic stories' --timeout=120000`.
+- Frontend build notes:
+  `npm run build` passed with existing Svelte/a11y/chunk warnings, including
+  pre-existing Universal Wire unused export/CSS selector warnings. The temporary
+  Vite-only Playwright server emitted expected proxy connection refusal noise
+  for unmocked backend endpoints while the focused mocked-route test passed.
+- Generated artifact cleanup:
+  root proof outputs `frontend/dist/`, `frontend/test-results/`, and
+  `frontend/playwright/` were removed after validation. Verifier-created ignored
+  artifacts `frontend/node_modules/`, `frontend/dist/`, and
+  `frontend/test-results/` were removed in the verifier worktree.
+
+Evidence boundary: branch-local worker, independent verifier, and root-focused
+rerun evidence only. No push, PR, CI, deploy, staging product acceptance,
+provider/gateway, Qdrant projection, native Texture body `source_ref` citation
+carry-forward, publication/export, promotion/rollback, or run-acceptance claim.
+
+Dirty-path classification: root tracked changes after incorporation are
+intentional source, tests, and durable documentation/evidence. Remaining ignored
+local env/log/dependency artifacts are unrelated/pre-existing:
+`.DS_Store`, `.direnv/`, `.env`, `.gstack/`, `auth.db`, logs,
+`doccheck-report.md`, `doccheck.json`, `frontend/node_modules/`, `proxy`,
+`sandbox`, `sourcecycled`, and related local service artifacts.
+
+Residual risks: tombstoned-only diagnostic behavior is code-inspected but not
+directly fixture-tested because objectgraph has no public tombstone writer. The
+frontend proof mocks the API payload rather than exercising a live backend.
+Complete News benchmark acceptance remains open; deployed sourcecycled/runtime
+objectgraph wiring and staging identity remain unproven; native Texture body
+citation carry-forward and real source artifact/source-opening proof remain
+open.
+
+Open edge: choose the next O4 realism axis: verify source/citation links open
+to real Source Viewer/reader artifacts, or create a verifier/documented blocker
+before claiming the full News benchmark.

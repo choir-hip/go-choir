@@ -263,7 +263,13 @@ Checklist:
   entities as Wire manifest context. It does not claim native Texture body
   `source_ref` citations, publication/export, deployed source artifacts,
   staging, or full News benchmark acceptance.
-- [ ] Keep empty feed honest but diagnostic.
+- [x] Keep empty feed honest but diagnostic. O4 Phase 8 adds accepted and
+  incorporated branch-level empty-only Universal Wire diagnostics plus UI
+  rendering. Empty responses stay empty and may include safe substrate
+  diagnostic states; non-empty Texture/graph responses omit diagnostics. This
+  does not claim staging, provider/search, Qdrant, publication/export,
+  run-acceptance, promotion/rollback, or native Texture `source_ref`
+  behavior.
 - [x] Add acceptance for authenticated `/api/universal-wire/stories`. O4 Phase 6
   adds accepted branch-level authenticated public-route API proof that
   sourcecycled writes graph-backed `choir.web_capture` objects to the
@@ -398,8 +404,8 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 32. Last Delta V: 1 for O4
-Phase 7 verifier acceptance and root incorporation. O4 Phase 1 closed the first
++ 8 Autoradio/Pipecat obligations. Current value: 31. Last Delta V: 1 for O4
+Phase 8 verifier acceptance and root incorporation. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
@@ -420,6 +426,10 @@ O4 Phase 7 adds accepted and incorporated graph `captured_from`
 `choir.source_entity` provenance carry-forward into Universal Wire manifest
 context; it does not claim native Texture body `source_ref` citations,
 publication/export, staging, or full News benchmark acceptance.
+O4 Phase 8 adds accepted and incorporated empty-only diagnostics for Universal
+Wire responses plus UI rendering; it does not claim staging, provider/search,
+Qdrant, publication/export, run-acceptance, promotion/rollback, or native
+Texture `source_ref` behavior.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -441,11 +451,11 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current O4 Phase 5 incorporated change is orange: it
-writes sourcecycled/web/source rows into durable objectgraph web-capture objects
-when sourcecycled is configured with an objectgraph DB path, while preserving
-the stated boundary against staging, publication/export, Qdrant, auth/session,
-provider/gateway, promotion, rollback, and native Texture citation claims.
+session artifacts. The current O4 Phase 8 incorporated change is orange: it
+adds empty-only diagnostics to the Universal Wire public response and UI while
+preserving the stated boundary against synthesized stories/source refs/source
+entities, staging, publication/export, Qdrant, auth/session, provider/gateway,
+promotion, rollback, run acceptance, and native Texture citation claims.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -802,20 +812,22 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: wait for O4 Phase 8 verifier thread
-`019f03e1-5342-7b61-a557-917c1ef1c407`
-(`O4 verifier - Empty Feed Diagnostics`) in
-`/Users/wiz/.codex/worktrees/f0d7/go-choir`, then read its verdict before any
-root incorporation. O4 Phase 8 worker thread
-`019f03d8-2a15-7a61-ab7f-82ea0213cce2` (`O4 worker - Empty Feed Diagnostics`)
-completed in `/Users/wiz/.codex/worktrees/41ed/go-choir` on branch
-`codex/o4-phase8-empty-feed-diagnostics` with checkpoint commit `4975163f` and
-implementation commit `cbf04485`. The worker reports additive empty-only
-Universal Wire diagnostics plus UI rendering, clean worker status, focused
-runtime/UI/build checks, and no staging, deploy, provider/search, Qdrant,
-publication/export, run-acceptance, promotion, rollback, or native Texture
-`source_ref` claim. No verifier acceptance, root incorporation, or O4 checklist
-descent exists yet. O4 Phase 7
+next move: choose the next O4 realism axis after accepted Phase 8. Remaining
+O4 checklist edges are source/citation links to real Source Viewer/reader
+artifacts and independent verifier coverage before claiming the full News
+benchmark; staging acceptance remains open. O4 Phase 8 worker thread
+`019f03d8-2a15-7a61-ab7f-82ea0213cce2` and verifier thread
+`019f03e1-5342-7b61-a557-917c1ef1c407` accepted worker commits `4975163f` and
+`cbf04485`, which root incorporated as `db46f8fe checkpoint O4 empty feed
+diagnostics gap` and `f510386b add Universal Wire empty feed diagnostics`.
+Root checks passed: `git show --check --oneline db46f8fe`;
+`git show --check --oneline f510386b`; `git diff --check 49b363cc..HEAD`;
+`nix develop -c go test ./internal/runtime -run
+'^TestHandleUniversalWireStories' -count=1 -timeout=120s`; `npm run build`;
+and focused `npx playwright test tests/universal-wire-app.spec.js -g
+'Universal Wire renders empty feed diagnostics without synthetic stories'
+--timeout=120000`. Evidence remains branch-local/root-rerun only, not staging
+or full News benchmark proof. O4 Phase 7
 worker thread
 `019f03c9-2c8f-73b1-bfca-ed7badd4383f` (`O4 worker - Graph Source-Ref Feed`)
 and verifier thread `019f03d1-0071-7371-bdd6-a3bd840c9e76` (`O4 verifier -
