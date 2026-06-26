@@ -5609,3 +5609,71 @@ Qdrant, provider/gateway/search, promotion/rollback, or run-acceptance claim.
 Open edge: wait for Phase 12 worker final report, then either create an
 independent verifier for the proposed proof path/handoff finding or record a
 precise revise/blocker before continuing.
+
+## 2026-06-26 - O4 Phase 12 Handoff Finding And Verifier Launch
+
+Claim: Phase 12 returned a concrete handoff finding for the deployed/live
+source artifact edge, and orchestration launched an independent verifier. This
+is worker-plus-verifier-pending evidence only.
+
+Move: read the completed worker thread, inspected worker worktree cleanliness,
+then created a project-scoped verifier worktree from the current mission branch.
+
+Expected Delta V: 0. A handoff finding cannot close source/citation proof before
+independent verification and before any deploy/auth authority is actually
+granted and exercised.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f043c-2f29-7302-ad9b-453b7757fffd`
+  (`O4 worker - Phase 12 Deployed Source Proof Path`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/dd88/go-choir`.
+- Worker starting head:
+  `5cc5093baf9bbb7b78f5ca166f4e60317c8b90cf`.
+- Worker commits/changed files:
+  none.
+- Worker verdict:
+  `handoff_required`.
+- Worker finding:
+  staging must deploy a commit line containing accepted local O4 source-opening
+  proof heads `9f54fd5e` and `b13ba881`, practically current handoff head
+  `5cc5093b` or a successor merged to `origin/main`; current
+  `https://choir.news/health` still reports deployed commit
+  `06e3225f02f60f113340309a2766c5face134395`.
+- Worker test-harness finding:
+  no existing authenticated read-only staging proof was found that asserts
+  Source Viewer reader artifact opening by default and explicit Web Lens routing
+  without creating staging content. Existing staging acceptance checks auth,
+  feed, and app rendering; source-opening tests either mock routes/local
+  sessions or create Texture/publication state. The smallest gap is a stable
+  read-only staging fixture/API path over an existing source-backed artifact.
+- Worker authority finding:
+  the next move requires deploy authority plus auth/session authority, or a
+  documented fixture/harness gap. `setup-auth-state.mjs` can create/reuse auth
+  state, but creating or renewing deployed auth was outside the worker's
+  assignment.
+- Verifier pending handle:
+  `local:4e663818-195f-4043-894c-765a77e334ec`.
+- Verifier thread:
+  `019f043f-03fe-7bc0-b96a-ab5807c688c8`
+  (`O4 verifier - Phase 12 Deployed Source Proof Path`), titled and pinned.
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/cb70/go-choir`.
+- Verifier starting head:
+  `5b6f7c4f681d75c919f8ba300c9e36e7fa2d7f76`
+  (`launch O4 source proof path worker`).
+- Root/worker hygiene:
+  root tracked status clean before verifier launch; worker worktree status clean.
+
+Evidence boundary: worker-local read-only handoff finding plus pending verifier
+launch only. No independent verifier verdict yet, no push, deploy,
+auth/session renewal, mutating staging proof, publication/export, Qdrant,
+provider/gateway/search, promotion/rollback, run-acceptance record, or
+deployed/live source artifact proof is claimed.
+
+Open edge: wait for Phase 12 verifier verdict before recording the
+deploy/auth-handoff finding as verified mission evidence.

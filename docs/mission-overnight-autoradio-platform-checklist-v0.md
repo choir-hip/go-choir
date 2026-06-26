@@ -928,16 +928,28 @@ and the absence of an existing deployed no-mutation source-opening proof path.
 Current V remains 31 because this verifies the blocker rather than the
 deployed/live source artifact proof.
 
-next move: resolve Phase 12 worker thread
+O4 Phase 12 proof-path worker returned `handoff_required`. Worker thread
 `019f043c-2f29-7302-ad9b-453b7757fffd`
 (`O4 worker - Phase 12 Deployed Source Proof Path`) in
-`/Users/wiz/.codex/worktrees/dd88/go-choir`, launched from pending handle
+`/Users/wiz/.codex/worktrees/dd88/go-choir` launched from pending handle
 `local:9d6ecc0f-b36e-4f20-9c3b-3db569c5b7bc` at root head
-`5cc5093b record O4 deployed blocker verifier`. The worker is read-only unless
-it needs a docs-only checkpoint and must determine the exact deploy line,
-whether an authenticated non-mutating staging source-opening proof path already
-exists, and whether the remaining O4 edge is within orchestration authority or
-requires deploy/auth handoff. O4
+`5cc5093b record O4 deployed blocker verifier`; it made no commits and left a
+clean worktree. Findings: staging must deploy a commit containing O4 proof heads
+`9f54fd5e` and `b13ba881`, practically current O4 handoff line `5cc5093b` or
+successor on `origin/main`; no existing authenticated read-only staging test
+proves Source Viewer reader artifact opening by default plus explicit Web Lens
+routing without creating content; the smallest missing piece is a stable
+read-only staging fixture/API path plus staging spec over an existing
+source-backed artifact; next move requires deploy/auth authority. Verifier
+pending handle `local:4e663818-195f-4043-894c-765a77e334ec` resolved to thread
+`019f043f-03fe-7bc0-b96a-ab5807c688c8`
+(`O4 verifier - Phase 12 Deployed Source Proof Path`) in
+`/Users/wiz/.codex/worktrees/cb70/go-choir`.
+
+next move: wait for Phase 12 verifier verdict before treating the
+deploy/auth-handoff finding as verified. If accepted, record the handoff and
+decide whether the mission exits `open_handoff` for O4 or seeks explicit
+deploy/auth authority. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
