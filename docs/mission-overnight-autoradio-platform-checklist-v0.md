@@ -787,10 +787,19 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: choose the next O4 branch-level realism slice without claiming the
-full News benchmark: either build the News/Wire feed from graph objects and
-source refs, keep the empty feed more diagnostic, or prove deployed/staging
-configuration after a behavior-changing landing. O4 Phase 6 worker thread
+next move: resolve O4 Phase 7 pending worker handle
+`local:663a63bc-ccdc-4ccf-a8b5-967ea9729c74` into a readable Codex thread,
+title/pin it, then read its report when complete. The worker assignment is
+`O4-phase7-news-wire-graph-source-ref-feed`: close or precisely narrow the
+`Build News/Wire feed from graph objects and source refs` checklist item by
+making Universal Wire/News feed behavior more graph/source-ref-native over
+accepted `choir.web_capture` objects, `choir.source_entity` provenance, and
+source/open identity fields, or document the precise blocker before any fix.
+Expected Delta V: 0 for worker launch; potential Delta V: 1 if worker plus
+independent verifier acceptance and root incorporation close the feed item. Do
+not claim full News benchmark, staging, native Texture `source_ref`
+publication/export, Qdrant, promotion, rollback, or run acceptance from this
+launch. O4 Phase 6 worker thread
 `019f03b9-7d73-7d13-9d58-4bec2361f5c8` (`O4 worker - Authenticated Wire API
 Proof`) in `/Users/wiz/.codex/worktrees/f0b3/go-choir` completed. Orchestration
 observed the worker branch dirty with one focused test change in

@@ -3739,3 +3739,57 @@ carry-forward, and complete News/Wire benchmark remain unproven.
 Open edge: choose the next O4 realism slice: build graph/source-ref News/Wire
 feed behavior, improve honest/diagnostic empty state, or pursue a
 behavior-changing deploy/staging proof with full landing-loop evidence.
+
+## 2026-06-26 - O4 Phase 7 Graph Source-Ref Feed Worker Launch
+
+Claim: O4 Phase 7 has a queued implementation worker for the graph/source-ref
+News/Wire feed obligation. This is worker launch only, not worker evidence,
+verifier acceptance, or root incorporation.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item
+`O4-phase7-news-wire-graph-source-ref-feed`.
+
+Expected Delta V: 0. Launching a worker does not close the feed obligation.
+Potential Delta V is 1 if worker evidence, independent verifier acceptance, and
+root incorporation close `Build News/Wire feed from graph objects and source
+refs`.
+
+Actual Delta V: 0. Current V remains 33.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:663a63bc-ccdc-4ccf-a8b5-967ea9729c74`.
+- Project:
+  `/Users/wiz/go-choir`.
+- Starting branch/head:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `c24dc9af record O4 Wire API acceptance`.
+- Worker objective:
+  close or precisely narrow the O4 checklist item `Build News/Wire feed from
+  graph objects and source refs` with the largest honest branch-level slice.
+  Preferred direction is graph/source-ref-native Universal Wire/News feed
+  behavior over accepted durable `choir.web_capture` objects,
+  `choir.source_entity` provenance, and source/open identity fields.
+- Required guardrails:
+  Problem Documentation First for newly discovered behavior/architecture
+  blockers; preserve Texture-edition priority, honest empty state, non-tombstoned
+  graph fallback, source/open identity, Source Viewer default, and explicit Web
+  Lens semantics; do not fake native Texture body `source_ref`, publication,
+  export, staging, Qdrant, provider/gateway calls, auth/session renewal,
+  promotion/rollback, or run acceptance.
+- Required final report:
+  thread id if visible, cwd, branch/HEAD, commits, changed files,
+  commands/results, dirty-path classification, evidence boundary/non-claims,
+  residual risks, rollback refs, heresy delta, and verifier-readiness.
+
+Evidence boundary: worker queued only. No readable worker thread yet, no worker
+commit, no verifier, no root incorporation, no push, no CI, no deploy, no
+staging product acceptance, no Texture native citation carry-forward, no
+publication/export, no Qdrant, no provider/gateway, no promotion/rollback, and
+no run-acceptance claim.
+
+Open edge: resolve pending handle
+`local:663a63bc-ccdc-4ccf-a8b5-967ea9729c74` into a readable worker thread,
+title/pin it, and read the worker report when complete.
