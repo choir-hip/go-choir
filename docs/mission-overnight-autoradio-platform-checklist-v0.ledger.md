@@ -5911,3 +5911,64 @@ storage state, then run the smallest read-only staging proof against an
 existing source-backed artifact that has source-open controls. The proof must
 show Source Viewer/reader artifact opening by default and Web Lens only through
 an explicit live/original action.
+
+## 2026-06-26 - O4 Universal Wire Empty Feed Config Gap Documented
+
+Claim: The persistent empty Universal Wire surface is not only an auth/browser
+proof problem. Node B sourcecycled is not configured to project source items into
+the objectgraph sidecar that the host sandbox reads for graph-backed Wire cards.
+
+Move: investigated the staging symptom after the owner reported signing back in.
+The Codex-controlled Chrome profile still rendered Choir as signed out, so the
+authenticated account proof remains unavailable from this browser session. The
+backend/code investigation traced the empty feed to the two Universal Wire
+substrates and then to Node B service environment.
+
+Expected Delta V: 0 for problem documentation before repair.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Chrome UI symptom:
+  `https://choir.news/` rendered with `.app-root[data-auth-state="signed_out"]`
+  in the Codex-controlled Chrome profile, despite the owner reporting login in
+  their account. Universal Wire showed
+  `data-universal-wire-data-source="universal-wire-texture-index"`, 0 articles,
+  and no source-open controls.
+- Backend path:
+  `internal/runtime/universal_wire.go` reads first from platform Texture alias
+  `universal-wire/Wire.texture`, then falls back to non-tombstoned
+  `choir.web_capture` objects for owner `universal-wire-platform`.
+- Projection gate:
+  `cmd/sourcecycled/main.go` only initializes graph projection when
+  `SOURCE_SERVICE_OBJECTGRAPH_DB_PATH`, `SOURCECYCLED_OBJECTGRAPH_DB_PATH`, or a
+  derived `SOURCE_SERVICE_RUNTIME_STORE_PATH` / `RUNTIME_STORE_PATH` is present.
+  Without one, `sourcecycledObjectGraphServiceFromEnv` returns nil and
+  `cycle.WriteWebCaptureGraphObjects` is never called.
+- Nix eval evidence:
+  `nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-sourcecycled.serviceConfig.Environment --json`
+  shows only `SOURCE_SERVICE_ADDR`, `SOURCE_SERVICE_DB_PATH`,
+  `SOURCE_SERVICE_CONFIG_PATH`, `SOURCE_SERVICE_RUNTIME_OWNER_ID`,
+  dispatch settings, and `VMCTL_SANDBOX_PROXY_SOCK`.
+- Write-boundary evidence:
+  `nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-sourcecycled.serviceConfig.ReadWritePaths --json`
+  shows only `/var/lib/go-choir/source-service`.
+- Reader-side evidence:
+  `nix eval .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-sandbox.serviceConfig.Environment --json`
+  shows `RUNTIME_STORE_PATH=/var/lib/go-choir/runtime/runtime.db`, whose sidecar
+  is the runtime objectgraph path used by `internal/runtime/objectgraph_runtime.go`.
+
+Mutation class / protected surfaces: this entry is green documentation. The next
+repair is orange deployment/runtime configuration because it changes how the
+host source ingestion daemon writes objectgraph state visible to the sandbox
+runtime.
+
+Evidence boundary: root-cause documentation only. No Nix repair, push, deploy,
+source ingestion run, authenticated API proof, source-opening acceptance,
+publication/export, run-acceptance record, promotion, or rollback is claimed.
+
+Open edge: configure `go-choir-sourcecycled` to derive the sandbox-visible
+objectgraph sidecar from `/var/lib/go-choir/runtime/runtime.db`, give it the
+necessary runtime directory write access, deploy, then verify that sourcecycled
+projects captures and Universal Wire exposes source-backed cards.
