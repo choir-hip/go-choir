@@ -1256,14 +1256,21 @@ benchmark.
 settlement: not settled. Full settlement still requires thread-native
 orchestration receipts, independent verifier verdicts, landed code/docs where
 behavior changed, CI, deploy identity, and staging/product acceptance for any
-staging claim. Staging now deploys `bbca43c5` successfully with sourcecycled
-configured to write the sandbox-visible objectgraph sidecar and empty-cycle
-backfill implemented, but authenticated Chrome still shows 0 Universal Wire
-articles and 0 graph-capture candidates after the next scheduled source cycle.
-Remaining V is 31 until the sourcecycled runtime discriminator is read and
-authenticated Chrome/Playwright proof can observe an existing source-backed
-artifact and verify Source Viewer default plus explicit Web Lens opening on
-`https://choir.news`.
+staging claim. Staging now deploys `338589ab` successfully with sourcecycled
+cycle-event diagnostics. The diagnostic readback proves sourcecycled wrote 2,873
+non-tombstoned `choir.web_capture` objects for `universal-wire-platform` into
+the host sandbox runtime objectgraph sidecar at
+`/var/lib/go-choir/runtime/runtime.db.objectgraph.db`, and direct Node B host
+sandbox API reads on `127.0.0.1:8085` return graph-backed Universal Wire
+stories. Authenticated Chrome and the active public platform VM at
+`http://10.200.251.2:8085` still show 0 Universal Wire articles and 0
+graph-capture candidates. The current O4 blocker is therefore a public-platform
+computer graph visibility mismatch: sourcecycled writes the host runtime graph
+while the product route reads the `universal-wire-platform/platform` VM graph.
+Remaining V is 31 until the sourcecycled-to-public-platform graph write path is
+repaired and authenticated Chrome/Playwright proof can observe an existing
+source-backed artifact and verify Source Viewer default plus explicit Web Lens
+opening on `https://choir.news`.
 
 ## Suggested Goal String
 

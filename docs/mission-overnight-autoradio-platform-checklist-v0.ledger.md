@@ -6173,3 +6173,67 @@ rollback proof.
 Open edge: push and monitor the diagnostic deploy. Once staging reports the new
 commit, read the source-service latest handoff/cycle event evidence through an
 authorized route, then choose the next O4 repair from that discriminator.
+
+## 2026-06-26 - O4 Public Platform Objectgraph Mismatch Documented
+
+Claim: The deployed Universal Wire empty state is no longer explained by
+sourcecycled failing to write web captures. The observed product failure is a
+graph visibility mismatch between the host sourcecycled/runtime objectgraph and
+the public platform computer objectgraph that serves authenticated Wire reads.
+
+Move: deployed the cycle-event diagnostic, read the source-service handoff
+summary on Node B, compared the host sandbox Universal Wire API with the active
+`universal-wire-platform/platform` VM API, and rechecked the owner's
+authenticated Chrome session.
+
+Expected Delta V: 0 for documentation. Actual Delta V: 0. Current V remains
+31.
+
+Receipts:
+
+- Diagnostic commit:
+  `338589ab expose sourcecycled cycle events in handoff status`.
+- CI/deploy:
+  GitHub Actions run `28257033768` for
+  `338589ab80e1b19e5fe351fd2fdf0b67af645b4e` passed, including
+  `Deploy to Staging (Node B)`.
+- Staging identity:
+  `https://choir.news/health` reported proxy and sandbox `commit` /
+  `deployed_commit` `338589ab80e1b19e5fe351fd2fdf0b67af645b4e`, deployed at
+  `2026-06-26T18:23:44Z`.
+- Sourcecycled diagnostic readback:
+  `ssh node-b curl http://127.0.0.1:8787/internal/source-service/ingestion-handoff/latest`
+  showed cycle `cycle_a89c8dfc1b439cb78d58d859` with
+  `web_captures_graph_written` at `2026-06-26T18:25:41Z`, metadata
+  `capture_count=2873`, `source_entity_count=2873`,
+  `captured_from_edges=2873`, `skipped_item_count=37`, and
+  `objectgraph_db_path=/var/lib/go-choir/runtime/runtime.db.objectgraph.db`.
+- Host runtime contrast:
+  direct Node B host sandbox API
+  `http://127.0.0.1:8085/api/universal-wire/stories` with trusted auth returned
+  graph-backed Universal Wire stories from source
+  `universal-wire-web-capture-graph`.
+- Product/platform contrast:
+  VMCTL listed active platform VM `vm-universal-wire-platform` for owner
+  `universal-wire-platform`, desktop `platform`, sandbox URL
+  `http://10.200.251.2:8085`. That VM's
+  `/api/universal-wire/stories` returned source `universal-wire-texture-index`,
+  0 stories, and diagnostics with 0 `choir.web_capture` candidates.
+- Authenticated visual evidence:
+  the owner's logged-in Chrome session on `https://choir.news` reloaded
+  successfully back to the primary desktop, but Universal Wire still displayed
+  0 articles and feed diagnostics with 0 graph-capture candidates.
+
+Mutation class / protected surfaces: green documentation describing an orange
+runtime/source-ingestion/public-route problem. No behavior changed in this
+move.
+
+Evidence boundary: staging/Node B diagnostic evidence identifies the mismatch,
+but no fix, source-opening proof, Texture article publication/export, run
+acceptance, promotion, or rollback proof is claimed.
+
+Open edge: repair the graph write/read boundary so sourcecycled projects
+`choir.web_capture` objects into the same public platform computer graph that
+serves `/api/universal-wire/stories`, or explicitly change the public route
+architecture with a documented rollback. The next behavior commit must cite
+this problem record.
