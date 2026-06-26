@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -599,11 +600,15 @@ func truncateRunes(value string, limit int) (string, bool) {
 }
 
 func (h *Handler) fetchSandboxJSON(r *http.Request, sandboxBase, path, userID string, out any) error {
+	return h.fetchSandboxJSONWithContext(r.Context(), sandboxBase, path, userID, out)
+}
+
+func (h *Handler) fetchSandboxJSONWithContext(ctx context.Context, sandboxBase, path, userID string, out any) error {
 	target, err := joinBasePath(sandboxBase, path)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return fmt.Errorf("build sandbox request: %w", err)
 	}

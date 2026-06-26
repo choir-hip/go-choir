@@ -473,11 +473,13 @@ source surface and Web Lens is explicit live/original inspection. Domain ramp:
 checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
 product acceptance.
 
-variant (ranking function) V: 73 total obligations. Current value: 30 after
-deploying accepted branch-local O4 article-surface repair proof as
-`d15ef3fb53f26b2c80d3641cc181ff67f500e557` but discovering the deployed Texture
-read path still returns 404, apparently across Texture documents rather than
-only Universal Wire headlines. O4 was reopened by +5 after owner
+variant (ranking function) V: 73 total obligations. Current value: 29 after
+locally repairing the deployed Texture read regression root cause and the
+remaining Universal Wire headline-to-Texture publication gap, with CI/deploy and
+authenticated staging QA still pending for the new head. The deployed
+`d15ef3fb53f26b2c80d3641cc181ff67f500e557` article-surface repair improved copy
+but still returned 404 on Texture document load, apparently across Texture
+documents rather than only Universal Wire headlines. O4 was reopened by +5 after owner
 clarification that graph-backed capture projections are substrate, not the
 Universal Wire product. The latest accepted Delta V is 1: verifier thread
 `019f0628-819d-72a0-9328-ab461101a408` accepted worker commit
@@ -485,10 +487,14 @@ Universal Wire product. The latest accepted Delta V is 1: verifier thread
 branch-local real story -> Texture document/revision public-route readability,
 legacy meta-copy repair, and deterministic reader-facing article copy. That
 Delta did not survive deployed product QA: article copy improved, but Texture
-document loading still 404s. Remaining O4 variant is deployed Texture document
-readability, cross-source/world-model clustering, article-quality synthesis, and
-authenticated product evidence that existing synthesis articles update when
-later relevant information arrives.
+document loading still 404ed. Root then found and locally repaired two read
+boundary failures: a frontend global `read_owner=universal-wire-platform` scope
+that tainted ordinary Texture reads, and a Universal Wire synthesis path that
+advertised story Texture doc ids before platformd had a readable synced copy.
+Remaining O4 variant is deployed Texture document readability,
+headline-to-Texture readability after platform publish/sync, cross-source/world-model
+clustering, article-quality synthesis, and authenticated product evidence
+that existing synthesis articles update when later relevant information arrives.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 func runtimeTestTextureBodyDoc(t *testing.T, docID, revisionID, content string) json.RawMessage {
@@ -288,9 +290,54 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 
 func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures(t *testing.T) {
 	_, handler := testAPISetup(t)
-	t.Setenv("RUNTIME_PLATFORMD_URL", "http://127.0.0.1:8082")
 	ctx := context.Background()
 	now := time.Date(2026, 6, 26, 22, 32, 0, 0, time.UTC)
+	var publishedMu sync.Mutex
+	publishedDocs := map[string]types.Document{}
+	publishedRevs := map[string]types.Revision{}
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("platformd internal header = %q, want true", r.Header.Get("X-Internal-Caller"))
+		}
+		publishedMu.Lock()
+		defer publishedMu.Unlock()
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/internal/platform/texture/documents/"):
+			docID := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents/")
+			if _, ok := publishedDocs[docID]; !ok {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": docID})
+		case strings.HasPrefix(r.URL.Path, "/internal/platform/texture/revisions/"):
+			revisionID := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/revisions/")
+			if _, ok := publishedRevs[revisionID]; !ok {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"revision_id": revisionID})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer platformd.Close()
+	t.Setenv("RUNTIME_PLATFORMD_URL", platformd.URL)
+	handler.rt.cfg.PlatformdURL = platformd.URL
+	publishCount := 0
+	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
+		publishedMu.Lock()
+		defer publishedMu.Unlock()
+		publishCount++
+		publishedDocs[doc.DocID] = doc
+		publishedRevs[rev.RevisionID] = rev
+		return &wirepublish.PublishTextureResponse{
+			PublicationID:        "pub-" + doc.DocID,
+			PublicationVersionID: "pubv-" + rev.RevisionID,
+			RoutePath:            "wire/" + doc.DocID,
+		}, nil
+	}
 	items := []sources.Item{
 		universalWireSourcecycledTestItem("srcitem-backfill-pt", "rss:pt-wire", "fetch-backfill-pt", "Chuvas interrompem corredor logistico", "https://example.com/pt/logistics", "pt", "Relatorios locais disseram que as chuvas interromperam um corredor logistico e atrasaram entregas regionais.", now.Add(-25*time.Minute)),
 		universalWireSourcecycledTestItem("srcitem-backfill-en", "rss:en-wire", "fetch-backfill-en", "Regional logistics delays follow heavy rain", "https://example.com/en/logistics", "en", "Transport agencies reported regional delays after heavy rain damaged inspection points along the logistics corridor.", now.Add(-18*time.Minute)),
@@ -331,6 +378,9 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 		firstStory.Manifest.Lead[0].ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
 		firstStory.Manifest.Lead[0].ReaderSnapshot == nil {
 		t.Fatalf("first story lead lacks source-viewer reader provenance: %+v", firstStory.Manifest.Lead[0])
+	}
+	if publishCount != 1 {
+		t.Fatalf("publish count = %d, want one platform publish before advertising story", publishCount)
 	}
 	firstDoc, err := handler.rt.Store().GetDocument(ctx, firstStory.StoryTextureDoc, universalWirePlatformOwnerID())
 	if err != nil {

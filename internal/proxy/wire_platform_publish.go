@@ -1,12 +1,14 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -198,10 +200,11 @@ type sandboxRevisionEntry struct {
 // asynchronously after a successful publication so the publish response is
 // not delayed.
 func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	var revisions []sandboxRevisionEntry
-	if err := h.fetchSandboxJSON(r, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
+	if err := h.fetchSandboxJSONWithContext(ctx, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
 		log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v", docID, err)
 		return
 	}

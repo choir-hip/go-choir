@@ -134,10 +134,43 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
+	if err := rt.publishUniversalWireSynthesisArticleToPlatform(ctx, doc, rev); err != nil {
+		return types.Document{}, types.Revision{}, "", err
+	}
 	if err := rt.upsertUniversalWireStoryCluster(ctx, clusterID, aliasPath, doc, rev, editionRef, sources, now); err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
 	return doc, rev, editionRef, nil
+}
+
+func (rt *Runtime) publishUniversalWireSynthesisArticleToPlatform(ctx context.Context, doc types.Document, rev types.Revision) error {
+	if rt == nil {
+		return fmt.Errorf("runtime unavailable")
+	}
+	if rt.wirePlatformPublisher == nil &&
+		strings.TrimSpace(rt.cfg.WirePublishURL) == "" &&
+		strings.TrimSpace(rt.cfg.PlatformdURL) == "" &&
+		fallbackWirePublishURLFromEnv() == "" {
+		return nil
+	}
+	meta := decodeRevisionMetadata(rev.Metadata)
+	rec := &types.RunRecord{
+		OwnerID: universalWirePlatformOwnerID(),
+		RunID:   "universal-wire-synthesis:" + strings.TrimSpace(rev.RevisionID),
+		Metadata: map[string]any{
+			"request_intent":          "universal_wire_synthesis_article_revision",
+			"type":                    "texture_agent_revision",
+			"source_network_cycle_id": metadataString(meta, "source_network_cycle_id"),
+		},
+	}
+	pub, err := rt.publishWireArticleToPlatform(ctx, doc, rev, rec)
+	if err != nil {
+		return fmt.Errorf("publish synthesis article to platform: %w", err)
+	}
+	if err := rt.persistWirePlatformPublicationRef(ctx, doc.OwnerID, rev, pub); err != nil {
+		return fmt.Errorf("persist synthesis platform publication ref: %w", err)
+	}
+	return nil
 }
 
 func (rt *Runtime) upsertUniversalWireStoryCluster(ctx context.Context, clusterID, aliasPath string, doc types.Document, rev types.Revision, editionRef string, sources []universalWireSynthesisSource, now time.Time) error {

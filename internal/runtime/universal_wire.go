@@ -75,7 +75,7 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		Summary: "Universal Wire found no publishable Texture synthesis articles.",
 	}
 	editionStories, editionResp, editionErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 12)
-	if editionErr == nil && len(editionStories) == 0 && editionResp == nil {
+	if editionErr == nil && len(editionStories) == 0 {
 		if synthesis, err := h.rt.synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(r.Context(), time.Now().UTC()); err != nil {
 			log.Printf("universal wire: graph capture materialization unavailable: %v", err)
 		} else if synthesis.Triggered {
@@ -219,7 +219,6 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 			continue
 		}
 		if h.platformdStoryVerificationEnabled() &&
-			!wireRevisionIsUniversalWireSynthesis(rev) &&
 			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}

@@ -8318,3 +8318,113 @@ Rollback path: revert this documentation checkpoint for wording only. Runtime ro
 Heresy delta: `discovered` for deployed global Texture document-read failure after the O4 article-surface repair deploy. The article-copy half of the repair is live; document readability is not repaired.
 
 Actual Delta V: +3. V is now 30. Next move: inspect deployed/root diffs and Texture read routing, reproduce ordinary Texture 404 with the least invasive authenticated product evidence available, repair the read path, then reland through CI/deploy/staging acceptance.
+
+## 2026-06-26 - Texture Read Regression Root Cause And Local Repair
+
+Claim: the deployed "all Texture documents fail" symptom was a frontend
+read-owner scope leak, while the remaining Universal Wire headline 404 was a
+separate platform publication/sync readiness gap.
+
+Evidence:
+
+- Staging health after `3ea242849c02f29e3af27aef46c92c21f3ed3a40` reported
+  proxy and sandbox deployed commit
+  `3ea242849c02f29e3af27aef46c92c21f3ed3a40`, deployed at
+  `2026-06-26T23:35:37Z`.
+- Authenticated Chrome cookies were read from the local Chrome profile and used
+  only through a temporary header file for product API probes; the header file
+  must be removed after proof.
+- Authenticated `/api/texture/documents` returned 37 user Texture documents.
+  Direct `GET /api/texture/documents/d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`
+  returned 200 with title
+  `O5_PRODUCT_PATH_PROBE_20260626: Continue the Choir-in-Choir platform PR
+  accelerator mission from.texture`. This proves the broad Texture read
+  poisoning was repaired by isolating Universal Wire read owner state in the
+  frontend.
+- Authenticated `/api/universal-wire/stories` still returned one story with
+  `story_texture_doc_id=4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, but both
+  `/api/texture/documents/4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` and
+  `/api/texture/documents/4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf?read_owner=universal-wire-platform`
+  returned 404. This narrows the remaining headline failure to the
+  Universal Wire platform article materialization/readiness path rather than
+  ordinary user Texture reads.
+
+Root cause:
+
+- The frontend had carried a process-global Texture read-owner stack. Opening a
+  Universal Wire platform-read Texture window could leak
+  `read_owner=universal-wire-platform` onto ordinary Texture reads, causing the
+  proxy to route normal documents to platformd and 404.
+- Universal Wire synthesis created/revised a platform-owned Texture article and
+  linked it into `Wire.texture`, but did not publish/sync the article into
+  platformd before `/api/universal-wire/stories` advertised its
+  `story_texture_doc_id`.
+- The story filter exempted synthesis revisions from platformd readability
+  verification, so the card could render from embedded story text while headline
+  open failed.
+- The proxy's asynchronous full-Texture sync used the publish request context;
+  once the handler returned, the background sync could inherit a canceled
+  context and fail to populate platformd.
+
+Local repair:
+
+- `frontend/src/lib/texture.js` and `frontend/src/lib/TextureEditor.svelte`
+  now pass `read_owner` per TextureEditor instance instead of through global
+  module state, and skip user-VM manifest/draft writes for platform-read
+  Universal Wire windows.
+- `internal/runtime/wire_synthesis.go` now publishes synthesis article
+  revisions to the configured platform publish path and persists the
+  platformd publication ref before the story cluster is advertised.
+- `internal/runtime/universal_wire.go` now applies platformd readability checks
+  to synthesis stories too, and re-materializes from sourcecycled graph captures
+  when an existing edition has no readable stories.
+- `internal/proxy/wire_platform_publish.go` now runs the background Texture sync
+  with a bounded background context instead of the already-returned request
+  context.
+
+Commands/results:
+
+- `npm run build` from `frontend`: passed; existing Svelte warnings only.
+- `npx playwright test tests/universal-wire-app.spec.js -g "Universal Wire
+  platform read does not taint ordinary Texture document reads" --project=chromium`:
+  passed.
+- `PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test
+  tests/universal-wire-app.spec.js -g "Universal Wire platform read does not
+  taint ordinary Texture document reads|Universal Wire renders empty feed
+  diagnostics without synthetic stories" --project=chromium`: passed.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
+  3.947s`.
+- `nix develop -c go test ./internal/proxy -run
+  'TestHandleInternalWirePlatformPublishPostsToPlatformd' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/proxy 0.472s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 9.793s`.
+- `nix develop -c go test ./internal/proxy -run 'WirePlatform|PlatformTextureRead'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/proxy
+  0.309s`.
+- `git diff --check`: passed.
+
+Mutation class / protected surfaces touched: orange runtime/API behavior,
+frontend product behavior, and yellow tests/docs. Protected surfaces touched are
+Universal Wire story readiness, platform publish/sync behavior, platform Texture
+read-owner handling, and Texture frontend read scoping. Auth/session renewal,
+vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, candidate computers, and publication/export
+outside existing platform publication helpers remain out of scope.
+
+Rollback path: revert the pending repair commit(s) after this checkpoint. The
+prior broad Texture read fix can be rolled back independently from the platform
+publish/readiness fix if staging shows only one side regressed.
+
+Heresy delta: `repaired` locally for the read-owner leakage and synthesis
+article platform-readiness gap; `discovered` remains for whether the deployed
+staging path fully repairs ordinary Texture UI loading and Universal Wire
+headline-to-Texture readability after CI/deploy.
+
+Actual Delta V: +1 local. V is now 29. Next move: commit, push to `origin/main`,
+monitor CI and Node B deploy, verify health identity, remove the temporary auth
+header file, then run deployed authenticated product proof for ordinary Texture
+document loading and Universal Wire headline-to-Texture readability.
