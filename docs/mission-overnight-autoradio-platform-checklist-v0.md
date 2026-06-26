@@ -796,9 +796,13 @@ creates a Go import-cycle boundary. A later read-only check found no active test
 process but still only the invalid runtime test dirty, so orchestration sent a
 second steering prompt requiring removal of that failed edit before finalizing,
 with either a valid relocated `cmd/sourcecycled` proof commit or a precise
-blocker/no-candidate report. The worker then removed the invalid runtime edit;
-the worker worktree is currently clean but has not returned a final candidate or
-blocker report. The worker replaces pending handle
+blocker/no-candidate report. The worker then removed the invalid runtime edit,
+relocated the proof into `cmd/sourcecycled/main_test.go`, and produced candidate
+commit `e406ca23 test O4 sourcecycled Wire API graph path`; external checks
+show a single test-file change, `git show --check --oneline e406ca23` passes,
+and the worker worktree is clean. A final-report prompt was sent after the
+commit; the next orchestration move is to read that report and launch an
+independent verifier for `e406ca23`. The worker replaces pending handle
 `local:b9a89dc6-e09f-4eec-8617-7706221de218` for orchestration purposes. The
 assignment is an authenticated Universal Wire product-API proof slice: show,
 through product-visible evidence if feasible, that configured sourcecycled

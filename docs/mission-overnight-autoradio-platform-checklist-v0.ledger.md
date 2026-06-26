@@ -3520,3 +3520,56 @@ run-acceptance claim.
 
 Open edge: wait for the worker to return either a valid relocated proof commit
 or a no-candidate/blocker final report.
+
+## 2026-06-26 - O4 Phase 6 Worker Candidate Commit
+
+Claim: O4 Phase 6 now has a worker candidate commit for independent verifier
+review. This is not verifier acceptance.
+
+Move: read the worker thread, inspect the worker worktree read-only, and record
+the candidate commit after the worker relocated the proof from the invalid
+runtime-package test placement into `cmd/sourcecycled`.
+
+Expected Delta V: 0. Candidate creation does not close an obligation until
+independent verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Worker branch:
+  `codex/o4-phase6-authenticated-universal-wire-product-api-proof`.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/f0b3/go-choir`.
+- Candidate commit:
+  `e406ca23 test O4 sourcecycled Wire API graph path`.
+- Changed file:
+  `cmd/sourcecycled/main_test.go`.
+- Candidate shape:
+  test-only extension of the existing sourcecycled graph-capture test. It uses
+  `RUNTIME_STORE_PATH` so sourcecycled derives the same objectgraph DB path that
+  runtime opens, then calls authenticated `GET /api/universal-wire/stories`
+  through registered runtime routes and asserts the graph-backed Wire story
+  preserves source/open identity.
+- Worker-reported checks seen in thread:
+  focused relocated sourcecycled test passed in 3.823s; adjacent
+  `internal/runtime` Universal Wire handler checks passed; adjacent
+  `internal/cycle` graph projection check passed; `git diff --check` passed.
+- Orchestration-observed checks:
+  `git show --check --oneline e406ca23` passed; worker
+  `git status --short --ignored` returned no output.
+- Follow-up:
+  orchestration sent a final-report prompt because the candidate commit existed
+  before the worker emitted its required final report.
+
+Evidence boundary: worker-local branch and orchestration read-only observation.
+No verifier verdict, root incorporation, main push, PR, CI, deploy, staging
+product acceptance, Texture native `source_ref`, publication/export, Qdrant,
+provider/gateway, auth/session renewal, promotion/rollback, or run-acceptance
+claim.
+
+Open edge: read the worker final report, then launch an independent verifier for
+candidate commit `e406ca23`.
