@@ -18,7 +18,6 @@ import (
 	runtimepkg "github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
-	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	storepkg "github.com/yusefmosiah/go-choir/internal/store"
@@ -215,32 +214,53 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	var wireResp struct {
-		Stories []types.WireStory `json:"stories"`
-		Source  string            `json:"source"`
+		Stories     []types.WireStory `json:"stories"`
+		Source      string            `json:"source"`
+		Diagnostics *struct {
+			Status     string `json:"status"`
+			Substrates []struct {
+				Substrate      string `json:"substrate"`
+				State          string `json:"state"`
+				CandidateCount int    `json:"candidate_count"`
+				StoryCount     int    `json:"story_count"`
+				Reason         string `json:"reason"`
+			} `json:"substrates"`
+		} `json:"diagnostics"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &wireResp); err != nil {
 		t.Fatalf("decode Universal Wire stories response: %v", err)
 	}
-	if wireResp.Source != "universal-wire-web-capture-graph" {
-		t.Fatalf("Universal Wire source = %q, want graph capture fallback", wireResp.Source)
+	if wireResp.Source != "universal-wire-texture-index" {
+		t.Fatalf("Universal Wire source = %q, want Texture article feed", wireResp.Source)
 	}
-	if len(wireResp.Stories) != 1 {
-		t.Fatalf("Universal Wire stories = %d, want one graph-backed sourcecycled story: %+v", len(wireResp.Stories), wireResp.Stories)
+	if len(wireResp.Stories) != 0 {
+		t.Fatalf("Universal Wire stories = %d, want no raw graph captures published as articles: %+v", len(wireResp.Stories), wireResp.Stories)
 	}
-	story := wireResp.Stories[0]
-	if story.Headline != "Graph ingest story" ||
-		story.OwnerID != "universal-wire-platform" ||
-		story.SourceState != "objectgraph-web-capture" ||
-		!strings.Contains(story.Projections["wire-style"], "Sourcecycled persisted this feed item") {
-		t.Fatalf("Universal Wire story did not read the sourcecycled graph capture: %+v", story)
+	if wireResp.Diagnostics == nil {
+		t.Fatal("Universal Wire diagnostics = nil, want diagnostic-only graph capture substrate")
 	}
-	if len(story.Manifest.Lead) != 1 ||
-		story.Manifest.Lead[0].ObjectKind != string(objectgraph.WebCaptureObjectKind) ||
-		story.Manifest.Lead[0].CanonicalID != captures[0].CanonicalID ||
-		story.Manifest.Lead[0].CanonicalURL != "https://example.com/wire-graph-1" ||
-		story.Manifest.Lead[0].OpenSurface != sourcecontract.OpenSurfaceSource ||
-		story.Manifest.Lead[0].LiveOpenSurface != sourcecontract.OpenSurfaceWebLens {
-		t.Fatalf("Universal Wire story manifest did not preserve configured graph identity: %+v", story.Manifest)
+	var graphDiag struct {
+		Substrate      string
+		State          string
+		CandidateCount int
+		StoryCount     int
+		Reason         string
+	}
+	for _, diag := range wireResp.Diagnostics.Substrates {
+		if diag.Substrate == "web_capture_graph" {
+			graphDiag.Substrate = diag.Substrate
+			graphDiag.State = diag.State
+			graphDiag.CandidateCount = diag.CandidateCount
+			graphDiag.StoryCount = diag.StoryCount
+			graphDiag.Reason = diag.Reason
+			break
+		}
+	}
+	if graphDiag.State != "diagnostic_only" ||
+		graphDiag.CandidateCount != 1 ||
+		graphDiag.StoryCount != 1 ||
+		!strings.Contains(graphDiag.Reason, "does not publish raw capture projections") {
+		t.Fatalf("Universal Wire graph diagnostic = %+v, want diagnostic-only sourcecycled graph capture", graphDiag)
 	}
 }
 
