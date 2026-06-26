@@ -4903,3 +4903,56 @@ run-acceptance claim.
 Open edge: resolve the readable O4 Phase 10c thread id or read the materialized
 worktree after it reports progress; if it produces a commit/checkpoint, create
 an independent verifier thread before root incorporation.
+
+## 2026-06-26 - O4 Phase 10c Harness Worker Resolved And Active
+
+Claim: O4 Phase 10c now has a readable, titled, pinned Codex worker thread
+actively investigating the browser-harness repair. This is worker identity and
+in-progress observer evidence only, not a final worker report, candidate
+commit, verifier acceptance, root incorporation, or checklist descent.
+
+Move: reconnect the pending worktree handle through `list_threads` by cwd,
+read the thread, title and pin it, and inspect the worker worktree status.
+
+Expected Delta V: 0. Resolving and observing an active worker does not close the
+native Texture citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:68462d14-f17c-45c0-a1e5-3b719a5eec5b`.
+- Resolved worker thread:
+  `019f0410-f4d9-7ee1-a1db-76ea71095b88`
+  (`O4 worker - Phase 10c Texture Browser Harness`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/eda4/go-choir`.
+- Worker branch/base:
+  `codex/o4-phase10c-native-texture-source-ref-browser-harness` from
+  `83fcbdef046b2253d823d4cea2136e9a3725f6dd`
+  (`checkpoint O4 native citation browser harness`).
+- Worker progress observed through `read_thread`:
+  the worker read the required mission/checkpoint context, reproduced the
+  missing `@playwright/test` failure, installed frontend dependencies from the
+  checked-in lockfile, reproduced the missing `4173` server failure, started
+  the `CHOIR_ENABLE_PLATFORMD=0` stack, and observed the frontend phase fail
+  because pnpm refuses the ignored `esbuild` build script.
+- Worker dirty state at orchestration inspection:
+  tracked status has untracked `frontend/pnpm-workspace.yaml`; ignored
+  artifacts include `auth.log`, `frontend/frontend.log`,
+  `frontend/node_modules/`, `frontend/test-results/`, `gateway.log`,
+  `proxy.log`, `sandbox.log`, and `vmctl.log`.
+
+Evidence boundary: active worker/status observation only. No worker final
+report, accepted candidate commit, verifier, root incorporation of a worker
+candidate, push, PR, CI, deploy, staging product acceptance, native Texture body
+`source_ref` citation-opening proof, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: wait for worker thread
+`019f0410-f4d9-7ee1-a1db-76ea71095b88` to complete or emit a durable callback;
+then inspect its worktree. If it produces a commit/checkpoint, create an
+independent verifier thread before root incorporation. If it returns no
+candidate, record the blocker and final dirty-path classification.
