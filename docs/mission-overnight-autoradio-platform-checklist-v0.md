@@ -829,10 +829,15 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: choose a new bounded route for the remaining O4 source/citation
-artifact-opening edge on the native Texture body `source_ref` citation axis:
-either launch a replacement worker with a smaller proof target, or document the
-smallest missing product/backend link before repair. O4 Phase 10 worker thread
+next move: wait for O4 Phase 10b replacement worker thread
+`019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
+Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` to return a
+candidate commit, checkpoint, or precise no-candidate report. The replacement
+assignment is intentionally narrower than Phase 10: inspect the existing native
+Texture `source_ref` Source Viewer/reader-snapshot tests and either strengthen
+a focused proof beyond O3 Phase 6, document the missing product/backend link
+before repair, or return file/line diagnostics with clean status. O4 Phase 10
+worker thread
 `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` (`O4 worker - Native Texture Citation
 Source Open`) resolved in `/Users/wiz/.codex/worktrees/d3ed/go-choir` on branch
 `codex/o4-phase10-native-texture-source-ref-open-proof`, but returned no

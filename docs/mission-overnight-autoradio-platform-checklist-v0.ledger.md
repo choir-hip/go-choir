@@ -4715,3 +4715,48 @@ Open edge: choose a replacement bounded route for native Texture body
 `source_ref` citation opening: either relaunch a smaller worker prompt with a
 more mechanical target, or document the smallest missing product/backend link
 before repair.
+
+## 2026-06-26 - O4 Phase 10b Replacement Worker Launch
+
+Claim: O4 Phase 10b has been launched as a narrower replacement worker for the
+native Texture body `source_ref` citation-opening edge. This is worker launch
+and thread identity only, not worker evidence, verifier acceptance, root
+incorporation, or checklist descent.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item
+`O4-phase10b-native-texture-source-ref-proof-or-blocker`, then title and pin
+the readable thread.
+
+Expected Delta V: 0. Launching a replacement worker does not close the native
+Texture citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:85aab949-0ab7-4025-8ed4-e68b2e5d0539`.
+- Resolved worker thread:
+  `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
+  Proof Replacement`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/013f/go-choir`.
+- Worker starting state:
+  detached `HEAD` at `24382118438db5eaa33f7e896a1cdbb9437fb10b` (`record O4
+  native citation worker no-candidate`).
+- Worker objective:
+  inspect the focused native Texture `source_ref` Source Viewer/reader-snapshot
+  frontend tests and code, then either produce a small proof/checkpoint commit
+  or return a precise no-candidate report with file/line evidence.
+
+Evidence boundary: worker launched/readable only. No worker final report,
+candidate commit, verifier, root incorporation, push, PR, CI, deploy, staging
+product acceptance, native Texture body `source_ref` citation-opening proof,
+publication/export, Qdrant, provider/gateway/search, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: read worker thread
+`019f0405-4fea-70f1-b248-5b6ebce70775` after it reports progress or final
+candidate; if it produces a commit/checkpoint, create an independent verifier
+thread before root incorporation.
