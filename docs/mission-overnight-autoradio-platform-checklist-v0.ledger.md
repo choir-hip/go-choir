@@ -174,3 +174,26 @@ Receipts:
 Open edge: Preserve this orchestration paradoc and ledger on
 `preserve/o0-autoradio-mission-state-2026-06-26`, then start O1 with a bounded
 objectgraph worker/verifier thread pair.
+
+## 2026-06-26 - O0 Closed
+
+Claim: O0 WIP preservation is complete enough to start O1.
+
+Move: settle O0.
+
+Expected Delta V: 0 additional; this records the final preservation handle for
+the already-counted O0 descent.
+
+Actual Delta V: 0. Current V remains 59.
+
+Receipts:
+
+- Orchestration mission-state branch:
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- All accepted dirty WIP clusters now have explicit preservation branch/commit
+  handles.
+- Accepted inventory verifier verdict: `accept`.
+
+Open edge: O1 must begin from the objectgraph prototype preservation handle and
+decide whether to land a branch-level `internal/objectgraph`, a narrower
+package, or a design-only successor. No O1 implementation is accepted yet.

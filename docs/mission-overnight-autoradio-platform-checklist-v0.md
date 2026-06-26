@@ -386,13 +386,12 @@ prototype `b6b45b60` on `preserve/o0-objectgraph-prototype-2026-06-26`;
 Qdrant prototype `4c1b28be` on `preserve/o0-qdrant-prototype-2026-06-26`;
 PPTX learning/prototype `4a687522` on
 `preserve/o0-pptx-learning-2026-06-26`; docs-checker cleanup `238c7ce2` on
-`preserve/o0-docs-checker-cleanup-2026-06-26`. O0 is complete once this
-orchestration paradoc/ledger update is preserved.
+`preserve/o0-docs-checker-cleanup-2026-06-26`; orchestration mission state on
+`preserve/o0-autoradio-mission-state-2026-06-26`. O0 is complete.
 
-next move: Preserve this orchestration paradoc/ledger on
-`preserve/o0-autoradio-mission-state-2026-06-26`, then start O1 by creating an
-objectgraph implementation worker thread and an independent verifier thread
-with O1's mutation-class/protected-surface evidence bounds.
+next move: Start O1 by creating an objectgraph implementation worker thread and
+an independent verifier thread with O1's mutation-class/protected-surface
+evidence bounds.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
