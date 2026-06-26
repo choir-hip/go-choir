@@ -415,7 +415,9 @@ chunk problem after the O4 Universal Wire repair. The latest decreasing move was
 Delta V 1 for `5b61fdc4`: sourcecycled now projects graph captures into the
 public `universal-wire-platform/platform` VM graph, the active VM returns 12
 Universal Wire graph-backed stories, and authenticated Chrome shows Universal
-Wire cards with Source Viewer and Web Lens source opening after page reload.
+Wire cards with Source Viewer and Web Lens source opening after page reload. A
+current/previous frontend asset-root repair candidate is local only until CI,
+deploy, and already-open-client staging proof complete.
 
 budget: Overnight budget is already partially spent; solvency is feasible only
 for bounded O4 follow-through plus explicit open handoff of the broader O5-O8
@@ -463,17 +465,21 @@ already-open post-deploy tab failed on stale dynamic import
 Web Lens opened `https://t.me/pulsenigeria247/1`. Current problem conjecture:
 Choir's deploy/static-asset strategy does not protect already-open SPA clients
 from chunk filename turnover across deploys, so source-open actions can fail
-until manual reload. Remaining open O4/O5+ edges: stale frontend chunk repair,
+until manual reload. Local repair candidate: Caddy `/assets/*` now resolves
+against `/var/www/go-choir/frontend-current` first and
+`/var/www/go-choir/frontend-previous` second, while the SPA shell remains
+`no-store` from `frontend-current`; the deploy smoke check now verifies the
+public asset URL and either current or previous on-disk asset root. Remaining
+O4/O5+ edges: deploy this repair, prove already-open-client behavior if feasible,
 native Texture body `source_ref` citation carry-forward, publication/export,
 Qdrant projection, provider/search realism, run acceptance, promotion/rollback,
 and broader O5-O8 settlement.
 
-next move: inspect frontend/deploy static asset serving and stale dynamic import
-handling, then choose the narrowest repair candidate. Preferred discriminator:
-prove whether old `/assets/*.js` chunks are deleted or cache headers cause
-already-open clients to request unavailable chunks. If repair is nontrivial,
-create a worker thread with this paradoc/ledger and require an independent
-verifier thread before landing.
+next move: commit and push the current/previous asset-root repair, monitor CI and
+Node B deploy, verify staging identity, then test Source Viewer/Web Lens from an
+already-open authenticated Chrome client across a fresh frontend deploy if a
+pre-deploy tab can be preserved. If that exact transition is unavailable, record
+the evidence cap and verify old/current asset URLs plus normal source opening.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

@@ -904,16 +904,6 @@ jobs:
             note_phase "health checks"
 
             echo "==> Smoke test: public frontend asset graph"
-            configured_frontend_root=$(sed -n "s|^[[:space:]]*root \\* \\([^[:space:]]*\\).*|\\1|p" /etc/caddy/caddy_config | head -n 1)
-            if [ -z "$configured_frontend_root" ]; then
-              echo "Could not find configured frontend root in Caddy config" >&2
-              exit 1
-            fi
-            resolved_frontend_root=$(readlink -f "$configured_frontend_root")
-            if [ -z "$resolved_frontend_root" ] || [ ! -d "$resolved_frontend_root" ]; then
-              echo "Configured frontend root $configured_frontend_root did not resolve to a directory" >&2
-              exit 1
-            fi
             served_asset=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors --resolve choir.news:443:147.135.70.196 https://choir.news/ |
               sed -n "s/.*src=\"\\/assets\\/\\([^\"]*\\.js\\)\".*/\\1/p" |
               head -n 1)
@@ -921,11 +911,15 @@ jobs:
               echo "Could not find served frontend JS asset in public index" >&2
               exit 1
             fi
-            if [ ! -f "$resolved_frontend_root/assets/$served_asset" ]; then
-              echo "Served asset $served_asset is not in configured frontend root $configured_frontend_root ($resolved_frontend_root)" >&2
+            if [ ! -f "/var/www/go-choir/frontend-current/assets/$served_asset" ] && [ ! -f "/var/www/go-choir/frontend-previous/assets/$served_asset" ]; then
+              echo "Served asset $served_asset is not in frontend-current or frontend-previous" >&2
               exit 1
             fi
-            echo "    Public frontend asset $served_asset belongs to $configured_frontend_root ($resolved_frontend_root)"
+            if ! curl -fsSI --retry 5 --retry-delay 2 --retry-all-errors --resolve choir.news:443:147.135.70.196 "https://choir.news/assets/$served_asset" >/dev/null; then
+              echo "Served asset URL /assets/$served_asset did not resolve through Caddy" >&2
+              exit 1
+            fi
+            echo "    Public frontend asset /assets/$served_asset resolves through current/previous asset roots"
             note_phase "frontend asset graph"
 
             echo "==> Staging deploy complete"

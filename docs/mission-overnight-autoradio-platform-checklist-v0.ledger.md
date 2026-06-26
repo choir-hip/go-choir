@@ -6475,3 +6475,56 @@ Open edge: inspect static asset serving and Vite dynamic import failure handling
 Choose between retaining old chunk files across deploys, changing cache policy,
 or adding an intentional stale-client recovery path, then verify on staging with
 an already-open client if feasible.
+
+## 2026-06-26 - O4 Stale Frontend Chunk Repair Candidate
+
+Claim: The stale deployed frontend chunk problem has a narrow deployment repair
+candidate: serve `/assets/*` from the current frontend release first and the
+previous frontend release second, while keeping the SPA shell rooted at
+`frontend-current` with `Cache-Control: no-store`.
+
+Move: changed the Node B Caddy asset route to use `/var/www/go-choir` as the
+asset root with `try_files /frontend-current{uri} /frontend-previous{uri}`, and
+updated the CI deploy smoke test to verify that the public JS asset from
+`index.html` exists in either release directory and resolves through the public
+`/assets/...` URL.
+
+Expected Delta V: 1 only after CI, deploy, staging identity, and source-open
+acceptance prove stale-client recovery or previous-asset serving. Actual Delta V:
+0 at local candidate stage. Current V remains 30.
+
+Receipts:
+
+- `git diff --check` passed.
+- `.github/scripts/deploy-impact-classify-test` passed.
+- `nix eval .#nixosConfigurations.go-choir-b.config.services.caddy.virtualHosts.\"choir.news\".extraConfig --raw` rendered the expected Caddy route:
+  current asset root, previous asset fallback, immutable assets, and no-store SPA
+  shell.
+- Local `caddy` was not installed, so local syntax validation is capped at Nix
+  render plus upcoming CI/deploy validation.
+
+Mutation class / protected surfaces: red-adjacent deployment routing and orange
+frontend static-asset behavior. Touched `nix/node-b.nix` Caddy public asset
+routing and `.github/workflows/ci.yml` staging deploy smoke validation. Excluded
+surfaces remain Texture canonical writes, Trace/evidence, candidate computers,
+auth/session renewal, vmctl, gateway/provider calls, Qdrant, publication/export,
+promotion/rollback, and run acceptance.
+
+Conjecture delta: preserving one previous frontend asset graph should let an
+already-open SPA tab dynamically import the chunk names it already knows after a
+single deploy, while new page loads still receive the current `index.html` and
+current chunks.
+
+Rollback refs: revert the repair commit to restore `/assets/*` serving only from
+`frontend-current`; a failed deploy can also roll back through the normal
+`frontend-previous` pointer only if the deploy leaves the previous release
+intact.
+
+Evidence boundary: this is a local config/render proof, not staging acceptance.
+It does not yet prove old chunk URLs remain available on Node B, nor that Web
+Lens opens without reload in an already-open browser after deploy.
+
+Open edge: commit, push, monitor full CI/deploy for the red-adjacent routing
+change, verify `choir.news` health/build identity, and run authenticated Chrome
+QA against Universal Wire Source Viewer/Web Lens. Prefer an already-open tab
+across deploy; if unavailable, record the evidence cap explicitly.

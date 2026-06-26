@@ -20,6 +20,7 @@ let
   # via interpolation instead of raw *_KEY_PATH=/absolute/path literals
   # that Droid-Shield false-positives on.
   authSigningDir = "/var/lib/go-choir/auth-signing";
+  frontendRoot = "/var/www/go-choir";
   frontendCurrent = "/var/www/go-choir/frontend-current";
   sandboxFilesDir = "/var/lib/go-choir/files";
   sandboxRuntimeDir = "/var/lib/go-choir/runtime";
@@ -180,7 +181,8 @@ in
           respond "internal routes are not available from the public edge" 403
         }
         handle /assets/* {
-          root * ${frontendCurrent}
+          root * ${frontendRoot}
+          try_files /frontend-current{uri} /frontend-previous{uri}
           header Cache-Control "public, max-age=31536000, immutable"
           file_server
         }
