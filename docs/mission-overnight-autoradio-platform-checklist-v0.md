@@ -251,7 +251,13 @@ Checklist:
   and wires `cmd/sourcecycled` to opt-in objectgraph DB paths. This is accepted
   branch-level local code/test proof only; platform/deploy objectgraph DB
   configuration and staging product proof remain open.
-- [ ] Build News/Wire feed from graph objects and source refs.
+- [x] Build News/Wire feed from graph objects and source refs. O4 Phase 7 adds
+  accepted and incorporated branch-level Universal Wire graph fallback
+  enrichment that reads `captured_from` edges from `choir.web_capture` objects
+  to graph `choir.source_entity` provenance objects and exposes those source
+  entities as Wire manifest context. It does not claim native Texture body
+  `source_ref` citations, publication/export, deployed source artifacts,
+  staging, or full News benchmark acceptance.
 - [ ] Keep empty feed honest but diagnostic.
 - [x] Add acceptance for authenticated `/api/universal-wire/stories`. O4 Phase 6
   adds accepted branch-level authenticated public-route API proof that
@@ -387,8 +393,8 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 33. Last Delta V: 1 for O4
-Phase 6 verifier acceptance and root incorporation. O4 Phase 1 closed the first
++ 8 Autoradio/Pipecat obligations. Current value: 32. Last Delta V: 1 for O4
+Phase 7 verifier acceptance and root incorporation. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
@@ -405,10 +411,10 @@ or staging proof. O4 Phase 5 adds accepted and incorporated sourcecycled
 ingestion into durable `choir.web_capture` objects with source entity provenance
 edges; it does not claim platform/deploy objectgraph DB configuration, staging,
 native Texture citation carry-forward, publication/export, or Qdrant.
-O4 Phase 7 has a worker candidate that carries graph `captured_from`
-`choir.source_entity` provenance into Universal Wire manifest context; an
-independent verifier is queued before any root incorporation or checklist
-closure.
+O4 Phase 7 adds accepted and incorporated graph `captured_from`
+`choir.source_entity` provenance carry-forward into Universal Wire manifest
+context; it does not claim native Texture body `source_ref` citations,
+publication/export, staging, or full News benchmark acceptance.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -791,32 +797,24 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: wait for O4 Phase 7 verifier thread
-`019f03d1-0071-7371-bdd6-a3bd840c9e76` (`O4 verifier - Graph Source-Ref Feed`)
-in `/Users/wiz/.codex/worktrees/51cf/go-choir`, then read its verdict against
-worker commits `35420443 checkpoint O4 graph source-ref feed gap` and
-`8a0a69d1 carry Wire graph source entity provenance`.
-The worker thread `019f03c9-2c8f-73b1-bfca-ed7badd4383f` (`O4 worker - Graph
-Source-Ref Feed`) in `/Users/wiz/.codex/worktrees/6c59/go-choir` is complete on
-branch `codex/o4-phase7-news-wire-graph-source-ref-feed` at
-`8a0a69d1b1af5bafbf1aca5724c4a16b3be2919e`. Its final report claims a
-checkpoint-first orange runtime/API feed slice: Universal Wire graph fallback
-reads `captured_from` edges from `choir.web_capture` objects to graph
-`choir.source_entity` provenance objects and exposes those source entities only
-as Wire manifest context, without minting native Texture body `source_ref`
-citations. Worker checks passed: `nix develop -c go test ./internal/runtime
--run '^TestHandleUniversalWireStories' -count=1 -timeout=90s`; `nix develop -c
+next move: launch an O4 worker for the remaining `Keep empty feed honest but
+diagnostic` obligation. O4 Phase 7 worker thread
+`019f03c9-2c8f-73b1-bfca-ed7badd4383f` (`O4 worker - Graph Source-Ref Feed`)
+and verifier thread `019f03d1-0071-7371-bdd6-a3bd840c9e76` (`O4 verifier -
+Graph Source-Ref Feed`) accepted worker commits `35420443` and `8a0a69d1`,
+which root incorporated as `24f48768 checkpoint O4 graph source-ref feed gap`
+and `62503e67 carry Wire graph source entity provenance`. Root checks passed:
+`git show --check --oneline 24f48768`; `git show --check --oneline 62503e67`;
+`git diff --check 4f67aaf9..HEAD`; `nix develop -c go test ./internal/runtime
+-run '^TestHandleUniversalWireStories' -count=1 -timeout=120s`; `nix develop -c
 go test ./internal/cycle -run
 '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1 -timeout=60s`;
-`nix develop -c go test ./cmd/sourcecycled -run
+and `nix develop -c go test ./cmd/sourcecycled -run
 '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1
--timeout=60s`; `git show --check --oneline 35420443`; `git show --check
---oneline 8a0a69d1`; and `git diff --check c24dc9af..HEAD`. Expected Delta V:
-0 until independent verifier acceptance and root incorporation; potential Delta
-V: 1 if the verifier accepts and root incorporates the branch-level feed slice.
-Do not claim full News benchmark, staging, native Texture `source_ref`
+-timeout=60s`. Expected Delta V: 1; Actual Delta V: 1. Current V is 32. Do not
+claim full News benchmark, staging, native Texture `source_ref`
 publication/export, Qdrant, promotion, rollback, or run acceptance from this
-candidate. O4 Phase 6 worker thread
+branch-level proof. O4 Phase 6 worker thread
 `019f03b9-7d73-7d13-9d58-4bec2361f5c8` (`O4 worker - Authenticated Wire API
 Proof`) in `/Users/wiz/.codex/worktrees/f0b3/go-choir` completed. Orchestration
 observed the worker branch dirty with one focused test change in

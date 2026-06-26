@@ -3936,3 +3936,92 @@ open.
 Open edge: wait for verifier thread
 `019f03d1-0071-7371-bdd6-a3bd840c9e76` to complete, then read the verifier
 verdict before incorporating worker commits.
+
+## 2026-06-26 - O4 Phase 7 Graph Source-Ref Feed Accepted And Incorporated
+
+Claim: O4 Phase 7 closes the bounded branch-level `Build News/Wire feed from
+graph objects and source refs` obligation by carrying graph source-entity
+provenance into Universal Wire manifest context. This is not full News
+benchmark acceptance.
+
+Move: read the independent verifier verdict, incorporate accepted worker commits
+into the orchestration branch, rerun focused root checks, update the O4
+checklist, and decrease V by 1.
+
+Expected Delta V: 1. The accepted slice closes one O4 checklist obligation at
+branch level.
+
+Actual Delta V: 1. Current V moves from 33 to 32.
+
+Receipts:
+
+- Worker thread:
+  `019f03c9-2c8f-73b1-bfca-ed7badd4383f`
+  (`O4 worker - Graph Source-Ref Feed`).
+- Verifier thread:
+  `019f03d1-0071-7371-bdd6-a3bd840c9e76`
+  (`O4 verifier - Graph Source-Ref Feed`).
+- Worker commits accepted by verifier:
+  `35420443 checkpoint O4 graph source-ref feed gap` and
+  `8a0a69d1 carry Wire graph source entity provenance`.
+- Root incorporated commits:
+  `24f48768 checkpoint O4 graph source-ref feed gap` and
+  `62503e67 carry Wire graph source entity provenance`.
+- Incorporated files:
+  `docs/o4-news-wire-graph-source-ref-feed-checkpoint-2026-06-26.md`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- Verifier verdict:
+  `accept`; findings none. The verifier states orchestration may incorporate
+  `35420443` and `8a0a69d1`.
+- Verifier evidence:
+  Problem Documentation First holds because `35420443` is docs-only and
+  precedes runtime commit `8a0a69d1`. The implementation preserves
+  Texture-edition priority, honest empty state, non-tombstoned graph fallback,
+  source/open identity fields, and auth behavior while adding `captured_from`
+  `choir.source_entity` provenance only as `manifest.context`.
+- Verifier commands passed:
+  `git status --short --ignored`; `git show --check --oneline 35420443`;
+  `git show --check --oneline 8a0a69d1`; `git diff --check c24dc9af..HEAD`;
+  `git diff --name-status c24dc9af..HEAD`; `nix develop -c go test
+  ./internal/runtime -run '^TestHandleUniversalWireStories' -count=1
+  -timeout=120s`; `nix develop -c go test ./internal/cycle -run
+  '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1
+  -timeout=60s`; and `nix develop -c go test ./cmd/sourcecycled -run
+  '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1
+  -timeout=60s`.
+- Root commands passed:
+  `git show --check --oneline 24f48768`;
+  `git show --check --oneline 62503e67`;
+  `git diff --check 4f67aaf9..HEAD`;
+  `nix develop -c go test ./internal/runtime -run
+  '^TestHandleUniversalWireStories' -count=1 -timeout=120s`;
+  `nix develop -c go test ./internal/cycle -run
+  '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1
+  -timeout=60s`; and
+  `nix develop -c go test ./cmd/sourcecycled -run
+  '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1
+  -timeout=60s`.
+- Non-fatal environment notes:
+  Nix emitted transient eval-cache SQLite busy and FlakeHub 401 cache warnings
+  during some root/verifier runs; Go tests returned `ok`.
+
+Evidence boundary: branch-local worker, independent verifier, and root-focused
+rerun evidence only. No push, PR, CI, deploy, staging product acceptance,
+native Texture body `source_ref` citation carry-forward, publication/export,
+Qdrant projection, provider/gateway, auth/session renewal, promotion/rollback,
+or run-acceptance claim.
+
+Dirty-path classification: root tracked changes after incorporation are
+intentional source, tests, and durable documentation/evidence. Ignored local
+env/log/dependency artifacts remain unrelated and pre-existing.
+
+Residual risks: complete News benchmark acceptance remains open; deployed
+sourcecycled/runtime objectgraph wiring and staging identity remain unproven;
+native Texture body citation carry-forward still requires downstream
+Texture/publication work; empty-feed diagnostics and real deployed source
+artifact/source-opening proof remain open.
+
+Open edge: launch the next O4 worker for `Keep empty feed honest but
+diagnostic`, preserving the accepted graph/source-ref feed behavior and avoiding
+any staging or full-News-benchmark claim without deployed evidence.
