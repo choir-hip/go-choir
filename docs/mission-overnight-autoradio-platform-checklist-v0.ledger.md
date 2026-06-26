@@ -1570,3 +1570,56 @@ or rollback claim.
 Open edge: wait for worker thread `019f031a-6008-7c42-a36a-cc3ffebe707c` to
 finish, then send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
 worker commits, exact tests, dirty-path classification, and non-claims.
+
+## 2026-06-26 - O3 Phase 5 Worker Finished Pending Fresh Verifier Verdict
+
+Claim: The O3 Phase 5 worker produced a bounded frontend implementation and
+evidence package, but Phase 5 remains unaccepted until the independent verifier
+reviews it and accepted commits are incorporated into the orchestration branch.
+
+Move: record the worker completion evidence and prepare a fresh verifier
+follow-up because the earlier verifier `blocked` result was stale launch-order
+evidence.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread: `019f031a-6008-7c42-a36a-cc3ffebe707c`
+  (`O3 worker - Source Open Phase 5`).
+- Worker cwd: `/Users/wiz/.codex/worktrees/1050/go-choir`.
+- Worker commit:
+  `927d58a68bc36ca8a4d2e82066c8961f60b5587d derive texture sources from graph wrappers`.
+- Chosen mapping: `revisionSourceEntities` keeps publication bundle sources
+  first, legacy revision `source_entities` second, and graph wrapper
+  `source_entity_objects` third.
+- Graph wrapper conversion: wrapper records become the existing local entity
+  shape consumed by `sourceEntityID`, `sourceEntityOpenPlan`, and
+  `sourceEntityLaunchPayload`.
+- `source_refs` role: preserve body-level legacy `source_ref` ids for aliases
+  that point at the same graph source entity version.
+- Non-synthesis invariant: legacy `metadata.media_source_refs` still do not
+  produce local source entities.
+- Worker test result:
+  `npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities"`
+  passed, 5 tests.
+- Worker build result: `npm run build` passed with unrelated existing
+  Svelte/a11y/chunk warnings only.
+- Worker whitespace result: `git diff --check HEAD~1..HEAD` passed.
+- Dirty-path classification: intentional source committed in
+  `frontend/src/lib/texture-source-state.ts` and
+  `frontend/tests/texture-source-entities.spec.js`; ignored generated artifacts
+  `frontend/node_modules/` and `frontend/dist/`; no temporary proof output; no
+  unrelated WIP; tracked `git status --short` clean.
+
+Evidence boundary: worker-level frontend helper/build proof only. No verifier
+acceptance, root incorporation, source-open browser proof, O3-complete, main,
+staging, product, deploy, Qdrant, publication/export, public producer,
+auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
+claim.
+
+Open edge: send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
+worker final report, commit diff/tests, dirty-path classification, and
+non-claims for a fresh `accept` / `revise` / `blocked` / `supersede` verdict.

@@ -592,13 +592,28 @@ entities. Excluded surfaces remain O4 News/Universal Wire, Qdrant projection,
 publication/export, auth/session renewal, gateway/provider calls, staging/deploy,
 graph-first enforcement, promotion, and rollback behavior.
 
-next move: wait for worker thread `019f031a-6008-7c42-a36a-cc3ffebe707c` to
-finish, then send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
-worker commits, tests, dirty-path classification, and non-claims. No Phase 5
-implementation, acceptance, source-open browser proof, O3-complete, main,
-staging, product, deploy, Qdrant, publication/export, auth/session,
-gateway/provider, graph-first enforcement, promotion, or rollback claim exists
-yet.
+Worker thread `019f031a-6008-7c42-a36a-cc3ffebe707c` finished Phase 5 with
+commit `927d58a68bc36ca8a4d2e82066c8961f60b5587d` (`derive texture sources
+from graph wrappers`). The chosen mapping keeps `revisionSourceEntities`
+priority as publication bundle sources, then legacy revision `source_entities`,
+then graph-backed `source_entity_objects`. Wrapper records are converted into
+the existing local entity shape consumed by `sourceEntityID`,
+`sourceEntityOpenPlan`, and `sourceEntityLaunchPayload`; `source_refs` are used
+only to preserve body-level legacy `source_ref` ids when multiple refs point at
+the same graph entity version. Legacy `metadata.media_source_refs` still do not
+synthesize source entities. Worker checks passed:
+`npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities"`;
+`npm run build` with unrelated existing Svelte/a11y/chunk warnings only; and
+`git diff --check HEAD~1..HEAD`. Worker tracked hygiene was clean; ignored
+artifacts remained `frontend/node_modules/` from `npm ci` and `frontend/dist/`
+from `npm run build`.
+
+next move: send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
+worker commit, tests, dirty-path classification, residual risks, and non-claims
+for a fresh verdict. No Phase 5 verifier acceptance, root incorporation,
+source-open browser proof, O3-complete, main, staging, product, deploy, Qdrant,
+publication/export, auth/session, gateway/provider, graph-first enforcement,
+promotion, or rollback claim exists yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
