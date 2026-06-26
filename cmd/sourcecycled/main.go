@@ -31,6 +31,7 @@ const (
 	defaultIngestionRuntimeRetryDelay       = 2 * time.Second
 	defaultIngestionQueueDrainInterval      = 1 * time.Minute
 	defaultIngestionProcessorInFlightWindow = 15 * time.Minute
+	defaultObjectGraphBackfillLimit         = 50
 )
 
 type runtimeRunSubmitRequest struct {
@@ -240,6 +241,10 @@ func sourceServiceObjectGraphComputerID() string {
 	return strings.TrimSpace(firstEnv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "SOURCECYCLED_OBJECTGRAPH_COMPUTER_ID"))
 }
 
+func sourceServiceObjectGraphBackfillLimit() int {
+	return parsePositiveInt(firstEnv("SOURCE_SERVICE_OBJECTGRAPH_BACKFILL_LIMIT", "SOURCECYCLED_OBJECTGRAPH_BACKFILL_LIMIT"), defaultObjectGraphBackfillLimit)
+}
+
 func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, error) {
 	dbPath := sourceServiceObjectGraphDBPath()
 	if strings.TrimSpace(dbPath) == "" {
@@ -253,6 +258,109 @@ func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, erro
 		Memory: objectgraph.NewMemoryStore(),
 		SQLite: sqliteStore,
 	}), dbPath, nil
+}
+
+func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cycleID string, items []sources.Item, now time.Time, eventType, message string) error {
+	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
+	if err != nil {
+		return err
+	}
+	if graph == nil {
+		return nil
+	}
+	result, writeErr := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
+		OwnerID:    sourceServiceObjectGraphOwnerID(),
+		ComputerID: sourceServiceObjectGraphComputerID(),
+		Now:        now,
+	})
+	closeErr := graph.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if store != nil {
+		_ = store.RecordCycleEvent(ctx, cycleID, "", eventType, message, map[string]any{
+			"objectgraph_db_path": graphPath,
+			"capture_count":       len(result.Captures),
+			"source_entity_count": len(result.SourceEntities),
+			"captured_from_edges": result.EdgeCount,
+			"skipped_item_count":  result.Skipped,
+		})
+	}
+	return nil
+}
+
+func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store *cycle.Storage, cycleID string, now time.Time) error {
+	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
+	if err != nil {
+		return err
+	}
+	if graph == nil {
+		return nil
+	}
+	closeGraph := true
+	defer func() {
+		if closeGraph {
+			_ = graph.Close()
+		}
+	}()
+	notTombstoned := false
+	existing, err := graph.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:      objectgraph.WebCaptureObjectKind,
+		OwnerID:   sourceServiceObjectGraphOwnerID(),
+		Limit:     1,
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		return err
+	}
+	if len(existing) > 0 {
+		if store != nil {
+			_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfill_skipped", "objectgraph already has Universal Wire web captures", map[string]any{
+				"objectgraph_db_path": graphPath,
+				"existing_count":      len(existing),
+			})
+		}
+		return nil
+	}
+	if store == nil {
+		return nil
+	}
+	items, err := store.SearchItems(ctx, "", sourceServiceObjectGraphBackfillLimit())
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfill_empty", "no stored source items available for graph backfill", map[string]any{
+			"objectgraph_db_path": graphPath,
+		})
+		return nil
+	}
+	result, err := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
+		OwnerID:    sourceServiceObjectGraphOwnerID(),
+		ComputerID: sourceServiceObjectGraphComputerID(),
+		Now:        now,
+	})
+	closeErr := graph.Close()
+	closeGraph = false
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfilled", "stored source items projected to empty objectgraph web captures", map[string]any{
+		"objectgraph_db_path": graphPath,
+		"backfill_limit":      sourceServiceObjectGraphBackfillLimit(),
+		"backfill_item_count": len(items),
+		"capture_count":       len(result.Captures),
+		"source_entity_count": len(result.SourceEntities),
+		"captured_from_edges": result.EdgeCount,
+		"skipped_item_count":  result.Skipped,
+	})
+	return nil
 }
 
 func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
@@ -1065,6 +1173,11 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	if len(items) == 0 {
 		log.Println("No new items found in this cycle. Skipping synthesis.")
 		_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed_empty", "no new items found", map[string]any{"fetch_count": len(pollResult.Fetches)})
+		if err := backfillSourceItemsToObjectGraphIfEmpty(ctx, store, cycleID, time.Now().UTC()); err != nil {
+			log.Printf("Failed to backfill sourcecycled web captures to objectgraph: %v", err)
+			_ = store.FinishCycle(ctx, cycleID, "error", 0, len(pollResult.Fetches), err)
+			return
+		}
 		dispatchResult := ingestionRuntimeDispatcherFromEnv().dispatch(ctx, store, cycle.IngestionHandoff{})
 		if ingestionDispatchResultHasActivity(dispatchResult) {
 			_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoff_queue_drain", "queued ingestion handoffs drained during empty source cycle", map[string]any{
@@ -1088,36 +1201,10 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		return
 	}
 	now := time.Now().UTC()
-	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
-	if err != nil {
-		log.Printf("Failed to initialize sourcecycled objectgraph projection: %v", err)
+	if err := writeSourceItemsToObjectGraph(ctx, store, cycleID, items, now, "web_captures_graph_written", "source items projected to objectgraph web captures"); err != nil {
+		log.Printf("Failed to write sourcecycled web captures to objectgraph: %v", err)
 		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
 		return
-	}
-	if graph != nil {
-		result, err := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
-			OwnerID:    sourceServiceObjectGraphOwnerID(),
-			ComputerID: sourceServiceObjectGraphComputerID(),
-			Now:        now,
-		})
-		closeErr := graph.Close()
-		if err != nil {
-			log.Printf("Failed to write sourcecycled web captures to objectgraph: %v", err)
-			_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
-			return
-		}
-		if closeErr != nil {
-			log.Printf("Failed to close sourcecycled objectgraph projection: %v", closeErr)
-			_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), closeErr)
-			return
-		}
-		_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_written", "source items projected to objectgraph web captures", map[string]any{
-			"objectgraph_db_path": graphPath,
-			"capture_count":       len(result.Captures),
-			"source_entity_count": len(result.SourceEntities),
-			"captured_from_edges": result.EdgeCount,
-			"skipped_item_count":  result.Skipped,
-		})
 	}
 	ingestionEvents := cycle.BuildIngestionEventsFromItems(cycleID, items, now)
 	if err := store.SaveIngestionEvents(ctx, ingestionEvents); err != nil {

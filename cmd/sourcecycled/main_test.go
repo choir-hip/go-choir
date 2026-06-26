@@ -244,6 +244,85 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 	}
 }
 
+func TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", "")
+	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
+	runtimeStorePath := filepath.Join(t.TempDir(), "runtime-store.db")
+	graphPath := filepath.Join(filepath.Dir(runtimeStorePath), filepath.Base(runtimeStorePath)+".objectgraph.db")
+	t.Setenv("RUNTIME_STORE_PATH", runtimeStorePath)
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID", "universal-wire-platform")
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "computer-universal-wire-platform")
+
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	defer store.Close()
+	published := time.Date(2026, 6, 26, 12, 30, 0, 0, time.UTC)
+	if err := store.SaveItems([]sources.Item{{
+		ID:           "srcitem_backfill_wire_1",
+		SourceID:     "rss:stored-wire",
+		SourceType:   sources.SourceTypeRSS,
+		FetchID:      "fetch-stored-wire",
+		OriginalID:   "stored-wire-1",
+		Title:        "Stored wire story",
+		Body:         "Stored sourcecycled item should become a graph-backed web capture after an empty cycle.",
+		URL:          "https://example.com/stored-wire#fragment",
+		CanonicalURL: "https://example.com/stored-wire",
+		Published:    published,
+		FetchedAt:    published.Add(2 * time.Minute),
+		Verticals:    []string{"wire"},
+		Language:     "en",
+		Region:       "global",
+	}}); err != nil {
+		t.Fatalf("save stored source item: %v", err)
+	}
+
+	registry := &sources.Registry{UserAgent: "ChoirTest/1.0"}
+	engine = nil
+	t.Cleanup(func() { engine = nil })
+
+	runCycle(context.Background(), registry, store)
+	captures := listTestWebCaptures(t, graphPath)
+	if len(captures) != 1 {
+		t.Fatalf("captures after empty-cycle backfill = %d, want 1: %+v", len(captures), captures)
+	}
+	meta, err := objectgraph.WebCaptureMetadataFromObject(captures[0])
+	if err != nil {
+		t.Fatalf("decode backfilled capture metadata: %v", err)
+	}
+	if meta.Title != "Stored wire story" || meta.CanonicalURL != "https://example.com/stored-wire" ||
+		!strings.Contains(string(captures[0].Body), "Stored sourcecycled item should become") {
+		t.Fatalf("backfilled capture metadata/body = %+v body=%q", meta, captures[0].Body)
+	}
+
+	runCycle(context.Background(), registry, store)
+	captures = listTestWebCaptures(t, graphPath)
+	if len(captures) != 1 {
+		t.Fatalf("captures after second empty cycle = %d, want existing graph to skip backfill: %+v", len(captures), captures)
+	}
+}
+
+func listTestWebCaptures(t *testing.T, graphPath string) []objectgraph.Object {
+	t.Helper()
+	graphStore, err := objectgraph.NewSQLiteStore(graphPath)
+	if err != nil {
+		t.Fatalf("open objectgraph store: %v", err)
+	}
+	graph := objectgraph.NewService(objectgraph.Config{SQLite: graphStore})
+	defer graph.Close()
+	notTombstoned := false
+	captures, err := graph.ListObjects(context.Background(), objectgraph.ListFilter{
+		Kind:      objectgraph.WebCaptureObjectKind,
+		OwnerID:   "universal-wire-platform",
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		t.Fatalf("list web captures: %v", err)
+	}
+	return captures
+}
+
 func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
 	if err != nil {
