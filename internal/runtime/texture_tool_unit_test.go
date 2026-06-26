@@ -210,9 +210,9 @@ func TestTextureToolStructuredSourceInsertionWritesBodyNodesAndTopLevelEntities(
 				},
 			},
 			{
-				Op:           "insert_source_ref",
-				BlockID:      "p-1",
-				DisplayMode:  "expanded_ref",
+				Op:          "insert_source_ref",
+				BlockID:     "p-1",
+				DisplayMode: "expanded_ref",
 				SourceEntity: &texturedoc.SourceEntity{
 					Target:  texturedoc.SourceTarget{Kind: "image", URI: "https://example.com/image.png"},
 					Display: texturedoc.SourceDisplay{Title: "Launch image"},
@@ -406,6 +406,48 @@ func TestTextureToolRejectsLegacyEditsAndSourceSyntax(t *testing.T) {
 	}
 }
 
+func TestTextureToolSourceGraphUsesTargetIdentityNotGeneratedLegacyID(t *testing.T) {
+	rev := types.Revision{
+		RevisionID: "rev-source-graph-identity",
+		DocID:      "doc-source-graph-identity",
+		OwnerID:    "user-1",
+		CreatedAt:  time.Now().UTC().Truncate(time.Millisecond),
+	}
+	entity := texturedoc.SourceEntity{
+		SourceEntityID: "src_model_generated_opaque",
+		Target:         texturedoc.SourceTarget{Kind: "web_url", URI: "https://example.com/grounded-story"},
+		Selectors:      []texturedoc.SourceSelector{{Kind: sourcecontract.SelectorKindWholeResource}},
+		Display:        texturedoc.SourceDisplay{Mode: "numbered_ref", Title: "Grounded story"},
+		Evidence:       texturedoc.SourceEvidence{State: sourcecontract.EvidenceStateAvailable, OpenSurface: sourcecontract.OpenSurfaceSource},
+		Provenance:     texturedoc.SourceEntityProvenance{CreatedBy: "runtime", SourceSystem: "test"},
+	}
+	sourceEntities, err := json.Marshal([]texturedoc.SourceEntity{entity})
+	if err != nil {
+		t.Fatalf("marshal source entities: %v", err)
+	}
+	graph, err := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{SourceEntities: sourceEntities}, &types.RunRecord{RunID: "run-source-graph"})
+	if err != nil {
+		t.Fatalf("textureToolSourceGraphWriteSet: %v", err)
+	}
+	if len(graph.SourceEntities) != 1 {
+		t.Fatalf("source graph entities len = %d, want 1", len(graph.SourceEntities))
+	}
+	expectedCanonicalID, err := store.BuildTextureSourceEntityCanonicalID(rev.OwnerID, rev.OwnerID, "web_url", "https://example.com/grounded-story")
+	if err != nil {
+		t.Fatalf("BuildTextureSourceEntityCanonicalID: %v", err)
+	}
+	got := graph.SourceEntities[0]
+	if got.CanonicalID != expectedCanonicalID {
+		t.Fatalf("canonical_id = %q, want target-derived %q", got.CanonicalID, expectedCanonicalID)
+	}
+	if got.LegacySourceEntityID != "src_model_generated_opaque" {
+		t.Fatalf("legacy_source_entity_id = %q, want compatibility id", got.LegacySourceEntityID)
+	}
+	if strings.Contains(got.CanonicalID, "src_model_generated_opaque") {
+		t.Fatalf("canonical graph id leaked model-generated source_entity_id: %q", got.CanonicalID)
+	}
+}
+
 func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing.T) {
 	s, rt := textureToolCommitRuntime(t)
 	ctx := context.Background()
@@ -480,6 +522,27 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	appRev := revs[0]
 	if len(appRev.BodyDoc) == 0 || len(appRev.SourceEntities) == 0 {
 		t.Fatalf("app revision missing structured fields: body_doc=%s source_entities=%s", appRev.BodyDoc, appRev.SourceEntities)
+	}
+	var legacyEntities []texturedoc.SourceEntity
+	if err := json.Unmarshal(appRev.SourceEntities, &legacyEntities); err != nil {
+		t.Fatalf("unmarshal legacy source_entities: %v", err)
+	}
+	if len(legacyEntities) != 1 || legacyEntities[0].SourceEntityID != "src-web" {
+		t.Fatalf("legacy source_entities = %#v, want src-web preserved", legacyEntities)
+	}
+	graphEntities, err := s.ListTextureSourceEntities(ctx, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("ListTextureSourceEntities: %v", err)
+	}
+	if len(graphEntities) != 1 {
+		t.Fatalf("graph source entities len = %d, want 1: %#v", len(graphEntities), graphEntities)
+	}
+	expectedCanonicalID, err := store.BuildTextureSourceEntityCanonicalID(doc.OwnerID, doc.OwnerID, "web_url", "https://example.com/story")
+	if err != nil {
+		t.Fatalf("BuildTextureSourceEntityCanonicalID: %v", err)
+	}
+	if graphEntities[0].CanonicalID != expectedCanonicalID || graphEntities[0].LegacySourceEntityID != "src-web" {
+		t.Fatalf("graph source entity = %#v, want target-derived canonical ID and legacy src-web", graphEntities[0])
 	}
 	meta := decodeRevisionMetadata(appRev.Metadata)
 	for _, key := range []string{"source_entities", "media_source_refs", "source_ref_normalization", "citations_json"} {

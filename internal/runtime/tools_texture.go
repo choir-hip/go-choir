@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -48,29 +49,29 @@ type textureStructuredEdit struct {
 }
 
 type editTextureArgs struct {
-	DocID                string                    `json:"doc_id"`
-	BaseRevisionID       string                    `json:"base_revision_id"`
-	Operation            string                    `json:"operation"`
-	Content              string                    `json:"content,omitempty"`
-	StructuredEdits      []textureStructuredEdit   `json:"edits,omitempty"`
-	AvailableSources     []texturedoc.SourceEntity `json:"-"`
-	Rationale            string                    `json:"rationale,omitempty"`
-	SourceTool           string                    `json:"-"`
-	UnusedSourceEntityIDs []string                 `json:"-"`
+	DocID                 string                    `json:"doc_id"`
+	BaseRevisionID        string                    `json:"base_revision_id"`
+	Operation             string                    `json:"operation"`
+	Content               string                    `json:"content,omitempty"`
+	StructuredEdits       []textureStructuredEdit   `json:"edits,omitempty"`
+	AvailableSources      []texturedoc.SourceEntity `json:"-"`
+	Rationale             string                    `json:"rationale,omitempty"`
+	SourceTool            string                    `json:"-"`
+	UnusedSourceEntityIDs []string                  `json:"-"`
 }
 
 type materializedTextureEdit struct {
-	Content              string
-	BodyDoc              json.RawMessage
-	SourceEntities       json.RawMessage
-	Operation            string
-	SourceTool           string
-	BaseRevisionID       string
-	EditCount            int
-	Rationale            string
-	BaseChars            int
-	ResultChars          int
-	DeltaChars           int
+	Content               string
+	BodyDoc               json.RawMessage
+	SourceEntities        json.RawMessage
+	Operation             string
+	SourceTool            string
+	BaseRevisionID        string
+	EditCount             int
+	Rationale             string
+	BaseChars             int
+	ResultChars           int
+	DeltaChars            int
 	UnusedSourceEntityIDs []string
 }
 
@@ -757,7 +758,12 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		ParentRevisionID: baseRevisionID,
 		CreatedAt:        now,
 	}
-	if err := rt.store.CreateRevision(ctx, rev); err != nil {
+	graph, err := textureToolSourceGraphWriteSet(rev, materialized, rec)
+	if err != nil {
+		_ = rt.store.FailAgentMutation(ctx, rec.RunID)
+		return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", err)
+	}
+	if err := rt.store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
 		_ = rt.store.FailAgentMutation(ctx, rec.RunID)
 		return types.Revision{}, fmt.Errorf("create Texture revision: %w", err)
 	}
@@ -794,6 +800,179 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		events.CauseToolExecution, completedPayload)
 	rt.maybeAutonomousPublishWireArticle(ctx, doc, storedRev, rec)
 	return storedRev, nil
+}
+
+func textureToolSourceGraphWriteSet(rev types.Revision, materialized materializedTextureEdit, rec *types.RunRecord) (store.TextureSourceGraphWriteSet, error) {
+	raw := strings.TrimSpace(string(materialized.SourceEntities))
+	if raw == "" || raw == "null" || raw == "[]" {
+		return store.TextureSourceGraphWriteSet{}, nil
+	}
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(materialized.SourceEntities, &entities); err != nil {
+		return store.TextureSourceGraphWriteSet{}, fmt.Errorf("decode structured source entities: %w", err)
+	}
+	records := make([]store.TextureSourceEntityGraphRecord, 0, len(entities))
+	seen := map[string]bool{}
+	for i, entity := range entities {
+		record, err := textureToolSourceEntityGraphRecord(rev, entity, rec)
+		if err != nil {
+			return store.TextureSourceGraphWriteSet{}, fmt.Errorf("source_entities[%d]: %w", i, err)
+		}
+		key := record.CanonicalID + "\x00" + record.VersionID
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		records = append(records, record)
+	}
+	return store.TextureSourceGraphWriteSet{SourceEntities: records}, nil
+}
+
+func textureToolSourceEntityGraphRecord(rev types.Revision, entity texturedoc.SourceEntity, rec *types.RunRecord) (store.TextureSourceEntityGraphRecord, error) {
+	sourceKind := strings.TrimSpace(entity.Target.Kind)
+	if sourceKind == "" {
+		sourceKind = "source_entity"
+	}
+	targetIdentity := textureToolSourceEntityTargetIdentity(entity)
+	if targetIdentity == "" {
+		return store.TextureSourceEntityGraphRecord{}, fmt.Errorf("target identity is required")
+	}
+	canonicalID, err := store.BuildTextureSourceEntityCanonicalID(rev.OwnerID, rev.OwnerID, sourceKind, targetIdentity)
+	if err != nil {
+		return store.TextureSourceEntityGraphRecord{}, err
+	}
+	body := textureToolSourceEntityBody(entity)
+	metadata, err := textureToolSourceEntityGraphMetadata(rev, entity, sourceKind, targetIdentity, rec)
+	if err != nil {
+		return store.TextureSourceEntityGraphRecord{}, err
+	}
+	versionID, contentHash, normalized, err := store.TextureSourceGraphVersionID(store.TextureSourceEntityObjectKind, body, metadata)
+	if err != nil {
+		return store.TextureSourceEntityGraphRecord{}, err
+	}
+	return store.TextureSourceEntityGraphRecord{
+		CanonicalID:          canonicalID,
+		OwnerID:              rev.OwnerID,
+		VersionID:            versionID,
+		ContentHash:          contentHash,
+		Body:                 body,
+		Metadata:             normalized,
+		LegacySourceEntityID: strings.TrimSpace(entity.SourceEntityID),
+		CreatedAt:            rev.CreatedAt,
+	}, nil
+}
+
+func textureToolSourceEntityTargetIdentity(entity texturedoc.SourceEntity) string {
+	if uri := strings.TrimSpace(entity.Target.URI); uri != "" {
+		return uri
+	}
+	if id := strings.TrimSpace(entity.Target.ID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(entity.SourceEntityID)
+}
+
+func textureToolSourceEntityBody(entity texturedoc.SourceEntity) []byte {
+	for _, key := range []string{"text", "summary", "content"} {
+		if value, ok := entity.ReaderSnapshot[key].(string); ok && strings.TrimSpace(value) != "" {
+			return []byte(strings.TrimSpace(value))
+		}
+	}
+	return nil
+}
+
+func textureToolSourceEntityGraphMetadata(rev types.Revision, entity texturedoc.SourceEntity, sourceKind, targetIdentity string, rec *types.RunRecord) (json.RawMessage, error) {
+	target := map[string]any{
+		"kind":     sourceKind,
+		"identity": targetIdentity,
+	}
+	if uri := strings.TrimSpace(entity.Target.URI); uri != "" {
+		target["uri"] = uri
+	}
+	if id := strings.TrimSpace(entity.Target.ID); id != "" {
+		target["id"] = id
+	}
+	if len(entity.Target.Metadata) > 0 {
+		target["metadata"] = entity.Target.Metadata
+	}
+	display := map[string]any{}
+	if title := strings.TrimSpace(entity.Display.Title); title != "" {
+		display["title"] = title
+	}
+	if label := strings.TrimSpace(entity.Display.Label); label != "" {
+		display["label"] = label
+	}
+	if description := strings.TrimSpace(entity.Display.Description); description != "" {
+		display["description"] = description
+	}
+	if mode := strings.TrimSpace(entity.Display.Mode); mode != "" {
+		display["display_mode"] = mode
+	}
+	evidence := map[string]any{}
+	if state := strings.TrimSpace(entity.Evidence.State); state != "" {
+		evidence["state"] = state
+	}
+	if openSurface := strings.TrimSpace(entity.Evidence.OpenSurface); openSurface != "" {
+		evidence["open_surface"] = openSurface
+	}
+	if relation := strings.TrimSpace(entity.Evidence.Relation); relation != "" {
+		evidence["relation"] = relation
+	}
+	if researchState := strings.TrimSpace(entity.Evidence.ResearchState); researchState != "" {
+		evidence["research_state"] = researchState
+	}
+	if uncertainty := strings.TrimSpace(entity.Evidence.Uncertainty); uncertainty != "" {
+		evidence["uncertainty"] = uncertainty
+	}
+	if readerArtifactState := strings.TrimSpace(entity.Evidence.ReaderArtifactState); readerArtifactState != "" {
+		evidence["reader_artifact_state"] = readerArtifactState
+	}
+	if len(entity.Evidence.EvidenceRefs) > 0 {
+		evidence["evidence_refs"] = entity.Evidence.EvidenceRefs
+	}
+	provenance := map[string]any{}
+	if createdBy := strings.TrimSpace(entity.Provenance.CreatedBy); createdBy != "" {
+		provenance["created_by"] = createdBy
+	}
+	if createdAt := strings.TrimSpace(entity.Provenance.CreatedAt); createdAt != "" {
+		provenance["created_at"] = createdAt
+	}
+	if sourceSystem := strings.TrimSpace(entity.Provenance.SourceSystem); sourceSystem != "" {
+		provenance["source_system"] = sourceSystem
+	}
+	if importArtifact := strings.TrimSpace(entity.Provenance.ImportArtifact); importArtifact != "" {
+		provenance["import_artifact"] = importArtifact
+	}
+	if rightsScope := strings.TrimSpace(entity.Provenance.RightsScope); rightsScope != "" {
+		provenance["rights_scope"] = rightsScope
+	}
+	if entity.Provenance.UntrustedSourceText {
+		provenance["untrusted_source_text"] = true
+	}
+	metadata := map[string]any{
+		"schema_version":          "choir.source_entity.v1",
+		"legacy_entity_id":        strings.TrimSpace(entity.SourceEntityID),
+		"source_kind":             sourceKind,
+		"target":                  target,
+		"display":                 display,
+		"evidence":                evidence,
+		"provenance":              provenance,
+		"texture_doc_id":          rev.DocID,
+		"texture_revision_id":     rev.RevisionID,
+		"texture_parent_revision": rev.ParentRevisionID,
+	}
+	if rec != nil {
+		if runID := strings.TrimSpace(rec.RunID); runID != "" {
+			metadata["created_run_id"] = runID
+		}
+	}
+	if len(entity.Selectors) > 0 {
+		metadata["selectors"] = entity.Selectors
+	}
+	if len(entity.ReaderSnapshotStatus) > 0 {
+		metadata["reader_snapshot_status"] = entity.ReaderSnapshotStatus
+	}
+	return objectgraph.NormalizeMetadata(metadata)
 }
 
 func sanitizeTextureToolRevisionMetadata(raw json.RawMessage) json.RawMessage {
