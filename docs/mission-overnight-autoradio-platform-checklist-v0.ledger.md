@@ -7430,3 +7430,88 @@ Open edge: resolve/read verifier result for pending handle
 `local:327660ea-fd09-4ad4-a0a8-4275e30779be`. If accepted, incorporate worker
 commit `43741e72`; if rejected or blocked, record the finding and route the next
 O4 move accordingly.
+
+## 2026-06-26 - O4 Live Synthesis Trigger Verifier Accepted
+
+Claim: worker commit `43741e72` is independently accepted for branch-local O4
+continuation and may be incorporated by orchestration.
+
+Move: read verifier callback from thread
+`019f05db-9738-7c82-ad22-06f6763f25c3`. Verdict: `accept`; findings: none
+requiring revision. The verifier reviewed `AGENTS.md`, O4/Parallax State, latest
+worker ledger entry, worker final report from thread
+`019f05d3-8f1a-7963-a863-89ea12661ace`, and the worker diff for commit
+`43741e7209c1d3f24b5af40923d3e6b63b8075b9`.
+
+Verifier notes:
+
+- Internal sourcecycled ingestion writes objectgraph projections first, then
+  calls the runtime-owned live synthesis trigger at
+  `internal/runtime/sourcecycled_web_captures.go:76` and
+  `internal/runtime/sourcecycled_web_captures.go:85`.
+- The trigger selects current non-tombstoned platform `choir.web_capture`
+  objects, requires at least two eligible synthesis sources, and calls the
+  existing Texture synthesis helper at
+  `internal/runtime/sourcecycled_web_captures.go:121`,
+  `internal/runtime/sourcecycled_web_captures.go:139`, and
+  `internal/runtime/sourcecycled_web_captures.go:142`.
+- Existing helper behavior owns the two-source minimum, creates/revises a
+  platform Texture document, emits native source refs through existing markdown
+  lineage, stores source metadata, and links the article into
+  `universal-wire/Wire.texture`.
+- `/api/universal-wire/stories` still returns edition Texture stories when
+  present and leaves raw graph captures diagnostic-only when no edition article
+  exists.
+- Sourcegraph projection carries language/region in source entity metadata
+  without changing objectgraph shape.
+- The focused test proves two-source creation, non-empty
+  `universal-wire-edition-texture` story, native `source_ref` body_doc, Source
+  Viewer reader provenance, raw graph diagnostic substrate, later-source
+  same-document revision, and single edition transclusion.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean/no output before and after
+  verification.
+- `git diff --check 43741e7209c1d3f24b5af40923d3e6b63b8075b9^..43741e7209c1d3f24b5af40923d3e6b63b8075b9`:
+  passed/no output.
+- `git show --check --oneline 43741e7209c1d3f24b5af40923d3e6b63b8075b9`:
+  passed; output `43741e72 Trigger Universal Wire synthesis from sourcecycled
+  captures`.
+- `git diff --name-status 43741e7209c1d3f24b5af40923d3e6b63b8075b9^..43741e7209c1d3f24b5af40923d3e6b63b8075b9`:
+  four expected modified files only.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles'
+  -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime
+  5.133s`; Nix emitted a FlakeHub cache 401 warning but fetched from
+  `cache.nixos.org` and completed.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed:
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 8.639s`.
+- `nix develop -c go test ./internal/sourcegraph -count=1` passed:
+  `? github.com/yusefmosiah/go-choir/internal/sourcegraph [no test files]`;
+  Nix emitted an ignored SQLite eval-cache busy warning.
+
+Dirty/generated artifact classification: worker worktree clean. No untracked
+scratch files, generated artifacts, temp proof outputs, or unrelated WIP
+observed.
+
+Actual Delta V: 0 in this orchestration pass; independent branch-local
+acceptance is necessary but not enough. Delta V can decrease only after root
+incorporation and landing evidence for the behavior-changing slice.
+
+Evidence boundary/non-claims: verifier acceptance is branch-local only. No
+push, CI, deploy, staging identity, authenticated product proof,
+provider/search freshness, semantic multi-story clustering, live world-model
+maintenance, Qdrant, run acceptance, promotion/rollback, auth/session renewal,
+vmctl, deployment routing, gateway credentials, or publication/export outside
+existing Wire edition helpers is claimed.
+
+Residual risks: cluster selection remains the deliberately narrow stable
+`sourcecycled-live` / recent-captures path, not semantic multi-story clustering;
+region is preserved in sourcegraph metadata but not yet product-visible
+synthesis metadata; broader package shards, CI, deploy, and authenticated
+staging acceptance remain orchestration responsibilities after incorporation.
+
+Open edge: incorporate worker commit `43741e72` and run the behavior-changing
+landing loop.
