@@ -206,18 +206,24 @@ Checklist:
   `texture_source_refs` records behind objectgraph-compatible IDs; Phase 3
   makes the selected Texture tool path shadow-write pinned `choir.source_ref`
   records. Phase 4 exposes graph-backed `source_entity_objects` and
-  `source_refs` wrapper arrays additively on Texture revision reads; source-open
-  integration remains future O3 work.
+  `source_refs` wrapper arrays additively on Texture revision reads; Phase 5
+  adapts frontend source-open derivation so graph wrappers feed the existing
+  native `source_ref` rendering and `sourceEntityLaunchPayload` path when
+  legacy `source_entities` is absent.
 - [x] Open a verifier thread before any red/orange landing claim. Phase 1
   verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`;
   Phase 3 verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` returned
   `accept` for branch-level continuation; Phase 4 verifier thread
   `019f02ed-d05e-78f1-975c-1de2df51451b` returned `accept` after a
-  revision-list batching repair.
+  revision-list batching repair; Phase 5 verifier thread
+  `019f031a-9eb9-7301-9db8-62bbb84e727a` returned `accept` for frontend
+  graph-wrapper source derivation.
 
 Acceptance: source entity persistence and source refs survive the relevant
-Texture/News path with focused tests, plus staging proof if behavior-changing
-code lands.
+Texture/source-open and News paths with focused tests, plus staging proof if
+behavior-changing code lands to the platform. Current branch evidence covers
+Texture store/runtime/API/frontend helper slices only; browser/product proof and
+the News path remain open.
 
 ### O4 - News / Universal Wire
 
@@ -355,11 +361,11 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
-Phase 4 verifier acceptance and root incorporation of the additive Texture
-source wrapper read path. The pass bought branch-level evidence and closed the
-graph-read wrapper API gap, but it did not close another counted checklist
-obligation; source-open/frontend integration and broader O3 product proof remain
-open.
+Phase 5 verifier acceptance and root incorporation of frontend graph-wrapper
+source derivation. The pass bought branch-level evidence that graph-backed
+`source_entity_objects` plus `source_refs` feed the existing source-open helper
+path, but it did not close another counted checklist obligation; browser/product
+proof and broader O3 Texture/News acceptance remain open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -619,10 +625,14 @@ warnings only; and `git diff --check HEAD~1..HEAD`. Root proof artifacts
 `frontend/test-results/` and `frontend/dist/` were removed after validation, and
 the tracked worktree was clean.
 
-next move: continue O3 dependency order after the accepted source-open/frontend
-read path. No source-open browser proof, O3-complete, main, staging, product,
-deploy, Qdrant projection, publication/export, auth/session, gateway/provider,
-graph-first enforcement, promotion, or rollback claim exists yet.
+next move: launch or execute a bounded O3 Phase 6 source-open browser/product
+proof from the accepted frontend graph-wrapper read path. The slice should prove
+that a Texture revision carrying `source_entity_objects` plus `source_refs`, and
+no legacy `source_entities`, renders a native `source_ref` and opens the
+existing Source Viewer/Web Lens surface through the product UI. No O3-complete,
+main, staging, product acceptance, deploy, Qdrant projection, publication/export,
+auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
+claim exists yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

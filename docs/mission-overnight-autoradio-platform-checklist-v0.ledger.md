@@ -1670,3 +1670,37 @@ gateway/provider, graph-first enforcement, promotion, or rollback claim.
 Open edge: continue O3 dependency order from the accepted source-open/frontend
 read path toward the next source graph / frontend / product-proof edge before
 O4 News.
+
+## 2026-06-26 - Thread-Tool Context Reconciled After O3 Phase 5
+
+Claim: the paradoc now carries the current Codex thread-tool operating context
+and no longer describes Phase 5 source-open/frontend integration as untouched.
+
+Move: reconcile the O3 checklist and live Parallax State with the accepted
+Phase 5 worker/verifier result while preserving the evidence boundary.
+
+Expected Delta V: 0. This is a green mission-state update, not a new behavior
+proof.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- The authoring-thread limitation is superseded by the current Codex app
+  surface: `list_projects`, `create_thread`, `read_thread`, `list_threads`,
+  `send_message_to_thread`, `handoff_thread`, `get_handoff_status`, and
+  title/pin/archive controls are recorded in the paradoc Thread Operating
+  Model.
+- O3 checklist now records Phase 5 as the frontend graph-wrapper derivation
+  slice: graph-backed `source_entity_objects` plus `source_refs` can feed the
+  existing native `source_ref` rendering and `sourceEntityLaunchPayload` helper
+  path when legacy `source_entities` is absent.
+- O3 verifier evidence now includes Phase 5 verifier thread
+  `019f031a-9eb9-7301-9db8-62bbb84e727a` with verdict `accept`.
+- The next move is narrowed to a bounded O3 Phase 6 source-open browser/product
+  proof from the accepted graph-wrapper read path.
+
+Evidence boundary: documentation/mission-state update only. No new
+source-open browser proof, O3-complete, main, staging, product acceptance,
+deploy, Qdrant projection, publication/export, auth/session, gateway/provider,
+graph-first enforcement, promotion, or rollback claim.
