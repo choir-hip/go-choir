@@ -326,6 +326,45 @@ Heresy delta: `discovered` none in this checkpoint; `introduced` none intended;
 - Preserve legacy packet fields.
 - Add tests proving model/generated IDs cannot become canonical graph IDs.
 
+#### Phase 2 Worker Checkpoint: `O3-phase2-shadow-write-producer`
+
+Chosen path: the Texture appagent edit tool path (`patch_texture` and
+`rewrite_texture`) through `commitTextureToolEdit` will call
+`CreateRevisionWithSourceGraph` in shadow-write mode for graph source entity
+records derived from the materialized revision's structured `SourceEntities`.
+This path is narrow because it is one existing Texture tool commit point, it
+already materializes and validates structured source entities, and it already
+preserves legacy revision DTO/read behavior through
+`texture_revisions.source_entities_json`.
+
+Out of scope for this worker: public Texture create-revision routes, markdown
+lineage import, file-open/import paths, coagent route seeding,
+frontend/source-open behavior, Qdrant projections, publication/export,
+auth/session renewal, gateway/provider calls, staging deploy, and product
+landing claims.
+
+Conjecture delta: one Texture tool producer path can shadow-write graph
+`choir.source_entity` records in the same Texture revision transaction without
+changing user-visible revision reads or the legacy source entity DTO shape.
+
+Protected surfaces touched by implementation: Texture canonical writes,
+source identity/version records, legacy revision DTO compatibility, and the
+Phase 1 source graph transaction boundary. Source-open routing, Qdrant
+derived-index/source-of-truth boundaries, auth/session renewal,
+gateway/provider calls, and staging/deploy behavior remain untouched.
+
+Admissible evidence: focused runtime/store tests proving a `patch_texture`
+revision still reads through legacy `SourceEntities` while graph source entity
+records are created transactionally, plus focused package tests. No staging or
+product claim is admissible for this worker.
+
+Rollback path: revert the Phase 2 implementation commit(s). The Phase 1
+`CreateRevisionWithSourceGraph` store boundary remains intact, and shadow
+records remain inert because reads continue to use legacy revision JSON.
+
+Heresy delta: `discovered` none in this checkpoint; `introduced` none intended;
+`repaired` only the chosen Texture tool shadow-write path, not O3 as a whole.
+
 ### Phase 3: Texture Revision Writes
 
 - Resolve every body `source_ref` node to a source entity version.
