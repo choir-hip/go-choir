@@ -74,7 +74,15 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		Status:  "empty",
 		Summary: "Universal Wire found no publishable Texture synthesis articles.",
 	}
-	if editionStories, editionResp, err := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); err == nil {
+	editionStories, editionResp, editionErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 12)
+	if editionErr == nil && len(editionStories) == 0 && editionResp == nil {
+		if synthesis, err := h.rt.synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(r.Context(), time.Now().UTC()); err != nil {
+			log.Printf("universal wire: graph capture materialization unavailable: %v", err)
+		} else if synthesis.Triggered {
+			editionStories, editionResp, editionErr = h.universalWireEditionTextureStories(r.Context(), styleSources, 12)
+		}
+	}
+	if editionErr == nil {
 		edition = editionResp
 		diagnostics.Substrates = append(diagnostics.Substrates, universalWireEditionDiagnostic(editionResp, len(editionStories)))
 		if len(editionStories) > 0 {
@@ -83,8 +91,8 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		} else if editionResp != nil {
 			source = "universal-wire-edition-texture"
 		}
-	} else if err != nil {
-		log.Printf("universal wire: edition unavailable: %v", err)
+	} else {
+		log.Printf("universal wire: edition unavailable: %v", editionErr)
 		diagnostics.Substrates = append(diagnostics.Substrates, universalWireFeedSubstrateDiagnostic{
 			Substrate: "texture_edition",
 			State:     "unavailable",

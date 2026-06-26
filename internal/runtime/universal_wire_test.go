@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -217,6 +218,71 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		!slices.Contains(secondStories.Edition.IncludedDocIDs, firstProjection.SynthesisDocID) ||
 		countStrings(secondStories.Edition.IncludedDocIDs, firstProjection.SynthesisDocID) != 1 {
 		t.Fatalf("updated stories = %+v, want one revised article and one edition transclusion", secondStories)
+	}
+}
+
+func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 26, 22, 32, 0, 0, time.UTC)
+	items := []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-backfill-pt", "rss:pt-wire", "fetch-backfill-pt", "Chuvas interrompem corredor logistico", "https://example.com/pt/logistics", "pt", "Relatorios locais disseram que as chuvas interromperam um corredor logistico e atrasaram entregas regionais.", now.Add(-25*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-backfill-en", "rss:en-wire", "fetch-backfill-en", "Regional logistics delays follow heavy rain", "https://example.com/en/logistics", "en", "Transport agencies reported regional delays after heavy rain damaged inspection points along the logistics corridor.", now.Add(-18*time.Minute)),
+	}
+	projection, err := sourcegraph.WriteWebCaptureGraphObjects(ctx, handler.rt.ObjectGraph(), items, sourcegraph.WebCaptureGraphProjectionConfig{
+		OwnerID:    universalWirePlatformOwnerID(),
+		ComputerID: "computer-universal-wire-platform",
+		Now:        now,
+	})
+	if err != nil {
+		t.Fatalf("seed existing sourcecycled graph captures: %v", err)
+	}
+	if len(projection.Captures) != 2 || len(projection.SourceEntities) != 2 || projection.EdgeCount != 2 {
+		t.Fatalf("projection = %+v, want two existing sourcecycled captures with source edges", projection)
+	}
+	if _, err := handler.rt.Store().GetDocumentAlias(ctx, universalWirePlatformOwnerID(), universalWireEditionSourcePath); err == nil {
+		t.Fatal("Wire edition alias exists before read-time materialization")
+	}
+
+	firstStories := getUniversalWireStoriesForTest(t, handler)
+	if firstStories.Source != "universal-wire-edition-texture" ||
+		firstStories.Diagnostics != nil ||
+		firstStories.Edition == nil ||
+		len(firstStories.Stories) != 1 {
+		t.Fatalf("first stories = %+v, want read-time materialized Texture edition article", firstStories)
+	}
+	firstStory := firstStories.Stories[0]
+	if firstStory.StoryTextureDoc == "" ||
+		firstStory.SourceState != "universal-wire-edition-texture" ||
+		strings.Contains(firstStory.SourceState, "objectgraph-web-capture") ||
+		!strings.Contains(firstStory.TextureContent, "one English synthesis") ||
+		len(firstStory.Manifest.Lead) != 2 {
+		t.Fatalf("first story = %+v, want synthesized Texture article with two source_ref leads", firstStory)
+	}
+	if firstStory.Manifest.Lead[0].OpenSurface != sourcecontract.OpenSurfaceSource ||
+		firstStory.Manifest.Lead[0].ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+		firstStory.Manifest.Lead[0].ReaderSnapshot == nil {
+		t.Fatalf("first story lead lacks source-viewer reader provenance: %+v", firstStory.Manifest.Lead[0])
+	}
+	firstDoc, err := handler.rt.Store().GetDocument(ctx, firstStory.StoryTextureDoc, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load materialized doc: %v", err)
+	}
+	if !slices.Contains(firstStories.Edition.IncludedDocIDs, firstStory.StoryTextureDoc) {
+		t.Fatalf("edition = %+v, want materialized story doc transcluded", firstStories.Edition)
+	}
+
+	secondStories := getUniversalWireStoriesForTest(t, handler)
+	secondDoc, err := handler.rt.Store().GetDocument(ctx, firstStory.StoryTextureDoc, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("reload materialized doc: %v", err)
+	}
+	if secondDoc.CurrentRevisionID != firstDoc.CurrentRevisionID ||
+		secondStories.Edition.RevisionID != firstStories.Edition.RevisionID ||
+		len(secondStories.Stories) != 1 ||
+		secondStories.Stories[0].StoryTextureDoc != firstStory.StoryTextureDoc ||
+		countStrings(secondStories.Edition.IncludedDocIDs, firstStory.StoryTextureDoc) != 1 {
+		t.Fatalf("second stories/doc = %+v / %+v, want idempotent read after edition exists", secondStories, secondDoc)
 	}
 }
 

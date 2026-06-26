@@ -206,6 +206,9 @@ func (rt *Runtime) universalWireSynthesisSourceFromGraphCapture(ctx context.Cont
 		if err != nil {
 			return universalWireSynthesisSource{}, false, err
 		}
+		if fields.ItemID == "" {
+			return universalWireSynthesisSource{}, false, nil
+		}
 		source.ItemID = firstNonEmpty(fields.ItemID, source.ItemID)
 		source.SourceID = fields.SourceID
 		source.FetchID = fields.FetchID
