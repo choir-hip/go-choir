@@ -936,6 +936,104 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 	}
 }
 
+func TestRequestSuperExecutionFreshTextureChannelBypassesOldActorCursor(t *testing.T) {
+	t.Parallel()
+	rt, s, cwd := testRuntimeWithTempCWD(t)
+	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+		t.Fatalf("install default tools: %v", err)
+	}
+	ctx := context.Background()
+	ownerID := "user-alice"
+	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ensure persistent super: %v", err)
+	}
+	now := time.Now().UTC()
+	for i, updateID := range []string{"old-super-update-1", "old-super-update-2"} {
+		update := types.CoagentSourcePacket{
+			UpdateID:      updateID,
+			OwnerID:       ownerID,
+			AgentID:       "texture:old-doc",
+			TargetAgentID: superAgent.AgentID,
+			ChannelID:     "old-doc",
+			TrajectoryID:  "old-trace",
+			Role:          AgentProfileTexture,
+			Packet: newCoagentPacket("execution_request", updateID, nil, nil, []types.CoagentPacketAction{
+				coagentAction("request_worker", updateID, nil, nil, types.CoagentPacketActionSafety{
+					MutationClass: "red",
+					Network:       "allowed",
+					FileMutation:  "allowed",
+				}),
+			}, nil, nil),
+			Content:   updateID,
+			CreatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+		message := types.ChannelMessage{
+			ChannelID:    update.ChannelID,
+			FromAgentID:  update.AgentID,
+			ToAgentID:    update.TargetAgentID,
+			TrajectoryID: update.TrajectoryID,
+			Role:         update.Role,
+			Content:      update.Content,
+			Timestamp:    update.CreatedAt,
+		}
+		if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+			t.Fatalf("dispatch old update %s: %v", updateID, err)
+		}
+	}
+	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, superAgent.AgentID, []string{"old-super-update-1", "old-super-update-2"}, "old-super-run"); err != nil {
+		t.Fatalf("mark old updates delivered: %v", err)
+	}
+	cursor, _, ok, err := s.GetCoagentMailboxCursor(ctx, ownerID, superAgent.AgentID)
+	if err != nil {
+		t.Fatalf("get cursor: %v", err)
+	}
+	if !ok || cursor != 2 {
+		t.Fatalf("old actor cursor = (%d,%v), want 2/true", cursor, ok)
+	}
+
+	textureRun, err := rt.StartRunWithMetadata(ctx, "request fresh super work", ownerID, map[string]any{
+		runMetadataAgentProfile: AgentProfileTexture,
+		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentID:      "texture:new-doc",
+		runMetadataChannelID:    "new-doc",
+		runMetadataTrajectoryID: "new-trace",
+	})
+	if err != nil {
+		t.Fatalf("start texture run: %v", err)
+	}
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "request_super_execution", json.RawMessage(`{
+		"objective":"Process the fresh O5 product-path handoff.",
+		"channel_id":"new-doc"
+	}`))
+	if err != nil {
+		t.Fatalf("request_super_execution: %v", err)
+	}
+	var resp struct {
+		LoopID string `json:"loop_id"`
+		Cursor int64  `json:"cursor"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		t.Fatalf("decode response: %v\n%s", err, raw)
+	}
+	if resp.Cursor != 1 {
+		t.Fatalf("fresh channel cursor = %d, want channel-local seq 1", resp.Cursor)
+	}
+	if resp.LoopID == "" {
+		t.Fatalf("fresh request returned empty loop_id behind old cursor; raw=%s", raw)
+	}
+	fresh, err := s.GetRun(ctx, resp.LoopID)
+	if err != nil {
+		t.Fatalf("get fresh super run: %v", err)
+	}
+	if fresh.AgentID != superAgent.AgentID {
+		t.Fatalf("fresh super run did not own new delivery: %+v", fresh)
+	}
+	if got := metadataStringSlice(fresh.Metadata["worker_update_ids"]); len(got) != 1 {
+		t.Fatalf("fresh super worker_update_ids = %+v, want one fresh update", got)
+	}
+}
+
 func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)

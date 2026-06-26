@@ -1923,12 +1923,15 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 	rows, err := s.db.QueryContext(ctx,
 		workerUpdateSelectSQL()+` WHERE owner_id = ?
 		    AND target_agent_id = ?
-		    AND message_seq > COALESCE((
+		    AND (
+		      delivered_at IS NULL
+		      OR message_seq > COALESCE((
 		        SELECT processed_message_seq
 		          FROM coagent_mailboxes
 		         WHERE owner_id = ?
 		           AND agent_id = ?
-		    ), 0)
+		      ), 0)
+		    )
 		  ORDER BY message_seq ASC, created_at ASC, update_id ASC
 		  LIMIT ?`,
 		ownerID,
@@ -1962,7 +1965,8 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx,
-		workerUpdateSelectSQL()+` WHERE message_seq > COALESCE((
+		workerUpdateSelectSQL()+` WHERE delivered_at IS NULL
+		     OR message_seq > COALESCE((
 		        SELECT processed_message_seq
 		          FROM coagent_mailboxes
 		         WHERE owner_id = worker_updates.owner_id

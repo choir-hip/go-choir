@@ -831,6 +831,83 @@ func TestCoagentMailboxBacklogAllUsesActorCursors(t *testing.T) {
 	}
 }
 
+func TestCoagentMailboxBacklogIncludesFreshChannelBelowActorCursor(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	ownerID := "user-alice"
+	targetAgentID := "super:user-alice"
+	dispatch := func(updateID, channelID string, at time.Time) types.CoagentSourcePacket {
+		t.Helper()
+		update := types.CoagentSourcePacket{
+			UpdateID:      updateID,
+			OwnerID:       ownerID,
+			AgentID:       "texture:" + channelID,
+			TargetAgentID: targetAgentID,
+			ChannelID:     channelID,
+			Role:          "texture",
+			Packet:        testStoreCoagentPacket("execution_request", updateID),
+			Content:       updateID,
+			CreatedAt:     at,
+		}
+		message := types.ChannelMessage{
+			ChannelID:   update.ChannelID,
+			FromAgentID: update.AgentID,
+			ToAgentID:   update.TargetAgentID,
+			Role:        update.Role,
+			Content:     update.Content,
+			Timestamp:   update.CreatedAt,
+		}
+		stored, _, err := s.DispatchWorkerUpdate(ctx, update, &message)
+		if err != nil {
+			t.Fatalf("dispatch %s: %v", updateID, err)
+		}
+		return stored
+	}
+
+	first := dispatch("update-fresh-channel-a1", "doc-a", now)
+	second := dispatch("update-fresh-channel-a2", "doc-a", now.Add(time.Second))
+	if first.MessageSeq != 1 || second.MessageSeq != 2 {
+		t.Fatalf("test setup message seqs = %d, %d; want 1, 2", first.MessageSeq, second.MessageSeq)
+	}
+	if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, targetAgentID, []string{first.UpdateID, second.UpdateID}, "run-doc-a"); err != nil {
+		t.Fatalf("mark first channel delivered: %v", err)
+	}
+	cursor, _, ok, err := s.GetCoagentMailboxCursor(ctx, ownerID, targetAgentID)
+	if err != nil {
+		t.Fatalf("get cursor: %v", err)
+	}
+	if !ok || cursor != second.MessageSeq {
+		t.Fatalf("cursor after first channel = (%d,%v), want %d/true", cursor, ok, second.MessageSeq)
+	}
+
+	fresh := dispatch("update-fresh-channel-b1", "doc-b", now.Add(2*time.Second))
+	if fresh.MessageSeq != 1 {
+		t.Fatalf("fresh channel message seq = %d, want 1", fresh.MessageSeq)
+	}
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list mailbox backlog: %v", err)
+	}
+	if len(backlog) != 1 || backlog[0].UpdateID != fresh.UpdateID {
+		t.Fatalf("mailbox backlog = %+v, want fresh channel update %s", backlog, fresh.UpdateID)
+	}
+	all, err := s.ListCoagentMailboxBacklogAll(ctx, 10)
+	if err != nil {
+		t.Fatalf("list all mailbox backlog: %v", err)
+	}
+	found := false
+	for _, update := range all {
+		if update.UpdateID == fresh.UpdateID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("fresh channel update %s missing from backlog-all: %+v", fresh.UpdateID, all)
+	}
+}
+
 func TestUpdateRunNotFound(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
