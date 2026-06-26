@@ -197,3 +197,31 @@ Receipts:
 Open edge: O1 must begin from the objectgraph prototype preservation handle and
 decide whether to land a branch-level `internal/objectgraph`, a narrower
 package, or a design-only successor. No O1 implementation is accepted yet.
+
+## 2026-06-26 - O1 Worker And Verifier Threads Created
+
+Claim: O1 can begin as a bounded objectgraph worker/prover pair using the
+preserved mission state and objectgraph prototype handle.
+
+Move: construct bounded O1 thread assignments.
+
+Expected Delta V: 0; create the worker/prover substrate for O1 without claiming
+objectgraph progress.
+
+Actual Delta V: 0. Current V remains 59.
+
+Receipts:
+
+- O1 worker thread `019f0279-b855-7e52-b830-70a8eb4bbfe8`, titled
+  `O1 worker - Object Graph Foundation`, pinned.
+- O1 worker cwd from thread listing:
+  `/Users/wiz/.codex/worktrees/3026/go-choir`.
+- O1 verifier thread `019f027a-3434-7ef2-b813-f3f21213167f`, titled
+  `O1 verifier - Object Graph Foundation`, pinned.
+- Worker authority: own Codex worktree only; protected surfaces are object
+  identity, content hashing, edge storage, persistence behavior, and package
+  API shape.
+- Verifier authority: read-only review of worker report/diff/tests.
+
+Open edge: Read the O1 worker report, then incorporate verifier verdict before
+marking any O1 checklist item complete.

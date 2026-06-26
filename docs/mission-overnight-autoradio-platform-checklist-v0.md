@@ -387,11 +387,16 @@ Qdrant prototype `4c1b28be` on `preserve/o0-qdrant-prototype-2026-06-26`;
 PPTX learning/prototype `4a687522` on
 `preserve/o0-pptx-learning-2026-06-26`; docs-checker cleanup `238c7ce2` on
 `preserve/o0-docs-checker-cleanup-2026-06-26`; orchestration mission state on
-`preserve/o0-autoradio-mission-state-2026-06-26`. O0 is complete.
+`preserve/o0-autoradio-mission-state-2026-06-26`. O0 is complete. O1 worker
+thread: `019f0279-b855-7e52-b830-70a8eb4bbfe8` (`O1 worker - Object Graph
+Foundation`) in `/Users/wiz/.codex/worktrees/3026/go-choir`. O1 verifier
+thread: `019f027a-3434-7ef2-b813-f3f21213167f` (`O1 verifier - Object Graph
+Foundation`). O1 is active but no O1 obligation is complete yet.
 
-next move: Start O1 by creating an objectgraph implementation worker thread and
-an independent verifier thread with O1's mutation-class/protected-surface
-evidence bounds.
+next move: Use `read_thread` on the O1 worker until it produces its objectgraph
+decision/implementation report, then use or follow up the O1 verifier for
+verdict `accept`, `revise_before_continue`, `blocked`, or `supersede`.
+Incorporate that verdict before claiming any O1 checklist progress.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
