@@ -829,11 +829,13 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: continue the remaining O4 source/citation artifact-opening edge
-without overclaiming Phase 9: either launch a narrow worker for native Texture
-body `source_ref` citation opening through real Source Viewer/reader artifacts,
-or document the smallest product blocker before any full News benchmark claim.
-O4 Phase 9 worker thread `019f03e9-8fe1-7503-a9a2-f55ee5430c54` completed in
+next move: wait for O4 Phase 10 worker pending handle
+`local:87d5deb5-9ff1-4b92-a8de-c9af587b57c8` to resolve, then read the worker
+thread and inspect its branch. The worker assignment targets the remaining O4
+source/citation artifact-opening edge on the native Texture body `source_ref`
+citation axis: prove real Source Viewer/reader artifact opening if feasible, or
+document the smallest product blocker before any full News benchmark claim. O4
+Phase 9 worker thread `019f03e9-8fe1-7503-a9a2-f55ee5430c54` completed in
 `/Users/wiz/.codex/worktrees/199d/go-choir`; verifier thread
 `019f03f2-bb27-7d80-90a1-e172558b9c61` accepted the repaired head
 `f7e8fced`. Root incorporated the checkpoint as `afe8e70d` and implementation

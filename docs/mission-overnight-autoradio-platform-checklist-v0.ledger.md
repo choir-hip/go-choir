@@ -4578,3 +4578,58 @@ benchmark acceptance remains open.
 Open edge: choose the next O4 realism axis: native Texture body `source_ref`
 citation opening to Source Viewer/reader artifacts, or a documented product
 blocker before claiming the full News benchmark.
+
+## 2026-06-26 - O4 Phase 10 Native Texture Citation Opening Worker Launch
+
+Claim: O4 Phase 10 has been launched as the next bounded worker for the
+remaining source/citation artifact-opening edge. This is worker launch only, not
+worker evidence, verifier acceptance, root incorporation, or checklist descent.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item
+`O4-phase10-native-texture-source-ref-artifact-open-proof`.
+
+Expected Delta V: 0. Launching a worker does not close the native Texture
+citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:87d5deb5-9ff1-4b92-a8de-c9af587b57c8`.
+- Starting branch/head:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `7b94d220 record O4 source artifact acceptance`.
+- Worker objective:
+  close or precisely narrow the remaining O4 checklist item `Verify
+  source/citation links open to real source artifacts or Source Viewer/reader
+  artifacts` on the native Texture body `source_ref` citation axis, not the
+  already-accepted Universal Wire graph source-handle axis.
+- Preferred route:
+  create a real Texture document/revision and source graph record path through
+  public/local product APIs or existing runtime/store helpers, then prove native
+  body `source_ref` citation opening to real Source Viewer/reader artifact text
+  with Web Lens explicit. If infeasible, follow Problem Documentation First and
+  name the missing product/backend link before repair.
+- Required guardrails:
+  preserve Texture canonical write safety, source entity/source_ref identity,
+  publication bundle priority, legacy `source_entities` fallback, no synthesis
+  from legacy `metadata.media_source_refs`, source-opening doctrine, and
+  accepted O4 Universal Wire semantics. Do not synthesize stories, source refs,
+  source entities, publication/export state, sourcecycled success, Qdrant state,
+  provider/search calls, staging evidence, promotion/rollback, or run
+  acceptance.
+- Required final report:
+  thread id if visible, cwd, branch/HEAD, commits, changed files,
+  commands/results, dirty-path classification, evidence boundary/non-claims,
+  residual risks, rollback refs, heresy delta, and verifier-readiness.
+
+Evidence boundary: worker queued only. No readable worker thread yet, no worker
+commit, no verifier, no root incorporation, no push, PR, CI, deploy, staging
+product acceptance, native Texture body `source_ref` citation opening proof,
+publication/export, Qdrant, provider/gateway/search, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: resolve pending worker handle into a readable thread/worktree, then
+read worker progress or final report before launching any independent verifier.
