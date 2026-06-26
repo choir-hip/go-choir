@@ -147,9 +147,9 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	}
 	doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
 		ClusterID: universalWireLiveSourcecycledClusterID,
-		Headline:  "Universal Wire live synthesis: " + truncateRunes(sources[0].Title, 90),
-		Summary:   fmt.Sprintf("Universal Wire selected %d graph-backed source captures from the live sourcecycled feed and published one English synthesis article instead of exposing raw capture cards.", len(sources)),
-		Tension:   "Later relevant source arrivals should revise this same live synthesis article until semantic story clustering can split independent events.",
+		Headline:  universalWireLiveSynthesisHeadline(sources),
+		Summary:   universalWireLiveSynthesisSummary(sources),
+		Tension:   "Further reporting should revise this article if the timeline, affected people, or official account changes.",
 		Sources:   sources,
 		Now:       now,
 	})
@@ -165,6 +165,27 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 		ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), universalWireLiveSourcecycledClusterID),
 		SourceCount:     len(sources),
 	}, nil
+}
+
+func universalWireLiveSynthesisHeadline(sources []universalWireSynthesisSource) string {
+	if len(sources) == 0 {
+		return "Developing story from incoming reports"
+	}
+	return "Multiple reports converge on " + truncateRunes(sources[0].Title, 90)
+}
+
+func universalWireLiveSynthesisSummary(sources []universalWireSynthesisSource) string {
+	if len(sources) == 0 {
+		return "Incoming reports point to a developing story that needs continued source-grounded revision."
+	}
+	if len(sources) == 1 {
+		return fmt.Sprintf("One incoming report points to a developing story: %s.", sources[0].Title)
+	}
+	count := "Two"
+	if len(sources) > 2 {
+		count = fmt.Sprintf("%d", len(sources))
+	}
+	return fmt.Sprintf("%s incoming reports point to the same developing story. %s provides the lead signal, while %s adds a second angle for readers.", count, sources[0].Title, sources[1].Title)
 }
 
 func (rt *Runtime) universalWireSynthesisSourcesFromGraphCaptures(ctx context.Context, captures []objectgraph.Object) ([]universalWireSynthesisSource, error) {

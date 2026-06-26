@@ -386,7 +386,7 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, so
 	b.WriteString(" ")
 	b.WriteString(fmt.Sprintf("[first source](source:%s)", firstRef))
 	b.WriteString("\n\n")
-	b.WriteString("A second source in the cluster adds a separate angle rather than repeating the same capture, so Universal Wire treats the pair as material for one English synthesis article instead of two raw cards. ")
+	b.WriteString("A second source in the cluster adds a separate angle rather than repeating the same capture, so the reports read as one developing article instead of two isolated updates. ")
 	b.WriteString(fmt.Sprintf("[second source](source:%s)", secondRef))
 	b.WriteString("\n\n")
 	b.WriteString(tension)
@@ -399,9 +399,9 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, so
 
 func universalWireSynthesisHeadline(sources []universalWireSynthesisSource) string {
 	if len(sources) == 0 {
-		return "Universal Wire synthesis"
+		return "Developing story from incoming reports"
 	}
-	return "Universal Wire synthesis: " + truncateRunes(sources[0].Title, 90)
+	return "Multiple reports converge on " + truncateRunes(sources[0].Title, 90)
 }
 
 var universalWireSlugInvalidRE = regexp.MustCompile(`[^a-z0-9]+`)

@@ -82,6 +82,17 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 			editionStories, editionResp, editionErr = h.universalWireEditionTextureStories(r.Context(), styleSources, 12)
 		}
 	}
+	if editionErr == nil && len(editionStories) > 0 && universalWireStoriesNeedArticleSurfaceRepair(editionStories) && h != nil && h.rt != nil {
+		if synthesis, err := h.rt.synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(r.Context(), time.Now().UTC()); err != nil {
+			log.Printf("universal wire: article surface repair unavailable: %v", err)
+		} else if synthesis.Triggered {
+			if refreshedStories, refreshedEdition, refreshedErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); refreshedErr == nil {
+				editionStories, editionResp = refreshedStories, refreshedEdition
+			} else {
+				log.Printf("universal wire: article surface repair reload unavailable: %v", refreshedErr)
+			}
+		}
+	}
 	if editionErr == nil {
 		edition = editionResp
 		diagnostics.Substrates = append(diagnostics.Substrates, universalWireEditionDiagnostic(editionResp, len(editionStories)))
@@ -627,6 +638,19 @@ func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {
 		out = append(out, docID)
 	}
 	return out
+}
+
+func universalWireStoriesNeedArticleSurfaceRepair(stories []types.WireStory) bool {
+	for _, story := range stories {
+		text := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
+		if strings.Contains(text, "Universal Wire live synthesis:") ||
+			strings.Contains(text, "Universal Wire selected ") ||
+			strings.Contains(text, "graph-backed source captures") ||
+			strings.Contains(text, "Universal Wire treats") {
+			return true
+		}
+	}
+	return false
 }
 
 func universalWirePlatformOwnerID() string {
