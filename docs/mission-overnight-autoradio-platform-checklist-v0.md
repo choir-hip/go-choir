@@ -172,11 +172,12 @@ Checklist:
 
 - [ ] Start with Problem Documentation First if implementation reveals a new
   behavior problem.
-- [ ] Get independent review of the existing design.
-- [ ] Define source entity identity, citation carry-forward, and unused-source
+- [x] Get independent review of the existing design.
+- [x] Define source entity identity, citation carry-forward, and unused-source
   handling.
-- [ ] Ensure source citation remains tri-state: cited, toolbar-only, unused.
-- [ ] Keep Texture canonical writes protected.
+- [x] Ensure source citation remains tri-state: cited, toolbar-only, unused.
+- [ ] Keep Texture canonical writes protected. Design-level plan accepted;
+  implementation must still prove revision/source graph transactionality.
 - [ ] Add tests that fail on disappearing source entities.
 - [ ] Verify that source refs are native objects, not prose links.
 - [ ] Open a verifier thread before any red/orange landing claim.
@@ -320,8 +321,9 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 44. Last Delta V: 1 for O2
-live local-Qdrant build/switch/rollback proof.
++ 8 Autoradio/Pipecat obligations. Current value: 41. Last Delta V: 3 for O3
+accepted design review, source identity/unused handling, and tri-state citation
+design.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -423,13 +425,13 @@ after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
 The same verifier returned `accept` on the final O2 completion readback. O2 is
 complete at branch level, with no main/staging/platform settlement claim.
 
-next move: Send O3 design-review thread `019f02a7-11d9-7573-885c-d91b7cffe8be`
-the revised `docs/paradoc-source-entity-migration.md`. The first verdict was
-`revise_before_continue`: the old root design was too thin, and the preserved
-O0 design was stale because it still referenced removed `source_embed`
-semantics. The revised root design now removes `source_embed`, models
-tri-state citation, accounts for landed objectgraph/Qdrant packages, and names
-the Texture transaction/version boundary before implementation.
+next move: Launch the O3 Phase 1 implementation worker. O3 design-review thread
+`019f02a7-11d9-7573-885c-d91b7cffe8be` returned `accept` after revision
+`f5149aba`. The worker must start by choosing the safe store route before code
+changes: either extend objectgraph into the Texture/Dolt transaction boundary
+or add Texture-store source tables behind the objectgraph contract. It must
+resolve the accepted P2 about `source_ref` canonical ID suffix shape against
+`objectgraph.BuildCanonicalID` before implementing.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

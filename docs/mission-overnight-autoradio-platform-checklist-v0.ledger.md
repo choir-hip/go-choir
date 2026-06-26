@@ -624,3 +624,38 @@ Texture, API, staging, product, or landing claim.
 Open edge: Send the revised design back to the O3 reviewer and wait for
 `accept`, `revise_before_continue`, `blocked`, or `supersede` before launching
 implementation.
+
+## 2026-06-26 - O3 Revised Design Accepted
+
+Claim: The revised source-entity migration design is sufficient to launch a
+bounded Phase 1 implementation worker.
+
+Move: read the O3 reviewer re-review verdict for commit `f5149aba`.
+
+Expected Delta V: 3 for O3 independent design review, source identity/unused
+handling definition, and tri-state citation definition.
+
+Actual Delta V: 3. Current V is 41.
+
+Receipts:
+
+- O3 reviewer thread `019f02a7-11d9-7573-885c-d91b7cffe8be` returned verdict
+  `accept` on the revised design.
+- Reviewer confirmed the design defines source entity identity/versioning,
+  `source_ref` identity/version pinning, tri-state citation, Texture
+  transaction boundary, O1/O2 objectgraph/Qdrant reality, concrete tests, and
+  rollback.
+- Reviewer confirmed `source_embed` appears only as removed/forbidden text, not
+  an implementation path.
+- Non-blocking P2: the design's illustrative `source_ref` canonical ID contains
+  extra colon-separated suffix components; Phase 1 must resolve the suffix shape
+  against `objectgraph.BuildCanonicalID` / `ParseCanonicalID` before code
+  changes.
+
+Evidence boundary: design-level acceptance only. Texture canonical-write
+protection, disappearing-source tests, source refs as native runtime objects,
+API behavior, staging, product, and landing claims remain open.
+
+Open edge: Launch O3 Phase 1 worker to choose the safe store route before code
+changes: extend objectgraph into the Texture/Dolt transaction boundary or add
+Texture-store source tables behind the objectgraph contract.
