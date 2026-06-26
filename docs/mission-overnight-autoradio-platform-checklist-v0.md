@@ -199,12 +199,17 @@ Checklist:
 - [x] Add tests that fail on disappearing source entities. Phase 1 covers a
   missing source entity/version rollback before document head advancement;
   Phase 2 adds focused Texture tool producer tests proving source entity graph
-  records are shadow-written while legacy revision reads continue to work.
+  records are shadow-written while legacy revision reads continue to work;
+  Phase 3 adds source_ref graph-edge tests and head-stability coverage for
+  unresolved graph refs.
 - [x] Verify that source refs are native objects, not prose links. Phase 1 adds
-  `texture_source_refs` records behind objectgraph-compatible IDs; producer
-  migration for source ref edges remains future O3 work.
+  `texture_source_refs` records behind objectgraph-compatible IDs; Phase 3
+  makes the selected Texture tool path shadow-write pinned `choir.source_ref`
+  records. Graph-read API/source-open integration remains future O3 work.
 - [x] Open a verifier thread before any red/orange landing claim. Phase 1
-  verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`.
+  verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`;
+  Phase 3 verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` returned
+  `accept` for branch-level continuation.
 
 Acceptance: source entity persistence and source refs survive the relevant
 Texture/News path with focused tests, plus staging proof if behavior-changing
@@ -346,10 +351,11 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
-Phase 2 verifier acceptance and root incorporation of the selected Texture
-tool source-entity shadow-write path. The pass bought branch-level evidence and
-implementation progress but did not close another counted checklist
-obligation; source ref edge producer migration remains open.
+Phase 3 verifier acceptance and root incorporation of the selected Texture
+tool source_ref graph-edge shadow-write path. The pass bought branch-level
+evidence and closed the selected producer source_ref edge gap, but it did not
+close another counted checklist obligation; graph-read API/source-open
+integration remains open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -496,29 +502,28 @@ boundary tests, `internal/runtime -run TestTextureTool`, full
 with protected surfaces: Texture canonical writes, source identity/ref edges,
 legacy DTO compatibility, source-open routing, Qdrant source-of-truth
 boundaries, auth/session renewal, gateway/provider calls, and staging/deploy
-claims. Evidence class is branch-level code/test/verifier acceptance only; no
-main, staging, product, deployment, O3-complete, source ref edge, public
-producer, source-open, Qdrant, or graph-first read claim exists yet.
-
-next move: Send Phase 3 worker final report to verifier thread
-`019f02d4-80e7-7c73-8085-bc1c52beebf2` (`O3 verifier - Source Ref Phase 3`)
-and wait for verdict. Worker thread `019f02d4-4877-7f82-89bd-ac87addc7bb3`
-(`O3 worker - Source Ref Phase 3`) completed in
-`/Users/wiz/.codex/worktrees/7935/go-choir` with clean worktree. Worker commits:
-`b0ad6de1` (`checkpoint O3 phase3 texture source ref edges`) and `98e77766`
-(`implement O3 phase3 texture source ref edges`). Chosen resolution rule:
-body `source_ref.attrs.source_entity_id` resolves against graph
-`choir.source_entity` records derived from the same materialized
-`SourceEntities` array; each `choir.source_ref` pins the Texture revision
-occurrence to the resolved source entity canonical ID and version ID; unresolved
-refs fail before document head advancement. Worker-reported checks passed:
+claims. O3 Phase 3 completed through worker thread
+`019f02d4-4877-7f82-89bd-ac87addc7bb3` and verifier thread
+`019f02d4-80e7-7c73-8085-bc1c52beebf2`. Worker commits `b0ad6de1` and
+`98e77766` were accepted and incorporated into this branch as `22829e24` and
+`f8769358`. The selected Texture tool path now resolves body
+`source_ref.attrs.source_entity_id` against graph `choir.source_entity` records
+derived from the same materialized `SourceEntities` array, writes pinned
+`choir.source_ref` records, and fails unresolved graph refs before document head
+advancement. Verifier verdict: `accept`, no blocking findings. Residual risk:
+the duplicate-normalization repair at `internal/runtime/tools_texture.go` lacks
+a dedicated two-legacy-IDs regression test. Root checks passed:
 focused Phase 3/Texture runtime tests, focused Phase 1 store boundary tests,
-full `internal/store`, and `git diff --check`. Evidence boundary remains
-worker branch only: no independent verifier acceptance, root incorporation,
-O3-complete, main, staging, product, deployment, public producer, source-open,
-Qdrant, or graph-first read claim. The first verifier pass returned `blocked`
-before the worker thread was discoverable; treat that as stale launch-order
-evidence and reawaken it with this worker report.
+full `internal/store`, and `git diff --check`. Evidence class is branch-level
+code/test/verifier acceptance only; no O3-complete, main, staging, product,
+deployment, public producer, source-open, Qdrant, graph-first read, auth,
+gateway/provider, or deploy claim exists yet.
+
+next move: Continue O3 with Phase 4 Reads, Frontend, And Source Open from
+`docs/paradoc-source-entity-migration.md`: create a bounded worker for returning
+`source_entities` and `source_refs` object-wrapper records from Texture APIs
+while preserving legacy fields, then verifier review before any broader
+source-open/frontend claim.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
