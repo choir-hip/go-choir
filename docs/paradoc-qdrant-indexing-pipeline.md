@@ -2,9 +2,11 @@
 
 ## Status
 
-O2 implementation working. The O0 prototype was preserved at
-`preserve/o0-qdrant-prototype-2026-06-26` (`4c1b28be`). O2 narrows it from
-sample-object prototype to objectgraph-derived package code.
+O2 implementation branch ready for verifier review, with real local-Qdrant
+verification blocked by no service at `127.0.0.1:6333` on 2026-06-26. The O0
+prototype was preserved at `preserve/o0-qdrant-prototype-2026-06-26`
+(`4c1b28be`). O2 narrows it from sample-object prototype to objectgraph-derived
+package code.
 
 ## Mission conjecture
 
@@ -71,7 +73,8 @@ Deliver a prototype with:
   skips when Qdrant is unavailable.
 - Move 5: Document rebuild, rollback, and provider/embedder boundary.
 - Move 6: Commit focused docs and code changes, then stop for independent O2
-  verifier review.
+  verifier review. Local Qdrant integration proof is deferred until a safe
+  local service is available.
 
 ## Version / lineage
 

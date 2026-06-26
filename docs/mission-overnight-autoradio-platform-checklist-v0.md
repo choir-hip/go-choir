@@ -149,14 +149,16 @@ parallel source of truth.
 Checklist:
 
 - [x] Review the Qdrant prototype for alias-switch correctness.
-- [ ] Verify against a real local Qdrant instance.
-- [ ] Replace sample objects with object-service-backed inputs or explicitly
+- [ ] Verify against a real local Qdrant instance. Current worker probe found
+  no local service at `127.0.0.1:6333`; hermetic tests cover the package until a
+  local Qdrant instance is available.
+- [x] Replace sample objects with object-service-backed inputs or explicitly
   defer that edge.
-- [ ] Keep deterministic hash embedding only as a test embedder.
-- [ ] Define production embedder/provider boundary without hard-coding role or
+- [x] Keep deterministic hash embedding only as a test embedder.
+- [x] Define production embedder/provider boundary without hard-coding role or
   provider assumptions.
-- [ ] Record derived-index rebuild and rollback path.
-- [ ] Open a verifier thread focused on schema, alias switch, and source-of-truth
+- [x] Record derived-index rebuild and rollback path.
+- [x] Open a verifier thread focused on schema, alias switch, and source-of-truth
   boundaries.
 
 Acceptance: Qdrant build/switch can be tested locally and is documented as
@@ -319,9 +321,10 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 50. Last Delta V: 1 for O2
-prototype review and documentation checkpoint before implementation. Variant
-total corrected from 67 to 68 because O0 contains nine checklist obligations.
++ 8 Autoradio/Pipecat obligations. Current value: 45. Last Delta V: 1 for O2
+independent verifier acceptance of the branch-level Qdrant implementation.
+Variant total corrected from 67
+to 68 because O0 contains nine checklist obligations.
 
 budget: overnight run, target 8-12 hours wall-clock, with orchestration
 checkpoints at least every major work item and before any behavior-changing
@@ -357,14 +360,17 @@ and `introduced` only if a reviewer explicitly finds a new doctrine or behavior
 regression.
 
 position / live conjectures / open edges: Email and O1 objectgraph foundation are
-done at branch level. O2 is working on branch
-`codex/o2-qdrant-derived-index` in
-`/Users/wiz/.codex/worktrees/fb93/go-choir`. Qdrant prototype
-`4c1b28be` was reviewed: its `update_alias` action shape is not accepted for
-O2; implementation must switch/rollback with one alias transaction containing
-delete/create alias actions, keep Qdrant derived from objectgraph objects, and
-keep deterministic hash embedding test-only. News depends on source/web objects.
-Choir-in-Choir should use News as its real
+done at branch level. O2 branch `codex/o2-qdrant-derived-index` in
+`/Users/wiz/.codex/worktrees/fb93/go-choir` produced implementation commit
+`d90d8a84`, now being incorporated into this orchestration branch. Qdrant
+prototype `4c1b28be` was reviewed: its `update_alias` action shape is not
+accepted for O2. The implementation switches/rolls back with one alias
+transaction containing delete/create alias actions, keeps Qdrant derived from
+objectgraph objects, and keeps deterministic hash embedding test-only. O2
+verifier thread `019f0285-e660-7cd1-a468-554e9b175825` returned `accept` for
+branch-level continuation. Real local Qdrant verification remains open because
+`localhost:6333` refused connections on 2026-06-26. News depends on source/web
+objects. Choir-in-Choir should use News as its real
 payload. Nucleus follows once there is a concrete worker/verifier isolation
 need. Choir Base starts as local reconciliation kernel. Autoradio is the final
 product forcing function, but Pipecat is an open implementation edge and not
@@ -408,14 +414,17 @@ complete at branch level, with no main/staging/platform settlement claim. O2
 worker thread: `019f0285-037b-7a21-b352-ece5b84efeca` (`O2 worker - Qdrant
 Derived Index`) in `/Users/wiz/.codex/worktrees/fb93/go-choir`. O2 verifier
 thread: `019f0285-e660-7cd1-a468-554e9b175825` (`O2 verifier - Qdrant Derived
-Index`). The verifier returned `blocked` because the worker turn was still
-`inProgress` and no final Qdrant report/diff/tests existed yet. O2 is active
-but no O2 obligation is complete yet.
+Index`). The verifier first returned `blocked` because the worker turn was
+still `inProgress` and no final Qdrant report/diff/tests existed yet. After
+worker completion, the verifier returned `accept` for branch-level
+continuation, with the live local-Qdrant proof still open. O2 is not complete
+until that local service proof passes.
 
-next move: Incorporate the completed O2 worker implementation and independent
-verifier verdict into this orchestration branch, then record whether O2 is
-branch-level accepted or still needs correction before claiming any checklist
-progress.
+next move: Start `docker-compose.qdrant.yml` or another safe local Qdrant
+service and rerun
+`nix develop -c go test -v ./internal/qdrant -run TestLocalQdrantBuildAndSwitchIfAvailable`.
+If it passes, record O2 completion and proceed to O3 source entities; if it
+fails, record the precise blocker before changing code.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

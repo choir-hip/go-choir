@@ -374,3 +374,82 @@ provider, staging, or product claim.
 Open edge: Implement `internal/qdrant` as a derived index over
 `internal/objectgraph.Object`, keep deterministic embedding test-only, and
 probe local Qdrant availability before final worker report.
+
+## 2026-06-26 - O2 Derived Index Implementation
+
+Claim: The O2 branch now contains a minimal Qdrant derived-index package over
+objectgraph data, but O2 remains incomplete until independent verifier review
+and real-Qdrant verification when a local service is available.
+
+Move: construct bounded package implementation and focused tests.
+
+Expected Delta V: 4 for replacing sample objects with objectgraph-backed
+inputs, keeping deterministic embedding test-only, defining the production
+embedder boundary, and documenting rebuild/rollback.
+
+Actual Delta V: 4. Current V is 46.
+
+Receipts:
+
+- Added `internal/qdrant` package with Qdrant REST client, payload schema,
+  safe collection/alias naming, deterministic point IDs derived from canonical
+  IDs, objectgraph projection, shadow-collection build/switch flow, rollback,
+  and old-collection cleanup.
+- Added `docker-compose.qdrant.yml` as local Qdrant service config.
+- Hermetic tests construct objectgraph objects through `internal/objectgraph`
+  and verify payload identity refs, delete/create alias switch actions,
+  shadow cleanup before alias mutation on verification failure, and test-only
+  deterministic embedding.
+- Local-Qdrant probe: `curl -fsS http://localhost:6333/healthz` failed with
+  connection refused. `nix develop -c go test -v ./internal/qdrant -run
+  TestLocalQdrantBuildAndSwitchIfAvailable` skipped with `dial tcp
+  127.0.0.1:6333: connect: connection refused`.
+- Focused test receipt: `nix develop -c go test ./internal/qdrant` passed.
+
+Evidence boundary: branch-level package tests only. No live Qdrant, provider,
+gateway, runtime route, staging, product, or promotion claim.
+
+Open edge: Commit the implementation, run touched package tests, and send the
+branch to an independent verifier focused on schema, alias switch, and
+source-of-truth boundaries. A future local-Qdrant proof should start the local
+service and rerun the integration test.
+
+## 2026-06-26 - O2 Branch-Level Verifier Accepted
+
+Claim: The Qdrant derived-index implementation is coherent enough to continue
+at branch level, but O2 remains incomplete until the real local-Qdrant proof
+passes.
+
+Move: re-run the independent O2 verifier against the worker's completed branch.
+
+Expected Delta V: 1 for opening and completing the verifier thread focused on
+schema, alias switch, and source-of-truth boundaries.
+
+Actual Delta V: 1. Current V is 45.
+
+Receipts:
+
+- O2 worker thread `019f0285-037b-7a21-b352-ece5b84efeca` completed on branch
+  `codex/o2-qdrant-derived-index` with docs checkpoint `7bc94611` and
+  implementation commit `d90d8a84`.
+- O2 verifier thread `019f0285-e660-7cd1-a468-554e9b175825` returned verdict
+  `accept` after inspecting the completed worker branch.
+- Verifier checked alias switch/rollback through one `UpdateAliases` call with
+  `delete_alias` then `create_alias`, objectgraph-backed projection,
+  test-only deterministic embedding, production embedder/model metadata
+  boundary, and documented rebuild/rollback semantics.
+- Verifier reran `nix develop -c go test ./internal/qdrant`,
+  `nix develop -c go test -count=1 ./internal/qdrant`, and
+  `nix develop -c go test ./internal/objectgraph ./internal/qdrant`; all
+  passed.
+- Verifier reran
+  `nix develop -c go test -v ./internal/qdrant -run TestLocalQdrantBuildAndSwitchIfAvailable`;
+  it skipped with `127.0.0.1:6333` connection refused.
+
+Evidence boundary: branch-level code/test/verifier acceptance only. No live
+Qdrant, main, CI, deploy, staging, provider, gateway, runtime route, product,
+promotion, or rollback claim.
+
+Open edge: Start a safe local Qdrant service from `docker-compose.qdrant.yml`
+or equivalent and rerun the integration test. O2 is not complete until that
+live build/switch/rollback proof passes and is recorded.
