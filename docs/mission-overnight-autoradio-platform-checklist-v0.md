@@ -363,11 +363,11 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: -1 for O4
-Phase 1 verifier acceptance and root incorporation. The pass closed the first
-O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
-foundation, but it did not prove Universal Wire graph-backed feed reads,
-sourcecycled ingestion, staging, deploy, or product acceptance.
++ 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
+Phase 2 worker launch and thread resolution. O4 Phase 1 closed the first O4
+checklist obligation by adding a tested `choir.web_capture` objectgraph
+foundation, but O4 Phase 2 has not yet proved Universal Wire graph-backed feed
+reads, sourcecycled ingestion, staging, deploy, or product acceptance.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -711,14 +711,21 @@ ignored local env/log/dependency artifacts remain unrelated. Evidence class is
 branch-level local test/verifier/root-rerun acceptance only. No Universal Wire
 feed proof, sourcecycled ingestion, Qdrant, main, staging, product acceptance,
 deploy, publication/export, auth/session, gateway/provider, promotion, or
-rollback claim exists.
+rollback claim exists. O4 Phase 2 worker thread
+`019f035c-2a13-7f20-abd9-960b9866189b` (`O4 worker - Universal Wire Web
+Capture Read`) resolved from pending worktree handle
+`local:6462c8b4-ca0f-4c42-bdc5-ad578dda6f15` in
+`/Users/wiz/.codex/worktrees/5f31/go-choir`; it was titled and pinned on
+2026-06-26. Early worker trace reports a runtime-owned objectgraph service gap
+and is following Problem Documentation First before any route behavior change.
+No O4 Phase 2 final report, verifier, root incorporation, or acceptance exists
+yet.
 
-next move: choose the next bounded O4 worker assignment for Universal Wire to
-read or prove graph-backed web captures without weakening empty-state honesty.
-The likely next slice is a focused API/read-path design or implementation that
-queries `choir.web_capture` objects and preserves cited source refs. If reliable
-staging/product evidence reveals a new behavior problem, apply Problem
-Documentation First before any fix.
+next move: reconnect to O4 Phase 2 worker
+`019f035c-2a13-7f20-abd9-960b9866189b`. If it emits a final report, record the
+report, then create an independent verifier thread before incorporation. If it
+documents a behavior problem, preserve that checkpoint as the first
+post-discovery artifact before any fix.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
