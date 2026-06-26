@@ -519,11 +519,18 @@ code/test/verifier acceptance only; no O3-complete, main, staging, product,
 deployment, public producer, source-open, Qdrant, graph-first read, auth,
 gateway/provider, or deploy claim exists yet.
 
-next move: Continue O3 with Phase 4 Reads, Frontend, And Source Open from
-`docs/paradoc-source-entity-migration.md`: create a bounded worker for returning
+next move: Resolve the O3 Phase 4 worker thread id if pending worktree
+`local:71935a66-7f54-4564-82ce-cca26dc682fa` has materialized, then wait for
+its final report. Phase 4 worker assignment:
+`O3-phase4-texture-api-source-object-wrappers`, the smallest additive
+Texture API/read step from `docs/paradoc-source-entity-migration.md`: return
 `source_entities` and `source_refs` object-wrapper records from Texture APIs
-while preserving legacy fields, then verifier review before any broader
-source-open/frontend claim.
+while preserving legacy fields and without switching product behavior to
+graph-first reads. Also add the accepted Phase 3 residual duplicate-normalization
+regression if cheap and local. Verifier thread
+`019f02ed-d05e-78f1-975c-1de2df51451b` (`O3 verifier - Source API Phase 4`)
+is live and pinned; it must return `blocked` until the worker has a final
+report.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

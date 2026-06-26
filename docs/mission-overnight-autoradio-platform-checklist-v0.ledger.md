@@ -984,6 +984,62 @@ Open edge: continue O3 with Phase 4 Reads, Frontend, And Source Open: return
 while preserving legacy fields, then route the worker diff through independent
 verifier review before any broader source-open/frontend claim.
 
+## 2026-06-26 - O3 Phase 4 Worker And Verifier Launched
+
+Claim: O3 Phase 4 additive Texture API/read work has been routed through
+current Codex thread tools as a bounded worker/verifier pair, but no Phase 4
+implementation evidence or acceptance exists yet.
+
+Move: create a project worktree worker for additive Texture source
+object-wrapper reads and a local verifier thread for independent review.
+
+Expected Delta V: 0 until the worker finishes, the verifier returns `accept`,
+and accepted commits are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker launch returned pending worktree handle
+  `local:71935a66-7f54-4564-82ce-cca26dc682fa` from project
+  `/Users/wiz/go-choir`, starting at branch
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- Worker work item id: `O3-phase4-texture-api-source-object-wrappers`.
+- Worker authority: implement the smallest additive Phase 4 read/API step:
+  return `source_entities` and `source_refs` object-wrapper records from
+  Texture APIs while preserving existing legacy fields and behavior.
+- Worker may also add a narrow duplicate-normalization regression test for the
+  accepted Phase 3 residual risk if it stays local and cheap.
+- Worker mutation class: orange/red-adjacent.
+- Worker protected surfaces: Texture canonical/read DTO compatibility, source
+  graph identity/ref records, legacy `source_entities` fields, source-open
+  routing boundaries, Qdrant derived-index/source-of-truth boundaries,
+  auth/session renewal, gateway/provider calls, staging/deploy claims, and
+  public API compatibility.
+- Worker admissible evidence: documentation checkpoint naming the additive read
+  shape and compatibility rule, implementation commit(s), focused tests proving
+  legacy fields remain while graph wrappers are returned for revisions with
+  graph records, source_ref wrapper identity/pinning coverage, and clean
+  worktree report.
+- Rollback path: revert Phase 4 implementation commit(s), leaving Phase 1-3
+  shadow writes intact and legacy reads active.
+- Heresy delta: `discovered` for newly observed read/API gaps, `repaired` only
+  for the selected additive Texture API wrapper path, and `introduced` only if
+  verifier finds a regression.
+- Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`, titled
+  `O3 verifier - Source API Phase 4`, pinned.
+- Verifier authority: read-only review of the worker final report/diff/tests;
+  return `blocked` if the worker thread is unavailable or has no final report.
+
+Evidence boundary: thread launch only. No Phase 4 implementation,
+incorporation, verifier acceptance, checklist descent, API behavior,
+source-open behavior, Qdrant projection, graph-first read, main, staging,
+product, deployment, or landing claim.
+
+Open edge: resolve the pending worker thread id if available, read worker and
+verifier results, then either incorporate an accepted worker diff or record the
+precise blocker as `open_handoff`.
+
 ## 2026-06-26 - O3 Phase 2 Worker Resolved, Verifier Blocked Pending Final Report
 
 Claim: The O3 Phase 2 worker thread resolved from its pending worktree handle
