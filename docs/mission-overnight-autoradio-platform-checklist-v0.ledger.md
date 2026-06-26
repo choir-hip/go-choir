@@ -1846,3 +1846,37 @@ product acceptance, deploy, or promotion/rollback claim.
 
 Open edge: launch an independent verifier thread against commit `65a08d44` and
 record its verdict before incorporation.
+
+## 2026-06-26 - O3 Phase 6 Verifier Launched
+
+Claim: Phase 6 now has an independent verifier thread reviewing the committed
+worker proof candidate.
+
+Move: create a project-local verifier thread after committing the worker final
+report checkpoint, then title and pin it for orchestration hygiene.
+
+Expected Delta V: 0. Verifier launch is observer setup, not acceptance.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Verifier thread:
+  `019f0343-df0b-7442-8d2e-7714b3fd3988`
+  (`O3 verifier - Source Open Phase 6`).
+- Verifier target:
+  worker commit `65a08d4426f72881b0a509bc2bd453ff5d4f6964` in
+  `/Users/wiz/.codex/worktrees/5e10/go-choir`.
+- Verifier prompt asks for findings first, file/line references, exact verdict
+  `accept`, `revise_before_continue`, `blocked`, or `supersede`, command
+  receipts, evidence boundary, dirty-path classification, residual risks, and
+  whether orchestration may incorporate worker commit `65a08d44`.
+- Thread titled and pinned.
+
+Evidence boundary: verifier launch only. No verifier verdict, root
+incorporation, Phase 6 acceptance, O3-complete, main, staging, product
+acceptance, deploy, or promotion/rollback claim.
+
+Open edge: read verifier thread
+`019f0343-df0b-7442-8d2e-7714b3fd3988`; incorporate the verdict into Parallax
+State before moving code.
