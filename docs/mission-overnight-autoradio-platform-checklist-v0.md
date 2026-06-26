@@ -40,11 +40,11 @@ thin Autoradio vertical slice to prove that the substrate is useful.
 ## Thread Operating Model
 
 This mission should be run with Codex thread tools. The current Codex app
-surface, as discovered on 2026-06-26, exposes the needed thread primitives via
-`codex_app` after tool discovery. The orchestration thread is the human-visible
-conductor for the overnight run. It owns this checklist, the ledger, worktree
-hygiene, dependency order, and final evidence packet. It does not self-certify
-implementation work.
+surface, as discovered and re-confirmed on 2026-06-26, exposes the needed
+thread primitives via `codex_app` after tool discovery. The orchestration
+thread is the human-visible conductor for the overnight run. It owns this
+checklist, the ledger, worktree hygiene, dependency order, and final evidence
+packet. It does not self-certify implementation work.
 
 Thread roles:
 
@@ -86,6 +86,11 @@ Required thread primitives and current semantics:
 
 Observed Codex app behavior on 2026-06-26:
 
+- The active orchestration environment can discover the thread tools with
+  targeted tool search. Available primitives include `list_projects`,
+  `create_thread`, `read_thread`, `list_threads`, `send_message_to_thread`,
+  `handoff_thread`, `get_handoff_status`, and thread title/pin/archive
+  controls.
 - Worktree `create_thread` may return a `pendingWorktreeId` before the actual
   thread id is visible. Treat the pending handle as a launch receipt, not a
   worker identity. Reconnect with `list_threads` by cwd, title/work-item text,
