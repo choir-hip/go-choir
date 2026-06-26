@@ -678,17 +678,23 @@ checks passed: `nix develop -c go test ./internal/objectgraph`,
 `git diff --check`, and clean tracked status. Independent verifier thread
 `019f0353-95c0-7020-8047-2e7d6fab7e66`
 (`O4 verifier - Web Capture Object Foundation`) has been launched against
-worker commits `ae0fb49f` and `7e9418af`, titled, and pinned. Evidence remains
-worker-local until independent verifier acceptance and root incorporation.
+worker commits `ae0fb49f` and `7e9418af`, titled, and pinned. The verifier
+returned `revise_before_continue`: focused `internal/objectgraph` tests passed,
+the implementation commit passed `git show --check`, and no code-level blocker
+was found, but `git diff --check 68cfb026..7e9418af` and
+`git show --check ae0fb49f` fail because
+`docs/o4-web-capture-foundation-checkpoint-2026-06-26.md` has a new blank line
+at EOF. Evidence remains worker-local until repair, independent verifier
+acceptance, and root incorporation.
 
-next move: read verifier thread `019f0353-95c0-7020-8047-2e7d6fab7e66` and
-incorporate its verdict into Parallax State. If it accepts, incorporate worker
-commits `ae0fb49f` and `7e9418af` into the orchestration branch and run bounded
-root checks. If it returns `revise_before_continue`, `blocked`, or `supersede`,
-record the finding before moving code. No accepted O4 web-capture foundation,
-Universal Wire feed proof, main, staging, product acceptance, deploy,
-publication/export, auth/session, gateway/provider, promotion, or rollback
-claim exists yet.
+next move: send a bounded repair follow-up to O4 worker thread
+`019f034d-ebc1-75a3-9c4b-269e8b9d6be7` to remove the checkpoint EOF blank line,
+commit the repair, and rerun `git diff --check 68cfb026..HEAD`,
+`git show --check HEAD`, and `nix develop -c go test ./internal/objectgraph`.
+Then ask the same verifier thread to review the repaired worker head. No
+accepted O4 web-capture foundation, Universal Wire feed proof, main, staging,
+product acceptance, deploy, publication/export, auth/session, gateway/provider,
+promotion, or rollback claim exists yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

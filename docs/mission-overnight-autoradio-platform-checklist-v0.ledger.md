@@ -2075,3 +2075,49 @@ main, staging, product acceptance, deploy, or promotion/rollback claim.
 Open edge: read verifier thread
 `019f0353-95c0-7020-8047-2e7d6fab7e66`; incorporate the verdict into Parallax
 State before moving code.
+
+## 2026-06-26 - O4 Phase 1 Verifier Returned Revise
+
+Claim: O4 Phase 1 worker commits are not acceptable as-is because the verifier
+found a diff-hygiene failure in the checkpoint commit.
+
+Move: receive the independent verifier verdict and record it before any repair
+or incorporation.
+
+Expected Delta V: 0. A revise verdict buys observer evidence but does not close
+the O4 web-capture foundation obligation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Verifier thread:
+  `019f0353-95c0-7020-8047-2e7d6fab7e66`
+  (`O4 verifier - Web Capture Object Foundation`).
+- Verdict: `revise_before_continue`.
+- Finding: [P3]
+  `/Users/wiz/.codex/worktrees/b850/go-choir/docs/o4-web-capture-foundation-checkpoint-2026-06-26.md:70`
+  has a new blank line at EOF.
+- Commands/results:
+  `nix develop -c go test ./internal/objectgraph` from the worker worktree
+  passed;
+  `git diff --check 68cfb026..7e9418af` failed on the checkpoint EOF blank
+  line;
+  `git show --check ae0fb49f` failed on the same checkpoint EOF blank line;
+  `git show --check 7e9418af` passed;
+  `git status --short --ignored` was clean/no output.
+- Verifier evidence boundary: branch-level local inspection/test only. No main,
+  push, CI, deploy, staging, product acceptance, Universal Wire feed proof,
+  auth/session, provider/gateway, Qdrant, publication/export, graph-first
+  enforcement, promotion, or rollback evidence.
+- Residual risk from verifier: this only adds an objectgraph helper/metadata
+  contract and tests; it does not prove any Universal Wire graph-backed read
+  path.
+
+Evidence boundary: verifier revise verdict only. No root incorporation or O4
+acceptance claim.
+
+Open edge: ask the O4 worker to remove the EOF blank line, commit the repair,
+rerun `git diff --check 68cfb026..HEAD`, `git show --check HEAD`, and
+`nix develop -c go test ./internal/objectgraph`, then re-review with the same
+verifier.
