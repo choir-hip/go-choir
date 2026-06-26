@@ -3168,3 +3168,48 @@ Residual risk:
 
 Open edge: create an independent verifier for worker commits `4395c251` and
 `543c6742`; do not incorporate them into root until accepted.
+
+## 2026-06-26 - O4 Phase 5 Verifier Launch
+
+Claim: O4 Phase 5 candidate has a queued independent verifier. This is verifier
+launch only, not verifier acceptance.
+
+Move: create a worktree verifier against branch
+`codex/o4-phase5-sourcecycled-web-capture-ingestion-replacement` with candidate
+commits `4395c251` and `543c6742`.
+
+Expected Delta V: 0. Verifier launch does not close an obligation.
+
+Actual Delta V: 0. Current V remains 35.
+
+Receipts:
+
+- Pending verifier worktree handle:
+  `local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c`.
+- Candidate commits:
+  `4395c251 checkpoint O4 sourcecycled web capture ingestion`;
+  `543c6742 write sourcecycled web captures to objectgraph`.
+- Verifier scope:
+  check Problem Documentation First, objectgraph/sourcecycled boundary honesty,
+  source entity and `captured_from` provenance coherence, opt-in objectgraph DB
+  wiring in `cmd/sourcecycled`, preserved Universal Wire fallback semantics, and
+  no claims over excluded surfaces.
+- Suggested verifier commands:
+  `git status --short --ignored`;
+  `git diff --check 2d0b171b..HEAD`;
+  `git show --check --oneline 4395c251`;
+  `git show --check --oneline 543c6742`;
+  `git diff --name-status 2d0b171b..HEAD`;
+  `nix develop -c go test ./cmd/sourcecycled -count=1`;
+  `nix develop -c go test ./internal/cycle -count=1`;
+  `nix develop -c go test ./internal/objectgraph -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`.
+
+Evidence boundary: verifier queued only. No verifier verdict, root
+incorporation, main, push, PR, CI, deploy, staging product acceptance, Texture
+native source_ref, publication/export, Qdrant, provider/gateway, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: resolve pending verifier worktree handle
+`local:2f4d614e-19ab-4a0a-9b88-b1a688bda10c` into a readable thread, title/pin
+it, and read its verdict.
