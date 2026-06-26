@@ -223,6 +223,7 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 
 func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures(t *testing.T) {
 	_, handler := testAPISetup(t)
+	t.Setenv("RUNTIME_PLATFORMD_URL", "http://127.0.0.1:8082")
 	ctx := context.Background()
 	now := time.Date(2026, 6, 26, 22, 32, 0, 0, time.UTC)
 	items := []sources.Item{

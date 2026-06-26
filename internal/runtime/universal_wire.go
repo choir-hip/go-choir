@@ -207,7 +207,9 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		if !ok {
 			continue
 		}
-		if h.platformdStoryVerificationEnabled() && !h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
+		if h.platformdStoryVerificationEnabled() &&
+			!wireRevisionIsUniversalWireSynthesis(rev) &&
+			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
 		story.Prominence = 100 - len(stories)
@@ -528,6 +530,12 @@ func (h *APIHandler) platformdStoryVerificationEnabled() bool {
 		return false
 	}
 	return strings.TrimSpace(platformdReadBaseURL()) != ""
+}
+
+func wireRevisionIsUniversalWireSynthesis(rev types.Revision) bool {
+	meta := decodeRevisionMetadata(rev.Metadata)
+	value, ok := meta["universal_wire_synthesis"].(bool)
+	return ok && value
 }
 
 func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {
