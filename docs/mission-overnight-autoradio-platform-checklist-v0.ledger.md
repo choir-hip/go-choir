@@ -4379,3 +4379,64 @@ Open edge: read worker thread
 `019f03e9-8fe1-7503-a9a2-f55ee5430c54` when complete. If it returns candidate
 commits, inspect hygiene/readiness and launch an independent verifier before
 any root incorporation.
+
+## 2026-06-26 - O4 Phase 9 Worker Candidate And Verifier Launch
+
+Claim: O4 Phase 9 has a clean worker candidate for graph-capture source
+artifact opening and a fresh independent verifier has been launched. This is not
+verifier acceptance, root incorporation, O4 checklist closure, or staging News
+benchmark proof.
+
+Move: read worker thread `019f03e9-8fe1-7503-a9a2-f55ee5430c54`, inspect the
+worker branch directly, then create a project-scoped verifier worktree thread
+against `codex/o4-phase9-source-artifact-open-proof`.
+
+Expected Delta V: 0 now; potential Delta V 1 if the verifier accepts and root
+incorporates/reruns the candidate against the source-artifact opening
+obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread: `019f03e9-8fe1-7503-a9a2-f55ee5430c54` (`O4 worker - Source
+  Artifact Open Proof`).
+- Worker cwd: `/Users/wiz/.codex/worktrees/199d/go-choir`.
+- Worker branch/head: `codex/o4-phase9-source-artifact-open-proof` at
+  `fcde783a prove O4 graph capture source artifact opening`.
+- Worker commits under review:
+  `42d47423 checkpoint O4 source artifact open proof gap` and
+  `fcde783a prove O4 graph capture source artifact opening`.
+- Worker final report states that Problem Documentation First was satisfied;
+  generated frontend artifacts were removed; `git status --short --ignored` was
+  clean; and these checks passed: `nix develop -c go test ./internal/runtime
+  -run '^TestHandleUniversalWireStories' -count=1 -timeout=120s`, `npm ci`,
+  `npm run build`, focused Playwright
+  `npx playwright test tests/universal-wire-app.spec.js -g 'Universal Wire opens
+  graph capture sources through Source Viewer by default and Web Lens explicitly'
+  --timeout=120000`, `git show --check --oneline 42d47423`, and
+  `git show --check --oneline fcde783a`.
+- Root inspection before verifier launch: worker tracked/ignored status had no
+  output; `git diff --name-status 724772c3..HEAD` listed the Phase 9 checkpoint,
+  paradoc/ledger updates, Universal Wire frontend/test changes, runtime/test
+  changes, and `internal/types/wire.go`; `git diff --check 724772c3..HEAD`
+  passed.
+- Verifier pending worktree handle:
+  `local:88926f6c-b13b-4e56-8029-6567bd86fa8d`.
+- Verifier assignment scope: verify checkpoint-before-code, additive bounded
+  `reader_snapshot` derivation from durable graph capture/source entity bodies,
+  Source Viewer default/Web Lens explicit behavior, preservation of accepted O4
+  semantics, diff hygiene, focused Go/runtime proof, frontend build, focused
+  Playwright source-opening proof, dirty-path classification, evidence boundary,
+  residual risks, and incorporation recommendation.
+
+Evidence boundary: worker-local branch proof plus root inspection and verifier
+launch only. No verifier verdict yet, no root incorporation, no root rerun of
+worker tests, no push, PR, CI, deploy, staging product acceptance, native
+Texture body `source_ref` citation opening, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or run
+acceptance.
+
+Open edge: resolve verifier thread id from pending handle or thread list, read
+its verdict, and only then decide whether to incorporate `42d47423` and
+`fcde783a` into the orchestration branch.

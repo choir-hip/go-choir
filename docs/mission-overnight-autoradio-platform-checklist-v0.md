@@ -430,6 +430,13 @@ O4 Phase 8 adds accepted and incorporated empty-only diagnostics for Universal
 Wire responses plus UI rendering; it does not claim staging, provider/search,
 Qdrant, publication/export, run-acceptance, promotion/rollback, or native
 Texture `source_ref` behavior.
+O4 Phase 9 has a worker candidate under independent verifier review:
+checkpoint `42d47423` and implementation `fcde783a` add a bounded
+`reader_snapshot` handoff from graph-backed Universal Wire source items into the
+existing Source Viewer/reader path, with Web Lens still explicit. This is not
+accepted or incorporated yet, and it does not claim staging, native Texture body
+`source_ref` citation opening, publication/export, Qdrant, provider/search,
+promotion/rollback, or run acceptance.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -451,8 +458,9 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current O4 Phase 8 incorporated change is orange: it
-adds empty-only diagnostics to the Universal Wire public response and UI while
+session artifacts. The current O4 Phase 9 candidate under verifier review is
+orange: it additively exposes bounded reader snapshots on Universal Wire source
+items and passes them to existing Source Viewer/reader UI behavior while
 preserving the stated boundary against synthesized stories/source refs/source
 entities, staging, publication/export, Qdrant, auth/session, provider/gateway,
 promotion, rollback, run acceptance, and native Texture citation claims.
@@ -812,15 +820,22 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: wait for O4 Phase 9 worker thread
+next move: wait for O4 Phase 9 verifier thread created from pending worktree
+handle `local:88926f6c-b13b-4e56-8029-6567bd86fa8d` against branch
+`codex/o4-phase9-source-artifact-open-proof`. The worker thread
 `019f03e9-8fe1-7503-a9a2-f55ee5430c54`
-(`O4 worker - Source Artifact Open Proof`) in
-`/Users/wiz/.codex/worktrees/199d/go-choir`. The worker is assigned the
-remaining O4 source/citation artifact-opening edge: prove or precisely document
-whether Universal Wire source/citation links open real Source Viewer/reader
-artifacts rather than only mocked routing. It must preserve source-opening
-doctrine, accepted O4 semantics, and avoid staging/full-News claims without
-deployed evidence. O4 Phase 8 worker thread
+(`O4 worker - Source Artifact Open Proof`) completed in
+`/Users/wiz/.codex/worktrees/199d/go-choir` with checkpoint commit `42d47423`
+and implementation commit `fcde783a`. Worker-reported checks passed:
+`nix develop -c go test ./internal/runtime -run
+'^TestHandleUniversalWireStories' -count=1 -timeout=120s`, `npm ci`,
+`npm run build`, focused Playwright
+`tests/universal-wire-app.spec.js -g 'Universal Wire opens graph capture sources
+through Source Viewer by default and Web Lens explicitly' --timeout=120000`,
+`git show --check --oneline 42d47423`, `git show --check --oneline fcde783a`,
+and clean `git status --short --ignored` after removing generated frontend
+artifacts. Do not incorporate or decrement V until the verifier returns an
+accept verdict and root reruns focused checks. O4 Phase 8 worker thread
 `019f03d8-2a15-7a61-ab7f-82ea0213cce2` and verifier thread
 `019f03e1-5342-7b61-a557-917c1ef1c407` accepted worker commits `4975163f` and
 `cbf04485`, which root incorporated as `db46f8fe checkpoint O4 empty feed
