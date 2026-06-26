@@ -4859,3 +4859,47 @@ promotion/rollback, or run-acceptance claim.
 Open edge: launch a bounded O4 Phase 10c worker whose only goal is making the
 existing Texture source-ref Playwright proof runnable from a clean worktree, or
 returning the smallest durable harness blocker with clean status.
+
+## 2026-06-26 - O4 Phase 10c Harness Worker Pending Handle Resolved To Worktree
+
+Claim: O4 Phase 10c now has a materialized worktree for the browser-harness
+repair/proof route, but orchestration has not yet resolved a readable Codex
+thread id. This is launch/worktree identity evidence only, not worker evidence,
+verifier acceptance, root incorporation, or checklist descent.
+
+Move: use Codex thread discovery and local worktree inspection after
+`create_thread` returned a pending worktree handle for
+`O4-phase10c-native-texture-source-ref-browser-harness`.
+
+Expected Delta V: 0. A pending worker launch does not close the native Texture
+citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:68462d14-f17c-45c0-a1e5-3b719a5eec5b`.
+- Thread lookup:
+  `list_threads` searches for the pending handle, work item text, and branch
+  did not return a readable thread id yet.
+- Materialized worker worktree:
+  `/Users/wiz/.codex/worktrees/eda4/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10c-native-texture-source-ref-browser-harness` at
+  `83fcbdef046b2253d823d4cea2136e9a3725f6dd`
+  (`checkpoint O4 native citation browser harness`).
+- Worker dirty state:
+  tracked status clean; ignored artifacts observed are `auth.log`,
+  `frontend/node_modules/`, `frontend/test-results/`, and `gateway.log`.
+
+Evidence boundary: launch/worktree identity and local status inspection only.
+No worker final report, candidate commit, verifier, root incorporation of a
+worker candidate, push, PR, CI, deploy, staging product acceptance, native
+Texture body `source_ref` citation-opening proof, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: resolve the readable O4 Phase 10c thread id or read the materialized
+worktree after it reports progress; if it produces a commit/checkpoint, create
+an independent verifier thread before root incorporation.

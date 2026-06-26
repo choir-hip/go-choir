@@ -829,10 +829,21 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: launch an O4 Phase 10c harness-focused worker from checkpoint
-`docs/o4-native-texture-source-ref-browser-harness-checkpoint-2026-06-26.md`.
-The worker should repair or precisely narrow the local browser harness needed
-to run the existing native Texture `source_ref` Source Viewer/reader-artifact
+O4 Phase 10c harness worker launch is partially resolved. Worktree
+`create_thread` returned pending handle
+`local:68462d14-f17c-45c0-a1e5-3b719a5eec5b`. The pending handle now
+corresponds to worktree `/Users/wiz/.codex/worktrees/eda4/go-choir` on branch
+`codex/o4-phase10c-native-texture-source-ref-browser-harness` at root checkpoint
+`83fcbdef046b2253d823d4cea2136e9a3725f6dd`. `list_threads` searches for the
+pending handle, work item, and branch did not yet return a readable thread id,
+so orchestration must not call it a resolved worker thread. Worker tracked
+status is clean; ignored worker artifacts are `auth.log`,
+`frontend/node_modules/`, `frontend/test-results/`, and `gateway.log`.
+
+next move: resolve the O4 Phase 10c thread id or read the materialized worktree
+once it reports progress. The worker should repair or precisely narrow the
+local browser harness needed to run the existing native Texture `source_ref`
+Source Viewer/reader-artifact
 Playwright proof from a clean worktree, without changing product behavior. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
