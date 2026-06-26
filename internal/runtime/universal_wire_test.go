@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -309,6 +310,35 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 		story.Manifest.Lead[0].CanonicalURL != "https://example.test/rail" ||
 		story.Manifest.Lead[0].Standing != "graph-backed web capture" {
 		t.Fatalf("graph-backed capture manifest = %+v, want durable capture identity and canonical URL", story.Manifest)
+	}
+	lead := story.Manifest.Lead[0]
+	if lead.ObjectKind != string(objectgraph.WebCaptureObjectKind) ||
+		lead.CanonicalID != newer.CanonicalID ||
+		lead.ContentHash != newer.ContentHash ||
+		lead.SourceKind != sourcecontract.SourceKindWebSource ||
+		lead.TargetKind != "web_url" ||
+		lead.OpenSurface != sourcecontract.OpenSurfaceSource ||
+		lead.LiveOpenSurface != sourcecontract.OpenSurfaceWebLens ||
+		lead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady {
+		t.Fatalf("graph-backed capture manifest did not carry source-open graph identity: %+v", lead)
+	}
+	storyJSON, err := json.Marshal(story)
+	if err != nil {
+		t.Fatalf("marshal graph-backed capture story: %v", err)
+	}
+	for _, want := range []string{
+		`"object_kind":"choir.web_capture"`,
+		`"canonical_id":"` + newer.CanonicalID + `"`,
+		`"content_hash":"` + newer.ContentHash + `"`,
+		`"open_surface":"source"`,
+		`"live_open_surface":"web_lens"`,
+	} {
+		if !strings.Contains(string(storyJSON), want) {
+			t.Fatalf("graph-backed capture story JSON missing %s: %s", want, string(storyJSON))
+		}
+	}
+	if strings.Contains(string(storyJSON), `"source_ref"`) || strings.Contains(string(storyJSON), `"story_texture_doc_id"`) {
+		t.Fatalf("graph-backed capture story JSON should not claim Texture source_ref/publication fields: %s", string(storyJSON))
 	}
 	if resp.Stories[1].ID != "web-capture-"+older.CanonicalID {
 		t.Fatalf("second story id = %q, want older capture %s", resp.Stories[1].ID, older.CanonicalID)

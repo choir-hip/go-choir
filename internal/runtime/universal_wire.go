@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -220,11 +221,20 @@ func wireStoryFromWebCaptureObject(obj objectgraph.Object) (types.WireStory, boo
 		Related:     []string{},
 		Manifest: types.WireSourceManifest{
 			Lead: []types.WireSourceItem{{
-				ID:           obj.CanonicalID,
-				Title:        headline,
-				Standing:     "graph-backed web capture",
-				Role:         "lead",
-				CanonicalURL: canonicalURL,
+				ID:                  obj.CanonicalID,
+				Title:               headline,
+				Standing:            "graph-backed web capture",
+				Role:                "lead",
+				CanonicalURL:        canonicalURL,
+				SourceKind:          sourcecontract.SourceKindWebSource,
+				TargetKind:          "web_url",
+				ObjectKind:          string(obj.ObjectKind),
+				CanonicalID:         obj.CanonicalID,
+				VersionID:           obj.VersionID,
+				ContentHash:         obj.ContentHash,
+				OpenSurface:         sourcecontract.OpenSurfaceSource,
+				LiveOpenSurface:     sourcecontract.OpenSurfaceWebLens,
+				ReaderArtifactState: sourcecontract.ReaderArtifactStateReady,
 			}},
 		},
 		Claims: []string{
