@@ -6528,3 +6528,94 @@ Open edge: commit, push, monitor full CI/deploy for the red-adjacent routing
 change, verify `choir.news` health/build identity, and run authenticated Chrome
 QA against Universal Wire Source Viewer/Web Lens. Prefer an already-open tab
 across deploy; if unavailable, record the evidence cap explicitly.
+
+## 2026-06-26 - O4 Stale Frontend Chunk Repair Staging Acceptance
+
+Claim: The stale frontend chunk blocker is repaired for the current deployment
+strategy: Node B serves immutable Vite assets from the current frontend release
+first and the previous frontend release second, while new SPA shells still come
+from `frontend-current` with `Cache-Control: no-store`.
+
+Move: landed and deployed `b0f646d41301a57daae334264ca67e20d4aa2218`
+(`serve previous frontend chunks after deploy`) after independent verifier
+acceptance from Codex thread `019f0562-35e5-7bf1-a987-324f57dd7831`.
+
+Expected Delta V: 1 after CI, deploy, staging identity, and source-open
+acceptance prove previous-asset serving or stale-client recovery. Actual Delta
+V: 1. Current V: 29.
+
+Receipts:
+
+- Independent verifier thread verdict: accept, no blocking findings. The
+  verifier reviewed the Caddy `/assets/*` route, deploy pointer preservation,
+  deploy smoke change, `git diff --check`, deploy impact classifier, and Nix
+  rendered route. Residual risk from verifier: branch-local review could not
+  prove Node B runtime syntax or already-open browser recovery before deploy.
+- Push: `b0f646d41301a57daae334264ca67e20d4aa2218` to `origin/main`.
+- CI/deploy: GitHub Actions CI run `28260381195` passed; docs truth run
+  `28260381171` passed; staging deploy job `83734770344` passed. Deploy impact
+  was host/NixOS-only for this config change; frontend rebuild was skipped.
+- Deploy smoke: public frontend asset
+  `/assets/index-CBp3PMGi.js` resolved through the current/previous asset roots.
+- Staging identity: `https://choir.news/health` reported proxy and sandbox
+  `commit` / `deployed_commit`
+  `b0f646d41301a57daae334264ca67e20d4aa2218`, deployed at
+  `2026-06-26T19:29:51Z`.
+- Direct stale chunk proof: `curl -fsSI
+  https://choir.news/assets/BrowserApp-BACPaCdk.js` returned HTTP 200 with
+  `Cache-Control: public, max-age=31536000, immutable`. This is the exact chunk
+  URL that failed during the earlier authenticated `WEB LENS` source-open click.
+- Authenticated Chrome QA: using the owner's logged-in Chrome session for
+  `yusefnathanson@me.com`, the primary desktop showed Universal Wire with
+  `12 articles`. Cards still stated that Universal Wire is reading durable
+  `choir.web_capture` objects from the object graph and that cards are capture
+  projections, not Texture article publications or native `source_ref`
+  citations.
+- Source-open product proof: the first card, `Our 36 favorite gaming deals on
+  Prime Day for Switch, PS5, and Xbox`, opened through `OPEN SOURCE` into a
+  Source Viewer/reader artifact showing `Reader snapshot ready`, `Open
+  original`, source details, and article text. The same first card opened
+  through `WEB LENS` into a browser/Web Lens reader at
+  `https://www.theverge.com/gadgets/951901/prime-day-video-games-switch-playstation-xbox-pc-deal-sale`
+  with a source reader snapshot and article text.
+
+Mutation class / protected surfaces: red-adjacent deployment routing and orange
+frontend static-asset behavior. Touched `nix/node-b.nix` Caddy public asset
+routing and `.github/workflows/ci.yml` staging deploy smoke validation. Excluded
+surfaces remain Texture canonical writes, Trace/evidence, candidate computers,
+auth/session renewal, vmctl, gateway/provider calls, Qdrant, publication/export,
+promotion/rollback, and run acceptance.
+
+Conjecture delta: retaining one previous frontend asset graph is sufficient for
+single-deploy stale chunk references such as `BrowserApp-BACPaCdk.js` to resolve
+on Node B while new sessions keep receiving the current no-store SPA shell.
+
+Heresy delta: `repaired` for the stale deployed frontend chunk problem at the
+route/product-evidence level.
+
+Rollback refs: revert `b0f646d41301a57daae334264ca67e20d4aa2218` to restore
+`/assets/*` serving only from `frontend-current`; normal Node B deployment can
+then redeploy the prior Caddy config. The docs-only evidence commits can be
+reverted independently.
+
+Evidence boundary:
+
+- This proves Node B serves the exact old chunk URL that previously failed and
+  that authenticated Universal Wire source opening works on the deployed build.
+- This was not a pure preserved-tab-across-deploy experiment. During Chrome QA
+  setup, automation navigated the tab to `https://choir.news/`, so the browser
+  held a current shell by the time source buttons were clicked.
+- The Chrome extension automation path was blocked by another extension UI for
+  console-log extraction; visible product UI and Computer Use accessibility
+  evidence showed successful Source Viewer and Web Lens opens with no in-app
+  stale import error surfaced.
+- This does not claim frontend recovery after multiple skipped releases, broken
+  chunk graphs older than one previous release, publication/export, native
+  Texture body citations, provider/search freshness, Qdrant projection, run
+  acceptance, promotion-level evidence, or rollback execution.
+
+Open edge: continue to the next O4 realism axis only after deciding whether to
+exercise a deliberately preserved tab across a future frontend-changing deploy.
+Broader remaining work remains native Texture citation carry-forward,
+publication/export, Qdrant projection, provider/search realism, run acceptance,
+promotion/rollback, and O5-O8 settlement.
