@@ -5402,3 +5402,51 @@ run-acceptance claim.
 Open edge: choose the next O4 realism axis for deployed/live source artifact
 proof or staging News benchmark evidence, preserving the accepted local
 source/citation proof boundaries.
+
+## 2026-06-26 - O4 Phase 11 Deployed/Live Source Proof Worker Launch
+
+Claim: O4 Phase 11 has been launched to identify the smallest admissible
+deployed/live source artifact proof or precise blocker for the remaining O4
+source/citation checklist edge. This is worker launch/worktree identity only,
+not worker evidence, verifier acceptance, root incorporation, or checklist
+descent.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item
+`O4-phase11-deployed-live-source-artifact-proof-or-blocker`.
+
+Expected Delta V: 0. Launching the worker does not close the deployed/live
+source artifact proof gap.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:d32abcad-6c68-4898-9f1b-f563a0abaa55`.
+- Materialized worker worktree:
+  `/Users/wiz/.codex/worktrees/d581/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase11-live-source-proof` at
+  `b13ba881 record O4 reader body proof acceptance`.
+- Thread lookup:
+  `list_threads` search for the work item and pending handle returned no
+  readable thread yet.
+- Worker objective:
+  inventory accepted local O4 source/citation evidence, inspect existing
+  staging/deployed acceptance paths, determine whether a safe read-only
+  `https://choir.news` proof exists through public product routes, or return
+  the smallest precise blocker. The worker is not authorized to push, deploy,
+  mutate staging, write run-acceptance records, or claim staging acceptance.
+
+Evidence boundary: worker launch/worktree identity only. No readable worker
+thread yet, no worker progress/final report, no candidate commit, no verifier,
+no root incorporation, push, PR, CI, deploy, staging product acceptance,
+deployed/live source artifact proof, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: resolve pending handle
+`local:d32abcad-6c68-4898-9f1b-f563a0abaa55` into a readable worker thread,
+title and pin it, inspect starting status, then wait for a no-code proof,
+candidate, or precise blocker callback.
