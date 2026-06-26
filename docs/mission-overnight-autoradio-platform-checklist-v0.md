@@ -1270,7 +1270,12 @@ while the product route reads the `universal-wire-platform/platform` VM graph.
 Remaining V is 31 until the sourcecycled-to-public-platform graph write path is
 repaired and authenticated Chrome/Playwright proof can observe an existing
 source-backed artifact and verify Source Viewer default plus explicit Web Lens
-opening on `https://choir.news`.
+opening on `https://choir.news`. The attempted platform-runtime projection
+repair (`2aba718f`) and first deploy-filter repair (`98773b68`) both passed CI
+test/build gates but failed Node B deploy packaging; the latest recorded
+blocker is the sandbox package-specific vendor closure omitting
+`golang.org/x/net/html/charset` after `internal/sources` entered the filtered
+sandbox build.
 
 ## Suggested Goal String
 

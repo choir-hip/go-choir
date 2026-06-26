@@ -6278,3 +6278,42 @@ run acceptance, promotion, or rollback proof is claimed for `2aba718f`.
 Open edge: update the Nix service source filters for sandbox, gateway, and
 sourcecycled as needed so the runtime graph projection packages are present in
 filtered builds, then rerun CI/deploy.
+
+## 2026-06-26 - O4 Runtime Projection Vendor Hash Gap Documented
+
+Claim: The first deploy-filter repair included the new internal packages, but
+staging still could not build the sandbox package because adding
+`internal/sources` to the filtered sandbox source also expanded the package's
+external module closure. The sandbox package-specific vendor hash still
+described the old closure and omitted `golang.org/x/net/html/charset`.
+
+Move: watched CI run `28258468120` for pushed repair commit `98773b68`. All Go
+test shards, vet/build, docs, frontend, and TLA jobs passed, then `Deploy to
+Staging (Node B)` failed during the host NixOS closure build.
+
+Expected Delta V: 0 for deploy failure documentation. Actual Delta V: 0.
+Current V remains 31.
+
+Receipts:
+
+- Deploy-filter repair commit under deploy:
+  `98773b68 include sourcegraph in service source filters`.
+- Passing gates in CI run `28258468120`: Go vet/build, non-runtime Go tests,
+  integration-tagged smoke, runtime shards 0-3, Docs Truth Check, Build
+  Frontend, TLA+ model check, and deploy impact detection.
+- Deploy failure:
+  Node B deploy job `83728235536` failed while building the host NixOS closure.
+- Error:
+  sandbox package build failed under `-mod=vendor` with
+  `internal/sources/rss.go:16:2: cannot find module providing package golang.org/x/net/html/charset`.
+
+Mutation class / protected surfaces: green documentation for a yellow/orange
+deployment packaging problem. No behavior changed in this move.
+
+Evidence boundary: this records a deploy build failure, not product behavior.
+No staging identity, browser proof, source-opening proof, publication/export,
+run acceptance, promotion, or rollback proof is claimed for `98773b68`.
+
+Open edge: update the affected package-specific Nix vendor hash or package
+dependency closure so filtered sandbox builds include the external
+`golang.org/x/net/html/charset` dependency, then rerun CI/deploy.
