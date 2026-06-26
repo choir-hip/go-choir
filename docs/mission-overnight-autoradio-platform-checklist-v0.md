@@ -967,10 +967,24 @@ authority was granted on 2026-06-26 and orchestration pushed
 passed. Failure: the remote NixOS host closure build for `cmd/sandbox` cannot
 resolve `github.com/yusefmosiah/go-choir/internal/objectgraph` under
 `-mod=vendor`, so staging remains on deployed commit
-`06e3225f02f60f113340309a2766c5face134395`. Next move is to repair the Nix
-package/source/vendor boundary that excludes `internal/objectgraph` from the
-sandbox host build, then push a fix to `origin/main` and rerun CI/deploy before
-attempting authenticated staging QA. O4
+`06e3225f02f60f113340309a2766c5face134395`. Root documented that problem in
+`c47afcbb document O4 staging deploy failure`, repaired the Nix service package
+source lists in `6a203e54 include objectgraph in service package sources`, and
+pushed `6a203e549d9adf6cb301e1ac74cc9b1bdd77e943` to `origin/main`. CI run
+`28247864701` passed all jobs, including `Deploy to Staging (Node B)`.
+`https://choir.news/health` reports both proxy and sandbox build/deployed
+commit `6a203e549d9adf6cb301e1ac74cc9b1bdd77e943`, deployed at
+`2026-06-26T15:31:51Z`. Authenticated Chrome QA could not complete the O4
+source-opening proof because the Chrome profile opened Choir as a public
+preview rather than an authenticated computer: `/auth/session` state presented
+the signed-out desktop, `/api/universal-wire/stories` returned 401 when called
+without cookies, the live Universal Wire app opened with
+`data-universal-wire-data-source="universal-wire-texture-index"`, 0 articles,
+and no source-open actions, and the normal Desk sign-in control opened a
+passkey modal requiring account email and local passkey approval. Next move is
+to complete passkey login in Chrome or provide an authenticated Playwright
+storage state, then rerun the smallest read-only staging source-opening proof
+against an existing source-backed artifact. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
@@ -1200,9 +1214,10 @@ benchmark.
 settlement: not settled. Full settlement still requires thread-native
 orchestration receipts, independent verifier verdicts, landed code/docs where
 behavior changed, CI, deploy identity, and staging/product acceptance for any
-staging claim. Current active blocker is the staging deploy failure in CI run
-`28247304935`; remaining V is 31 until deploy identity and deployed/live O4
-source-opening proof are established.
+staging claim. Staging now deploys `6a203e54` successfully, but remaining V is
+31 until authenticated Chrome/Playwright proof can observe an existing
+source-backed artifact and verify Source Viewer default plus explicit Web Lens
+opening on `https://choir.news`.
 
 ## Suggested Goal String
 

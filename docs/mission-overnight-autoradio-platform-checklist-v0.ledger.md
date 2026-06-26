@@ -5831,3 +5831,83 @@ Open edge: repair the Nix package/source/vendor boundary that leaves
 `internal/objectgraph` unavailable to the `cmd/sandbox` host build under
 `-mod=vendor`, push the repair to `origin/main`, rerun CI/deploy, verify staging
 commit identity, then run authenticated source-opening QA in logged-in Chrome.
+
+## 2026-06-26 - O4 Deploy Repaired, Authenticated QA Blocked At Passkey
+
+Claim: The O4 handoff line is now deployed to staging, but the remaining
+deployed/live source-opening acceptance is still open because the available
+Chrome session is not authenticated to Choir and the live public Universal Wire
+surface has no source-backed article to exercise.
+
+Move: repaired the service package source filter so Node B can build services
+that import runtime-owned objectgraph code, pushed the repair to `origin/main`,
+monitored CI/deploy to success, verified staging commit identity, then attempted
+Chrome-based product QA through the normal UI and public APIs.
+
+Expected Delta V: 1 if deploy identity plus authenticated source-opening QA
+proved Source Viewer default and explicit Web Lens opening on staging.
+
+Actual Delta V: 0. Current V remains 31 because deploy is repaired but the
+authenticated source-opening proof did not run.
+
+Receipts:
+
+- Problem documentation commit before fix:
+  `c47afcbb document O4 staging deploy failure`.
+- Repair commit:
+  `6a203e54 include objectgraph in service package sources`.
+- Repair content:
+  `flake.nix` now includes `internal/objectgraph` in the service source lists
+  for `gateway`, `sourcecycled`, and `sandbox`, matching their runtime import
+  closure.
+- Push:
+  `6a203e549d9adf6cb301e1ac74cc9b1bdd77e943` pushed to `origin/main`.
+- CI/deploy:
+  GitHub Actions CI run `28247864701` completed successfully. Passing jobs:
+  docs truth check, TLA+ model check, Go vet/build, deploy-impact detection,
+  Go non-runtime tests, integration-tagged smoke, runtime shards 0-3, frontend
+  build, aggregate Go vet/test/build, and `Deploy to Staging (Node B)`.
+- Staging identity:
+  `https://choir.news/health` reported `status: ok`, upstream `ok`, and both
+  proxy and sandbox `commit`/`deployed_commit`
+  `6a203e549d9adf6cb301e1ac74cc9b1bdd77e943`, deployed at
+  `2026-06-26T15:31:51Z`.
+- Local repair checks:
+  `git diff --check` passed and `nix flake check --no-build` passed. Local
+  explicit Linux package builds could not run on this aarch64-darwin host
+  without an x86_64-linux builder, and local `nix develop -c go build
+  ./cmd/sandbox ./cmd/sourcecycled ./cmd/gateway` was blocked by host disk
+  exhaustion (`No space left on device`), not by the original missing
+  `internal/objectgraph` package.
+- Chrome QA:
+  Chrome extension control connected to the user's Chrome profile. Opening
+  `https://choir.news/` showed the public preview desktop with "Local preview -
+  sign in to save", not an authenticated durable computer.
+- Public API boundary:
+  unauthenticated `GET /api/universal-wire/stories` returned 401.
+- Product UI boundary:
+  Universal Wire opened on staging with
+  `data-universal-wire-data-source="universal-wire-texture-index"`, 0 articles,
+  empty state "No Wire edition articles yet", and no source action controls to
+  click.
+- Auth boundary:
+  opening Desk -> Sign in displayed the normal passkey auth overlay. Completing
+  it requires the account email and local passkey approval, so the agent did
+  not synthesize or bypass authentication.
+
+Mutation class / protected surfaces: deploy repair was behavior-changing for
+staging build packaging and touched the deploy readiness path through
+`flake.nix`; no Texture canonical writes, source ingestion, provider/gateway,
+auth/session implementation, Qdrant, publication/export, promotion/rollback, or
+run-acceptance surface was changed. This ledger entry is green documentation.
+
+Evidence boundary: staging deploy identity is claimed for `6a203e54`; O4
+source-opening product acceptance is not claimed. No authenticated API proof,
+source click, publication/export, run-acceptance record, promotion, or rollback
+was performed.
+
+Open edge: complete passkey login in Chrome or provide authenticated Playwright
+storage state, then run the smallest read-only staging proof against an
+existing source-backed artifact that has source-open controls. The proof must
+show Source Viewer/reader artifact opening by default and Web Lens only through
+an explicit live/original action.
