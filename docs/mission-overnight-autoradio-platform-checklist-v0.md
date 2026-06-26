@@ -101,16 +101,16 @@ Goal: make the existing salvageable work durable before broad construction.
 
 Checklist:
 
-- [ ] Record current main SHA and clean/dirty status.
-- [ ] Inventory all Codex/Cascade worktrees.
-- [ ] Mark the email-freeze worktrees superseded by main.
-- [ ] Preserve object-service prototype work before any cleanup.
-- [ ] Preserve Qdrant pipeline prototype work before any cleanup.
-- [ ] Preserve source-entity migration design state.
-- [ ] Preserve Universal Wire diagnosis state.
-- [ ] Extract PPTX prototype learning and mark prototype code disposable unless
+- [x] Record current main SHA and clean/dirty status.
+- [x] Inventory all Codex/Cascade worktrees.
+- [x] Mark the email-freeze worktrees superseded by main.
+- [x] Preserve object-service prototype work before any cleanup.
+- [x] Preserve Qdrant pipeline prototype work before any cleanup.
+- [x] Preserve source-entity migration design state.
+- [x] Preserve Universal Wire diagnosis state.
+- [x] Extract PPTX prototype learning and mark prototype code disposable unless
   revived by a later mission.
-- [ ] Record recovery handles for any stash, branch, commit, or thread.
+- [x] Record recovery handles for any stash, branch, commit, or thread.
 
 Evidence: `git worktree list --porcelain`, `git status --short` per worktree,
 branch/commit/stash refs, and a ledger entry naming intentional source,
@@ -315,11 +315,13 @@ thread messages resumable; use Codex thread tools for independent worker and
 verifier evidence when available. Domain ramp: docs/checkpoint -> branch-level
 tests -> local focused proof -> CI/deploy -> staging product acceptance.
 
-variant (ranking function) V: 67 total obligations = 8 WIP-preservation
+variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 67. Last Delta V: initial.
++ 8 Autoradio/Pipecat obligations. Current value: 59. Last Delta V: 9 for O0
+inventory verification and preservation handles. Variant total corrected from
+67 to 68 because O0 contains nine checklist obligations.
 
 budget: overnight run, target 8-12 hours wall-clock, with orchestration
 checkpoints at least every major work item and before any behavior-changing
@@ -364,15 +366,33 @@ Codex thread primitives; this update confirms the current Codex app surface can
 load `list_projects`, `create_thread`, `read_thread`, `list_threads`,
 `send_message_to_thread`, `handoff_thread`, `get_handoff_status`, and thread
 title/pin/archive controls. Remaining edge: the overnight runner must still
-create actual worker/verifier threads and record their ids, verdicts, and
-handoff status where relevant before claiming thread-native settlement.
+use actual worker/verifier verdicts as evidence before claiming thread-native
+settlement. O0 worker thread: `019f0270-aad3-7001-a6df-d6bc21aec9ab`
+(`O0 worker - Autoradio WIP inventory`). O0 verifier thread:
+`019f0271-02d9-7391-a564-3ffc2dfce2cd` (`O0 verifier - Autoradio WIP
+inventory`). Both were created project-scoped against `/Users/wiz/go-choir`,
+titled, and pinned on 2026-06-26. The verifier returned `blocked` because the
+worker thread was still `inProgress` and had not emitted its required final O0
+report; the verifier also observed that orchestration edits changed the main
+worktree dirty status during verification, so the worker must refresh dirty
+status before finalizing. After worker refresh, the verifier returned `accept`:
+root dirty state matched durable mission docs only, clean Codex/email-freeze
+heads were contained in `main`, and the four Cascade branch heads were real
+recovery handles not ancestors of `main`. O0 preservation commits created:
+Universal Wire diagnosis `a246ab04` on
+`preserve/o0-universal-wire-diagnosis-2026-06-26`; source-entity migration
+`7a355806` on `preserve/o0-source-entity-migration-2026-06-26`; objectgraph
+prototype `b6b45b60` on `preserve/o0-objectgraph-prototype-2026-06-26`;
+Qdrant prototype `4c1b28be` on `preserve/o0-qdrant-prototype-2026-06-26`;
+PPTX learning/prototype `4a687522` on
+`preserve/o0-pptx-learning-2026-06-26`; docs-checker cleanup `238c7ce2` on
+`preserve/o0-docs-checker-cleanup-2026-06-26`. O0 is complete once this
+orchestration paradoc/ledger update is preserved.
 
-next move: In the orchestration thread, call `list_projects`, create a
-project-scoped O0 inventory/preservation worker thread, create an independent
-read-only verifier thread, then record both thread ids and callback
-instructions in the ledger. If thread tools are unavailable in a later
-execution environment, record a capability blocker and produce a single-thread
-preservation checkpoint only.
+next move: Preserve this orchestration paradoc/ledger on
+`preserve/o0-autoradio-mission-state-2026-06-26`, then start O1 by creating an
+objectgraph implementation worker thread and an independent verifier thread
+with O1's mutation-class/protected-surface evidence bounds.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
