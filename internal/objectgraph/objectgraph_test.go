@@ -167,6 +167,150 @@ func TestSQLiteStoreObjectsAndEdges(t *testing.T) {
 	}
 }
 
+func TestCreateWebCaptureUsesTypedMetadataAndDeterministicIdentity(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	svc := NewService(Config{Memory: store, SQLite: store})
+	defer svc.Close()
+
+	req := CreateWebCaptureRequest{
+		OwnerID:             "user:alice",
+		ComputerID:          "computer:local",
+		URL:                 "https://example.com/story?utm_source=wire#section",
+		CanonicalURL:        "https://example.com/story",
+		Title:               "Example story",
+		FetchedAt:           time.Date(2026, 6, 26, 10, 11, 12, 0, time.FixedZone("offset", -4*60*60)),
+		ContentBlobID:       "blob:raw-html",
+		ExtractedTextBlobID: "blob:extracted-text",
+		EmbeddingModel:      "test-embed",
+		EmbeddingVersion:    "v1",
+		ExtractedText:       []byte("Durable extracted text for News indexing."),
+		Now:                 time.Unix(20, 0),
+	}
+	first, err := svc.CreateWebCapture(ctx, req)
+	if err != nil {
+		t.Fatalf("CreateWebCapture() error = %v", err)
+	}
+	second, err := svc.CreateWebCapture(ctx, req)
+	if err != nil {
+		t.Fatalf("CreateWebCapture() second error = %v", err)
+	}
+	if first.CanonicalID != second.CanonicalID {
+		t.Fatalf("web capture canonical id changed for same capture: %s != %s", first.CanonicalID, second.CanonicalID)
+	}
+	if first.ObjectKind != WebCaptureObjectKind || first.OwnerID != "user:alice" || string(first.Body) != string(req.ExtractedText) {
+		t.Fatalf("web capture object lost graph fields: %#v", first)
+	}
+	metadata, err := WebCaptureMetadataFromObject(first)
+	if err != nil {
+		t.Fatalf("WebCaptureMetadataFromObject() error = %v", err)
+	}
+	if metadata.SchemaVersion != WebCaptureSchemaVersion ||
+		metadata.URL != "https://example.com/story?utm_source=wire" ||
+		metadata.CanonicalURL != "https://example.com/story" ||
+		metadata.FetchedAt != "2026-06-26T14:11:12Z" ||
+		metadata.ContentBlobID != "blob:raw-html" ||
+		metadata.ExtractedTextBlobID != "blob:extracted-text" {
+		t.Fatalf("unexpected metadata: %#v", metadata)
+	}
+}
+
+func TestCreateWebCaptureRejectsIncompleteMetadata(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	svc := NewService(Config{Memory: store, SQLite: store})
+	defer svc.Close()
+
+	_, err := svc.CreateWebCapture(ctx, CreateWebCaptureRequest{
+		OwnerID:             "user:alice",
+		URL:                 "https://example.com/story",
+		FetchedAt:           time.Unix(20, 0),
+		ExtractedTextBlobID: "blob:extracted-text",
+	})
+	if err == nil || !strings.Contains(err.Error(), "content_blob_id is required") {
+		t.Fatalf("CreateWebCapture() error = %v, want missing content_blob_id", err)
+	}
+
+	_, err = svc.CreateWebCapture(ctx, CreateWebCaptureRequest{
+		OwnerID:             "user:alice",
+		URL:                 "ftp://example.com/story",
+		FetchedAt:           time.Unix(20, 0),
+		ContentBlobID:       "blob:raw-html",
+		ExtractedTextBlobID: "blob:extracted-text",
+	})
+	if err == nil || !strings.Contains(err.Error(), "url must use http or https") {
+		t.Fatalf("CreateWebCapture() error = %v, want URL scheme validation", err)
+	}
+}
+
+func TestWebCapturePersistsWithCapturedFromEdge(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "objectgraph.db")
+	store, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore() error = %v", err)
+	}
+	svc := NewService(Config{SQLite: store})
+
+	source, err := svc.CreateObject(ctx, CreateObjectRequest{
+		Kind:    "choir.source_entity",
+		OwnerID: "universal-wire-platform",
+		Metadata: map[string]any{
+			"schema_version": "choir.source_entity.v1",
+			"source_kind":    "web_url",
+			"target":         map[string]any{"kind": "url", "identity": "https://example.com/story"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateObject(source_entity) error = %v", err)
+	}
+	capture, err := svc.CreateWebCapture(ctx, CreateWebCaptureRequest{
+		OwnerID:             "universal-wire-platform",
+		URL:                 "https://example.com/story",
+		Title:               "Example story",
+		FetchedAt:           time.Unix(30, 0),
+		ContentBlobID:       "blob:raw-html",
+		ExtractedTextBlobID: "blob:extracted-text",
+		ExtractedText:       []byte("A capture body that a later feed query can project."),
+	})
+	if err != nil {
+		t.Fatalf("CreateWebCapture() error = %v", err)
+	}
+	edge, err := svc.PutEdge(ctx, capture.CanonicalID, source.CanonicalID, "captured_from", map[string]any{"relation": "original_web_source"})
+	if err != nil {
+		t.Fatalf("PutEdge(captured_from) error = %v", err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	reopenedStore, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("reopen SQLite store: %v", err)
+	}
+	reopenedSvc := NewService(Config{SQLite: reopenedStore})
+	defer reopenedSvc.Close()
+
+	got, err := reopenedSvc.GetObject(ctx, capture.CanonicalID)
+	if err != nil {
+		t.Fatalf("GetObject(web_capture) after reopen error = %v", err)
+	}
+	metadata, err := WebCaptureMetadataFromObject(got)
+	if err != nil {
+		t.Fatalf("WebCaptureMetadataFromObject() after reopen error = %v", err)
+	}
+	if metadata.CanonicalURL != "https://example.com/story" || string(got.Body) != string(capture.Body) {
+		t.Fatalf("reopened capture = metadata %#v body %q", metadata, got.Body)
+	}
+	edges, err := reopenedSvc.ListEdges(ctx, EdgeFilter{FromID: capture.CanonicalID, Kind: "captured_from"})
+	if err != nil {
+		t.Fatalf("ListEdges(captured_from) after reopen error = %v", err)
+	}
+	if len(edges) != 1 || edges[0].EdgeID != edge.EdgeID || edges[0].ToID != source.CanonicalID {
+		t.Fatalf("edges after reopen = %#v, want captured_from %s", edges, source.CanonicalID)
+	}
+}
+
 func TestSQLiteStoreReopenPreservesObjectsAndEdges(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "durable-objectgraph.db")
