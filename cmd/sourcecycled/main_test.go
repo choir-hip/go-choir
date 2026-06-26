@@ -13,10 +13,16 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	runtimepkg "github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sources"
+	storepkg "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestUniversalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.T) {
@@ -102,9 +108,9 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 	t.Cleanup(func() { sourcefetch.SetAllowPrivateNetworkForTests(previous) })
 	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", "")
 	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
-	t.Setenv("RUNTIME_STORE_PATH", "")
-	graphPath := filepath.Join(t.TempDir(), "runtime.objectgraph.db")
-	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_DB_PATH", graphPath)
+	runtimeStorePath := filepath.Join(t.TempDir(), "runtime-store.db")
+	graphPath := filepath.Join(filepath.Dir(runtimeStorePath), filepath.Base(runtimeStorePath)+".objectgraph.db")
+	t.Setenv("RUNTIME_STORE_PATH", runtimeStorePath)
 	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID", "universal-wire-platform")
 	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "computer-universal-wire-platform")
 
@@ -145,6 +151,9 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 	if err := store.SaveSources(registry); err != nil {
 		t.Fatalf("save sources: %v", err)
 	}
+	if got := sourceServiceObjectGraphDBPath(); got != graphPath {
+		t.Fatalf("sourcecycled objectgraph path = %q, want runtime-derived path %q", got, graphPath)
+	}
 	engine = nil
 	t.Cleanup(func() { engine = nil })
 
@@ -182,6 +191,56 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 	}
 	if len(edges) != 1 {
 		t.Fatalf("captured_from edges = %+v, want one source item edge", edges)
+	}
+
+	runtimeStore, err := storepkg.Open(runtimeStorePath)
+	if err != nil {
+		t.Fatalf("open runtime store: %v", err)
+	}
+	rt := runtimepkg.New(runtimepkg.Config{
+		StorePath:           runtimeStorePath,
+		ProviderTimeout:     time.Second,
+		SupervisionInterval: time.Hour,
+	}, runtimeStore, events.NewEventBus(), runtimepkg.NewStubProvider(0))
+	handler := runtimepkg.NewAPIHandler(rt)
+	api := server.NewServer("sourcecycled-wire-proof", "0")
+	runtimepkg.RegisterRoutes(api, handler)
+	req := httptest.NewRequest(http.MethodGet, "/api/universal-wire/stories", nil)
+	req.Header.Set("X-Authenticated-User", "user-universal-wire")
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
+	rt.Stop()
+	_ = runtimeStore.Close()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var wireResp struct {
+		Stories []types.WireStory `json:"stories"`
+		Source  string            `json:"source"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wireResp); err != nil {
+		t.Fatalf("decode Universal Wire stories response: %v", err)
+	}
+	if wireResp.Source != "universal-wire-web-capture-graph" {
+		t.Fatalf("Universal Wire source = %q, want graph capture fallback", wireResp.Source)
+	}
+	if len(wireResp.Stories) != 1 {
+		t.Fatalf("Universal Wire stories = %d, want one graph-backed sourcecycled story: %+v", len(wireResp.Stories), wireResp.Stories)
+	}
+	story := wireResp.Stories[0]
+	if story.Headline != "Graph ingest story" ||
+		story.OwnerID != "universal-wire-platform" ||
+		story.SourceState != "objectgraph-web-capture" ||
+		!strings.Contains(story.Projections["wire-style"], "Sourcecycled persisted this feed item") {
+		t.Fatalf("Universal Wire story did not read the sourcecycled graph capture: %+v", story)
+	}
+	if len(story.Manifest.Lead) != 1 ||
+		story.Manifest.Lead[0].ObjectKind != string(objectgraph.WebCaptureObjectKind) ||
+		story.Manifest.Lead[0].CanonicalID != captures[0].CanonicalID ||
+		story.Manifest.Lead[0].CanonicalURL != "https://example.com/wire-graph-1" ||
+		story.Manifest.Lead[0].OpenSurface != sourcecontract.OpenSurfaceSource ||
+		story.Manifest.Lead[0].LiveOpenSurface != sourcecontract.OpenSurfaceWebLens {
+		t.Fatalf("Universal Wire story manifest did not preserve configured graph identity: %+v", story.Manifest)
 	}
 }
 
