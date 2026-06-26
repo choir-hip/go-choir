@@ -2473,3 +2473,63 @@ Open edge: read worker thread
 `019f036b-3492-7213-b261-00daeee6445e` after it completes. If it has a final
 report, record the report and create an independent verifier thread before
 incorporating any O4 Phase 3 commits.
+
+## 2026-06-26 - O4 Phase 3 Worker Completed, Verifier Pending
+
+Claim: O4 Phase 3 has a completed worker candidate for graph-backed Universal
+Wire source identity carry-forward, but it is not accepted or incorporated until
+an independent verifier reviews it.
+
+Move: read the completed worker thread final report through Codex thread tools,
+inspect the worker branch metadata, and update Parallax State so orchestration
+can launch a verifier against exact commits.
+
+Expected Delta V: 0. A worker final report provides candidate evidence, not an
+accepted proof.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Worker thread:
+  `019f036b-3492-7213-b261-00daeee6445e`
+  (`O4 worker - Universal Wire Source Ref Citations`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/4aec/go-choir`.
+- Worker branch:
+  `codex/o4-phase3-universal-wire-source-ref-citations`.
+- Worker commits:
+  `cb461bb880c63a10dedc7fcfbd55d49cea9ee526 checkpoint O4 wire source identity gap`;
+  `5b6086e1d42a990dc9baf1aad71cebdd6fcb5797 carry Wire web capture source identity`.
+- Changed files:
+  `docs/o4-universal-wire-source-ref-carry-forward-checkpoint-2026-06-26.md`;
+  `internal/types/wire.go`;
+  `internal/runtime/universal_wire.go`;
+  `internal/runtime/universal_wire_test.go`.
+- Worker-reported behavior:
+  graph-backed `choir.web_capture` Universal Wire fallback cards carry explicit
+  manifest source identity: object kind, canonical id, optional version id,
+  content hash, `web_source`/`web_url`, default Source Viewer open surface,
+  explicit Web Lens alternate, and reader snapshot readiness. The route does
+  not mint or claim a native Texture `source_ref`.
+- Worker-reported checks passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
+  `nix develop -c go test ./internal/objectgraph -count=1`;
+  `git diff --check 03ca986d..HEAD`;
+  `git show --check --oneline HEAD`;
+  `git show --check --oneline HEAD~1`;
+  `git status --short --ignored` produced no output.
+
+Evidence boundary: worker-local branch-level focused backend/API DTO proof only.
+No independent verifier verdict, root incorporation, frontend UI opening proof,
+staging, deploy, sourcecycled ingestion, Texture publication, native body
+`source_ref` rendering for capture cards, auth/session, provider, promotion,
+rollback, or run-acceptance claim.
+
+Residual risks: the candidate is a DTO source-identity bridge for fallback
+capture cards, not a production News pipeline and not a sourcecycled/Texture
+citation pipeline. It still needs independent review before incorporation, then
+future UI/browser source-opening proof if accepted.
+
+Open edge: create an independent verifier thread for worker commits `cb461bb8`
+and `5b6086e1`; only incorporate after an `accept` verdict.

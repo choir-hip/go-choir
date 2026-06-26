@@ -368,13 +368,16 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 2 verifier acceptance and root incorporation. O4 Phase 1 closed the first
+Phase 3 worker completion before verifier review. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
 close the broader News/Wire feed-from-graph-and-source-refs obligation because
 sourcecycled ingestion, source_ref citation carry-forward, browser rendering,
-staging, deploy, and product acceptance remain open.
+staging, deploy, and product acceptance remain open. O4 Phase 3 worker output
+adds an unverified additive DTO source-identity carry-forward slice for graph
+capture cards; it is not incorporated into root yet and does not claim native
+Texture `source_ref`, frontend opening, or staging proof.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -755,15 +758,23 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: choose the next bounded O4 worker. The highest-value next slice is
-graph/source-ref citation carry-forward for Universal Wire cards or a
-sourcecycled-to-`choir.web_capture` ingestion seam, while preserving the accepted
-empty-state and Texture-priority behavior. Use Problem Documentation First for
-any newly discovered behavior gap. O4 Phase 3 worker thread
-`019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire Source Ref
-Citations`) has been launched, titled, and pinned from pending worktree handle
-`local:0aa9d499-4306-40ff-8c74-9dc4d1c28513` in
-`/Users/wiz/.codex/worktrees/4aec/go-choir`; it is active.
+next move: launch an independent verifier thread for O4 Phase 3 worker commits
+`cb461bb8 checkpoint O4 wire source identity gap` and `5b6086e1 carry Wire web
+capture source identity` before any root incorporation. O4 Phase 3 worker
+thread `019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire
+Source Ref Citations`) completed on branch
+`codex/o4-phase3-universal-wire-source-ref-citations` in
+`/Users/wiz/.codex/worktrees/4aec/go-choir` at
+`5b6086e1d42a990dc9baf1aad71cebdd6fcb5797`. The worker reports a checkpoint
+commit first, then an additive Universal Wire DTO slice carrying graph/source
+identity for `choir.web_capture` fallback cards without minting native Texture
+`source_ref` citations. Worker-reported checks passed:
+`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
+`nix develop -c go test ./internal/objectgraph -count=1`;
+`git diff --check 03ca986d..HEAD`; `git show --check --oneline HEAD`; and
+`git show --check --oneline HEAD~1`. Worker status is clean with
+`git status --short --ignored` producing no output. Evidence is still
+worker-local branch proof only.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
