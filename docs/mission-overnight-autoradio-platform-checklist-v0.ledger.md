@@ -6619,3 +6619,82 @@ exercise a deliberately preserved tab across a future frontend-changing deploy.
 Broader remaining work remains native Texture citation carry-forward,
 publication/export, Qdrant projection, provider/search realism, run acceptance,
 promotion/rollback, and O5-O8 settlement.
+
+## 2026-06-26 - O4 Final News Benchmark Verifier Acceptance
+
+Claim: O4 News / Universal Wire can be closed at the graph-backed
+capture-projection News benchmark scope. The remaining O4 checklist obligations
+were (1) deployed/live source or Source Viewer/reader artifact opening and (2)
+an independent verifier thread before claiming the News benchmark.
+
+Move: created independent read-only Codex verifier thread
+`019f0570-cab8-78e1-8dca-2f058ecf7e13` for work item
+`O4-final-news-benchmark-settlement-verifier`. The verifier inspected
+`AGENTS.md`, this paradoc, the latest ledger O4 entries, git state/history,
+staging health, public asset routes, and GitHub Actions metadata. It reported
+`accept` with no blocking findings.
+
+Expected Delta V: 1 for closing the remaining O4 settlement obligation after an
+independent prover accepts the staging evidence boundary. Actual Delta V: 1.
+Current V: 28.
+
+Verifier verdict:
+
+- Findings: no blocking findings.
+- Documentation caveat: before this entry, the O4 checklist still had the
+  source-open and independent-verifier boxes unchecked, and still said
+  deployed/live source artifact proof remained open. The verifier treated the
+  later Parallax State and ledger evidence as the evidence to incorporate.
+- Orchestration may mark both remaining O4 checklist items complete after
+  recording the verifier callback.
+
+Evidence accepted by verifier:
+
+- Source/citation links opening to real source artifacts or Source
+  Viewer/reader artifacts is supported for the deployed graph-backed Universal
+  Wire path by authenticated Chrome QA recorded in the ledger and summarized in
+  the compact Parallax State.
+- The verifier thread itself satisfies the independent-verifier-before-News
+  benchmark obligation.
+- `https://choir.news/health` reported proxy and sandbox `deployed_commit`
+  `b0f646d41301a57daae334264ca67e20d4aa2218`.
+- GitHub Actions CI run `28260381195` and staging deploy job `83734770344` were
+  successful for `b0f646d4`.
+- The exact old failed chunk `/assets/BrowserApp-BACPaCdk.js` returned HTTP 200
+  with immutable cache headers.
+- Unauthenticated `/api/universal-wire/stories` returned 401 as expected, so
+  authenticated story JSON/browser proof was audited from prior recorded Chrome
+  QA rather than personally replayed by the verifier.
+
+Mutation class / protected surfaces: green evidence/checklist documentation.
+This entry changes no runtime behavior. It records acceptance of prior
+orange/red-adjacent runtime/deploy repairs already landed and verified. Excluded
+surfaces remain Texture canonical writes, Trace/evidence, candidate computers,
+auth/session renewal, vmctl, gateway/provider calls, Qdrant, publication/export,
+promotion/rollback, and run acceptance.
+
+Conjecture delta: O4 is no longer the active dependency blocker for the
+Autoradio mission. Universal Wire now works as a scoped News benchmark over
+durable graph-backed `choir.web_capture` / source-entity capture projections on
+staging, with Source Viewer/Web Lens source-opening evidence and deployed commit
+identity.
+
+Heresy delta: `repaired` for the O4 public graph visibility, source-opening,
+and stale frontend chunk blockers at the scoped graph-backed capture-projection
+level.
+
+Evidence boundary and non-claims:
+
+- This is not a native Texture body `source_ref` carry-forward claim.
+- This is not publication/export, Qdrant projection, provider/search freshness,
+  run acceptance, promotion-level evidence, rollback execution, or owner
+  adoption proof.
+- This is not a pure preserved-tab-across-deploy browser experiment beyond the
+  exact previous asset URL resolving after deploy.
+- The verifier did not replay authenticated Chrome QA; it audited the recorded
+  authenticated QA and independently reproduced public health/asset checks.
+
+Open edge: begin O5 Choir-in-Choir self-development from the product path. The
+first O5 move should create or continue a Texture/super mission through the
+prompt-bar/product route, define the candidate evidence contract, and avoid
+Codex-only edits as the primary proof.

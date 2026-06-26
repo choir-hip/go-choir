@@ -280,7 +280,7 @@ Checklist:
   O4 Phase 4 proves a graph-backed capture story card through the public
   `/api/universal-wire/stories` route mock in the authenticated desktop shell,
   with Source Viewer default and explicit Web Lens source opening.
-- [ ] Verify source/citation links open to real source artifacts or Source
+- [x] Verify source/citation links open to real source artifacts or Source
   Viewer/reader artifacts. O4 Phase 4 proves frontend routing for graph-backed
   fallback cards. O4 Phase 9 adds accepted and incorporated branch-level API/UI
   proof that graph-backed capture source handles carry durable reader snapshots
@@ -290,8 +290,15 @@ Checklist:
   and incorporated branch-level browser proof that native Texture graph-wrapper
   `source_ref` opening distinguishes inline citation note text from graph object
   reader body text and opens Source Viewer reader artifact content by default.
-  Deployed/live source artifact proof remains open.
-- [ ] Open independent verifier thread before claiming News benchmark.
+  O4 final staging proof closes this for the graph-backed Universal Wire capture
+  projection scope: authenticated Chrome QA opened a deployed Universal Wire
+  card through Source Viewer/reader artifact and Web Lens reader surfaces.
+- [x] Open independent verifier thread before claiming News benchmark. Final O4
+  settlement verifier thread `019f0570-cab8-78e1-8dca-2f058ecf7e13` returned
+  `accept` for closing the graph-backed capture-projection News benchmark scope,
+  with the boundary that it audited recorded authenticated Chrome QA plus
+  independently reproduced public health/asset checks rather than replaying a
+  fresh authenticated browser session.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty, cited, source-grounded stories from durable graph/source
@@ -410,12 +417,11 @@ product acceptance.
 variant (ranking function) V: 68 total obligations = 9 WIP-preservation + 8
 object graph + 7 Qdrant + 8 source-entity + 8 News/Universal Wire + 7
 self-development + 7 Nucleus + 6 Choir Base + 8 Autoradio/Pipecat obligations.
-Current value: 29. Last Delta V: 1 for `b0f646d4`: Node B now serves
-`/assets/*` from `frontend-current` first and `frontend-previous` second; CI and
-staging deploy passed; health reports `b0f646d4`; the exact formerly failing
-chunk `/assets/BrowserApp-BACPaCdk.js` now returns 200; authenticated Chrome
-shows 12 Universal Wire graph-backed stories, and the first card's `OPEN SOURCE`
-and `WEB LENS` actions open Source Viewer and Web Lens reader surfaces.
+Current value: 28. Last Delta V: 1 for final O4 settlement verifier thread
+`019f0570-cab8-78e1-8dca-2f058ecf7e13`: the verifier accepted closing the
+remaining O4 source-open and independent-News-benchmark obligations at the
+graph-backed capture-projection scope, based on recorded authenticated Chrome QA
+plus independently reproduced public health/asset checks.
 
 budget: Overnight budget is already partially spent; solvency is feasible only
 for bounded O4 follow-through plus explicit open handoff of the broader O5-O8
@@ -449,29 +455,33 @@ the direct old-chunk 200 plus product source-open proof is the accepted evidence
 for this pass.
 
 position / live conjectures / open edges: O0 preservation, O1 objectgraph, O2
-Qdrant derived index, O3 source entity phases, and O4 branch-level graph/source
-proofs are recorded in the ledger with worker/verifier thread ids and accepted
-commits. Staging O4 runtime repair `5b61fdc4fda5376d1fc39b119f12687944d41427`
-made sourcecycled project 3,833 web captures into the public platform VM graph,
-and the active VM returned 12 Universal Wire graph-backed stories. Follow-up
-deploy/static-asset repair `b0f646d41301a57daae334264ca67e20d4aa2218` passed CI
-run `28260381195`, Node B deploy job `83734770344`, and health identity
-`b0f646d4` deployed at `2026-06-26T19:29:51Z`. The deploy smoke verified the
-public frontend asset route, and staging now serves both the current asset and
-the exact old failing chunk `/assets/BrowserApp-BACPaCdk.js` with immutable
-asset headers. Authenticated Chrome as `yusefnathanson@me.com` showed 12
-Universal Wire articles; `OPEN SOURCE` opened a Source Viewer reader artifact
-for `Our 36 favorite gaming deals on Prime Day for Switch, PS5, and Xbox`, and
-`WEB LENS` opened
+Qdrant derived index, O3 source entity phases, and O4 News/Universal Wire are
+recorded in the ledger with worker/verifier thread ids, accepted commits, CI
+receipts, deploy identity, and staging/product evidence. Staging O4 runtime
+repair `5b61fdc4fda5376d1fc39b119f12687944d41427` made sourcecycled project
+3,833 web captures into the public platform VM graph, and the active VM returned
+12 Universal Wire graph-backed stories. Follow-up deploy/static-asset repair
+`b0f646d41301a57daae334264ca67e20d4aa2218` passed CI run `28260381195`, Node B
+deploy job `83734770344`, and health identity `b0f646d4` deployed at
+`2026-06-26T19:29:51Z`. The deploy smoke verified the public frontend asset
+route, and staging serves both the current asset and the exact old failing chunk
+`/assets/BrowserApp-BACPaCdk.js` with immutable asset headers. Authenticated
+Chrome as `yusefnathanson@me.com` showed 12 Universal Wire articles;
+`OPEN SOURCE` opened a Source Viewer reader artifact for `Our 36 favorite gaming
+deals on Prime Day for Switch, PS5, and Xbox`, and `WEB LENS` opened
 `https://www.theverge.com/gadgets/951901/prime-day-video-games-switch-playstation-xbox-pc-deal-sale`
-with a source reader snapshot. Remaining O4/O5+ edges: native Texture body
-`source_ref` citation carry-forward, publication/export, Qdrant projection,
-provider/search realism, run acceptance, promotion/rollback, and broader O5-O8
-settlement.
+with a source reader snapshot. Final O4 verifier thread
+`019f0570-cab8-78e1-8dca-2f058ecf7e13` accepted closure for this
+graph-backed capture-projection News benchmark scope. Non-O4 realism axes remain
+open: native Texture body `source_ref` citation carry-forward,
+publication/export, Qdrant projection, provider/search freshness, run
+acceptance, promotion/rollback, and preserved-tab-across-deploy proof beyond one
+previous asset URL resolving.
 
-next move: record and push this evidence-only docs update, monitor the docs truth
-workflow, then either continue the next bounded O4 realism axis or open handoff
-with remaining V=29 and explicit successor assignments.
+next move: record and push this final O4 evidence-only docs update, monitor the
+docs truth workflow, then begin O5 with a product-path self-development
+checkpoint and thread assignment. The first O5 move must start from prompt
+bar/Texture/super product evidence, not Codex-only edits.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -485,10 +495,9 @@ local/branch graph proofs did not settle O4 until staging auth, deploy identity,
 sourcecycled readback, active platform VM API, and authenticated browser product
 QA all agreed.
 
-settlement: not settled. The O4 public graph visibility blocker and stale-client
-asset-route blocker are repaired for this pass, but this mission remains
-`working` because larger O4/O5-O8 obligations remain open. Exit requires
-`settled`, `open_handoff`,
+settlement: not settled. O4 News/Universal Wire is accepted at the graph-backed
+capture-projection benchmark scope, but this mission remains `working` because
+O5-O8 obligations remain open. Exit requires `settled`, `open_handoff`,
 `blocked`, or `superseded` with remaining V and next assignment explicit.
 
 ## Suggested Goal String
