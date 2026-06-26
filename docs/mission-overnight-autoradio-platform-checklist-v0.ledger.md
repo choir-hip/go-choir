@@ -5318,3 +5318,87 @@ Open edge: wait for verifier thread
 `019f042a-af35-7411-abee-9adf12c2a664` to return verdict on worker commit
 `5cc0457f`; only after `accept` should orchestration consider root
 incorporation and V treatment.
+
+## 2026-06-26 - O4 Phase 10d Reader-Body Proof Accepted And Incorporated
+
+Claim: O4 Phase 10d is accepted and incorporated at branch level for the
+bounded native Texture graph-wrapper Source Viewer reader-body proof. It closes
+the local native Texture `source_ref` reader-body assertion gap, but it does not
+close the broader O4 source/citation checklist item because deployed/live source
+artifact proof remains open.
+
+Move: read verifier thread
+`019f042a-af35-7411-abee-9adf12c2a664`, incorporate accepted worker commit
+`5cc0457f`, rerun root focused and adjacent browser checks, stop services,
+remove generated proof artifacts, and update Parallax State plus the O4
+checklist text.
+
+Expected Delta V: 0. The move closes a named local proof gap but not the
+remaining checklist obligation, because deployed/live source artifact proof is
+still missing.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f0425-84ab-7120-99bc-c068a19227a8`
+  (`O4 worker - Phase 10d Texture Reader Body Proof`).
+- Verifier thread:
+  `019f042a-af35-7411-abee-9adf12c2a664`
+  (`O4 verifier - Phase 10d Texture Reader Body Proof`).
+- Worker commit:
+  `5cc0457f6695f43466b714161a56c86b46ed1e3b`
+  (`Tighten graph wrapper source reader proof`).
+- Root incorporation:
+  `9f54fd5e Tighten graph wrapper source reader proof`.
+- Accepted diff:
+  `frontend/tests/texture-source-entities.spec.js` only. The focused browser
+  test now uses distinct inline `source_ref` selector/note text and graph
+  object reader body text, asserts Source Viewer reader markdown contains the
+  graph body and not the inline quote, and preserves native `source_ref`, Web
+  Lens, legacy `source_entities` absence, and no-synthesis coverage.
+- Verifier verdict:
+  `accept`, no blocking findings. The verifier reran/read governing docs,
+  Parallax State, latest O4 ledger entries, worker diff, `git status
+  --short --ignored`, `git show --check --oneline 5cc0457f`, patch/name-status
+  inspection, `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix
+  develop -c ./start-services.sh`, the exact focused Playwright proof, the
+  adjacent six-test regression filter, service stop, and no-listener checks for
+  `4173`, `8081`, `8082`, and `8083`. The requested base-range SHA
+  `35d0e350181b...` was unavailable in the detached verifier checkout, so the
+  verifier used the commit parent present there and recorded that evidence
+  boundary.
+- Root checks:
+  `git show --check --oneline HEAD` passed;
+  `git diff --check HEAD~1..HEAD` passed;
+  `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  ./start-services.sh` reached `Services started successfully`;
+  `npx playwright test tests/texture-source-entities.spec.js -g "Texture
+  renders and opens graph-wrapper sources when legacy revision source entities
+  are absent" --timeout=120000` passed;
+  `npx playwright test tests/texture-source-entities.spec.js -g "revisions do
+  not synthesize source entities from legacy media refs|revision source
+  entities|Texture renders and opens graph-wrapper sources when legacy revision
+  source entities are absent" --timeout=120000` passed; services were stopped;
+  no listeners remained on `4173`, `8081`, `8082`, or `8083`.
+- Root cleanup:
+  removed generated `frontend/playwright/` and `frontend/test-results/`.
+
+Dirty/generated artifact classification: tracked root status is clean after
+root incorporation. Remaining ignored artifacts are local env/log/dependency
+artifacts: `.DS_Store`, `.direnv/`, `.env`, `.gstack/`, `auth.db`, `auth.log`,
+`doccheck-report.md`, `doccheck.json`, `docs/.DS_Store`,
+`docs/evidence/.DS_Store`, `frontend/frontend.log`, `frontend/node_modules/`,
+`gateway.log`, `proxy`, `proxy.log`, `sandbox`, `sandbox.log`,
+`skills/.DS_Store`, `sourcecycled`, and `vmctl.log`.
+
+Evidence boundary: local branch-level browser test proof, verifier acceptance,
+and root rerun only. No push, PR, CI, deploy, staging product acceptance,
+deployed/live source artifact proof, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: choose the next O4 realism axis for deployed/live source artifact
+proof or staging News benchmark evidence, preserving the accepted local
+source/citation proof boundaries.

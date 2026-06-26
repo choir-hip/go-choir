@@ -285,8 +285,12 @@ Checklist:
   fallback cards. O4 Phase 9 adds accepted and incorporated branch-level API/UI
   proof that graph-backed capture source handles carry durable reader snapshots
   and open Source Viewer/reader artifact text by default while Web Lens remains
-  an explicit live/original action. Native Texture `source_ref` citation
-  carry-forward and deployed/live source artifact proof remain open.
+  an explicit live/original action. O4 Phase 10c repairs the local browser
+  harness needed for native Texture source-ref proof. O4 Phase 10d adds accepted
+  and incorporated branch-level browser proof that native Texture graph-wrapper
+  `source_ref` opening distinguishes inline citation note text from graph object
+  reader body text and opens Source Viewer reader artifact content by default.
+  Deployed/live source artifact proof remains open.
 - [ ] Open independent verifier thread before claiming News benchmark.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
@@ -864,8 +868,8 @@ and `frontend/test-results/` were removed. This repairs the local browser
 harness blocker but does not close V because the later native Texture
 body-`source_ref` assertion-tightening and deployed/staging proof remain open.
 
-O4 Phase 10d native Texture reader-body proof worker completed with a
-test-only candidate and verifier launch is pending.
+O4 Phase 10d native Texture reader-body proof is accepted and incorporated at
+branch level.
 Worktree `create_thread` returned pending handle
 `local:1e43828a-9ce3-4a57-bd83-62a92d90d85d` for work item
 `O4-phase10d-native-texture-source-ref-reader-body-proof`, starting from this
@@ -885,12 +889,22 @@ service stop, and port cleanup passed. Independent verifier launch returned
 pending handle `local:d292cc59-d088-480f-baef-83c5b2dfc12b`, which resolved to
 thread `019f042a-af35-7411-abee-9adf12c2a664`
 (`O4 verifier - Phase 10d Texture Reader Body Proof`) in
-`/Users/wiz/.codex/worktrees/515b/go-choir`; the verifier is active.
+`/Users/wiz/.codex/worktrees/515b/go-choir`; it returned `accept` with no
+blocking findings after patch inspection, focused Playwright proof, adjacent
+six-test regression filter, service stop, and port cleanup. The requested
+base-range SHA was unavailable in the verifier checkout, so it verified against
+the commit parent present there and called that boundary out. Root incorporated
+the worker commit as `9f54fd5e Tighten graph wrapper source reader proof`; root
+checks passed: `git show --check --oneline HEAD`, `git diff --check
+HEAD~1..HEAD`, `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1
+nix develop -c ./start-services.sh`, the exact focused Playwright proof, the
+adjacent six-test regression filter, service stop, and port cleanup. Generated
+`frontend/playwright/` and `frontend/test-results/` were removed. Current V
+remains 31 because deployed/live source artifact proof remains open.
 
-next move: wait for verifier thread
-`019f042a-af35-7411-abee-9adf12c2a664` to return its verdict on worker commit
-`5cc0457f`. Do not incorporate the
-candidate into root or decrement V before independent verifier acceptance. O4
+next move: choose the next O4 realism axis for deployed/live source artifact
+proof or staging News benchmark evidence without weakening the existing local
+source/citation proof boundaries. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
