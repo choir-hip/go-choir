@@ -4025,3 +4025,61 @@ artifact/source-opening proof remain open.
 Open edge: launch the next O4 worker for `Keep empty feed honest but
 diagnostic`, preserving the accepted graph/source-ref feed behavior and avoiding
 any staging or full-News-benchmark claim without deployed evidence.
+
+## 2026-06-26 - O4 Phase 8 Empty Feed Diagnostics Worker Launch
+
+Claim: O4 Phase 8 has a readable implementation worker thread for the remaining
+empty-feed diagnostics obligation. This is worker launch only, not worker
+evidence, verifier acceptance, or root incorporation.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item `O4-phase8-empty-feed-diagnostics`, then
+title/pin the resolved worker thread.
+
+Expected Delta V: 0. Launching a worker does not close the empty-feed
+diagnostics obligation. Potential Delta V is 1 if worker evidence, independent
+verifier acceptance, and root incorporation close `Keep empty feed honest but
+diagnostic`.
+
+Actual Delta V: 0. Current V remains 32.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:ee846dcd-b687-494b-a8e8-0ff98cca2fd6`.
+- Resolved worker thread:
+  `019f03d8-2a15-7a61-ab7f-82ea0213cce2`
+  (`O4 worker - Empty Feed Diagnostics`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/41ed/go-choir`.
+- Starting branch/head:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `8471418c record O4 graph feed acceptance`.
+- Worker objective:
+  close or precisely narrow `Keep empty feed honest but diagnostic` with a
+  branch-level slice. Desired outcome is an honest empty Universal Wire
+  response, plus safe diagnostic context if feasible, when no Texture story and
+  no graph-backed capture candidate exists.
+- Required guardrails:
+  Problem Documentation First for newly discovered behavior/architecture
+  blockers; preserve Texture-edition priority, non-tombstoned graph fallback,
+  Phase 7 `captured_from` source-entity manifest context, source/open identity,
+  Source Viewer/Web Lens policy, and auth behavior; do not synthesize stories,
+  source refs, source entities, publication/export state, sourcecycled success,
+  Qdrant state, provider/search calls, staging evidence, promotion/rollback, or
+  run acceptance.
+- Required final report:
+  thread id if visible, cwd, branch/HEAD, commits, changed files,
+  commands/results, dirty-path classification, evidence boundary/non-claims,
+  residual risks, rollback refs, heresy delta, and verifier-readiness.
+
+Evidence boundary: worker launched/resolved only. No worker commit, no verifier,
+no root incorporation, no push, PR, CI, deploy, staging product acceptance,
+native Texture body `source_ref` citation carry-forward, publication/export,
+Qdrant, provider/gateway, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: read worker thread
+`019f03d8-2a15-7a61-ab7f-82ea0213cce2` when complete. If it returns candidate
+commits, inspect hygiene/readiness and launch an independent verifier before
+any root incorporation.

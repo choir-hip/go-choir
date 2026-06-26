@@ -797,8 +797,17 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: launch an O4 worker for the remaining `Keep empty feed honest but
-diagnostic` obligation. O4 Phase 7 worker thread
+next move: wait for O4 Phase 8 worker thread
+`019f03d8-2a15-7a61-ab7f-82ea0213cce2` (`O4 worker - Empty Feed Diagnostics`)
+in `/Users/wiz/.codex/worktrees/41ed/go-choir`, then read its final report and
+create an independent verifier if it returns candidate commits. The worker was
+launched from orchestration head `8471418c record O4 graph feed acceptance` for
+the remaining `Keep empty feed honest but diagnostic` obligation. It must keep
+empty Universal Wire responses honest, add only safe diagnostic context if
+feasible, preserve accepted O4 graph/source-ref behavior, and avoid fabricating
+stories, source refs, source entities, publication/export state, staging
+evidence, Qdrant state, provider/search calls, or run acceptance. O4 Phase 7
+worker thread
 `019f03c9-2c8f-73b1-bfca-ed7badd4383f` (`O4 worker - Graph Source-Ref Feed`)
 and verifier thread `019f03d1-0071-7371-bdd6-a3bd840c9e76` (`O4 verifier -
 Graph Source-Ref Feed`) accepted worker commits `35420443` and `8a0a69d1`,
