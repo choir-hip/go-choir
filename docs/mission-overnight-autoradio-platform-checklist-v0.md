@@ -576,10 +576,13 @@ source-open/frontend behavior, Qdrant projection, publication/export,
 graph-first enforcement, auth/session, gateway/provider, promotion, deploy, or
 rollback proof exists.
 
-O3 Phase 5 source-open/frontend worker launch is in progress. Worker pending
-worktree handle: `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`. Verifier thread
+O3 Phase 5 source-open/frontend worker has materialized. Worker pending
+worktree handle `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0` resolved to
+thread `019f031a-6008-7c42-a36a-cc3ffebe707c` (`O3 worker - Source Open
+Phase 5`) in `/Users/wiz/.codex/worktrees/1050/go-choir`. Verifier thread
 `019f031a-9eb9-7301-9db8-62bbb84e727a` (`O3 verifier - Source Open Phase 5`)
-has been created and pinned. The bounded slice is
+returned `blocked` before the worker materialized; treat that as stale
+launch-order evidence, not a Phase 5 rejection. The bounded slice is
 `O3-phase5-source-open-frontend-wrappers`: adapt frontend source-open derivation
 so Texture revisions can consume graph-backed `source_entity_objects` and
 `source_refs` when legacy `source_entities` is absent, while preserving
@@ -589,14 +592,13 @@ entities. Excluded surfaces remain O4 News/Universal Wire, Qdrant projection,
 publication/export, auth/session renewal, gateway/provider calls, staging/deploy,
 graph-first enforcement, promotion, and rollback behavior.
 
-next move: resolve the pending worker thread id for
-`local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`, title/pin the worker, and read
-worker/verifier status. If the worker completes, send verifier thread
-`019f031a-9eb9-7301-9db8-62bbb84e727a` the worker commits, tests, dirty-path
-classification, and non-claims. No Phase 5 implementation, acceptance,
-source-open browser proof, O3-complete, main, staging, product, deploy, Qdrant,
-publication/export, auth/session, gateway/provider, graph-first enforcement,
-promotion, or rollback claim exists yet.
+next move: wait for worker thread `019f031a-6008-7c42-a36a-cc3ffebe707c` to
+finish, then send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
+worker commits, tests, dirty-path classification, and non-claims. No Phase 5
+implementation, acceptance, source-open browser proof, O3-complete, main,
+staging, product, deploy, Qdrant, publication/export, auth/session,
+gateway/provider, graph-first enforcement, promotion, or rollback claim exists
+yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

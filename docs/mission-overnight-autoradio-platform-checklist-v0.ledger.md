@@ -1530,3 +1530,43 @@ claim.
 Open edge: resolve worker thread id for pending handle
 `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`, title/pin it, then read worker
 and verifier status.
+
+## 2026-06-26 - O3 Phase 5 Worker Materialized, Verifier Blocked Pending Final Report
+
+Claim: The O3 Phase 5 pending worktree handle has resolved to a live worker
+thread, and the initial verifier `blocked` result is launch-order evidence
+because it was returned before worker final evidence existed.
+
+Move: reconnect the worker through Codex thread tools, title and pin the
+worker, read worker/verifier status, and update the Parallax State.
+
+Expected Delta V: 0 until the worker finishes, verifier returns `accept`, and
+accepted commits are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker pending worktree handle
+  `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0` materialized as thread
+  `019f031a-6008-7c42-a36a-cc3ffebe707c`.
+- Worker title set to `O3 worker - Source Open Phase 5` and pinned.
+- Worker cwd: `/Users/wiz/.codex/worktrees/1050/go-choir`.
+- Worker HEAD when inspected: `1c8cb4b5 record O3 phase4 acceptance`.
+- Worker thread status when inspected: `active`; no final report,
+  implementation commit list, test report, or final dirty-path classification
+  exists yet.
+- Verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` returned `blocked`
+  because the worker had not materialized and no final report/diff/tests were
+  available. That verdict is stale launch-order evidence, not a Phase 5
+  rejection.
+
+Evidence boundary: worker materialization only. No Phase 5 implementation,
+verifier acceptance, root incorporation, source-open browser proof,
+O3-complete, main, staging, product, deploy, Qdrant, publication/export, public
+producer, auth/session, gateway/provider, graph-first enforcement, promotion,
+or rollback claim.
+
+Open edge: wait for worker thread `019f031a-6008-7c42-a36a-cc3ffebe707c` to
+finish, then send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
+worker commits, exact tests, dirty-path classification, and non-claims.
