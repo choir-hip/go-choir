@@ -576,12 +576,27 @@ source-open/frontend behavior, Qdrant projection, publication/export,
 graph-first enforcement, auth/session, gateway/provider, promotion, deploy, or
 rollback proof exists.
 
-next move: Continue O3 with a narrow source-open/frontend resolution through
-the accepted `source_ref` / source wrapper read path, or defer that and launch a
-separate publication/Qdrant read projection slice. The next worker assignment
-must keep the same mutation contract: protected Texture canonical/read DTO
-compatibility, source-open routing, Qdrant source-of-truth boundaries,
-auth/session, gateway/provider, and staging/deploy claims.
+O3 Phase 5 source-open/frontend worker launch is in progress. Worker pending
+worktree handle: `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`. Verifier thread
+`019f031a-9eb9-7301-9db8-62bbb84e727a` (`O3 verifier - Source Open Phase 5`)
+has been created and pinned. The bounded slice is
+`O3-phase5-source-open-frontend-wrappers`: adapt frontend source-open derivation
+so Texture revisions can consume graph-backed `source_entity_objects` and
+`source_refs` when legacy `source_entities` is absent, while preserving
+publication bundle priority, legacy `source_entities` fallback, and the rule
+that legacy `metadata.media_source_refs` are not synthesized into source
+entities. Excluded surfaces remain O4 News/Universal Wire, Qdrant projection,
+publication/export, auth/session renewal, gateway/provider calls, staging/deploy,
+graph-first enforcement, promotion, and rollback behavior.
+
+next move: resolve the pending worker thread id for
+`local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`, title/pin the worker, and read
+worker/verifier status. If the worker completes, send verifier thread
+`019f031a-9eb9-7301-9db8-62bbb84e727a` the worker commits, tests, dirty-path
+classification, and non-claims. No Phase 5 implementation, acceptance,
+source-open browser proof, O3-complete, main, staging, product, deploy, Qdrant,
+publication/export, auth/session, gateway/provider, graph-first enforcement,
+promotion, or rollback claim exists yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

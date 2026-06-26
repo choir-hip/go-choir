@@ -1474,3 +1474,59 @@ graph-first enforcement, promotion, or rollback claim.
 Open edge: choose the next O3 slice: source-open/frontend resolution through the
 accepted `source_ref` / source wrapper read path, or a narrower
 publication/Qdrant read projection slice.
+
+## 2026-06-26 - O3 Phase 5 Source-Open Worker And Verifier Launched
+
+Claim: The next dependency-ordered O3 slice is a narrow source-open/frontend
+consumer pass over the accepted Texture source wrapper read path, not O4 News
+yet.
+
+Move: create a bounded implementation worker in a fresh Codex worktree and a
+separate verifier thread before any Phase 5 landing claim.
+
+Expected Delta V: 0 until the worker finishes, the verifier accepts, and
+accepted commits are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker pending worktree handle:
+  `local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`.
+- Work item id: `O3-phase5-source-open-frontend-wrappers`.
+- Worker assignment: adapt frontend source-open derivation so Texture
+  revisions can consume graph-backed `source_entity_objects` and `source_refs`
+  when legacy `source_entities` is absent.
+- Worker invariants: preserve publication bundle priority, legacy
+  `source_entities` fallback, existing Source Viewer/Web Lens open-surface
+  policy, and the rule that legacy `metadata.media_source_refs` are not
+  synthesized into source entities.
+- Worker mutation class: orange/red-adjacent, bounded to frontend/read DTO
+  behavior.
+- Worker protected surfaces: Texture revision DTO compatibility, source-open
+  routing, Source Viewer/Web Lens distinction, legacy `source_entities`
+  fallback, publication bundle source behavior, Qdrant source-of-truth
+  boundaries, auth/session renewal, gateway/provider calls, staging/deploy
+  claims, and O4 News behavior.
+- Worker admissible evidence: implementation commit(s), focused frontend tests
+  proving wrapper consumption plus publication/legacy/media-ref compatibility,
+  and a clean worktree report.
+- Rollback path: revert Phase 5 implementation commit(s), leaving Phase 4 API
+  wrapper reads intact and legacy frontend reads active.
+- Heresy delta: `discovered` for newly observed source-open wrapper gaps,
+  `repaired` only for the selected frontend read/open derivation path, and
+  `introduced` only if verifier finds a regression.
+- Verifier thread: `019f031a-9eb9-7301-9db8-62bbb84e727a`
+  (`O3 verifier - Source Open Phase 5`), pinned.
+- Verifier authority: read-only review of the worker final report/diff/tests;
+  return `blocked` if the worker thread is unavailable or has no final report.
+
+Evidence boundary: thread launch only. No Phase 5 implementation, verifier
+acceptance, root incorporation, source-open browser proof, O3-complete, main,
+staging, product, deploy, Qdrant, publication/export, public producer,
+auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
+claim.
+
+Open edge: resolve worker thread id for pending handle
+`local:e1f57d79-acef-4354-9dcf-5fd39bb28ec0`, title/pin it, then read worker
+and verifier status.
