@@ -286,3 +286,32 @@ foundation scope.
 Open edge: O2 should begin with Qdrant as a rebuildable derived index over
 objectgraph data, using the branch-level objectgraph API and preserving
 source-of-truth boundaries.
+
+## 2026-06-26 - O2 Worker And Verifier Threads Created
+
+Claim: O2 can begin as a bounded Qdrant derived-index worker/prover pair using
+the accepted objectgraph foundation and preserved Qdrant prototype handle.
+
+Move: construct bounded O2 thread assignments.
+
+Expected Delta V: 0; create the worker/prover substrate for O2 without claiming
+Qdrant progress.
+
+Actual Delta V: 0. Current V remains 51.
+
+Receipts:
+
+- O2 worker thread `019f0285-037b-7a21-b352-ece5b84efeca`, titled
+  `O2 worker - Qdrant Derived Index`, pinned.
+- O2 worker cwd from thread listing:
+  `/Users/wiz/.codex/worktrees/fb93/go-choir`.
+- O2 verifier thread `019f0285-e660-7cd1-a468-554e9b175825`, titled
+  `O2 verifier - Qdrant Derived Index`, pinned.
+- Worker authority: own Codex worktree only; protected surfaces are
+  objectgraph source-of-truth boundaries, derived-index rebuildability,
+  collection naming/alias switch, embedder/provider boundary, local Qdrant
+  config, and rollback/rebuild path.
+- Verifier authority: read-only review of worker report/diff/tests.
+
+Open edge: Read the O2 worker report, then incorporate verifier verdict before
+marking any O2 checklist item complete.

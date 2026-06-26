@@ -398,12 +398,17 @@ blocking findings. O1 branch `codex/o1-objectgraph-foundation` produced docs
 checkpoint `fa06b718` and implementation `34ece272`; implementation was
 cherry-picked into this mission branch as `a68bc801`. Focused objectgraph tests
 passed from this branch: `nix develop -c go test ./internal/objectgraph`. O1 is
-complete at branch level, with no main/staging/platform settlement claim.
+complete at branch level, with no main/staging/platform settlement claim. O2
+worker thread: `019f0285-037b-7a21-b352-ece5b84efeca` (`O2 worker - Qdrant
+Derived Index`) in `/Users/wiz/.codex/worktrees/fb93/go-choir`. O2 verifier
+thread: `019f0285-e660-7cd1-a468-554e9b175825` (`O2 verifier - Qdrant Derived
+Index`). O2 is active but no O2 obligation is complete yet.
 
-next move: Start O2 by creating a bounded Qdrant derived-index worker thread
-and independent verifier thread. O2 must use the objectgraph branch-level API as
-input and keep Qdrant derived/rebuildable, with no staging claim unless later
-landed through the full commit/push/CI/deploy/staging loop.
+next move: Use `read_thread` on the O2 worker until it produces its Qdrant
+derived-index decision/implementation report, then use or follow up the O2
+verifier for verdict `accept`, `revise_before_continue`, `blocked`, or
+`supersede`. Incorporate that verdict before claiming any O2 checklist
+progress.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
