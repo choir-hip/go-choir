@@ -4821,3 +4821,41 @@ Open edge: decide whether the next O4 move should be a Problem Documentation
 First checkpoint for the native Texture browser harness blocker, or a bounded
 harness worker whose only goal is making the existing Texture source-ref
 Playwright proof runnable without changing product behavior.
+
+## 2026-06-26 - O4 Phase 10c Browser Harness Checkpoint
+
+Claim: The native Texture `source_ref` browser-proof blocker is now documented
+as its own O4 Phase 10c checkpoint before any harness repair. This is
+Problem-Documentation-First progress, not a harness repair, proof candidate,
+verifier acceptance, or checklist descent.
+
+Move: add
+`docs/o4-native-texture-source-ref-browser-harness-checkpoint-2026-06-26.md`
+and update the live Parallax State so the next worker targets the browser
+harness explicitly.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- New checkpoint:
+  `docs/o4-native-texture-source-ref-browser-harness-checkpoint-2026-06-26.md`.
+- The checkpoint records the Phase 10 and 10b no-candidate evidence, the
+  plausible test-tightening observation, the local harness failures
+  (`@playwright/test` absent, no `4173` server, preview-only auth/proxy
+  failure, platformd/Dolt state failure, and pnpm/esbuild build-script refusal),
+  protected surfaces, belief state, remaining error field, and rollback.
+- Live Parallax State now points to an O4 Phase 10c harness-focused worker
+  rather than another broad native Texture citation proof worker.
+
+Evidence boundary: green documentation/checkpoint only. No code, worker repair,
+verifier, root incorporation of a worker commit, push, PR, CI, deploy, staging
+product acceptance, native Texture body `source_ref` citation-opening proof,
+publication/export, Qdrant, provider/gateway/search, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: launch a bounded O4 Phase 10c worker whose only goal is making the
+existing Texture source-ref Playwright proof runnable from a clean worktree, or
+returning the smallest durable harness blocker with clean status.

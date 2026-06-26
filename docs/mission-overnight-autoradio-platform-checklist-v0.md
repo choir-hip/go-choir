@@ -829,8 +829,12 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: choose the next O4 source/citation move from the now-observed
-native Texture browser harness blocker. O4 Phase 10b replacement worker thread
+next move: launch an O4 Phase 10c harness-focused worker from checkpoint
+`docs/o4-native-texture-source-ref-browser-harness-checkpoint-2026-06-26.md`.
+The worker should repair or precisely narrow the local browser harness needed
+to run the existing native Texture `source_ref` Source Viewer/reader-artifact
+Playwright proof from a clean worktree, without changing product behavior. O4
+Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
 candidate and left a clean worktree at
@@ -840,9 +844,8 @@ proofs, but reverted it because the focused Playwright harness could not be run
 locally: full `start-services.sh` failed at platformd/Dolt state, the
 `CHOIR_ENABLE_PLATFORMD=0` harness failed frontend startup under pnpm/esbuild
 build-script policy, and preview-only/auth setup failed without the full
-auth/proxy stack. The next bounded route should either document this browser
-harness blocker first or launch a harness-focused worker to make the existing
-Texture source-ref Playwright proof runnable without changing product behavior.
+auth/proxy stack. Root documented the blocker in the Phase 10c checkpoint
+before repair.
 O4 Phase 10 worker thread
 `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` (`O4 worker - Native Texture Citation
 Source Open`) resolved in `/Users/wiz/.codex/worktrees/d3ed/go-choir` on branch
