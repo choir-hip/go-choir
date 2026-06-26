@@ -6317,3 +6317,109 @@ run acceptance, promotion, or rollback proof is claimed for `98773b68`.
 Open edge: update the affected package-specific Nix vendor hash or package
 dependency closure so filtered sandbox builds include the external
 `golang.org/x/net/html/charset` dependency, then rerun CI/deploy.
+
+## 2026-06-26 - O4 Public Platform Universal Wire Repair Landed
+
+Claim: The public Universal Wire empty-state blocker is repaired for the
+sourcecycled graph-backed capture path. Sourcecycled now writes web-capture
+objects into the same `universal-wire-platform/platform` runtime graph that the
+authenticated product route reads, and the deployed UI renders source-backed
+Universal Wire cards.
+
+Move: landed the documented sourcecycled-to-platform-runtime projection repair,
+repaired two Nix service packaging gaps, pushed to `origin/main`, monitored CI
+and Node B deploy, verified staging build identity, read sourcecycled runtime
+projection events, checked the active public platform VM API, and ran
+authenticated Chrome product QA through the owner's passkey session.
+
+Expected Delta V: 1 for closing the O4 staging/product graph visibility
+obligation. Actual Delta V: 1. Current V moves from 31 to 30.
+
+Receipts:
+
+- Problem documentation commit:
+  `a2621ef1 document Universal Wire platform graph mismatch`.
+- Behavior repair commit:
+  `2aba718f project sourcecycled captures into platform runtime graph`.
+- Deploy packaging documentation/repair commits:
+  `925bdbf2 document runtime projection deploy filter gap`,
+  `98773b68 include sourcegraph in service source filters`,
+  `d3c67f20 document runtime projection vendor hash gap`, and
+  `5b61fdc4 repair runtime projection service vendor hashes`.
+- Local/diagnostic build proof:
+  focused Go tests passed before push for the runtime internal projection
+  endpoint and sourcecycled runtime endpoint selection; Node B scratch Nix
+  builds of `.#packages.x86_64-linux.sandbox` and
+  `.#packages.x86_64-linux.gateway` passed with the final vendor hashes.
+- CI/deploy:
+  GitHub Actions CI run `28259046853` for
+  `5b61fdc4fda5376d1fc39b119f12687944d41427` passed all Go test shards,
+  Go vet/build, integration-tagged smoke, frontend build, docs truth check,
+  deploy-impact detection, TLA+ model check, and `Deploy to Staging (Node B)`.
+  The separate Docs Truth Check workflow `28259046864` and FlakeHub publish
+  workflow `28259046848` also passed for the same SHA.
+- Staging identity:
+  `https://choir.news/health` reported proxy and sandbox `commit` /
+  `deployed_commit` `5b61fdc4fda5376d1fc39b119f12687944d41427`, deployed at
+  `2026-06-26T19:02:50Z`.
+- Sourcecycled projection readback:
+  Node B source-service latest handoff reported completed cycle
+  `cycle_31ff8e99fc978df53000a511`; event
+  `web_captures_graph_written` at `2026-06-26T19:07:03Z` recorded
+  `objectgraph_mode=runtime_api`,
+  `objectgraph_target=http://unix/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/objectgraph/web-captures`,
+  `capture_count=3833`, `source_entity_count=3833`,
+  `captured_from_edges=3833`, and `skipped_item_count=52`.
+- Public platform VM API:
+  active platform VM `http://10.200.254.2:8085` returned
+  `source=universal-wire-web-capture-graph`, 12 stories, and first story
+  `Telegram Post from Pulse Nigeria Telegram` with `reader_snapshot_ready`,
+  `open_surface=source`, `live_open_surface=web_lens`, and graph-backed
+  `choir.web_capture` / `choir.source_entity` manifest context.
+- Authenticated product QA:
+  Chrome passkey session for `yusefnathanson@me.com` loaded the primary
+  desktop. Universal Wire displayed `12 articles`; cards stated that Universal
+  Wire is reading durable `choir.web_capture` objects from the object graph and
+  that the cards are capture projections, not Texture article publication or
+  native `source_ref` citation. The first card's `OPEN SOURCE` action opened
+  the Source Viewer/reader artifact titled `Telegram Post from Pulse Nigeria
+  Telegram`, showing `Reader snapshot ready`, `Open original`, and content
+  `Channel created`. After a page reload to clear a stale deployed chunk, the
+  first card's `WEB LENS` action opened a Web Lens/browser window at
+  `https://t.me/pulsenigeria247/1` with a source reader snapshot and content
+  `Channel created`.
+
+Mutation class / protected surfaces: orange runtime/source-ingestion and
+deployment packaging repair. Touched runtime/internal API, sourcecycled graph
+projection dispatch, sourcegraph projection helper, runtime tests,
+sourcecycled tests, and Nix service package metadata. It does not claim Texture
+canonical writes, native Texture body `source_ref` citations,
+publication/export, Qdrant, provider/search calls, run acceptance,
+promotion/rollback, or owner-reviewed adoption evidence.
+
+Evidence boundary: staging/product evidence covers the local public platform
+computer route and authenticated browser product path. It does not claim full
+News benchmark quality, provider freshness/ranking, publication/export,
+derived Qdrant indexing, CI beyond the named run, production outside
+`https://choir.news`, run-acceptance synthesis, promotion-level evidence, or
+rollback execution.
+
+Residual risks:
+
+- The first post-deploy `WEB LENS` click failed in the already-open Chrome
+  session with a stale dynamic import for
+  `https://choir.news/assets/BrowserApp-BACPaCdk.js`; reloading the page
+  cleared the stale frontend chunk and the retry succeeded. This is a deploy
+  cache/stale-client residual, not a graph projection failure.
+- The cards are graph-backed capture projections, not native Texture articles
+  with body `source_ref` citations.
+- Sourcecycled downstream processor handoff dispatch still encountered runtime
+  429 backpressure after the graph write. The graph-backed Wire read path was
+  already successful, but broader ingestion/processor draining remains a
+  separate realism axis.
+
+Open edge: proceed to the next O4 realism axis only after deciding whether the
+stale deployed frontend chunk needs its own Problem Documentation First repair.
+Remaining O4/O5+ work includes native Texture citation carry-forward,
+publication/export, Qdrant projection, provider/search realism, run acceptance,
+promotion/rollback evidence, and the broader self-development mission.

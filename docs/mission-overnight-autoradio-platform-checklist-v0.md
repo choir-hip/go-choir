@@ -411,10 +411,13 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 31. Last Delta V: 0 for the
-O4 sourcecycled cycle-event diagnostic construct because it creates the missing
-staging oracle but has not yet been deployed/read back. The last decrement was
-1 for O4 Phase 8 verifier acceptance and root incorporation.
++ 8 Autoradio/Pipecat obligations. Current value: 30. Last Delta V: 1 for the
+O4 public-platform Universal Wire repair: staging now deploys the
+sourcecycled-to-platform-runtime graph projection, sourcecycled writes
+`choir.web_capture` objects through the runtime API into the
+`universal-wire-platform/platform` VM graph, authenticated Universal Wire shows
+graph-backed cards, Source Viewer opens reader artifacts by default, and Web
+Lens opens explicitly after refreshing the deployed frontend chunk.
 O4 Phase 1 closed the first O4 checklist obligation by adding a tested
 `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
@@ -1267,15 +1270,18 @@ stories. Authenticated Chrome and the active public platform VM at
 graph-capture candidates. The current O4 blocker is therefore a public-platform
 computer graph visibility mismatch: sourcecycled writes the host runtime graph
 while the product route reads the `universal-wire-platform/platform` VM graph.
-Remaining V is 31 until the sourcecycled-to-public-platform graph write path is
-repaired and authenticated Chrome/Playwright proof can observe an existing
-source-backed artifact and verify Source Viewer default plus explicit Web Lens
-opening on `https://choir.news`. The attempted platform-runtime projection
-repair (`2aba718f`) and first deploy-filter repair (`98773b68`) both passed CI
-test/build gates but failed Node B deploy packaging; the latest recorded
-blocker is the sandbox package-specific vendor closure omitting
-`golang.org/x/net/html/charset` after `internal/sources` entered the filtered
-sandbox build.
+Remaining V is now 30. The sourcecycled-to-public-platform graph visibility
+blocker is repaired by `5b61fdc4`: staging health reports proxy and sandbox at
+`5b61fdc4fda5376d1fc39b119f12687944d41427`, sourcecycled cycle
+`cycle_31ff8e99fc978df53000a511` projected 3,833 web captures through the
+runtime API into the public platform VM, the platform VM
+`/api/universal-wire/stories` returns 12 graph-backed stories, and
+authenticated Chrome shows 12 Universal Wire articles with Source Viewer and
+Web Lens source opening. Remaining open work is outside this repaired mismatch:
+stale frontend chunk handling across deploys, native Texture body `source_ref`
+citation carry-forward, publication/export, Qdrant projection, provider/search
+realism, run acceptance, promotion/rollback, and broader O5-O8 mission
+settlement.
 
 ## Suggested Goal String
 
