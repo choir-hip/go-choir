@@ -42,3 +42,31 @@ Next move: implement graph `choir.source_entity` shadow writes for that tool
 path only, add focused compatibility tests, and avoid public route,
 frontend/source-open, Qdrant, provider, auth/session, deploy, or staging
 changes.
+
+## 2026-06-26 - O3 Phase 3 Source Ref Edge Checkpoint
+
+Move: route decision before implementation.
+
+Expected delta V: remove the Phase 3 resolution-rule ambiguity for the selected
+Texture tool path without expanding O3 into graph reads or product source-open.
+
+Actual delta V: chose to resolve body `source_ref.attrs.source_entity_id`
+against the graph source entity records derived from the same materialized
+`SourceEntities` array in `commitTextureToolEdit`, then write pinned
+`choir.source_ref` records through `CreateRevisionWithSourceGraph`.
+
+Evidence: Phase 2 already routes `patch_texture` / `rewrite_texture` through
+`textureToolSourceGraphWriteSet` and `CreateRevisionWithSourceGraph` while
+preserving legacy revision JSON reads. Phase 1 already makes source graph writes
+part of the Texture revision transaction and rejects refs pointing at a missing
+source entity version before advancing the document head.
+
+Failure mode: if a body `source_ref` cannot resolve to a graph source entity
+record, the Texture tool edit must fail and document head advancement must not
+occur. The producer resolver should report the unresolved legacy source id; the
+store transaction remains the final head-stability guard.
+
+Next move: implement source_ref graph record construction for the selected tool
+path only, add focused legacy-compatibility and unresolved-ref/head-stability
+tests, and avoid public route, frontend/source-open, Qdrant, provider,
+auth/session, deploy, staging, and graph-first-read changes.

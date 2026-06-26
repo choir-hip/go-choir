@@ -373,6 +373,54 @@ Heresy delta: `discovered` none in this checkpoint; `introduced` none intended;
 - Fail the Texture revision commit if source graph writes fail.
 - Record toolbar-only and unused states explicitly.
 
+#### Phase 3 Worker Checkpoint: `O3-phase3-texture-tool-source-ref-edges`
+
+Chosen path: stay on the same Texture appagent edit tool path selected in
+Phase 2. The only producer in scope is `patch_texture` / `rewrite_texture`
+through `commitTextureToolEdit`; public create/import producers, graph-first
+reads, source-open/frontend behavior, publication/export, Qdrant projections,
+auth/session renewal, gateway/provider calls, staging deploy, and product
+landing claims remain out of scope.
+
+Resolution rule: after `materializeTextureToolEdit` produces a structured
+`body_doc` plus the compatibility `SourceEntities` array, Phase 3 resolves each
+body `source_ref.attrs.source_entity_id` against the graph source entity records
+derived from that same `SourceEntities` array. The pinned `choir.source_ref`
+record stores the body node id, a path hash for the source_ref occurrence, the
+legacy source entity id, the resolved source entity canonical id, the resolved
+source entity version id, `display_mode`, and `citation_state=cited`.
+
+Failure mode: a body `source_ref` whose legacy `source_entity_id` cannot resolve
+to a graph source entity record is an invalid graph write set. The edit fails
+before or inside `CreateRevisionWithSourceGraph`; document head advancement must
+not occur. Store-level failure remains the final transaction guard, and the
+producer resolver should surface a precise unresolved-ref error before creating
+partial graph refs.
+
+Conjecture delta: the selected Texture tool path can transactionally
+shadow-write both graph `choir.source_entity` records and pinned
+`choir.source_ref` records without changing legacy revision DTO/read behavior.
+
+Protected surfaces touched by implementation: Texture canonical writes,
+source identity/ref edges, legacy revision DTO compatibility, and the Phase 1
+source graph transaction boundary. Source-open routing, Qdrant
+derived-index/source-of-truth boundaries, auth/session renewal,
+gateway/provider calls, staging/deploy behavior, public producers, and
+graph-first reads remain untouched.
+
+Admissible evidence: focused runtime/store tests proving legacy revision reads
+still work, graph `choir.source_ref` records are created and pinned to resolved
+source entity versions, and unresolved refs cannot advance document head. No
+staging or product claim is admissible for this worker.
+
+Rollback path: revert the Phase 3 implementation commit(s), leaving Phase 1
+and Phase 2 source entity shadow writes intact. Shadow graph records remain
+inert because legacy revision reads continue to use revision JSON.
+
+Heresy delta: `discovered` for the previously open Texture tool source-ref edge
+gap; `introduced` none intended; `repaired` only for the selected Texture tool
+source_ref shadow-write path after focused tests pass.
+
 ### Phase 4: Reads, Frontend, And Source Open
 
 - Return `source_entities` and `source_refs` object-wrapper records from Texture
