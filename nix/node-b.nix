@@ -367,7 +367,7 @@ in
       Restart = "on-failure";
       RestartSec = 10;
       StateDirectory = "go-choir/source-service";
-      ReadWritePaths = [ sourceServiceDir ];
+      ReadWritePaths = [ sourceServiceDir sandboxRuntimeDir ];
       EnvironmentFile = [
         "-/var/lib/go-choir/deploy.env"
       ];
@@ -376,12 +376,24 @@ in
         "SOURCE_SERVICE_DB_PATH=${sourceServiceDir}/sourcecycled.db"
         "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
+        "SOURCE_SERVICE_RUNTIME_STORE_PATH=${sandboxRuntimeDir}/runtime.db"
         "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=1"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"
         "VMCTL_SANDBOX_PROXY_SOCK=/run/go-choir/vmctl.sock"
       ];
     };
   };
+
+  assertions = [
+    {
+      assertion = lib.elem "SOURCE_SERVICE_RUNTIME_STORE_PATH=${sandboxRuntimeDir}/runtime.db" config.systemd.services.go-choir-sourcecycled.serviceConfig.Environment;
+      message = "go-choir-sourcecycled must share the sandbox runtime store path so Universal Wire graph captures are written to the sandbox-visible objectgraph sidecar.";
+    }
+    {
+      assertion = lib.elem sandboxRuntimeDir config.systemd.services.go-choir-sourcecycled.serviceConfig.ReadWritePaths;
+      message = "go-choir-sourcecycled must be allowed to write the sandbox runtime directory for Universal Wire objectgraph projection.";
+    }
+  ];
 
   systemd.services.go-choir-vmctl = {
     description = "go-choir VMCtl Service (Firecracker VM lifecycle)";
