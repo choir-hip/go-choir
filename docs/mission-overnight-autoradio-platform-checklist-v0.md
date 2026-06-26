@@ -771,10 +771,32 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: read O4 Phase 5 worker thread
+next move: launch an independent O4 Phase 5 verifier for worker commits
+`4395c251` and `543c6742`, then read the verifier verdict before incorporating
+or rejecting the candidate. O4 Phase 5 worker thread
 `019f039f-9dd6-7881-a4ec-8607c9a4bb34` (`O4 worker - Web Capture Ingestion`)
-after it completes, then record its report and create an independent verifier
-if it produces candidate commits. Earlier pending worktree handle
+completed on branch
+`codex/o4-phase5-sourcecycled-web-capture-ingestion-replacement` in
+`/Users/wiz/.codex/worktrees/o4-phase5-sourcecycled-web-capture-ingestion-replacement`
+with checkpoint commit `4395c251 checkpoint O4 sourcecycled web capture
+ingestion` and implementation commit `543c6742 write sourcecycled web captures
+to objectgraph`. The worker reports a narrow orange slice: `internal/cycle`
+projects eligible sourcecycled `sources.Item` rows into durable
+`choir.web_capture` objects via `objectgraph.Service.CreateWebCapture`, creates
+`choir.source_entity` endpoints and `captured_from` edges for provenance, and
+`cmd/sourcecycled` writes graph captures only when
+`SOURCE_SERVICE_OBJECTGRAPH_DB_PATH`, `SOURCECYCLED_OBJECTGRAPH_DB_PATH`, or a
+derived `RUNTIME_STORE_PATH` objectgraph DB path is configured. Worker-reported
+checks passed: `nix develop -c go test ./cmd/sourcecycled -count=1`;
+`nix develop -c go test ./internal/cycle -count=1`;
+`nix develop -c go test ./internal/objectgraph -count=1`;
+`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
+`git diff --check HEAD~2..HEAD`; and `git show --check --oneline HEAD`.
+Worker worktree status is clean. Evidence boundary is worker-local branch-level
+code/test proof only; no push, CI, deploy, staging, Texture native
+`source_ref`, publication/export, Qdrant, auth/session renewal,
+provider/gateway, promotion/rollback, or run-acceptance claim. Earlier pending
+worktree handle
 `local:2848c27e-c530-4401-87fb-709786e6e4b2` did not resolve in `list_threads`
 and is superseded for orchestration by the readable replacement worker. The
 worker is assigned the next smallest graph-backed News/Wire realism axis:

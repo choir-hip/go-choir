@@ -3096,3 +3096,75 @@ staging product acceptance, promotion, rollback, or run-acceptance claim.
 Open edge: read worker thread
 `019f039f-9dd6-7881-a4ec-8607c9a4bb34` after it completes. If it has candidate
 commits, record them and create an independent verifier before incorporating.
+
+## 2026-06-26 - O4 Phase 5 Worker Report
+
+Claim: O4 Phase 5 has a worker-produced candidate for sourcecycled/web-source
+ingestion into durable graph-backed `choir.web_capture` objects. This is
+verifier-ready, not accepted.
+
+Move: read worker thread `019f039f-9dd6-7881-a4ec-8607c9a4bb34`, inspect the
+worker worktree status/diff summary, and update Parallax State with exact
+candidate commits and evidence boundary.
+
+Expected Delta V: 0. Worker completion alone does not close an obligation
+without independent verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V remains 35.
+
+Receipts:
+
+- Worker thread:
+  `019f039f-9dd6-7881-a4ec-8607c9a4bb34`
+  (`O4 worker - Web Capture Ingestion`).
+- Worker worktree:
+  `/Users/wiz/.codex/worktrees/o4-phase5-sourcecycled-web-capture-ingestion-replacement`.
+- Worker branch:
+  `codex/o4-phase5-sourcecycled-web-capture-ingestion-replacement`.
+- Worker commits:
+  `4395c251 checkpoint O4 sourcecycled web capture ingestion`;
+  `543c6742 write sourcecycled web captures to objectgraph`.
+- Worker diff:
+  `cmd/sourcecycled/main.go`;
+  `cmd/sourcecycled/main_test.go`;
+  `docs/o4-sourcecycled-web-capture-ingestion-checkpoint-2026-06-26.md`;
+  `internal/cycle/web_capture_graph.go`;
+  `internal/cycle/web_capture_graph_test.go`;
+  `internal/runtime/universal_wire.go`;
+  `internal/runtime/universal_wire_test.go`.
+- Worker-reported behavior:
+  `internal/cycle.WriteWebCaptureGraphObjects` projects eligible
+  sourcecycled `sources.Item` rows into durable `choir.web_capture` objects
+  with `objectgraph.Service.CreateWebCapture`; source entity endpoints and
+  `captured_from` edges preserve provenance; `cmd/sourcecycled` writes graph
+  captures only when an objectgraph DB path is configured through
+  `SOURCE_SERVICE_OBJECTGRAPH_DB_PATH`, `SOURCECYCLED_OBJECTGRAPH_DB_PATH`, or
+  derived from `RUNTIME_STORE_PATH`.
+- Worker-reported checks passed:
+  `nix develop -c go test ./cmd/sourcecycled -count=1`;
+  `nix develop -c go test ./internal/cycle -count=1`;
+  `nix develop -c go test ./internal/objectgraph -count=1`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`;
+  `git diff --check HEAD~2..HEAD`;
+  `git show --check --oneline HEAD`.
+- Orchestration spot checks:
+  worker `git status --short --branch` shows the candidate branch header only;
+  `git diff --name-status HEAD~2..HEAD` matches the expected seven paths; root
+  orchestration checkout remains clean on
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+
+Evidence boundary: worker-local branch-level code/test proof only. No
+independent verifier verdict, root incorporation, main, push, PR, CI, deploy,
+staging product acceptance, Texture native `source_ref`, publication/export,
+Qdrant, auth/session renewal, provider/gateway, promotion/rollback, or
+run-acceptance claim.
+
+Residual risk:
+
+- Platform/deploy configuration must point sourcecycled at the runtime
+  objectgraph DB for deployed Universal Wire to see these captures.
+- The candidate should be checked carefully for source-service boundary honesty
+  and objectgraph/source entity schema coherence.
+
+Open edge: create an independent verifier for worker commits `4395c251` and
+`543c6742`; do not incorporate them into root until accepted.
