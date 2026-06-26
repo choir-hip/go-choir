@@ -1623,3 +1623,50 @@ claim.
 Open edge: send verifier thread `019f031a-9eb9-7301-9db8-62bbb84e727a` the
 worker final report, commit diff/tests, dirty-path classification, and
 non-claims for a fresh `accept` / `revise` / `blocked` / `supersede` verdict.
+
+## 2026-06-26 - O3 Phase 5 Accepted And Incorporated
+
+Claim: O3 Phase 5 source-open/frontend graph-wrapper consumption is accepted
+at branch level and incorporated into the orchestration branch.
+
+Move: read the fresh verifier verdict, cherry-pick the accepted worker commit
+into root, rerun the focused frontend proof, remove generated artifacts, and
+record acceptance evidence.
+
+Expected Delta V: 0 until a broader O3 source-open/product proof retires a
+frontier edge. This slice repairs the selected frontend read/open derivation
+path but does not complete O3.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Verifier thread: `019f031a-9eb9-7301-9db8-62bbb84e727a`
+  (`O3 verifier - Source Open Phase 5`).
+- Verifier verdict: `accept`, no blocking findings.
+- Verifier checked that publication bundle priority, legacy revision fallback,
+  graph-wrapper local entity conversion, no media-ref synthesis, native
+  `source_ref` rendering, and existing Source Reader/Web Lens open-surface
+  policy were preserved.
+- Accepted worker commit
+  `927d58a68bc36ca8a4d2e82066c8961f60b5587d derive texture sources from graph wrappers`
+  incorporated into root as
+  `0189d59a derive texture sources from graph wrappers`.
+- Root passed:
+  `npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities"`
+  from `frontend/`, 5 tests.
+- Root passed: `npm run build` from `frontend/`, with unrelated existing
+  Svelte/a11y/chunk warnings only.
+- Root passed: `git diff --check HEAD~1..HEAD`.
+- Root proof/build artifacts `frontend/test-results/` and `frontend/dist/`
+  were removed after validation.
+- Root tracked worktree was clean after incorporation and checks.
+
+Evidence boundary: branch-level code/test/verifier acceptance only. No
+source-open browser proof, O3-complete, main, staging, product acceptance,
+deploy, Qdrant projection, publication/export, public producer, auth/session,
+gateway/provider, graph-first enforcement, promotion, or rollback claim.
+
+Open edge: continue O3 dependency order from the accepted source-open/frontend
+read path toward the next source graph / frontend / product-proof edge before
+O4 News.
