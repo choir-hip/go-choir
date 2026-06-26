@@ -7782,3 +7782,79 @@ Evidence boundary: branch-local read-only verification only. No push, CI,
 deploy identity, authenticated staging QA, or product acceptance is claimed.
 
 Orchestration may push/deploy `c8af6ecb` for the landing loop.
+
+## 2026-06-26 - O4 Deployed Wire Texture Edition Acceptance
+
+Claim: deployed commit `a2a5a74910be1c189cd9d9f090695169bf729561` produces a
+non-empty authenticated Universal Wire product surface from existing graph
+captures, and source opening routes to a Source Viewer/reader artifact.
+
+Landing evidence:
+
+- Pushed commit: `a2a5a74910be1c189cd9d9f090695169bf729561`.
+- GitHub CI run `28268268801`: success, including runtime shards, non-runtime
+  tests, vet/build, Docs Truth Check, TLA+ model check, deploy-impact detection,
+  and Node B staging deploy. Frontend build was skipped by deploy-impact
+  classification.
+- Docs Truth Check workflow `28268268803`: success.
+- FlakeHub publish workflow `28268268809`: success.
+- `https://choir.news/health` reported proxy and sandbox `deployed_commit`
+  `a2a5a74910be1c189cd9d9f090695169bf729561`, deployed at
+  `2026-06-26T22:18:54Z`.
+- Unauthenticated `curl -i https://choir.news/api/universal-wire/stories`
+  returned HTTP 401 with `{"error":"authentication required"}`, as expected.
+
+Authenticated Chrome QA:
+
+- Refreshed the logged-in `choir.news` session for user Yusef after deploy.
+- Universal Wire rendered `1 article`.
+- Visible article title: `Universal Wire live synthesis: Telegram Post from
+  Metropoles Telegram`.
+- Visible article text said Universal Wire selected `24` graph-backed source
+  captures from the live sourcecycled feed and published one English synthesis
+  article instead of exposing raw capture cards. It showed source refs `[1]` and
+  `[2]`.
+- Clicking `OPEN SOURCE` opened the Source Viewer/reader artifact titled
+  `Telegram Post from Metropoles Telegram`.
+- The source viewer showed `Available source`, `Reader snapshot ready`, an
+  `Open original` link to `t.me/Metropoles/407020`, source text `Rumble amplia
+  equipe jurídica em ação contra Moraes nos EUA`, and expandable `Source
+  evidence` / `Source entity` sections.
+
+Verifier contracts:
+
+- Materialization repair verifier thread
+  `019f05f0-81de-76a2-bb57-c2c66db82272`: accepted `9523273f`.
+- Platform verification filter verifier thread
+  `019f05fc-425f-7790-9b73-5527fffa7fc3`: accepted `c8af6ecb`.
+
+Mutation class / protected surfaces touched: orange runtime behavior, yellow
+tests, green docs. Touched Universal Wire read/materialization semantics,
+runtime-owned objectgraph capture selection, Texture canonical revision creation
+through the existing synthesis helper, source entity/source_ref projection,
+existing Wire edition linkage, and the platformd verification filter for
+runtime-owned `universal_wire_synthesis` revisions. Did not touch auth/session
+renewal, vmctl, provider/gateway credentials, Qdrant, promotion/rollback, run
+acceptance, or publication/export outside existing Wire edition helpers.
+
+Heresy delta: `repaired` for the deployed backfill/materialization gap and the
+deployed platformd verification filter gap that hid runtime-owned synthesis
+stories. `discovered` remains for semantic multi-story clustering, provider or
+model synthesis quality, live world-model maintenance, and update-existing
+article semantics.
+
+Rollback refs: revert `a2a5a74910be1c189cd9d9f090695169bf729561` to return to
+the prior deployed state; `8abe5cb1bb2fb18132c9f2e6f3d2cfae295e2e9b` is the
+known state where the edition existed but stories were filtered; `4918c507` is
+the known state before read-time materialization.
+
+Actual Delta V: 1. The deployed owner-visible Universal Wire product now has a
+non-empty Wire Texture edition article and source opening through Source Viewer.
+
+Evidence boundary/non-claims: this proves a narrow deployed graph-backed
+capture-cluster -> runtime-owned English Texture synthesis article -> Wire
+edition -> Source Viewer opening slice. It does not prove full production News,
+semantic multi-story clustering, provider/search freshness, model synthesis
+quality, Qdrant projection, publication/export beyond existing Wire edition
+helpers, run acceptance, promotion/rollback, live world-model reconciliation, or
+automatic updates to existing articles when later facts arrive.

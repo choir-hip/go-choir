@@ -446,7 +446,7 @@ source surface and Web Lens is explicit live/original inspection. Domain ramp:
 checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
 product acceptance.
 
-variant (ranking function) V: 73 total obligations. Current value: 30. O4 was
+variant (ranking function) V: 73 total obligations. Current value: 29. O4 was
 reopened by +5 after owner clarification that graph-backed capture projections
 are substrate, not the Universal Wire product. Latest actual Delta V: 0 for
 deployed diagnostic-boundary repair `73f0a888`/`0975eea9`, which prevents raw
@@ -603,6 +603,22 @@ next move: repair the narrow publishability/filter gate for runtime-owned
 `universal_wire_synthesis` articles transcluded in `universal-wire/Wire.texture`,
 without letting non-synthesis platform Textures or raw graph capture projections
 become public Wire articles.
+
+Deployed acceptance result: `a2a5a74910be1c189cd9d9f090695169bf729561` was
+pushed to `origin/main`; CI run `28268268801`, Docs Truth Check `28268268803`,
+and FlakeHub publish `28268268809` succeeded; health reported proxy/sandbox
+deployed commit `a2a5a74910be1c189cd9d9f090695169bf729561`, deployed at
+`2026-06-26T22:18:54Z`. Authenticated Chrome QA on the owner session showed
+Universal Wire with `1 article`, titled `Universal Wire live synthesis: Telegram
+Post from Metropoles Telegram`, source `universal-wire-edition-texture`
+rendering as a Texture article with `[1]`/`[2]` source refs. Clicking `OPEN
+SOURCE` opened the Source Viewer/reader artifact `Telegram Post from Metropoles
+Telegram`, marked `Available source` and `Reader snapshot ready`, with `Open
+original` pointing to `t.me/Metropoles/407020` and source evidence/entity
+sections visible. Latest actual Delta V: 1 for deployed non-empty Wire Texture
+edition rendering plus Source Viewer source opening. This still does not prove
+semantic multi-story clustering, provider-quality synthesis, live world-model
+maintenance, or updates to existing articles from later facts.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
