@@ -2362,3 +2362,73 @@ run-acceptance claim.
 Open edge: read verifier thread
 `019f0364-d34d-7270-bcb9-ebefb5cb2ade` and incorporate its verdict into
 Parallax State before any worker commit incorporation.
+
+## 2026-06-26 - O4 Phase 2 Accepted And Incorporated
+
+Claim: O4 Phase 2 is accepted and incorporated at branch level as a bounded
+Universal Wire fallback projection for existing graph-backed
+`choir.web_capture` objects.
+
+Move: accept the independent verifier verdict, cherry-pick worker commits
+`b264e8e7` and `77b3f251` into root, rerun bounded root checks, and update the
+evidence boundary without claiming the full News/source-ref/staging benchmark.
+
+Expected Delta V: 0. The move should prove and incorporate a real graph-backed
+web-capture read bridge, but it should not close a full checklist obligation
+because sourcecycled ingestion, source_ref citation carry-forward, browser
+rendering, and staging product proof remain open.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Verifier thread:
+  `019f0364-d34d-7270-bcb9-ebefb5cb2ade`
+  (`O4 verifier - Universal Wire Web Capture Read`) returned `accept` with no
+  blocking findings for worker commits `b264e8e7` and `77b3f251`.
+- Verifier evidence:
+  checkpoint-before-code satisfied; runtime objectgraph service boundary is
+  narrow and sidecar-backed; `/api/universal-wire/stories` keeps Texture edition
+  reads first and falls back only when no story is produced; graph fallback
+  filters non-tombstoned `choir.web_capture` records for
+  `universal-wire-platform`; focused tests cover empty state, Texture priority
+  with capture present, and graph-backed capture fallback.
+- Verifier commands/results:
+  `git diff --check f3272233..HEAD` passed;
+  `git show --check --oneline b264e8e766c1f1accb1578aa76a0dbf92aabf5ea`
+  passed;
+  `git show --check --oneline 77b3f251c8e41b552efa41a577e81fa10baab7d9`
+  passed;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`
+  passed;
+  `nix develop -c go test ./internal/objectgraph` passed;
+  `git status --short --ignored` in the worker worktree produced no output.
+- Root incorporated commits:
+  `4d8b0f95 checkpoint O4 web capture read gap`;
+  `b3d4f646 add Universal Wire web capture read path`.
+- Root checks passed:
+  `git diff --check d6f0b389..HEAD`;
+  `git show --check --oneline 4d8b0f95`;
+  `git show --check --oneline b3d4f646`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`;
+  `nix develop -c go test ./internal/objectgraph`.
+- Root dirty-path classification:
+  tracked status clean; ignored local env/log/dependency artifacts remain
+  unrelated.
+
+Evidence boundary: branch-level local verifier acceptance, root incorporation,
+focused Go tests, and diff hygiene. No main push, PR, CI, deploy, staging or
+product acceptance, auth/session, provider/gateway, Qdrant projection,
+sourcecycled ingestion, Texture publication/export, graph-first enforcement,
+promotion, rollback, or run-acceptance evidence.
+
+Residual risks: the path is a fallback projection over existing graph-backed
+captures, not a production News pipeline. It does not prove live sourcecycled
+web fetch writes, graph selection/ranking, Texture article creation with
+source_ref citations, browser rendering, publication/export, staging behavior,
+or deploy identity. Broader canonical objectgraph storage policy remains future
+architecture work.
+
+Open edge: choose the next bounded O4 worker for source_ref citation carry-
+forward or sourcecycled-to-`choir.web_capture` ingestion, preserving accepted
+empty-state and Texture-priority behavior.

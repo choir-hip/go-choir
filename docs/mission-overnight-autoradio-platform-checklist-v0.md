@@ -235,7 +235,11 @@ Checklist:
 - [x] Implement or wire `choir.web_capture`. O4 Phase 1 adds a typed
   `choir.web_capture.v1` objectgraph metadata contract, validation,
   `Service.CreateWebCapture`, object body storage for extracted text, and
-  focused objectgraph tests. Universal Wire feed reads remain open.
+  focused objectgraph tests. O4 Phase 2 adds an accepted branch-level Universal
+  Wire fallback projection for existing graph-backed `choir.web_capture`
+  objects through `/api/universal-wire/stories`; sourcecycled ingestion,
+  source_ref citation carry-forward, browser rendering, and staging product
+  proof remain open.
 - [ ] Ingest sourcecycled/web/source items into graph objects.
 - [ ] Build News/Wire feed from graph objects and source refs.
 - [ ] Keep empty feed honest but diagnostic.
@@ -364,11 +368,13 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 2 worker completion report. O4 Phase 1 closed the first O4 checklist
-obligation by adding a tested `choir.web_capture` objectgraph foundation. O4
-Phase 2 worker evidence now proposes a bounded Universal Wire graph-backed
-web-capture read path, but verifier review, root incorporation, staging, deploy,
-sourcecycled ingestion, and product acceptance remain open.
+Phase 2 verifier acceptance and root incorporation. O4 Phase 1 closed the first
+O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
+foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
+graph-backed web captures into `/api/universal-wire/stories`, but it does not
+close the broader News/Wire feed-from-graph-and-source-refs obligation because
+sourcecycled ingestion, source_ref citation carry-forward, browser rendering,
+staging, deploy, and product acceptance remain open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -735,14 +741,25 @@ yet. The worker later completed on branch
 `HEAD~1`. Worker tracked/ignored status was clean/no output. Evidence boundary
 is worker-local branch-level focused tests only. Verifier thread
 `019f0364-d34d-7270-bcb9-ebefb5cb2ade` (`O4 verifier - Universal Wire Web
-Capture Read`) has been launched, titled, and pinned against the worker branch;
-verdict is pending.
+Capture Read`) returned `accept` with no blocking findings. The verifier
+confirmed checkpoint-before-code, the narrow runtime-owned objectgraph service
+boundary, Texture-edition priority, honest empty-state/fallback behavior, and
+focused tests. Accepted worker commits were incorporated into this orchestration
+branch as `4d8b0f95 checkpoint O4 web capture read gap` and `b3d4f646 add
+Universal Wire web capture read path`. Root checks passed:
+`git diff --check d6f0b389..HEAD`; `git show --check --oneline 4d8b0f95`;
+`git show --check --oneline b3d4f646`;
+`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories'`;
+and `nix develop -c go test ./internal/objectgraph`. The root runtime test
+emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
+Tracked root status is clean; ignored local env/log/dependency artifacts remain
+unrelated.
 
-next move: read O4 Phase 2 verifier thread
-`019f0364-d34d-7270-bcb9-ebefb5cb2ade`. If it accepts, record the verdict,
-incorporate worker commits, and rerun bounded root checks before decreasing V.
-If it returns `revise_before_continue`, record the finding before sending a
-repair follow-up to the worker.
+next move: choose the next bounded O4 worker. The highest-value next slice is
+graph/source-ref citation carry-forward for Universal Wire cards or a
+sourcecycled-to-`choir.web_capture` ingestion seam, while preserving the accepted
+empty-state and Texture-priority behavior. Use Problem Documentation First for
+any newly discovered behavior gap.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
