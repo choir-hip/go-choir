@@ -829,14 +829,15 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: wait for O4 Phase 10 worker thread
+next move: choose a new bounded route for the remaining O4 source/citation
+artifact-opening edge on the native Texture body `source_ref` citation axis:
+either launch a replacement worker with a smaller proof target, or document the
+smallest missing product/backend link before repair. O4 Phase 10 worker thread
 `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` (`O4 worker - Native Texture Citation
-Source Open`) in `/Users/wiz/.codex/worktrees/d3ed/go-choir` on branch
-`codex/o4-phase10-native-texture-source-ref-open-proof`. The worker assignment
-targets the remaining O4 source/citation artifact-opening edge on the native
-Texture body `source_ref` citation axis: prove real Source Viewer/reader
-artifact opening if feasible, or document the smallest product blocker before
-any full News benchmark claim. O4 Phase 9 worker thread
+Source Open`) resolved in `/Users/wiz/.codex/worktrees/d3ed/go-choir` on branch
+`codex/o4-phase10-native-texture-source-ref-open-proof`, but returned no
+candidate and left the worktree clean at its starting head
+`7b94d220 record O4 source artifact acceptance`. O4 Phase 9 worker thread
 `019f03e9-8fe1-7503-a9a2-f55ee5430c54` completed in
 `/Users/wiz/.codex/worktrees/199d/go-choir`; verifier thread
 `019f03f2-bb27-7d80-90a1-e172558b9c61` accepted the repaired head

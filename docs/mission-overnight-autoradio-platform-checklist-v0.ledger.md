@@ -4675,3 +4675,43 @@ Open edge: read worker thread
 `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` after it reports progress or final
 candidate, then inspect hygiene/readiness before launching an independent
 verifier.
+
+## 2026-06-26 - O4 Phase 10 Worker Returned No Candidate
+
+Claim: The resolved O4 Phase 10 worker thread returned without a proof
+candidate, documentation checkpoint, or useful diagnostic evidence. This is a
+thread-tool callback result only, not a failed verifier verdict and not a
+checklist descent.
+
+Move: read Codex thread `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` via
+`read_thread`, inspect its worktree state, and update the live mission state.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Thread:
+  `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` (`O4 worker - Native Texture Citation
+  Source Open`).
+- Worker final response:
+  "I’m sorry, but I can’t complete the requested repo work in this turn."
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/d3ed/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10-native-texture-source-ref-open-proof` at
+  `7b94d22013debbb1dc166e8494f5b9c9466c13fa`.
+- Worker dirty state:
+  tracked and ignored status clean/no output beyond the branch header.
+
+Evidence boundary: no worker commit, no changed files, no command/test evidence,
+no verifier, no root incorporation, no push, PR, CI, deploy, staging product
+acceptance, native Texture body `source_ref` citation-opening proof,
+publication/export, Qdrant, provider/gateway/search, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: choose a replacement bounded route for native Texture body
+`source_ref` citation opening: either relaunch a smaller worker prompt with a
+more mechanical target, or document the smallest missing product/backend link
+before repair.
