@@ -4316,3 +4316,66 @@ open.
 Open edge: choose the next O4 realism axis: verify source/citation links open
 to real Source Viewer/reader artifacts, or create a verifier/documented blocker
 before claiming the full News benchmark.
+
+## 2026-06-26 - O4 Phase 9 Source Artifact Open Worker Launch
+
+Claim: O4 Phase 9 has a readable implementation/proof worker thread for the
+remaining source/citation artifact-opening edge. This is worker launch only, not
+worker evidence, verifier acceptance, root incorporation, or O4 checklist
+descent.
+
+Move: create a project-scoped Codex worktree thread from the current
+orchestration branch for work item `O4-phase9-source-artifact-open-proof`, then
+title/pin the resolved worker thread.
+
+Expected Delta V: 0. Launching a worker does not close the source-artifact
+opening obligation. Potential Delta V is 1 if worker evidence, independent
+verifier acceptance, and root incorporation close `Verify source/citation links
+open to real source artifacts or Source Viewer/reader artifacts`.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:173c0800-61b8-4302-8a29-a895aa35009f`.
+- Resolved worker thread:
+  `019f03e9-8fe1-7503-a9a2-f55ee5430c54`
+  (`O4 worker - Source Artifact Open Proof`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/199d/go-choir`.
+- Starting branch/head:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `724772c3 record O4 empty diagnostics acceptance`.
+- Worker objective:
+  close or precisely narrow the O4 checklist item `Verify source/citation links
+  open to real source artifacts or Source Viewer/reader artifacts` with the
+  largest honest branch-level slice. Preferred route is product-path proof that
+  Universal Wire source/citation links open real Source Viewer/reader artifact
+  content, with Web Lens remaining explicit; fallback is Problem Documentation
+  First plus the narrowest test/blocker if the product route cannot yet create
+  or read such artifacts.
+- Required guardrails:
+  source-opening doctrine must default durable web-derived reading to Source
+  Viewer/reader artifacts and reserve Web Lens for explicit live/original
+  inspection; preserve Texture priority, graph fallback, Phase 7 provenance,
+  source/open identity, Source Viewer/Web Lens policy, auth behavior, and Phase
+  8 empty-only diagnostics; do not synthesize stories, source refs, source
+  entities, publication/export state, sourcecycled success, Qdrant state,
+  provider/search calls, staging evidence, promotion/rollback, or run
+  acceptance.
+- Required final report:
+  thread id if visible, cwd, branch/HEAD, commits, changed files,
+  commands/results, dirty-path classification, evidence boundary/non-claims,
+  residual risks, rollback refs, heresy delta, and verifier-readiness.
+
+Evidence boundary: worker launched/resolved only. No worker commit, no verifier,
+no root incorporation, no push, PR, CI, deploy, staging product acceptance,
+native Texture body `source_ref` citation carry-forward, publication/export,
+Qdrant, provider/gateway, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: read worker thread
+`019f03e9-8fe1-7503-a9a2-f55ee5430c54` when complete. If it returns candidate
+commits, inspect hygiene/readiness and launch an independent verifier before
+any root incorporation.

@@ -812,10 +812,15 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: choose the next O4 realism axis after accepted Phase 8. Remaining
-O4 checklist edges are source/citation links to real Source Viewer/reader
-artifacts and independent verifier coverage before claiming the full News
-benchmark; staging acceptance remains open. O4 Phase 8 worker thread
+next move: wait for O4 Phase 9 worker thread
+`019f03e9-8fe1-7503-a9a2-f55ee5430c54`
+(`O4 worker - Source Artifact Open Proof`) in
+`/Users/wiz/.codex/worktrees/199d/go-choir`. The worker is assigned the
+remaining O4 source/citation artifact-opening edge: prove or precisely document
+whether Universal Wire source/citation links open real Source Viewer/reader
+artifacts rather than only mocked routing. It must preserve source-opening
+doctrine, accepted O4 semantics, and avoid staging/full-News claims without
+deployed evidence. O4 Phase 8 worker thread
 `019f03d8-2a15-7a61-ab7f-82ea0213cce2` and verifier thread
 `019f03e1-5342-7b61-a557-917c1ef1c407` accepted worker commits `4975163f` and
 `cbf04485`, which root incorporated as `db46f8fe checkpoint O4 empty feed
