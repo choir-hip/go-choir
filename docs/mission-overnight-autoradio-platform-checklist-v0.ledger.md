@@ -3305,3 +3305,53 @@ Open edge: run or delegate the next O4 realism axis: authenticated
 `/api/universal-wire/stories` product API evidence over configured
 sourcecycled/objectgraph storage, or a precise blocker if deployed/local product
 configuration cannot yet prove that path.
+
+## 2026-06-26 - O4 Phase 6 Authenticated Universal Wire Product API Worker Launch
+
+Claim: O4 Phase 6 has been queued as the next bounded worker. This is worker
+launch only, not product acceptance.
+
+Move: create a worktree worker from branch
+`preserve/o0-autoradio-mission-state-2026-06-26` for work item
+`O4-phase6-authenticated-universal-wire-product-api-proof`.
+
+Expected Delta V: 0. Worker launch does not close an obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:b9a89dc6-e09f-4eec-8617-7706221de218`.
+- Assignment objective:
+  produce the smallest honest O4 realism slice after accepted sourcecycled
+  ingestion by proving, through product-visible authenticated API evidence if
+  feasible, that sourcecycled/web/source ingestion writes durable
+  `choir.web_capture` graph objects and `/api/universal-wire/stories` can read
+  them through configured runtime/objectgraph storage.
+- Blocker fallback:
+  if current local or deployed configuration cannot exercise the product path
+  honestly, document the precise blocker and add the narrowest durable
+  test/config improvement that moves toward the proof without overstating it.
+- Mutation envelope:
+  yellow if test/acceptance/documentation only; orange if runtime/config/API or
+  sourcecycled behavior changes. Any newly discovered behavior/config blocker
+  must follow Problem Documentation First.
+- Excluded surfaces:
+  no staging deployment, promotion/rollback, auth/session renewal,
+  provider/gateway calls, Qdrant projection, Texture canonical writes,
+  publication/export, native Texture `source_ref` carry-forward,
+  run-acceptance, candidate computers, vmctl, or main deployment routing claim
+  unless separately documented and authorized.
+- Product-path constraint:
+  public authenticated product APIs may be used; internal/test-only/raw event
+  mutation routes must not be used to seed success.
+
+Evidence boundary: worker queued only. No worker final report, verifier verdict,
+root incorporation, main push, PR, CI, deploy, staging product acceptance,
+Texture native `source_ref`, publication/export, Qdrant, provider/gateway,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: resolve pending worker handle
+`local:b9a89dc6-e09f-4eec-8617-7706221de218` into a readable thread, title/pin
+it, and read the worker report when complete.

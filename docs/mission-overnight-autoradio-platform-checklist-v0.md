@@ -782,14 +782,17 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: choose the next O4 realism axis after accepted sourcecycled ingestion
-root incorporation. The smallest useful next proof is an authenticated product
-API acceptance slice showing the configured sourcecycled objectgraph DB path and
-`/api/universal-wire/stories` read path working together through product-visible
-evidence, or documenting the precise deploy/config blocker if that path cannot
-yet be exercised. Do not claim News benchmark, staging, native Texture
-`source_ref` carry-forward, publication/export, Qdrant, promotion, rollback, or
-run acceptance from the Phase 5 branch-level proof. O4 Phase 5 verifier thread
+next move: resolve pending O4 Phase 6 worker handle
+`local:b9a89dc6-e09f-4eec-8617-7706221de218` into a readable thread, title/pin
+it if available, then wait for the worker report. The assignment is an
+authenticated Universal Wire product-API proof slice: show, through
+product-visible evidence if feasible, that configured sourcecycled objectgraph
+storage and `/api/universal-wire/stories` work together, or document the precise
+config/deploy blocker and the narrowest durable improvement. Expected Delta V:
+0 for launch; potential Delta V: 1 if authenticated API acceptance closes. Do
+not claim News benchmark, staging, native Texture `source_ref` carry-forward,
+publication/export, Qdrant, promotion, rollback, or run acceptance from this
+launch. O4 Phase 5 verifier thread
 `019f03b0-6a16-79b0-888d-b8a48e6a378f` (`O4 verifier - Web Capture
 Ingestion`) returned `accept` with no blocking findings. The verifier confirmed
 checkpoint-before-code, narrow sourcecycled/objectgraph boundaries, provenance
