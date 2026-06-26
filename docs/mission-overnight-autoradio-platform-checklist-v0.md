@@ -806,7 +806,11 @@ the remaining `Keep empty feed honest but diagnostic` obligation. It must keep
 empty Universal Wire responses honest, add only safe diagnostic context if
 feasible, preserve accepted O4 graph/source-ref behavior, and avoid fabricating
 stories, source refs, source entities, publication/export state, staging
-evidence, Qdrant state, provider/search calls, or run acceptance. O4 Phase 7
+evidence, Qdrant state, provider/search calls, or run acceptance. The worker has
+already committed checkpoint `4975163f checkpoint O4 empty feed diagnostics gap`
+before behavior edits, recording the empty-response diagnostic gap and the
+intended safe additive `diagnostics` route. No final worker candidate, verifier,
+or root incorporation exists yet. O4 Phase 7
 worker thread
 `019f03c9-2c8f-73b1-bfca-ed7badd4383f` (`O4 worker - Graph Source-Ref Feed`)
 and verifier thread `019f03d1-0071-7371-bdd6-a3bd840c9e76` (`O4 verifier -

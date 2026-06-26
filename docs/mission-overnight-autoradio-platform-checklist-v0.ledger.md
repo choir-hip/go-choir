@@ -4083,3 +4083,52 @@ Open edge: read worker thread
 `019f03d8-2a15-7a61-ab7f-82ea0213cce2` when complete. If it returns candidate
 commits, inspect hygiene/readiness and launch an independent verifier before
 any root incorporation.
+
+## 2026-06-26 - O4 Phase 8 Empty Feed Checkpoint Observed
+
+Claim: O4 Phase 8 now has checkpoint-before-code evidence for the empty-feed
+diagnostics slice. This is not a final worker candidate, verifier acceptance, or
+root incorporation.
+
+Move: read the worker thread progress and inspect the worker worktree after its
+first commit.
+
+Expected Delta V: 0. A checkpoint commit does not close the empty-feed
+diagnostics obligation.
+
+Actual Delta V: 0. Current V remains 32.
+
+Receipts:
+
+- Worker thread:
+  `019f03d8-2a15-7a61-ab7f-82ea0213cce2`
+  (`O4 worker - Empty Feed Diagnostics`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/41ed/go-choir`.
+- Worker branch:
+  `codex/o4-phase8-empty-feed-diagnostics`.
+- Worker observed HEAD:
+  `4975163f checkpoint O4 empty feed diagnostics gap`.
+- Worker checkpoint file:
+  `docs/o4-empty-feed-diagnostics-checkpoint-2026-06-26.md`.
+- Worker progress:
+  read the Parallax/O4 context, classified the likely API/UI behavior mutation
+  as orange, identified that the current Universal Wire empty response carries
+  only `source` plus empty arrays, and committed a checkpoint before runtime/UI
+  edits. The intended shape is a narrow additive `diagnostics` response for
+  empty feeds that remains safe for old clients and avoids raw errors, local
+  paths, secrets, or success-record fabrication.
+- Orchestration checks:
+  `git show --stat --oneline --no-renames 4975163f` shows one added checkpoint
+  doc; `git show --check --oneline 4975163f` passed. A direct worker status
+  check showed no dirty paths at the checkpoint moment.
+
+Evidence boundary: worker checkpoint/progress only. No behavior commit, no
+final worker report, no independent verifier, no root incorporation, no push,
+PR, CI, deploy, staging product acceptance, native Texture body `source_ref`
+citation carry-forward, publication/export, Qdrant, provider/gateway,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: read the worker final report when complete. If it returns candidate
+commits, inspect hygiene/readiness and launch an independent verifier before
+any root incorporation.
