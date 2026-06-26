@@ -6864,3 +6864,98 @@ Texture article with native `source_ref` citations and Source Viewer artifacts,
 serve that Texture article through `/api/universal-wire/stories`, and record
 the remaining world-model/update semantics as explicit blockers if they do not
 fit in the slice.
+
+## 2026-06-26 - Universal Wire Raw-Capture Publication Suppressed
+
+Claim: the immediate product mistake exposed by the owner screenshot is now
+bounded: Universal Wire no longer publishes raw `choir.web_capture` graph
+captures as public article cards when no Texture synthesis edition exists. This
+is a diagnostic-boundary repair, not the full Universal Wire synthesis product.
+
+Move: after the Product Target Reopened checkpoint, change
+`/api/universal-wire/stories` so graph-backed web captures remain available as a
+diagnostic substrate with `state=diagnostic_only`, while the public `stories`
+array remains empty until a Texture synthesis article/edition exists. Update
+runtime and sourcecycled tests to enforce that raw graph captures are not
+published as articles.
+
+Evidence:
+
+- Commit `73f0a888385a15a01a84eb726255b39662627b4d` changes
+  `internal/runtime/universal_wire.go` and `internal/runtime/universal_wire_test.go`.
+  The route keeps `source=universal-wire-texture-index`, reports graph captures
+  as diagnostic-only, and does not switch the public feed source to
+  `universal-wire-web-capture-graph`.
+- Local tests before that commit passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestHandleInternalSourcecycledWebCaptures' -count=1`,
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`,
+  and `git diff --check`.
+- Push CI run `28262988186` failed in `cmd/sourcecycled`
+  `TestRunCycleWritesSourceItemsToObjectGraphWebCaptures` because the stale
+  proof still expected `source=universal-wire-web-capture-graph`.
+- Commit `0975eea990a0de44f99a55ae0e5fb5aee2416bbd` changes
+  `cmd/sourcecycled/main_test.go` so the sourcecycled integration proof still
+  verifies graph capture persistence, but expects the public Universal Wire
+  route to return zero stories and diagnostic-only graph substrate.
+- Local repair tests passed:
+  `nix develop -c go test ./cmd/sourcecycled -run TestRunCycleWritesSourceItemsToObjectGraphWebCaptures -count=1`,
+  `nix develop -c go test ./cmd/sourcecycled -count=1`,
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestHandleInternalSourcecycledWebCaptures' -count=1`,
+  and `git diff --check`.
+- Push CI run `28263422604` for commit `0975eea990a0de44f99a55ae0e5fb5aee2416bbd`
+  passed all checks, including non-runtime tests and runtime shards, but the
+  deploy job was skipped because the head diff was test-only.
+- Manual CI `workflow_dispatch` run `28263687466` with
+  `force_staging_deploy=true` ran the full gate and deployed current `main`.
+  Node B deploy job `83745803112` succeeded.
+- Staging health after deploy reports proxy and sandbox deployed commit
+  `0975eea990a0de44f99a55ae0e5fb5aee2416bbd`, deployed at
+  `2026-06-26T20:37:16Z`.
+- Unauthenticated `curl https://choir.news/api/universal-wire/stories` returns
+  HTTP 401 `{"error":"authentication required"}` as expected. Adding
+  `X-Authenticated-User: yusefnathanson@me.com` from curl also returns HTTP 401,
+  so this evidence does not rely on a browser-public test header bypass.
+- Chrome extension automation is currently blocked by Chrome's extension/native
+  UI state. Direct Computer Use navigation in the visible Chrome window to
+  `https://choir.news/api/universal-wire/stories` returned
+  `{"error":"authentication required"}`, so authenticated deployed acceptance is
+  blocked until the usable Chrome session is reauthenticated.
+
+Mutation class / protected surfaces: orange runtime/API behavior change plus
+yellow tests and green evidence docs. The code path touches
+`/api/universal-wire/stories` feed semantics and sourcecycled/runtime proof
+expectations. It does not touch Texture canonical writes, provider/gateway
+calls, publication/export, Qdrant, promotion/rollback, run acceptance, vmctl,
+auth/session renewal, or deployment routing beyond the normal staging deploy.
+
+Conjecture delta: owner clarification split the problem into two layers. This
+repair addresses the bad public fallback layer by refusing to call raw capture
+projections "articles." It does not address the actual product layer: selecting
+multilingual clusters, synthesizing English Texture articles with native
+`source_ref` citations, maintaining a world model, or updating existing articles
+when new relevant information arrives.
+
+Heresy delta: `repaired` for raw-capture projection publication as public Wire
+articles; `discovered` remains open for the missing Texture synthesis/world-model
+pipeline.
+
+Rollback refs: revert `73f0a888385a15a01a84eb726255b39662627b4d` and
+`0975eea990a0de44f99a55ae0e5fb5aee2416bbd` to restore graph-capture fallback
+publication behavior and its test expectation. That rollback would intentionally
+reintroduce the owner-rejected raw capture grid.
+
+Evidence boundary and non-claims:
+
+- This proves commit identity, CI, deploy, health identity, and local/public
+  unauthenticated/auth-boundary behavior for the diagnostic-boundary repair.
+- This does not prove authenticated deployed JSON/body shape because the
+  accessible Chrome session is not authenticated to Choir.
+- This does not prove English synthesis Texture articles, native Texture-body
+  citation carry-forward, Source Viewer artifacts on synthesis articles,
+  world-model update semantics, provider/search freshness, publication/export,
+  Qdrant projection, run acceptance, promotion, or rollback execution.
+
+Open edge: reauthenticate the Chrome session and replay authenticated
+`/api/universal-wire/stories` plus UI proof. Then implement the first real
+Universal Wire synthesis slice through Texture rather than expanding the
+diagnostic graph-capture fallback.

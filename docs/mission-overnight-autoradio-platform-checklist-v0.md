@@ -447,7 +447,14 @@ object graph + 7 Qdrant + 8 source-entity + 13 News/Universal Wire + 7
 self-development + 7 Nucleus + 6 Choir Base + 8 Autoradio/Pipecat obligations.
 Current value: 31. Last variant change: +5 open Universal Wire product
 obligations after owner clarification that graph-backed capture projections are
-not the product benchmark. Prior Delta V: 0 for the deployed O5 handoff repair
+not the product benchmark. Latest Delta V: 0 for the deployed Universal Wire
+diagnostic-boundary repair: commits `73f0a888385a15a01a84eb726255b39662627b4d`
+and `0975eea990a0de44f99a55ae0e5fb5aee2416bbd` stop publishing raw
+`choir.web_capture` graph captures as public Wire articles and update the stale
+sourcecycled proof, but they do not yet create English synthesis Texture
+articles, update a live world model, or complete authenticated browser
+acceptance because the accessible Chrome session is not authenticated to Choir.
+Prior Delta V: 0 for the deployed O5 handoff repair
 attempt: commit `c6bddff039636971727e9d05d5c267caa82e6d4b` repaired the
 apparent channel-local mailbox cursor bug and deployed successfully, but the
 post-deploy authenticated Chrome acceptance probe is blocked at passkey sign-in,
@@ -472,16 +479,19 @@ heresy delta before editing. User granted staging deploy authority by pushing to
 `origin/main` and authenticated Chrome QA on `choir.news`.
 
 mutation class / protected surfaces: Current repo move is green evidence
-documentation. The landed O5 repair was orange/red-adjacent runtime/store
-behavior touching coagent mailbox backlog selection and Texture-to-Super wake
-routing evidence, with protected surfaces around coagent wake, Texture/Super
-routing, Trace evidence, worker/candidate delegation, run acceptance, and
-auth/session because staging proof depends on an authenticated browser. The
-earlier staging product probe was a red-adjacent product-state mutation through
-authenticated prompt bar, Texture canonical revision creation, Trace/channel
-message evidence, and Super-request routing. It did not touch deployment
-routing, vmctl, gateway/provider credentials, Qdrant, publication/export,
-promotion/rollback, run acceptance, or owner adoption.
+documentation. The deployed Universal Wire diagnostic-boundary repair was an
+orange runtime/API behavior change touching `/api/universal-wire/stories` and
+sourcecycled/runtime tests; it deliberately did not touch Texture canonical
+writes, provider/gateway calls, publication/export, Qdrant, promotion/rollback,
+run acceptance, vmctl, or deployment routing beyond the normal staging deploy.
+The landed O5 repair was orange/red-adjacent runtime/store behavior touching
+coagent mailbox backlog selection and Texture-to-Super wake routing evidence,
+with protected surfaces around coagent wake, Texture/Super routing, Trace
+evidence, worker/candidate delegation, run acceptance, and auth/session because
+staging proof depends on an authenticated browser. The earlier staging product
+probe was a red-adjacent product-state mutation through authenticated prompt
+bar, Texture canonical revision creation, Trace/channel message evidence, and
+Super-request routing.
 
 evidence packet: Behavior-changing landings require pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance proof, verifier
@@ -525,8 +535,23 @@ Telegram`, repeated per capture, with card text explicitly saying the cards are
 capture projections and not Texture article publications or native
 `source_ref` citations. The intended product is multilingual ingestion ->
 object-graph/Texture processing -> English synthesis Texture articles -> live
-world model -> article updates on new relevant information. O5 has now started
-through the product path:
+world model -> article updates on new relevant information. A bounded
+diagnostic-boundary repair landed after that clarification: commit
+`73f0a888385a15a01a84eb726255b39662627b4d` changes Universal Wire so graph
+captures remain diagnostic substrate and the public story list stays empty until
+a Texture synthesis edition exists; commit
+`0975eea990a0de44f99a55ae0e5fb5aee2416bbd` repairs the stale sourcecycled proof.
+Push CI run `28263422604` passed but skipped deploy because the head diff was
+test-only, so a manual `workflow_dispatch` with `force_staging_deploy=true`
+ran CI/deploy as run `28263687466`. That run passed and Node B deploy job
+`83745803112` succeeded. Staging `/health` reports proxy and sandbox deployed
+commit `0975eea990a0de44f99a55ae0e5fb5aee2416bbd`, deployed at
+`2026-06-26T20:37:16Z`. Unauthenticated `/api/universal-wire/stories` returns
+401 as expected, and adding `X-Authenticated-User` from curl still returns 401,
+so public auth cannot be bypassed with that header. The accessible Chrome window
+also returns `{"error":"authentication required"}` for the API, so deployed
+authenticated acceptance is blocked until the owner reauthenticates the usable
+Chrome profile/session. O5 has now started through the product path:
 authenticated Chrome as `yusefnathanson@me.com` submitted
 `O5_PRODUCT_PATH_PROBE_20260626` through prompt bar at `2026-06-26T19:45:58Z`.
 The product created Texture doc `d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`,
@@ -555,13 +580,15 @@ was blocking automation. This is an acceptance blocker, not proof that the
 handoff repair works on staging.
 
 next move: Problem Documentation First is satisfied for the clarified Universal
-Wire product gap by this paradoc/ledger update. Next, design a bounded
-Universal Wire synthesis slice: choose a multilingual source cluster, create or
-update a Texture article in English with native `source_ref` citations and
-Source Viewer artifacts, expose that article through Universal Wire instead of a
-raw capture card, and record the remaining world-model/update gap. The O5
+Wire product gap by this paradoc/ledger update, and the immediate bad fallback
+has been repaired so raw graph captures are diagnostic-only rather than public
+articles. Next, design a bounded Universal Wire synthesis slice: choose a
+multilingual source cluster, create or update a Texture article in English with
+native `source_ref` citations and Source Viewer artifacts, expose that article
+through Universal Wire, and record the remaining world-model/update gap. The O5
 post-deploy handoff proof is still useful, but it should not distract from the
-fact that raw capture projections are not the Universal Wire product target.
+fact that the product target is synthesis through Texture rather than capture
+projection.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -575,7 +602,9 @@ local/branch graph proofs did not settle O4 until staging auth, deploy identity,
 sourcecycled readback, active platform VM API, and authenticated browser product
 QA all agreed, but even that did not settle the actual Universal Wire product.
 The graph-backed capture projection is useful substrate evidence and bad product
-evidence. O5's first product-path probe improved the belief state: prompt bar
+evidence. The diagnostic-boundary repair improves the product by removing that
+bad evidence from the public article list, but it is not the synthesis pipeline.
+O5's first product-path probe improved the belief state: prompt bar
 and Texture materialization work on staging for a self-development mission, and
 Texture can issue a Super execution request, but the observed request did not
 wake a visible Super loop or produce downstream worker/package evidence. The
@@ -583,11 +612,13 @@ local root cause is plausibly repaired and deployed, but product acceptance is
 blocked until Chrome is re-authenticated with passkey.
 
 settlement: not settled. O4 News/Universal Wire is accepted only at the
-graph-backed capture-projection substrate scope, and owner clarification shows
-that the actual product benchmark remains open. O5 has started through product
-prompt-bar/Texture/Super-request evidence. The first O5 handoff repair is
-landed and deployed but not product-accepted because Chrome is waiting on
-passkey sign-in. This mission remains `working` because O4 synthesis/world-model
+graph-backed capture-projection substrate scope plus the deployed
+diagnostic-boundary repair that prevents raw captures from being published as
+articles; owner clarification shows that the actual product benchmark remains
+open. O5 has started through product prompt-bar/Texture/Super-request evidence.
+The first O5 handoff repair is landed and deployed but not product-accepted
+because Chrome is waiting on passkey sign-in or another usable Choir auth
+session. This mission remains `working` because O4 synthesis/world-model
 obligations, O5 package/blocker/verifier obligations, and O6-O8 remain open.
 Exit requires `settled`, `open_handoff`, `blocked`, or `superseded` with
 remaining V and next assignment explicit.
