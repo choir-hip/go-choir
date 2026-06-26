@@ -2432,3 +2432,44 @@ architecture work.
 Open edge: choose the next bounded O4 worker for source_ref citation carry-
 forward or sourcecycled-to-`choir.web_capture` ingestion, preserving accepted
 empty-state and Texture-priority behavior.
+
+## 2026-06-26 - O4 Phase 3 Worker Launched And Resolved
+
+Claim: O4 Phase 3 has been launched in a real Codex worker thread to pursue the
+next source_ref/citation carry-forward edge after accepted Phase 2.
+
+Move: create a new worktree worker from the orchestration branch, resolve the
+pending worktree handle to a thread id, title and pin the worker, and record the
+work item in Parallax State.
+
+Expected Delta V: 0. Worker launch creates an implementation context but cannot
+close an obligation before final report and independent verifier acceptance.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Pending worktree handle:
+  `local:0aa9d499-4306-40ff-8c74-9dc4d1c28513`.
+- Worker thread:
+  `019f036b-3492-7213-b261-00daeee6445e`
+  (`O4 worker - Universal Wire Source Ref Citations`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/4aec/go-choir`.
+- Work item:
+  `O4-phase3-universal-wire-source-ref-citations`.
+- Worker status at readback: active.
+- Assignment scope: add or precisely scope the smallest Universal Wire
+  graph-backed citation/source-ref carry-forward path for graph-backed
+  `web_capture` cards without claiming full sourcecycled ingestion, Texture
+  publication, staging, or browser/product proof.
+
+Evidence boundary: thread-tool launch/readback and paradoc state update only.
+No worker final report, verifier verdict, root incorporation, source_ref
+carry-forward proof, browser rendering, sourcecycled ingestion, staging/product
+proof, main, push, CI, deploy, promotion, rollback, or run-acceptance claim.
+
+Open edge: read worker thread
+`019f036b-3492-7213-b261-00daeee6445e` after it completes. If it has a final
+report, record the report and create an independent verifier thread before
+incorporating any O4 Phase 3 commits.

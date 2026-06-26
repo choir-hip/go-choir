@@ -759,7 +759,11 @@ next move: choose the next bounded O4 worker. The highest-value next slice is
 graph/source-ref citation carry-forward for Universal Wire cards or a
 sourcecycled-to-`choir.web_capture` ingestion seam, while preserving the accepted
 empty-state and Texture-priority behavior. Use Problem Documentation First for
-any newly discovered behavior gap.
+any newly discovered behavior gap. O4 Phase 3 worker thread
+`019f036b-3492-7213-b261-00daeee6445e` (`O4 worker - Universal Wire Source Ref
+Citations`) has been launched, titled, and pinned from pending worktree handle
+`local:0aa9d499-4306-40ff-8c74-9dc4d1c28513` in
+`/Users/wiz/.codex/worktrees/4aec/go-choir`; it is active.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
