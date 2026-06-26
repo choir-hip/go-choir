@@ -3054,3 +3054,45 @@ run-acceptance claim.
 Open edge: resolve pending worker handle
 `local:2848c27e-c530-4401-87fb-709786e6e4b2` into a readable thread, title/pin
 it, and read its final report before creating an independent verifier.
+
+## 2026-06-26 - O4 Phase 5 Readable Worker Replacement
+
+Claim: O4 Phase 5 now has a readable Codex worker thread. The earlier pending
+worktree handle remains unresolved and is superseded for orchestration
+purposes.
+
+Move: after `list_threads` failed to find pending handle
+`local:2848c27e-c530-4401-87fb-709786e6e4b2`, create a replacement local
+project-scoped worker, title and pin it, and keep the shared orchestration
+checkout clean.
+
+Expected Delta V: 0. Worker materialization creates an implementation context,
+not a completed proof.
+
+Actual Delta V: 0. Current V remains 35.
+
+Receipts:
+
+- Superseded unresolved pending handle:
+  `local:2848c27e-c530-4401-87fb-709786e6e4b2`.
+- Replacement worker thread:
+  `019f039f-9dd6-7881-a4ec-8607c9a4bb34`
+  (`O4 worker - Web Capture Ingestion`).
+- Work item:
+  `O4-phase5-sourcecycled-web-capture-ingestion-replacement`.
+- Assignment scope:
+  identify the current sourcecycled/web/source ingestion path and add the
+  smallest branch-level slice that writes real durable `choir.web_capture`
+  graph objects through the accepted objectgraph helper/service, or document a
+  precise blocker checkpoint-first.
+- Isolation instruction:
+  worker starts in the shared checkout but must create its own `codex/` branch
+  or separate worktree before tracked edits and leave a clean committed state.
+
+Evidence boundary: worker thread creation/title/pin only. No worker final
+report, verifier verdict, implementation, root incorporation, CI, deploy,
+staging product acceptance, promotion, rollback, or run-acceptance claim.
+
+Open edge: read worker thread
+`019f039f-9dd6-7881-a4ec-8607c9a4bb34` after it completes. If it has candidate
+commits, record them and create an independent verifier before incorporating.

@@ -771,14 +771,18 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: resolve O4 Phase 5 worker pending worktree handle
-`local:2848c27e-c530-4401-87fb-709786e6e4b2` into a readable thread for
-`O4-phase5-sourcecycled-web-capture-ingestion`. The worker is assigned the next
-smallest graph-backed News/Wire realism axis: sourcecycled/web/source ingestion
-into durable `choir.web_capture` graph objects, while keeping native Texture
-`source_ref` carry-forward, publication/export, staging/deploy, Qdrant,
-provider/gateway, auth/session, promotion, rollback, and run-acceptance claims
-out of scope unless explicitly assigned. O4 Phase 4 verifier thread
+next move: read O4 Phase 5 worker thread
+`019f039f-9dd6-7881-a4ec-8607c9a4bb34` (`O4 worker - Web Capture Ingestion`)
+after it completes, then record its report and create an independent verifier
+if it produces candidate commits. Earlier pending worktree handle
+`local:2848c27e-c530-4401-87fb-709786e6e4b2` did not resolve in `list_threads`
+and is superseded for orchestration by the readable replacement worker. The
+worker is assigned the next smallest graph-backed News/Wire realism axis:
+sourcecycled/web/source ingestion into durable `choir.web_capture` graph
+objects, while keeping native Texture `source_ref` carry-forward,
+publication/export, staging/deploy, Qdrant, provider/gateway, auth/session,
+promotion, rollback, and run-acceptance claims out of scope unless explicitly
+assigned. O4 Phase 4 verifier thread
 `019f0395-93f6-7ad3-b89f-63aa07d9d5b0` (`O4 verifier - Source Open Browser
 Proof`) returned `accept` with no findings. Earlier pending verifier worktree handles
 `local:5cdd17ec-f3ed-489f-8339-37caa04201c4` and
