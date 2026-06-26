@@ -311,8 +311,16 @@ payload rather than a toy task.
 
 Checklist:
 
-- [ ] Start from product path, not Codex-only edits.
-- [ ] Use prompt bar / Texture / super path to create or continue a mission.
+- [x] Start from product path, not Codex-only edits. Evidence: authenticated
+  Chrome prompt-bar submission on staging at `2026-06-26T19:45:58Z` created
+  Texture document `d4b61d05-0e1c-44a9-a7b3-5e4b1048d812` and trajectory
+  `2f331a8d-3228-42da-9afb-238b33e2a7b9`.
+- [x] Use prompt bar / Texture / super path to create or continue a mission.
+  Boundary: Texture authored v1 mission narrative
+  `b4afd7f0-1be6-43ab-87fd-38dc50cbd721`, invoked
+  `request_super_execution`, and sent a channel message to
+  `super:5bd6de97-3b58-408c-bf89-c42c81b083de`; Super did not yet appear as a
+  running trajectory agent or produce worker/package evidence.
 - [ ] Produce a reviewable PR, AppChangePackage, or precise blocker.
 - [ ] Attach worker/candidate evidence to the artifact context.
 - [ ] Attach verifier contract and verdict.
@@ -417,11 +425,14 @@ product acceptance.
 variant (ranking function) V: 68 total obligations = 9 WIP-preservation + 8
 object graph + 7 Qdrant + 8 source-entity + 8 News/Universal Wire + 7
 self-development + 7 Nucleus + 6 Choir Base + 8 Autoradio/Pipecat obligations.
-Current value: 28. Last Delta V: 1 for final O4 settlement verifier thread
-`019f0570-cab8-78e1-8dca-2f058ecf7e13`: the verifier accepted closing the
-remaining O4 source-open and independent-News-benchmark obligations at the
-graph-backed capture-projection scope, based on recorded authenticated Chrome QA
-plus independently reproduced public health/asset checks.
+Current value: 26. Last Delta V: 2 for starting O5 through the authenticated
+staging product path: prompt bar created Texture doc
+`d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`, trajectory
+`2f331a8d-3228-42da-9afb-238b33e2a7b9`, and Texture run
+`0fe24855-e1f6-4f01-9230-51b5983cbb18`; Texture wrote v1 mission narrative
+`b4afd7f0-1be6-43ab-87fd-38dc50cbd721` and requested Super execution, but no
+Super run, worker/candidate evidence, AppChangePackage, or final
+Texture-visible blocker has appeared yet.
 
 budget: Overnight budget is already partially spent; solvency is feasible only
 for bounded O4 follow-through plus explicit open handoff of the broader O5-O8
@@ -434,12 +445,12 @@ protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing. User granted staging deploy authority by pushing to
 `origin/main` and authenticated Chrome QA on `choir.news`.
 
-mutation class / protected surfaces: Current move is green evidence
-documentation after the red-adjacent/orange deployed repair. The landed repair
-touched frontend/deployment static asset routing and deploy smoke validation. It
-did not touch Texture canonical writes, Trace/evidence, candidate computers,
-auth/session renewal, vmctl, gateway/provider calls, Qdrant,
-publication/export, promotion/rollback, or run acceptance.
+mutation class / protected surfaces: Current repo move is green evidence
+documentation. The staging product probe was a red-adjacent product-state
+mutation through authenticated prompt bar, Texture canonical revision creation,
+Trace/channel-message evidence, and Super-request routing. It did not touch
+tracked code, deployment routing, vmctl, gateway/provider credentials, Qdrant,
+publication/export, promotion/rollback, run acceptance, or owner adoption.
 
 evidence packet: Behavior-changing landings require pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance proof, verifier
@@ -476,12 +487,29 @@ graph-backed capture-projection News benchmark scope. Non-O4 realism axes remain
 open: native Texture body `source_ref` citation carry-forward,
 publication/export, Qdrant projection, provider/search freshness, run
 acceptance, promotion/rollback, and preserved-tab-across-deploy proof beyond one
-previous asset URL resolving.
+previous asset URL resolving. O5 has now started through the product path:
+authenticated Chrome as `yusefnathanson@me.com` submitted
+`O5_PRODUCT_PATH_PROBE_20260626` through prompt bar at `2026-06-26T19:45:58Z`.
+The product created Texture doc `d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`,
+trajectory `2f331a8d-3228-42da-9afb-238b33e2a7b9`, and Texture run
+`0fe24855-e1f6-4f01-9230-51b5983cbb18`. Texture wrote v1
+`b4afd7f0-1be6-43ab-87fd-38dc50cbd721` as a mission narrative, invoked
+`request_super_execution` with update
+`33cb84e5-d9a3-4144-8bce-eda258125b07`, and emitted a channel message to
+`super:5bd6de97-3b58-408c-bf89-c42c81b083de`. A second Super request was
+deduped with `dedupe_reason=texture_run_already_requested_super`. By
+`2026-06-26T19:50:23Z`, the trajectory still listed only conductor and Texture
+agents, no Super loop id/state, no worker/candidate evidence, no
+AppChangePackage, no new revision after v1, and no final Texture-visible
+blocker; Texture passivated at `2026-06-26T19:48:40Z` with
+`reason=idle_deadline`.
 
-next move: record and push this final O4 evidence-only docs update, monitor the
-docs truth workflow, then begin O5 with a product-path self-development
-checkpoint and thread assignment. The first O5 move must start from prompt
-bar/Texture/super product evidence, not Codex-only edits.
+next move: because O5 product evidence revealed a handoff boundary rather than a
+package, continue Problem Documentation First. Open a focused O5 worker/checker
+thread or local checkpoint to inspect why `request_super_execution` returns a
+persistent Super update with empty `loop_id`/`state` and no subsequent Super
+agent in Trace, then either repair the wake/delegation path or document the
+precise blocker before attempting a self-development package.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -493,12 +521,17 @@ learning state: Thread-native orchestration is now proved usable in this Codex
 environment through `codex_app` thread tools. The current shared learning is that
 local/branch graph proofs did not settle O4 until staging auth, deploy identity,
 sourcecycled readback, active platform VM API, and authenticated browser product
-QA all agreed.
+QA all agreed. O5's first product-path probe improved the belief state: prompt
+bar and Texture materialization work on staging for a self-development mission,
+and Texture can issue a Super execution request, but the observed request did
+not yet wake a visible Super loop or produce downstream worker/package evidence.
 
 settlement: not settled. O4 News/Universal Wire is accepted at the graph-backed
-capture-projection benchmark scope, but this mission remains `working` because
-O5-O8 obligations remain open. Exit requires `settled`, `open_handoff`,
-`blocked`, or `superseded` with remaining V and next assignment explicit.
+capture-projection benchmark scope, and O5 has started through product
+prompt-bar/Texture/Super-request evidence, but this mission remains `working`
+because O5 package/blocker/verifier obligations and O6-O8 remain open. Exit
+requires `settled`, `open_handoff`, `blocked`, or `superseded` with remaining V
+and next assignment explicit.
 
 ## Suggested Goal String
 

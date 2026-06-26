@@ -6698,3 +6698,102 @@ Open edge: begin O5 Choir-in-Choir self-development from the product path. The
 first O5 move should create or continue a Texture/super mission through the
 prompt-bar/product route, define the candidate evidence contract, and avoid
 Codex-only edits as the primary proof.
+
+## 2026-06-26 - O5 Product-Path Self-Development Probe Started
+
+Claim: O5 has started through the authenticated staging product path, but it has
+not yet produced a reviewable PR, AppChangePackage, worker/candidate evidence,
+verifier verdict, or Texture-visible final blocker.
+
+Move: in logged-in Chrome on `https://choir.news` as
+`yusefnathanson@me.com`, submitted prompt marker
+`O5_PRODUCT_PATH_PROBE_20260626` through the prompt bar at
+`2026-06-26T19:45:58Z`. The prompt asked the product path to continue
+`docs/mission-choir-in-choir-platform-pr-accelerator-v0.md`, create or update a
+Texture mission narrative first, and ask Super for one bounded
+self-development run: inspect whether the current Universal Wire
+graph-backed capture projection can yield a reviewable AppChangePackage or a
+precise blocker for freshness/source-body/ranking truthfulness gaps, without
+pushing `main` or deploying.
+
+Expected Delta V: 2 for proving the first two O5 obligations through product
+evidence: start from product path, and use prompt bar / Texture / Super-request
+path to create or continue the mission. Actual Delta V: 2. Current V: 26.
+
+Product evidence:
+
+- Staging health at probe time reported proxy and sandbox deployed commit
+  `b0f646d41301a57daae334264ca67e20d4aa2218`, deployed at
+  `2026-06-26T19:29:51Z`.
+- Prompt-bar submission created Texture document
+  `d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`, trajectory
+  `2f331a8d-3228-42da-9afb-238b33e2a7b9`, and initial user revision
+  `646e7c58-1e33-4c51-9d9e-0dfaff46276a`.
+- Texture run `0fe24855-e1f6-4f01-9230-51b5983cbb18` authored v1 revision
+  `b4afd7f0-1be6-43ab-87fd-38dc50cbd721` with a mission narrative naming the
+  objective, execution bounds, evidence needed, rollback posture, and residual
+  risks.
+- Trace moment `56de6b27-f534-45fd-9bed-d5c645fc1b37` shows Texture invoked
+  `request_super_execution` with the bounded O5 objective.
+- Trace moment `ff027b55-9cab-45b6-a338-35b9bc5612fb` shows
+  `request_super_execution` returned successfully with
+  `agent_id=super:5bd6de97-3b58-408c-bf89-c42c81b083de`,
+  `channel_id=d4b61d05-0e1c-44a9-a7b3-5e4b1048d812`,
+  `requested_by_run_id=0fe24855-e1f6-4f01-9230-51b5983cbb18`,
+  `update_id=33cb84e5-d9a3-4144-8bce-eda258125b07`, `persistent=true`, but
+  empty `loop_id` and empty `state`.
+- Trace moment `1a5a41d8-5dff-48d8-8ab6-828c88a7d611` shows the channel
+  message from Texture to Super carrying a `coagent_source_packet.v1`
+  `execution_request`.
+- A second `request_super_execution` call returned as deduped at moment
+  `4fdc1d6a-dbcd-4d6d-962f-6ee0b670aaa7` with
+  `dedupe_reason=texture_run_already_requested_super`.
+- Texture passivated at `2026-06-26T19:48:40Z` with `reason=idle_deadline`.
+- A bounded authenticated poll at `2026-06-26T19:50:23Z` showed the document
+  still at v1, no revision after `b4afd7f0`, trajectory agents only conductor
+  and Texture, no Super loop id/state in the trajectory, no worker/candidate
+  evidence, and no AppChangePackage.
+
+Mutation class / protected surfaces: repo change is green evidence
+documentation. The product probe was red-adjacent product-state mutation through
+authenticated prompt bar, Texture canonical revision creation, Trace/channel
+message evidence, and Super-request routing. No tracked code, deploy routing,
+vmctl, gateway/provider credentials, Qdrant, publication/export,
+promotion/rollback, run acceptance, or owner adoption was changed by this
+orchestration step.
+
+Conjecture delta: product-path ingress is healthier than the old O5 June 8
+blocker state because prompt bar and Texture materialization worked and Texture
+requested Super execution. The remaining uncertainty moved to the
+Texture-to-Super wake/delegation boundary: `request_super_execution` can return
+a persistent update handle while no visible Super trajectory agent or downstream
+worker/package evidence appears within the observed window.
+
+Heresy delta: `discovered` for the current O5 handoff boundary. It is not yet a
+regression claim because the prior O5 mission doc already recorded historical
+VText/Super handoff unreliability, and this probe establishes the current
+staging shape after later repairs.
+
+Rollback refs: no platform code was changed. The created Texture document and
+Trace trajectory should remain as evidence; no AppChangePackage was adopted, no
+PR was merged, no deployment occurred, and no owner promotion/rollback action is
+needed for this probe.
+
+Evidence boundary and non-claims:
+
+- This proves staging prompt bar -> Texture materialization -> Texture
+  `request_super_execution` request/return evidence for the O5 mission.
+- This does not prove a Super run, worker VM/candidate computer, package
+  publication, AppChangePackage adoption, reviewable PR, verifier contract,
+  run acceptance, promotion-level evidence, rollback execution, or self-hosted
+  code repair.
+- The visible app still showed a generic `Connection error` container near the
+  command prompt during the probe, but the authenticated public APIs confirmed
+  the prompt-bar and Texture state mutations. This entry does not yet attribute
+  causality to that UI error.
+
+Open edge: perform Problem Documentation First on the O5 handoff boundary. The
+next worker/checker should inspect why `request_super_execution` returned a
+persistent Super update with empty `loop_id`/`state` and no subsequent visible
+Super agent in Trace, then either repair wake/delegation or document the precise
+blocker before attempting a self-development AppChangePackage.
