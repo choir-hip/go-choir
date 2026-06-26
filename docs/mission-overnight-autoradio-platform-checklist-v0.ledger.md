@@ -6237,3 +6237,44 @@ Open edge: repair the graph write/read boundary so sourcecycled projects
 serves `/api/universal-wire/stories`, or explicitly change the public route
 architecture with a documented rollback. The next behavior commit must cite
 this problem record.
+
+## 2026-06-26 - O4 Runtime Projection Deploy Filter Gap Documented
+
+Claim: The sourcecycled-to-platform-runtime graph repair passed CI tests but
+failed staging deployment because the Nix service source filter did not include
+the new small projection package and the sandbox/runtime transitive source
+dependency now needed by the internal runtime endpoint.
+
+Move: watched CI run `28258130251` for pushed repair commit `2aba718f`. All Go
+test shards, vet/build, docs, and TLA jobs passed, but `Deploy to Staging
+(Node B)` job `83727097139` failed while building the sandbox guest image.
+
+Expected Delta V: 0 for deploy failure documentation. Actual Delta V: 0.
+Current V remains 31.
+
+Receipts:
+
+- Behavior repair commit under deploy:
+  `2aba718f project sourcecycled captures into platform runtime graph`.
+- Passing gates in CI run `28258130251`: non-runtime Go tests,
+  integration-tagged smoke, runtime shards 0-3, Go vet/build, Docs Truth Check,
+  TLA+ model check, and deploy impact detection.
+- Deploy failure:
+  Node B deploy job `83727097139` failed in Nix sandbox package build.
+- Error:
+  `internal/runtime/sourcecycled_web_captures.go` could not resolve
+  `github.com/yusefmosiah/go-choir/internal/sourcegraph` and
+  `github.com/yusefmosiah/go-choir/internal/sources` under `-mod=vendor`,
+  because service-specific Nix source filtering did not include those internal
+  package directories for the sandbox guest package.
+
+Mutation class / protected surfaces: green documentation for a yellow/orange
+deployment packaging problem. No behavior changed in this move.
+
+Evidence boundary: this records a deploy build failure, not product behavior.
+No staging identity, browser proof, source-opening proof, publication/export,
+run acceptance, promotion, or rollback proof is claimed for `2aba718f`.
+
+Open edge: update the Nix service source filters for sandbox, gateway, and
+sourcecycled as needed so the runtime graph projection packages are present in
+filtered builds, then rerun CI/deploy.
