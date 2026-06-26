@@ -29,8 +29,6 @@
     semanticCompareTexture,
     submitAgentRevision,
     submitPublicationProposal,
-    pushTextureReadOwner,
-    popTextureReadOwner,
     WIRE_PLATFORM_READ_OWNER,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
@@ -153,7 +151,7 @@
   let relatedOpenPointerHandledAt = 0;
   let relatedOpenPointerHandledDocID = '';
   let removeLiveListener = () => {};
-  let platformReadScoped = false;
+  let textureReadOwner = '';
 
   const AUTOSAVE_DELAY_MS = 900;
   const TOOLBAR_HIDE_SCROLL_DELTA = 8;
@@ -537,6 +535,7 @@
     closeDocumentStream();
     streamDocId = docId;
     streamSource = openDocumentStream(docId, {
+      readOwner: textureReadOwner,
       onEvent: (event) => {
         void handleDocumentStreamEvent(event);
       },
@@ -548,7 +547,7 @@
   }
 
   async function refreshRevisions(docId, preferredRevisionId = '') {
-    const listed = await listRevisions(docId);
+    const listed = await listRevisions(docId, { readOwner: textureReadOwner });
     const ordered = sortRevisionsChronologically(listed.revisions || []);
     revisions = ordered;
 
@@ -575,7 +574,7 @@
     resetCompareMergeState();
     sourcePanelError = '';
     const summary = revisions[index];
-    const revision = await getRevision(summary.revision_id);
+    const revision = await getRevision(summary.revision_id, { readOwner: textureReadOwner });
     currentRevision = revision;
     activeRevisionIndex = index;
     setEditorFromRevision(revision);
@@ -604,7 +603,7 @@
   }
 
   async function reloadDocument(preferredRevisionId = '') {
-    currentDoc = await getDocument(currentDoc.doc_id);
+    currentDoc = await getDocument(currentDoc.doc_id, { readOwner: textureReadOwner });
     applyDocumentWorkState(currentDoc);
     latestHeadRevisionId = currentDoc.current_revision_id || latestHeadRevisionId;
     await refreshRevisions(currentDoc.doc_id, preferredRevisionId);
@@ -788,20 +787,11 @@
   }
 
   function applyPlatformReadScope(ctx = appContext) {
-    const wants = wantsPlatformReadScope(ctx);
-    if (wants && !platformReadScoped) {
-      pushTextureReadOwner(WIRE_PLATFORM_READ_OWNER);
-      platformReadScoped = true;
-    } else if (!wants && platformReadScoped) {
-      popTextureReadOwner();
-      platformReadScoped = false;
-    }
+    textureReadOwner = wantsPlatformReadScope(ctx) ? WIRE_PLATFORM_READ_OWNER : '';
   }
 
   function clearPlatformReadScope() {
-    if (!platformReadScoped) return;
-    popTextureReadOwner();
-    platformReadScoped = false;
+    textureReadOwner = '';
   }
   async function loadContext() {
     loading = true;
@@ -867,7 +857,7 @@
       }
 
       if (appContext.docId) {
-        currentDoc = await getDocument(appContext.docId);
+        currentDoc = await getDocument(appContext.docId, { readOwner: textureReadOwner });
         latestHeadRevisionId = currentDoc.current_revision_id || '';
         await refreshRevisions(currentDoc.doc_id, appContext.initialRevisionId || '');
         applyDocumentWorkState(currentDoc);
@@ -903,8 +893,10 @@
       }
 
       if (currentDoc?.doc_id) {
-        await ensureFileManifest();
-        if (!agentPending && !isPublishedReadOnly && !appContext.initialRevisionId) {
+        if (!textureReadOwner) {
+          await ensureFileManifest();
+        }
+        if (!textureReadOwner && !agentPending && !isPublishedReadOnly && !appContext.initialRevisionId) {
           restoreLocalDraftIfNewer();
         }
         publishCurrentDocumentContext(normalizeTitle(appContext));
@@ -1190,6 +1182,7 @@
       compareResult = await semanticCompareTexture(currentDoc.doc_id, {
         sourceRevisionId: currentRevision.revision_id,
         targetRevisionId: target.revision_id,
+        readOwner: textureReadOwner,
       });
       selectedMergeSuggestionIds = (compareResult.suggestions || []).slice(0, 3).map((suggestion) => suggestion.id);
       saveStatus = `Comparing ${versionLabel} to ${compareTargetVersionLabel()}`;

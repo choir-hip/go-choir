@@ -178,6 +178,203 @@ test('Universal Wire retries authenticated story loads after transient route fai
   }
 });
 
+test('Universal Wire platform read does not taint ordinary Texture document reads', async ({ page }) => {
+  let normalDocReadCount = 0;
+  let normalSawPlatformReadOwner = false;
+  let wireSawPlatformReadOwner = false;
+  let wireManifestEnsures = 0;
+
+  await page.route('**/auth/session', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authenticated: true,
+        user: {
+          id: 'user-o4-wire-read-owner-isolation',
+          email: 'o4-wire-read-owner-isolation@example.com',
+        },
+      }),
+    });
+  });
+  await page.route('**/api/shell/bootstrap**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sandbox_id: 'sandbox-dev' }),
+    });
+  });
+  await page.route('**/api/desktop/state**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, updated_at: '2026-06-26T00:00:00Z' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        owner_id: 'user-o4-wire-read-owner-isolation',
+        windows: [
+          {
+            window_id: 'wire-platform-texture',
+            app_id: 'texture',
+            title: 'Wire article',
+            geometry: { x: 70, y: 70, width: 760, height: 520 },
+            mode: 'normal',
+            z_index: 3,
+            app_context: {
+              windowTitle: 'Wire article',
+              docId: 'doc-wire-platform',
+              createdFrom: 'universal_wire_article',
+              platformRead: true,
+              sourcePath: 'universal-wire/story.story.texture',
+            },
+          },
+          {
+            window_id: 'ordinary-texture',
+            app_id: 'texture',
+            title: 'Ordinary Texture',
+            geometry: { x: 160, y: 120, width: 760, height: 520 },
+            mode: 'normal',
+            z_index: 4,
+            app_context: {
+              windowTitle: 'Ordinary Texture',
+              docId: 'doc-normal-user',
+              createInitialVersion: false,
+            },
+          },
+        ],
+        active_window_id: 'ordinary-texture',
+      }),
+    });
+  });
+  await page.route('**/api/texture/**', async (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    const readOwner = url.searchParams.get('read_owner') || '';
+    const docMatch = url.pathname.match(/^\/api\/texture\/documents\/([^/]+)$/);
+    const revisionsMatch = url.pathname.match(/^\/api\/texture\/documents\/([^/]+)\/revisions$/);
+    const revisionMatch = url.pathname.match(/^\/api\/texture\/revisions\/([^/]+)$/);
+    const manifestMatch = url.pathname.match(/^\/api\/texture\/documents\/([^/]+)\/manifest$/);
+    const streamMatch = url.pathname.match(/^\/api\/texture\/documents\/([^/]+)\/stream$/);
+
+    if (docMatch && method === 'GET') {
+      const docId = decodeURIComponent(docMatch[1]);
+      if (docId === 'doc-normal-user') {
+        normalDocReadCount += 1;
+        normalSawPlatformReadOwner = normalSawPlatformReadOwner || readOwner === 'universal-wire-platform';
+        await route.fulfill({
+          status: readOwner ? 409 : 200,
+          contentType: 'application/json',
+          body: JSON.stringify(readOwner ? { error: 'ordinary read was tainted by platform read owner' } : {
+            doc_id: 'doc-normal-user',
+            title: 'Ordinary Texture',
+            current_revision_id: 'rev-normal-user',
+            current_version_number: 0,
+          }),
+        });
+        return;
+      }
+      if (docId === 'doc-wire-platform') {
+        wireSawPlatformReadOwner = wireSawPlatformReadOwner || readOwner === 'universal-wire-platform';
+        await route.fulfill({
+          status: readOwner === 'universal-wire-platform' ? 200 : 409,
+          contentType: 'application/json',
+          body: JSON.stringify(readOwner === 'universal-wire-platform' ? {
+            doc_id: 'doc-wire-platform',
+            title: 'Wire article',
+            current_revision_id: 'rev-wire-platform',
+            current_version_number: 0,
+          } : { error: 'wire read missed platform owner' }),
+        });
+        return;
+      }
+    }
+
+    if (revisionsMatch && method === 'GET') {
+      const docId = decodeURIComponent(revisionsMatch[1]);
+      const isWire = docId === 'doc-wire-platform';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          revisions: [{
+            revision_id: isWire ? 'rev-wire-platform' : 'rev-normal-user',
+            doc_id: docId,
+            version_number: 0,
+            author_kind: isWire ? 'agent' : 'user',
+            author_label: isWire ? 'Universal Wire' : 'Yusef',
+            created_at: '2026-06-26T00:00:00Z',
+          }],
+        }),
+      });
+      return;
+    }
+
+    if (revisionMatch && method === 'GET') {
+      const revisionId = decodeURIComponent(revisionMatch[1]);
+      const isWire = revisionId === 'rev-wire-platform';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          revision_id: revisionId,
+          doc_id: isWire ? 'doc-wire-platform' : 'doc-normal-user',
+          version_number: 0,
+          content: isWire
+            ? 'Wire article content loaded through platform read owner.'
+            : 'Ordinary Texture content loaded without platform read owner.',
+          metadata: {},
+        }),
+      });
+      return;
+    }
+
+    if (manifestMatch && method === 'POST') {
+      const docId = decodeURIComponent(manifestMatch[1]);
+      if (docId === 'doc-wire-platform') {
+        wireManifestEnsures += 1;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'wire platform document should not ensure a user manifest' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ doc_id: docId, source_path: '' }),
+      });
+      return;
+    }
+
+    if (streamMatch && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: '',
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto(BASE_URL);
+  await expect(page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window-id="wire-platform-texture"] [data-texture-editor-area]')).toContainText('Wire article content loaded through platform read owner');
+  await expect(page.locator('[data-window-id="ordinary-texture"] [data-texture-editor-area]')).toContainText('Ordinary Texture content loaded without platform read owner');
+  expect(wireSawPlatformReadOwner).toBe(true);
+  expect(normalDocReadCount).toBeGreaterThan(0);
+  expect(normalSawPlatformReadOwner).toBe(false);
+  expect(wireManifestEnsures).toBe(0);
+});
+
 test('Universal Wire renders empty feed diagnostics without synthetic stories', async ({ page }) => {
   await page.route('**/auth/session', async (route) => {
     await route.fulfill({
