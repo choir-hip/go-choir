@@ -67,4 +67,3 @@ behavior, Qdrant indexing, or product acceptance.
 
 Drop/revert the O4 Phase 1 checkpoint and implementation commits. O0-O3
 accepted commits remain out of scope.
-
