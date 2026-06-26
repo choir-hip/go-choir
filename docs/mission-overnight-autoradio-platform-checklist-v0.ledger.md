@@ -5677,3 +5677,60 @@ deployed/live source artifact proof is claimed.
 
 Open edge: wait for Phase 12 verifier verdict before recording the
 deploy/auth-handoff finding as verified mission evidence.
+
+## 2026-06-26 - O4 Phase 12 Handoff Finding Verified
+
+Claim: The Phase 12 deploy/auth handoff finding is independently verified.
+This records the remaining O4 source/citation edge as outside current
+orchestration authority, not as closed.
+
+Move: read the completed verifier verdict and updated Parallax State.
+
+Expected Delta V: 0. Verifying a handoff edge does not prove deployed/live
+source artifact opening.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Verifier thread:
+  `019f043f-03fe-7bc0-b96a-ab5807c688c8`
+  (`O4 verifier - Phase 12 Deployed Source Proof Path`).
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/cb70/go-choir`.
+- Verifier verdict:
+  `accept`, with no blocking discrepancies.
+- Deployed identity verified:
+  `curl https://choir.news/health` returned deployed commit
+  `06e3225f02f60f113340309a2766c5face134395`.
+- Auth boundary verified:
+  unauthenticated `GET https://choir.news/api/universal-wire/stories` returned
+  `401 {"error":"authentication required"}`.
+- Ancestry verified:
+  `git merge-base --is-ancestor 9f54fd5e 06e3225f...` and
+  `git merge-base --is-ancestor b13ba881 06e3225f...` returned `1`;
+  deployed `06e3225f` is an ancestor of the O4 proof line, and
+  `9f54fd5e -> b13ba881 -> 5cc5093b -> 5b6f7c4` are ancestor-successor.
+- Deploy gate verified:
+  `.github/workflows/ci.yml` deploys staging from `origin/main`, resets Node B
+  to `origin/main`, and writes deployed commit identity into
+  `/var/lib/go-choir/deploy.env`.
+- Test-path boundary verified:
+  `frontend/tests/universal-wire-staging-acceptance.spec.js` is authenticated
+  but checks stories API/app surface rather than source clicks;
+  `frontend/tests/universal-wire-app.spec.js` source-opening proof is
+  local/mock-routed; `frontend/tests/texture-source-entities.spec.js` and
+  `frontend/tests/texture-source-service-publication.spec.js` create
+  document/revision/content/publication state before proof.
+- Dirty state verified:
+  verifier worktree clean; worker worktree
+  `/Users/wiz/.codex/worktrees/dd88/go-choir` clean at `5cc5093b`; temporary
+  curl bodies were written only under `/tmp`.
+
+Evidence boundary: verified handoff only. No push, deploy, auth/session
+renewal, staging mutation, publication creation, run-acceptance record, or
+deployed/live source-opening acceptance was performed or claimed.
+
+Open edge: O4 source/citation remains open. Continue only by obtaining
+deploy/auth authority for the specified read-only staging proof path, or by
+leaving O4 as an `open_handoff` edge before any authorized move to O5.

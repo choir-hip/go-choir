@@ -944,12 +944,22 @@ source-backed artifact; next move requires deploy/auth authority. Verifier
 pending handle `local:4e663818-195f-4043-894c-765a77e334ec` resolved to thread
 `019f043f-03fe-7bc0-b96a-ab5807c688c8`
 (`O4 verifier - Phase 12 Deployed Source Proof Path`) in
-`/Users/wiz/.codex/worktrees/cb70/go-choir`.
+`/Users/wiz/.codex/worktrees/cb70/go-choir`; it returned `accept` with no
+blocking discrepancies. The verifier confirmed current staging deploy identity
+`06e3225f02f60f113340309a2766c5face134395`, 401 unauthenticated Universal Wire
+behavior, deploy-from-`origin/main` workflow, missing read-only deployed
+source-opening test path, and clean verifier/worker worktrees. Current V
+remains 31 because the remaining O4 source/citation proof now requires
+deploy/auth authority or a documented staging fixture/harness gap.
 
-next move: wait for Phase 12 verifier verdict before treating the
-deploy/auth-handoff finding as verified. If accepted, record the handoff and
-decide whether the mission exits `open_handoff` for O4 or seeks explicit
-deploy/auth authority. O4
+next move: treat O4 source/citation as an explicit handoff edge unless
+deploy/auth authority is granted. The admissible continuation is: merge or
+advance `origin/main` to a commit containing `9f54fd5e` and `b13ba881`, verify
+`https://choir.news/health` reports that deployed commit, provide or authorize
+an authenticated Playwright storage state, then run or add the smallest
+read-only staging source-opening proof over an existing source-backed artifact.
+Without that authority, prepare an `open_handoff` state for O4 and continue
+only if the mission owner authorizes moving to O5 with this O4 edge named. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
