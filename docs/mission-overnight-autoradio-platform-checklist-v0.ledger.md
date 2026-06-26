@@ -4132,3 +4132,89 @@ auth/session renewal, promotion/rollback, or run-acceptance claim.
 Open edge: read the worker final report when complete. If it returns candidate
 commits, inspect hygiene/readiness and launch an independent verifier before
 any root incorporation.
+
+## 2026-06-26 - O4 Phase 8 Worker Candidate And Verifier Launch
+
+Claim: O4 Phase 8 now has a verifier-ready worker candidate and a separate
+independent verifier thread in progress. This is not verifier acceptance, root
+incorporation, or checklist descent.
+
+Move: read the completed worker thread, inspect the worker worktree, create a
+project-scoped verifier thread from branch
+`codex/o4-phase8-empty-feed-diagnostics`, then title/pin the resolved verifier
+thread.
+
+Expected Delta V: 0. Worker candidate plus verifier launch does not close the
+empty-feed diagnostics obligation.
+
+Actual Delta V: 0. Current V remains 32.
+
+Receipts:
+
+- Worker thread:
+  `019f03d8-2a15-7a61-ab7f-82ea0213cce2`
+  (`O4 worker - Empty Feed Diagnostics`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/41ed/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase8-empty-feed-diagnostics` at
+  `cbf04485f01ad7ac0a8407af5113a58a7e80406b`.
+- Worker commits:
+  `4975163f checkpoint O4 empty feed diagnostics gap` and
+  `cbf04485 add Universal Wire empty feed diagnostics`.
+- Worker-reported changes:
+  `docs/o4-empty-feed-diagnostics-checkpoint-2026-06-26.md`,
+  `internal/runtime/universal_wire.go`,
+  `internal/runtime/universal_wire_test.go`,
+  `frontend/src/lib/UniversalWireApp.svelte`, and
+  `frontend/tests/universal-wire-app.spec.js`.
+- Worker-reported behavior:
+  empty `/api/universal-wire/stories` responses add diagnostics only when
+  `stories` is empty; diagnostics describe safe substrate states for
+  `texture_edition`, `web_capture_graph`, and `source_provenance`;
+  non-empty Texture and graph fallback responses omit diagnostics; the
+  Universal Wire UI renders diagnostics in the empty state without synthetic
+  story cards.
+- Worker-reported checks passed:
+  `nix develop -c go test ./internal/runtime -run
+  '^TestHandleUniversalWireStories' -count=1 -timeout=120s`;
+  `npx playwright test tests/universal-wire-app.spec.js -g 'Universal Wire
+  renders empty feed diagnostics without synthetic stories' --timeout=120000`;
+  `npm run build`; `git show --check --oneline 4975163f`;
+  `git show --check --oneline cbf04485`; `git diff --check HEAD~2..HEAD`; and
+  `git status --short --ignored` clean.
+- Orchestration read-only checks:
+  worker `git log --oneline --decorate -3` shows `cbf04485`, `4975163f`, and
+  `8471418c`; worker `git status --short --ignored` produced no output after
+  final cleanup.
+- Pending verifier handle:
+  `local:263ee5c6-9e4c-4682-9db3-3e117590d621`.
+- Resolved verifier thread:
+  `019f03e1-5342-7b61-a557-917c1ef1c407`
+  (`O4 verifier - Empty Feed Diagnostics`), titled and pinned.
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/f0d7/go-choir`.
+- Verifier work item:
+  `O4-phase8-empty-feed-diagnostics-verifier`.
+- Verifier requested scope:
+  Problem Documentation First; safe honest empty-only diagnostics; no fake
+  stories/source refs/source entities/publication/export/sourcecycled
+  success/Qdrant/provider/staging/run-acceptance claims; no sensitive local
+  paths/secrets/raw internal errors; preservation of Texture priority, graph
+  fallback, Phase 7 provenance, source/open identity, Source Viewer/Web Lens
+  policy, and auth behavior.
+
+Evidence boundary: worker branch/local evidence and verifier launch only. No
+independent verifier verdict yet, no root incorporation, no push, PR, CI,
+deploy, staging product acceptance, native Texture body `source_ref` citation
+carry-forward, publication/export, Qdrant, provider/gateway, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Residual risks: the worker reports tombstoned capture counting is implemented
+but not directly fixture-tested because objectgraph has no public tombstone
+writer. The verifier must decide whether that is acceptable for the bounded
+empty diagnostics claim.
+
+Open edge: wait for verifier thread
+`019f03e1-5342-7b61-a557-917c1ef1c407` to complete, then read the verifier
+verdict before incorporating worker commits.
