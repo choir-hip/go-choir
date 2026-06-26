@@ -2937,3 +2937,80 @@ claim.
 
 Open edge: read verifier thread
 `019f0395-93f6-7ad3-b89f-63aa07d9d5b0` after completion.
+
+## 2026-06-26 - O4 Phase 4 Source-Open Browser Proof Accepted
+
+Claim: O4 Phase 4 is accepted and incorporated at branch level. The mission now
+has a focused frontend/browser proof that Universal Wire graph-backed capture
+cards consume Phase 3 source/open identity fields and route source opening
+through existing Source Viewer/Web Lens policy.
+
+Move: read replacement verifier thread
+`019f0395-93f6-7ad3-b89f-63aa07d9d5b0`, incorporate accepted worker commit
+`d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`, run root-side hygiene/build/browser
+checks, and update Parallax State/checklist.
+
+Expected Delta V: 1 for closing the O4 browser proof obligation.
+
+Actual Delta V: 1. Current V decreases from 36 to 35.
+
+Receipts:
+
+- Worker thread:
+  `019f037f-41d4-7fa2-8ff7-d4a01ff78a64`
+  (`O4 worker - Universal Wire Source Open Browser`).
+- Worker commit:
+  `d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`
+  (`prove Wire graph capture source opening`).
+- Incorporated root commit:
+  `2ad415b4 prove Wire graph capture source opening`.
+- Files changed by incorporated commit:
+  `frontend/src/lib/UniversalWireApp.svelte` and
+  `frontend/tests/universal-wire-app.spec.js`.
+- Verifier thread:
+  `019f0395-93f6-7ad3-b89f-63aa07d9d5b0`
+  (`O4 verifier - Source Open Browser Proof`).
+- Verifier verdict:
+  `accept`, no findings.
+- Verifier confirmations:
+  `UniversalWireApp.svelte` maps Phase 3 manifest source/open fields into
+  existing `sourceEntityLaunchPayload`; `source-contract.ts` keeps `source`
+  routed to content/source reader and `web_lens` to browser live original; the
+  focused test proves Source Viewer default, explicit Web Lens, and no native
+  Texture `source_ref` card claim.
+- Verifier checks passed:
+  `git status --short --ignored`;
+  `git diff --check 407bddce..HEAD`;
+  `git show --check --oneline d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`;
+  `npx playwright test tests/universal-wire-app.spec.js -g "graph capture sources" --timeout=120000`;
+  and `npm run build`.
+- Verifier cleanup:
+  generated `frontend/node_modules`, `frontend/dist`, `frontend/test-results`,
+  and `frontend/playwright/.auth` were removed from the detached verifier
+  worktree; final detached verifier worktree status was clean.
+- Root checks passed:
+  `git diff --check 8d52cf14..HEAD`;
+  `git show --check --oneline 2ad415b4`;
+  `npm run build`;
+  and `npx playwright test tests/universal-wire-app.spec.js -g "graph capture sources" --timeout=120000`.
+- Root cleanup:
+  generated `frontend/dist`, `frontend/test-results`, and
+  `frontend/playwright/.auth` were removed after root checks.
+
+Evidence boundary: accepted branch/local frontend proof only. No main, push,
+PR, CI, deploy, staging product acceptance, sourcecycled ingestion, native
+Texture body `source_ref`, publication/export, Qdrant, provider/gateway,
+auth/session renewal, promotion, rollback, or run-acceptance claim.
+
+Residual risks:
+
+- The browser proof uses mocked authenticated shell/bootstrap state and mocked
+  public `/api/universal-wire/stories` DTO input. It proves UI consumption and
+  routing, not live backend production or deployed product behavior.
+- Native Texture `source_ref` citation carry-forward, sourcecycled/web/source
+  ingestion into graph objects, and staging authenticated Wire acceptance remain
+  open.
+
+Open edge: continue O4 on sourcecycled/web/source ingestion into graph objects
+or authenticated `/api/universal-wire/stories` acceptance, whichever offers the
+next highest realism gain per budget.

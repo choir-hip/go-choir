@@ -239,16 +239,23 @@ Checklist:
   Wire fallback projection for existing graph-backed `choir.web_capture`
   objects through `/api/universal-wire/stories`. O4 Phase 3 adds accepted
   branch-level additive source/open identity fields for graph-backed fallback
-  cards; sourcecycled ingestion, native Texture `source_ref` citation
-  carry-forward, browser rendering/opening, and staging product proof remain
-  open.
+  cards. O4 Phase 4 adds accepted branch-level frontend/browser proof that
+  graph-backed capture cards render source-open controls and route Source
+  Viewer/Web Lens through the existing source policy; sourcecycled ingestion,
+  native Texture `source_ref` citation carry-forward, and staging product proof
+  remain open.
 - [ ] Ingest sourcecycled/web/source items into graph objects.
 - [ ] Build News/Wire feed from graph objects and source refs.
 - [ ] Keep empty feed honest but diagnostic.
 - [ ] Add acceptance for authenticated `/api/universal-wire/stories`.
-- [ ] Add browser proof that the Universal Wire app renders real story cards.
+- [x] Add browser proof that the Universal Wire app renders real story cards.
+  O4 Phase 4 proves a graph-backed capture story card through the public
+  `/api/universal-wire/stories` route mock in the authenticated desktop shell,
+  with Source Viewer default and explicit Web Lens source opening.
 - [ ] Verify source/citation links open to real source artifacts or Source
-  Viewer/reader artifacts.
+  Viewer/reader artifacts. O4 Phase 4 proves frontend routing for graph-backed
+  fallback cards, but native Texture `source_ref` citation carry-forward and
+  deployed/live source artifact proof remain open.
 - [ ] Open independent verifier thread before claiming News benchmark.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
@@ -369,20 +376,21 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 36. Last Delta V: 0 for O4
-Phase 4 worker completion and verifier launch. O4 Phase 1 closed the first
++ 8 Autoradio/Pipecat obligations. Current value: 35. Last Delta V: 1 for O4
+Phase 4 verifier acceptance and root incorporation. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
 close the broader News/Wire feed-from-graph-and-source-refs obligation because
 sourcecycled ingestion, native Texture `source_ref` citation carry-forward,
-browser rendering/opening, staging, deploy, and product acceptance remain open.
+staging, deploy, and product acceptance remain open.
 O4 Phase 3 adds an accepted and incorporated additive DTO source/open identity
 slice for graph capture cards; it does not claim native Texture `source_ref`,
-frontend opening, or staging proof. O4 Phase 4 worker commit `d49a19bd` adds a
-verifier-ready frontend/browser source-open proof on a separate `codex/` branch,
-but no obligation closes until independent verifier acceptance and root
-incorporation.
+frontend opening, or staging proof. O4 Phase 4 adds accepted and incorporated
+frontend/browser proof that graph-backed capture cards render source controls
+and route Source Viewer/Web Lens through existing source policy; it does not
+claim live ingestion, native Texture citation carry-forward, publication/export,
+or staging proof.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -763,10 +771,14 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: read O4 Phase 4 verifier thread
+next move: continue O4 with the next smallest graph-backed News/Wire realism
+axis: sourcecycled/web/source ingestion into graph objects or authenticated
+`/api/universal-wire/stories` acceptance, while keeping native Texture
+`source_ref` carry-forward, publication/export, staging/deploy, Qdrant,
+provider/gateway, auth/session, promotion, rollback, and run-acceptance claims
+out of scope unless explicitly assigned. O4 Phase 4 verifier thread
 `019f0395-93f6-7ad3-b89f-63aa07d9d5b0` (`O4 verifier - Source Open Browser
-Proof`) after it completes, then incorporate or reject commit `d49a19bd` based
-on the verdict. Earlier pending verifier worktree handles
+Proof`) returned `accept` with no findings. Earlier pending verifier worktree handles
 `local:5cdd17ec-f3ed-489f-8339-37caa04201c4` and
 `local:05c26241-c132-4699-a101-faa5183bdf45` did not resolve in `list_threads`
 and are superseded for orchestration by the readable local verifier thread,
@@ -786,7 +798,19 @@ native Texture `source_ref`, publication/export, sourcecycled ingestion,
 staging, deploy, Qdrant, provider/gateway, auth/session renewal, promotion,
 rollback, and run-acceptance claims. Worker-reported focused browser proof and
 `npm run build` passed; tracked status is clean on the worker branch, with only
-ignored local logs/dependencies remaining. The earlier pending worker handle
+ignored local logs/dependencies remaining. Verifier checks passed:
+`git status --short --ignored`, `git diff --check 407bddce..HEAD`,
+`git show --check --oneline d49a19bd7ee2624e47b4bcd2f47e11e75f9195a4`,
+focused `npx playwright test tests/universal-wire-app.spec.js -g "graph capture sources" --timeout=120000`,
+and `npm run build`; generated verifier artifacts were removed and the detached
+verifier worktree was clean. Accepted worker commit was incorporated into this
+orchestration branch as `2ad415b4 prove Wire graph capture source opening`.
+Root checks passed: `git diff --check 8d52cf14..HEAD`;
+`git show --check --oneline 2ad415b4`; `npm run build`; and focused
+`npx playwright test tests/universal-wire-app.spec.js -g "graph capture sources" --timeout=120000`.
+Root build emitted existing Svelte/a11y/chunk warnings; Vite emitted expected
+proxy connection refusals for unmocked preference/websocket requests while no
+backend proxy was running, but the focused proof passed. The earlier pending worker handle
 `local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` did not resolve in `list_threads`
 and is superseded for orchestration by the readable replacement worker.
 Independent verifier thread
