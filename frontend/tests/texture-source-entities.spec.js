@@ -1085,6 +1085,218 @@ test('Texture source URL opens Source Viewer unless browser is explicitly reques
   await expect(page.locator('[data-browser-app]')).toHaveCount(1);
 });
 
+test('Texture renders and opens graph-wrapper sources when legacy revision source entities are absent', async ({ desktopSession }) => {
+  const { page } = desktopSession;
+  await page.evaluate(async () => {
+    await fetch('/api/desktop/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windows: [], active_window_id: '' }),
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-window]')).toHaveCount(0);
+
+  const created = await page.evaluate(async () => {
+    const title = `Graph Wrapper Source Open Fixture ${Date.now()}`;
+    const sourceURL = 'https://example.com/graph-wrapper-source-open';
+    const docRes = await fetch('/api/texture/documents', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!docRes.ok) throw new Error(`create doc failed: ${docRes.status}`);
+    const doc = await docRes.json();
+    const sourceEntities = [
+      {
+        source_entity_id: 'src-graph-ui-source-viewer',
+        target: { kind: 'web_url', uri: sourceURL },
+        selectors: [{ kind: 'text_quote', data: { text_quote: 'Graph-only reader snapshot proves Source Viewer opened.' } }],
+        display: { mode: 'numbered_ref', title: 'Graph-only Source Viewer fixture', label: '1' },
+        evidence: { state: 'available', open_surface: 'source', reader_artifact_state: 'reader_snapshot_ready' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+      {
+        source_entity_id: 'src-graph-ui-web-lens',
+        target: { kind: 'web_url', uri: sourceURL },
+        selectors: [{ kind: 'text_quote', data: { text_quote: 'Graph-only Web Lens fixture.' } }],
+        display: { mode: 'numbered_ref', title: 'Graph-only Web Lens fixture', label: '2' },
+        evidence: { state: 'available', open_surface: 'web_lens' },
+        provenance: { created_by: 'browser-test', source_system: 'playwright' },
+      },
+    ];
+    const bodyDoc = {
+      schema: 'choir.texture_doc.v1',
+      doc: {
+        type: 'doc',
+        attrs: { id: `doc-${doc.doc_id}` },
+        content: [
+          { type: 'heading', attrs: { id: 'heading-graph-wrapper-open', level: 1 }, content: [{ type: 'text', text: 'Graph Wrapper Source Open Fixture' }] },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-graph-wrapper-source-viewer' },
+            content: [
+              { type: 'text', text: 'This graph-backed source opens the reader artifact ' },
+              { type: 'source_ref', attrs: { id: 'ref-graph-ui-source-viewer', source_entity_id: 'src-graph-ui-source-viewer', display_mode: 'numbered_ref', label: '1' } },
+              { type: 'text', text: '.' },
+            ],
+          },
+          {
+            type: 'paragraph',
+            attrs: { id: 'p-graph-wrapper-web-lens' },
+            content: [
+              { type: 'text', text: 'This graph-backed source explicitly opens Web Lens ' },
+              { type: 'source_ref', attrs: { id: 'ref-graph-ui-web-lens', source_entity_id: 'src-graph-ui-web-lens', display_mode: 'numbered_ref', label: '2' } },
+              { type: 'text', text: '.' },
+            ],
+          },
+        ],
+      },
+    };
+    const revRes = await fetch(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/revisions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: '# Graph Wrapper Source Open Fixture\n\nThis graph-backed source opens the reader artifact [1].\n\nThis graph-backed source explicitly opens Web Lens [2].',
+        body_doc: bodyDoc,
+        source_entities: sourceEntities,
+        author_kind: 'user',
+        author_label: 'browser-test',
+      }),
+    });
+    if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
+    const revision = await revRes.json();
+    return { title, docID: doc.doc_id, revision };
+  });
+
+  const graphOnlyRevision = {
+    ...created.revision,
+    source_entity_objects: [
+      {
+        object_kind: 'choir.source_entity',
+        canonical_id: 'choir.source_entity:user-1:graph-ui-source-viewer',
+        version_id: 'ver-graph-ui-source-viewer',
+        content_hash: 'sha256:graph-ui-source-viewer',
+        owner_id: 'user-1',
+        body: 'Graph-only reader snapshot proves Source Viewer opened.',
+        legacy_source_entity_id: 'src-graph-ui-source-viewer',
+        metadata: {
+          schema_version: 'choir.source_entity.v1',
+          legacy_entity_id: 'src-graph-ui-source-viewer',
+          source_kind: 'web_url',
+          target: {
+            kind: 'web_url',
+            identity: 'https://example.com/graph-wrapper-source-open',
+            uri: 'https://example.com/graph-wrapper-source-open',
+          },
+          display: { mode: 'excerpt', title: 'Graph-only Source Viewer fixture', label: '1' },
+          evidence: { state: 'available', open_surface: 'source', reader_artifact_state: 'reader_snapshot_ready' },
+          reader_snapshot_status: { state: 'reader_snapshot_ready' },
+          selectors: [{ kind: 'text_quote', data: { text_quote: 'Graph-only reader snapshot proves Source Viewer opened.' } }],
+          provenance: { created_by: 'browser-test', source_system: 'playwright' },
+        },
+      },
+      {
+        object_kind: 'choir.source_entity',
+        canonical_id: 'choir.source_entity:user-1:graph-ui-web-lens',
+        version_id: 'ver-graph-ui-web-lens',
+        content_hash: 'sha256:graph-ui-web-lens',
+        owner_id: 'user-1',
+        body: 'Graph-only Web Lens fixture.',
+        legacy_source_entity_id: 'src-graph-ui-web-lens',
+        metadata: {
+          schema_version: 'choir.source_entity.v1',
+          legacy_entity_id: 'src-graph-ui-web-lens',
+          source_kind: 'web_url',
+          target: {
+            kind: 'web_url',
+            identity: 'https://example.com/graph-wrapper-source-open',
+            uri: 'https://example.com/graph-wrapper-source-open',
+          },
+          display: { mode: 'excerpt', title: 'Graph-only Web Lens fixture', label: '2' },
+          evidence: { state: 'available', open_surface: 'web_lens' },
+          selectors: [{ kind: 'text_quote', data: { text_quote: 'Graph-only Web Lens fixture.' } }],
+          provenance: { created_by: 'browser-test', source_system: 'playwright' },
+        },
+      },
+    ],
+    source_refs: [
+      {
+        object_kind: 'choir.source_ref',
+        canonical_id: 'choir.source_ref:user-1:graph-ui-ref-source-viewer',
+        version_id: 'ver-graph-ui-ref-source-viewer',
+        legacy_source_entity_id: 'src-graph-ui-source-viewer',
+        source_entity_canonical_id: 'choir.source_entity:user-1:graph-ui-source-viewer',
+        source_entity_version_id: 'ver-graph-ui-source-viewer',
+        body_node_id: 'ref-graph-ui-source-viewer',
+        display_mode: 'numbered_ref',
+        citation_state: 'cited',
+      },
+      {
+        object_kind: 'choir.source_ref',
+        canonical_id: 'choir.source_ref:user-1:graph-ui-ref-web-lens',
+        version_id: 'ver-graph-ui-ref-web-lens',
+        legacy_source_entity_id: 'src-graph-ui-web-lens',
+        source_entity_canonical_id: 'choir.source_entity:user-1:graph-ui-web-lens',
+        source_entity_version_id: 'ver-graph-ui-web-lens',
+        body_node_id: 'ref-graph-ui-web-lens',
+        display_mode: 'numbered_ref',
+        citation_state: 'cited',
+      },
+    ],
+  };
+  delete graphOnlyRevision.source_entities;
+  expect(graphOnlyRevision.source_entities).toBeUndefined();
+
+  let servedGraphOnlyRevision = false;
+  await page.route(`**/api/texture/revisions/${created.revision.revision_id}**`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    servedGraphOnlyRevision = true;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(graphOnlyRevision),
+    });
+  });
+
+  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  const textureWindow = page.locator('[data-texture-app]').last();
+  await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
+  await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
+
+  const rendered = textureWindow.locator('[data-texture-rendered]');
+  const sourceViewerCitation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-graph-ui-source-viewer"]');
+  await expect(sourceViewerCitation).toBeVisible({ timeout: 10000 });
+  await expect(sourceViewerCitation).toHaveAttribute('data-texture-citation-transclusion', '');
+  await expect(sourceViewerCitation).toHaveAttribute('data-source-display-mode', 'numbered_ref');
+  await expect(sourceViewerCitation).toHaveAttribute('data-source-expansion-surface', 'journal');
+  await sourceViewerCitation.click();
+  await expect(rendered.locator('[data-texture-source-flow-note]')).toContainText('Graph-only Source Viewer fixture');
+  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-graph-ui-source-viewer"]').click();
+
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Graph-only reader snapshot proves Source Viewer opened');
+  await expect(page.locator('[data-browser-app]')).toHaveCount(0);
+
+  await page.locator('[data-window-app-id="texture"]').last().click({ position: { x: 24, y: 24 } });
+  const webLensCitation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-graph-ui-web-lens"]').first();
+  await expect(webLensCitation).toBeVisible({ timeout: 10000 });
+  await expect(webLensCitation).toHaveAttribute('data-texture-citation-transclusion', '');
+  await webLensCitation.click();
+  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-graph-ui-web-lens"]').click();
+  await expect(page.locator('[data-browser-app]')).toHaveCount(1);
+  expect(servedGraphOnlyRevision).toBe(true);
+});
+
 test('published source readers prefer publication snapshots over loaded content items', async ({ desktopSession }) => {
   const { page } = desktopSession;
   await page.evaluate(async () => {
