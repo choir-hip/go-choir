@@ -280,6 +280,16 @@ type ReconcilerRequest struct {
 	UpdatedAt           time.Time
 }
 
+type CycleEvent struct {
+	EventID   string
+	CycleID   string
+	SourceID  string
+	Kind      string
+	Message   string
+	Metadata  map[string]any
+	CreatedAt time.Time
+}
+
 type CycleSummary struct {
 	CycleID            string
 	StartedAt          time.Time
@@ -288,6 +298,7 @@ type CycleSummary struct {
 	ItemCount          int
 	FetchCount         int
 	Error              string
+	Events             []CycleEvent
 	Fetches            []sources.FetchRecord
 	ProcessorRequests  []ProcessorRequest
 	ReconcilerRequests []ReconcilerRequest
@@ -542,6 +553,35 @@ func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind,
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO cycle_events (event_id, cycle_id, source_id, kind, message, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		eventID, cycleID, sourceID, kind, message, mustJSON(metadata), formatTime(now))
 	return err
+}
+
+func (s *Storage) ListCycleEvents(ctx context.Context, cycleID string, limit int) ([]CycleEvent, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT event_id, cycle_id, source_id, kind, message, metadata_json, created_at
+		FROM cycle_events WHERE cycle_id = ? ORDER BY created_at, event_id LIMIT ?`, cycleID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []CycleEvent{}
+	for rows.Next() {
+		var event CycleEvent
+		var metadataJSON, createdAt string
+		if err := rows.Scan(&event.EventID, &event.CycleID, &event.SourceID, &event.Kind, &event.Message, &metadataJSON, &createdAt); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(metadataJSON) != "" {
+			_ = json.Unmarshal([]byte(metadataJSON), &event.Metadata)
+		}
+		if event.Metadata == nil {
+			event.Metadata = map[string]any{}
+		}
+		event.CreatedAt = parseStoredTime(createdAt)
+		out = append(out, event)
+	}
+	return out, rows.Err()
 }
 
 func (s *Storage) SaveIngestionEvents(ctx context.Context, events []IngestionEvent) error {
@@ -1068,6 +1108,11 @@ func (s *Storage) LatestCycleSummary(ctx context.Context) (CycleSummary, error) 
 	if err != nil {
 		return CycleSummary{}, err
 	}
+	events, err := s.ListCycleEvents(ctx, summary.CycleID, 100)
+	if err != nil {
+		return CycleSummary{}, err
+	}
+	summary.Events = events
 	summary.Fetches = fetches
 	summary.ProcessorRequests = processors
 	summary.ReconcilerRequests = reconcilers

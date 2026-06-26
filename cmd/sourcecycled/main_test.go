@@ -303,6 +303,49 @@ func TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph(t *testing.T) {
 	}
 }
 
+func TestSourceServiceIngestionHandoffLatestIncludesCycleEvents(t *testing.T) {
+	ctx := context.Background()
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open sourcecycled storage: %v", err)
+	}
+	defer store.Close()
+
+	cycleID, err := store.StartCycle(ctx)
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	if err := store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfilled", "stored source items projected to empty objectgraph web captures", map[string]any{
+		"capture_count":      3,
+		"skipped_item_count": 1,
+	}); err != nil {
+		t.Fatalf("record cycle event: %v", err)
+	}
+	if err := store.FinishCycle(ctx, cycleID, "completed", 0, 0, nil); err != nil {
+		t.Fatalf("finish cycle: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/ingestion-handoff/latest", nil)
+	rec := httptest.NewRecorder()
+	handleSourceServiceIngestionHandoffLatest(store).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("latest handoff status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp sourceapi.IngestionHandoffResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode latest handoff response: %v", err)
+	}
+	if len(resp.Cycle.Events) != 1 {
+		t.Fatalf("cycle events = %d, want 1: %+v", len(resp.Cycle.Events), resp.Cycle.Events)
+	}
+	event := resp.Cycle.Events[0]
+	if event.Kind != "web_captures_graph_backfilled" ||
+		event.Metadata["capture_count"] != float64(3) ||
+		event.Metadata["skipped_item_count"] != float64(1) {
+		t.Fatalf("unexpected cycle event in response: %+v", event)
+	}
+}
+
 func listTestWebCaptures(t *testing.T, graphPath string) []objectgraph.Object {
 	t.Helper()
 	graphStore, err := objectgraph.NewSQLiteStore(graphPath)

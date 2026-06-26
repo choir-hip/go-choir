@@ -6124,3 +6124,52 @@ URLs or body text; source cycle fails before backfill; sourcecycled writes to a
 different graph DB than the sandbox reads; or the product route reads a
 different active computer/objectgraph than the host sandbox health identity
 suggests.
+
+## 2026-06-26 - O4 Sourcecycled Cycle-Event Diagnostic Construct
+
+Claim: Universal Wire is stuck behind a missing staging oracle; exposing recent
+sourcecycled cycle events through the existing internal source-service handoff
+summary should let the next deployed probe distinguish an empty source store,
+ineligible stored items, a backfill/cycle error, or a graph-store mismatch.
+
+Move: added bounded cycle-event readback to sourcecycled storage and the
+internal source-service DTO. The existing
+`/internal/source-service/ingestion-handoff/latest` response now includes recent
+cycle events such as `web_captures_graph_backfilled`,
+`web_captures_graph_backfill_empty`, and
+`web_captures_graph_backfill_skipped` under `cycle.events`.
+
+Expected Delta V: 0 now, with decision-changing observer evidence after
+deployment/readback. Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Code paths changed:
+  `internal/cycle/storage.go`, `internal/sourceapi/types.go`,
+  `cmd/sourcecycled/main.go`.
+- Tests added/updated:
+  `internal/cycle/storage_test.go` verifies `LatestCycleSummary` includes
+  persisted cycle events; `cmd/sourcecycled/main_test.go` verifies the internal
+  latest-handoff endpoint serializes cycle events and metadata.
+- Local checks:
+  `git diff --check` passed;
+  `nix develop -c go test ./internal/cycle -run 'TestStorage(PersistsIngestionHandoffsAndLatestCycleSummary|RecordsCycleEvents)' -count=1 -timeout=60s` passed;
+  `nix develop -c go test ./cmd/sourcecycled -run 'TestSourceServiceIngestionHandoffLatestIncludesCycleEvents|TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph|TestRunCycleWritesSourceItemsToObjectGraphWebCaptures' -count=1 -timeout=120s` passed;
+  `nix develop -c go test ./cmd/sourcecycled ./internal/cycle ./internal/sourceapi -count=1 -timeout=120s` passed;
+  `nix develop -c go test ./internal/runtime -run '^$' -count=1 -timeout=120s` passed.
+
+Mutation class / protected surfaces: orange/yellow internal source ingestion
+diagnostic. It exposes already-recorded sourcecycled cycle events through an
+internal host API used by runtime/source tools. It does not touch Texture
+canonical writes, Trace/evidence, candidate computers, auth/session renewal,
+vmctl, gateway/provider calls, Qdrant, publication/export, promotion/rollback,
+or run acceptance.
+
+Evidence boundary: local code/test evidence only until pushed/deployed. This
+does not claim live Universal Wire source cards, staging event readback,
+source-opening proof, publication/export, run acceptance, promotion, or
+rollback proof.
+
+Open edge: push and monitor the diagnostic deploy. Once staging reports the new
+commit, read the source-service latest handoff/cycle event evidence through an
+authorized route, then choose the next O4 repair from that discriminator.

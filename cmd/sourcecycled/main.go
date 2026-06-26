@@ -551,7 +551,26 @@ func sourceAPICycleSummary(summary cycle.CycleSummary) sourceapi.CycleSummary {
 		ItemCount:  summary.ItemCount,
 		FetchCount: summary.FetchCount,
 		Error:      summary.Error,
+		Events:     sourceAPICycleEvents(summary.Events),
 	}
+}
+
+func sourceAPICycleEvents(events []cycle.CycleEvent) []sourceapi.CycleEventSummary {
+	if len(events) == 0 {
+		return nil
+	}
+	out := make([]sourceapi.CycleEventSummary, 0, len(events))
+	for _, event := range events {
+		out = append(out, sourceapi.CycleEventSummary{
+			EventID:   event.EventID,
+			SourceID:  event.SourceID,
+			Kind:      event.Kind,
+			Message:   event.Message,
+			Metadata:  event.Metadata,
+			CreatedAt: formatSourceTime(event.CreatedAt),
+		})
+	}
+	return out
 }
 
 func sourceAPISourceHealth(summary cycle.CycleSummary) sourceapi.SourceHealth {

@@ -411,10 +411,10 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 31. Last Delta V: 0 for O4
-Phase 9 accepted branch-level graph-capture Source Viewer proof because native
-Texture citation opening and deployed source artifact proof remain open; the
-last decrement was 1 for O4 Phase 8 verifier acceptance and root incorporation.
++ 8 Autoradio/Pipecat obligations. Current value: 31. Last Delta V: 0 for the
+O4 sourcecycled cycle-event diagnostic construct because it creates the missing
+staging oracle but has not yet been deployed/read back. The last decrement was
+1 for O4 Phase 8 verifier acceptance and root incorporation.
 O4 Phase 1 closed the first O4 checklist obligation by adding a tested
 `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
@@ -471,12 +471,13 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current O4 Phase 9 incorporated change is orange: it
-additively exposes bounded reader snapshots on Universal Wire source items and
-passes them to existing Source Viewer/reader UI behavior while preserving the
-stated boundary against synthesized stories/source refs/source entities,
-staging, publication/export, Qdrant, auth/session, provider/gateway, promotion,
-rollback, run acceptance, and native Texture citation claims.
+session artifacts. The current O4 diagnostic change is orange/yellow: it exposes
+recent sourcecycled cycle events through the existing internal source-service
+handoff summary so staging can distinguish graph backfill ran/skipped/empty
+from source-cycle failure or graph-store mismatch. It does not touch Texture
+canonical writes, Trace/evidence, candidate computers, auth/session renewal,
+vmctl, gateway/provider calls, Qdrant, publication/export, promotion/rollback,
+or run acceptance.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -952,16 +953,15 @@ source-opening test path, and clean verifier/worker worktrees. Current V
 remains 31 because the remaining O4 source/citation proof now requires
 deploy/auth authority or a documented staging fixture/harness gap.
 
-next move: resume only when either deploy/auth authority is granted for O4 or
-the mission owner explicitly authorizes moving to O5 with the O4
-source/citation edge still open. O4 deploy/auth resume condition: merge or
-advance `origin/main` to a commit containing `9f54fd5e` and `b13ba881`, verify
-`https://choir.news/health` reports that deployed commit, provide or authorize
-an authenticated Playwright storage state, then run or add the smallest
-read-only staging source-opening proof over an existing source-backed artifact.
-O5 resume condition: owner accepts O4 as an open handoff edge and authorizes
-the next worker assignment for Choir-in-Choir self-development. Deploy/auth
-authority was granted on 2026-06-26 and orchestration pushed
+next move: deploy the sourcecycled cycle-event diagnostic, verify
+`https://choir.news/health` reports that commit, then read the internal
+source-service handoff/cycle event evidence through an authorized product or
+host path before writing another Universal Wire behavior fix. The discriminator
+must decide whether staging has no stored source items, stored but ineligible
+items, a source-cycle/backfill error, a graph-store mismatch, or a different
+active computer/objectgraph route. O5 remains deferred unless the mission owner
+accepts O4 as an open handoff edge. Deploy/auth authority was granted on
+2026-06-26 and orchestration pushed
 `a52fb233bbfa0c64346634b87cebe13f9797cbd5` to `origin/main`, but CI run
 `28247304935` failed in `Deploy to Staging (Node B)` after all test/build jobs
 passed. Failure: the remote NixOS host closure build for `cmd/sandbox` cannot
@@ -1256,11 +1256,11 @@ benchmark.
 settlement: not settled. Full settlement still requires thread-native
 orchestration receipts, independent verifier verdicts, landed code/docs where
 behavior changed, CI, deploy identity, and staging/product acceptance for any
-staging claim. Staging now deploys `f658af08` successfully with sourcecycled
-configured to write the sandbox-visible objectgraph sidecar, but Universal Wire
-may still be empty until either a fresh source cycle yields new items or an
-empty-cycle backfill projects existing stored source items into graph captures.
-Remaining V is 31 until the backfill gap is repaired or falsified and
+staging claim. Staging now deploys `bbca43c5` successfully with sourcecycled
+configured to write the sandbox-visible objectgraph sidecar and empty-cycle
+backfill implemented, but authenticated Chrome still shows 0 Universal Wire
+articles and 0 graph-capture candidates after the next scheduled source cycle.
+Remaining V is 31 until the sourcecycled runtime discriminator is read and
 authenticated Chrome/Playwright proof can observe an existing source-backed
 artifact and verify Source Viewer default plus explicit Web Lens opening on
 `https://choir.news`.

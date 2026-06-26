@@ -496,6 +496,9 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	if err := store.SaveCycleFetches(cycleID, []sources.FetchRecord{fetch}); err != nil {
 		t.Fatalf("save cycle fetches: %v", err)
 	}
+	if err := store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfill_empty", "no stored source items available for graph backfill", map[string]any{"capture_count": 0}); err != nil {
+		t.Fatalf("record cycle event: %v", err)
+	}
 	if err := store.FinishCycle(ctx, cycleID, "completed", 1, 1, nil); err != nil {
 		t.Fatalf("finish cycle: %v", err)
 	}
@@ -509,6 +512,11 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	}
 	if len(summary.Fetches) != 1 || summary.Fetches[0].SourceID != "rss:ai_policy" {
 		t.Fatalf("unexpected cycle fetches: %+v", summary.Fetches)
+	}
+	if len(summary.Events) != 1 ||
+		summary.Events[0].Kind != "web_captures_graph_backfill_empty" ||
+		summary.Events[0].Metadata["capture_count"] != float64(0) {
+		t.Fatalf("unexpected cycle events: %+v", summary.Events)
 	}
 	if len(summary.ProcessorRequests) != 1 || summary.ProcessorRequests[0].ProcessorKey != "processor:ai:us:rss" {
 		t.Fatalf("unexpected processor summary: %+v", summary.ProcessorRequests)

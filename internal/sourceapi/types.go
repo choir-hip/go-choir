@@ -59,13 +59,23 @@ type SourceFetchSummary struct {
 }
 
 type CycleSummary struct {
-	CycleID    string `json:"cycle_id"`
-	StartedAt  string `json:"started_at,omitempty"`
-	EndedAt    string `json:"ended_at,omitempty"`
-	Status     string `json:"status"`
-	ItemCount  int    `json:"item_count"`
-	FetchCount int    `json:"fetch_count"`
-	Error      string `json:"error,omitempty"`
+	CycleID    string              `json:"cycle_id"`
+	StartedAt  string              `json:"started_at,omitempty"`
+	EndedAt    string              `json:"ended_at,omitempty"`
+	Status     string              `json:"status"`
+	ItemCount  int                 `json:"item_count"`
+	FetchCount int                 `json:"fetch_count"`
+	Error      string              `json:"error,omitempty"`
+	Events     []CycleEventSummary `json:"events,omitempty"`
+}
+
+type CycleEventSummary struct {
+	EventID   string         `json:"event_id"`
+	SourceID  string         `json:"source_id,omitempty"`
+	Kind      string         `json:"kind"`
+	Message   string         `json:"message,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	CreatedAt string         `json:"created_at,omitempty"`
 }
 
 type ProcessorRequest struct {
