@@ -67,6 +67,39 @@ CREATE TABLE IF NOT EXISTS texture_revisions (
 	created_at          DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS texture_source_entities (
+	canonical_id           VARCHAR(255) NOT NULL,
+	version_id             VARCHAR(255) NOT NULL,
+	owner_id               VARCHAR(255) NOT NULL,
+	computer_id            VARCHAR(255) NOT NULL DEFAULT '',
+	content_hash           VARCHAR(255) NOT NULL,
+	body                   LONGTEXT NOT NULL DEFAULT '',
+	metadata_json          LONGTEXT NOT NULL DEFAULT '{}',
+	legacy_source_entity_id VARCHAR(255) NOT NULL DEFAULT '',
+	created_at             DATETIME NOT NULL,
+	PRIMARY KEY (canonical_id, version_id)
+);
+
+CREATE TABLE IF NOT EXISTS texture_source_refs (
+	canonical_id                 VARCHAR(255) NOT NULL,
+	version_id                   VARCHAR(255) NOT NULL,
+	owner_id                     VARCHAR(255) NOT NULL,
+	computer_id                  VARCHAR(255) NOT NULL DEFAULT '',
+	content_hash                 VARCHAR(255) NOT NULL,
+	doc_id                       VARCHAR(255) NOT NULL,
+	texture_revision_id          VARCHAR(255) NOT NULL,
+	body_node_id                 VARCHAR(255) NOT NULL DEFAULT '',
+	body_node_path_hash          VARCHAR(255) NOT NULL DEFAULT '',
+	legacy_source_entity_id      VARCHAR(255) NOT NULL DEFAULT '',
+	source_entity_canonical_id   VARCHAR(255) NOT NULL,
+	source_entity_version_id     VARCHAR(255) NOT NULL,
+	display_mode                 VARCHAR(64) NOT NULL,
+	citation_state               VARCHAR(64) NOT NULL,
+	metadata_json                LONGTEXT NOT NULL DEFAULT '{}',
+	created_at                   DATETIME NOT NULL,
+	PRIMARY KEY (canonical_id, version_id)
+);
+
 CREATE TABLE IF NOT EXISTS texture_document_aliases (
 	owner_id            VARCHAR(255) NOT NULL,
 	source_path         VARCHAR(2048) NOT NULL,
@@ -80,6 +113,9 @@ CREATE INDEX IF NOT EXISTS idx_texture_docs_owner ON texture_documents(owner_id)
 CREATE INDEX IF NOT EXISTS idx_texture_revs_doc ON texture_revisions(doc_id);
 CREATE INDEX IF NOT EXISTS idx_texture_revs_owner ON texture_revisions(owner_id);
 CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_texture_source_entities_owner ON texture_source_entities(owner_id);
+CREATE INDEX IF NOT EXISTS idx_texture_source_refs_revision ON texture_source_refs(owner_id, doc_id, texture_revision_id);
+CREATE INDEX IF NOT EXISTS idx_texture_source_refs_source ON texture_source_refs(source_entity_canonical_id, source_entity_version_id);
 CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(doc_id);
 
 CREATE TABLE IF NOT EXISTS texture_agent_mutations (
@@ -842,6 +878,17 @@ func (s *Store) DeleteTextureAliasesByOwner(ctx context.Context, ownerID string)
 // CreateRevision inserts a new revision record and updates the document's
 // current_revision_id if this is the latest revision.
 func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
+	return s.createRevision(ctx, rev, TextureSourceGraphWriteSet{})
+}
+
+// CreateRevisionWithSourceGraph inserts a Texture revision and its graph-shaped
+// source records in the same Texture transaction. If any source write fails, the
+// document head is not advanced.
+func (s *Store) CreateRevisionWithSourceGraph(ctx context.Context, rev types.Revision, graph TextureSourceGraphWriteSet) error {
+	return s.createRevision(ctx, rev, graph)
+}
+
+func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph TextureSourceGraphWriteSet) error {
 	preparedRev, bodyDocJSON, sourceEntitiesJSON, err := prepareTextureRevisionV2(rev)
 	if err != nil {
 		return err
@@ -935,6 +982,10 @@ func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
 	)
 	if err != nil {
 		return fmt.Errorf("insert texture revision: %w", err)
+	}
+
+	if err := s.writeTextureSourceGraph(ctx, tx, rev, graph); err != nil {
+		return err
 	}
 
 	// Update the document's current_revision_id and updated_at, but only if the
