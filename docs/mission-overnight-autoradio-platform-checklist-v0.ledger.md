@@ -5139,3 +5139,42 @@ Open edge: resolve pending handle
 `local:1e43828a-9ce3-4a57-bd83-62a92d90d85d` into a readable worker
 thread/worktree, title and pin it, inspect starting status, then wait for a
 candidate or no-candidate callback.
+
+## 2026-06-26 - O4 Phase 10d Worker Worktree Materialized
+
+Claim: The O4 Phase 10d reader-body proof worker pending handle has
+materialized as a Codex worktree, but orchestration has not yet resolved a
+readable thread id. This is worktree identity evidence only, not worker
+evidence, verifier acceptance, root incorporation, or checklist descent.
+
+Move: inspect worktree list and thread search after the Phase 10d
+`create_thread` pending handle.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:1e43828a-9ce3-4a57-bd83-62a92d90d85d`.
+- Materialized worker worktree:
+  `/Users/wiz/.codex/worktrees/0f6b/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10d-native-texture-source-ref-reader-body-proof` at
+  `35d0e350 record O4 harness repair acceptance`.
+- Thread lookup:
+  `list_threads` search for
+  `O4-phase10d-native-texture-source-ref-reader-body-proof` returned no readable
+  thread yet.
+
+Evidence boundary: worktree identity only. No readable worker thread yet, no
+worker progress/final report, no candidate commit, no verifier, no root
+incorporation, push, PR, CI, deploy, staging product acceptance, native Texture
+body `source_ref` assertion proof, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: resolve the Phase 10d worker thread id from cwd or pending handle,
+title and pin it, inspect starting status, then wait for a candidate or
+no-candidate callback.
