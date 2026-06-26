@@ -787,3 +787,55 @@ main, staging, product, deployment, or landing claim.
 Open edge: continue O3 with a narrow producer or Texture tool path that calls
 `CreateRevisionWithSourceGraph` in shadow-write mode and adds compatibility
 tests proving legacy DTO reads still work while graph records are created.
+
+## 2026-06-26 - O3 Phase 2 Worker And Verifier Launched
+
+Claim: O3 Phase 2 has been routed through current Codex thread tools as a
+bounded worker/verifier pair, but no implementation evidence or acceptance
+exists yet.
+
+Move: create a project worktree worker for one narrow Texture producer/tool
+shadow-write path and a local verifier thread for independent review.
+
+Expected Delta V: 0 until the worker finishes, the verifier returns `accept`,
+and accepted commits are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker launch returned pending worktree handle
+  `local:c6b79ff4-1a9f-491c-81e5-ea1cdc44df60` from project
+  `/Users/wiz/go-choir`, starting at branch
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- Worker work item id: `O3-phase2-shadow-write-producer`.
+- Worker authority: choose exactly one narrow producer or Texture tool path
+  that already creates Texture revisions, call `CreateRevisionWithSourceGraph`
+  in shadow-write mode, preserve legacy DTO/read behavior, and stop with a
+  final report naming chosen path, docs checkpoint, implementation commits,
+  tests, dirty paths, blockers, risks, and next O3 move.
+- Worker mutation class: orange/red-adjacent.
+- Worker protected surfaces: Texture canonical writes, source identity/ref
+  edges, legacy DTO compatibility, source-open routing, Qdrant derived-index
+  and source-of-truth boundaries, auth/session renewal, gateway/provider calls,
+  and staging/deploy claims.
+- Worker admissible evidence: documentation checkpoint, implementation commit,
+  focused tests proving legacy revision reads still work while graph records
+  are created transactionally, and a clean worktree report.
+- Rollback path: revert the Phase 2 implementation commit(s), leaving the O3
+  Phase 1 store boundary intact.
+- Heresy delta: `discovered` for newly observed legacy/source path gaps,
+  `repaired` only for the chosen shadow-write path, and `introduced` only if a
+  reviewer finds a new regression.
+- Verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`, titled
+  `O3 verifier - Source Entity Phase 2`, pinned.
+- Verifier authority: read-only review of the worker final report/diff/tests;
+  return `blocked` if the worker thread is unavailable or has no final report.
+
+Evidence boundary: thread launch only. No O3 Phase 2 implementation, root
+incorporation, API behavior, source-open behavior, Qdrant projection, main,
+staging, product, deployment, or landing claim.
+
+Open edge: resolve the pending worker thread id if available, read worker and
+verifier results, then either incorporate an accepted worker diff or record the
+precise blocker as `open_handoff`.

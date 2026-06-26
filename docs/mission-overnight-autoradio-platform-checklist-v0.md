@@ -450,11 +450,24 @@ checks also passed on this branch:
 `nix develop -c go test ./internal/store -count=1`. Evidence boundary:
 branch-level code/test/verifier acceptance only; no API producer path,
 frontend/source-open, Qdrant projection, main, staging, product, deployment, or
-landing claim.
+landing claim. O3 Phase 2 was launched through current Codex thread tools as a
+bounded shadow-write producer slice. Worker setup returned pending worktree
+handle `local:c6b79ff4-1a9f-491c-81e5-ea1cdc44df60`; verifier thread
+`019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` (`O3 verifier - Source Entity Phase
+2`) was created, titled, and pinned. The worker assignment requires exactly one
+narrow producer or Texture tool path to call `CreateRevisionWithSourceGraph` in
+shadow-write mode while preserving legacy DTO/read behavior. Mutation class is
+orange/red-adjacent with protected surfaces: Texture canonical writes, source
+identity/ref edges, legacy DTO compatibility, source-open routing, Qdrant
+source-of-truth boundaries, auth/session renewal, gateway/provider calls, and
+staging/deploy claims. Evidence remains pending; no O3 Phase 2 implementation
+or acceptance claim exists yet.
 
-next move: Continue O3 with a narrow producer or Texture tool path that calls
-`CreateRevisionWithSourceGraph` in shadow-write mode and adds compatibility
-tests proving legacy DTO reads still work while graph records are created.
+next move: Resolve the O3 Phase 2 worker thread id if the pending worktree has
+materialized, read the worker final report, send exact commit/diff/test handles
+to verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`, and incorporate only
+after an `accept` verdict. If the worker remains pending or blocked, record the
+handle as the recovery edge and exit as `open_handoff`.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
