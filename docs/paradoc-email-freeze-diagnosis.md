@@ -2,7 +2,33 @@
 
 ## Status
 
-Open. Not yet started.
+Settled for branch-level diagnosis and local hardening on 2026-06-23. Not a staging repair claim.
+
+## Suggested Goal String
+
+```text
+Use Parallax on docs/paradoc-email-freeze-diagnosis.md. Current status: settled for branch-level diagnosis and local Email bootstrap hardening, with affected-account freeze and deployed repair proof retained as explicit open edges. Branch head: `6706ae02`. Independent verifier thread `019ef323-c1a8-7640-bb77-a8e64c774160` returned `accept` with no blocking findings. Do not claim staging repair without landing-loop proof. If continuing, next move is either run the focused Playwright spec in a clean auth-origin harness or land/push through the platform behavior loop and verify staging. Ledger: docs/paradoc-email-freeze-diagnosis.ledger.md.
+```
+
+## Parallax State
+
+status: settled
+mission conjecture: if a browser-based staging probe captures the Email app freeze with console/network/app-state evidence, then Choir can identify whether Email state, auth renewal, desktop suspension, or another request path is the cause and scope the graph-view rewrite/fix correctly.
+deeper goal (G): distinguish a short-term salvageable Email app defect from evidence that Email must become a view over object-graph state.
+witness/spec (A/S): diagnosis document plus ledger evidence naming reproduction steps, console/network results, state variables involved, root-cause hypothesis, and proposed fix path.
+invariants / qualities / domain ramp (I/Q/D): staging is the acceptance environment; no product behavior change in this pass; do not claim local proof; do not weaken Email UX; browser proof must capture console, network, and visible state.
+variant (ranking function) V: 0 for this branch-level mission. Accepted residual edges are tracked below, not hidden: clean local Playwright harness run or staging proof (open), affected-account hard-freeze reproduction (open).
+budget: spent; mission settled at branch level after independent verifier acceptance.
+authority / bounds: orange frontend runtime hardening plus tests/docs. Do not claim staging repair without landing-loop proof. Do not weaken Email UX.
+mutation class / protected surfaces: orange. Protected surfaces touched: Email app load state and Email browser regression coverage. Auth renewal and desktop suspension were inspected but not changed.
+evidence packet: docs/email-freeze-diagnosis-2026-06-23.md; `npm run build` passed; focused Playwright spec added but local execution blocked by stale/mixed auth service origin configuration (`8081` already bound before `start-services.sh` auth could start); verifier thread `019ef323-c1a8-7640-bb77-a8e64c774160` accepted `6706ae02`.
+heresy delta: discovered: duplicate initial Email bootstrap and no request ownership/timeout. repaired: local patch removes dual bootstrap, adds latest-request guards, and bounds Email fetches with timeout. introduced: none found by verifier.
+position / live conjectures / open edges: Email bootstrap/load-state hazard is locally repaired in source and independently accepted. Desktop suspension and auth renewal loop remain weakened, not repaired surfaces. The exact affected-account hard freeze is still unreproduced; the fix is preventive for the confirmed request-state hazard, not proof that the reported freeze cannot recur. Local Playwright proof is blocked by harness auth-origin mismatch, not by observed Email behavior. Staging repair proof is not claimed.
+next move: outside this settled branch-level mission, either run the focused Playwright spec in a clean local auth-origin harness or land/push through the platform behavior loop and verify staging.
+ledger file: docs/paradoc-email-freeze-diagnosis.ledger.md
+version / lineage: predecessor remains docs/object-graph-synthesis-2026-06-23.md; successor should be the Email bootstrap hardening or mail-object graph migration mission.
+learning state: retained here and in docs/email-freeze-diagnosis-2026-06-23.md.
+settlement: settled for branch-level diagnosis and local hardening. Independent verifier accepted the diff; residual edges are explicitly retained: affected-account hard freeze unreproduced, focused Playwright not run cleanly due local auth-origin harness, and no deployed/staging repair proof.
 
 ## Mission conjecture
 
