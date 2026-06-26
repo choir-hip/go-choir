@@ -529,5 +529,5 @@ func (h *APIHandler) HandleTextureAcceptMerge(w http.ResponseWriter, r *http.Req
 		return
 	}
 	h.rt.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
-	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
+	writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), storedRev))
 }

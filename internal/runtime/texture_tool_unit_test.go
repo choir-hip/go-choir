@@ -494,6 +494,69 @@ func TestTextureToolSourceGraphWritesSourceRefEdgesPinnedToRevisionAndSourceVers
 	}
 }
 
+func TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity(t *testing.T) {
+	doc := texturedoc.StructuredTextureDoc{
+		Schema: texturedoc.SchemaV1,
+		Doc: texturedoc.Node{
+			Type:  "doc",
+			Attrs: map[string]any{"id": "doc-node"},
+			Content: []texturedoc.Node{{
+				Type:  "paragraph",
+				Attrs: map[string]any{"id": "p-1"},
+				Content: []texturedoc.Node{
+					{Type: "text", Text: "First"},
+					{Type: "source_ref", Attrs: map[string]any{"id": "ref-a", "source_entity_id": "src-a", "display_mode": "numbered_ref"}},
+					{Type: "text", Text: " and second"},
+					{Type: "source_ref", Attrs: map[string]any{"id": "ref-b", "source_entity_id": "src-b", "display_mode": "expanded_ref"}},
+					{Type: "text", Text: "."},
+				},
+			}},
+		},
+	}
+	entities := []texturedoc.SourceEntity{
+		textureToolAvailableSource("src-a"),
+		textureToolAvailableSource("src-b"),
+	}
+	bodyDoc, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal body_doc: %v", err)
+	}
+	sourceEntities, err := json.Marshal(entities)
+	if err != nil {
+		t.Fatalf("marshal source_entities: %v", err)
+	}
+	rev := types.Revision{
+		RevisionID: "rev-duplicate-source-ids",
+		DocID:      "doc-duplicate-source-ids",
+		OwnerID:    "user-1",
+		CreatedAt:  time.Now().UTC().Truncate(time.Millisecond),
+	}
+	graph, err := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+	}, &types.RunRecord{RunID: "run-duplicate-source-ids"})
+	if err != nil {
+		t.Fatalf("textureToolSourceGraphWriteSet: %v", err)
+	}
+	if len(graph.SourceEntities) != 1 {
+		t.Fatalf("source graph entities len = %d, want 1 shared graph record: %#v", len(graph.SourceEntities), graph.SourceEntities)
+	}
+	if len(graph.SourceRefs) != 2 {
+		t.Fatalf("source refs len = %d, want 2: %#v", len(graph.SourceRefs), graph.SourceRefs)
+	}
+	shared := graph.SourceEntities[0]
+	seenLegacyRefs := map[string]bool{}
+	for _, ref := range graph.SourceRefs {
+		if ref.SourceEntityCanonicalID != shared.CanonicalID || ref.SourceEntityVersionID != shared.VersionID {
+			t.Fatalf("source ref %#v did not pin shared graph entity %#v", ref, shared)
+		}
+		seenLegacyRefs[ref.LegacySourceEntityID] = true
+	}
+	if !seenLegacyRefs["src-a"] || !seenLegacyRefs["src-b"] {
+		t.Fatalf("source refs legacy ids = %#v, want src-a and src-b", seenLegacyRefs)
+	}
+}
+
 func TestPatchTextureSourceRefFailureDoesNotAdvanceDocumentHead(t *testing.T) {
 	s, _ := textureToolCommitRuntime(t)
 	ctx := context.Background()
@@ -654,6 +717,27 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	}
 	if graphRefs[0].SourceEntityCanonicalID != graphEntities[0].CanonicalID || graphRefs[0].SourceEntityVersionID != graphEntities[0].VersionID {
 		t.Fatalf("graph source ref = %#v, want pin to graph entity %#v", graphRefs[0], graphEntities[0])
+	}
+	apiResp := NewAPIHandler(rt).revisionResponseFromRecord(ctx, appRev)
+	if string(apiResp.SourceEntities) != string(appRev.SourceEntities) {
+		t.Fatalf("legacy source_entities changed in API response: got %s want %s", apiResp.SourceEntities, appRev.SourceEntities)
+	}
+	if len(apiResp.SourceEntityObjects) != 1 {
+		t.Fatalf("source_entity_objects len = %d, want 1: %#v", len(apiResp.SourceEntityObjects), apiResp.SourceEntityObjects)
+	}
+	if apiResp.SourceEntityObjects[0].ObjectKind != string(store.TextureSourceEntityObjectKind) ||
+		apiResp.SourceEntityObjects[0].CanonicalID != graphEntities[0].CanonicalID ||
+		apiResp.SourceEntityObjects[0].LegacySourceEntityID != "src-web" {
+		t.Fatalf("source_entity_objects[0] = %#v, want graph entity wrapper", apiResp.SourceEntityObjects[0])
+	}
+	if len(apiResp.SourceRefs) != 1 {
+		t.Fatalf("source_refs len = %d, want 1: %#v", len(apiResp.SourceRefs), apiResp.SourceRefs)
+	}
+	if apiResp.SourceRefs[0].ObjectKind != string(store.TextureSourceRefObjectKind) ||
+		apiResp.SourceRefs[0].SourceEntityCanonicalID != graphEntities[0].CanonicalID ||
+		apiResp.SourceRefs[0].SourceEntityVersionID != graphEntities[0].VersionID ||
+		apiResp.SourceRefs[0].DisplayMode != store.TextureSourceRefDisplayNumbered {
+		t.Fatalf("source_refs[0] = %#v, want pinned source_ref wrapper", apiResp.SourceRefs[0])
 	}
 	meta := decodeRevisionMetadata(appRev.Metadata)
 	for _, key := range []string{"source_entities", "media_source_refs", "source_ref_normalization", "citations_json"} {

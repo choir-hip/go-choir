@@ -214,21 +214,56 @@ type textureCreateRevisionRequest struct {
 
 // textureRevisionResponse is the JSON response for revision-related endpoints.
 type textureRevisionResponse struct {
-	RevisionID       string           `json:"revision_id"`
-	DocID            string           `json:"doc_id"`
-	OwnerID          string           `json:"owner_id"`
-	AuthorKind       types.AuthorKind `json:"author_kind"`
-	AuthorLabel      string           `json:"author_label"`
-	VersionNumber    int              `json:"version_number"`
-	Content          string           `json:"content"`
-	BodyDoc          json.RawMessage  `json:"body_doc,omitempty"`
-	SourceEntities   json.RawMessage  `json:"source_entities,omitempty"`
-	Citations        json.RawMessage  `json:"citations,omitempty"`
-	Metadata         json.RawMessage  `json:"metadata,omitempty"`
-	Provenance       json.RawMessage  `json:"provenance,omitempty"`
-	RevisionHash     string           `json:"revision_hash,omitempty"`
-	ParentRevisionID string           `json:"parent_revision_id,omitempty"`
-	CreatedAt        string           `json:"created_at"`
+	RevisionID          string                              `json:"revision_id"`
+	DocID               string                              `json:"doc_id"`
+	OwnerID             string                              `json:"owner_id"`
+	AuthorKind          types.AuthorKind                    `json:"author_kind"`
+	AuthorLabel         string                              `json:"author_label"`
+	VersionNumber       int                                 `json:"version_number"`
+	Content             string                              `json:"content"`
+	BodyDoc             json.RawMessage                     `json:"body_doc,omitempty"`
+	SourceEntities      json.RawMessage                     `json:"source_entities,omitempty"`
+	SourceEntityObjects []textureSourceEntityObjectResponse `json:"source_entity_objects,omitempty"`
+	SourceRefs          []textureSourceRefObjectResponse    `json:"source_refs,omitempty"`
+	Citations           json.RawMessage                     `json:"citations,omitempty"`
+	Metadata            json.RawMessage                     `json:"metadata,omitempty"`
+	Provenance          json.RawMessage                     `json:"provenance,omitempty"`
+	RevisionHash        string                              `json:"revision_hash,omitempty"`
+	ParentRevisionID    string                              `json:"parent_revision_id,omitempty"`
+	CreatedAt           string                              `json:"created_at"`
+}
+
+type textureSourceEntityObjectResponse struct {
+	ObjectKind           string          `json:"object_kind"`
+	CanonicalID          string          `json:"canonical_id"`
+	OwnerID              string          `json:"owner_id"`
+	ComputerID           string          `json:"computer_id,omitempty"`
+	VersionID            string          `json:"version_id"`
+	ContentHash          string          `json:"content_hash"`
+	Body                 string          `json:"body,omitempty"`
+	Metadata             json.RawMessage `json:"metadata"`
+	LegacySourceEntityID string          `json:"legacy_source_entity_id,omitempty"`
+	CreatedAt            string          `json:"created_at"`
+}
+
+type textureSourceRefObjectResponse struct {
+	ObjectKind              string          `json:"object_kind"`
+	CanonicalID             string          `json:"canonical_id"`
+	OwnerID                 string          `json:"owner_id"`
+	ComputerID              string          `json:"computer_id,omitempty"`
+	VersionID               string          `json:"version_id"`
+	ContentHash             string          `json:"content_hash"`
+	DocID                   string          `json:"doc_id"`
+	TextureRevisionID       string          `json:"texture_revision_id"`
+	BodyNodeID              string          `json:"body_node_id,omitempty"`
+	BodyNodePathHash        string          `json:"body_node_path_hash,omitempty"`
+	LegacySourceEntityID    string          `json:"legacy_source_entity_id,omitempty"`
+	SourceEntityCanonicalID string          `json:"source_entity_canonical_id"`
+	SourceEntityVersionID   string          `json:"source_entity_version_id"`
+	DisplayMode             string          `json:"display_mode"`
+	CitationState           string          `json:"citation_state"`
+	Metadata                json.RawMessage `json:"metadata"`
+	CreatedAt               string          `json:"created_at"`
 }
 
 // textureListRevisionsResponse is the JSON response for
@@ -604,7 +639,7 @@ func (h *APIHandler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
 			return
 		}
-		revisionResponses = append(revisionResponses, revisionResponseFromRecord(storedRev))
+		revisionResponses = append(revisionResponses, h.revisionResponseFromRecord(r.Context(), storedRev))
 		originalIDs = append(originalIDs, resolved.ContentID)
 		parentID = rev.RevisionID
 		doc.CurrentRevisionID = rev.RevisionID
@@ -943,7 +978,7 @@ func (h *APIHandler) HandleInternalTextureRevision(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, sandboxTextureRevisionResponseFromRecord(rev))
+	writeAPIJSON(w, http.StatusOK, h.sandboxTextureRevisionResponseFromRecord(r.Context(), rev))
 }
 
 func sandboxTextureDocumentResponseFromRecord(doc types.Document) map[string]any {
@@ -968,6 +1003,18 @@ func sandboxTextureRevisionResponseFromRecord(rev types.Revision) map[string]any
 		"provenance":      rev.Provenance,
 		"revision_hash":   rev.RevisionHash,
 	}
+}
+
+func (h *APIHandler) sandboxTextureRevisionResponseFromRecord(ctx context.Context, rev types.Revision) map[string]any {
+	resp := sandboxTextureRevisionResponseFromRecord(rev)
+	enriched := h.revisionResponseFromRecord(ctx, rev)
+	if len(enriched.SourceEntityObjects) > 0 {
+		resp["source_entity_objects"] = enriched.SourceEntityObjects
+	}
+	if len(enriched.SourceRefs) > 0 {
+		resp["source_refs"] = enriched.SourceRefs
+	}
+	return resp
 }
 
 func (h *APIHandler) HandleTextureDocument(w http.ResponseWriter, r *http.Request) {
@@ -1216,7 +1263,7 @@ func (h *APIHandler) handleTextureCreateRevision(w http.ResponseWriter, r *http.
 				rebased, rebaseErr := h.createRebasedUserRevision(r.Context(), docID, ownerID, req, parentID, citations, metadata, now)
 				if rebaseErr == nil {
 					h.rt.emitTextureDocumentRevisionEvent(r.Context(), ownerID, rebased)
-					writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(rebased))
+					writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), rebased))
 					return
 				}
 				log.Printf("texture api: rebase stale user revision: %v", rebaseErr)
@@ -1239,7 +1286,7 @@ func (h *APIHandler) handleTextureCreateRevision(w http.ResponseWriter, r *http.
 	}
 	h.rt.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
 
-	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
+	writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), storedRev))
 }
 
 func (h *APIHandler) createRebasedUserRevision(ctx context.Context, docID, ownerID string, req textureCreateRevisionRequest, staleParentID string, citations, metadata json.RawMessage, now time.Time) (types.Revision, error) {
@@ -1424,6 +1471,77 @@ func revisionResponseFromRecord(rev types.Revision) textureRevisionResponse {
 	}
 }
 
+func (h *APIHandler) revisionResponseFromRecord(ctx context.Context, rev types.Revision) textureRevisionResponse {
+	resp := revisionResponseFromRecord(rev)
+	h.attachTextureSourceGraphObjects(ctx, &resp)
+	return resp
+}
+
+func (h *APIHandler) attachTextureSourceGraphObjects(ctx context.Context, resp *textureRevisionResponse) {
+	if h == nil || h.rt == nil || h.rt.Store() == nil || resp == nil {
+		return
+	}
+	entities, err := h.rt.Store().ListTextureSourceEntitiesForRevision(ctx, resp.OwnerID, resp.DocID, resp.RevisionID)
+	if err != nil {
+		log.Printf("texture api: list source entity objects for revision %s: %v", resp.RevisionID, err)
+		return
+	}
+	refs, err := h.rt.Store().ListTextureSourceRefsForRevision(ctx, resp.OwnerID, resp.DocID, resp.RevisionID)
+	if err != nil {
+		log.Printf("texture api: list source refs for revision %s: %v", resp.RevisionID, err)
+		return
+	}
+	if len(entities) > 0 {
+		resp.SourceEntityObjects = make([]textureSourceEntityObjectResponse, 0, len(entities))
+		for _, rec := range entities {
+			resp.SourceEntityObjects = append(resp.SourceEntityObjects, textureSourceEntityObjectResponseFromRecord(rec))
+		}
+	}
+	if len(refs) > 0 {
+		resp.SourceRefs = make([]textureSourceRefObjectResponse, 0, len(refs))
+		for _, rec := range refs {
+			resp.SourceRefs = append(resp.SourceRefs, textureSourceRefObjectResponseFromRecord(rec))
+		}
+	}
+}
+
+func textureSourceEntityObjectResponseFromRecord(rec store.TextureSourceEntityGraphRecord) textureSourceEntityObjectResponse {
+	return textureSourceEntityObjectResponse{
+		ObjectKind:           string(store.TextureSourceEntityObjectKind),
+		CanonicalID:          rec.CanonicalID,
+		OwnerID:              rec.OwnerID,
+		ComputerID:           rec.ComputerID,
+		VersionID:            rec.VersionID,
+		ContentHash:          rec.ContentHash,
+		Body:                 string(rec.Body),
+		Metadata:             rec.Metadata,
+		LegacySourceEntityID: rec.LegacySourceEntityID,
+		CreatedAt:            rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+	}
+}
+
+func textureSourceRefObjectResponseFromRecord(rec store.TextureSourceRefGraphRecord) textureSourceRefObjectResponse {
+	return textureSourceRefObjectResponse{
+		ObjectKind:              string(store.TextureSourceRefObjectKind),
+		CanonicalID:             rec.CanonicalID,
+		OwnerID:                 rec.OwnerID,
+		ComputerID:              rec.ComputerID,
+		VersionID:               rec.VersionID,
+		ContentHash:             rec.ContentHash,
+		DocID:                   rec.DocID,
+		TextureRevisionID:       rec.TextureRevisionID,
+		BodyNodeID:              rec.BodyNodeID,
+		BodyNodePathHash:        rec.BodyNodePathHash,
+		LegacySourceEntityID:    rec.LegacySourceEntityID,
+		SourceEntityCanonicalID: rec.SourceEntityCanonicalID,
+		SourceEntityVersionID:   rec.SourceEntityVersionID,
+		DisplayMode:             rec.DisplayMode,
+		CitationState:           rec.CitationState,
+		Metadata:                rec.Metadata,
+		CreatedAt:               rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+	}
+}
+
 func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.Request, docID string) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
@@ -1462,7 +1580,7 @@ func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.R
 		if readOwnerID != ownerID {
 			rev = normalizeWireArticleRevisionForRead(rev)
 		}
-		resp.Revisions = append(resp.Revisions, revisionResponseFromRecord(rev))
+		resp.Revisions = append(resp.Revisions, h.revisionResponseFromRecord(r.Context(), rev))
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
@@ -1509,7 +1627,7 @@ func (h *APIHandler) HandleTextureRevision(w http.ResponseWriter, r *http.Reques
 	if readOwnerID, resolveErr := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, rev.DocID); resolveErr == nil && readOwnerID != ownerID {
 		rev = normalizeWireArticleRevisionForRead(rev)
 	}
-	writeAPIJSON(w, http.StatusOK, revisionResponseFromRecord(rev))
+	writeAPIJSON(w, http.StatusOK, h.revisionResponseFromRecord(r.Context(), rev))
 }
 
 // HandleTextureHistory handles GET /api/texture/documents/{id}/history.
@@ -1837,7 +1955,7 @@ func (h *APIHandler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http
 		return
 	}
 	h.rt.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
-	writeAPIJSON(w, http.StatusCreated, revisionResponseFromRecord(storedRev))
+	writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), storedRev))
 }
 
 func (h *APIHandler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request) {
@@ -1872,7 +1990,7 @@ func (h *APIHandler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Reque
 				for _, rev := range revs {
 					resp.RevisionStructures = append(resp.RevisionStructures, revisionStructureSummaryFromRecord(rev))
 					if includeContent {
-						resp.Revisions = append(resp.Revisions, revisionResponseFromRecord(rev))
+						resp.Revisions = append(resp.Revisions, h.revisionResponseFromRecord(r.Context(), rev))
 					}
 				}
 			}

@@ -812,20 +812,19 @@ func textureToolSourceGraphWriteSet(rev types.Revision, materialized materialize
 	}
 	records := make([]store.TextureSourceEntityGraphRecord, 0, len(entities))
 	recordsByLegacyID := make(map[string]store.TextureSourceEntityGraphRecord, len(entities))
-	recordsByGraphKey := map[string]store.TextureSourceEntityGraphRecord{}
+	recordsByCanonicalID := map[string]store.TextureSourceEntityGraphRecord{}
 	for i, entity := range entities {
 		record, err := textureToolSourceEntityGraphRecord(rev, entity, rec)
 		if err != nil {
 			return store.TextureSourceGraphWriteSet{}, fmt.Errorf("source_entities[%d]: %w", i, err)
 		}
-		key := record.CanonicalID + "\x00" + record.VersionID
-		if existing, ok := recordsByGraphKey[key]; ok {
+		if existing, ok := recordsByCanonicalID[record.CanonicalID]; ok {
 			if legacyID := strings.TrimSpace(record.LegacySourceEntityID); legacyID != "" {
 				recordsByLegacyID[legacyID] = existing
 			}
 			continue
 		}
-		recordsByGraphKey[key] = record
+		recordsByCanonicalID[record.CanonicalID] = record
 		records = append(records, record)
 		if legacyID := strings.TrimSpace(record.LegacySourceEntityID); legacyID != "" {
 			recordsByLegacyID[legacyID] = record

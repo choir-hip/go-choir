@@ -153,6 +153,35 @@ func (s *Store) ListTextureSourceRefsForRevision(ctx context.Context, ownerID, d
 	return out, nil
 }
 
+func (s *Store) ListTextureSourceEntitiesForRevision(ctx context.Context, ownerID, docID, revisionID string) ([]TextureSourceEntityGraphRecord, error) {
+	refs, err := s.ListTextureSourceRefsForRevision(ctx, ownerID, docID, revisionID)
+	if err != nil {
+		return nil, err
+	}
+	pinned := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		pinned[entityVersionKey(ref.SourceEntityCanonicalID, ref.SourceEntityVersionID)] = true
+	}
+
+	entities, err := s.ListTextureSourceEntities(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TextureSourceEntityGraphRecord, 0, len(entities))
+	seen := make(map[string]bool, len(entities))
+	for _, rec := range entities {
+		key := entityVersionKey(rec.CanonicalID, rec.VersionID)
+		if seen[key] {
+			continue
+		}
+		if pinned[key] || textureSourceEntityRecordMatchesRevision(rec, docID, revisionID) {
+			out = append(out, rec)
+			seen[key] = true
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) writeTextureSourceGraph(ctx context.Context, tx *sql.Tx, rev types.Revision, graph TextureSourceGraphWriteSet) error {
 	if len(graph.SourceEntities) == 0 && len(graph.SourceRefs) == 0 {
 		return nil
@@ -509,4 +538,23 @@ func defaultTextureGraphTime(candidate, fallback time.Time) time.Time {
 		return fallback.UTC()
 	}
 	return time.Now().UTC()
+}
+
+func textureSourceEntityRecordMatchesRevision(rec TextureSourceEntityGraphRecord, docID, revisionID string) bool {
+	docID = strings.TrimSpace(docID)
+	revisionID = strings.TrimSpace(revisionID)
+	if revisionID == "" {
+		return false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(rec.Metadata, &meta); err != nil {
+		return false
+	}
+	if strings.TrimSpace(fmt.Sprint(meta["texture_revision_id"])) != revisionID {
+		return false
+	}
+	if docID == "" {
+		return true
+	}
+	return strings.TrimSpace(fmt.Sprint(meta["texture_doc_id"])) == docID
 }
