@@ -2623,3 +2623,61 @@ push, CI, promotion, rollback, or run-acceptance claim.
 Open edge: read verifier thread
 `019f0376-a32c-74b3-b1bc-35b9823e648f` after completion. Incorporate the
 verdict into Parallax State before deciding whether to cherry-pick O4 Phase 3.
+
+## 2026-06-26 - O4 Phase 3 Verifier Accepted Candidate
+
+Claim: O4 Phase 3 worker commits `cb461bb8` and `5b6086e1` are accepted for
+narrow branch-level continuation by an independent Codex verifier.
+
+Move: read verifier thread `019f0376-a32c-74b3-b1bc-35b9823e648f`, record its
+`accept` verdict, and prepare root incorporation.
+
+Expected Delta V: 0. Verifier acceptance upgrades the worker candidate from
+unchecked to accepted branch-level evidence, but does not by itself close a
+checklist obligation or root incorporation.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Verifier thread:
+  `019f0376-a32c-74b3-b1bc-35b9823e648f`
+  (`O4 verifier - Universal Wire Source Identity`).
+- Verdict:
+  `accept`, no blocking findings.
+- Accepted worker commits:
+  `cb461bb880c63a10dedc7fcfbd55d49cea9ee526 checkpoint O4 wire source identity gap`;
+  `5b6086e1d42a990dc9baf1aad71cebdd6fcb5797 carry Wire web capture source identity`.
+- Verifier evidence:
+  checkpoint-before-code satisfied; `WireSourceItem` additions are additive
+  `omitempty` fields; graph/source-open fields derive from `choir.web_capture`
+  objectgraph identity and existing `sourcecontract` constants; route semantics
+  preserve O4 Phase 2 empty-state, Texture-priority, non-tombstoned fallback,
+  and capture-projection labeling; graph fallback JSON explicitly avoids fake
+  Texture `source_ref` / publication claims.
+- Verifier commands/results:
+  `git status --short --ignored` produced no output;
+  `git diff --check 03ca986d..HEAD` passed;
+  `git show --check --oneline cb461bb880c63a10dedc7fcfbd55d49cea9ee526`
+  passed;
+  `git show --check --oneline 5b6086e1d42a990dc9baf1aad71cebdd6fcb5797`
+  passed;
+  `git diff --name-status 03ca986d..HEAD` showed one doc add and three source
+  modifications;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories' -count=1`
+  passed;
+  `nix develop -c go test ./internal/objectgraph -count=1` passed.
+
+Evidence boundary: independent branch-level local verification only. No root
+incorporation yet; no frontend/browser proof, sourcecycled ingestion, Texture
+publication/export, Qdrant, auth/session renewal, gateway/provider calls,
+vmctl, candidate computers, promotion/rollback, staging/deploy, CI,
+run-acceptance, or production proof.
+
+Residual risks: the accepted branch proves additive source/open identity on
+graph-backed Universal Wire fallback cards. It does not prove live ingestion
+into `choir.web_capture`, Source Viewer/Web Lens UI opening, native Texture body
+`source_ref` rendering for these cards, publication/export, or staging behavior.
+
+Open edge: cherry-pick accepted worker commits into root and rerun bounded root
+checks before claiming O4 Phase 3 incorporation.
