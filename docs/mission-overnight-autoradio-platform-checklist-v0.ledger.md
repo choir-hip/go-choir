@@ -4440,3 +4440,64 @@ acceptance.
 Open edge: resolve verifier thread id from pending handle or thread list, read
 its verdict, and only then decide whether to incorporate `42d47423` and
 `fcde783a` into the orchestration branch.
+
+## 2026-06-26 - O4 Phase 9 Verifier Revise Finding
+
+Claim: O4 Phase 9 worker candidate is not incorporable as-is because the
+independent verifier found a durable evidence provenance error in the candidate
+ledger. No code-level blocker was found.
+
+Move: read verifier thread `019f03f2-bb27-7d80-90a1-e172558b9c61`, inspect the
+reported ledger line in worker worktree `/Users/wiz/.codex/worktrees/199d/go-choir`,
+and send the finding back to worker thread
+`019f03e9-8fe1-7503-a9a2-f55ee5430c54` for a narrow docs-only repair.
+
+Expected Delta V: 0. A revise verdict does not close the source-artifact
+opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Verifier thread: `019f03f2-bb27-7d80-90a1-e172558b9c61` (`Verify source
+  artifact proof`) in `/Users/wiz/.codex/worktrees/794e/go-choir`.
+- Verifier verdict: `revise_before_continue`.
+- Finding: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
+  in the worker candidate records `019f026a-e014-7680-9029-aa894e61c7c8` as
+  the worker thread, but that id is the source/orchestration thread id. The
+  readable worker thread is `019f03e9-8fe1-7503-a9a2-f55ee5430c54`.
+- Verifier non-blocking code conclusion: Problem Documentation First holds;
+  `42d47423` is docs-only and precedes behavior commit `fcde783a`; the
+  implementation is narrow/additive; `reader_snapshot` is populated from durable
+  graph object bodies, bounded to 12k runes, and forwarded to the existing
+  Source Viewer payload; Source Viewer remains default and Web Lens remains
+  explicit.
+- Verifier commands passed:
+  `git show --check --oneline 42d47423`;
+  `git show --check --oneline fcde783a`;
+  `git diff --check 724772c3..HEAD`;
+  `nix develop -c go test ./internal/runtime -run
+  '^TestHandleUniversalWireStories' -count=1 -timeout=120s`;
+  `npm ci`; `npm run build`; and
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npx playwright test
+  tests/universal-wire-app.spec.js -g 'Universal Wire opens graph capture
+  sources through Source Viewer by default and Web Lens explicitly'
+  --timeout=120000`.
+- Verifier dirty-path classification: final `git status --short --ignored` was
+  clean; generated `frontend/node_modules`, `frontend/dist`,
+  `frontend/test-results`, and `frontend/playwright-report` were absent after
+  cleanup.
+- Worker follow-up sent: repair only the ledger provenance, commit it, run
+  `git show --check --oneline HEAD`, `git diff --check 724772c3..HEAD`, and
+  `git status --short --ignored`, then final-report repair commit SHA and dirty
+  state. No implementation code or claim broadening requested.
+
+Evidence boundary: branch-local verifier evidence only. No root incorporation,
+root rerun, push, PR, CI, deploy, staging product acceptance, native Texture
+body `source_ref` citation opening, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or run
+acceptance.
+
+Open edge: wait for worker repair commit, then request or read verifier
+acceptance on the repaired candidate before any root incorporation or V
+decrement.
