@@ -4501,3 +4501,80 @@ acceptance.
 Open edge: wait for worker repair commit, then request or read verifier
 acceptance on the repaired candidate before any root incorporation or V
 decrement.
+
+## 2026-06-26 - O4 Phase 9 Accepted And Root-Incorporated
+
+Claim: O4 Phase 9 is accepted and incorporated at branch level for the bounded
+graph-capture Source Viewer reader-snapshot slice. It narrows the remaining
+source/citation artifact-opening edge but does not close the whole checklist
+obligation because native Texture body `source_ref` citation opening and
+deployed/live source artifact proof remain open.
+
+Move: incorporate accepted worker commits into the orchestration branch, resolve
+mission-doc conflicts by preserving newer root verifier/revise history, rerun
+focused root checks, and update Parallax State with evidence and non-claims.
+
+Expected Delta V: 0. The accepted slice proves graph-backed Universal Wire
+source handles can open stored reader text through Source Viewer, but the
+combined source/citation obligation remains open.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread: `019f03e9-8fe1-7503-a9a2-f55ee5430c54` (`O4 worker - Source
+  Artifact Open Proof`) in `/Users/wiz/.codex/worktrees/199d/go-choir`.
+- Verifier thread: `019f03f2-bb27-7d80-90a1-e172558b9c61` (`Verify source
+  artifact proof`) in `/Users/wiz/.codex/worktrees/794e/go-choir`.
+- Worker commits accepted by verifier:
+  `42d47423 checkpoint O4 source artifact open proof gap`,
+  `fcde783a prove O4 graph capture source artifact opening`, and
+  `f7e8fced fix O4 Phase 9 worker thread provenance`.
+- Initial verifier verdict: `revise_before_continue` for one P2 durable
+  evidence provenance issue in the worker ledger. No code-level blocker found.
+- Worker repair: `f7e8fced` changed only the Phase 9 ledger receipt to list
+  worker thread `019f03e9-8fe1-7503-a9a2-f55ee5430c54` separately from
+  delegating/source thread `019f026a-e014-7680-9029-aa894e61c7c8`.
+- Re-review verdict: `accept`; verifier confirmed `f7e8fced` was docs-only,
+  `git show --check --oneline f7e8fced` passed, `git diff --check
+  724772c3..HEAD` passed, worker status was clean, and no implementation code
+  changed in the repair.
+- Root incorporation commits:
+  `afe8e70d checkpoint O4 source artifact open proof gap` and
+  `9ac7d6c2 prove O4 graph capture source artifact opening`.
+- Root repair incorporation note: cherry-picking `f7e8fced` became empty after
+  conflict resolution because root docs already represented the corrected
+  provenance through the verifier/revise entries; the accepted worker repair is
+  recorded here and in Parallax State rather than as a separate root commit.
+- Root checks passed:
+  `git show --check --oneline afe8e70d`;
+  `git show --check --oneline 9ac7d6c2`;
+  `git diff --check 617a0a45..HEAD`;
+  `nix develop -c go test ./internal/runtime -run
+  '^TestHandleUniversalWireStories' -count=1 -timeout=120s`;
+  `npm run build`; and
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npx playwright test
+  tests/universal-wire-app.spec.js -g 'Universal Wire opens graph capture
+  sources through Source Viewer by default and Web Lens explicitly'
+  --timeout=120000`.
+- Root frontend build warnings: existing Svelte/a11y/chunk warnings only.
+- Root Playwright note: Vite preview emitted expected proxy refusal noise for
+  unmocked backend endpoints while the focused mocked-route proof passed.
+- Generated artifact cleanup: root proof outputs `frontend/dist/`,
+  `frontend/test-results/`, and `frontend/playwright-report/` were removed
+  after validation.
+
+Evidence boundary: branch-local worker, independent verifier, and root-focused
+rerun evidence only. No push, PR, CI, deploy, staging product acceptance,
+native Texture body `source_ref` citation opening, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or run
+acceptance.
+
+Residual risks: the browser proof still mocks the Universal Wire story payload;
+the API proof is handler-level over graph fixtures. Native Texture citation
+opening and deployed source artifact behavior remain open. Complete News
+benchmark acceptance remains open.
+
+Open edge: choose the next O4 realism axis: native Texture body `source_ref`
+citation opening to Source Viewer/reader artifacts, or a documented product
+blocker before claiming the full News benchmark.

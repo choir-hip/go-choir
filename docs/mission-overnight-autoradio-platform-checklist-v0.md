@@ -282,12 +282,11 @@ Checklist:
   with Source Viewer default and explicit Web Lens source opening.
 - [ ] Verify source/citation links open to real source artifacts or Source
   Viewer/reader artifacts. O4 Phase 4 proves frontend routing for graph-backed
-  fallback cards. O4 Phase 9 worker candidate adds branch-level API/UI proof
-  that graph-backed capture source handles carry durable reader snapshots and
-  open Source Viewer/reader artifact text by default while Web Lens remains an
-  explicit live/original action. Native Texture `source_ref` citation
-  carry-forward, independent verifier acceptance, and deployed/live source
-  artifact proof remain open.
+  fallback cards. O4 Phase 9 adds accepted and incorporated branch-level API/UI
+  proof that graph-backed capture source handles carry durable reader snapshots
+  and open Source Viewer/reader artifact text by default while Web Lens remains
+  an explicit live/original action. Native Texture `source_ref` citation
+  carry-forward and deployed/live source artifact proof remain open.
 - [ ] Open independent verifier thread before claiming News benchmark.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
@@ -408,9 +407,12 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 31. Last Delta V: 1 for O4
-Phase 8 verifier acceptance and root incorporation. O4 Phase 1 closed the first
-O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
++ 8 Autoradio/Pipecat obligations. Current value: 31. Last Delta V: 0 for O4
+Phase 9 accepted branch-level graph-capture Source Viewer proof because native
+Texture citation opening and deployed source artifact proof remain open; the
+last decrement was 1 for O4 Phase 8 verifier acceptance and root incorporation.
+O4 Phase 1 closed the first O4 checklist obligation by adding a tested
+`choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
 close the broader News/Wire feed-from-graph-and-source-refs obligation because
@@ -434,16 +436,16 @@ O4 Phase 8 adds accepted and incorporated empty-only diagnostics for Universal
 Wire responses plus UI rendering; it does not claim staging, provider/search,
 Qdrant, publication/export, run-acceptance, promotion/rollback, or native
 Texture `source_ref` behavior.
-O4 Phase 9 has a worker candidate awaiting a docs-only provenance repair:
-checkpoint `42d47423` and implementation `fcde783a` add a bounded
-`reader_snapshot` handoff from graph-backed Universal Wire source items into the
-existing Source Viewer/reader path, with Web Lens still explicit. Verifier
-thread `019f03f2-bb27-7d80-90a1-e172558b9c61` returned
-`revise_before_continue` because the candidate ledger mislabeled the
-source/orchestration thread id as the worker thread; no code-level blocker was
-found. This is not accepted or incorporated yet, and it does not claim staging,
-native Texture body `source_ref` citation opening, publication/export, Qdrant,
-provider/search, promotion/rollback, or run acceptance.
+O4 Phase 9 adds accepted and incorporated branch-level graph-capture Source
+Viewer reader-snapshot proof: checkpoint `42d47423`, implementation
+`fcde783a`, and docs-only provenance repair `f7e8fced` were accepted by
+verifier thread `019f03f2-bb27-7d80-90a1-e172558b9c61`; root incorporated the
+checkpoint as `afe8e70d` and the implementation as `9ac7d6c2`. The repair was
+empty in root because the root ledger already distinguished the worker thread
+from the source/orchestration thread. O4 Phase 9 does not close root V because
+native Texture body `source_ref` citation opening and deployed/live source
+artifact proof remain open, and it does not claim staging, publication/export,
+Qdrant, provider/search, promotion/rollback, or run acceptance.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -465,13 +467,12 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current O4 Phase 9 candidate awaiting repair is orange:
-it additively exposes bounded reader snapshots on Universal Wire source items
-and passes them to existing Source Viewer/reader UI behavior while preserving
-the stated boundary against synthesized stories/source refs/source entities,
+session artifacts. The current O4 Phase 9 incorporated change is orange: it
+additively exposes bounded reader snapshots on Universal Wire source items and
+passes them to existing Source Viewer/reader UI behavior while preserving the
+stated boundary against synthesized stories/source refs/source entities,
 staging, publication/export, Qdrant, auth/session, provider/gateway, promotion,
-rollback, run acceptance, and native Texture citation claims. The required
-repair is documentation/evidence provenance only.
+rollback, run acceptance, and native Texture citation claims.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -828,21 +829,24 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: wait for O4 Phase 9 worker repair from thread
-`019f03e9-8fe1-7503-a9a2-f55ee5430c54`
-(`O4 worker - Source Artifact Open Proof`) in
-`/Users/wiz/.codex/worktrees/199d/go-choir`. Verifier thread
-`019f03f2-bb27-7d80-90a1-e172558b9c61` (`Verify source artifact proof`) ran
-against branch `codex/o4-phase9-source-artifact-open-proof` in
-`/Users/wiz/.codex/worktrees/794e/go-choir` and returned
-`revise_before_continue`: the worker candidate ledger line for Phase 9
-mislabeled `019f026a-e014-7680-9029-aa894e61c7c8` as the worker thread when
-the actual worker thread is `019f03e9-8fe1-7503-a9a2-f55ee5430c54`. Verifier
-found no code-level blocker and passed git hygiene, focused runtime test,
-frontend build, and focused Playwright source-opening proof. A follow-up has
-asked the worker for a docs-only repair commit and diff hygiene. Do not
-incorporate or decrement V until the repaired candidate receives verifier
-acceptance and root reruns focused checks. O4 Phase 8 worker thread
+next move: continue the remaining O4 source/citation artifact-opening edge
+without overclaiming Phase 9: either launch a narrow worker for native Texture
+body `source_ref` citation opening through real Source Viewer/reader artifacts,
+or document the smallest product blocker before any full News benchmark claim.
+O4 Phase 9 worker thread `019f03e9-8fe1-7503-a9a2-f55ee5430c54` completed in
+`/Users/wiz/.codex/worktrees/199d/go-choir`; verifier thread
+`019f03f2-bb27-7d80-90a1-e172558b9c61` accepted the repaired head
+`f7e8fced`. Root incorporated the checkpoint as `afe8e70d` and implementation
+as `9ac7d6c2`; the repair commit was empty in root after conflict resolution
+because root documentation already carried corrected provenance. Root checks
+passed: `git show --check --oneline afe8e70d`;
+`git show --check --oneline 9ac7d6c2`; `git diff --check 617a0a45..HEAD`;
+`nix develop -c go test ./internal/runtime -run
+'^TestHandleUniversalWireStories' -count=1 -timeout=120s`; `npm run build`;
+and focused `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 npx playwright test
+tests/universal-wire-app.spec.js -g 'Universal Wire opens graph capture sources
+through Source Viewer by default and Web Lens explicitly' --timeout=120000`.
+Actual Delta V: 0; current V remains 31. O4 Phase 8 worker thread
 `019f03d8-2a15-7a61-ab7f-82ea0213cce2` and verifier thread
 `019f03e1-5342-7b61-a557-917c1ef1c407` accepted worker commits `4975163f` and
 `cbf04485`, which root incorporated as `db46f8fe checkpoint O4 empty feed
