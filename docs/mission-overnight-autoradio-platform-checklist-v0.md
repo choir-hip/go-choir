@@ -864,18 +864,24 @@ and `frontend/test-results/` were removed. This repairs the local browser
 harness blocker but does not close V because the later native Texture
 body-`source_ref` assertion-tightening and deployed/staging proof remain open.
 
-O4 Phase 10d native Texture reader-body proof worker has materialized as a
-worktree but is not yet resolved to a readable thread. Worktree `create_thread`
-returned pending handle `local:1e43828a-9ce3-4a57-bd83-62a92d90d85d` for work item
+O4 Phase 10d native Texture reader-body proof worker is resolved and active.
+Worktree `create_thread` returned pending handle
+`local:1e43828a-9ce3-4a57-bd83-62a92d90d85d` for work item
 `O4-phase10d-native-texture-source-ref-reader-body-proof`, starting from this
 orchestration branch at `35d0e350 record O4 harness repair acceptance`; the
 materialized worktree is `/Users/wiz/.codex/worktrees/0f6b/go-choir` on branch
-`codex/o4-phase10d-native-texture-source-ref-reader-body-proof`.
+`codex/o4-phase10d-native-texture-source-ref-reader-body-proof`. The readable
+thread is `019f0425-84ab-7120-99bc-c068a19227a8`
+(`O4 worker - Phase 10d Texture Reader Body Proof`), titled and pinned. Current
+worker status shows an in-progress test-only modification to
+`frontend/tests/texture-source-entities.spec.js` plus ignored local service and
+browser proof artifacts; this is not yet a candidate, verifier target, or
+checklist descent.
 
-next move: resolve pending Phase 10d handle
-`local:1e43828a-9ce3-4a57-bd83-62a92d90d85d`, title/pin the worker thread, and
-inspect worktree status, then wait for the test-only proof candidate or precise
-blocker. The worker should use the now-runnable browser harness to tighten the native Texture body
+next move: wait for worker thread
+`019f0425-84ab-7120-99bc-c068a19227a8` to complete or emit a durable callback,
+then inspect the worker worktree. The worker should use the now-runnable
+browser harness to tighten the native Texture body
 `source_ref` Source Viewer/reader-artifact assertion, specifically separating
 inline citation note/excerpt text from graph object reader body text, without
 changing product behavior unless a new behavior problem is documented first. O4

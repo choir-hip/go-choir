@@ -5178,3 +5178,48 @@ run-acceptance claim.
 Open edge: resolve the Phase 10d worker thread id from cwd or pending handle,
 title and pin it, inspect starting status, then wait for a candidate or
 no-candidate callback.
+
+## 2026-06-26 - O4 Phase 10d Worker Resolved And Active
+
+Claim: The O4 Phase 10d reader-body proof worker has resolved to a readable,
+titled, pinned Codex thread and is actively editing the focused frontend test.
+This is worker identity and in-progress status evidence only, not a candidate,
+verifier acceptance, root incorporation, or checklist descent.
+
+Move: resolve the materialized worktree through `list_threads` by cwd, title
+and pin the thread, and inspect worker status.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending worker worktree handle:
+  `local:1e43828a-9ce3-4a57-bd83-62a92d90d85d`.
+- Resolved worker thread:
+  `019f0425-84ab-7120-99bc-c068a19227a8`
+  (`O4 worker - Phase 10d Texture Reader Body Proof`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/0f6b/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10d-native-texture-source-ref-reader-body-proof` at
+  `35d0e350 record O4 harness repair acceptance`.
+- Worker dirty state at orchestration inspection:
+  tracked modification `frontend/tests/texture-source-entities.spec.js`;
+  ignored artifacts `auth.log`, `frontend/frontend.log`,
+  `frontend/node_modules/`, `frontend/playwright/`,
+  `frontend/test-results/`, `gateway.log`, `proxy.log`, `sandbox.log`, and
+  `vmctl.log`.
+
+Evidence boundary: active worker/status observation only. No worker final
+report, accepted candidate commit, verifier, root incorporation, push, PR, CI,
+deploy, staging product acceptance, native Texture body `source_ref` assertion
+proof, publication/export, Qdrant, provider/gateway/search, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: wait for worker thread
+`019f0425-84ab-7120-99bc-c068a19227a8` to complete or emit a durable callback;
+then inspect its worktree. If it produces a commit, create an independent
+verifier thread before root incorporation. If it returns no candidate, record
+the blocker and final dirty-path classification.
