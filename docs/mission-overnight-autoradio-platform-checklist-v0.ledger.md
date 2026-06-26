@@ -2736,3 +2736,50 @@ Open edge: choose the next bounded O4 worker. Highest-value next slices are:
 sourcecycled/web ingestion into `choir.web_capture`; or browser/UI proof that
 Universal Wire cards consume the graph source/open identity and route to Source
 Viewer/Web Lens correctly.
+
+## 2026-06-26 - O4 Phase 4 Source-Open Browser Worker Queued
+
+Claim: the next O4 move is a bounded frontend/browser proof that Universal Wire
+can consume Phase 3 graph source/open identity, not a sourcecycled ingestion or
+staging claim.
+
+Move: create a new project-scoped Codex worker from the orchestration branch for
+`O4-phase4-universal-wire-source-open-browser-proof`; poll for materialization.
+
+Expected Delta V: 0. Worker launch creates an implementation context but cannot
+close an obligation before final report, independent verifier acceptance, and
+root incorporation.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Pending worktree handle:
+  `local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840`.
+- Work item:
+  `O4-phase4-universal-wire-source-open-browser-proof`.
+- Current orchestration branch/head at launch:
+  `preserve/o0-autoradio-mission-state-2026-06-26` at
+  `ec5192e9 record O4 source identity acceptance`.
+- Assignment scope:
+  add the smallest Universal Wire frontend/browser proof that graph-backed
+  capture cards consume Phase 3 manifest fields and route to Source
+  Viewer/reader by default, with explicit Web Lens routing available, while
+  preserving no-publication/no-native-Texture-`source_ref` claims.
+- Candidate files named in prompt:
+  `frontend/src/lib/UniversalWireApp.svelte`;
+  `frontend/tests/universal-wire-app.spec.js`;
+  source-opening helper files and existing Texture source-open tests for policy
+  alignment.
+- Poll result:
+  `list_threads` did not yet show a materialized worker thread for the work item
+  or title terms.
+
+Evidence boundary: worker creation request and pending handle only. No worker
+final report, verifier verdict, root incorporation, frontend/browser proof,
+sourcecycled ingestion, native Texture `source_ref` citation proof, staging,
+deploy, main, push, CI, promotion, rollback, or run-acceptance claim.
+
+Open edge: resolve pending worker handle
+`local:a5a3855d-0a7e-4bea-9bda-a4b2ba0fe840` to a thread id, title/pin it, and
+read its final report before launching an independent verifier.
