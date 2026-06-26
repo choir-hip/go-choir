@@ -1087,6 +1087,8 @@ test('Texture source URL opens Source Viewer unless browser is explicitly reques
 
 test('Texture renders and opens graph-wrapper sources when legacy revision source entities are absent', async ({ desktopSession }) => {
   const { page } = desktopSession;
+  const inlineSourceViewerQuote = 'Inline graph citation quote stays in the Texture note.';
+  const graphSourceViewerReaderBody = 'Graph object reader body proves Source Viewer opened from the wrapper body.';
   await page.evaluate(async () => {
     await fetch('/api/desktop/state', {
       method: 'PUT',
@@ -1099,7 +1101,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
   await expect(page.locator('[data-desktop]')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('[data-window]')).toHaveCount(0);
 
-  const created = await page.evaluate(async () => {
+  const created = await page.evaluate(async ({ inlineSourceViewerQuote }) => {
     const title = `Graph Wrapper Source Open Fixture ${Date.now()}`;
     const sourceURL = 'https://example.com/graph-wrapper-source-open';
     const docRes = await fetch('/api/texture/documents', {
@@ -1114,7 +1116,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
       {
         source_entity_id: 'src-graph-ui-source-viewer',
         target: { kind: 'web_url', uri: sourceURL },
-        selectors: [{ kind: 'text_quote', data: { text_quote: 'Graph-only reader snapshot proves Source Viewer opened.' } }],
+        selectors: [{ kind: 'text_quote', data: { text_quote: inlineSourceViewerQuote } }],
         display: { mode: 'numbered_ref', title: 'Graph-only Source Viewer fixture', label: '1' },
         evidence: { state: 'available', open_surface: 'source', reader_artifact_state: 'reader_snapshot_ready' },
         provenance: { created_by: 'browser-test', source_system: 'playwright' },
@@ -1171,7 +1173,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
     if (!revRes.ok) throw new Error(`create revision failed: ${revRes.status}`);
     const revision = await revRes.json();
     return { title, docID: doc.doc_id, revision };
-  });
+  }, { inlineSourceViewerQuote });
 
   const graphOnlyRevision = {
     ...created.revision,
@@ -1182,7 +1184,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
         version_id: 'ver-graph-ui-source-viewer',
         content_hash: 'sha256:graph-ui-source-viewer',
         owner_id: 'user-1',
-        body: 'Graph-only reader snapshot proves Source Viewer opened.',
+        body: graphSourceViewerReaderBody,
         legacy_source_entity_id: 'src-graph-ui-source-viewer',
         metadata: {
           schema_version: 'choir.source_entity.v1',
@@ -1196,7 +1198,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
           display: { mode: 'excerpt', title: 'Graph-only Source Viewer fixture', label: '1' },
           evidence: { state: 'available', open_surface: 'source', reader_artifact_state: 'reader_snapshot_ready' },
           reader_snapshot_status: { state: 'reader_snapshot_ready' },
-          selectors: [{ kind: 'text_quote', data: { text_quote: 'Graph-only reader snapshot proves Source Viewer opened.' } }],
+          selectors: [{ kind: 'text_quote', data: { text_quote: inlineSourceViewerQuote } }],
           provenance: { created_by: 'browser-test', source_system: 'playwright' },
         },
       },
@@ -1278,13 +1280,18 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
   await expect(sourceViewerCitation).toHaveAttribute('data-source-display-mode', 'numbered_ref');
   await expect(sourceViewerCitation).toHaveAttribute('data-source-expansion-surface', 'journal');
   await sourceViewerCitation.click();
-  await expect(rendered.locator('[data-texture-source-flow-note]')).toContainText('Graph-only Source Viewer fixture');
+  const sourceViewerFlowNote = rendered.locator('[data-texture-source-flow-note]');
+  await expect(sourceViewerFlowNote).toContainText('Graph-only Source Viewer fixture');
+  await expect(sourceViewerFlowNote).toContainText(inlineSourceViewerQuote);
+  await expect(sourceViewerFlowNote).not.toContainText(graphSourceViewerReaderBody);
   await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-graph-ui-source-viewer"]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
   await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
-  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('Graph-only reader snapshot proves Source Viewer opened');
+  const sourceReader = sourceWindow.locator('[data-content-reader-markdown]');
+  await expect(sourceReader).toContainText(graphSourceViewerReaderBody);
+  await expect(sourceReader).not.toContainText(inlineSourceViewerQuote);
   await expect(page.locator('[data-browser-app]')).toHaveCount(0);
 
   await page.locator('[data-window-app-id="texture"]').last().click({ position: { x: 24, y: 24 } });
