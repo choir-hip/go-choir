@@ -519,18 +519,20 @@ code/test/verifier acceptance only; no O3-complete, main, staging, product,
 deployment, public producer, source-open, Qdrant, graph-first read, auth,
 gateway/provider, or deploy claim exists yet.
 
-next move: Resolve the O3 Phase 4 worker thread id if pending worktree
-`local:71935a66-7f54-4564-82ce-cca26dc682fa` has materialized, then wait for
-its final report. Phase 4 worker assignment:
-`O3-phase4-texture-api-source-object-wrappers`, the smallest additive
-Texture API/read step from `docs/paradoc-source-entity-migration.md`: return
+next move: Wait for O3 Phase 4 worker thread
+`019f02ed-7ce9-7d30-906b-f497a95ecc6d` (`O3 worker - Source API Phase 4`) in
+`/Users/wiz/.codex/worktrees/ba60/go-choir` to finish. The earlier pending
+worktree handle `local:71935a66-7f54-4564-82ce-cca26dc682fa` has
+materialized. At last read the worker was active at `a5583088` with
+documentation WIP in `docs/paradoc-source-entity-migration.md`, this paradoc,
+and the ledger, and no implementation commit or final report yet. Phase 4
+assignment remains `O3-phase4-texture-api-source-object-wrappers`: return
 `source_entities` and `source_refs` object-wrapper records from Texture APIs
 while preserving legacy fields and without switching product behavior to
-graph-first reads. Also add the accepted Phase 3 residual duplicate-normalization
-regression if cheap and local. Verifier thread
-`019f02ed-d05e-78f1-975c-1de2df51451b` (`O3 verifier - Source API Phase 4`)
-is live and pinned; it must return `blocked` until the worker has a final
-report.
+graph-first reads. Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
+(`O3 verifier - Source API Phase 4`) returned `blocked` because no worker final
+report exists yet; treat that as stale launch-order evidence and reawaken it
+after the worker final report.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
