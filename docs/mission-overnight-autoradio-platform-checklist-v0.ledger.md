@@ -5506,3 +5506,58 @@ Open edge: resolve verifier pending handle
 `local:db7cea87-c4ef-4e27-a82f-60770e93688e`, title/pin the verifier thread,
 and wait for verdict on the Phase 11 no-code blocker before treating it as
 verified mission evidence.
+
+## 2026-06-26 - O4 Phase 11 No-Code Blocker Verified
+
+Claim: The Phase 11 deployed/live source artifact proof blocker is now
+independently verified. This accepts the blocker as mission evidence; it does
+not close the remaining O4 source/citation checklist item.
+
+Move: resolved the verifier pending handle, titled/pinned the verifier thread,
+read its completed verdict, and updated Parallax State.
+
+Expected Delta V: 0. Verifying a blocker does not prove deployed/live source
+artifact opening.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Verifier pending handle:
+  `local:db7cea87-c4ef-4e27-a82f-60770e93688e`.
+- Verifier thread:
+  `019f0437-2147-7f32-b4e4-0bf1ddd57759`
+  (`O4 verifier - Phase 11 Deployed Source Blocker`), titled and pinned.
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/0539/go-choir`.
+- Verifier verdict:
+  `accept`, with no blocking findings.
+- Deployed identity verified:
+  `https://choir.news/health` reports
+  `06e3225f02f60f113340309a2766c5face134395`.
+- Ancestry verified:
+  `git merge-base --is-ancestor b13ba881... 06e3225f...` returned `1`, and
+  the same check for `9f54fd5e` returned `1`; deployed `06e3225f` is an
+  ancestor of the Phase 11 branch, which is 135 commits ahead of deployed.
+- Public unauthenticated route verified:
+  `GET https://choir.news/api/universal-wire/stories` returned
+  `401 {"error":"authentication required"}`.
+- Test-path boundary verified:
+  `frontend/tests/universal-wire-staging-acceptance.spec.js` requires auth and
+  checks feed/app surface rather than source opening;
+  `frontend/tests/texture-source-service-publication.spec.js` creates Texture
+  documents/revisions/publications before source-service proof; local
+  source-opening proofs use mocks or local `desktopSession` state.
+- Dirty state verified:
+  `git status --short --ignored`, `git diff --check`, and
+  `git diff --cached --check` were clean in both verifier and worker worktrees.
+
+Evidence boundary: verified no-code blocker only. No push, deploy, auth/session
+renewal, mutating staging proof, publication/export, Qdrant,
+provider/gateway/search, promotion/rollback, run-acceptance record, or
+deployed/live source artifact proof is claimed.
+
+Open edge: O4 source/citation proof still needs an admissible authenticated
+read-only staging proof on a deployed commit containing the accepted O4 local
+proof line, or an explicit handoff that names deploy/auth authority as the next
+blocker.
