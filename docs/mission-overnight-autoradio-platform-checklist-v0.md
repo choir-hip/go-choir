@@ -124,18 +124,18 @@ web-capture, media, run-sheet, Qdrant, and Base objects.
 
 Checklist:
 
-- [ ] Review the object-service prototype for fit with current main.
-- [ ] Decide whether to land as `internal/objectgraph`, narrower package, or
+- [x] Review the object-service prototype for fit with current main.
+- [x] Decide whether to land as `internal/objectgraph`, narrower package, or
   design-only successor.
-- [ ] Preserve stable object identity and content hash semantics.
-- [ ] Preserve edge storage semantics.
-- [ ] Add or retain focused tests for memory and SQLite stores.
-- [ ] Add the next missing integration test before claiming durable persistence.
-- [ ] Define minimal object kinds needed by News and Autoradio:
+- [x] Preserve stable object identity and content hash semantics.
+- [x] Preserve edge storage semantics.
+- [x] Add or retain focused tests for memory and SQLite stores.
+- [x] Add the next missing integration test before claiming durable persistence.
+- [x] Define minimal object kinds needed by News and Autoradio:
   `choir.source_entity`, `choir.source_ref`, `choir.web_capture`,
   `choir.media_item`, `choir.audio_recording`, `choir.transcript`,
   `choir.autoradio_run_sheet`.
-- [ ] Open a verifier thread before merge or settlement.
+- [x] Open a verifier thread before merge or settlement.
 
 Acceptance: branch-level object graph foundation merged or a precise blocker
 with review evidence. Platform behavior settlement requires the normal
@@ -319,9 +319,10 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 59. Last Delta V: 9 for O0
-inventory verification and preservation handles. Variant total corrected from
-67 to 68 because O0 contains nine checklist obligations.
++ 8 Autoradio/Pipecat obligations. Current value: 51. Last Delta V: 8 for
+branch-level O1 objectgraph foundation accepted by verifier and merged into
+this mission branch. Variant total corrected from 67 to 68 because O0 contains
+nine checklist obligations.
 
 budget: overnight run, target 8-12 hours wall-clock, with orchestration
 checkpoints at least every major work item and before any behavior-changing
@@ -392,12 +393,17 @@ thread: `019f0279-b855-7e52-b830-70a8eb4bbfe8` (`O1 worker - Object Graph
 Foundation`) in `/Users/wiz/.codex/worktrees/3026/go-choir`. O1 verifier
 thread: `019f027a-3434-7ef2-b813-f3f21213167f` (`O1 verifier - Object Graph
 Foundation`). The verifier returned `blocked` because the worker had no final
-report or diff yet. O1 is active but no O1 obligation is complete yet.
+report or diff yet. After worker completion, verifier returned `accept` with no
+blocking findings. O1 branch `codex/o1-objectgraph-foundation` produced docs
+checkpoint `fa06b718` and implementation `34ece272`; implementation was
+cherry-picked into this mission branch as `a68bc801`. Focused objectgraph tests
+passed from this branch: `nix develop -c go test ./internal/objectgraph`. O1 is
+complete at branch level, with no main/staging/platform settlement claim.
 
-next move: Use `read_thread` on the O1 worker until it produces its objectgraph
-decision/implementation report, then use or follow up the O1 verifier for
-verdict `accept`, `revise_before_continue`, `blocked`, or `supersede`.
-Incorporate that verdict before claiming any O1 checklist progress.
+next move: Start O2 by creating a bounded Qdrant derived-index worker thread
+and independent verifier thread. O2 must use the objectgraph branch-level API as
+input and keep Qdrant derived/rebuildable, with no staging claim unless later
+landed through the full commit/push/CI/deploy/staging loop.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

@@ -248,3 +248,41 @@ Receipts:
 
 Open edge: Wait for the O1 worker report, then re-run verifier against the
 completed worker branch/diff/tests.
+
+## 2026-06-26 - O1 Objectgraph Foundation Accepted
+
+Claim: A branch-level objectgraph foundation now exists with independent
+verifier acceptance.
+
+Move: settle O1 at branch level.
+
+Expected Delta V: 8, one for each O1 checklist obligation.
+
+Actual Delta V: 8. Current V is 51.
+
+Receipts:
+
+- O1 worker thread `019f0279-b855-7e52-b830-70a8eb4bbfe8` completed with
+  branch `codex/o1-objectgraph-foundation`.
+- Worker commits: `fa06b718` docs checkpoint and `34ece272` objectgraph
+  implementation.
+- Implementation cherry-picked into this mission branch as `a68bc801`.
+- O1 verifier thread `019f027a-3434-7ef2-b813-f3f21213167f` returned verdict
+  `accept` with no blocking findings.
+- Verifier checked deterministic object IDs/content hashes, deterministic edge
+  IDs, memory and SQLite stores, SQLite reopen persistence proof, required
+  object kinds, and paradoc/ledger updates.
+- Worker and verifier both ran `nix develop -c go test ./internal/objectgraph`;
+  orchestration re-ran the same focused test after cherry-pick and it passed.
+
+Evidence boundary: This is branch-level/local objectgraph proof only. It does
+not claim main, CI, deploy, staging, Texture, Universal Wire, Qdrant runtime,
+Dolt, auth, vmctl, provider, promotion, rollback, or production behavior.
+
+Residual risk: `choir.autoradio_run_sheet` is registered as versioned, but
+version-chain behavior is not implemented yet. That is accepted as outside O1's
+foundation scope.
+
+Open edge: O2 should begin with Qdrant as a rebuildable derived index over
+objectgraph data, using the branch-level objectgraph API and preserving
+source-of-truth boundaries.
