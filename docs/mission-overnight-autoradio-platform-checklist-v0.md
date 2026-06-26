@@ -882,11 +882,14 @@ Source Viewer reader content comes from the graph body. Worker-reported
 evidence: exact focused Playwright proof passed, adjacent six-test regression
 filter passed, `git diff --check`, `git show --check`, commit-range diff check,
 service stop, and port cleanup passed. Independent verifier launch returned
-pending handle `local:d292cc59-d088-480f-baef-83c5b2dfc12b`.
+pending handle `local:d292cc59-d088-480f-baef-83c5b2dfc12b`, which resolved to
+thread `019f042a-af35-7411-abee-9adf12c2a664`
+(`O4 verifier - Phase 10d Texture Reader Body Proof`) in
+`/Users/wiz/.codex/worktrees/515b/go-choir`; the verifier is active.
 
-next move: resolve pending verifier handle
-`local:d292cc59-d088-480f-baef-83c5b2dfc12b`, title/pin the verifier thread,
-and wait for its verdict on worker commit `5cc0457f`. Do not incorporate the
+next move: wait for verifier thread
+`019f042a-af35-7411-abee-9adf12c2a664` to return its verdict on worker commit
+`5cc0457f`. Do not incorporate the
 candidate into root or decrement V before independent verifier acceptance. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation

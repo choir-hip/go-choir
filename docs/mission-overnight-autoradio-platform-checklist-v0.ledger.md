@@ -5281,3 +5281,40 @@ Open edge: resolve verifier pending handle
 `local:d292cc59-d088-480f-baef-83c5b2dfc12b`, title/pin the verifier thread,
 and wait for verdict on worker commit `5cc0457f`; only after `accept` should
 orchestration consider root incorporation and V treatment.
+
+## 2026-06-26 - O4 Phase 10d Verifier Resolved
+
+Claim: The O4 Phase 10d verifier pending handle has resolved to a readable,
+titled, pinned Codex thread. This is verifier identity/readiness evidence only,
+not a verdict, root incorporation, or checklist descent.
+
+Move: resolve the verifier worktree through `list_threads` by cwd, title and
+pin the thread, and inspect verifier status.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Pending verifier worktree handle:
+  `local:d292cc59-d088-480f-baef-83c5b2dfc12b`.
+- Resolved verifier thread:
+  `019f042a-af35-7411-abee-9adf12c2a664`
+  (`O4 verifier - Phase 10d Texture Reader Body Proof`), titled and pinned.
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/515b/go-choir`.
+- Verifier state:
+  detached `HEAD` at `5cc0457f6695f43466b714161a56c86b46ed1e3b`; ignored
+  artifacts observed are `auth.log` and `gateway.log`; thread status active at
+  read time.
+
+Evidence boundary: verifier identity/readiness only. No verifier verdict yet,
+no root incorporation of worker commit, push, PR, CI, deploy, staging product
+acceptance, publication/export, Qdrant, provider/gateway/search,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: wait for verifier thread
+`019f042a-af35-7411-abee-9adf12c2a664` to return verdict on worker commit
+`5cc0457f`; only after `accept` should orchestration consider root
+incorporation and V treatment.
