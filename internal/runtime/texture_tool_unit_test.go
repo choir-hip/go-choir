@@ -739,6 +739,22 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 		apiResp.SourceRefs[0].DisplayMode != store.TextureSourceRefDisplayNumbered {
 		t.Fatalf("source_refs[0] = %#v, want pinned source_ref wrapper", apiResp.SourceRefs[0])
 	}
+	listResp := NewAPIHandler(rt).revisionResponsesFromRecords(ctx, revs, doc.OwnerID, doc.DocID)
+	if len(listResp) != 2 {
+		t.Fatalf("revisionResponsesFromRecords len = %d, want 2", len(listResp))
+	}
+	if listResp[0].RevisionID != appRev.RevisionID || len(listResp[0].SourceEntityObjects) != 1 || len(listResp[0].SourceRefs) != 1 {
+		t.Fatalf("listed app revision response = %#v, want source wrappers", listResp[0])
+	}
+	if string(listResp[0].SourceEntities) != string(appRev.SourceEntities) {
+		t.Fatalf("listed response changed legacy source_entities: got %s want %s", listResp[0].SourceEntities, appRev.SourceEntities)
+	}
+	if listResp[1].RevisionID != base.RevisionID {
+		t.Fatalf("listed base revision id = %q, want %q", listResp[1].RevisionID, base.RevisionID)
+	}
+	if len(listResp[1].SourceEntityObjects) != 0 || len(listResp[1].SourceRefs) != 0 {
+		t.Fatalf("listed base revision response = %#v, want no graph wrappers", listResp[1])
+	}
 	meta := decodeRevisionMetadata(appRev.Metadata)
 	for _, key := range []string{"source_entities", "media_source_refs", "source_ref_normalization", "citations_json"} {
 		if _, ok := meta[key]; ok {

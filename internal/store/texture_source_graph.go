@@ -182,6 +182,65 @@ func (s *Store) ListTextureSourceEntitiesForRevision(ctx context.Context, ownerI
 	return out, nil
 }
 
+func (s *Store) ListTextureSourceGraphForRevisions(ctx context.Context, ownerID, docID string, revisionIDs []string) (map[string]TextureSourceGraphWriteSet, error) {
+	ids, wanted := normalizeTextureSourceGraphRevisionIDs(revisionIDs)
+	out := make(map[string]TextureSourceGraphWriteSet, len(ids))
+	for _, revisionID := range ids {
+		out[revisionID] = TextureSourceGraphWriteSet{}
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	refsByRevision, err := s.listTextureSourceRefsForRevisions(ctx, ownerID, docID, ids)
+	if err != nil {
+		return nil, err
+	}
+	pinnedRevisionsByEntity := map[string][]string{}
+	for revisionID, refs := range refsByRevision {
+		set := out[revisionID]
+		set.SourceRefs = refs
+		out[revisionID] = set
+		for _, ref := range refs {
+			key := entityVersionKey(ref.SourceEntityCanonicalID, ref.SourceEntityVersionID)
+			pinnedRevisionsByEntity[key] = append(pinnedRevisionsByEntity[key], revisionID)
+		}
+	}
+
+	entities, err := s.ListTextureSourceEntities(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	seenEntityByRevision := make(map[string]map[string]bool, len(ids))
+	appendEntity := func(revisionID string, rec TextureSourceEntityGraphRecord) {
+		if !wanted[revisionID] {
+			return
+		}
+		key := entityVersionKey(rec.CanonicalID, rec.VersionID)
+		if seenEntityByRevision[revisionID] == nil {
+			seenEntityByRevision[revisionID] = map[string]bool{}
+		}
+		if seenEntityByRevision[revisionID][key] {
+			return
+		}
+		set := out[revisionID]
+		set.SourceEntities = append(set.SourceEntities, rec)
+		out[revisionID] = set
+		seenEntityByRevision[revisionID][key] = true
+	}
+
+	for _, rec := range entities {
+		key := entityVersionKey(rec.CanonicalID, rec.VersionID)
+		for _, revisionID := range pinnedRevisionsByEntity[key] {
+			appendEntity(revisionID, rec)
+		}
+		if revisionID, ok := textureSourceEntityRecordRevisionID(rec, docID); ok {
+			appendEntity(revisionID, rec)
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) writeTextureSourceGraph(ctx context.Context, tx *sql.Tx, rev types.Revision, graph TextureSourceGraphWriteSet) error {
 	if len(graph.SourceEntities) == 0 && len(graph.SourceRefs) == 0 {
 		return nil
@@ -540,21 +599,78 @@ func defaultTextureGraphTime(candidate, fallback time.Time) time.Time {
 	return time.Now().UTC()
 }
 
-func textureSourceEntityRecordMatchesRevision(rec TextureSourceEntityGraphRecord, docID, revisionID string) bool {
-	docID = strings.TrimSpace(docID)
-	revisionID = strings.TrimSpace(revisionID)
-	if revisionID == "" {
-		return false
+func (s *Store) listTextureSourceRefsForRevisions(ctx context.Context, ownerID, docID string, revisionIDs []string) (map[string][]TextureSourceRefGraphRecord, error) {
+	ids, wanted := normalizeTextureSourceGraphRevisionIDs(revisionIDs)
+	out := make(map[string][]TextureSourceRefGraphRecord, len(ids))
+	for _, revisionID := range ids {
+		out[revisionID] = nil
 	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+2)
+	args = append(args, ownerID, docID)
+	for _, revisionID := range ids {
+		args = append(args, revisionID)
+	}
+	rows, err := s.textureHandle().QueryContext(ctx,
+		fmt.Sprintf(`SELECT canonical_id, version_id, owner_id, computer_id, content_hash, doc_id, texture_revision_id, body_node_id, body_node_path_hash, legacy_source_entity_id, source_entity_canonical_id, source_entity_version_id, display_mode, citation_state, metadata_json, created_at
+		   FROM texture_source_refs
+		  WHERE owner_id = ? AND doc_id = ? AND texture_revision_id IN (%s)
+		  ORDER BY texture_revision_id, created_at, canonical_id, version_id`, placeholders),
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query texture source refs for revisions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		rec, err := scanTextureSourceRef(rows)
+		if err != nil {
+			return nil, err
+		}
+		if wanted[rec.TextureRevisionID] {
+			out[rec.TextureRevisionID] = append(out[rec.TextureRevisionID], rec)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate texture source refs for revisions: %w", err)
+	}
+	return out, nil
+}
+
+func normalizeTextureSourceGraphRevisionIDs(revisionIDs []string) ([]string, map[string]bool) {
+	out := make([]string, 0, len(revisionIDs))
+	seen := make(map[string]bool, len(revisionIDs))
+	for _, revisionID := range revisionIDs {
+		revisionID = strings.TrimSpace(revisionID)
+		if revisionID == "" || seen[revisionID] {
+			continue
+		}
+		seen[revisionID] = true
+		out = append(out, revisionID)
+	}
+	return out, seen
+}
+
+func textureSourceEntityRecordMatchesRevision(rec TextureSourceEntityGraphRecord, docID, revisionID string) bool {
+	gotRevisionID, ok := textureSourceEntityRecordRevisionID(rec, docID)
+	return ok && gotRevisionID == strings.TrimSpace(revisionID)
+}
+
+func textureSourceEntityRecordRevisionID(rec TextureSourceEntityGraphRecord, docID string) (string, bool) {
+	docID = strings.TrimSpace(docID)
 	var meta map[string]any
 	if err := json.Unmarshal(rec.Metadata, &meta); err != nil {
-		return false
+		return "", false
 	}
-	if strings.TrimSpace(fmt.Sprint(meta["texture_revision_id"])) != revisionID {
-		return false
+	revisionID := strings.TrimSpace(fmt.Sprint(meta["texture_revision_id"]))
+	if revisionID == "" {
+		return "", false
 	}
-	if docID == "" {
-		return true
+	if docID != "" && strings.TrimSpace(fmt.Sprint(meta["texture_doc_id"])) != docID {
+		return "", false
 	}
-	return strings.TrimSpace(fmt.Sprint(meta["texture_doc_id"])) == docID
+	return revisionID, true
 }

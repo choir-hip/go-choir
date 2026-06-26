@@ -158,6 +158,71 @@ func TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead(t *testi
 	}
 }
 
+func TestListTextureSourceGraphForRevisionsBatchesRevisionScopedWrappers(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{DocID: "doc-source-graph-batch", OwnerID: "user-1", Title: "Source Graph Batch"}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	bodyDoc, sourceEntities := structuredRevisionFixture(t)
+	rev0 := types.Revision{
+		RevisionID:     "rev-source-graph-batch-0",
+		DocID:          doc.DocID,
+		OwnerID:        doc.OwnerID,
+		AuthorKind:     types.AuthorUser,
+		AuthorLabel:    "alice",
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
+	}
+	entityOnly := testTextureSourceEntityRecordForRevision(t, doc.OwnerID, doc.DocID, rev0.RevisionID, "src-entity-only", "web_url", "https://example.com/entity-only")
+	if err := s.CreateRevisionWithSourceGraph(ctx, rev0, TextureSourceGraphWriteSet{
+		SourceEntities: []TextureSourceEntityGraphRecord{entityOnly},
+	}); err != nil {
+		t.Fatalf("CreateRevisionWithSourceGraph rev0: %v", err)
+	}
+
+	rev1 := types.Revision{
+		RevisionID:       "rev-source-graph-batch-1",
+		DocID:            doc.DocID,
+		OwnerID:          doc.OwnerID,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      "alice",
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
+		ParentRevisionID: rev0.RevisionID,
+		CreatedAt:        rev0.CreatedAt.Add(time.Second),
+	}
+	pinnedEntity := testTextureSourceEntityRecordForRevision(t, doc.OwnerID, doc.DocID, rev1.RevisionID, "src-pinned", "web_url", "https://example.com/pinned")
+	pinnedRef := testTextureSourceRefRecord(t, doc.OwnerID, doc.DocID, rev1.RevisionID, "ref-1", pinnedEntity)
+	if err := s.CreateRevisionWithSourceGraph(ctx, rev1, TextureSourceGraphWriteSet{
+		SourceEntities: []TextureSourceEntityGraphRecord{pinnedEntity},
+		SourceRefs:     []TextureSourceRefGraphRecord{pinnedRef},
+	}); err != nil {
+		t.Fatalf("CreateRevisionWithSourceGraph rev1: %v", err)
+	}
+
+	graphByRevision, err := s.ListTextureSourceGraphForRevisions(ctx, doc.OwnerID, doc.DocID, []string{rev1.RevisionID, rev0.RevisionID, rev1.RevisionID, ""})
+	if err != nil {
+		t.Fatalf("ListTextureSourceGraphForRevisions: %v", err)
+	}
+	if len(graphByRevision[rev0.RevisionID].SourceEntities) != 1 || len(graphByRevision[rev0.RevisionID].SourceRefs) != 0 {
+		t.Fatalf("rev0 graph = %#v, want entity-only wrapper", graphByRevision[rev0.RevisionID])
+	}
+	if graphByRevision[rev0.RevisionID].SourceEntities[0].CanonicalID != entityOnly.CanonicalID {
+		t.Fatalf("rev0 source entity = %#v, want %#v", graphByRevision[rev0.RevisionID].SourceEntities[0], entityOnly)
+	}
+	if len(graphByRevision[rev1.RevisionID].SourceEntities) != 1 || len(graphByRevision[rev1.RevisionID].SourceRefs) != 1 {
+		t.Fatalf("rev1 graph = %#v, want pinned source entity/ref", graphByRevision[rev1.RevisionID])
+	}
+	if graphByRevision[rev1.RevisionID].SourceEntities[0].CanonicalID != pinnedEntity.CanonicalID ||
+		graphByRevision[rev1.RevisionID].SourceRefs[0].SourceEntityCanonicalID != pinnedEntity.CanonicalID {
+		t.Fatalf("rev1 graph = %#v, want pinned graph entity %#v", graphByRevision[rev1.RevisionID], pinnedEntity)
+	}
+}
+
 func testTextureSourceEntityRecord(t *testing.T, ownerID, legacyID, sourceKind, targetIdentity string, body []byte) TextureSourceEntityGraphRecord {
 	t.Helper()
 	canonicalID, err := BuildTextureSourceEntityCanonicalID(ownerID, ownerID, sourceKind, targetIdentity)
@@ -165,6 +230,41 @@ func testTextureSourceEntityRecord(t *testing.T, ownerID, legacyID, sourceKind, 
 		t.Fatalf("BuildTextureSourceEntityCanonicalID: %v", err)
 	}
 	metadata := json.RawMessage(`{"schema_version":"choir.source_entity.v1","source_kind":"web_url","target":{"kind":"url","identity":"https://example.com/story"},"display":{"title":"Example story","url":"https://example.com/story"},"evidence":{"state":"available"}}`)
+	versionID, contentHash, normalized, err := TextureSourceGraphVersionID(TextureSourceEntityObjectKind, body, metadata)
+	if err != nil {
+		t.Fatalf("TextureSourceGraphVersionID(source): %v", err)
+	}
+	return TextureSourceEntityGraphRecord{
+		CanonicalID:          canonicalID,
+		OwnerID:              ownerID,
+		VersionID:            versionID,
+		ContentHash:          contentHash,
+		Body:                 body,
+		Metadata:             normalized,
+		LegacySourceEntityID: legacyID,
+	}
+}
+
+func testTextureSourceEntityRecordForRevision(t *testing.T, ownerID, docID, revisionID, legacyID, sourceKind, targetIdentity string) TextureSourceEntityGraphRecord {
+	t.Helper()
+	canonicalID, err := BuildTextureSourceEntityCanonicalID(ownerID, ownerID, sourceKind, targetIdentity)
+	if err != nil {
+		t.Fatalf("BuildTextureSourceEntityCanonicalID: %v", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"schema_version":       "choir.source_entity.v1",
+		"source_kind":          sourceKind,
+		"target":               map[string]any{"kind": sourceKind, "identity": targetIdentity},
+		"display":              map[string]any{"title": legacyID, "url": targetIdentity},
+		"evidence":             map[string]any{"state": "available"},
+		"texture_doc_id":       docID,
+		"texture_revision_id":  revisionID,
+		"legacy_source_entity": legacyID,
+	})
+	if err != nil {
+		t.Fatalf("marshal source entity metadata: %v", err)
+	}
+	body := []byte("source snapshot " + legacyID)
 	versionID, contentHash, normalized, err := TextureSourceGraphVersionID(TextureSourceEntityObjectKind, body, metadata)
 	if err != nil {
 		t.Fatalf("TextureSourceGraphVersionID(source): %v", err)

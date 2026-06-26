@@ -1491,6 +1491,40 @@ func (h *APIHandler) attachTextureSourceGraphObjects(ctx context.Context, resp *
 		log.Printf("texture api: list source refs for revision %s: %v", resp.RevisionID, err)
 		return
 	}
+	attachTextureSourceGraphObjectRecords(resp, entities, refs)
+}
+
+func (h *APIHandler) revisionResponsesFromRecords(ctx context.Context, revs []types.Revision, graphReadOwnerID, graphDocID string) []textureRevisionResponse {
+	responses := make([]textureRevisionResponse, 0, len(revs))
+	if len(revs) == 0 {
+		return responses
+	}
+	revisionIDs := make([]string, 0, len(revs))
+	for _, rev := range revs {
+		revisionIDs = append(revisionIDs, rev.RevisionID)
+	}
+	graphByRevision := map[string]store.TextureSourceGraphWriteSet{}
+	if h != nil && h.rt != nil && h.rt.Store() != nil {
+		var err error
+		graphByRevision, err = h.rt.Store().ListTextureSourceGraphForRevisions(ctx, graphReadOwnerID, graphDocID, revisionIDs)
+		if err != nil {
+			log.Printf("texture api: batch list source graph objects for document %s: %v", graphDocID, err)
+			graphByRevision = map[string]store.TextureSourceGraphWriteSet{}
+		}
+	}
+	for _, rev := range revs {
+		resp := revisionResponseFromRecord(rev)
+		graph := graphByRevision[rev.RevisionID]
+		attachTextureSourceGraphObjectRecords(&resp, graph.SourceEntities, graph.SourceRefs)
+		responses = append(responses, resp)
+	}
+	return responses
+}
+
+func attachTextureSourceGraphObjectRecords(resp *textureRevisionResponse, entities []store.TextureSourceEntityGraphRecord, refs []store.TextureSourceRefGraphRecord) {
+	if resp == nil {
+		return
+	}
 	if len(entities) > 0 {
 		resp.SourceEntityObjects = make([]textureSourceEntityObjectResponse, 0, len(entities))
 		for _, rec := range entities {
@@ -1575,12 +1609,15 @@ func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	resp := textureListRevisionsResponse{Revisions: make([]textureRevisionResponse, 0, len(revs))}
+	responseRevs := make([]types.Revision, 0, len(revs))
 	for _, rev := range revs {
 		if readOwnerID != ownerID {
 			rev = normalizeWireArticleRevisionForRead(rev)
 		}
-		resp.Revisions = append(resp.Revisions, h.revisionResponseFromRecord(r.Context(), rev))
+		responseRevs = append(responseRevs, rev)
+	}
+	resp := textureListRevisionsResponse{
+		Revisions: h.revisionResponsesFromRecords(r.Context(), responseRevs, readOwnerID, docID),
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
