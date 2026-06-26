@@ -573,6 +573,22 @@ next move: repair the smallest runtime materialization path that can synthesize
 a Wire Texture edition from existing eligible sourcecycled graph captures,
 verify locally, land to staging, and rerun authenticated product QA.
 
+Branch-local repair result: commit
+`9523273fa43ed2b43dc817516196b12639e599a5` (`Materialize Wire edition from
+existing sourcecycled captures`) adds a read-time materialization attempt only
+when the Wire edition alias is absent, rereads the normal edition route after
+synthesis, and requires sourcecycled source-entity `item_id` metadata before a
+graph capture can feed synthesis. Local focused proof passed, and independent
+verifier thread `019f05f0-81de-76a2-bb57-c2c66db82272` returned `accept` with no
+findings requiring revision. The verifier reran `git diff --check
+9523273f^..9523273f`, `git show --check --oneline 9523273f`, the four-test
+repair/guard filter, and the broader `UniversalWire|WireProcessor|WireStory|WirePublication`
+runtime filter. Evidence remains branch-local until the commit is pushed,
+deployed, and authenticated staging QA shows a non-empty Wire Texture edition.
+
+next move: push accepted repair `9523273f` to `origin/main`, monitor CI/deploy,
+verify staging identity, and rerun authenticated Universal Wire product QA.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

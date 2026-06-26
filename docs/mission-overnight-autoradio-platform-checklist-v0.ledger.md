@@ -7628,3 +7628,59 @@ rollback reference for the trigger-only state.
 
 Actual Delta V: 0. The mission has better evidence but no product-visible
 Universal Wire article yet.
+
+## 2026-06-26 - O4 Existing Capture Materialization Repair Accepted
+
+Claim: independent verifier thread
+`019f05f0-81de-76a2-bb57-c2c66db82272` accepted commit
+`9523273fa43ed2b43dc817516196b12639e599a5` (`Materialize Wire edition from
+existing sourcecycled captures`) for the narrow branch-local O4
+backfill/materialization repair.
+
+Verifier verdict: `accept`; findings: none requiring revision.
+
+Verifier evidence:
+
+- The repair is narrow: `/api/universal-wire/stories` attempts materialization
+  only when the Wire edition alias is absent, then rereads the existing edition
+  route.
+- Synthesis source eligibility now requires sourcecycled source-entity
+  `item_id` metadata, so raw graph capture fixtures remain diagnostic-only.
+- The new regression seeds existing sourcecycled graph captures directly,
+  confirms no Wire edition alias exists, reads Universal Wire, observes a
+  materialized `universal-wire-edition-texture` story, checks Source Viewer
+  reader provenance and edition transclusion, and confirms the next read is
+  idempotent.
+
+Verifier commands/results:
+
+- `git diff --check 9523273f^..9523273f`: passed/no output.
+- `git show --check --oneline 9523273f`: passed; commit is `9523273f
+  Materialize Wire edition from existing sourcecycled captures`.
+- `git diff --name-status 9523273f^..9523273f`: only
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
+  4.076s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 8.914s`.
+- `git status --short --ignored`: no output after verification.
+
+Dirty/generated artifact classification: verifier worktree clean. No verifier
+source changes, durable evidence files, temp proof output, generated artifacts,
+or unrelated WIP observed.
+
+Evidence boundary: branch-local read-only verification plus focused runtime
+tests. No push, CI, deploy, staging identity, authenticated product acceptance,
+auth/session renewal, vmctl, provider/gateway, Qdrant, promotion/rollback, run
+acceptance, publication/export outside existing Wire edition helpers, semantic
+clustering, or world-model behavior is claimed.
+
+Orchestration may push/deploy `9523273f` for the behavior-changing landing loop.
+
+Actual Delta V: 0 until deployed authenticated Universal Wire product QA shows
+a non-empty Wire Texture edition from existing captures.
