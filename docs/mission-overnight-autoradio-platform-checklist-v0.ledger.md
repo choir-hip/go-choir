@@ -4956,3 +4956,61 @@ Open edge: wait for worker thread
 then inspect its worktree. If it produces a commit/checkpoint, create an
 independent verifier thread before root incorporation. If it returns no
 candidate, record the blocker and final dirty-path classification.
+
+## 2026-06-26 - O4 Phase 10c Harness Candidate And Verifier Launch
+
+Claim: O4 Phase 10c now has a worker candidate commit for the browser-harness
+dependency setup repair and an independent verifier launch receipt. This is
+candidate and verifier-pending evidence only, not verifier acceptance, root
+incorporation, or checklist descent.
+
+Move: read the completed worker thread, inspect the worker worktree and diff,
+then create a project-scoped verifier worktree thread from worker branch
+`codex/o4-phase10c-native-texture-source-ref-browser-harness`.
+
+Expected Delta V: 0. A candidate commit plus pending verifier launch does not
+close the native Texture citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f0410-f4d9-7ee1-a1db-76ea71095b88`
+  (`O4 worker - Phase 10c Texture Browser Harness`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/eda4/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10c-native-texture-source-ref-browser-harness` at
+  `6995feb89964af984cbc2afc66fef62e70d500e3`
+  (`Fix frontend pnpm build approval for harness`).
+- Worker diff:
+  `frontend/package.json` removes obsolete `pnpm.onlyBuiltDependencies`;
+  `frontend/pnpm-workspace.yaml` adds `allowBuilds.esbuild: true`.
+- Worker-reported proof:
+  reproduced missing `@playwright/test`, missing `4173`, and pnpm/esbuild
+  startup failures; repaired pnpm approval config; from cleaned generated
+  artifacts, `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop
+  -c ./start-services.sh` reached `Services started successfully`; exact
+  focused Playwright proof passed; `npm run build` passed with existing
+  warnings; `git diff --check`, `git show --check HEAD`, clean
+  `git status --short --ignored`, and no listeners on `4173`, `8081`, `8082`,
+  or `8083`.
+- Orchestration inspection:
+  worker status clean; `git diff --check 83fcbdef..6995feb8` passed; diff
+  name-status is limited to `frontend/package.json` and
+  `frontend/pnpm-workspace.yaml`.
+- Verifier pending worktree handle:
+  `local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`.
+
+Evidence boundary: worker-local candidate plus pending verifier launch only. No
+independent verifier verdict yet, no root incorporation of worker commit, push,
+PR, CI, deploy, staging product acceptance, native Texture body `source_ref`
+citation-opening proof beyond the local harness target, publication/export,
+Qdrant, provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: resolve verifier pending handle
+`local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`, title/pin the verifier thread,
+and wait for verdict on worker commit `6995feb8`; only after `accept` should
+orchestration consider root incorporation.

@@ -829,28 +829,31 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-O4 Phase 10c harness worker is resolved and active. Pending handle
+O4 Phase 10c harness worker completed with a candidate. Pending handle
 `local:68462d14-f17c-45c0-a1e5-3b719a5eec5b` resolved to thread
 `019f0410-f4d9-7ee1-a1db-76ea71095b88`
 (`O4 worker - Phase 10c Texture Browser Harness`), titled and pinned, in
 `/Users/wiz/.codex/worktrees/eda4/go-choir` on branch
 `codex/o4-phase10c-native-texture-source-ref-browser-harness` from root
-checkpoint `83fcbdef046b2253d823d4cea2136e9a3725f6dd`. The worker has
-reproduced the clean-worktree `@playwright/test` absence, missing `4173`
-frontend, and `CHOIR_ENABLE_PLATFORMD=0` frontend startup failure where pnpm
-refuses the ignored `esbuild` build script. Current worker status is in
-progress with untracked `frontend/pnpm-workspace.yaml` and ignored local
-service/dependency/proof artifacts; this is not yet a candidate, verifier
-target, blocker settlement, or checklist descent.
+checkpoint `83fcbdef046b2253d823d4cea2136e9a3725f6dd`. Worker commit
+`6995feb89964af984cbc2afc66fef62e70d500e3` (`Fix frontend pnpm build approval
+for harness`) changes only `frontend/package.json` and new
+`frontend/pnpm-workspace.yaml`, moving pnpm `esbuild` build-script approval to
+the current workspace-level format and removing the obsolete package-level
+setting. Worker-reported evidence: reproduced missing `@playwright/test`,
+missing `4173`, and pnpm/esbuild startup failures; repaired config; from cleaned
+artifacts, `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+./start-services.sh` reached `Services started successfully`; the exact focused
+Playwright proof passed; `npm run build` passed with existing warnings;
+`git diff --check`, `git show --check HEAD`, clean status, and port cleanup for
+4173/8081/8082/8083 passed. Independent verifier launch returned pending
+worktree handle `local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`, not yet a
+resolved verifier thread id.
 
-next move: wait for O4 Phase 10c worker thread
-`019f0410-f4d9-7ee1-a1db-76ea71095b88` to finish or emit a durable callback,
-then inspect its worktree. If it produces a commit, launch an independent
-verifier before root incorporation; if it returns no candidate, record the
-precise blocker and clean/dirty classification. The worker should repair or
-precisely narrow the local browser harness needed to run the existing native
-Texture `source_ref` Source Viewer/reader-artifact
-Playwright proof from a clean worktree, without changing product behavior. O4
+next move: resolve pending verifier handle
+`local:5703fec1-9e3a-4495-93b2-8fbf340c72a4`, title/pin the verifier thread,
+and wait for its verdict on worker commit `6995feb8`. Do not incorporate the
+candidate into root or decrement V before independent verifier acceptance. O4
 Phase 10b replacement worker thread
 `019f0405-4fea-70f1-b248-5b6ebce70775` (`O4 worker - Native Texture Citation
 Proof Replacement`) in `/Users/wiz/.codex/worktrees/013f/go-choir` returned no
