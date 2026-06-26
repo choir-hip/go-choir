@@ -733,15 +733,16 @@ yet. The worker later completed on branch
 `nix develop -c go test ./internal/objectgraph`,
 `git diff --check f3272233..HEAD`, and `git show --check --oneline HEAD` plus
 `HEAD~1`. Worker tracked/ignored status was clean/no output. Evidence boundary
-is worker-local branch-level focused tests only.
+is worker-local branch-level focused tests only. Verifier thread
+`019f0364-d34d-7270-bcb9-ebefb5cb2ade` (`O4 verifier - Universal Wire Web
+Capture Read`) has been launched, titled, and pinned against the worker branch;
+verdict is pending.
 
-next move: reconnect to O4 Phase 2 worker
-`019f035c-2a13-7f20-abd9-960b9866189b` and create an independent verifier
-thread against worker commits `b264e8e7` and `77b3f251` before incorporation.
-The verifier should check the checkpoint-before-code sequence, runtime-owned
-objectgraph service boundary, Universal Wire empty-state/Texture-precedence
-honesty, graph-backed `choir.web_capture` projection, focused tests, and
-non-claims.
+next move: read O4 Phase 2 verifier thread
+`019f0364-d34d-7270-bcb9-ebefb5cb2ade`. If it accepts, record the verdict,
+incorporate worker commits, and rerun bounded root checks before decreasing V.
+If it returns `revise_before_continue`, record the finding before sending a
+repair follow-up to the worker.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

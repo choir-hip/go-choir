@@ -2325,3 +2325,40 @@ bounded graph-backed `choir.web_capture` public-route fallback, and
 
 Open edge: create an independent O4 Phase 2 verifier thread against commits
 `b264e8e7` and `77b3f251` before root incorporation.
+
+## 2026-06-26 - O4 Phase 2 Verifier Launched
+
+Claim: O4 Phase 2 candidate review has moved to an independent Codex verifier
+thread; acceptance remains pending.
+
+Move: create a local project verifier thread, title and pin it, and record the
+review contract in Parallax State.
+
+Expected Delta V: 0. Verifier launch buys independent observer evidence but
+does not close the O4 feed-read obligation before verdict and incorporation.
+
+Actual Delta V: 0. Current V remains 36.
+
+Receipts:
+
+- Verifier thread:
+  `019f0364-d34d-7270-bcb9-ebefb5cb2ade`
+  (`O4 verifier - Universal Wire Web Capture Read`).
+- Verifier target:
+  worker commits `b264e8e7` and `77b3f251` on branch
+  `codex/o4-phase2-universal-wire-web-capture-read` in
+  `/Users/wiz/.codex/worktrees/5f31/go-choir`.
+- Verifier contract: findings first with verdict `accept`,
+  `revise_before_continue`, `blocked`, or `supersede`; inspect
+  checkpoint-before-code, runtime-owned objectgraph service boundary,
+  Universal Wire empty-state and Texture-precedence honesty, graph-backed
+  `choir.web_capture` projection, focused tests, dirty state, and non-claims.
+
+Evidence boundary: verifier thread creation/title/pin/readback only. No
+verdict, root incorporation, staging/product proof, sourcecycled ingestion,
+publication/export, main, push, CI, deploy, promotion, rollback, or
+run-acceptance claim.
+
+Open edge: read verifier thread
+`019f0364-d34d-7270-bcb9-ebefb5cb2ade` and incorporate its verdict into
+Parallax State before any worker commit incorporation.
