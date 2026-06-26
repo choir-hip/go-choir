@@ -883,3 +883,56 @@ claim.
 Open edge: wait for worker thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489` to
 emit a final report, then send exact commit/diff/test handles back to verifier
 thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`.
+
+## 2026-06-26 - O3 Phase 2 Worker Completed, Verifier Follow-Up Sent
+
+Claim: The O3 Phase 2 worker completed the selected Texture tool
+source-entity shadow-write slice, but the slice is not accepted until the
+independent verifier reviews the final diff and test evidence.
+
+Move: read the worker final report, confirm clean worker branch state, and
+send exact commit/test handles to the verifier thread.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489` completed and became
+  idle.
+- Worker cwd: `/Users/wiz/.codex/worktrees/fcf1/go-choir`.
+- Worker branch: `codex/o3-phase2-shadow-write-producer`.
+- Worker docs checkpoint: `caf5b737 checkpoint O3 phase2 shadow-write
+  producer`.
+- Worker implementation: `32a5d338 implement O3 phase2 texture tool source
+  shadow writes`.
+- Worker chosen path: Texture appagent edit tools, `patch_texture` /
+  `rewrite_texture` through `commitTextureToolEdit`.
+- Worker change: the chosen path now calls `CreateRevisionWithSourceGraph` in
+  shadow-write mode for `choir.source_entity` records derived from
+  materialized structured `SourceEntities`.
+- Worker legacy compatibility claim: legacy revision reads/DTOs still use
+  `texture_revisions.source_entities_json`.
+- Worker explicit non-claims: no `source_ref` graph edges yet, no public
+  create/import producer migration, no graph-first read path, no frontend or
+  source-open behavior, no Qdrant projection, no auth/session/provider/deploy
+  changes.
+- Worker-reported tests passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphUsesTargetIdentityNotGeneratedLegacyID|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`,
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `git diff --check`.
+- Worker dirty-path classification: clean worktree.
+- Verifier follow-up sent to `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` with the
+  worker thread id, cwd, branch, commit handles, test list, and non-claims.
+
+Evidence boundary: worker branch evidence only. No independent verifier
+acceptance, root incorporation, O3 Phase 2 checklist descent, API behavior,
+source-open behavior, Qdrant projection, main, staging, product, deployment, or
+landing claim.
+
+Open edge: read verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`; on
+`accept`, incorporate worker commits into the orchestration branch and rerun
+focused root checks.

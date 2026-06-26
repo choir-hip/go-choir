@@ -457,22 +457,29 @@ thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489` (`O3 worker - Source Entity
 Phase 2 shadow-write`) in `/Users/wiz/.codex/worktrees/fcf1/go-choir` on
 branch `codex/o3-phase2-shadow-write-producer`. The worker created docs
 checkpoint `caf5b737 checkpoint O3 phase2 shadow-write producer`, choosing the
-`edit_texture` appagent tool path through `commitTextureToolEdit`; runtime
-implementation is still in progress. Verifier thread
-`019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` (`O3 verifier - Source Entity Phase
-2`) returned `blocked` because no worker final report, implementation diff, or
-test evidence exists yet. Mutation class is orange/red-adjacent with protected
-surfaces: Texture canonical writes, source identity/ref edges, legacy DTO
-compatibility, source-open routing, Qdrant source-of-truth boundaries,
+`edit_texture` appagent tool path through `commitTextureToolEdit`. The worker
+then completed implementation commit `32a5d338 implement O3 phase2 texture
+tool source shadow writes`: `patch_texture` / `rewrite_texture` now call
+`CreateRevisionWithSourceGraph` in shadow-write mode for `choir.source_entity`
+records derived from structured `SourceEntities`, while legacy revision reads
+and DTOs still use `texture_revisions.source_entities_json`. Worker-reported
+tests passed: focused runtime source-graph/legacy compatibility tests, focused
+Phase 1 store boundary tests, `internal/runtime -run TestTextureTool`, full
+`internal/store`, and `git diff --check`; worker worktree was clean. Verifier
+thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` (`O3 verifier - Source Entity
+Phase 2`) was sent those commit/test handles after its initial `blocked`
+verdict and is now the open gate. Mutation class is orange/red-adjacent with
+protected surfaces: Texture canonical writes, source identity/ref edges, legacy
+DTO compatibility, source-open routing, Qdrant source-of-truth boundaries,
 auth/session renewal, gateway/provider calls, and staging/deploy claims.
-Evidence remains pending; no O3 Phase 2 implementation or acceptance claim
-exists yet.
+Evidence remains worker-branch only; no O3 Phase 2 acceptance, root
+incorporation, main, staging, product, deployment, or landing claim exists yet.
 
-next move: Wait for worker thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489` to
-emit its final report. Then send exact implementation commit/diff/test handles
-to verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` and incorporate only
-after an `accept` verdict. If the worker blocks or abandons dirty state, record
-the precise recovery edge and exit as `open_handoff`.
+next move: Read verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`. On
+`accept`, incorporate worker commits `caf5b737` and `32a5d338` into the root
+orchestration branch, rerun focused root checks, update O3 checklist/variant,
+and record evidence. On `revise_before_continue`, route the exact finding back
+to worker thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489`.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
