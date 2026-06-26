@@ -2121,3 +2121,44 @@ Open edge: ask the O4 worker to remove the EOF blank line, commit the repair,
 rerun `git diff --check 68cfb026..HEAD`, `git show --check HEAD`, and
 `nix develop -c go test ./internal/objectgraph`, then re-review with the same
 verifier.
+
+## 2026-06-26 - O4 Phase 1 Worker Repaired Diff Hygiene
+
+Claim: the O4 Phase 1 worker repaired the verifier's whitespace finding and the
+candidate is ready for re-review.
+
+Move: send the bounded repair follow-up to the worker, read back the repaired
+worker report, and send the repaired head to the same verifier thread.
+
+Expected Delta V: 0. Repair request/readback prepares acceptance but does not
+itself close the O4 web-capture foundation obligation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread:
+  `019f034d-ebc1-75a3-9c4b-269e8b9d6be7`
+  (`O4 worker - Web Capture Object Foundation`).
+- Worker branch: `codex/o4-phase1-web-capture-object-foundation`.
+- New worker HEAD:
+  `b79251db69d22b00d69676187ff6f989ec7fcc1c`
+  (`fix O4 checkpoint trailing blank line`).
+- Repair scope: deleted only the EOF blank line in
+  `docs/o4-web-capture-foundation-checkpoint-2026-06-26.md`.
+- Worker-reported checks:
+  `git diff --check 68cfb026..HEAD` passed with no output;
+  `git show --check HEAD` passed;
+  `nix develop -c go test ./internal/objectgraph` passed;
+  `git status --short --ignored` produced no output.
+- Same verifier thread
+  `019f0353-95c0-7020-8047-2e7d6fab7e66` was asked to re-review repaired HEAD
+  `b79251db`.
+
+Evidence boundary: worker repair report and verifier re-review request only.
+No verifier acceptance, root incorporation, O4 acceptance, Universal Wire feed
+proof, main, staging, product acceptance, deploy, or promotion/rollback claim.
+
+Open edge: read verifier thread
+`019f0353-95c0-7020-8047-2e7d6fab7e66`; incorporate its repaired-head verdict
+before moving code.

@@ -687,14 +687,25 @@ was found, but `git diff --check 68cfb026..7e9418af` and
 at EOF. Evidence remains worker-local until repair, independent verifier
 acceptance, and root incorporation.
 
-next move: send a bounded repair follow-up to O4 worker thread
-`019f034d-ebc1-75a3-9c4b-269e8b9d6be7` to remove the checkpoint EOF blank line,
-commit the repair, and rerun `git diff --check 68cfb026..HEAD`,
-`git show --check HEAD`, and `nix develop -c go test ./internal/objectgraph`.
-Then ask the same verifier thread to review the repaired worker head. No
-accepted O4 web-capture foundation, Universal Wire feed proof, main, staging,
-product acceptance, deploy, publication/export, auth/session, gateway/provider,
-promotion, or rollback claim exists yet.
+Worker thread `019f034d-ebc1-75a3-9c4b-269e8b9d6be7` repaired the verifier
+finding with commit `b79251db fix O4 checkpoint trailing blank line`, making
+worker branch `codex/o4-phase1-web-capture-object-foundation` HEAD
+`b79251db69d22b00d69676187ff6f989ec7fcc1c`. Worker-reported repair checks
+passed: `git diff --check 68cfb026..HEAD`, `git show --check HEAD`,
+`nix develop -c go test ./internal/objectgraph`, and `git status --short --ignored`
+with no output. The same verifier thread
+`019f0353-95c0-7020-8047-2e7d6fab7e66` has been asked to re-review the repaired
+head. Evidence remains worker-local until verifier acceptance and root
+incorporation.
+
+next move: read verifier thread `019f0353-95c0-7020-8047-2e7d6fab7e66` for the
+re-review verdict. If it accepts, incorporate worker commits `ae0fb49f`,
+`7e9418af`, and `b79251db` into the orchestration branch and run bounded root
+checks. If it returns another `revise_before_continue`, `blocked`, or
+`supersede`, record the finding before moving code. No accepted O4 web-capture
+foundation, Universal Wire feed proof, main, staging, product acceptance,
+deploy, publication/export, auth/session, gateway/provider, promotion, or
+rollback claim exists yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
