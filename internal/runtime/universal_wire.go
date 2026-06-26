@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -61,6 +62,14 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		}
 	} else if err != nil {
 		log.Printf("universal wire: edition unavailable: %v", err)
+	}
+	if len(stories) == 0 {
+		if captureStories, err := h.universalWireWebCaptureStories(r.Context(), 12); err == nil && len(captureStories) > 0 {
+			stories = captureStories
+			source = "universal-wire-web-capture-graph"
+		} else if err != nil {
+			log.Printf("universal wire: web capture graph unavailable: %v", err)
+		}
 	}
 	for i := range stories {
 		stories[i] = normalizeWireStoryPresentation(stories[i])
@@ -150,6 +159,91 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		stories = append(stories, story)
 	}
 	return stories, edition, nil
+}
+
+func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit int) ([]types.WireStory, error) {
+	if h == nil || h.rt == nil {
+		return nil, nil
+	}
+	graph := h.rt.ObjectGraph()
+	if graph == nil {
+		return nil, nil
+	}
+	notTombstoned := false
+	objects, err := graph.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:      objectgraph.WebCaptureObjectKind,
+		OwnerID:   universalWirePlatformOwnerID(),
+		Limit:     limit,
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		return nil, err
+	}
+	stories := make([]types.WireStory, 0, len(objects))
+	for _, obj := range objects {
+		story, ok := wireStoryFromWebCaptureObject(obj)
+		if !ok {
+			continue
+		}
+		story.Prominence = 100 - len(stories)
+		stories = append(stories, story)
+	}
+	return stories, nil
+}
+
+func wireStoryFromWebCaptureObject(obj objectgraph.Object) (types.WireStory, bool) {
+	metadata, err := objectgraph.WebCaptureMetadataFromObject(obj)
+	if err != nil {
+		return types.WireStory{}, false
+	}
+	body := strings.TrimSpace(string(obj.Body))
+	if body == "" {
+		return types.WireStory{}, false
+	}
+	headline := firstNonEmpty(metadata.Title, metadata.CanonicalURL, metadata.URL, "Graph-backed web capture")
+	canonicalURL := firstNonEmpty(metadata.CanonicalURL, metadata.URL)
+	fetchedAt := obj.UpdatedAt
+	if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(metadata.FetchedAt)); err == nil {
+		fetchedAt = parsed
+	}
+	dek := truncateRunes(firstNonEmpty(firstWireCaptureParagraph(body), canonicalURL), 220)
+	projection := truncateRunes(body, 900)
+	return types.WireStory{
+		ID:          "web-capture-" + obj.CanonicalID,
+		OwnerID:     obj.OwnerID,
+		Headline:    truncateRunes(headline, 140),
+		Dek:         dek,
+		Freshness:   wireArticleFreshness(fetchedAt),
+		Tension:     "graph-backed web capture",
+		ChangeState: "captured",
+		NodeTone:    "live",
+		Related:     []string{},
+		Manifest: types.WireSourceManifest{
+			Lead: []types.WireSourceItem{{
+				ID:           obj.CanonicalID,
+				Title:        headline,
+				Standing:     "graph-backed web capture",
+				Role:         "lead",
+				CanonicalURL: canonicalURL,
+			}},
+		},
+		Claims: []string{
+			"Universal Wire is reading a durable choir.web_capture object from the object graph.",
+			"This card is a capture projection, not a Texture article publication or sourcecycled ingestion claim.",
+		},
+		Projections:    map[string]string{"wire-style": projection},
+		SourceState:    "objectgraph-web-capture",
+		TextureContent: projection,
+		CreatedAt:      obj.CreatedAt,
+		UpdatedAt:      obj.UpdatedAt,
+	}, true
+}
+
+func firstWireCaptureParagraph(content string) string {
+	for _, paragraph := range wireArticleArticleParagraphs(content) {
+		return paragraph
+	}
+	return strings.TrimSpace(content)
 }
 
 func (h *APIHandler) platformdStoryVerificationEnabled() bool {

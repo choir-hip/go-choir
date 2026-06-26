@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -144,6 +145,30 @@ func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, included
 	return doc
 }
 
+func seedUniversalWireWebCaptureFixture(t *testing.T, handler *APIHandler, title, url, body string, fetchedAt time.Time) objectgraph.Object {
+	t.Helper()
+	graph := handler.rt.ObjectGraph()
+	if graph == nil {
+		t.Fatal("runtime objectgraph service is unavailable")
+	}
+	capture, err := graph.CreateWebCapture(context.Background(), objectgraph.CreateWebCaptureRequest{
+		OwnerID:             universalWirePlatformOwnerID(),
+		ComputerID:          "computer-universal-wire-platform",
+		URL:                 url,
+		CanonicalURL:        url,
+		Title:               title,
+		FetchedAt:           fetchedAt,
+		ContentBlobID:       "blob-html-" + strings.ToLower(strings.ReplaceAll(title, " ", "-")),
+		ExtractedTextBlobID: "blob-text-" + strings.ToLower(strings.ReplaceAll(title, " ", "-")),
+		ExtractedText:       []byte(body),
+		Now:                 fetchedAt,
+	})
+	if err != nil {
+		t.Fatalf("create web capture fixture: %v", err)
+	}
+	return capture
+}
+
 func TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformTextures(t *testing.T) {
 	_, handler := testAPISetup(t)
 	doc := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-source-network-live")
@@ -174,6 +199,7 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 	_, handler := testAPISetup(t)
 	doc := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-source-network-live")
 	edition := seedUniversalWireEditionFixture(t, handler, doc.DocID)
+	seedUniversalWireWebCaptureFixture(t, handler, "Capture fallback should not win", "https://example.test/fallback", "A graph capture exists, but the edition Texture story should remain primary.", time.Now().UTC().Add(-time.Hour))
 
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
 	if w.Code != http.StatusOK {
@@ -231,6 +257,66 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 		strings.Contains(claimText, "Style.texture Source") ||
 		!strings.Contains(claimText, "Source and style provenance are carried by the Texture revision metadata and citations") {
 		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
+	}
+}
+
+func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	older := seedUniversalWireWebCaptureFixture(t, handler,
+		"Regional harbor notice",
+		"https://example.test/harbor",
+		"PORTO -- Harbor pilots reopened the inner channel after overnight inspections.\n\nOfficials said the next update will follow the afternoon tide window.",
+		now.Add(-2*time.Hour))
+	newer := seedUniversalWireWebCaptureFixture(t, handler,
+		"Rail corridor reopens",
+		"https://example.test/rail",
+		"PARIS -- Emergency crews reopened the rail corridor after flooding, with regional authorities saying inspections will continue through the afternoon.",
+		now)
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	if resp.Source != "universal-wire-web-capture-graph" {
+		t.Fatalf("source = %q, want graph-backed web capture source", resp.Source)
+	}
+	if resp.Edition != nil {
+		t.Fatalf("edition = %+v, want no Texture edition for graph fallback", resp.Edition)
+	}
+	if len(resp.Stories) != 2 {
+		t.Fatalf("stories length = %d, want graph-backed captures: %+v", len(resp.Stories), resp.Stories)
+	}
+	story := resp.Stories[0]
+	if story.ID != "web-capture-"+newer.CanonicalID ||
+		story.OwnerID != universalWirePlatformOwnerID() ||
+		story.Headline != "Rail corridor reopens" ||
+		story.StoryTextureDoc != "" ||
+		story.PlatformRoutePath != "" ||
+		story.SourceState != "objectgraph-web-capture" {
+		t.Fatalf("first story is not the newest graph-backed capture projection: %+v", story)
+	}
+	if !strings.Contains(story.Dek, "Emergency crews reopened") ||
+		!strings.Contains(story.Projections["wire-style"], "regional authorities") {
+		t.Fatalf("graph-backed capture text was not projected into the Wire card: %+v", story)
+	}
+	if len(story.Manifest.Lead) != 1 ||
+		story.Manifest.Lead[0].ID != newer.CanonicalID ||
+		story.Manifest.Lead[0].CanonicalURL != "https://example.test/rail" ||
+		story.Manifest.Lead[0].Standing != "graph-backed web capture" {
+		t.Fatalf("graph-backed capture manifest = %+v, want durable capture identity and canonical URL", story.Manifest)
+	}
+	if resp.Stories[1].ID != "web-capture-"+older.CanonicalID {
+		t.Fatalf("second story id = %q, want older capture %s", resp.Stories[1].ID, older.CanonicalID)
+	}
+	claims := strings.Join(story.Claims, "\n")
+	if !strings.Contains(claims, "choir.web_capture") ||
+		!strings.Contains(claims, "not a Texture article publication") {
+		t.Fatalf("graph-backed capture claims did not bound the projection: %+v", story.Claims)
 	}
 }
 func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {

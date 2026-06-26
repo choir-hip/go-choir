@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -65,6 +66,9 @@ type Runtime struct {
 	browserCDP            map[string]*browserCDPSession
 	modelPolicyMu         sync.Mutex
 	modelPolicies         map[string]ModelPolicy
+	objectGraphMu         sync.Mutex
+	objectGraph           *objectgraph.Service
+	objectGraphInitErr    error
 }
 
 type textureWakeTimer interface {
@@ -352,6 +356,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
 	rt.closeAllBrowserCDPSessions()
+	rt.closeObjectGraph()
 	rt.mu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
