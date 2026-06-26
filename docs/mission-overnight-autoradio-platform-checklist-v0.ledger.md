@@ -453,3 +453,37 @@ promotion, or rollback claim.
 Open edge: Start a safe local Qdrant service from `docker-compose.qdrant.yml`
 or equivalent and rerun the integration test. O2 is not complete until that
 live build/switch/rollback proof passes and is recorded.
+
+## 2026-06-26 - O2 Incorporated Into Orchestration Branch
+
+Claim: The independently accepted O2 branch-level implementation is now present
+on the orchestration mission branch with root-branch focused test receipts.
+
+Move: incorporate worker commits and resolve mission evidence against the newer
+orchestration branch state.
+
+Expected Delta V: 0; this records incorporation and root receipts after the
+verifier acceptance already counted the relevant O2 obligation.
+
+Actual Delta V: 0. Current V remains 45.
+
+Receipts:
+
+- O2 worker docs checkpoint `7bc94611` was incorporated as root commit
+  `dae88f60`.
+- O2 worker implementation `d90d8a84` was incorporated as root commit
+  `b02d43d5`.
+- Root orchestration branch test:
+  `nix develop -c go test ./internal/objectgraph ./internal/qdrant` passed.
+- Root orchestration branch live-Qdrant probe:
+  `nix develop -c go test -v ./internal/qdrant -run TestLocalQdrantBuildAndSwitchIfAvailable`
+  skipped because `http://localhost:6333/healthz` returned
+  `dial tcp 127.0.0.1:6333: connect: connection refused`.
+
+Evidence boundary: local branch-level test receipt only. No live Qdrant,
+main, CI, deploy, staging, provider, gateway, runtime route, product,
+promotion, or rollback claim.
+
+Open edge: O2 has one remaining obligation: start a safe local Qdrant service
+and pass the live build/switch/rollback integration test before marking O2
+complete or proceeding to O3.

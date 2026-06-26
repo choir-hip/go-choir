@@ -362,7 +362,8 @@ regression.
 position / live conjectures / open edges: Email and O1 objectgraph foundation are
 done at branch level. O2 branch `codex/o2-qdrant-derived-index` in
 `/Users/wiz/.codex/worktrees/fb93/go-choir` produced implementation commit
-`d90d8a84`, now being incorporated into this orchestration branch. Qdrant
+`d90d8a84`, incorporated into this orchestration branch as `b02d43d5` after
+docs checkpoint `dae88f60`. Qdrant
 prototype `4c1b28be` was reviewed: its `update_alias` action shape is not
 accepted for O2. The implementation switches/rolls back with one alias
 transaction containing delete/create alias actions, keeps Qdrant derived from
