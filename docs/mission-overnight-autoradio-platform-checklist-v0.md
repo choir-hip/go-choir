@@ -548,13 +548,22 @@ path that queries refs and then scans all owner source entities. At
 `limit=10000`, an existing revision-list read becomes repeated graph queries
 plus repeated owner-wide source scans.
 
-next move: Send the revise finding back to worker thread
-`019f02ed-7ce9-7d30-906b-f497a95ecc6d`. The acceptable repair is to batch
-graph-wrapper reads for revision lists or add a revision-scoped store query that
-does not call `ListTextureSourceEntities(ctx, ownerID)` per listed revision.
-Single-revision reads may keep the current helper. After a revised worker
-commit, reawaken the verifier for the same contract. Do not claim O3 complete,
-main, staging, source-open frontend behavior, Qdrant projection,
+Worker thread `019f02ed-7ce9-7d30-906b-f497a95ecc6d` repaired the revise
+finding in code-only commit `f9a23cea batch texture source graph wrappers for
+revision lists`. Revision-list responses now batch source graph wrapper reads
+once per list via `ListTextureSourceGraphForRevisions`; single-revision reads
+keep the existing helper. Legacy `source_entities` remains unchanged, and
+`source_entity_objects` plus `source_refs` remain additive. Worker-reported
+checks passed: focused store batch/graph tests, focused runtime duplicate/API
+tests, `internal/runtime -run TestTextureTool`, full `internal/store`, and
+`git diff --check`. Residual risk: the batch helper still scans owner source
+entities once per revision-list response to preserve entity-only shadow-write
+wrappers; it no longer repeats that scan per listed revision.
+
+next move: Reawaken verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
+against revised commit `f9a23cea`. If it accepts, incorporate the accepted Phase
+4 commits into this orchestration branch and rerun the root checks. Do not claim
+O3 complete, main, staging, source-open frontend behavior, Qdrant projection,
 publication/export, graph-first enforcement, auth/session, gateway/provider,
 promotion, deploy, or rollback proof from this branch-level worker evidence.
 

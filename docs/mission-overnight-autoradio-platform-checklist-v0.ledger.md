@@ -1384,3 +1384,48 @@ graph-first enforcement, promotion, or rollback claim.
 Open edge: send the finding back to worker thread
 `019f02ed-7ce9-7d30-906b-f497a95ecc6d`, request a bounded repair, and rerun the
 same verifier contract after a revised worker commit.
+
+## 2026-06-26 - O3 Phase 4 Worker Repaired Revision-List Batch Read
+
+Claim: The worker repaired the verifier's revision-list read regression with a
+code-only batch graph-wrapper read for list responses.
+
+Move: read the worker's completed repair report and record the revised commit
+before re-verification.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread: `019f02ed-7ce9-7d30-906b-f497a95ecc6d`
+  (`O3 worker - Source API Phase 4`).
+- Repair commit: `f9a23cea batch texture source graph wrappers for revision
+  lists`.
+- Repair shape: revision-list responses batch source graph wrapper reads once
+  per list via `ListTextureSourceGraphForRevisions`.
+- Single-revision reads keep the existing helper.
+- Legacy `source_entities` remains unchanged; `source_entity_objects` and
+  `source_refs` remain additive.
+- Passed:
+  `nix develop -c go test ./internal/store -run 'TestListTextureSourceGraphForRevisionsBatchesRevisionScopedWrappers|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`.
+- Passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase|TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity' -count=1`.
+- Passed: `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`.
+- Passed: `nix develop -c go test ./internal/store -count=1`.
+- Passed: `git diff --check`.
+- Worker dirty-path classification: clean worktree.
+
+Residual risk: the batch helper still scans owner source entities once per
+revision-list response to preserve entity-only shadow-write wrappers. It no
+longer repeats that scan per listed revision.
+
+Evidence boundary: worker branch-level repair and tests only. No verifier
+acceptance of the repair yet, no root incorporation yet, and no O3-complete,
+main, staging, product, deploy, source-open, frontend rendering, Qdrant,
+publication/export, public producer, auth/session, gateway/provider,
+graph-first enforcement, promotion, or rollback claim.
+
+Open edge: reawaken verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
+against revised commit `f9a23cea`.
