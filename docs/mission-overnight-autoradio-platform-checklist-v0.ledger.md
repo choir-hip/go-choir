@@ -7121,3 +7121,100 @@ Open edge: resolve verifier pending handle
 `local:700b0e22-464d-4ee9-a131-c44a52f8c622`, read the verifier verdict, and
 then either incorporate worker commit `daec537c` through the behavior-changing
 landing loop or return to the worker branch for revision.
+
+## 2026-06-26 - O4 Synthesis Slice Verified, Landed, Deployed; Auth Proof Blocked
+
+Claim: the first bounded Universal Wire synthesis route slice is independently
+accepted, incorporated into `main`, and deployed to staging, but authenticated
+deployed product proof remains blocked by Choir auth.
+
+Move: read independent verifier thread
+`019f05ba-e585-7573-a752-851a43364c9e`, which accepted worker commit
+`daec537c5afe6377b3b6a4460f13b57548cffc92` with no findings. Cherry-picked the
+worker commit into the root checkout, resolved the ledger append conflict by
+preserving worker-start, local-proof, and verifier-pending records, and produced
+root commit `a648b31d45a3495d28ad295232cc848e37a69a2a` (`Add Universal Wire
+synthesis slice`). Pushed `a648b31d` to `origin/main`.
+
+Verifier evidence:
+
+- Verifier thread:
+  `019f05ba-e585-7573-a752-851a43364c9e`.
+- Verdict: `accept`; findings: none.
+- Verifier command results: worker worktree clean; `git diff --check
+  daec537c^..daec537c` passed; `git show --check --oneline daec537c` passed;
+  focused runtime test passed; broader Wire runtime test passed. The verifier
+  reported one non-fatal Nix eval-cache `database is busy` warning during the
+  broader run but Go exited successfully.
+
+Root pre-push evidence:
+
+- `git diff --check HEAD^..HEAD` passed for root commit `a648b31d`.
+- `nix develop -c go test ./internal/runtime -run
+  'TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics'
+  -count=1` passed from root: `ok
+  github.com/yusefmosiah/go-choir/internal/runtime 3.951s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed from
+  root: `ok github.com/yusefmosiah/go-choir/internal/runtime 8.706s`.
+
+CI/deploy evidence:
+
+- Docs Truth Check run `28265293534` for `a648b31d`: success.
+- FlakeHub publish run `28265293621` for `a648b31d`: success.
+- CI run `28265293557` for `a648b31d`: success, including runtime shards,
+  non-runtime tests, Go vet/build, docs truth check, and staging deploy job
+  `Deploy to Staging (Node B)`.
+- `https://choir.news/health` after deploy reports proxy and sandbox
+  `deployed_commit` `a648b31d45a3495d28ad295232cc848e37a69a2a`, deployed at
+  `2026-06-26T21:10:42Z`.
+
+Deployed acceptance attempt:
+
+- Unauthenticated curl to `https://choir.news/api/universal-wire/stories`
+  returns HTTP 401 / `{"error":"authentication required"}`, as expected.
+- Chrome extension-controlled and visible Google Chrome sessions both show
+  signed-out Choir state. Direct visible Chrome page
+  `choir.news/api/universal-wire/stories` displays
+  `{"error":"authentication required"}`. The Chrome tab also shows the signed
+  out `Local preview - sign in to save` desktop, so authenticated product API/UI
+  acceptance could not be completed.
+
+Mutation class / protected surfaces: orange runtime/API behavior plus yellow
+tests and green evidence docs. Touched Universal Wire route/manifest behavior,
+Texture source entity projection, existing Wire edition linkage, tests, and
+ledger evidence. Did not touch auth/session renewal, vmctl, provider/gateway
+credentials, Qdrant, promotion/rollback, run acceptance, or publication/export
+outside existing Wire edition helpers. Deployment routing was exercised only
+through the normal `origin/main` CI deploy path.
+
+Conjecture delta: the system now has a verified and deployed first synthesis
+route slice: clustered source items can be represented as an English Texture
+article with native `source_ref` citations and routed through
+`universal-wire/Wire.texture` rather than raw graph-capture publication.
+However, the owner-visible Universal Wire product target remains open because
+this does not prove live multilingual ingestion cluster selection, model/provider
+synthesis, live world-model maintenance, updates to existing articles, or a
+non-empty authenticated deployed Wire edition.
+
+Heresy delta: `repaired` for the missing first branch-local/deployed synthesis
+route slice. `discovered` remains open for production cluster selection,
+provider freshness, world-model/update semantics, and authenticated staging
+product evidence.
+
+Rollback refs: revert `a648b31d45a3495d28ad295232cc848e37a69a2a` to remove the
+synthesis helper, manifest/source-entity carry-forward, focused tests, and local
+proof ledger block. Earlier rollback for diagnostic-boundary repair remains
+reverting `73f0a888385a15a01a84eb726255b39662627b4d` and
+`0975eea990a0de44f99a55ae0e5fb5aee2416bbd`, but that would intentionally
+reintroduce owner-rejected raw capture grid behavior.
+
+Actual Delta V: 1. V moves from 31 to 30 for verified/deployed first synthesis
+route substrate. No additional Delta V for product acceptance because auth and
+live non-empty synthesis evidence are blocked/open.
+
+Open edge: get a usable authenticated Choir browser/session, then replay
+deployed `/api/universal-wire/stories` and Universal Wire UI acceptance. If the
+Wire edition is empty, the next construct should seed or trigger a product-path
+source cluster through Texture/world-model processing, not reclassify raw graph
+captures as public articles.
