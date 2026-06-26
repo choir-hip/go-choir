@@ -5223,3 +5223,61 @@ Open edge: wait for worker thread
 then inspect its worktree. If it produces a commit, create an independent
 verifier thread before root incorporation. If it returns no candidate, record
 the blocker and final dirty-path classification.
+
+## 2026-06-26 - O4 Phase 10d Reader-Body Candidate And Verifier Launch
+
+Claim: O4 Phase 10d now has a test-only worker candidate that tightens the
+native Texture graph-wrapper source-open proof, plus an independent verifier
+launch receipt. This is candidate and verifier-pending evidence only, not
+verifier acceptance, root incorporation, or checklist descent.
+
+Move: read the completed worker thread, inspect the worker worktree and diff,
+then create a project-scoped verifier worktree thread from worker branch
+`codex/o4-phase10d-native-texture-source-ref-reader-body-proof`.
+
+Expected Delta V: 0. A candidate commit plus pending verifier launch does not
+close the native Texture citation/source artifact-opening obligation.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f0425-84ab-7120-99bc-c068a19227a8`
+  (`O4 worker - Phase 10d Texture Reader Body Proof`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/0f6b/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10d-native-texture-source-ref-reader-body-proof` at
+  `5cc0457f6695f43466b714161a56c86b46ed1e3b`
+  (`Tighten graph wrapper source reader proof`).
+- Worker diff:
+  `frontend/tests/texture-source-entities.spec.js` only. The test now uses
+  distinct inline `source_ref` selector/note text and graph object reader body
+  text, asserts Source Viewer reader markdown contains the graph body and not
+  the inline quote, and preserves the existing native `source_ref`, Web Lens,
+  and legacy absence assertions.
+- Worker-reported proof:
+  `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  ./start-services.sh` reached `Services started successfully`; exact focused
+  Playwright proof passed; adjacent six-test regression filter passed;
+  `git diff --check`, `git show --check --oneline HEAD`, and
+  `git diff --check HEAD~1..HEAD` passed; services stopped; no listeners
+  remained on `4173`, `8081`, `8082`, or `8083`.
+- Orchestration inspection:
+  worker tracked status clean; ignored artifacts are local harness logs and
+  `frontend/node_modules/`; `git diff --check 35d0e350..5cc0457f` passed; diff
+  name-status is limited to `frontend/tests/texture-source-entities.spec.js`.
+- Verifier pending worktree handle:
+  `local:d292cc59-d088-480f-baef-83c5b2dfc12b`.
+
+Evidence boundary: worker-local candidate plus pending verifier launch only. No
+independent verifier verdict yet, no root incorporation of worker commit, push,
+PR, CI, deploy, staging product acceptance, publication/export, Qdrant,
+provider/gateway/search, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: resolve verifier pending handle
+`local:d292cc59-d088-480f-baef-83c5b2dfc12b`, title/pin the verifier thread,
+and wait for verdict on worker commit `5cc0457f`; only after `accept` should
+orchestration consider root incorporation and V treatment.
