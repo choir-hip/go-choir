@@ -4633,3 +4633,45 @@ promotion/rollback, or run-acceptance claim.
 
 Open edge: resolve pending worker handle into a readable thread/worktree, then
 read worker progress or final report before launching any independent verifier.
+
+## 2026-06-26 - O4 Phase 10 Worker Resolved
+
+Claim: The O4 Phase 10 native Texture citation-opening worker has resolved to a
+readable, titled, pinned Codex thread/worktree. This is identity/readiness
+tracking only, not worker evidence, verifier acceptance, root incorporation, or
+checklist descent.
+
+Move: resolve pending handle `local:87d5deb5-9ff1-4b92-a8de-c9af587b57c8` via
+worktree/thread lookup, title the thread, pin it, and inspect its initial branch
+state.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Resolved worker thread:
+  `019f03ff-f119-75d3-8bf2-ae3f50af3ab4` (`O4 worker - Native Texture Citation
+  Source Open`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/d3ed/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase10-native-texture-source-ref-open-proof` at
+  `7b94d220 record O4 source artifact acceptance`.
+- Worker objective:
+  close or precisely narrow the remaining O4 source/citation artifact-opening
+  edge on the native Texture body `source_ref` citation axis; prove real Source
+  Viewer/reader artifact opening if feasible, or document the smallest product
+  blocker before any full News benchmark claim.
+
+Evidence boundary: worker resolved/readable only. No worker final report,
+commit, verifier, root incorporation, push, PR, CI, deploy, staging product
+acceptance, native Texture body `source_ref` citation-opening proof,
+publication/export, Qdrant, provider/gateway/search, auth/session renewal,
+promotion/rollback, or run-acceptance claim.
+
+Open edge: read worker thread
+`019f03ff-f119-75d3-8bf2-ae3f50af3ab4` after it reports progress or final
+candidate, then inspect hygiene/readiness before launching an independent
+verifier.
