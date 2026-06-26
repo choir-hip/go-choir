@@ -3390,3 +3390,52 @@ promotion/rollback, or run-acceptance claim.
 Open edge: read worker thread
 `019f03b9-7d73-7d13-9d58-4bec2361f5c8` after it completes, then create an
 independent verifier if the worker returns candidate commits.
+
+## 2026-06-26 - O4 Phase 6 Worker Progress Check-In
+
+Claim: O4 Phase 6 worker remains active and is not yet verifier-ready. This is
+an orchestration progress check, not worker acceptance.
+
+Move: read worker thread
+`019f03b9-7d73-7d13-9d58-4bec2361f5c8`, inspect the worker worktree status
+read-only, identify a long-running sourcecycled test process, and send a
+bounded follow-up asking the worker to classify progress or hang and finalize
+honestly.
+
+Expected Delta V: 0. Progress check-in does not close an obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Worker branch:
+  `codex/o4-phase6-authenticated-universal-wire-product-api-proof`.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/f0b3/go-choir`.
+- Worker dirty state observed read-only:
+  `M internal/runtime/universal_wire_test.go`.
+- Worker diff shape observed read-only:
+  one focused test addition,
+  `TestHandleUniversalWireStoriesReadsSourcecycledCapturesFromConfiguredObjectGraphPath`,
+  intended to write sourcecycled-style capture objects through the configured
+  runtime-derived objectgraph DB path and read them through authenticated
+  `GET /api/universal-wire/stories`.
+- Long-running process observed:
+  `go test ./cmd/sourcecycled -run Test.*ObjectGraph|Test.*RuntimeStore|Test.*WebCapture -count=1`.
+- Follow-up sent:
+  classify whether the command is progressing or hung; if hung, stop the narrow
+  command, record the exact blocker, and finish with committed or uncommitted
+  state classification; do not broaden scope or claim product acceptance without
+  passing evidence.
+
+Evidence boundary: orchestration read-only observation and follow-up only. No
+worker final report, candidate commit, verifier verdict, root incorporation,
+main push, PR, CI, deploy, staging product acceptance, Texture native
+`source_ref`, publication/export, Qdrant, provider/gateway, auth/session
+renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: read worker thread again after it responds to the follow-up or
+finishes; if it returns candidate commits, launch an independent verifier.

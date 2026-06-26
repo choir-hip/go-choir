@@ -785,17 +785,22 @@ unrelated.
 next move: wait for O4 Phase 6 worker thread
 `019f03b9-7d73-7d13-9d58-4bec2361f5c8` (`O4 worker - Authenticated Wire API
 Proof`) in `/Users/wiz/.codex/worktrees/f0b3/go-choir`, then read its report and
-create an independent verifier if it returns candidate commits. The worker
-replaces pending handle `local:b9a89dc6-e09f-4eec-8617-7706221de218` for
-orchestration purposes. The assignment is an authenticated Universal Wire
-product-API proof slice: show, through product-visible evidence if feasible,
-that configured sourcecycled objectgraph storage and `/api/universal-wire/stories`
-work together, or document the precise config/deploy blocker and the narrowest
-durable improvement. Expected Delta V: 0 for readable-thread resolution;
-potential Delta V: 1 if authenticated API acceptance closes after worker and
-verifier evidence. Do not claim News benchmark, staging, native Texture
-`source_ref` carry-forward, publication/export, Qdrant, promotion, rollback, or
-run acceptance from this launch/resolution. O4 Phase 5 verifier thread
+create an independent verifier if it returns candidate commits. Orchestration
+observed the worker branch dirty with one focused test change in
+`internal/runtime/universal_wire_test.go` and a long-running
+`go test ./cmd/sourcecycled -run Test.*ObjectGraph|Test.*RuntimeStore|Test.*WebCapture -count=1`
+process, then sent a bounded follow-up asking the worker to classify progress
+or hang and finalize honestly. The worker replaces pending handle
+`local:b9a89dc6-e09f-4eec-8617-7706221de218` for orchestration purposes. The
+assignment is an authenticated Universal Wire product-API proof slice: show,
+through product-visible evidence if feasible, that configured sourcecycled
+objectgraph storage and `/api/universal-wire/stories` work together, or document
+the precise config/deploy blocker and the narrowest durable improvement.
+Expected Delta V: 0 for worker follow-up; potential Delta V: 1 if authenticated
+API acceptance closes after worker and verifier evidence. Do not claim News
+benchmark, staging, native Texture `source_ref` carry-forward,
+publication/export, Qdrant, promotion, rollback, or run acceptance from this
+launch/resolution/follow-up. O4 Phase 5 verifier thread
 `019f03b0-6a16-79b0-888d-b8a48e6a378f` (`O4 verifier - Web Capture
 Ingestion`) returned `accept` with no blocking findings. The verifier confirmed
 checkpoint-before-code, narrow sourcecycled/objectgraph boundaries, provenance
