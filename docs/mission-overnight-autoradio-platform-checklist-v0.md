@@ -181,10 +181,11 @@ Checklist:
   before guarded head advancement.
 - [x] Add tests that fail on disappearing source entities. Phase 1 covers a
   missing source entity/version rollback before document head advancement;
-  producer-path coverage remains future O3 work.
+  Phase 2 adds focused Texture tool producer tests proving source entity graph
+  records are shadow-written while legacy revision reads continue to work.
 - [x] Verify that source refs are native objects, not prose links. Phase 1 adds
   `texture_source_refs` records behind objectgraph-compatible IDs; producer
-  migration remains future O3 work.
+  migration for source ref edges remains future O3 work.
 - [x] Open a verifier thread before any red/orange landing claim. Phase 1
   verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`.
 
@@ -327,9 +328,11 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 3 for O3
-Phase 1 verifier acceptance and root incorporation of the store/transaction
-boundary.
++ 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
+Phase 2 verifier acceptance and root incorporation of the selected Texture
+tool source-entity shadow-write path. The pass bought branch-level evidence and
+implementation progress but did not close another counted checklist
+obligation; source ref edge producer migration remains open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -467,19 +470,23 @@ tests passed: focused runtime source-graph/legacy compatibility tests, focused
 Phase 1 store boundary tests, `internal/runtime -run TestTextureTool`, full
 `internal/store`, and `git diff --check`; worker worktree was clean. Verifier
 thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` (`O3 verifier - Source Entity
-Phase 2`) was sent those commit/test handles after its initial `blocked`
-verdict and is now the open gate. Mutation class is orange/red-adjacent with
-protected surfaces: Texture canonical writes, source identity/ref edges, legacy
-DTO compatibility, source-open routing, Qdrant source-of-truth boundaries,
-auth/session renewal, gateway/provider calls, and staging/deploy claims.
-Evidence remains worker-branch only; no O3 Phase 2 acceptance, root
-incorporation, main, staging, product, deployment, or landing claim exists yet.
+Phase 2`) returned `accept` with no blocking findings and reran the same
+focused/broader checks. Worker commits were incorporated into this
+orchestration branch as `fb876caa` and `5d349eaf`; root checks passed:
+focused runtime source-graph/legacy compatibility tests, focused Phase 1 store
+boundary tests, `internal/runtime -run TestTextureTool`, full
+`internal/store`, and `git diff --check`. Mutation class is orange/red-adjacent
+with protected surfaces: Texture canonical writes, source identity/ref edges,
+legacy DTO compatibility, source-open routing, Qdrant source-of-truth
+boundaries, auth/session renewal, gateway/provider calls, and staging/deploy
+claims. Evidence class is branch-level code/test/verifier acceptance only; no
+main, staging, product, deployment, O3-complete, source ref edge, public
+producer, source-open, Qdrant, or graph-first read claim exists yet.
 
-next move: Read verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`. On
-`accept`, incorporate worker commits `caf5b737` and `32a5d338` into the root
-orchestration branch, rerun focused root checks, update O3 checklist/variant,
-and record evidence. On `revise_before_continue`, route the exact finding back
-to worker thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489`.
+next move: Continue O3 with a narrow Phase 3 on the same `patch_texture` /
+`rewrite_texture` path: resolve body `source_ref` nodes to graph source entity
+versions and write pinned `choir.source_ref` records transactionally, with a
+failure test proving document head does not advance if a ref cannot resolve.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

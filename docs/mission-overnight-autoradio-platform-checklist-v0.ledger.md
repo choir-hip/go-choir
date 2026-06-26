@@ -936,3 +936,55 @@ landing claim.
 Open edge: read verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda`; on
 `accept`, incorporate worker commits into the orchestration branch and rerun
 focused root checks.
+
+## 2026-06-26 - O3 Phase 2 Accepted And Incorporated
+
+Claim: The selected Texture tool source-entity shadow-write path is accepted at
+branch level and incorporated into the orchestration branch.
+
+Move: read the verifier verdict, cherry-pick the accepted worker commits into
+the root orchestration branch, rerun the focused root checks, and update the
+mission state.
+
+Expected Delta V: 0 because this pass adds branch-level producer-path evidence
+but does not close another counted O3 checklist obligation. Source ref edge
+producer migration remains open.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker thread `019f02c4-6b34-70d1-a268-5bd7ccc4d489` completed with clean
+  branch `codex/o3-phase2-shadow-write-producer`.
+- Verifier thread `019f02c4-a8c3-78e2-b3d6-e08e45ba8fda` returned verdict
+  `accept`.
+- Worker docs checkpoint `caf5b737` was incorporated into this branch as
+  `fb876caa`.
+- Worker implementation `32a5d338` was incorporated into this branch as
+  `5d349eaf`.
+- Verifier findings: no blocking findings; scope limited to the selected
+  Texture tool path; legacy `source_entities_json` reads remain; graph source
+  entity records are shadow writes; no source ref edge, public producer,
+  source-open, Qdrant, auth/session, provider, staging, or deploy behavior was
+  claimed.
+- Verifier reran and passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphUsesTargetIdentityNotGeneratedLegacyID|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`,
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `git diff --check`.
+- Root incorporation checks passed after cherry-pick:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphUsesTargetIdentityNotGeneratedLegacyID|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`,
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `git diff --check`.
+
+Evidence boundary: branch-level code/test/verifier acceptance only. No
+O3-complete, main, staging, product, deploy, source-open, Qdrant, public
+producer, `source_ref` edge, or graph-first read claim.
+
+Open edge: continue O3 with a narrow Phase 3 on the same Texture tool path:
+resolve body `source_ref` nodes to graph source entity versions and write
+pinned `choir.source_ref` records transactionally, including a failure test
+that document head does not advance when a ref cannot resolve.
