@@ -1991,3 +1991,52 @@ auth/session, gateway/provider, promotion, or rollback claim.
 Open edge: read worker thread `019f034d-ebc1-75a3-9c4b-269e8b9d6be7` when it
 finishes, then create a verifier thread against the actual artifact before
 incorporating or claiming O4 progress.
+
+## 2026-06-26 - O4 Phase 1 Worker Final Report Received
+
+Claim: O4 Phase 1 has a committed worker artifact ready for independent
+verifier review, but not for incorporation or acceptance.
+
+Move: read the completed worker report, confirm the worker branch/HEAD and
+tracked hygiene from the filesystem, and rewrite Parallax State so the verifier
+can start from file state rather than chat memory.
+
+Expected Delta V: 0. Worker completion enables verifier review but does not
+itself close the web-capture obligation.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker thread:
+  `019f034d-ebc1-75a3-9c4b-269e8b9d6be7`
+  (`O4 worker - Web Capture Object Foundation`).
+- Worker cwd: `/Users/wiz/.codex/worktrees/b850/go-choir`.
+- Worker branch: `codex/o4-phase1-web-capture-object-foundation`.
+- Worker commits:
+  `ae0fb49f checkpoint O4 web capture foundation gap`;
+  `7e9418afa69aec326bd20d091c9182f7b8dca4d5 add web capture objectgraph foundation`.
+- Files changed:
+  `docs/o4-web-capture-foundation-checkpoint-2026-06-26.md`;
+  `internal/objectgraph/web_capture.go`;
+  `internal/objectgraph/objectgraph_test.go`.
+- Worker-reported implementation: typed `choir.web_capture.v1` metadata
+  contract and validation, `Service.CreateWebCapture`, extracted text stored as
+  the object body, deterministic content-addressed identity tests, required
+  field and URL validation, SQLite durability, and `captured_from` edge
+  persistence.
+- Worker-reported commands passed:
+  `nix develop -c go test ./internal/objectgraph`;
+  `git diff --check`;
+  `git status --short` clean.
+- Worker non-claims: no push, deploy, PR, staging proof, auth/session, vmctl,
+  provider/gateway, Texture canonical write, sourcecycled ingestion, Qdrant
+  indexing, publication/export, or Universal Wire API behavior change.
+
+Evidence boundary: worker final report plus committed candidate only. No
+independent verifier verdict, root incorporation, accepted O4 web-capture
+foundation, Universal Wire feed proof, main, staging, product acceptance,
+deploy, or promotion/rollback claim.
+
+Open edge: launch an independent verifier thread against worker commits
+`ae0fb49f` and `7e9418af`; record its verdict before incorporation.
