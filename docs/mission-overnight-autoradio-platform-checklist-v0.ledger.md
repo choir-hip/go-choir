@@ -691,3 +691,99 @@ runtime, Texture, API, staging, product, or landing claim.
 
 Open edge: Read worker and verifier results before incorporating any O3 Phase 1
 output.
+
+## 2026-06-26 - O3 Phase 1 Worker Completed, Verifier Pending
+
+Claim: The O3 Phase 1 worker produced a bounded store/transaction-boundary
+candidate, but O3 Phase 1 is not accepted until the independent verifier emits
+a final verdict and the reviewed commits are incorporated into the root
+orchestration branch.
+
+Move: read the O3 Phase 1 worker thread after commit, send the exact worker
+commit handles to the verifier, and record current open verifier state.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation.
+
+Actual Delta V: 0. Current V is 40.
+
+Receipts:
+
+- Worker thread `019f02af-74d3-73a0-ae15-cf0809739b3b` completed in
+  `/Users/wiz/.codex/worktrees/a870/go-choir`.
+- Worker docs checkpoint commit: `7623b5f1 checkpoint O3 phase1 source store
+  boundary`.
+- Worker implementation commit: `017b4113 implement O3 phase1 source store
+  boundary`.
+- Worker final state: clean detached HEAD at `017b4113`; no mutation to
+  `/Users/wiz/go-choir`.
+- Worker route decision: Texture-store source tables behind an
+  objectgraph-compatible contract, not generic objectgraph inside the
+  Texture/Dolt transaction boundary.
+- Worker P2 resolution: source entity/source ref canonical IDs use one
+  URL-safe `objectgraph.StableSuffixFromKey(...)` suffix and no extra
+  colon-separated suffix components.
+- Worker-reported tests passed:
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `nix develop -c go test ./internal/objectgraph -count=1`.
+- Verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` was sent a follow-up
+  to review commits `7623b5f1` and `017b4113` read-only.
+- Verifier progress so far: checkpoint is documentation-only and precedes
+  code, transaction/head update path shows no obvious break, focused Phase 1
+  tests pass in the worker worktree, `git diff --check` is clean, and
+  `internal/objectgraph` passes. The full `internal/store` rerun has ended, but
+  no final verdict has been emitted yet.
+
+Evidence boundary: worker branch/local evidence plus in-progress verifier
+evidence only. No O3 acceptance, root incorporation, API behavior, staging,
+product, deployment, or landing claim.
+
+Open edge: wait for the verifier verdict. On `accept`, incorporate the worker
+commits into the root orchestration branch and rerun focused root tests. On
+`revise_before_continue`, route the exact finding back to the worker. On
+continued active/blocker state, exit as `open_handoff` with the verifier state
+explicit.
+
+## 2026-06-26 - O3 Phase 1 Accepted And Incorporated
+
+Claim: The O3 Phase 1 source-entity store/transaction boundary is accepted at
+branch level and incorporated into the orchestration branch.
+
+Move: read the verifier verdict, cherry-pick the accepted worker commits into
+the root orchestration branch, and update the mission state.
+
+Expected Delta V: 3 for Texture revision/source graph transaction protection,
+missing-source rollback tests, and native `source_ref` store records.
+
+Actual Delta V: 3. Current V is 37.
+
+Receipts:
+
+- Worker thread `019f02af-74d3-73a0-ae15-cf0809739b3b` completed with clean
+  detached HEAD at `017b4113`.
+- Verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned verdict
+  `accept`.
+- Worker checkpoint `7623b5f1` was incorporated into this branch as
+  `7e6874a9`.
+- Worker implementation `017b4113` was incorporated into this branch as
+  `3adcd0ae`.
+- Verifier findings: no blocking findings; docs-checkpoint-before-code
+  satisfied; P2 source-ref canonical ID suffix shape resolved with one
+  URL-safe suffix; Texture transaction/head invariants preserved; scope
+  contained to O3 docs/ledger and `internal/store`.
+- Verifier reran and passed:
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/store -count=1`, and
+  `nix develop -c go test ./internal/objectgraph -count=1`.
+- Root incorporation checks passed after cherry-pick:
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+  `nix develop -c go test ./internal/objectgraph -count=1`, and
+  `nix develop -c go test ./internal/store -count=1`.
+
+Evidence boundary: branch-level code/test/verifier acceptance only. No producer
+path, frontend/source-open, publication/export, Qdrant projection, API behavior,
+main, staging, product, deployment, or landing claim.
+
+Open edge: continue O3 with a narrow producer or Texture tool path that calls
+`CreateRevisionWithSourceGraph` in shadow-write mode and adds compatibility
+tests proving legacy DTO reads still work while graph records are created.

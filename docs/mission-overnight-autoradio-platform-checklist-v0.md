@@ -176,13 +176,17 @@ Checklist:
 - [x] Define source entity identity, citation carry-forward, and unused-source
   handling.
 - [x] Ensure source citation remains tri-state: cited, toolbar-only, unused.
-- [ ] Keep Texture canonical writes protected. Design-level plan accepted;
-  implementation must still prove revision/source graph transactionality.
-- [ ] Add tests that fail on disappearing source entities.
-- [ ] Verify that source refs are native objects, not prose links.
+- [x] Keep Texture canonical writes protected. O3 Phase 1 store boundary
+  accepted: source graph writes happen inside the Texture revision transaction
+  before guarded head advancement.
+- [x] Add tests that fail on disappearing source entities. Phase 1 covers a
+  missing source entity/version rollback before document head advancement;
+  producer-path coverage remains future O3 work.
+- [x] Verify that source refs are native objects, not prose links. Phase 1 adds
+  `texture_source_refs` records behind objectgraph-compatible IDs; producer
+  migration remains future O3 work.
 - [x] Open a verifier thread before any red/orange landing claim. Phase 1
-  verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` is open; verdict still
-  required before incorporating worker output.
+  verifier thread `019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`.
 
 Acceptance: source entity persistence and source refs survive the relevant
 Texture/News path with focused tests, plus staging proof if behavior-changing
@@ -323,8 +327,9 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 40. Last Delta V: 1 for O3
-Phase 1 verifier thread launch.
++ 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 3 for O3
+Phase 1 verifier acceptance and root incorporation of the store/transaction
+boundary.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -424,15 +429,32 @@ worker completion, the verifier returned `accept` for branch-level
 continuation, with the live local-Qdrant proof still open. That proof passed
 after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
 The same verifier returned `accept` on the final O2 completion readback. O2 is
-complete at branch level, with no main/staging/platform settlement claim.
+complete at branch level, with no main/staging/platform settlement claim. O3
+Phase 1 worker thread `019f02af-74d3-73a0-ae15-cf0809739b3b` completed in
+`/Users/wiz/.codex/worktrees/a870/go-choir` and reported clean detached HEAD at
+`017b4113`. The worker first created docs checkpoint `7623b5f1` choosing
+Texture-store source tables behind an objectgraph-compatible contract, then
+implementation commit `017b4113` adding `texture_source_entities`,
+`texture_source_refs`, `CreateRevisionWithSourceGraph`, canonical ID/version
+helpers, and focused tests. Those commits were incorporated into this
+orchestration branch as `7e6874a9` and `3adcd0ae`. The worker resolved the
+accepted P2 by using a single URL-safe `objectgraph.StableSuffixFromKey(...)`
+suffix with no extra colon-separated components. O3 verifier thread
+`019f02b0-47a4-74b2-b78a-44d13bdd958d` returned `accept`: no blocking findings,
+checkpoint-before-code satisfied, transaction/head invariant preserved,
+focused Phase 1 tests passed, `git diff --check` passed, full
+`internal/store` passed, and `internal/objectgraph` passed. Root incorporation
+checks also passed on this branch:
+`nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`,
+`nix develop -c go test ./internal/objectgraph -count=1`, and
+`nix develop -c go test ./internal/store -count=1`. Evidence boundary:
+branch-level code/test/verifier acceptance only; no API producer path,
+frontend/source-open, Qdrant projection, main, staging, product, deployment, or
+landing claim.
 
-next move: Read O3 Phase 1 worker thread
-`019f02af-74d3-73a0-ae15-cf0809739b3b` and verifier thread
-`019f02b0-47a4-74b2-b78a-44d13bdd958d`. The worker must first choose the safe
-store route before code changes: either extend objectgraph into the Texture/Dolt
-transaction boundary or add Texture-store source tables behind the objectgraph
-contract. It must resolve the accepted P2 about `source_ref` canonical ID suffix
-shape against `objectgraph.BuildCanonicalID` before implementing.
+next move: Continue O3 with a narrow producer or Texture tool path that calls
+`CreateRevisionWithSourceGraph` in shadow-write mode and adds compatibility
+tests proving legacy DTO reads still work while graph records are created.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
