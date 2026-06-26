@@ -556,3 +556,35 @@ staging, provider, gateway, runtime route, product, promotion, or rollback
 claim.
 
 Open edge: Launch O3 source entities with a bounded worker/verifier pair.
+
+## 2026-06-26 - O3 Source Entity Design Review Launched
+
+Claim: O3 should begin with independent review of the existing source-entity
+migration design before any implementation touches protected source/Texture
+surfaces.
+
+Move: create a read-only O3 design-review thread.
+
+Expected Delta V: 0; this starts the O3 review gate but does not complete the
+O3 independent-review obligation until a verdict exists.
+
+Actual Delta V: 0. Current V remains 44.
+
+Receipts:
+
+- O3 reviewer thread `019f02a7-11d9-7573-885c-d91b7cffe8be` created, titled
+  `O3 reviewer - Source Entity Migration design`, and pinned.
+- Reviewer prompt is read-only and asks it to compare the root
+  `docs/paradoc-source-entity-migration.md` with preserved O0 source-entity
+  migration commit `7a355806` in
+  `/Users/wiz/.codex/worktrees/2bae/go-choir`.
+- Protected surfaces named for review: Texture canonical writes, source entity
+  identity, `source_ref` edges, tri-state citation, citation carry-forward,
+  persisted-revision compatibility, News/Texture/Autoradio shared source
+  substrate, and objectgraph source-of-truth boundaries.
+
+Evidence boundary: thread launch only. No source-entity design acceptance,
+implementation, runtime, staging, product, or landing claim.
+
+Open edge: Read the O3 reviewer verdict and incorporate it before launching
+any O3 implementation worker.

@@ -423,8 +423,10 @@ after starting Nix Qdrant `1.18.1` with `/tmp/choir-qdrant-o2-proof` storage.
 The same verifier returned `accept` on the final O2 completion readback. O2 is
 complete at branch level, with no main/staging/platform settlement claim.
 
-next move: Commit the O2 completion evidence, then launch O3 source entities
-with a bounded worker/verifier thread pair.
+next move: Read O3 design-review thread `019f02a7-11d9-7573-885c-d91b7cffe8be`
+(`O3 reviewer - Source Entity Migration design`) for verdict on whether the
+existing source-entity migration design is safe enough to proceed into a
+bounded implementation worker.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
