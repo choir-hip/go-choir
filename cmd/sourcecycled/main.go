@@ -93,6 +93,30 @@ type ingestionDispatchResult struct {
 	Errors              []string
 }
 
+type webCaptureProjectionSummary struct {
+	Mode              string
+	Target            string
+	CaptureCount      int
+	SourceEntityCount int
+	CapturedFromEdges int
+	SkippedItemCount  int
+}
+
+type runtimeWebCaptureProjectionRequest struct {
+	OwnerID    string         `json:"owner_id"`
+	ComputerID string         `json:"computer_id,omitempty"`
+	Items      []sources.Item `json:"items"`
+	Now        string         `json:"now,omitempty"`
+}
+
+type runtimeWebCaptureProjectionResponse struct {
+	Status            string `json:"status"`
+	CaptureCount      int    `json:"capture_count"`
+	SourceEntityCount int    `json:"source_entity_count"`
+	CapturedFromEdges int    `json:"captured_from_edges"`
+	SkippedItemCount  int    `json:"skipped_item_count"`
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting Choir Universal Wire sourcecycled daemon (V0)")
@@ -261,12 +285,33 @@ func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, erro
 }
 
 func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cycleID string, items []sources.Item, now time.Time, eventType, message string) error {
-	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
+	summary, err := projectSourceItemsToObjectGraph(ctx, items, now)
 	if err != nil {
 		return err
 	}
+	if store != nil {
+		_ = store.RecordCycleEvent(ctx, cycleID, "", eventType, message, map[string]any{
+			"objectgraph_mode":    summary.Mode,
+			"objectgraph_target":  summary.Target,
+			"capture_count":       summary.CaptureCount,
+			"source_entity_count": summary.SourceEntityCount,
+			"captured_from_edges": summary.CapturedFromEdges,
+			"skipped_item_count":  summary.SkippedItemCount,
+		})
+	}
+	return nil
+}
+
+func projectSourceItemsToObjectGraph(ctx context.Context, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
+	if dispatcher := ingestionRuntimeDispatcherFromEnv(); dispatcher != nil && strings.TrimSpace(dispatcher.baseURL) != "" {
+		return dispatcher.projectWebCaptures(ctx, items, now)
+	}
+	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
+	if err != nil {
+		return webCaptureProjectionSummary{}, err
+	}
 	if graph == nil {
-		return nil
+		return webCaptureProjectionSummary{}, nil
 	}
 	result, writeErr := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
 		OwnerID:    sourceServiceObjectGraphOwnerID(),
@@ -275,24 +320,53 @@ func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cy
 	})
 	closeErr := graph.Close()
 	if writeErr != nil {
-		return writeErr
+		return webCaptureProjectionSummary{}, writeErr
 	}
 	if closeErr != nil {
-		return closeErr
+		return webCaptureProjectionSummary{}, closeErr
 	}
-	if store != nil {
-		_ = store.RecordCycleEvent(ctx, cycleID, "", eventType, message, map[string]any{
-			"objectgraph_db_path": graphPath,
-			"capture_count":       len(result.Captures),
-			"source_entity_count": len(result.SourceEntities),
-			"captured_from_edges": result.EdgeCount,
-			"skipped_item_count":  result.Skipped,
-		})
-	}
-	return nil
+	return webCaptureProjectionSummary{
+		Mode:              "sqlite_sidecar",
+		Target:            graphPath,
+		CaptureCount:      len(result.Captures),
+		SourceEntityCount: len(result.SourceEntities),
+		CapturedFromEdges: result.EdgeCount,
+		SkippedItemCount:  result.Skipped,
+	}, nil
 }
 
 func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store *cycle.Storage, cycleID string, now time.Time) error {
+	if dispatcher := ingestionRuntimeDispatcherFromEnv(); dispatcher != nil && strings.TrimSpace(dispatcher.baseURL) != "" {
+		if store == nil {
+			return nil
+		}
+		items, err := store.SearchItems(ctx, "", sourceServiceObjectGraphBackfillLimit())
+		if err != nil {
+			return err
+		}
+		if len(items) == 0 {
+			_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfill_empty", "no stored source items available for objectgraph backfill", map[string]any{
+				"objectgraph_mode": "runtime_api",
+				"backfill_limit":   sourceServiceObjectGraphBackfillLimit(),
+			})
+			return nil
+		}
+		summary, err := dispatcher.projectWebCaptures(ctx, items, now)
+		if err != nil {
+			return err
+		}
+		_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfilled", "stored source items projected to empty objectgraph web captures", map[string]any{
+			"objectgraph_mode":    summary.Mode,
+			"objectgraph_target":  summary.Target,
+			"backfill_limit":      sourceServiceObjectGraphBackfillLimit(),
+			"backfill_item_count": len(items),
+			"capture_count":       summary.CaptureCount,
+			"source_entity_count": summary.SourceEntityCount,
+			"captured_from_edges": summary.CapturedFromEdges,
+			"skipped_item_count":  summary.SkippedItemCount,
+		})
+		return nil
+	}
 	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
 	if err != nil {
 		return err
@@ -1073,6 +1147,61 @@ func (d *ingestionRuntimeDispatcher) runtimeRunsEndpoint() string {
 		return d.baseURL + "/internal/vmctl/sandbox-proxy/" + d.ownerID + "/internal/runtime/runs"
 	}
 	return d.baseURL + "/internal/runtime/runs"
+}
+
+func (d *ingestionRuntimeDispatcher) runtimeWebCapturesEndpoint() string {
+	if d.socketPath != "" {
+		return d.baseURL + "/internal/vmctl/sandbox-proxy/" + d.ownerID + "/internal/runtime/objectgraph/web-captures"
+	}
+	return d.baseURL + "/internal/runtime/objectgraph/web-captures"
+}
+
+func (d *ingestionRuntimeDispatcher) projectWebCaptures(ctx context.Context, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
+	if d == nil || d.client == nil {
+		return webCaptureProjectionSummary{}, fmt.Errorf("runtime dispatcher is not configured")
+	}
+	payload := runtimeWebCaptureProjectionRequest{
+		OwnerID:    d.ownerID,
+		ComputerID: sourceServiceObjectGraphComputerID(),
+		Items:      items,
+		Now:        now.UTC().Format(time.RFC3339Nano),
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return webCaptureProjectionSummary{}, fmt.Errorf("marshal runtime web capture projection request: %w", err)
+	}
+	endpoint := d.runtimeWebCapturesEndpoint()
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return webCaptureProjectionSummary{}, fmt.Errorf("create runtime web capture projection request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Internal-Caller", "true")
+	resp, err := d.client.Do(httpReq)
+	if err != nil {
+		return webCaptureProjectionSummary{}, fmt.Errorf("project web captures into runtime: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return webCaptureProjectionSummary{}, runtimeSubmitError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Message:    strings.TrimSpace(string(responseBody)),
+		}
+	}
+	var out runtimeWebCaptureProjectionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return webCaptureProjectionSummary{}, fmt.Errorf("decode runtime web capture projection response: %w", err)
+	}
+	return webCaptureProjectionSummary{
+		Mode:              "runtime_api",
+		Target:            endpoint,
+		CaptureCount:      out.CaptureCount,
+		SourceEntityCount: out.SourceEntityCount,
+		CapturedFromEdges: out.CapturedFromEdges,
+		SkippedItemCount:  out.SkippedItemCount,
+	}, nil
 }
 
 func (d *ingestionRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {

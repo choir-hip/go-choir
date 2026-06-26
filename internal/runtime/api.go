@@ -1750,6 +1750,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
 	s.HandleFunc("/internal/runtime/app-change-packages/", h.HandleInternalAppChangePackageDetail)
 	s.HandleFunc("/internal/runtime/channel-casts", h.HandleInternalChannelCast)
+	s.HandleFunc("/internal/runtime/objectgraph/web-captures", h.HandleInternalSourcecycledWebCaptures)
 	s.HandleFunc("/internal/runtime/refresh", h.HandleInternalRuntimeRefresh)
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)

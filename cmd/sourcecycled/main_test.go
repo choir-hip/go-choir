@@ -244,6 +244,81 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 	}
 }
 
+func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testing.T) {
+	t.Setenv("SOURCECYCLED_VMCTL_PROXY_SOCK", "")
+	t.Setenv("VMCTL_SANDBOX_PROXY_SOCK", "")
+	t.Setenv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "universal-wire-platform")
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "vm-universal-wire-platform")
+	var gotPath, gotInternalCaller string
+	var gotPayload runtimeWebCaptureProjectionRequest
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotInternalCaller = r.Header.Get("X-Internal-Caller")
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode runtime projection request: %v", err)
+		}
+		writeSourceServiceJSON(w, http.StatusCreated, runtimeWebCaptureProjectionResponse{
+			Status:            "ok",
+			CaptureCount:      1,
+			SourceEntityCount: 1,
+			CapturedFromEdges: 1,
+			SkippedItemCount:  0,
+		})
+	}))
+	defer runtimeServer.Close()
+	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", runtimeServer.URL)
+	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
+
+	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
+	if err != nil {
+		t.Fatalf("open sourcecycled storage: %v", err)
+	}
+	defer store.Close()
+	cycleID, err := store.StartCycle(context.Background())
+	if err != nil {
+		t.Fatalf("start cycle: %v", err)
+	}
+	now := time.Date(2026, 6, 26, 18, 45, 0, 0, time.UTC)
+	item := sources.Item{
+		ID:           "srcitem-runtime-target-1",
+		SourceID:     "rss:runtime_target",
+		SourceType:   sources.SourceTypeRSS,
+		FetchID:      "fetch-runtime-target-1",
+		OriginalID:   "https://example.com/runtime-target",
+		Title:        "Runtime target story",
+		Body:         "Sourcecycled should send this item to the configured runtime projection endpoint.",
+		URL:          "https://example.com/runtime-target",
+		CanonicalURL: "https://example.com/runtime-target",
+		FetchedAt:    now,
+		ContentHash:  sources.ContentHash("Runtime target story", "Sourcecycled should send this item to the configured runtime projection endpoint.", "https://example.com/runtime-target", "https://example.com/runtime-target"),
+	}
+	if err := writeSourceItemsToObjectGraph(context.Background(), store, cycleID, []sources.Item{item}, now, "web_captures_graph_written", "source items projected to objectgraph web captures"); err != nil {
+		t.Fatalf("write source items to objectgraph: %v", err)
+	}
+	if gotPath != "/internal/runtime/objectgraph/web-captures" {
+		t.Fatalf("runtime projection path = %q, want /internal/runtime/objectgraph/web-captures", gotPath)
+	}
+	if gotInternalCaller != "true" {
+		t.Fatalf("runtime projection internal caller = %q, want true", gotInternalCaller)
+	}
+	if gotPayload.OwnerID != "universal-wire-platform" || gotPayload.ComputerID != "vm-universal-wire-platform" || len(gotPayload.Items) != 1 {
+		t.Fatalf("runtime projection payload = %+v", gotPayload)
+	}
+	summary, err := store.LatestCycleSummary(context.Background())
+	if err != nil {
+		t.Fatalf("latest cycle summary: %v", err)
+	}
+	if len(summary.Events) != 1 {
+		t.Fatalf("cycle events = %d, want 1", len(summary.Events))
+	}
+	event := summary.Events[0]
+	if event.Kind != "web_captures_graph_written" ||
+		event.Metadata["objectgraph_mode"] != "runtime_api" ||
+		event.Metadata["capture_count"] != float64(1) {
+		t.Fatalf("cycle event = %+v", event)
+	}
+}
+
 func TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph(t *testing.T) {
 	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", "")
 	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")

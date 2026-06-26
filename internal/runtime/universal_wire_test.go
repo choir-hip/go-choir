@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -65,6 +66,61 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	provenanceDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "source_provenance")
 	if provenanceDiag.State != "not_applicable" || strings.Contains(strings.ToLower(provenanceDiag.Reason), "/api/agent") || strings.Contains(strings.ToLower(provenanceDiag.Reason), "/internal/") {
 		t.Fatalf("source provenance diagnostic = %+v, want safe unavailable provenance reason", provenanceDiag)
+	}
+}
+
+func TestHandleInternalSourcecycledWebCapturesProjectsReadableWireStories(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 26, 18, 40, 0, 0, time.UTC)
+	item := sources.Item{
+		ID:           "srcitem-runtime-wire-1",
+		SourceID:     "rss:test_wire",
+		SourceType:   sources.SourceTypeRSS,
+		FetchID:      "fetch-runtime-wire-1",
+		OriginalID:   "https://example.com/runtime-wire",
+		Title:        "Runtime-projected sourcecycled story",
+		Body:         "Runtime endpoint should project this sourcecycled item into the platform objectgraph.",
+		URL:          "https://example.com/runtime-wire",
+		CanonicalURL: "https://example.com/runtime-wire",
+		FetchedAt:    now,
+		ContentHash:  sources.ContentHash("Runtime-projected sourcecycled story", "Runtime endpoint should project this sourcecycled item into the platform objectgraph.", "https://example.com/runtime-wire", "https://example.com/runtime-wire"),
+	}
+	body, err := json.Marshal(internalSourcecycledWebCapturesRequest{
+		OwnerID: universalWirePlatformOwnerID(),
+		Items:   []sources.Item{item},
+		Now:     now.Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/internal/runtime/objectgraph/web-captures", strings.NewReader(string(body)))
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalSourcecycledWebCaptures(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST /internal/runtime/objectgraph/web-captures status = %d body=%s", w.Code, w.Body.String())
+	}
+	var projection internalSourcecycledWebCapturesResponse
+	if err := json.NewDecoder(w.Body).Decode(&projection); err != nil {
+		t.Fatalf("decode projection response: %v", err)
+	}
+	if projection.CaptureCount != 1 || projection.SourceEntityCount != 1 || projection.CapturedFromEdges != 1 {
+		t.Fatalf("projection response = %+v, want one capture/source/edge", projection)
+	}
+
+	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "reader-1")
+	if storiesW.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", storiesW.Code, storiesW.Body.String())
+	}
+	var stories universalWireStoriesResponse
+	if err := json.NewDecoder(storiesW.Body).Decode(&stories); err != nil {
+		t.Fatalf("decode stories: %v", err)
+	}
+	if stories.Source != "universal-wire-web-capture-graph" || len(stories.Stories) != 1 {
+		t.Fatalf("stories source/count = %q/%d, want graph fallback with one story", stories.Source, len(stories.Stories))
+	}
+	if stories.Stories[0].Headline != "Runtime-projected sourcecycled story" {
+		t.Fatalf("headline = %q", stories.Stories[0].Headline)
 	}
 }
 
