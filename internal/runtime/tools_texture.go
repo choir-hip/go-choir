@@ -803,29 +803,132 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 }
 
 func textureToolSourceGraphWriteSet(rev types.Revision, materialized materializedTextureEdit, rec *types.RunRecord) (store.TextureSourceGraphWriteSet, error) {
-	raw := strings.TrimSpace(string(materialized.SourceEntities))
-	if raw == "" || raw == "null" || raw == "[]" {
-		return store.TextureSourceGraphWriteSet{}, nil
-	}
 	var entities []texturedoc.SourceEntity
-	if err := json.Unmarshal(materialized.SourceEntities, &entities); err != nil {
-		return store.TextureSourceGraphWriteSet{}, fmt.Errorf("decode structured source entities: %w", err)
+	rawEntities := strings.TrimSpace(string(materialized.SourceEntities))
+	if rawEntities != "" && rawEntities != "null" {
+		if err := json.Unmarshal(materialized.SourceEntities, &entities); err != nil {
+			return store.TextureSourceGraphWriteSet{}, fmt.Errorf("decode structured source entities: %w", err)
+		}
 	}
 	records := make([]store.TextureSourceEntityGraphRecord, 0, len(entities))
-	seen := map[string]bool{}
+	recordsByLegacyID := make(map[string]store.TextureSourceEntityGraphRecord, len(entities))
+	recordsByGraphKey := map[string]store.TextureSourceEntityGraphRecord{}
 	for i, entity := range entities {
 		record, err := textureToolSourceEntityGraphRecord(rev, entity, rec)
 		if err != nil {
 			return store.TextureSourceGraphWriteSet{}, fmt.Errorf("source_entities[%d]: %w", i, err)
 		}
 		key := record.CanonicalID + "\x00" + record.VersionID
-		if seen[key] {
+		if existing, ok := recordsByGraphKey[key]; ok {
+			if legacyID := strings.TrimSpace(record.LegacySourceEntityID); legacyID != "" {
+				recordsByLegacyID[legacyID] = existing
+			}
 			continue
 		}
-		seen[key] = true
+		recordsByGraphKey[key] = record
 		records = append(records, record)
+		if legacyID := strings.TrimSpace(record.LegacySourceEntityID); legacyID != "" {
+			recordsByLegacyID[legacyID] = record
+		}
 	}
-	return store.TextureSourceGraphWriteSet{SourceEntities: records}, nil
+	graph := store.TextureSourceGraphWriteSet{SourceEntities: records}
+	rawBodyDoc := strings.TrimSpace(string(materialized.BodyDoc))
+	if rawBodyDoc == "" || rawBodyDoc == "null" {
+		return graph, nil
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(materialized.BodyDoc, &doc); err != nil {
+		return store.TextureSourceGraphWriteSet{}, fmt.Errorf("decode structured body_doc: %w", err)
+	}
+	refs, err := textureToolSourceRefGraphRecords(rev, doc, recordsByLegacyID, rec)
+	if err != nil {
+		return store.TextureSourceGraphWriteSet{}, err
+	}
+	graph.SourceRefs = refs
+	return graph, nil
+}
+
+func textureToolSourceRefGraphRecords(rev types.Revision, doc texturedoc.StructuredTextureDoc, entitiesByLegacyID map[string]store.TextureSourceEntityGraphRecord, rec *types.RunRecord) ([]store.TextureSourceRefGraphRecord, error) {
+	var refs []store.TextureSourceRefGraphRecord
+	var walk func(node texturedoc.Node, path string) error
+	walk = func(node texturedoc.Node, path string) error {
+		if node.Type == "source_ref" {
+			ref, err := textureToolSourceRefGraphRecord(rev, node, path, entitiesByLegacyID, rec)
+			if err != nil {
+				return err
+			}
+			refs = append(refs, ref)
+		}
+		for i, child := range node.Content {
+			if err := walk(child, fmt.Sprintf("%s.content[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(doc.Doc, "doc"); err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
+func textureToolSourceRefGraphRecord(rev types.Revision, node texturedoc.Node, path string, entitiesByLegacyID map[string]store.TextureSourceEntityGraphRecord, rec *types.RunRecord) (store.TextureSourceRefGraphRecord, error) {
+	nodeID := textureNodeStringAttr(node, "id")
+	sourceEntityID := textureNodeStringAttr(node, "source_entity_id")
+	if sourceEntityID == "" {
+		return store.TextureSourceRefGraphRecord{}, fmt.Errorf("source_ref at %s has no source_entity_id", path)
+	}
+	entity, ok := entitiesByLegacyID[sourceEntityID]
+	if !ok {
+		return store.TextureSourceRefGraphRecord{}, fmt.Errorf("source_ref at %s source_entity_id %q does not resolve to a graph source entity version", path, sourceEntityID)
+	}
+	displayMode := textureNodeStringAttr(node, "display_mode")
+	if displayMode == "" {
+		displayMode = store.TextureSourceRefDisplayNumbered
+	}
+	occurrenceKey := path + "\x00" + nodeID + "\x00" + sourceEntityID
+	canonicalID, err := store.BuildTextureSourceRefCanonicalID(rev.OwnerID, rev.RevisionID, occurrenceKey)
+	if err != nil {
+		return store.TextureSourceRefGraphRecord{}, err
+	}
+	pathHash := objectgraph.SHA256([]byte(path))
+	metadata := map[string]any{
+		"schema_version":             "choir.source_ref.v1",
+		"doc_id":                     rev.DocID,
+		"texture_revision_id":        rev.RevisionID,
+		"body_node_id":               nodeID,
+		"body_node_path_hash":        pathHash,
+		"legacy_source_entity_id":    sourceEntityID,
+		"source_entity_canonical_id": entity.CanonicalID,
+		"source_entity_version_id":   entity.VersionID,
+		"display_mode":               displayMode,
+		"citation_state":             "cited",
+		"texture_parent_revision_id": rev.ParentRevisionID,
+	}
+	if rec != nil {
+		if runID := strings.TrimSpace(rec.RunID); runID != "" {
+			metadata["created_run_id"] = runID
+		}
+	}
+	normalized, err := objectgraph.NormalizeMetadata(metadata)
+	if err != nil {
+		return store.TextureSourceRefGraphRecord{}, err
+	}
+	return store.TextureSourceRefGraphRecord{
+		CanonicalID:             canonicalID,
+		OwnerID:                 rev.OwnerID,
+		DocID:                   rev.DocID,
+		TextureRevisionID:       rev.RevisionID,
+		BodyNodeID:              nodeID,
+		BodyNodePathHash:        pathHash,
+		LegacySourceEntityID:    sourceEntityID,
+		SourceEntityCanonicalID: entity.CanonicalID,
+		SourceEntityVersionID:   entity.VersionID,
+		DisplayMode:             displayMode,
+		CitationState:           "cited",
+		Metadata:                normalized,
+		CreatedAt:               rev.CreatedAt,
+	}, nil
 }
 
 func textureToolSourceEntityGraphRecord(rev types.Revision, entity texturedoc.SourceEntity, rec *types.RunRecord) (store.TextureSourceEntityGraphRecord, error) {

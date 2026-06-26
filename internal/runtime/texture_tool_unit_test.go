@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -448,6 +449,106 @@ func TestTextureToolSourceGraphUsesTargetIdentityNotGeneratedLegacyID(t *testing
 	}
 }
 
+func TestTextureToolSourceGraphWritesSourceRefEdgesPinnedToRevisionAndSourceVersion(t *testing.T) {
+	bodyDoc, sourceEntities := structuredTextureToolPayload(t)
+	rev := types.Revision{
+		RevisionID:       "rev-source-ref-edges",
+		DocID:            "doc-source-ref-edges",
+		OwnerID:          "user-1",
+		ParentRevisionID: "rev-base",
+		CreatedAt:        time.Now().UTC().Truncate(time.Millisecond),
+	}
+	graph, err := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+	}, &types.RunRecord{RunID: "run-source-ref-edges"})
+	if err != nil {
+		t.Fatalf("textureToolSourceGraphWriteSet: %v", err)
+	}
+	if len(graph.SourceEntities) != 1 {
+		t.Fatalf("source graph entities len = %d, want 1", len(graph.SourceEntities))
+	}
+	if len(graph.SourceRefs) != 1 {
+		t.Fatalf("source graph refs len = %d, want 1: %#v", len(graph.SourceRefs), graph.SourceRefs)
+	}
+	entity := graph.SourceEntities[0]
+	ref := graph.SourceRefs[0]
+	if ref.LegacySourceEntityID != "src-web" || ref.BodyNodeID != "ref-1" {
+		t.Fatalf("source ref legacy/body identity = %#v, want src-web/ref-1", ref)
+	}
+	if ref.SourceEntityCanonicalID != entity.CanonicalID || ref.SourceEntityVersionID != entity.VersionID {
+		t.Fatalf("source ref pins %s/%s, want %s/%s", ref.SourceEntityCanonicalID, ref.SourceEntityVersionID, entity.CanonicalID, entity.VersionID)
+	}
+	if ref.DisplayMode != store.TextureSourceRefDisplayNumbered || ref.CitationState != "cited" {
+		t.Fatalf("source ref mode/state = %s/%s", ref.DisplayMode, ref.CitationState)
+	}
+	if ref.BodyNodePathHash == "" || !strings.HasPrefix(ref.BodyNodePathHash, "sha256:") {
+		t.Fatalf("body node path hash = %q, want sha256 hash", ref.BodyNodePathHash)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
+		t.Fatalf("unmarshal source ref metadata: %v", err)
+	}
+	if meta["source_entity_canonical_id"] != entity.CanonicalID || meta["source_entity_version_id"] != entity.VersionID || meta["created_run_id"] != "run-source-ref-edges" {
+		t.Fatalf("source ref metadata missing pin/run evidence: %#v", meta)
+	}
+}
+
+func TestPatchTextureSourceRefFailureDoesNotAdvanceDocumentHead(t *testing.T) {
+	s, _ := textureToolCommitRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	doc := types.Document{DocID: "doc-source-ref-failure", OwnerID: "user-1", Title: "Source Ref Failure", CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	base := plainTextureToolRevision(t, "Base")
+	base.RevisionID = "rev-source-ref-failure-base"
+	base.DocID = doc.DocID
+	base.OwnerID = doc.OwnerID
+	base.CreatedAt = now
+	if err := s.CreateRevision(ctx, base); err != nil {
+		t.Fatalf("CreateRevision base: %v", err)
+	}
+	bodyDoc, sourceEntities := structuredTextureToolPayload(t)
+	rev := types.Revision{
+		RevisionID:       "rev-source-ref-failure-next",
+		DocID:            doc.DocID,
+		OwnerID:          doc.OwnerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "appagent",
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
+		ParentRevisionID: base.RevisionID,
+		CreatedAt:        now.Add(time.Second),
+	}
+	graph, err := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntities,
+	}, &types.RunRecord{RunID: "run-source-ref-failure"})
+	if err != nil {
+		t.Fatalf("textureToolSourceGraphWriteSet: %v", err)
+	}
+	if len(graph.SourceRefs) != 1 {
+		t.Fatalf("source refs len = %d, want 1", len(graph.SourceRefs))
+	}
+	graph.SourceEntities = nil
+	err = s.CreateRevisionWithSourceGraph(ctx, rev, graph)
+	if err == nil || !strings.Contains(err.Error(), "missing source entity version") {
+		t.Fatalf("CreateRevisionWithSourceGraph error = %v, want missing source entity version", err)
+	}
+	gotDoc, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
+	if err != nil {
+		t.Fatalf("GetDocument: %v", err)
+	}
+	if gotDoc.CurrentRevisionID != base.RevisionID {
+		t.Fatalf("current_revision_id = %q, want unchanged base %q", gotDoc.CurrentRevisionID, base.RevisionID)
+	}
+	if _, err := s.GetRevision(ctx, rev.RevisionID, doc.OwnerID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetRevision after failed graph write = %v, want ErrNotFound", err)
+	}
+}
+
 func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing.T) {
 	s, rt := textureToolCommitRuntime(t)
 	ctx := context.Background()
@@ -543,6 +644,16 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	}
 	if graphEntities[0].CanonicalID != expectedCanonicalID || graphEntities[0].LegacySourceEntityID != "src-web" {
 		t.Fatalf("graph source entity = %#v, want target-derived canonical ID and legacy src-web", graphEntities[0])
+	}
+	graphRefs, err := s.ListTextureSourceRefsForRevision(ctx, doc.OwnerID, doc.DocID, appRev.RevisionID)
+	if err != nil {
+		t.Fatalf("ListTextureSourceRefsForRevision: %v", err)
+	}
+	if len(graphRefs) != 1 {
+		t.Fatalf("graph source refs len = %d, want 1: %#v", len(graphRefs), graphRefs)
+	}
+	if graphRefs[0].SourceEntityCanonicalID != graphEntities[0].CanonicalID || graphRefs[0].SourceEntityVersionID != graphEntities[0].VersionID {
+		t.Fatalf("graph source ref = %#v, want pin to graph entity %#v", graphRefs[0], graphEntities[0])
 	}
 	meta := decodeRevisionMetadata(appRev.Metadata)
 	for _, key := range []string{"source_entities", "media_source_refs", "source_ref_normalization", "citations_json"} {
