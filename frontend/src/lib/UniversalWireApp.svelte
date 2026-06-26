@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte';
+  import { sourceEntityLaunchPayload } from './texture-source-launcher';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -109,6 +110,111 @@
       .filter(Boolean);
   }
 
+  function stringValue(value) {
+    return String(value || '').trim();
+  }
+
+  function firstString(...values) {
+    for (const value of values) {
+      const normalized = stringValue(value);
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+
+  function firstOpenableManifestItem(story) {
+    const lead = Array.isArray(story?.manifest?.lead) ? story.manifest.lead : [];
+    return lead.find((item) => firstString(item?.canonical_url, item?.content_id, item?.source_id, item?.id)) || null;
+  }
+
+  function storySourceControls(story) {
+    const item = firstOpenableManifestItem(story);
+    if (!item) return [];
+    const openSurface = firstString(item.open_surface, 'source');
+    const controls = [{
+      kind: 'source',
+      label: 'Open source',
+      sourceItem: item,
+      openSurface,
+    }];
+    const liveOpenSurface = firstString(item.live_open_surface);
+    if (liveOpenSurface && liveOpenSurface !== openSurface) {
+      controls.push({
+        kind: 'live',
+        label: 'Web Lens',
+        sourceItem: item,
+        openSurface: liveOpenSurface,
+      });
+    }
+    return controls;
+  }
+
+  function wireSourceItemEntity(item, openSurface = '') {
+    if (!item) return null;
+    const canonicalURL = firstString(item.canonical_url);
+    const sourceKind = firstString(item.source_kind, canonicalURL ? 'web_url' : '', item.object_kind, 'source');
+    const targetKind = firstString(
+      item.target_kind,
+      item.content_id ? 'content_item' : '',
+      item.source_id ? 'source_service_item' : '',
+      canonicalURL ? 'web_url' : '',
+      sourceKind,
+    );
+    const entityID = firstString(item.id, item.canonical_id, item.content_id, item.source_id, canonicalURL);
+    if (!entityID) return null;
+    const title = firstString(item.title, canonicalURL, entityID);
+    const target = {
+      kind: targetKind,
+      target_kind: targetKind,
+      id: firstString(item.content_id, item.source_id, item.id),
+      content_id: firstString(item.content_id),
+      item_id: firstString(item.source_id),
+      canonical_url: canonicalURL,
+      url: canonicalURL,
+      uri: canonicalURL,
+    };
+    const readerArtifactState = firstString(item.reader_artifact_state);
+    const entity = {
+      entity_id: entityID,
+      source_entity_id: entityID,
+      kind: sourceKind,
+      label: title,
+      target,
+      display: {
+        title,
+        label: title,
+        open_surface: firstString(openSurface, item.open_surface, 'source'),
+      },
+      evidence: {
+        state: 'available',
+        open_surface: firstString(openSurface, item.open_surface, 'source'),
+        reader_artifact_state: readerArtifactState,
+      },
+      provenance: {
+        created_from: 'universal_wire',
+        source: 'universal_wire_manifest',
+      },
+      graph: {
+        object_kind: firstString(item.object_kind),
+        canonical_id: firstString(item.canonical_id),
+        version_id: firstString(item.version_id),
+        content_hash: firstString(item.content_hash),
+      },
+    };
+    if (readerArtifactState) {
+      entity.reader_snapshot_status = { state: readerArtifactState };
+    }
+    return entity;
+  }
+
+  function openStorySource(story, sourceItem, openSurface = '') {
+    if (!story || !sourceItem) return;
+    selectedStoryId = story.id;
+    const entity = wireSourceItemEntity(sourceItem, openSurface);
+    const payload = sourceEntityLaunchPayload(entity);
+    if (payload) dispatch('launchapp', payload);
+  }
+
   function launchTexture({ title, content, createdFrom, sourcePath = '', docId = '', createInitialVersion = false, relatedTextures = [] }) {
     dispatch('launchapp', {
       appId: 'texture',
@@ -184,6 +290,21 @@
                 {story.headline}
               </button>
               <p class="dek">{story.dek}</p>
+              {#if storySourceControls(story).length}
+                <div class="source-actions" data-universal-wire-source-actions>
+                  {#each storySourceControls(story) as control}
+                    <button
+                      type="button"
+                      class="source-action"
+                      data-universal-wire-open-source={control.kind === 'source' ? '' : undefined}
+                      data-universal-wire-open-live-source={control.kind === 'live' ? '' : undefined}
+                      on:click={() => openStorySource(story, control.sourceItem, control.openSurface)}
+                    >
+                      {control.label}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
               <p class="projection" data-universal-wire-story-reader>{story.projections?.['wire-style']}</p>
               <div class="claims" data-universal-wire-claims>
                 {#each (story.claims || []).slice(0, 2) as claim}
@@ -360,6 +481,33 @@
   .dek {
     color: var(--choir-text-muted);
     margin-bottom: 13px;
+  }
+
+  .source-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+  }
+
+  .source-action {
+    min-height: 30px;
+    padding: 4px 10px;
+    border: 1px solid var(--choir-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--choir-text-secondary);
+    cursor: pointer;
+    font: 700 0.72rem/1 var(--choir-font-ui);
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .source-action:hover,
+  .source-action:focus-visible {
+    border-color: var(--choir-border-strong);
+    color: var(--choir-text-accent);
+    outline: none;
   }
 
   .projection {

@@ -178,6 +178,125 @@ test('Universal Wire retries authenticated story loads after transient route fai
   }
 });
 
+test('Universal Wire opens graph capture sources through Source Viewer by default and Web Lens explicitly', async ({ page }) => {
+  const sourceURL = 'https://example.com/o4-wire-capture-source';
+  const graphCaptureStory = {
+    id: 'graph-capture-wire-story',
+    story_texture_doc_id: '',
+    headline: 'Graph capture card reaches the Wire',
+    dek: 'A graph-backed web capture appears as a real Universal Wire card.',
+    freshness: 'captured 4 min ago',
+    prominence: 91,
+    tension: 'capture projection',
+    changeState: 'graph fallback',
+    nodeTone: 'source-backed',
+    related: [],
+    manifest: {
+      lead: [{
+        id: 'capture-source-handle',
+        title: 'O4 graph capture source',
+        standing: 'Capture projection, not a Texture publication citation.',
+        role: 'lead',
+        canonical_url: sourceURL,
+        source_kind: 'web_url',
+        target_kind: 'web_url',
+        object_kind: 'choir.web_capture',
+        canonical_id: 'choir.web_capture:user-1:o4-wire-capture-source',
+        version_id: 'ver-o4-wire-capture-source',
+        content_hash: 'sha256:o4-wire-capture-source',
+        open_surface: 'source',
+        live_open_surface: 'web_lens',
+        reader_artifact_state: 'reader_snapshot_ready',
+      }],
+      supporting: [],
+      contrary: [],
+      context: [],
+    },
+    claims: ['The card carries graph source identity without claiming a native Texture source_ref.'],
+    projections: {
+      'wire-style': 'Universal Wire renders the graph-backed capture projection while preserving source-opening policy.',
+    },
+  };
+
+  await page.route('**/auth/session', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authenticated: true,
+        user: {
+          id: 'user-o4-wire-source-proof',
+          email: 'o4-wire-source-proof@example.com',
+        },
+      }),
+    });
+  });
+  await page.route('**/api/shell/bootstrap**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sandbox_id: 'sandbox-dev' }),
+    });
+  });
+  await page.route('**/api/desktop/state**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, updated_at: '2026-06-26T00:00:00Z' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ owner_id: 'user-o4-wire-source-proof', windows: [], active_window_id: '' }),
+    });
+  });
+  await page.route('**/api/browser/capabilities**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ available: false, mode: 'test_no_backend' }),
+    });
+  });
+  await page.route('**/api/universal-wire/stories', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ source: 'universal-wire-web-capture-fallback', stories: [graphCaptureStory] }),
+    });
+  });
+
+  await page.goto(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173');
+  await expect(page.locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')).toBeVisible({ timeout: 10000 });
+  await openDeskApp(page, 'universal-wire');
+
+  const app = page.locator('[data-universal-wire-app]');
+  await expect(app).toBeVisible();
+  await expect(app).toHaveAttribute('data-universal-wire-data-source', 'universal-wire-web-capture-fallback');
+  const story = app.locator('[data-universal-wire-story]').first();
+  await expect(story).toContainText('Graph capture card reaches the Wire');
+  await expect(story.locator('[data-universal-wire-source-actions]')).toBeVisible();
+  await expect(story.locator('[data-universal-wire-open-source]')).toHaveText('Open source');
+  await expect(story.locator('[data-universal-wire-open-live-source]')).toHaveText('Web Lens');
+  await expect(story.locator('[data-texture-source-ref]')).toHaveCount(0);
+
+  await story.locator('[data-universal-wire-open-source]').click();
+  const sourceWindow = page.locator('[data-content-viewer]').last();
+  await expect(sourceWindow).toBeVisible({ timeout: 10000 });
+  await expect(sourceWindow).toHaveAttribute('data-source-reader-mode', 'true');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText('O4 graph capture source');
+  await expect(sourceWindow.locator('[data-content-reader-markdown]')).toContainText(sourceURL);
+  await expect(page.locator('[data-browser-app]')).toHaveCount(0);
+
+  await page.locator('[data-window-app-id="universal-wire"]').last().click({ position: { x: 24, y: 24 } });
+  await story.locator('[data-universal-wire-open-live-source]').click();
+  const browserWindow = page.locator('[data-browser-app]').last();
+  await expect(browserWindow).toBeVisible({ timeout: 10000 });
+  await expect(browserWindow.locator('[data-browser-url-input]')).toHaveValue(sourceURL);
+});
+
 test('Universal Wire deletes detritus source chronology and bespoke style controls', async ({ page }) => {
   await page.goto(BASE_URL);
   await openDeskApp(page, 'universal-wire');
