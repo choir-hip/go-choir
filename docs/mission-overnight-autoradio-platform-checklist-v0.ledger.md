@@ -1704,3 +1704,51 @@ Evidence boundary: documentation/mission-state update only. No new
 source-open browser proof, O3-complete, main, staging, product acceptance,
 deploy, Qdrant projection, publication/export, auth/session, gateway/provider,
 graph-first enforcement, promotion, or rollback claim.
+
+## 2026-06-26 - O3 Phase 6 Worker Launched
+
+Claim: O3 Phase 6 now has a live implementation worker for source-open
+browser/product proof from graph-backed Texture revision wrappers.
+
+Move: create a project worktree thread from
+`preserve/o0-autoradio-mission-state-2026-06-26` at `6b7ef24d`, assign the
+bounded proof slice, then reconnect the pending worktree handle to a concrete
+thread id and pin/name it.
+
+Expected Delta V: 0 until the worker returns accepted product/browser evidence
+and an independent verifier accepts it.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Worker pending worktree handle:
+  `local:c0f12b0c-2845-46eb-bb84-8f135082ec9c`.
+- Resolved worker thread:
+  `019f032c-7960-7563-8b75-c8a681a388f8`
+  (`O3 worker - Source Open Phase 6`).
+- Worker cwd: `/Users/wiz/.codex/worktrees/5e10/go-choir`.
+- Worker status at launch readback: `active`; thread pinned.
+- Work item id: `O3-phase6-source-open-browser-product-proof`.
+- Assignment mutation class: yellow for proof/tests only, orange if frontend or
+  runtime behavior must change.
+- Assignment conjecture delta: Phase 5 helper derivation must survive the
+  actual Texture UI/source-open path without legacy `source_entities`, using
+  graph wrapper fields from the revision DTO shape.
+- Assignment admissible evidence: focused browser/product test proving native
+  `source_ref` rendering and Source Viewer/Web Lens launch from
+  `source_entity_objects` plus `source_refs`, focused frontend command results,
+  `git diff --check`, dirty-path classification, non-claims, and rollback refs.
+- Verifier timing: independent verifier thread intentionally deferred until the
+  worker has a final report/artifact, avoiding the stale launch-order blocker
+  observed in Phase 5.
+
+Evidence boundary: orchestration/thread launch only. No Phase 6 source-open
+browser proof, verifier acceptance, incorporation, O3-complete, main, staging,
+product acceptance, deploy, Qdrant projection, publication/export,
+auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
+claim.
+
+Open edge: read worker thread `019f032c-7960-7563-8b75-c8a681a388f8` when it
+finishes, then create a verifier thread against the actual diff/report before
+incorporating or claiming Phase 6.

@@ -387,8 +387,9 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. This update is green and only narrows the thread-tool
-capability edge.
+session artifacts. The current Phase 6 launch is green orchestration; the worker
+assignment is yellow if it only adds browser proof/tests and orange if it must
+change frontend/runtime behavior.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -625,12 +626,23 @@ warnings only; and `git diff --check HEAD~1..HEAD`. Root proof artifacts
 `frontend/test-results/` and `frontend/dist/` were removed after validation, and
 the tracked worktree was clean.
 
-next move: launch or execute a bounded O3 Phase 6 source-open browser/product
-proof from the accepted frontend graph-wrapper read path. The slice should prove
-that a Texture revision carrying `source_entity_objects` plus `source_refs`, and
-no legacy `source_entities`, renders a native `source_ref` and opens the
-existing Source Viewer/Web Lens surface through the product UI. No O3-complete,
-main, staging, product acceptance, deploy, Qdrant projection, publication/export,
+O3 Phase 6 source-open/browser-product proof worker has been launched. Pending
+worktree handle `local:c0f12b0c-2845-46eb-bb84-8f135082ec9c` resolved to
+thread `019f032c-7960-7563-8b75-c8a681a388f8` (`O3 worker - Source Open Phase
+6`) in `/Users/wiz/.codex/worktrees/5e10/go-choir`; the thread is pinned.
+Assignment: prove through a focused browser/product UI path that a Texture
+revision carrying `source_entity_objects` plus `source_refs`, and no legacy
+`source_entities`, renders a native `source_ref` and opens the existing Source
+Viewer/Web Lens surface. The verifier is intentionally deferred until the worker
+has a final report, avoiding the stale launch-order blocker encountered in Phase
+5.
+
+next move: reconnect to Phase 6 worker thread
+`019f032c-7960-7563-8b75-c8a681a388f8`; if it reports a committed proof/fix,
+create an independent verifier thread against that artifact before
+incorporation. If it reports a reliable new behavior problem, require Problem
+Documentation First before any fix. No Phase 6 proof, O3-complete, main,
+staging, product acceptance, deploy, Qdrant projection, publication/export,
 auth/session, gateway/provider, graph-first enforcement, promotion, or rollback
 claim exists yet.
 
