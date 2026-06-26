@@ -3619,3 +3619,60 @@ auth/session renewal, promotion/rollback, or run-acceptance claim.
 Open edge: resolve pending verifier handle
 `local:fda573a5-c918-4c70-9b9e-4f4e6b843960` into a readable thread, title/pin
 it, and read the verdict when complete.
+
+## 2026-06-26 - O4 Phase 6 Verifier Thread Resolution
+
+Claim: O4 Phase 6 now has a readable independent verifier thread in progress.
+This is not verifier acceptance and not root incorporation.
+
+Move: read the worker's required final report, resolve the queued verifier
+handle into a thread id, title/pin the verifier thread, and record current
+verifier progress.
+
+Expected Delta V: 0. Thread-tool resolution and in-progress verifier checks do
+not close the authenticated Universal Wire acceptance obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Worker final report thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Worker branch/HEAD:
+  `codex/o4-phase6-authenticated-universal-wire-product-api-proof` at
+  `e406ca23 test O4 sourcecycled Wire API graph path`.
+- Worker changed file:
+  `cmd/sourcecycled/main_test.go`.
+- Worker final-report commands:
+  invalid first runtime-package placement failed because it imported
+  `internal/cycle` and created a Go test import cycle, then was removed;
+  `nix develop -c go test ./cmd/sourcecycled -run 'Test.*ObjectGraph|Test.*RuntimeStore|Test.*WebCapture' -count=1`
+  completed rather than hung; focused relocated sourcecycled test passed;
+  focused Universal Wire runtime handler tests passed; focused cycle graph
+  projection test passed; `git diff --check` passed.
+- Worker dirty-path classification:
+  clean worktree after commit, with no intentional uncommitted source,
+  durable docs/evidence, temporary proof output, generated artifact, or
+  unrelated WIP.
+- Resolved verifier thread:
+  `019f03c2-88b6-7481-b570-79190baeeb0b`
+  (`O4 verifier - Authenticated Wire API Proof`).
+- Verifier cwd:
+  `/Users/wiz/.codex/worktrees/d9c6/go-choir`.
+- Resolved-from pending handle:
+  `local:fda573a5-c918-4c70-9b9e-4f4e6b843960`.
+- Verifier status:
+  active. The verifier has read the worker report and candidate diff, found the
+  candidate diff to be exactly one test file, and reported that all three
+  focused checks passed while it performs final source/route inspection.
+
+Evidence boundary: worker final report plus readable verifier-thread progress
+only. No verifier verdict, root incorporation, main push, PR, CI, deploy,
+staging product acceptance, Texture native `source_ref`, publication/export,
+Qdrant, provider/gateway, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: read the verifier verdict. If accepted, consider root incorporation
+of `e406ca23` followed by root-focused reruns and a separate Parallax
+settlement update; if not accepted, record the finding before any repair.
