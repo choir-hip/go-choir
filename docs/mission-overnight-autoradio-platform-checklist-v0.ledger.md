@@ -840,6 +840,53 @@ Open edge: resolve the pending worker thread id if available, read worker and
 verifier results, then either incorporate an accepted worker diff or record the
 precise blocker as `open_handoff`.
 
+## 2026-06-26 - O3 Phase 3 Worker Materialized
+
+Claim: The O3 Phase 3 pending worktree handle has resolved to a live Codex
+worker thread, and the earlier verifier `blocked` verdict is stale
+launch-order evidence rather than an implementation rejection.
+
+Move: reconnect pending worktree launch evidence through current Codex thread
+tools, title/pin the worker, and update the Parallax State with the resolved
+thread id, cwd, checkpoint commit, verifier state, and next follow-up.
+
+Expected Delta V: 0 until the worker finishes, the verifier returns `accept`,
+and accepted commits are incorporated into the orchestration branch.
+
+Actual Delta V: 0. Current V is 37.
+
+Receipts:
+
+- Worker pending worktree handle
+  `local:497e4e88-d21d-463d-9f2e-bcaac91c6482` materialized as thread
+  `019f02d4-4877-7f82-89bd-ac87addc7bb3`.
+- Worker title set to `O3 worker - Source Ref Phase 3` and pinned.
+- Worker cwd: `/Users/wiz/.codex/worktrees/7935/go-choir`.
+- Worker worktree HEAD when inspected: `b0ad6de1 checkpoint O3 phase3 texture
+  source ref edges`, with parent `17e75669 record O3 phase2 acceptance
+  evidence`.
+- Worker thread status when inspected: `active`; no final report,
+  implementation commit list, full test report, or dirty-path classification
+  exists yet.
+- Verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` previously returned
+  `blocked` because it could not find a resolved worker thread/final report.
+  That verdict was correct at the time but is now stale because the worker
+  later materialized.
+- Live thread-tool discovery confirms the available Codex app primitives:
+  `list_projects`, `create_thread`, `read_thread`, `list_threads`,
+  `send_message_to_thread`, `handoff_thread`, `get_handoff_status`,
+  `set_thread_title`, `set_thread_pinned`, and `set_thread_archived`.
+
+Evidence boundary: thread resolution and docs-checkpoint visibility only. No
+O3 Phase 3 implementation acceptance, verifier acceptance, root incorporation,
+API behavior, source-open behavior, Qdrant projection, main, staging, product,
+deployment, or landing claim.
+
+Open edge: wait for worker thread `019f02d4-4877-7f82-89bd-ac87addc7bb3` to
+finish, then send verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` a
+follow-up with the resolved worker id/cwd, docs checkpoint, implementation
+commits, exact tests, dirty-path classification, and non-claims.
+
 ## 2026-06-26 - O3 Phase 2 Worker Resolved, Verifier Blocked Pending Final Report
 
 Claim: The O3 Phase 2 worker thread resolved from its pending worktree handle

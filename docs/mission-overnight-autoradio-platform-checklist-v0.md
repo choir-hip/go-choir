@@ -84,6 +84,23 @@ Required thread primitives and current semantics:
   orchestration-critical threads, and archive settled or superseded threads only
   after their evidence is recorded.
 
+Observed Codex app behavior on 2026-06-26:
+
+- Worktree `create_thread` may return a `pendingWorktreeId` before the actual
+  thread id is visible. Treat the pending handle as a launch receipt, not a
+  worker identity. Reconnect with `list_threads` by cwd, title/work-item text,
+  or the pending handle, then record the resolved thread id, cwd, branch/HEAD,
+  and title/pin state once materialized.
+- A verifier may correctly return `blocked` if it runs before the worker thread
+  or final report exists. If the worker later materializes, record the earlier
+  verifier result as stale launch-order evidence and send a follow-up with the
+  resolved worker id, cwd, commits, diff/test scope, and non-claims.
+- Tool discovery is progressive. A broad thread-tool search exposed
+  `list_projects`, `create_thread`, `read_thread`, `list_threads`,
+  `send_message_to_thread`, `handoff_thread`, and title/pin/archive controls;
+  a targeted handoff search exposed `get_handoff_status`. Future orchestration
+  should search for the specific thread primitive before declaring it absent.
+
 If these tools are not exposed in the executing environment, the orchestration
 thread must record that as a capability blocker. It may still perform local
 planning or a single-thread checkpoint, but it must not claim a thread-native
@@ -483,16 +500,25 @@ claims. Evidence class is branch-level code/test/verifier acceptance only; no
 main, staging, product, deployment, O3-complete, source ref edge, public
 producer, source-open, Qdrant, or graph-first read claim exists yet.
 
-next move: Resolve the O3 Phase 3 worker thread id if pending worktree
-`local:497e4e88-d21d-463d-9f2e-bcaac91c6482` has materialized, then wait for
-its final report. Phase 3 worker assignment:
+next move: Wait for O3 Phase 3 worker thread
+`019f02d4-4877-7f82-89bd-ac87addc7bb3` (`O3 worker - Source Ref Phase 3`) in
+`/Users/wiz/.codex/worktrees/7935/go-choir` to finish. The earlier pending
+worktree handle `local:497e4e88-d21d-463d-9f2e-bcaac91c6482` has
+materialized. The worker has created docs checkpoint commit `b0ad6de1`
+(`checkpoint O3 phase3 texture source ref edges`) and is still active at the
+time of this state update. The first verifier pass
+`019f02d4-80e7-7c73-8085-bc1c52beebf2` returned `blocked` before the worker
+thread was discoverable; treat that as stale launch-order evidence, not a
+Phase 3 rejection. After the worker final report, send the verifier a follow-up
+with the resolved worker id/cwd, docs checkpoint, implementation commits,
+tests, dirty-path classification, and non-claims. Phase 3 worker assignment:
 `O3-phase3-texture-tool-source-ref-edges`, same `patch_texture` /
 `rewrite_texture` path, resolve body `source_ref` nodes to graph source entity
 versions and write pinned `choir.source_ref` records transactionally, with a
 failure test proving document head does not advance if a ref cannot resolve.
 Verifier thread `019f02d4-80e7-7c73-8085-bc1c52beebf2` (`O3 verifier - Source
-Ref Phase 3`) is live and pinned; it must return `blocked` until the worker has
-a final report.
+Ref Phase 3`) is live and pinned; it must be reawakened only after the worker
+has a final report.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
