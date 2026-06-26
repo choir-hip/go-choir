@@ -1333,3 +1333,54 @@ Open edge: send verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b` the
 worker id/cwd, commits, exact tests, dirty-path classification, and non-claims.
 If accepted, incorporate the implementation commit into this orchestration
 branch and rerun root checks before updating the checklist state.
+
+## 2026-06-26 - O3 Phase 4 Verifier Returned Revise
+
+Claim: Independent verifier review found the Phase 4 additive wrapper candidate
+behaviorally compatible in focused checks but not ready to incorporate because
+revision-list enrichment introduces a read-path performance regression.
+
+Move: record the verifier verdict before any fix, preserving Problem
+Documentation First for the newly observed issue.
+
+Expected Delta V: 0.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Verifier thread: `019f02ed-d05e-78f1-975c-1de2df51451b`
+  (`O3 verifier - Source API Phase 4`).
+- Verdict: `revise`.
+- Finding: revision listing now enriches every revision one-by-one; each
+  enrichment calls `ListTextureSourceEntitiesForRevision`, which queries refs
+  and then scans all owner source entities. For large revision-list limits, the
+  existing read path becomes repeated graph queries plus repeated owner-wide
+  source scans.
+- Recommended repair: batch graph-wrapper reads for revision lists, or add a
+  revision-scoped store query that does not call
+  `ListTextureSourceEntities(ctx, ownerID)` per listed revision. Single-revision
+  reads can keep the current helper.
+- Verifier reran and passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity|TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase' -count=1`.
+- Verifier reran and passed:
+  `nix develop -c go test ./internal/store -run 'TestTextureSourceGraphCanonicalIDsUseSingleURLSafeSuffix|TestCreateRevisionWithSourceGraphPersistsPinnedSourceRecords|TestCreateRevisionWithSourceGraphFailureDoesNotAdvanceDocumentHead' -count=1`.
+- Verifier reran and passed:
+  `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`.
+- Verifier reran and passed: `nix develop -c go test ./internal/store -count=1`.
+- Verifier reran and passed: `git diff --check`.
+- Verifier confirmed legacy `source_entities` stays assigned unchanged, wrapper
+  fields are additive (`source_entity_objects`, `source_refs`), and no
+  frontend/source-open, Qdrant, publication/export, auth/session,
+  provider/gateway, deploy, promotion, or rollback paths were touched.
+- Worker worktree was clean at
+  `b74f5a870e93414e72e08c4fa5f5f61d6d78f1a4`.
+
+Evidence boundary: revise verdict only. No root incorporation, O3 complete,
+main, staging, product, deploy, source-open, frontend rendering, Qdrant,
+publication/export, public producer, auth/session, gateway/provider,
+graph-first enforcement, promotion, or rollback claim.
+
+Open edge: send the finding back to worker thread
+`019f02ed-7ce9-7d30-906b-f497a95ecc6d`, request a bounded repair, and rerun the
+same verifier contract after a revised worker commit.

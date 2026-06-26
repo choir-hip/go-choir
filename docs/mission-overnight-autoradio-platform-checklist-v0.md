@@ -538,13 +538,25 @@ Worker-reported checks passed:
 `nix develop -c go test ./internal/runtime -run 'TestTextureTool' -count=1`;
 `nix develop -c go test ./internal/store -count=1`; and `git diff --check`.
 
-next move: Reawaken verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
-(`O3 verifier - Source API Phase 4`) with the worker commits and tests. If it
-accepts, incorporate the accepted implementation into this orchestration branch
-and rerun the root checks. Do not claim O3 complete, main, staging, source-open
-frontend behavior, Qdrant projection, publication/export, graph-first
-enforcement, auth/session, gateway/provider, promotion, deploy, or rollback
-proof from this branch-level worker evidence.
+Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b`
+(`O3 verifier - Source API Phase 4`) returned `revise`. Rerun checks passed:
+the focused runtime duplicate/API check, focused store graph checks,
+`internal/runtime -run TestTextureTool`, full `internal/store`, and
+`git diff --check`. The blocking finding is [P2]: the Phase 4 candidate enriches
+revision listing one revision at a time, and each enrichment calls a graph read
+path that queries refs and then scans all owner source entities. At
+`limit=10000`, an existing revision-list read becomes repeated graph queries
+plus repeated owner-wide source scans.
+
+next move: Send the revise finding back to worker thread
+`019f02ed-7ce9-7d30-906b-f497a95ecc6d`. The acceptable repair is to batch
+graph-wrapper reads for revision lists or add a revision-scoped store query that
+does not call `ListTextureSourceEntities(ctx, ownerID)` per listed revision.
+Single-revision reads may keep the current helper. After a revised worker
+commit, reawaken the verifier for the same contract. Do not claim O3 complete,
+main, staging, source-open frontend behavior, Qdrant projection,
+publication/export, graph-first enforcement, auth/session, gateway/provider,
+promotion, deploy, or rollback proof from this branch-level worker evidence.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
