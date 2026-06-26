@@ -264,6 +264,61 @@ error. Fix commits come after.
 - Add deterministic canonical IDs and version IDs.
 - Add compatibility projection back to existing Texture DTOs.
 
+#### Phase 1 Worker Checkpoint: `O3-phase1-store-boundary`
+
+Decision: Phase 1 will add Texture-store source tables behind an
+objectgraph-compatible contract, rather than extending the generic
+`internal/objectgraph` SQLite store into the Texture/Dolt transaction boundary
+now.
+
+Rationale: current `CreateRevision` already owns the protected Texture
+transaction that validates the parent head, inserts the immutable revision,
+computes the revision hash, and advances `texture_documents.current_revision_id`
+only after all writes succeed. The accepted `internal/objectgraph` package is
+still a storage-agnostic memory/SQLite foundation and currently upserts objects
+by `canonical_id`; it does not yet carry immutable source-version chains inside
+the Dolt Texture transaction. The smallest safe Phase 1 slice is therefore a
+Texture-store boundary that writes source entity/source ref records through the
+same logical transaction as a Texture revision, while preserving DTO and
+canonical ID compatibility with objectgraph.
+
+P2 canonical ID resolution: do not add extra colon-separated suffix parts to
+`objectgraph.BuildCanonicalID` outputs. `choir.source_entity` and
+`choir.source_ref` IDs must use a single URL-safe suffix, preferably
+`objectgraph.StableSuffixFromKey(...)`. For `choir.source_entity`, the key is
+derived from owner scope plus normalized source kind plus normalized target
+identity. For `choir.source_ref`, the key is derived from the Texture revision
+ID plus a stable occurrence key or occurrence hash. The suffix remains one
+component, e.g. `obj:choir.source_ref:<owner-b64>:key-<sha256>`, so
+`objectgraph.ParseCanonicalID` remains valid.
+
+Conjecture delta: a Texture-store source graph boundary can make source
+entity/source ref writes transactionally adjacent to Texture revision creation
+without weakening Texture canonical revision invariants. The generic
+objectgraph store remains a reusable package and Qdrant input shape, not yet
+the Texture transaction owner.
+
+Protected surfaces touched by implementation: Texture canonical revision writes,
+source identity, `source_ref` edges, tri-state citation records, legacy revision
+compatibility, objectgraph source-of-truth boundaries, and Qdrant source input
+shape. Phase 1 must not touch auth/session renewal, vmctl, gateway/provider
+calls, deployment routing, promotion/rollback, staging, producer migration,
+frontend source-open, publication/export, or Qdrant alias switching.
+
+Admissible evidence: focused store/objectgraph tests proving deterministic
+canonical IDs, immutable source entity versions, pinned source refs, and failure
+rollback where a source graph write failure prevents document-head advancement.
+No staging/product claim is admissible for this worker.
+
+Rollback path: revert the Phase 1 store/API commit. Until a later rollout mode
+enables producer writes or graph reads, the new tables and helpers are inert and
+legacy `texture_revisions.source_entities_json` reads remain the active
+compatibility path. Any partially created local test Dolt workspace can be
+discarded with the test database cleanup path.
+
+Heresy delta: `discovered` none in this checkpoint; `introduced` none intended;
+`repaired` none claimed. This checkpoint narrows implementation route only.
+
 ### Phase 2: Producer Shadow Writes
 
 - Convert researcher/coagent/source-ingestion packets into source entity
