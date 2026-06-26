@@ -1880,3 +1880,65 @@ acceptance, deploy, or promotion/rollback claim.
 Open edge: read verifier thread
 `019f0343-df0b-7442-8d2e-7714b3fd3988`; incorporate the verdict into Parallax
 State before moving code.
+
+## 2026-06-26 - O3 Phase 6 Accepted And Incorporated
+
+Claim: Phase 6 source-open/browser-product proof is accepted at local
+branch-level and incorporated into the orchestration branch.
+
+Move: accept verifier verdict, cherry-pick worker commit `65a08d44` into root,
+rerun the bounded browser checks from root, clean generated proof artifacts, and
+update mission state.
+
+Expected Delta V: 0. The move closes the Phase 6 evidence gap but does not close
+another counted O3 checklist obligation; News-path source/citation evidence and
+staging proof remain open.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Verifier thread:
+  `019f0343-df0b-7442-8d2e-7714b3fd3988`
+  (`O3 verifier - Source Open Phase 6`) returned `accept` with no blocking
+  findings.
+- Verifier evidence: inspected worker branch
+  `codex/o3-phase6-source-open-browser-product-proof` at
+  `65a08d4426f72881b0a509bc2bd453ff5d4f6964`, confirmed only
+  `frontend/tests/texture-source-entities.spec.js` changed, checked that the
+  test creates a real Texture document/revision through public
+  `/api/texture/*`, intercepts only `GET /api/texture/revisions/{id}`, deletes
+  legacy `source_entities`, and asserts native source-ref rendering plus Source
+  Viewer/Web Lens routing through the UI.
+- Verifier commands passed:
+  `git diff --check 65a08d4426f72881b0a509bc2bd453ff5d4f6964^..65a08d4426f72881b0a509bc2bd453ff5d4f6964`;
+  `npx playwright test tests/texture-source-entities.spec.js -g "Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+  and
+  `npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities|Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`.
+- Verifier stack boundary: local stack started with
+  `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`; this caps proof to the non-publication local
+  Texture/browser harness and does not exercise platformd.
+- Incorporated root commit:
+  `9eeb5115 test O3 phase6 graph wrapper source open path`.
+- Root checks passed from `/Users/wiz/go-choir/frontend`:
+  `npx playwright test tests/texture-source-entities.spec.js -g "Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+  `npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities|Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+  and from repo root `git diff --check HEAD~1..HEAD`.
+- Root generated proof outputs `frontend/test-results/` and
+  `frontend/playwright/` were removed after validation. Ignored
+  `frontend/node_modules/` and `frontend/frontend.log` remain local
+  dependency/log artifacts.
+
+Evidence boundary: local branch-level browser/UI product-path consumption of a
+graph-only revision DTO for native source-ref rendering and Source Viewer/Web
+Lens routing. No staging, main, deploy, auth/session renewal, provider/gateway,
+Qdrant, O4 News, publication/export, graph-first enforcement, promotion,
+rollback, or live backend graph-wrapper production claim.
+
+Residual risks: backend graph-wrapper production remains covered by prior Phase
+4 API/read tests, not this browser proof. The browser proof uses distinct graph
+entities; alias/shared-entity `source_refs` behavior remains covered by the
+adjacent helper regression, not by this UI test.
+
+Open edge: choose the next O3/O4 boundary move for News/Universal Wire
+source/citation evidence over durable source and web-capture objects.

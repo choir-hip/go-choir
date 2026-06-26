@@ -361,10 +361,11 @@ obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
 + 8 Autoradio/Pipecat obligations. Current value: 37. Last Delta V: 0 for O3
-Phase 6 worker progress. The worker has a committed local browser proof for the
-graph-wrapper source-open path and has emitted its final report, but no
-independent verifier has accepted it; O3 browser/product proof and broader O3
-Texture/News acceptance remain open.
+Phase 6 verifier acceptance and root incorporation. The pass bought local
+browser/product evidence that the Texture UI consumes graph-only revision
+wrappers for native source refs and Source Viewer/Web Lens routing, but it did
+not close another counted checklist obligation; broader O3 News-path acceptance
+and any staging claim remain open.
 Variant total corrected from 67
 to 68 because O0 contains nine checklist obligations.
 
@@ -386,10 +387,9 @@ mutation class / protected surfaces: This paradoc creation is green. The
 overnight mission will include yellow/orange/red slices: object persistence,
 Texture/source refs, Universal Wire routes, Qdrant derived indexes,
 self-development/candidate evidence, capsules, Base sync state, and audio
-session artifacts. The current Phase 6 worker change appears yellow
-proof/test-only from orchestration evidence; it remains unincorporated and
-unverified. It would become orange only if later review discovers required
-frontend/runtime behavior changes.
+session artifacts. The current Phase 6 change is yellow proof/test-only:
+accepted verifier evidence and root incorporation add a focused browser test,
+not frontend/runtime product behavior.
 
 evidence packet: For each landed behavior-changing slice, record pushed commit
 SHA, CI run, deploy status, staging health/build identity, deployed acceptance
@@ -626,8 +626,8 @@ warnings only; and `git diff --check HEAD~1..HEAD`. Root proof artifacts
 `frontend/test-results/` and `frontend/dist/` were removed after validation, and
 the tracked worktree was clean.
 
-O3 Phase 6 source-open/browser-product proof worker has reached committed local
-proof and emitted its final report. Pending worktree handle
+O3 Phase 6 source-open/browser-product proof is accepted and incorporated at
+branch level. Pending worktree handle
 `local:c0f12b0c-2845-46eb-bb84-8f135082ec9c` resolved to thread
 `019f032c-7960-7563-8b75-c8a681a388f8` (`O3 worker - Source Open Phase 6`) in
 `/Users/wiz/.codex/worktrees/5e10/go-choir`; the thread is pinned. Worker
@@ -645,17 +645,27 @@ because the change is test-only. Tracked worker hygiene is clean; ignored
 `frontend/node_modules/` and service logs remain confined to the worker
 worktree. Independent verifier thread
 `019f0343-df0b-7442-8d2e-7714b3fd3988` (`O3 verifier - Source Open Phase 6`)
-has been launched against worker commit `65a08d44`, titled, and pinned. No
-verifier has accepted the proof yet, so no Phase 6 acceptance is claimed.
+returned `accept` with no blocking findings after inspecting the diff, rerunning
+the exact focused Phase 6 Playwright proof, rerunning the 6-test regression
+filter, and checking tracked hygiene. The accepted worker commit was
+incorporated into this orchestration branch as `9eeb5115 test O3 phase6 graph
+wrapper source open path`. Root checks passed:
+`npx playwright test tests/texture-source-entities.spec.js -g "Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+`npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities|Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`;
+and `git diff --check HEAD~1..HEAD`. Root generated proof outputs
+`frontend/test-results/` and `frontend/playwright/` were removed; ignored
+`frontend/node_modules/` and `frontend/frontend.log` remain as local
+dependency/log artifacts. Evidence class is local branch-level
+test/verifier/root-rerun acceptance only. No O3-complete, main, staging,
+product acceptance, deploy, backend graph-wrapper production, Qdrant
+projection, publication/export, auth/session, gateway/provider, graph-first
+enforcement, promotion, or rollback claim exists.
 
-next move: read verifier thread `019f0343-df0b-7442-8d2e-7714b3fd3988` and
-incorporate its verdict into Parallax State. If it accepts, incorporate worker
-commit `65a08d44` into the orchestration branch and run the bounded root checks.
-If it returns `revise_before_continue`, `blocked`, or `supersede`, record the
-finding before further code movement. No verified Phase 6 acceptance,
-O3-complete, main, staging, product acceptance, deploy, Qdrant projection,
-publication/export, auth/session, gateway/provider, graph-first enforcement,
-promotion, or rollback claim exists yet.
+next move: choose the next O3/O4 boundary move for the remaining News-path
+source/citation evidence. Prefer a bounded worker assignment that starts O4
+Universal Wire from durable source/web-capture objects without weakening the O3
+evidence boundary. If reliable staging or product evidence reveals a new
+behavior problem, apply Problem Documentation First before any fix.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
