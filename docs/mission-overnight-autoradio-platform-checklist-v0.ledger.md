@@ -3484,3 +3484,39 @@ main push, PR, CI, deploy, staging product acceptance, Texture native
 renewal, promotion/rollback, or run-acceptance claim.
 
 Open edge: read worker thread after it responds to the second steering prompt.
+
+## 2026-06-26 - O4 Phase 6 Invalid Test Cleanup Observed
+
+Claim: O4 Phase 6 worker cleaned up the invalid runtime-package test edit. No
+candidate or blocker report exists yet.
+
+Move: after the second steering prompt, inspect the worker thread and worktree
+read-only.
+
+Expected Delta V: 0. Cleanup observation does not close an obligation.
+
+Actual Delta V: 0. Current V remains 34.
+
+Receipts:
+
+- Worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/f0b3/go-choir`.
+- Worker response:
+  it acknowledged the second steering prompt and removed the invalid
+  runtime-package edit with a single-file restore because patch cleanup failed
+  against the modified file.
+- Worker status observed:
+  thread still `inProgress`; worktree `git status --short --ignored` returned
+  no output.
+
+Evidence boundary: cleanup observation only. No worker final report, candidate
+commit, verifier verdict, root incorporation, main push, PR, CI, deploy,
+staging product acceptance, Texture native `source_ref`, publication/export,
+Qdrant, provider/gateway, auth/session renewal, promotion/rollback, or
+run-acceptance claim.
+
+Open edge: wait for the worker to return either a valid relocated proof commit
+or a no-candidate/blocker final report.
