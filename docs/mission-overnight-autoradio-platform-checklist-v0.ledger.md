@@ -7404,3 +7404,29 @@ model/provider synthesis quality; deployed non-empty staging proof remains open.
 
 Open edge: launch an independent verifier thread over worker commit `43741e72`
 before any root incorporation.
+
+## 2026-06-26 - O4 Live Synthesis Trigger Verifier Launched
+
+Claim: worker commit `43741e72` now has an independent verifier request, but no
+verification verdict yet.
+
+Move: used Codex app `create_thread` against project `/Users/wiz/go-choir` with
+a new worktree from `main`. The verifier prompt is scoped to read-only review of
+worker thread `019f05d3-8f1a-7963-a863-89ea12661ace`, worker worktree
+`/Users/wiz/.codex/worktrees/ba01/go-choir`, and commit
+`43741e7209c1d3f24b5af40923d3e6b63b8075b9`. Pending verifier worktree handle:
+`local:327660ea-fd09-4ad4-a0a8-4275e30779be`.
+
+Expected Delta V: 1 if the verifier returns `accept` and orchestration later
+incorporates, lands, deploys, and accepts the behavior-changing slice. Actual
+Delta V for this pass: 0; verifier launch is observer setup, not acceptance.
+
+Evidence boundary: verifier launch only. No verifier verdict, root
+incorporation, push of worker code, CI, deploy, staging identity, authenticated
+product proof, promotion/rollback, run acceptance, or O4 product settlement is
+claimed.
+
+Open edge: resolve/read verifier result for pending handle
+`local:327660ea-fd09-4ad4-a0a8-4275e30779be`. If accepted, incorporate worker
+commit `43741e72`; if rejected or blocked, record the finding and route the next
+O4 move accordingly.
