@@ -5450,3 +5450,59 @@ Open edge: resolve pending handle
 `local:d32abcad-6c68-4898-9f1b-f563a0abaa55` into a readable worker thread,
 title and pin it, inspect starting status, then wait for a no-code proof,
 candidate, or precise blocker callback.
+
+## 2026-06-26 - O4 Phase 11 No-Code Blocker And Verifier Launch
+
+Claim: O4 Phase 11 returned a precise no-code blocker for deployed/live source
+artifact proof and orchestration launched an independent verifier for that
+blocker. This is blocker-plus-verifier-pending evidence only, not verified
+settlement, root incorporation, or checklist descent.
+
+Move: read the completed worker thread, inspect its worktree, and create a
+project-scoped verifier worktree thread from worker branch
+`codex/o4-phase11-live-source-proof`.
+
+Expected Delta V: 0. A blocker report does not close the remaining O4
+source/citation checklist item.
+
+Actual Delta V: 0. Current V remains 31.
+
+Receipts:
+
+- Worker thread:
+  `019f0432-48be-7d12-bdd6-b7776d6cc1c0`
+  (`O4 worker - Phase 11 Deployed Source Proof`), titled and pinned.
+- Worker cwd:
+  `/Users/wiz/.codex/worktrees/d581/go-choir`.
+- Worker branch/head:
+  `codex/o4-phase11-live-source-proof` at
+  `b13ba8813189ac24ba64c8976280ac7454f5fcf2`
+  (`record O4 reader body proof acceptance`).
+- Worker commits/changed files:
+  none.
+- Worker finding:
+  deployed/live proof is blocked because staging `/health` reports deployed
+  commit `06e3225f02f60f113340309a2766c5face134395`, which does not contain
+  accepted local O4 proof heads `b13ba881` or `9f54fd5e`; unauthenticated
+  `GET https://choir.news/api/universal-wire/stories` returns authentication
+  required; no normal authenticated product session is available in the worker;
+  existing deployed/staging tests do not prove source opening read-only; stronger
+  source artifact tests create docs/content/publications and therefore exceed
+  the worker's no-mutation scope.
+- Orchestration inspection:
+  worker status clean; `git diff --check` and `git diff --cached --check`
+  passed; `git merge-base --is-ancestor b13ba881 06e3225f...` and
+  `git merge-base --is-ancestor 9f54fd5e 06e3225f...` both returned nonzero.
+- Verifier pending worktree handle:
+  `local:db7cea87-c4ef-4e27-a82f-60770e93688e`.
+
+Evidence boundary: worker-local no-code blocker plus pending verifier launch
+only. No independent verifier verdict yet, no candidate commit, no root
+incorporation, push, PR, CI, deploy, staging product acceptance, deployed/live
+source artifact proof, publication/export, Qdrant, provider/gateway/search,
+auth/session renewal, promotion/rollback, or run-acceptance claim.
+
+Open edge: resolve verifier pending handle
+`local:db7cea87-c4ef-4e27-a82f-60770e93688e`, title/pin the verifier thread,
+and wait for verdict on the Phase 11 no-code blocker before treating it as
+verified mission evidence.
