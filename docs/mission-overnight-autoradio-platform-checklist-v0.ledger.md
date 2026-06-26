@@ -7739,3 +7739,46 @@ capture cards as articles. `8abe5cb1` is the deployed rollback reference for
 "edition exists but story filtered".
 
 Actual Delta V: 0. The product-visible Universal Wire remains empty.
+
+## 2026-06-26 - O4 Platform Verification Filter Repair Accepted
+
+Claim: independent verifier thread
+`019f05fc-425f-7790-9b73-5527fffa7fc3` accepted commit
+`c8af6ecb414baf6ac907ee92876fdf49034dcdb4` (`Allow Wire synthesis stories
+through platform verification`) for the narrow O4 publishability/filter repair.
+
+Verifier verdict: `accept`; findings: none requiring revision.
+
+Verifier evidence:
+
+- The platformd publication check now skips only revisions whose metadata has
+  `universal_wire_synthesis=true`.
+- That metadata is stamped by the existing synthesis path.
+- Non-synthesis unpublished platform Textures remain filtered by
+  `TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformTextures`.
+- Raw graph captures remain diagnostic substrate and still do not claim
+  `source_ref` or `story_texture_doc_id`.
+
+Verifier commands/results:
+
+- `git diff --check c8af6ecb^..c8af6ecb`: passed/no output.
+- `git show --check --oneline c8af6ecb`: passed; output `c8af6ecb Allow Wire
+  synthesis stories through platform verification`.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformTextures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles'
+  -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
+  5.372s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 10.406s`.
+- `git status --short --ignored`: clean/no output. Nix emitted a transient
+  eval-cache SQLite busy warning during startup, but the test completed.
+
+Dirty/generated artifact classification: verifier worktree clean. No source
+edits, durable evidence files, temporary proof output, generated artifacts, or
+unrelated WIP observed.
+
+Evidence boundary: branch-local read-only verification only. No push, CI,
+deploy identity, authenticated staging QA, or product acceptance is claimed.
+
+Orchestration may push/deploy `c8af6ecb` for the landing loop.
