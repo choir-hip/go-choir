@@ -1942,3 +1942,52 @@ adjacent helper regression, not by this UI test.
 
 Open edge: choose the next O3/O4 boundary move for News/Universal Wire
 source/citation evidence over durable source and web-capture objects.
+
+## 2026-06-26 - O4 Phase 1 Worker Launched
+
+Claim: O4 now has a bounded implementation worker for the first web-capture
+object foundation move.
+
+Move: create a project worktree thread from current orchestration branch
+`preserve/o0-autoradio-mission-state-2026-06-26` after Phase 6 acceptance,
+assign the O4 Phase 1 bounded web-capture foundation slice, then reconnect the
+pending worktree handle to a concrete thread id and title/pin it.
+
+Expected Delta V: 0 until the worker returns a committed artifact and an
+independent verifier accepts it.
+
+Actual Delta V: 0. Current V remains 37.
+
+Receipts:
+
+- Root launch head:
+  `68cfb026 record O3 phase6 acceptance`.
+- Worker pending worktree handle:
+  `local:3a8578f8-9c76-4572-bca1-2c3b2d02b638`.
+- Resolved worker thread:
+  `019f034d-ebc1-75a3-9c4b-269e8b9d6be7`
+  (`O4 worker - Web Capture Object Foundation`).
+- Worker cwd: `/Users/wiz/.codex/worktrees/b850/go-choir`.
+- Worker status at launch readback: `active`; thread titled and pinned.
+- Work item id: `O4-phase1-web-capture-object-foundation`.
+- Assignment mutation class: yellow for tests/docs/diagnosis only; orange for
+  objectgraph/source model or Universal Wire API behavior; red surfaces are
+  explicitly avoided.
+- Assignment conjecture delta: after O3 proves local Texture/source-open
+  graph-wrapper consumption, O4 must begin moving News/Universal Wire from
+  empty/legacy feed behavior toward durable graph objects, starting with a
+  citeable `choir.web_capture` object rather than a bespoke feed-only record.
+- Assignment admissible evidence: focused objectgraph/source/Universal Wire
+  tests as applicable, `git diff --check`, dirty-path classification, non-claims,
+  rollback refs, heresy delta, and residual risks.
+- Verifier timing: independent verifier thread deferred until the worker has a
+  final report/artifact.
+
+Evidence boundary: orchestration/thread launch only. No O4 web-capture
+foundation proof, Universal Wire feed proof, verifier acceptance, root
+incorporation, main, staging, product acceptance, deploy, publication/export,
+auth/session, gateway/provider, promotion, or rollback claim.
+
+Open edge: read worker thread `019f034d-ebc1-75a3-9c4b-269e8b9d6be7` when it
+finishes, then create a verifier thread against the actual artifact before
+incorporating or claiming O4 progress.

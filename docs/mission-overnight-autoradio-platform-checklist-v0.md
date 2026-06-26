@@ -661,11 +661,24 @@ product acceptance, deploy, backend graph-wrapper production, Qdrant
 projection, publication/export, auth/session, gateway/provider, graph-first
 enforcement, promotion, or rollback claim exists.
 
-next move: choose the next O3/O4 boundary move for the remaining News-path
-source/citation evidence. Prefer a bounded worker assignment that starts O4
-Universal Wire from durable source/web-capture objects without weakening the O3
-evidence boundary. If reliable staging or product evidence reveals a new
-behavior problem, apply Problem Documentation First before any fix.
+O4 Phase 1 web-capture foundation worker has been launched. Pending worktree
+handle `local:3a8578f8-9c76-4572-bca1-2c3b2d02b638` resolved to thread
+`019f034d-ebc1-75a3-9c4b-269e8b9d6be7`
+(`O4 worker - Web Capture Object Foundation`) in
+`/Users/wiz/.codex/worktrees/b850/go-choir`; the thread is titled and pinned.
+Assignment: start O4 by landing or precisely scoping the smallest graph-native
+`choir.web_capture` foundation that Universal Wire/News can build on, with
+focused tests if code changes, Problem Documentation First for any reliable new
+behavior problem, and no O4 feed rewrite or staging claim.
+
+next move: reconnect to O4 worker thread
+`019f034d-ebc1-75a3-9c4b-269e8b9d6be7`; if it reports a committed artifact,
+create an independent verifier thread against the actual diff/report before
+incorporation. If it reports a reliable Universal Wire/source-service behavior
+problem, require Problem Documentation First before any fix. No O4 web-capture
+foundation proof, Universal Wire feed proof, main, staging, product acceptance,
+deploy, publication/export, auth/session, gateway/provider, promotion, or
+rollback claim exists yet.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
