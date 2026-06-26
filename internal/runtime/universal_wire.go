@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -186,6 +187,11 @@ func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit i
 		if !ok {
 			continue
 		}
+		sourceContext, err := wireCaptureSourceEntityContext(ctx, graph, obj)
+		if err != nil {
+			return nil, err
+		}
+		story.Manifest.Context = append(story.Manifest.Context, sourceContext...)
 		story.Prominence = 100 - len(stories)
 		stories = append(stories, story)
 	}
@@ -247,6 +253,134 @@ func wireStoryFromWebCaptureObject(obj objectgraph.Object) (types.WireStory, boo
 		CreatedAt:      obj.CreatedAt,
 		UpdatedAt:      obj.UpdatedAt,
 	}, true
+}
+
+func wireCaptureSourceEntityContext(ctx context.Context, graph *objectgraph.Service, capture objectgraph.Object) ([]types.WireSourceItem, error) {
+	if graph == nil || strings.TrimSpace(capture.CanonicalID) == "" {
+		return nil, nil
+	}
+	notTombstoned := false
+	edges, err := graph.ListEdges(ctx, objectgraph.EdgeFilter{
+		FromID:    capture.CanonicalID,
+		Kind:      "captured_from",
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]types.WireSourceItem, 0, len(edges))
+	for _, edge := range edges {
+		sourceObj, err := graph.GetObject(ctx, edge.ToID)
+		if err != nil {
+			if errors.Is(err, objectgraph.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		item, ok := wireSourceItemFromGraphSourceEntity(sourceObj)
+		if !ok {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func wireSourceItemFromGraphSourceEntity(obj objectgraph.Object) (types.WireSourceItem, bool) {
+	if obj.ObjectKind != "choir.source_entity" || obj.Tombstone {
+		return types.WireSourceItem{}, false
+	}
+	var meta struct {
+		SourceKind string         `json:"source_kind"`
+		Target     map[string]any `json:"target"`
+		Display    map[string]any `json:"display"`
+		Evidence   map[string]any `json:"evidence"`
+	}
+	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+		return types.WireSourceItem{}, false
+	}
+	sourceKind := firstNonEmpty(
+		sourcecontract.NormalizeSourceKind(meta.SourceKind),
+		wireStringFromMap(meta.Target, "target_kind"),
+		wireStringFromMap(meta.Target, "kind"),
+		"source_entity",
+	)
+	targetKind := firstNonEmpty(
+		wireStringFromMap(meta.Target, "target_kind"),
+		wireStringFromMap(meta.Target, "kind"),
+		sourceKind,
+	)
+	canonicalURL := firstNonEmpty(
+		wireStringFromMap(meta.Display, "url"),
+		wireStringFromMap(meta.Target, "canonical_url"),
+		wireStringFromMap(meta.Target, "url"),
+	)
+	itemID := firstNonEmpty(
+		wireStringFromMap(meta.Target, "item_id"),
+		wireStringFromMap(meta.Target, "id"),
+		wireStringFromMap(meta.Target, "identity"),
+		obj.CanonicalID,
+	)
+	openSurface := sourcecontract.NormalizeOpenSurface(wireStringFromMap(meta.Evidence, "default_open_surface"))
+	if openSurface == "" {
+		openSurface = sourcecontract.OpenSurfaceSource
+	}
+	liveOpenSurface := sourcecontract.NormalizeOpenSurface(wireStringFromMap(meta.Evidence, "explicit_live_surface"))
+	if liveOpenSurface == "" && canonicalURL != "" {
+		liveOpenSurface = sourcecontract.OpenSurfaceWebLens
+	}
+	readerState := sourcecontract.NormalizeReaderArtifactState(wireStringFromMap(meta.Evidence, "reader_artifact_state"))
+	if readerState == "" && wireBoolFromMap(meta.Evidence, "reader_snapshot") {
+		readerState = sourcecontract.ReaderArtifactStateReady
+	}
+	title := firstNonEmpty(
+		wireStringFromMap(meta.Display, "title"),
+		wireStringFromMap(meta.Display, "label"),
+		canonicalURL,
+		itemID,
+		"Source entity provenance",
+	)
+	return types.WireSourceItem{
+		ID:                  itemID,
+		ContentID:           wireStringFromMap(meta.Target, "item_id"),
+		Title:               title,
+		Standing:            "source entity provenance for graph-backed web capture",
+		Role:                "context",
+		SourceID:            wireStringFromMap(meta.Target, "source_id"),
+		FetchID:             wireStringFromMap(meta.Target, "fetch_id"),
+		CanonicalURL:        canonicalURL,
+		SourceKind:          sourceKind,
+		TargetKind:          targetKind,
+		ObjectKind:          string(obj.ObjectKind),
+		CanonicalID:         obj.CanonicalID,
+		VersionID:           obj.VersionID,
+		ContentHash:         obj.ContentHash,
+		OpenSurface:         openSurface,
+		LiveOpenSurface:     liveOpenSurface,
+		ReaderArtifactState: readerState,
+	}, true
+}
+
+func wireStringFromMap(values map[string]any, key string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	switch value := values[key].(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case fmt.Stringer:
+		return strings.TrimSpace(value.String())
+	default:
+		return ""
+	}
+}
+
+func wireBoolFromMap(values map[string]any, key string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	value, ok := values[key].(bool)
+	return ok && value
 }
 
 func firstWireCaptureParagraph(content string) string {

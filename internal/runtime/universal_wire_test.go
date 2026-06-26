@@ -350,6 +350,103 @@ func TestHandleUniversalWireStoriesFallsBackToGraphBackedWebCaptures(t *testing.
 	}
 }
 
+func TestHandleUniversalWireStoriesCarriesCapturedFromSourceEntityContext(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	capture := seedUniversalWireWebCaptureFixture(t, handler,
+		"River watch lifted",
+		"https://example.test/river-watch",
+		"GENEVA -- Emergency officials lifted the river watch after gauges fell below the alert threshold.",
+		now)
+	graph := handler.rt.ObjectGraph()
+	sourceEntity, err := graph.CreateObject(ctx, objectgraph.CreateObjectRequest{
+		Kind:       "choir.source_entity",
+		OwnerID:    universalWirePlatformOwnerID(),
+		ComputerID: "computer-universal-wire-platform",
+		Body:       []byte("Emergency officials lifted the river watch after gauges fell below the alert threshold."),
+		Metadata: map[string]any{
+			"schema_version": "choir.source_entity.v1",
+			"source_kind":    sourcecontract.SourceKindSourceServiceItem,
+			"target": map[string]any{
+				"target_kind":   sourcecontract.SourceKindSourceServiceItem,
+				"item_id":       "srcitem-river-watch",
+				"source_id":     "rss:city-alerts",
+				"fetch_id":      "fetch-river-watch",
+				"url":           "https://example.test/river-watch",
+				"canonical_url": "https://example.test/river-watch",
+			},
+			"display": map[string]any{
+				"title": "City alerts river watch bulletin",
+				"url":   "https://example.test/river-watch",
+			},
+			"evidence": map[string]any{
+				"state":                 sourcecontract.EvidenceStateAvailable,
+				"reader_snapshot":       true,
+				"default_open_surface":  sourcecontract.OpenSurfaceSource,
+				"explicit_live_surface": sourcecontract.OpenSurfaceWebLens,
+			},
+			"provenance": map[string]any{
+				"created_by": "test",
+			},
+		},
+		Now: now,
+	})
+	if err != nil {
+		t.Fatalf("create source entity: %v", err)
+	}
+	if _, err := graph.PutEdge(ctx, capture.CanonicalID, sourceEntity.CanonicalID, "captured_from", map[string]any{"relation": "sourcecycled_source_item"}); err != nil {
+		t.Fatalf("put captured_from edge: %v", err)
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	if resp.Source != "universal-wire-web-capture-graph" || len(resp.Stories) != 1 {
+		t.Fatalf("response source/stories = %q/%d, want graph source with one story: %+v", resp.Source, len(resp.Stories), resp.Stories)
+	}
+	story := resp.Stories[0]
+	if len(story.Manifest.Lead) != 1 || story.Manifest.Lead[0].CanonicalID != capture.CanonicalID {
+		t.Fatalf("lead manifest should remain the web capture object: %+v", story.Manifest.Lead)
+	}
+	if len(story.Manifest.Context) != 1 {
+		t.Fatalf("context manifest len = %d, want captured_from source entity: %+v", len(story.Manifest.Context), story.Manifest.Context)
+	}
+	contextItem := story.Manifest.Context[0]
+	if contextItem.ID != "srcitem-river-watch" ||
+		contextItem.ContentID != "srcitem-river-watch" ||
+		contextItem.Title != "City alerts river watch bulletin" ||
+		contextItem.SourceID != "rss:city-alerts" ||
+		contextItem.FetchID != "fetch-river-watch" ||
+		contextItem.CanonicalURL != "https://example.test/river-watch" ||
+		contextItem.SourceKind != sourcecontract.SourceKindSourceServiceItem ||
+		contextItem.TargetKind != sourcecontract.SourceKindSourceServiceItem ||
+		contextItem.ObjectKind != "choir.source_entity" ||
+		contextItem.CanonicalID != sourceEntity.CanonicalID ||
+		contextItem.ContentHash != sourceEntity.ContentHash ||
+		contextItem.OpenSurface != sourcecontract.OpenSurfaceSource ||
+		contextItem.LiveOpenSurface != sourcecontract.OpenSurfaceWebLens ||
+		contextItem.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady {
+		t.Fatalf("captured_from source entity context = %+v", contextItem)
+	}
+	storyJSON, err := json.Marshal(story)
+	if err != nil {
+		t.Fatalf("marshal graph-backed story: %v", err)
+	}
+	if !strings.Contains(string(storyJSON), `"object_kind":"choir.source_entity"`) ||
+		!strings.Contains(string(storyJSON), `"canonical_id":"`+sourceEntity.CanonicalID+`"`) {
+		t.Fatalf("story JSON missing graph source entity provenance: %s", string(storyJSON))
+	}
+	if strings.Contains(string(storyJSON), `"source_ref"`) || strings.Contains(string(storyJSON), `"story_texture_doc_id"`) {
+		t.Fatalf("graph provenance story should not claim Texture source_ref/publication fields: %s", string(storyJSON))
+	}
+}
+
 func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
