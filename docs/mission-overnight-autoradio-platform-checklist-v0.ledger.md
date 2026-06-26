@@ -3676,3 +3676,66 @@ run-acceptance claim.
 Open edge: read the verifier verdict. If accepted, consider root incorporation
 of `e406ca23` followed by root-focused reruns and a separate Parallax
 settlement update; if not accepted, record the finding before any repair.
+
+## 2026-06-26 - O4 Phase 6 Verifier Acceptance And Root Incorporation
+
+Claim: O4 Phase 6 authenticated Universal Wire API acceptance is closed at
+branch/local handler level. This is not staging or deployed product acceptance.
+
+Move: read verifier verdict, incorporate accepted worker commit `e406ca23` into
+the orchestration branch, rerun focused root checks, update checklist and
+variant.
+
+Expected Delta V: 1. The remaining O4 authenticated API acceptance obligation
+closes only after independent verifier acceptance plus root incorporation and
+focused reruns.
+
+Actual Delta V: 1. Current V decreases from 34 to 33.
+
+Receipts:
+
+- Worker thread:
+  `019f03b9-7d73-7d13-9d58-4bec2361f5c8`
+  (`O4 worker - Authenticated Wire API Proof`).
+- Verifier thread:
+  `019f03c2-88b6-7481-b570-79190baeeb0b`
+  (`O4 verifier - Authenticated Wire API Proof`).
+- Verifier verdict:
+  `accept`, findings none.
+- Verifier evidence:
+  candidate is a one-file test-only change in `cmd/sourcecycled/main_test.go`;
+  invalid `internal/runtime` import-cycle placement is absent; the test derives
+  objectgraph DB path from `RUNTIME_STORE_PATH`, writes sourcecycled graph
+  captures through `runCycle`, opens runtime on the same store path, uses
+  registered public runtime routes for `GET /api/universal-wire/stories`, and
+  uses authenticated `X-Authenticated-User` rather than internal/test-only route
+  seeding.
+- Accepted worker commit:
+  `e406ca23 test O4 sourcecycled Wire API graph path`.
+- Root incorporation commit:
+  `6dec06b4 test O4 sourcecycled Wire API graph path`.
+- Root hygiene:
+  `git diff --check 413d97c3..HEAD` passed;
+  `git show --check --oneline 6dec06b4` passed.
+- Root tests:
+  `nix develop -c go test ./cmd/sourcecycled -run '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1 -timeout=60s`
+  passed: `ok github.com/yusefmosiah/go-choir/cmd/sourcecycled 3.904s`;
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(FallsBackToGraphBackedWebCaptures|RequiresAuth)$' -count=1 -timeout=60s`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.962s`;
+  `nix develop -c go test ./internal/cycle -run '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1 -timeout=60s`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/cycle 2.204s`.
+
+Evidence boundary: branch/worktree-local worker and verifier evidence plus
+root-focused reruns only. No main push, PR, CI, deploy, staging product
+acceptance, Texture native `source_ref`, publication/export, Qdrant,
+provider/gateway, auth/session renewal, promotion/rollback, or run-acceptance
+claim.
+
+Residual risks: deployed sourcecycled/runtime configuration may still not point
+at the same intended runtime store/objectgraph path; live staging credentials,
+deployed build identity, production daemon wiring, native Texture citation
+carry-forward, and complete News/Wire benchmark remain unproven.
+
+Open edge: choose the next O4 realism slice: build graph/source-ref News/Wire
+feed behavior, improve honest/diagnostic empty state, or pursue a
+behavior-changing deploy/staging proof with full landing-loop evidence.

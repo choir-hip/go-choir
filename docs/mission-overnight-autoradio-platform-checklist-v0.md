@@ -253,7 +253,12 @@ Checklist:
   configuration and staging product proof remain open.
 - [ ] Build News/Wire feed from graph objects and source refs.
 - [ ] Keep empty feed honest but diagnostic.
-- [ ] Add acceptance for authenticated `/api/universal-wire/stories`.
+- [x] Add acceptance for authenticated `/api/universal-wire/stories`. O4 Phase 6
+  adds accepted branch-level authenticated public-route API proof that
+  sourcecycled writes graph-backed `choir.web_capture` objects to the
+  runtime-derived objectgraph DB path and a runtime opened on the same store path
+  reads them through `GET /api/universal-wire/stories`. This does not prove
+  staging/deploy/runtime daemon configuration.
 - [x] Add browser proof that the Universal Wire app renders real story cards.
   O4 Phase 4 proves a graph-backed capture story card through the public
   `/api/universal-wire/stories` route mock in the authenticated desktop shell,
@@ -382,14 +387,14 @@ variant (ranking function) V: 68 total obligations = 9 WIP-preservation
 obligations + 8 object graph obligations + 7 Qdrant obligations + 8
 source-entity obligations + 8 News/Universal Wire obligations + 7
 self-development obligations + 7 Nucleus obligations + 6 Choir Base obligations
-+ 8 Autoradio/Pipecat obligations. Current value: 34. Last Delta V: 1 for O4
-Phase 5 verifier acceptance and root incorporation. O4 Phase 1 closed the first
++ 8 Autoradio/Pipecat obligations. Current value: 33. Last Delta V: 1 for O4
+Phase 6 verifier acceptance and root incorporation. O4 Phase 1 closed the first
 O4 checklist obligation by adding a tested `choir.web_capture` objectgraph
 foundation. O4 Phase 2 adds an accepted branch-level fallback projection from
 graph-backed web captures into `/api/universal-wire/stories`, but it does not
 close the broader News/Wire feed-from-graph-and-source-refs obligation because
-sourcecycled ingestion, native Texture `source_ref` citation carry-forward,
-staging, deploy, and product acceptance remain open.
+native Texture `source_ref` citation carry-forward, staging, deploy, and product
+acceptance remain open.
 O4 Phase 3 adds an accepted and incorporated additive DTO source/open identity
 slice for graph capture cards; it does not claim native Texture `source_ref`,
 frontend opening, or staging proof. O4 Phase 4 adds accepted and incorporated
@@ -782,10 +787,12 @@ emitted a non-fatal Nix eval-cache SQLite busy warning while Go returned `ok`.
 Tracked root status is clean; ignored local env/log/dependency artifacts remain
 unrelated.
 
-next move: wait for O4 Phase 6 worker thread
+next move: choose the next O4 branch-level realism slice without claiming the
+full News benchmark: either build the News/Wire feed from graph objects and
+source refs, keep the empty feed more diagnostic, or prove deployed/staging
+configuration after a behavior-changing landing. O4 Phase 6 worker thread
 `019f03b9-7d73-7d13-9d58-4bec2361f5c8` (`O4 worker - Authenticated Wire API
-Proof`) in `/Users/wiz/.codex/worktrees/f0b3/go-choir`, then read its report and
-create an independent verifier if it returns candidate commits. Orchestration
+Proof`) in `/Users/wiz/.codex/worktrees/f0b3/go-choir` completed. Orchestration
 observed the worker branch dirty with one focused test change in
 `internal/runtime/universal_wire_test.go` and a long-running
 `go test ./cmd/sourcecycled -run Test.*ObjectGraph|Test.*RuntimeStore|Test.*WebCapture -count=1`
@@ -810,20 +817,26 @@ canonical writes/publication/export/promotion/rollback/run acceptance.
 Independent verifier worktree handle
 `local:fda573a5-c918-4c70-9b9e-4f4e6b843960` resolved to verifier thread
 `019f03c2-88b6-7481-b570-79190baeeb0b` (`O4 verifier - Authenticated Wire API
-Proof`) in `/Users/wiz/.codex/worktrees/d9c6/go-choir`; the verifier is active,
-has read the worker report and candidate diff, and reports all three focused
-checks passed while it performs final source/route inspection. The next
-orchestration move is to read the verifier verdict when complete. The worker replaces pending handle
+Proof`) in `/Users/wiz/.codex/worktrees/d9c6/go-choir`; the verifier returned
+`accept` with no findings and confirmed the candidate is a one-file test-only
+proof using registered public runtime routes and authenticated
+`X-Authenticated-User`, with no internal/test-only route seeding. Accepted
+worker commit `e406ca23` was incorporated into root as `6dec06b4 test O4
+sourcecycled Wire API graph path`. Root checks passed:
+`git diff --check 413d97c3..HEAD`; `git show --check --oneline 6dec06b4`;
+`nix develop -c go test ./cmd/sourcecycled -run '^TestRunCycleWritesSourceItemsToObjectGraphWebCaptures$' -count=1 -timeout=60s`;
+`nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(FallsBackToGraphBackedWebCaptures|RequiresAuth)$' -count=1 -timeout=60s`;
+and `nix develop -c go test ./internal/cycle -run '^TestWriteWebCaptureGraphObjectsProjectsSourceItems$' -count=1 -timeout=60s`.
+The worker replaces pending handle
 `local:b9a89dc6-e09f-4eec-8617-7706221de218` for orchestration purposes. The
 assignment is an authenticated Universal Wire product-API proof slice: show,
 through product-visible evidence if feasible, that configured sourcecycled
 objectgraph storage and `/api/universal-wire/stories` work together, or document
 the precise config/deploy blocker and the narrowest durable improvement.
-Expected Delta V: 0 for worker follow-up; potential Delta V: 1 if authenticated
-API acceptance closes after worker and verifier evidence. Do not claim News
-benchmark, staging, native Texture `source_ref` carry-forward,
-publication/export, Qdrant, promotion, rollback, or run acceptance from this
-launch/resolution/follow-up. O4 Phase 5 verifier thread
+Expected Delta V: 1 for authenticated API acceptance after verifier acceptance
+and root incorporation; actual Delta V: 1. Do not claim News benchmark,
+staging, native Texture `source_ref` carry-forward, publication/export, Qdrant,
+promotion, rollback, or run acceptance from this branch-level proof. O4 Phase 5 verifier thread
 `019f03b0-6a16-79b0-888d-b8a48e6a378f` (`O4 verifier - Web Capture
 Ingestion`) returned `accept` with no blocking findings. The verifier confirmed
 checkpoint-before-code, narrow sourcecycled/objectgraph boundaries, provenance
