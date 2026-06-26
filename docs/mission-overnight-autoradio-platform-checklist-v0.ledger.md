@@ -315,3 +315,29 @@ Receipts:
 
 Open edge: Read the O2 worker report, then incorporate verifier verdict before
 marking any O2 checklist item complete.
+
+## 2026-06-26 - O2 Verifier Blocked Pending Worker Report
+
+Claim: O2 cannot be evaluated until the Qdrant worker produces a completed
+report and diff.
+
+Move: probe independent verifier thread.
+
+Expected Delta V: 0; decide whether O2 has evidence ready for review.
+
+Actual Delta V: 0. Verifier verdict was `blocked`.
+
+Receipts:
+
+- O2 verifier thread `019f0285-e660-7cd1-a468-554e9b175825` returned verdict
+  `blocked`.
+- Verifier finding: O2 worker thread `019f0285-037b-7a21-b352-ece5b84efeca`
+  was still `inProgress`.
+- Verifier finding: worker cwd `/Users/wiz/.codex/worktrees/fb93/go-choir` was
+  on `codex/o2-qdrant-derived-index`, but had no O2 implementation commit or
+  final report at verification time.
+
+Open edge: Wait for the O2 worker final report with branch/commit handles,
+tests run, local Qdrant status or blocker, alias-switch decision,
+objectgraph-input boundary, embedder/provider boundary, and rebuild/rollback
+documentation. Then re-run verifier against the actual diff and evidence.

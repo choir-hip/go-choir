@@ -402,7 +402,9 @@ complete at branch level, with no main/staging/platform settlement claim. O2
 worker thread: `019f0285-037b-7a21-b352-ece5b84efeca` (`O2 worker - Qdrant
 Derived Index`) in `/Users/wiz/.codex/worktrees/fb93/go-choir`. O2 verifier
 thread: `019f0285-e660-7cd1-a468-554e9b175825` (`O2 verifier - Qdrant Derived
-Index`). O2 is active but no O2 obligation is complete yet.
+Index`). The verifier returned `blocked` because the worker turn was still
+`inProgress` and no final Qdrant report/diff/tests existed yet. O2 is active
+but no O2 obligation is complete yet.
 
 next move: Use `read_thread` on the O2 worker until it produces its Qdrant
 derived-index decision/implementation report, then use or follow up the O2
