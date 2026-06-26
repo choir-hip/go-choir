@@ -480,14 +480,13 @@ Universal Wire product. The latest accepted Delta V is 1: verifier thread
 `019f0617-f88e-72d3-a71a-c59b8a40e7a7` accepted worker commit
 `1e3e72bed659c7992aa09d4bfd6fcd3a84176d39`, now incorporated as `8121b4d4`, for
 durable branch-local `choir.universal_wire_story_cluster` identity and
-same-article revision when a later relevant source arrives. The latest deployed
-failure does not change V by itself because it sharpens an already-open O4
-obligation: the headline/article publication surface opens a blank Texture
-window with a 404, and the synthesis prose is deterministic platform meta-copy
-rather than news article copy. Remaining O4 variant is cross-source/world-model
-clustering, deployed publication-surface document readability, article-quality
-synthesis, and authenticated product evidence that existing synthesis articles
-update when later relevant information arrives.
+same-article revision when a later relevant source arrives. Worker thread
+`019f061f-0238-7c43-957f-f25a35c66d06` has produced branch-local article-surface
+repair commit `4c467cffba108b1eae3ef7e72fd9893539b3dc92`, but V does not
+decrease until an independent verifier accepts it. Remaining O4 variant is
+cross-source/world-model clustering, deployed publication-surface document
+readability, article-quality synthesis, and authenticated product evidence that
+existing synthesis articles update when later relevant information arrives.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -548,23 +547,27 @@ revision of the same article. O4 remains open because the owner-observed
 deployed article headline opens a blank Texture editor with `Get document failed
 (404)`, the live card copy is deterministic platform meta-prose rather than
 news article copy, and semantic multi-story clustering/provider-quality
-synthesis are still future realism axes. O5 product path has started through
-prompt bar/Texture/Super request, but O5 acceptance has not been replayed after
-the latest O4 work.
+synthesis are still future realism axes. Worker thread
+`019f061f-0238-7c43-957f-f25a35c66d06` produced commit
+`4c467cffba108b1eae3ef7e72fd9893539b3dc92`, which claims to replace the old
+Universal Wire meta-copy with reader-facing deterministic article prose, add a
+narrow read-time repair for already materialized old-copy edition stories, and
+prove the returned story `story_texture_doc_id` can be read through real public
+Texture document/revision endpoints with `read_owner=universal-wire-platform`.
+That claim is unaccepted until a verifier reviews the commit. O5 product path
+has started through prompt bar/Texture/Super request, but O5 acceptance has not
+been replayed after the latest O4 work.
 
-next move: article-surface repair worker is queued as pending Codex worktree
-`local:c735d584-6155-4b09-8f1f-f2a3eda99c78`. It should start from current root
-commit `6a17d369d3d2089134d9c2c8df716e51daccc537`, read the deployed failure
-checkpoint, and implement the smallest fix that makes the Universal Wire
-headline open the actual platform-owned Texture article without 404 while
-replacing deterministic Universal Wire meta-copy/headline framing with
-reader-facing article synthesis copy for the deterministic slice. It must add a
-test that exercises the real Universal Wire story -> Texture document read path,
-not only mocked `/api/texture/*`, and must preserve source_ref/Source Viewer
-behavior. Stop at `ready_for_verifier`; do not push or deploy. Expected Delta V:
-1 if branch-local tests and an independent verifier accept the headline-open
-repair. Deployed product acceptance still requires commit, push, CI/deploy
-identity, authenticated Chrome replay, and verifier evidence.
+next move: create an independent Codex verifier thread for worker commit
+`4c467cffba108b1eae3ef7e72fd9893539b3dc92` in worktree
+`/Users/wiz/.codex/worktrees/1967/go-choir`. The verifier should decide whether
+the branch-local repair actually fixes the headline-to-Texture read path,
+article-facing deterministic copy, and legacy meta-copy repair boundary while
+preserving source_ref/Source Viewer behavior, raw capture diagnostic-only
+semantics, and same-article/world-model update behavior. Expected Delta V: 1 if
+the verifier accepts and orchestration incorporates the worker commit. Deployed
+product acceptance still requires commit, push, CI/deploy identity,
+authenticated Chrome replay, and verifier evidence.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -582,8 +585,9 @@ revision, not card duplication; branch-local proof for that axis is now
 accepted and incorporated, but not deployed/product-accepted. The new owner
 screenshots add a second realism axis: the rendered card must open the actual
 platform-owned Texture article document, and the content must read as a news
-synthesis rather than status text about Universal Wire. The key O5 learning is
-that prompt bar and Texture
+synthesis rather than status text about Universal Wire. Worker commit
+`4c467cff` claims a branch-local repair for that axis; independent review is
+the next observer shift. The key O5 learning is that prompt bar and Texture
 materialization work, but Texture-to-Super acceptance still needs authenticated
 staging replay.
 
@@ -605,5 +609,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=28. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. Branch-local commit 8121b4d4ca835d1c334e18144296683098506f59 incorporates verifier-accepted worker commit 1e3e72bed659c7992aa09d4bfd6fcd3a84176d39, proving durable `sourcecycled-live` story-cluster identity and same-article revision when a later relevant source arrives. Owner screenshots on 2026-06-26 reveal the current deployed product is still not Universal Wire: it shows one deterministic meta-copy article, and clicking the headline opens a blank Texture window with `Get document failed (404)`. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles; the current route does not yet prove semantic clustering, article-quality synthesis, readable deployed Texture article publication surface, or same-article update semantics with product evidence. Next move: reconnect pending worker `local:c735d584-6155-4b09-8f1f-f2a3eda99c78` for bounded O4 article-surface repair from 6a17d369 to fix the headline-to-Texture 404 and replace Universal Wire meta-copy with reader-facing synthesis copy, stopping at ready_for_verifier with branch-local tests that exercise the real story -> Texture document read path rather than only mocked `/api/texture/*`. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=28. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. Branch-local commit 8121b4d4ca835d1c334e18144296683098506f59 incorporates verifier-accepted worker commit 1e3e72bed659c7992aa09d4bfd6fcd3a84176d39, proving durable `sourcecycled-live` story-cluster identity and same-article revision when a later relevant source arrives. Owner screenshots on 2026-06-26 reveal the current deployed product is still not Universal Wire: it shows one deterministic meta-copy article, and clicking the headline opens a blank Texture window with `Get document failed (404)`. Worker thread 019f061f-0238-7c43-957f-f25a35c66d06 produced branch-local commit 4c467cffba108b1eae3ef7e72fd9893539b3dc92 claiming a bounded repair: reader-facing deterministic article prose, legacy meta-copy repair, and real story -> Texture document/revision read proof. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles; the current route does not yet prove semantic clustering, article-quality synthesis, readable deployed Texture article publication surface, or same-article update semantics with product evidence. Next move: create an independent Codex verifier thread for commit 4c467cff in /Users/wiz/.codex/worktrees/1967/go-choir before incorporation. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

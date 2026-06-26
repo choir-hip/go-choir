@@ -8139,3 +8139,76 @@ readability and deterministic meta-copy article-surface gap if proven;
 
 Expected Delta V: 1 if the worker returns a committed branch-local repair proof
 and an independent verifier accepts it. Actual Delta V: 0 for this assignment.
+
+## 2026-06-26 - O4 Article-Surface Repair Worker Ready For Verifier
+
+Claim: worker thread `019f061f-0238-7c43-957f-f25a35c66d06` completed the
+bounded O4 article-surface repair worker pass and returned `ready_for_verifier`
+for commit `4c467cffba108b1eae3ef7e72fd9893539b3dc92` in worktree
+`/Users/wiz/.codex/worktrees/1967/go-choir`.
+
+Worker claim summary: commit `4c467cff` replaces deterministic Universal Wire
+sourcecycled synthesis headline/body copy with reader-facing article prose; adds
+a narrow read-time repair hook for existing edition stories that still expose
+the old meta-copy; and adds backend tests proving a story returned by
+`/api/universal-wire/stories` can be fetched through real public Texture
+document and revision endpoints with `read_owner=universal-wire-platform`.
+
+Changed files claimed by worker:
+
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/wire_synthesis.go`
+- `internal/runtime/universal_wire.go`
+- `internal/runtime/universal_wire_test.go`
+
+Worker commands/results:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc'
+  -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+- `git diff --check`: passed.
+- `git show --check --oneline HEAD`: passed.
+- `git status --short --ignored`: clean.
+
+Orchestration read-only checks before verifier request:
+
+- `git show --check --oneline
+  4c467cffba108b1eae3ef7e72fd9893539b3dc92`: passed, output
+  `4c467cff Repair Universal Wire article surface`.
+- `git diff --name-status
+  4c467cffba108b1eae3ef7e72fd9893539b3dc92^..4c467cffba108b1eae3ef7e72fd9893539b3dc92`:
+  four expected runtime files only.
+- `git status --short --ignored` in the worker worktree: clean/no output.
+
+Evidence boundary/non-claims: unverified worker-local branch proof only. This
+does not claim independent acceptance, root incorporation, push, CI, deploy,
+staging identity, authenticated product QA, provider freshness, semantic
+clustering, Qdrant, promotion/rollback, run acceptance, or publication/export.
+The worker reports that the suspected local DTO/transclusion/read-owner 404 did
+not reproduce after its repair path and is now covered by a real story ->
+Texture document/revision public route test.
+
+Mutation class / protected surfaces: orange runtime behavior and yellow tests.
+Touched Universal Wire sourcecycled synthesis copy, Universal Wire story route
+read-time repair, existing Wire edition linkage, and read-only Texture document
+access for platform-owned Wire articles. Red surfaces remain out of scope:
+auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
+promotion/rollback, run acceptance, candidate computers, and publication/export
+outside existing Wire edition helpers.
+
+Rollback path: drop/revert `4c467cffba108b1eae3ef7e72fd9893539b3dc92`. If
+incorporated later, root rollback for the current O4 branch-local slice is
+reverting `8121b4d4ca835d1c334e18144296683098506f59` plus the incorporated
+article-surface repair commit. Deployed identity remains
+`a2a5a74910be1c189cd9d9f090695169bf729561` until orchestration pushes/deploys.
+
+Heresy delta: worker claims `repaired` for branch-local headline-to-Texture
+readability proof and deterministic meta-copy article-surface gap; `discovered`
+remains for no narrower local reproduction of the deployed 404 beyond the now
+guarded story -> Texture read path.
+
+Expected Delta V: 1 if an independent verifier accepts `4c467cff` and
+orchestration incorporates it. Actual Delta V: 0 for this ready-for-verifier
+record.
