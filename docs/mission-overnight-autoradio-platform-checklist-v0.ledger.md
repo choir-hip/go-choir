@@ -10378,3 +10378,73 @@ Residual risks: the grouping remains a bounded deterministic topic/signal map;
 cluster IDs can still be affected by vocabulary and slug truncation in broader
 live data; deployed product proof remains required before claiming staging
 behavior.
+
+## 2026-06-27 - O4 Deployed Source-Aware Slice Exposes Read-Repair Gap
+
+Conjecture statement: deployed commit
+`b11e4fa29168fc25c070316e5189b777c9688443` preserves the branch-local
+source-aware/article-copy slice and repairs product-visible Universal Wire
+article copy on staging.
+
+Verdict: weakened. CI/deploy/health succeeded and Universal Wire still renders
+multiple Texture-backed articles, but authenticated product proof falsified the
+article-copy repair claim for existing deployed articles.
+
+Receipts:
+
+- Pushed root head `b11e4fa29168fc25c070316e5189b777c9688443` to
+  `origin/main`.
+- GitHub CI run `28278867763` completed successfully. Deploy job
+  `83790960862` completed successfully. Docs Truth Check run `28278867758` and
+  FlakeHub run `28278867761` completed successfully.
+- Public `https://choir.news/health` reported proxy and sandbox `commit` and
+  `deployed_commit` equal to
+  `b11e4fa29168fc25c070316e5189b777c9688443`, deployed at
+  `2026-06-27T04:45:30Z`.
+- Public unauthenticated `GET /api/universal-wire/stories` returned HTTP 401
+  with `{"error":"authentication required"}`, as expected.
+- Authenticated Computer Use replay in the owner's signed-in Chrome tab showed
+  ordinary Texture still loading with `Document loaded`, Universal Wire
+  rendering `11 articles`, and headline-opened Texture article windows with
+  version controls, `Sources 24`, native source buttons, rendered article text,
+  and `Document loaded`.
+- The same replay showed product-visible scaffold copy still present:
+  headlines such as `Multiple reports converge on Telegram Post from Hong Kong
+  Free Press Telegram`, body text beginning `24 incoming reports point to the
+  same developing story...`, and paragraphs containing `A second source in the
+  cluster...` and `reports read as one developing article`.
+- Code inspection after staging proof found the likely cause:
+  `universalWireSynthesisArticleMarkdown` and
+  `universalWireLiveSynthesisSummary` no longer emit those newer scaffold
+  phrases for newly generated content, but
+  `universalWireStoriesNeedArticleSurfaceRepair` only detects older legacy
+  phrases: `Universal Wire selected`, `graph-backed source captures`,
+  `Universal Wire live synthesis:`, and `Universal Wire treats`.
+
+Strong definitive statement: the branch-local tests proved new generated copy
+can avoid helper/meta framing, but staging product proof shows existing
+platform-owned Wire Texture articles with newer scaffold prose bypass read-time
+repair. The next repair must make deployed-shaped newer scaffold articles revise
+on read without loosening raw `choir.web_capture` diagnostic-only boundaries.
+
+Mutation class for this pass: green documentation-first checkpoint. Next
+implementation move is orange/red because it changes runtime repair policy and
+can create Texture revisions through existing helpers.
+
+Protected surfaces for the next move: Universal Wire story DTOs, runtime
+synthesis/article materialization, existing article revision/upsert semantics,
+Texture revisions through existing helpers, source entity/source_ref projection,
+Wire edition linkage, and read-only Texture publication surfaces for
+platform-owned Wire articles. Out of scope: auth/session renewal, vmctl,
+deployment routing, provider/gateway credentials, Qdrant, promotion/rollback,
+run acceptance, and publication/export outside existing Wire edition helpers.
+
+Admissible evidence for repair: focused local regression proving a
+deployed-shaped scaffold article triggers read repair, broader Universal Wire
+runtime selector, `git diff --check`, CI/deploy, health identity, and
+authenticated staging replay showing no product-visible scaffold phrases in the
+articles checked.
+
+Expected Delta V: 0 for this documentation-first discovery pass. Actual Delta V:
+0; it adds C11 as the next discriminator and prevents accepting `b11e4fa2` as an
+article-quality settlement.
