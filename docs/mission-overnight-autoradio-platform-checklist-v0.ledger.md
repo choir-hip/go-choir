@@ -12626,3 +12626,65 @@ path shows empty state while `/api/universal-wire/stories` returns 12 stories in
 the same authenticated session. A valid repair must preserve the article-copy
 improvement, public API behavior, Texture headline open, and native
 source/citation surfaces.
+
+## 2026-06-27 - O4 Wire UI API Mismatch And Texture Restore Read Scope Repaired
+
+Conjecture decided: the deployed Universal Wire empty-UI/headline-open failure was not missing article storage; it was a product-surface/read-scope edge. Current staging can render the non-empty Wire edition and open the platform-owned Texture article through the correct read owner.
+
+Problem Documentation First satisfied: `9509d708 Document O4 Wire UI API mismatch` recorded the deployed mismatch before code repair. The repair commit is `bef7fa0c Repair Universal Wire Texture restore read scope`.
+
+Root cause/evidence:
+
+- Authenticated public API on `ca30a35b` returned 12 `universal-wire-edition-texture` stories, but a prior UI probe observed the empty state.
+- Direct authenticated API checks showed ordinary-owner Texture reads for story doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` returned 404, while `?read_owner=universal-wire-platform` returned the document and revisions.
+- Current Universal Wire headline opens already include explicit platform read context, but restored/stale Universal Wire Texture windows may predate `platformRead` and `createdFrom: universal_wire_article` context fields.
+
+Repair:
+
+- `frontend/src/lib/TextureEditor.svelte` now infers Universal Wire platform read scope from legacy restored contexts with `appHint: universal-wire` plus `universal-wire/*.texture` source paths.
+- `frontend/tests/universal-wire-app.spec.js` now proves a restored Wire article context without explicit `platformRead` or `createdFrom` still uses `read_owner=universal-wire-platform`, while ordinary Texture reads remain untainted.
+
+Local evidence:
+
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 10.460s`.
+- `npx playwright test tests/universal-wire-app.spec.js -g "Universal Wire platform read does not taint ordinary Texture document reads" --timeout=120000` passed after starting local Vite on `127.0.0.1:5173`: 1 test.
+- `git diff --check` passed.
+
+Landing evidence:
+
+- Pushed `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35` to `origin/main`.
+- CI run `28284272706` passed.
+- FlakeHub run `28284272684` passed.
+- Deploy job `83805645285` passed.
+- `https://choir.news/health` reported proxy and sandbox `deployed_commit: bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`, deployed at `2026-06-27T08:50:34Z`.
+
+Authenticated staging acceptance:
+
+- Temporary Playwright product auth state was created outside the repo at `/tmp/choir-news-bef7fa0c.storage.json` for user `qa-bef7fa0c-1782550286@example.com`.
+- `/api/universal-wire/stories` returned HTTP 200, `source: universal-wire-edition-texture`, and 12 stories.
+- First story: headline `Telegram Post from Metropoles Telegram`, doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, semantic change type `legacy_revision_projection`.
+- Universal Wire UI rendered 12 story cards.
+- Opening the first headline loaded a Texture article containing the first headline, length 2030 characters.
+- Texture document/revision/stream requests used `read_owner=universal-wire-platform`; no ordinary-owner Texture document requests were observed for the opened Wire article.
+- No documented helper/provenance phrases appeared in API, UI, or Texture surfaces: `Universal Wire selected`, `graph-backed source captures`, `incoming reports point to the same developing story`, `reports read as one developing article`, `gives the clearest current account`, `second sourced angle`, or `The second account narrows what readers can trust now`.
+
+Conjecture verdict: supported for the deployed API/UI/open-Texture repair path. This decreases V from 4 to 3.
+
+Mutation class: orange frontend product behavior repair over Texture read scope for Universal Wire article opens/restores.
+
+Protected surfaces touched: Texture document read ownership in the frontend app context; Universal Wire UI-to-Texture article open path regression coverage. No auth/session renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, provider/model calls, or backend publication/export behavior was changed.
+
+Heresy delta: `repaired` for the documented UI/API mismatch and stale Universal Wire Texture restore read-scope edge.
+
+Residual risks/non-claims:
+
+- This does not prove provider/model-quality synthesis, broad semantic clustering, Qdrant/world-model projection, or full News benchmark settlement.
+- The live source-arrival update behavior remains the next realism axis.
+- Temporary auth artifacts remain outside the repo only.
+
+Dirty/generated artifact classification:
+
+- Intentional source/test changes committed in `bef7fa0c`.
+- Intentional durable docs/evidence changes in this paradoc and ledger.
+- Existing unrelated local WIP remains `skills/parallax/SKILL.md`.
+- Existing unrelated untracked report remains `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
