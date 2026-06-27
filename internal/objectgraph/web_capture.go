@@ -15,9 +15,6 @@ const (
 
 	UniversalWireStoryClusterObjectKind    ObjectKind = "choir.universal_wire_story_cluster"
 	UniversalWireStoryClusterSchemaVersion            = "choir.universal_wire_story_cluster.v1"
-
-	UniversalWireLiveArrivalStatusObjectKind    ObjectKind = "choir.universal_wire_live_arrival_status"
-	UniversalWireLiveArrivalStatusSchemaVersion            = "choir.universal_wire_live_arrival_status.v1"
 )
 
 type WebCaptureMetadata struct {

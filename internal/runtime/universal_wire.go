@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -75,38 +74,7 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 		Status:  "empty",
 		Summary: "Universal Wire found no publishable Texture synthesis articles.",
 	}
-	editionStories, editionResp, editionErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 12)
-	if editionErr == nil && len(editionStories) == 0 {
-		if synthesis, err := h.rt.synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(r.Context(), time.Now().UTC()); err != nil {
-			log.Printf("universal wire: graph capture materialization unavailable: %v", err)
-		} else if synthesis.Triggered {
-			editionStories, editionResp, editionErr = h.universalWireEditionTextureStories(r.Context(), styleSources, 12)
-		}
-	}
-	if editionErr == nil && len(editionStories) > 0 && universalWireStoriesNeedArticleSurfaceRepair(editionStories) && h != nil && h.rt != nil {
-		repaired, err := h.repairUniversalWireEditionArticleSurfaces(r.Context(), editionStories, time.Now().UTC())
-		if err != nil {
-			log.Printf("universal wire: article surface direct repair unavailable: %v", err)
-		}
-		if repaired {
-			if refreshedStories, refreshedEdition, refreshedErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); refreshedErr == nil {
-				editionStories, editionResp = refreshedStories, refreshedEdition
-			} else {
-				log.Printf("universal wire: article surface direct repair reload unavailable: %v", refreshedErr)
-			}
-		}
-		if !repaired {
-			if synthesis, err := h.rt.synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(r.Context(), time.Now().UTC()); err != nil {
-				log.Printf("universal wire: article surface repair unavailable: %v", err)
-			} else if synthesis.Triggered {
-				if refreshedStories, refreshedEdition, refreshedErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 12); refreshedErr == nil {
-					editionStories, editionResp = refreshedStories, refreshedEdition
-				} else {
-					log.Printf("universal wire: article surface repair reload unavailable: %v", refreshedErr)
-				}
-			}
-		}
-	}
+	editionStories, editionResp, editionErr := h.universalWireEditionTextureStories(r.Context(), styleSources, 0)
 	if editionErr == nil {
 		edition = editionResp
 		diagnostics.Substrates = append(diagnostics.Substrates, universalWireEditionDiagnostic(editionResp, len(editionStories)))
@@ -163,153 +131,6 @@ func (h *APIHandler) HandleUniversalWireStories(w http.ResponseWriter, r *http.R
 	})
 }
 
-func (h *APIHandler) repairUniversalWireEditionArticleSurfaces(ctx context.Context, stories []types.WireStory, now time.Time) (bool, error) {
-	if h == nil || h.rt == nil || h.rt.Store() == nil {
-		return false, nil
-	}
-	repaired := false
-	ownerID := universalWirePlatformOwnerID()
-	for _, story := range stories {
-		if !universalWireStoryNeedsArticleSurfaceRepair(story) || strings.TrimSpace(story.StoryTextureDoc) == "" {
-			continue
-		}
-		doc, err := h.rt.Store().GetDocument(ctx, story.StoryTextureDoc, ownerID)
-		if err != nil {
-			if err == store.ErrNotFound {
-				continue
-			}
-			return repaired, err
-		}
-		if strings.TrimSpace(doc.CurrentRevisionID) == "" {
-			continue
-		}
-		rev, err := h.rt.Store().GetRevision(ctx, doc.CurrentRevisionID, ownerID)
-		if err != nil {
-			if err == store.ErrNotFound {
-				continue
-			}
-			return repaired, err
-		}
-		if !universalWireRevisionNeedsArticleSurfaceRepair(rev) {
-			continue
-		}
-		ok, err := h.rt.repairUniversalWireSynthesisArticleFromRevision(ctx, doc, rev, now)
-		if err != nil {
-			return repaired, err
-		}
-		repaired = repaired || ok
-	}
-	return repaired, nil
-}
-
-func (rt *Runtime) repairUniversalWireSynthesisArticleFromRevision(ctx context.Context, doc types.Document, rev types.Revision, now time.Time) (bool, error) {
-	if rt == nil || rt.store == nil {
-		return false, nil
-	}
-	if !wireRevisionIsUniversalWireSynthesis(rev) || !universalWireRevisionNeedsArticleSurfaceRepair(rev) {
-		return false, nil
-	}
-	meta := decodeRevisionMetadata(rev.Metadata)
-	clusterID := firstNonEmpty(
-		metadataString(meta, "universal_wire_story_cluster_id"),
-		metadataString(meta, "source_network_cycle_id"),
-		metadataString(meta, "ingestion_handoff_cycle_id"),
-	)
-	if clusterID == "" {
-		return false, nil
-	}
-	sources := universalWireSynthesisSourcesFromTextureRevision(rev)
-	if len(sources) < 2 {
-		return false, nil
-	}
-	if _, _, _, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: clusterID,
-		Headline:  universalWireSynthesisHeadline(sources),
-		Sources:   sources,
-		Now:       now,
-	}); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func universalWireSynthesisSourcesFromTextureRevision(rev types.Revision) []universalWireSynthesisSource {
-	entities := wireArticleVisibleStructuredSourceEntities(rev)
-	if len(entities) == 0 && len(strings.TrimSpace(string(rev.SourceEntities))) > 0 {
-		var structured []texturedoc.SourceEntity
-		if err := json.Unmarshal(rev.SourceEntities, &structured); err == nil {
-			for _, entity := range structured {
-				entities = append(entities, provenanceSourceEntityFromStructured(entity))
-			}
-		}
-	}
-	sources := make([]universalWireSynthesisSource, 0, len(entities))
-	for _, entity := range entities {
-		source, ok := universalWireSynthesisSourceFromTextureSourceEntity(entity)
-		if !ok {
-			continue
-		}
-		sources = append(sources, source)
-	}
-	return normalizedUniversalWireSynthesisSources(sources)
-}
-
-func universalWireSynthesisSourceFromTextureSourceEntity(entity textureSourceEntity) (universalWireSynthesisSource, bool) {
-	snapshot := wireSourceEntityReaderSnapshot(entity)
-	body := ""
-	if snapshot != nil {
-		body = strings.TrimSpace(snapshot.TextContent)
-	}
-	title := firstNonEmpty(
-		strings.TrimSpace(entity.Label),
-		metadataString(entity.ReaderSnapshot, "source_title"),
-		strings.TrimSpace(entity.Target.CanonicalURL),
-		strings.TrimSpace(entity.Target.URL),
-		wireArticleSourceEntityManifestID(entity),
-	)
-	itemID := wireArticleSourceEntityManifestID(entity)
-	canonicalURL := firstNonEmpty(strings.TrimSpace(entity.Target.CanonicalURL), strings.TrimSpace(entity.Target.URL))
-	if title == "" || body == "" || itemID == "" {
-		return universalWireSynthesisSource{}, false
-	}
-	var fetchedAt time.Time
-	for _, key := range []string{"fetched_at", "captured_at"} {
-		if raw := metadataString(entity.ReaderSnapshot, key); raw != "" {
-			if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-				fetchedAt = parsed.UTC()
-				break
-			}
-		}
-	}
-	return universalWireSynthesisSource{
-		ItemID:       itemID,
-		SourceID:     strings.TrimSpace(entity.Target.SourceID),
-		FetchID:      strings.TrimSpace(entity.Target.FetchID),
-		Title:        title,
-		URL:          strings.TrimSpace(entity.Target.URL),
-		CanonicalURL: canonicalURL,
-		Language:     metadataString(entity.ReaderSnapshot, "language"),
-		Body:         body,
-		FetchedAt:    fetchedAt,
-	}, true
-}
-
-func universalWireRevisionNeedsArticleSurfaceRepair(rev types.Revision) bool {
-	if !universalWireRevisionTextNeedsArticleSurfaceRepair(rev.Content) {
-		return false
-	}
-	return wireRevisionIsUniversalWireSynthesis(rev)
-}
-
-func universalWireRevisionTextNeedsArticleSurfaceRepair(text string) bool {
-	return universalWireTextContainsArticleSurfaceHelper(text)
-}
-
-func universalWireStoryNeedsArticleSurfaceRepair(story types.WireStory) bool {
-	text := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
-	return universalWireRevisionTextNeedsArticleSurfaceRepair(text)
-}
-
 func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, styleSources []types.WireStyleSource, limit int) ([]types.WireStory, *universalWireEditionResponse, error) {
 	if h == nil || h.rt == nil || h.rt.Store() == nil {
 		return nil, nil, nil
@@ -353,11 +174,11 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		IncludedDocIDs: includedDocIDs,
 		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
 	}
-	type editionStoryCandidate struct {
-		story types.WireStory
-	}
-	candidates := make([]editionStoryCandidate, 0, len(includedDocIDs))
+	stories := make([]types.WireStory, 0, min(len(includedDocIDs), limit))
 	for _, docID := range includedDocIDs {
+		if limit > 0 && len(stories) >= limit {
+			break
+		}
 		doc, err := h.rt.Store().GetDocument(ctx, docID, platformOwner)
 		if err != nil {
 			if err == store.ErrNotFound {
@@ -379,234 +200,15 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		if !ok {
 			continue
 		}
-		story.SemanticStory = h.universalWireStorySemanticState(ctx, rev)
 		if h.platformdStoryVerificationEnabled() &&
 			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
-		if universalWireSynthesisStoryStaleUnderCurrentClassifier(rev) {
-			continue
-		}
-		if h.universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx, rev) {
-			continue
-		}
+		story.Prominence = 100 - len(stories)
 		story.SourceState = "universal-wire-edition-texture"
-		candidates = append(candidates, editionStoryCandidate{
-			story: story,
-		})
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		left := candidates[i].story.UpdatedAt
-		right := candidates[j].story.UpdatedAt
-		if left.Equal(right) {
-			return candidates[i].story.StoryTextureDoc < candidates[j].story.StoryTextureDoc
-		}
-		return left.After(right)
-	})
-	stories := make([]types.WireStory, 0, len(candidates))
-	for _, candidate := range candidates {
-		stories = append(stories, candidate.story)
-	}
-	if limit > 0 && len(stories) > limit {
-		stories = stories[:limit]
-	}
-	for i := range stories {
-		stories[i].Prominence = 100 - i
+		stories = append(stories, story)
 	}
 	return stories, edition, nil
-}
-
-func universalWireSynthesisStoryStaleUnderCurrentClassifier(rev types.Revision) bool {
-	if !wireRevisionIsUniversalWireSynthesis(rev) {
-		return false
-	}
-	meta := decodeRevisionMetadata(rev.Metadata)
-	clusterID := firstNonEmpty(
-		metadataString(meta, "universal_wire_story_cluster_id"),
-		metadataString(meta, "source_network_cycle_id"),
-		metadataString(meta, "ingestion_handoff_cycle_id"),
-	)
-	if clusterID == "" {
-		return false
-	}
-	if !strings.HasPrefix(clusterID, "sourcecycled-live-") {
-		return false
-	}
-	sources := universalWireSynthesisSourcesFromTextureRevision(rev)
-	if len(sources) < 2 {
-		return false
-	}
-	sourceItemIDs := map[string]bool{}
-	for _, source := range sources {
-		if itemID := strings.TrimSpace(source.ItemID); itemID != "" {
-			sourceItemIDs[itemID] = true
-		}
-	}
-	for _, group := range universalWireDeterministicStorySourceGroups(sources) {
-		if group.ClusterID == clusterID {
-			groupItemIDs := map[string]bool{}
-			for _, source := range group.Sources {
-				if itemID := strings.TrimSpace(source.ItemID); itemID != "" {
-					groupItemIDs[itemID] = true
-				}
-			}
-			if len(groupItemIDs) > 0 && len(groupItemIDs) < len(sourceItemIDs) {
-				return true
-			}
-			return false
-		}
-	}
-	return true
-}
-
-func (h *APIHandler) universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx context.Context, rev types.Revision) bool {
-	if h == nil || h.rt == nil || !wireRevisionIsUniversalWireSynthesis(rev) {
-		return false
-	}
-	status, ok, err := h.rt.latestUniversalWireLiveArrivalStatus(ctx)
-	if err != nil || !ok || status.SynthesisStatus != "skipped" {
-		return false
-	}
-	observedAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(status.ObservedAt))
-	if err != nil || !observedAt.After(rev.CreatedAt) {
-		return false
-	}
-	switch strings.TrimSpace(status.SynthesisSkipReason) {
-	case "no graph-backed synthesis sources matched known story concepts",
-		"no deterministic story group reached two sources with a shared topic and story signal",
-		"no deterministic story group produced a new or updated Texture article":
-		return true
-	default:
-		return false
-	}
-}
-
-func (h *APIHandler) universalWireStorySemanticState(ctx context.Context, rev types.Revision) *types.WireStorySemanticState {
-	meta := decodeRevisionMetadata(rev.Metadata)
-	clusterObjectID := metadataString(meta, "universal_wire_story_cluster_object_id")
-	if h != nil && h.rt != nil && h.rt.ObjectGraph() != nil && clusterObjectID != "" {
-		if obj, err := h.rt.ObjectGraph().GetObject(ctx, clusterObjectID); err == nil {
-			var state universalWireSemanticStoryState
-			if err := json.Unmarshal(obj.Body, &state); err == nil && state.StoryID != "" {
-				return wireStorySemanticStateFromClusterState(state)
-			}
-		}
-	}
-	storyID := metadataString(meta, "universal_wire_semantic_story_id")
-	changeType := metadataString(meta, "universal_wire_semantic_change_type")
-	if storyID == "" && changeType == "" {
-		return wireStoryLegacySemanticStateFromMetadata(meta)
-	}
-	count := wireMetadataInt(meta["synthesis_source_count"])
-	return &types.WireStorySemanticState{
-		StoryID:             storyID,
-		ChangeType:          changeType,
-		CurrentSourceCount:  count,
-		SourceCount:         count,
-		PreviousSourceCount: 0,
-	}
-}
-
-func wireStoryLegacySemanticStateFromMetadata(meta map[string]any) *types.WireStorySemanticState {
-	if meta == nil {
-		return nil
-	}
-	clusterID := firstNonEmpty(
-		metadataString(meta, "universal_wire_story_cluster_id"),
-		metadataString(meta, "source_network_cycle_id"),
-		metadataString(meta, "ingestion_handoff_cycle_id"),
-	)
-	if clusterID == "" {
-		return nil
-	}
-	isWireSynthesis := metadataBoolValue(meta, "universal_wire_synthesis") ||
-		metadataString(meta, "ingestion_handoff_request_kind") == "synthesis_cluster" ||
-		metadataString(meta, "universal_wire_article_alias_path") != ""
-	if !isWireSynthesis {
-		return nil
-	}
-	sourceItemIDs := metadataStringSliceValue(meta, "source_item_ids")
-	count := wireMetadataInt(meta["synthesis_source_count"])
-	if count == 0 {
-		count = len(sourceItemIDs)
-	}
-	signature := append([]string{clusterID}, sourceItemIDs...)
-	return &types.WireStorySemanticState{
-		SchemaVersion:       "choir.universal_wire_story_cluster.semantic.legacy.v1",
-		WorldModelKind:      "universal_wire_semantic_story",
-		StoryID:             stableSourceEntityID("universal_wire_semantic_story", strings.Join(signature, "|")),
-		ChangeType:          "legacy_revision_projection",
-		SemanticSignature:   signature,
-		PreviousSourceCount: 0,
-		CurrentSourceCount:  count,
-		SourceCount:         count,
-	}
-}
-
-func wireStorySemanticStateFromClusterState(state universalWireSemanticStoryState) *types.WireStorySemanticState {
-	if state.StoryID == "" {
-		return nil
-	}
-	var frame *types.WireStoryEventFrame
-	if state.EventFrame.Lead != "" ||
-		state.EventFrame.CurrentAccount != "" ||
-		state.EventFrame.LatestDevelopment != "" ||
-		state.EventFrame.ContinuityQuestion != "" {
-		frame = &types.WireStoryEventFrame{
-			Lead:               state.EventFrame.Lead,
-			CurrentAccount:     state.EventFrame.CurrentAccount,
-			LatestDevelopment:  state.EventFrame.LatestDevelopment,
-			ContinuityQuestion: state.EventFrame.ContinuityQuestion,
-		}
-	}
-	var updateDecision *types.WireStoryUpdateDecision
-	if state.UpdateDecision.Decision != "" || state.UpdateDecision.Rationale != "" {
-		updateDecision = &types.WireStoryUpdateDecision{
-			SchemaVersion:        state.UpdateDecision.SchemaVersion,
-			Decision:             state.UpdateDecision.Decision,
-			Rationale:            state.UpdateDecision.Rationale,
-			ContinuityPredicates: append([]string(nil), state.UpdateDecision.ContinuityPredicates...),
-			MatchedSourceItemIDs: append([]string(nil), state.UpdateDecision.MatchedSourceItemIDs...),
-			AddedSourceItemIDs:   append([]string(nil), state.UpdateDecision.AddedSourceItemIDs...),
-			SplitPredicates:      append([]string(nil), state.UpdateDecision.SplitPredicates...),
-			UnresolvedQuestions:  append([]string(nil), state.UpdateDecision.UnresolvedQuestions...),
-		}
-	}
-	return &types.WireStorySemanticState{
-		SchemaVersion:       state.SchemaVersion,
-		WorldModelKind:      state.WorldModelKind,
-		StoryID:             state.StoryID,
-		ChangeType:          state.LatestChange.ChangeType,
-		SemanticSignature:   append([]string(nil), state.SemanticSignature...),
-		TopicConcepts:       append([]string(nil), state.TopicConcepts...),
-		SignalConcepts:      append([]string(nil), state.SignalConcepts...),
-		EventFrame:          frame,
-		UpdateDecision:      updateDecision,
-		PreviousSourceCount: state.LatestChange.PreviousSourceCount,
-		CurrentSourceCount:  state.LatestChange.CurrentSourceCount,
-		SourceCount:         state.SourceCount,
-		ChangedAt:           state.LatestChange.ChangedAt,
-	}
-}
-
-func wireMetadataInt(value any) int {
-	switch typed := value.(type) {
-	case int:
-		return typed
-	case int64:
-		return int(typed)
-	case float64:
-		return int(typed)
-	case json.Number:
-		n, _ := typed.Int64()
-		return int(n)
-	case string:
-		var n int
-		if _, err := fmt.Sscanf(strings.TrimSpace(typed), "%d", &n); err == nil {
-			return n
-		}
-	}
-	return 0
 }
 
 func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit int) ([]types.WireStory, universalWireFeedSubstrateDiagnostic, error) {
@@ -924,11 +526,8 @@ func (h *APIHandler) platformdStoryVerificationEnabled() bool {
 
 func wireRevisionIsUniversalWireSynthesis(rev types.Revision) bool {
 	meta := decodeRevisionMetadata(rev.Metadata)
-	return metadataBoolValue(meta, "universal_wire_synthesis") ||
-		metadataString(meta, "ingestion_handoff_request_kind") == "synthesis_cluster" ||
-		metadataString(meta, "universal_wire_article_alias_path") != "" ||
-		metadataString(meta, "universal_wire_story_cluster_id") != "" ||
-		metadataString(meta, "universal_wire_story_cluster_object_id") != ""
+	value, ok := meta["universal_wire_synthesis"].(bool)
+	return ok && value
 }
 
 func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {
@@ -1043,16 +642,6 @@ func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {
 		out = append(out, docID)
 	}
 	return out
-}
-
-func universalWireStoriesNeedArticleSurfaceRepair(stories []types.WireStory) bool {
-	for _, story := range stories {
-		text := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
-		if universalWireTextContainsArticleSurfaceHelper(text) {
-			return true
-		}
-	}
-	return false
 }
 
 func universalWirePlatformOwnerID() string {

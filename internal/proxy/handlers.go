@@ -712,14 +712,14 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 }
 
 // protectedAPIResolveTarget chooses which computer sandbox should serve an
-// authenticated /api/* request. Universal Wire edition/oracle state lives on
-// the always-on platform computer.
+// authenticated /api/* request. Universal Wire edition state lives on the
+// always-on platform computer.
 func protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (ownerID, resolvedDesktopID string) {
 	if r == nil || r.URL == nil {
 		return userID, desktopID
 	}
 	path := r.URL.Path
-	if path == "/api/universal-wire/stories" || path == "/api/universal-wire/live-arrival" {
+	if path == "/api/universal-wire/stories" {
 		return vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID
 	}
 	return userID, desktopID

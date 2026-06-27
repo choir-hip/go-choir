@@ -529,4 +529,93 @@ a test double, never a product path.
 
 ---
 
-*Documented 2026-06-27 12:10 EDT, Boston, MA.*
+## Deletion Evidence (2026-06-27)
+
+Executed by Heresy Deletion v1 (`docs/mission-heresy-deletion-v1.md`). See that
+paradoc and its ledger for the Parallax settlement record.
+
+**Repaired heresies (3):**
+
+- **H-WIRE-DETERMINISTIC-SCAFFOLD** — `REPAIRED`. Session 2 code reverted
+  (selective checkout of all changed code paths back to `6d88d7f5`, preserving
+  docs and the unrelated parallax skill update at HEAD). The hardcoded keyword
+  classifier, template prose, stale detection, helper-phrase blacklist,
+  live-arrival oracle, semantic story DTOs, and event frames are gone.
+- **H-WIRE-READ-TRIGGERED-WRITE** — `REPAIRED`. The two GET-handler branches in
+  `HandleUniversalWireStories` that called
+  `synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` on read
+  (materialization + `universalWireStoriesNeedArticleSurfaceRepair`) are
+  removed. The dead `universalWireStoriesNeedArticleSurfaceRepair` helper is
+  removed. A GET no longer creates Texture revisions.
+- **H-WIRE-ACCRETION-WITHOUT-CONSOLIDATION** — `REPAIRED`. The 115-commit / 71
+  function accretion is reverted to the anchor, and the session-1 fake
+  synthesis machinery is consolidated into one inert dispatch stub.
+
+**Surgical deletion (session 1):**
+
+- `universalWireSynthesisArticleMarkdown` (template prose generator) — DELETED.
+- `universalWireLiveSynthesisHeadline` (source-label headline) — DELETED.
+- `universalWireLiveSynthesisSummary` (template summary) — DELETED.
+- `synthesizeUniversalWireSourceClusterTextureArticle` body — replaced with a
+  real processor dispatch. It translates the cluster sources into
+  `sources.Item`s, derives the processor key/batch (mirroring
+  `cycle.sourceProcessorKey`, inlined because `runtime` cannot import `cycle`
+  — the cycle → provider → runtime import cycle), and submits a processor run
+  via `rt.StartRunWithMetadata` with the metadata shape
+  `createRunWithMetadata` recognizes (`agent_profile=processor`,
+  `processor_key`, `source_item_ids`, `ingestion_handoff_request_id`,
+  `continuity_ref`, `universal_wire_story_cluster_id`). The processor agent
+  decides whether to open a Texture story; `createRunWithMetadata` opens
+  per-source-item decision work items via `beginWireProcessorSourceDecisionWorkItems`.
+  The function returns the dispatched run handle (sentinel
+  `processor_dispatched:<run_id>`) rather than a finished Document/Revision,
+  since synthesis is now asynchronous. The legacy fake-synthesis helpers
+  (`getOrCreateUniversalWireSynthesisDocument`,
+  `ensureUniversalWireEditionIncludes`,
+  `publishUniversalWireSynthesisArticleToPlatform`,
+  `upsertUniversalWireStoryCluster`, `normalizedUniversalWireSynthesisSources`,
+  `universalWireSynthesisSourceEntities`, `universalWireSynthesisHeadline`,
+  `universalWireSlug`, `containsWireString`, `universalWireStoryClusterObjectID`)
+  are removed as dead code.
+- 12-story hard cap — REMOVED. `HandleUniversalWireStories` now passes `limit=0`
+  (no cap) to `universalWireEditionTextureStories`.
+- 5 tests that asserted the deleted direct/read-triggered synthesis bypass —
+  DELETED: `TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster`,
+  `TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures`,
+  `TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture`,
+  `TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition`,
+  `TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges`.
+
+**Intact (kept per mission bounds):**
+
+- Agent pipeline: `tools_wire_processor.go`, `wire_publication.go`,
+  `tools_coagent.go`, `wire_reconciler_debounce.go`,
+  `wire_platform_publish.go` — unchanged from HEAD.
+- Cycle package: `synthesize.go` (original LLM synthesizer),
+  `ingestion_handoff.go` — unchanged.
+- Clean substrate: O1 (`internal/objectgraph/` core), O2
+  (`internal/qdrant/`), O3 (`internal/store/texture_source_graph.go`).
+- Texture core.
+
+**Remaining heresy (1):**
+
+- **H-WIRE-SOFT-GUARDRAIL** — OPEN. The synthesis entry point now dispatches
+  a real processor run, but the processor/Texture agents do not yet produce a
+  real LLM-synthesized article end-to-end (that wiring is the successor
+  mission `docs/mission-universal-wire-agent-pipeline-v1.md`). This remains
+  open until a real LLM-synthesized article reaches the edition.
+
+**Verification:** `go build ./...`, `go vet ./...`, all 4 runtime shards
+(`scripts/go-test-runtime-shards`), `internal/cycle/...`,
+`internal/objectgraph/...`, `internal/store/...`, `internal/qdrant/...` all
+pass. 10 surviving Universal Wire tests pass;
+`TestSynthesizeUniversalWireSourceClusterDispatchesProcessorRun` proves the
+dispatch submits a processor run with the correct metadata and opens
+per-source-item work items; 5 synthesis-bypass tests deleted. Net diff:
+~4,230 lines removed, processor dispatch added, agent pipeline and clean
+substrate intact.
+
+---
+
+*Documented 2026-06-27 12:10 EDT, Boston, MA. Deletion evidence appended
+2026-06-27 by Heresy Deletion v1.*

@@ -2966,18 +2966,16 @@ func TestVMctlRouting_SameUserPinnedToSameVM(t *testing.T) {
 	}
 }
 
-func TestProtectedAPIResolveTarget_UniversalWirePlatformRoutesUsePlatformComputer(t *testing.T) {
-	for _, path := range []string{"/api/universal-wire/stories", "/api/universal-wire/live-arrival"} {
-		ownerID, desktopID := protectedAPIResolveTarget(httptest.NewRequest(http.MethodGet, path, nil), "user-alice", vmctl.PrimaryDesktopID)
-		if ownerID != vmctl.UniversalWirePlatformOwnerID {
-			t.Fatalf("%s ownerID = %q, want %q", path, ownerID, vmctl.UniversalWirePlatformOwnerID)
-		}
-		if desktopID != vmctl.UniversalWirePlatformDesktopID {
-			t.Fatalf("%s desktopID = %q, want %q", path, desktopID, vmctl.UniversalWirePlatformDesktopID)
-		}
+func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *testing.T) {
+	ownerID, desktopID := protectedAPIResolveTarget(httptest.NewRequest(http.MethodGet, "/api/universal-wire/stories", nil), "user-alice", vmctl.PrimaryDesktopID)
+	if ownerID != vmctl.UniversalWirePlatformOwnerID {
+		t.Fatalf("ownerID = %q, want %q", ownerID, vmctl.UniversalWirePlatformOwnerID)
+	}
+	if desktopID != vmctl.UniversalWirePlatformDesktopID {
+		t.Fatalf("desktopID = %q, want %q", desktopID, vmctl.UniversalWirePlatformDesktopID)
 	}
 
-	ownerID, desktopID := protectedAPIResolveTarget(httptest.NewRequest(http.MethodPost, "/api/prompt-bar", nil), "user-alice", vmctl.PrimaryDesktopID)
+	ownerID, desktopID = protectedAPIResolveTarget(httptest.NewRequest(http.MethodPost, "/api/prompt-bar", nil), "user-alice", vmctl.PrimaryDesktopID)
 	if ownerID != "user-alice" || desktopID != vmctl.PrimaryDesktopID {
 		t.Fatalf("prompt-bar resolve = (%q, %q), want caller desktop", ownerID, desktopID)
 	}

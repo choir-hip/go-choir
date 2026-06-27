@@ -105,7 +105,6 @@ type webCaptureProjectionSummary struct {
 type runtimeWebCaptureProjectionRequest struct {
 	OwnerID    string         `json:"owner_id"`
 	ComputerID string         `json:"computer_id,omitempty"`
-	CycleID    string         `json:"cycle_id,omitempty"`
 	Items      []sources.Item `json:"items"`
 	Now        string         `json:"now,omitempty"`
 }
@@ -286,7 +285,7 @@ func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, erro
 }
 
 func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cycleID string, items []sources.Item, now time.Time, eventType, message string) error {
-	summary, err := projectSourceItemsToObjectGraph(ctx, cycleID, items, now)
+	summary, err := projectSourceItemsToObjectGraph(ctx, items, now)
 	if err != nil {
 		return err
 	}
@@ -303,9 +302,9 @@ func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cy
 	return nil
 }
 
-func projectSourceItemsToObjectGraph(ctx context.Context, cycleID string, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
+func projectSourceItemsToObjectGraph(ctx context.Context, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
 	if dispatcher := ingestionRuntimeDispatcherFromEnv(); dispatcher != nil && strings.TrimSpace(dispatcher.baseURL) != "" {
-		return dispatcher.projectWebCaptures(ctx, cycleID, items, now)
+		return dispatcher.projectWebCaptures(ctx, items, now)
 	}
 	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
 	if err != nil {
@@ -352,7 +351,7 @@ func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store *cycle.S
 			})
 			return nil
 		}
-		summary, err := dispatcher.projectWebCaptures(ctx, cycleID, items, now)
+		summary, err := dispatcher.projectWebCaptures(ctx, items, now)
 		if err != nil {
 			return err
 		}
@@ -1157,14 +1156,13 @@ func (d *ingestionRuntimeDispatcher) runtimeWebCapturesEndpoint() string {
 	return d.baseURL + "/internal/runtime/objectgraph/web-captures"
 }
 
-func (d *ingestionRuntimeDispatcher) projectWebCaptures(ctx context.Context, cycleID string, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
+func (d *ingestionRuntimeDispatcher) projectWebCaptures(ctx context.Context, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
 	if d == nil || d.client == nil {
 		return webCaptureProjectionSummary{}, fmt.Errorf("runtime dispatcher is not configured")
 	}
 	payload := runtimeWebCaptureProjectionRequest{
 		OwnerID:    d.ownerID,
 		ComputerID: sourceServiceObjectGraphComputerID(),
-		CycleID:    strings.TrimSpace(cycleID),
 		Items:      items,
 		Now:        now.UTC().Format(time.RFC3339Nano),
 	}

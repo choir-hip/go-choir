@@ -112,66 +112,100 @@ because Path B short-circuited it.
 
 ## Checklist
 
-- [ ] Revert `6d88d7f5..HEAD` (session 2, 115 commits)
-- [ ] Verify repo compiles after revert
-- [ ] Delete `universalWireSynthesisArticleMarkdown` template prose generator
-- [ ] Delete `universalWireLiveSynthesisHeadline` source-label headline function
-- [ ] Delete `universalWireLiveSynthesisSummary` template summary function
-- [ ] Delete or stub `synthesizeUniversalWireSourceClusterTextureArticle`
+- [x] Revert `6d88d7f5..HEAD` (session 2, 115 commits)
+- [x] Verify repo compiles after revert
+- [x] Delete `universalWireSynthesisArticleMarkdown` template prose generator
+- [x] Delete `universalWireLiveSynthesisHeadline` source-label headline function
+- [x] Delete `universalWireLiveSynthesisSummary` template summary function
+- [x] Delete or stub `synthesizeUniversalWireSourceClusterTextureArticle`
       (the direct synthesis bypass — keep the function signature if
       sourcecycled ingestion calls it, but replace the body with a
       processor dispatch)
-- [ ] Remove 12-story hard cap from `HandleUniversalWireStories`
-- [ ] Delete tests for deleted functions
-- [ ] Verify repo compiles and remaining tests pass
-- [ ] Run `nix develop -c scripts/go-test-runtime-shards` or focused Wire tests
+- [x] Remove 12-story hard cap from `HandleUniversalWireStories`
+- [x] Delete tests for deleted functions
+- [x] Verify repo compiles and remaining tests pass
+- [x] Run `nix develop -c scripts/go-test-runtime-shards` or focused Wire tests
 - [ ] Commit deletion as a single atomic commit
-- [ ] Update heresy document with deletion evidence
+- [x] Update heresy document with deletion evidence
 
 Acceptance: repo compiles, existing tests pass, heresy count reduced by at
 least 3. Agent pipeline code intact. Clean substrate intact.
 
 ## Parallax State
 
-status: proposed
+status: settled
 
 mission conjecture: if reverting session 2 and surgically deleting session 1
 fake synthesis code produces a compiling repo with the agent pipeline and
 clean substrate intact, then the Universal Wire can be rebuilt by wiring
 the existing agent pipeline to replace the deterministic scaffold.
+VERDICT: supported. Repo compiles, all runtime shards + cycle + O1-O3 pass,
+agent pipeline + cycle + clean substrate verified intact, 3 heresies repaired.
 
 deeper goal (G): a clean repo state where the existing processor → Texture
 agent → publication → reconciler pipeline can be wired to produce real
-LLM-synthesized articles.
+LLM-synthesized articles. ADVANCED — the synthesis entry point now dispatches
+into the processor run, so the successor mission starts from a live dispatch
+rather than an inert stub.
 
 witness/spec (A/S): reverted commit range, deleted functions, compiling repo,
-passing tests, heresy document updated.
+passing tests, processor dispatch implemented, heresy document updated.
+ALL SATISFIED.
 
 invariants / qualities / domain ramp (I/Q/D): Do not touch O1-O3 settled code.
 Do not touch Texture core. Do not delete agent pipeline code (processor
 decisions, coagent routing, publication, reconciler debounce). Do not delete
 `cycle/synthesize.go`. Domain: local build + test only; no deploy needed.
+ALL PRESERVED — verified each protected file matches the pre-mission commit.
 
-variant (conjecture descent) V: count heresies still present. Current: 4.
-Target: 1 (H-WIRE-SOFT-GUARDRAIL remains until real synthesis is produced).
+variant (conjecture descent) V: count heresies still present. Was 4.
+Now 1 (H-WIRE-SOFT-GUARDRAIL, open until real LLM synthesis is produced).
+ΔV = -3, exceeds the settlement requirement of "reduced by 3+".
 
-budget: 1 pass.
+budget: 1 pass granted, 1 pass spent (with one verifier-forced revision adding
+the actual processor dispatch after the initial inert-stub pass). Solvent.
 
-authority / bounds: may revert commits, delete functions, delete tests, commit.
-May not touch agent pipeline, cycle package, O1-O3, Texture core, or
-quarantined centralized service code.
+authority / bounds: reverted session-2 code, deleted functions, deleted tests,
+implemented the processor dispatch, committed. Did not touch agent pipeline,
+cycle package, O1-O3, Texture core, or quarantined centralized service code.
 
-mutation class / protected surfaces: Orange — deleting runtime behavior.
-Protected: agent pipeline, cycle, O1-O3, Texture core.
+mutation class / protected surfaces: Orange — deleting runtime behavior + wiring
+a processor dispatch. Protected: agent pipeline, cycle, O1-O3, Texture core.
+All verified intact.
 
-evidence packet: revert commit SHA, deleted function list, `go build` output,
-test output.
+evidence packet: working-tree diff (~4,230 lines removed, dispatch added),
+`go build ./...` clean, `go vet ./...` clean, all 4 runtime shards pass,
+`internal/cycle/...` pass, `internal/objectgraph/...` pass,
+`internal/store/...` pass, `internal/qdrant/...` pass, 10 surviving Universal
+Wire tests pass, `TestSynthesizeUniversalWireSourceClusterDispatchesProcessorRun`
+proves the dispatch submits a processor run with `agent_profile=processor`,
+`processor_key`, `source_item_ids`, and cluster metadata, and that
+`createRunWithMetadata` opens per-source-item decision work items. 5
+synthesis-bypass tests deleted. Heresy doc updated with deletion evidence.
 
 heresy delta: `repaired` for H-WIRE-DETERMINISTIC-SCAFFOLD,
 H-WIRE-READ-TRIGGERED-WRITE, H-WIRE-ACCRETION-WITHOUT-CONSOLIDATION.
+`discovered` (not repaired) for H-WIRE-SOFT-GUARDRAIL — that stays open for
+the successor mission (the dispatch routes into the pipeline, but the
+processor/Texture agents do not yet produce a real LLM-synthesized article
+end-to-end).
 
-next move: revert session 2, then delete session 1 fake synthesis functions
-one by one, verifying compilation after each.
+position / live conjectures / open edges: The repo is at a known-clean state.
+`synthesizeUniversalWireSourceClusterTextureArticle` now dispatches a real
+processor run (translates sources → `sources.Item`, derives the processor
+key/batch mirroring `cycle.sourceProcessorKey`, and submits via
+`StartRunWithMetadata` with the metadata shape `createRunWithMetadata`
+recognizes). The processor-key derivation is inlined in `wire_synthesis.go`
+because `runtime` cannot import `cycle` (the cycle → provider → runtime import
+cycle); this is consolidation debt for the successor mission, which should
+extract the handoff builder into a leaf package both can import. What remains
+for H-WIRE-SOFT-GUARDRAIL: the processor agent must decide to open a Texture
+story and the Texture agent must write the revision via the LLM provider, then
+wire publication/reconciler must carry it to the edition. The dispatch is the
+ingress; the synthesis is the successor's work.
+
+next move: amend the deletion commit with the dispatch, then hand off to
+`docs/mission-universal-wire-agent-pipeline-v1.md`.
 
 ledger file: `docs/mission-heresy-deletion-v1.ledger.md`
 
@@ -179,8 +213,16 @@ version / lineage: v1. Depends on
 `docs/heresy-universal-wire-deterministic-scaffold-2026-06-27.md`.
 Successor: `docs/mission-universal-wire-agent-pipeline-v1.md`.
 
-settlement: settled when repo compiles, tests pass, heresy count reduced by
-3+, agent pipeline intact.
+learning state: (1) the selective-checkout technique (restore code paths from
+an anchor while preserving unrelated docs/skill at HEAD) cleanly separates a
+session's code accretion from unrelated commits that landed on top; (2)
+`runtime` cannot import `cycle` because cycle → provider → runtime — a real
+architectural constraint the successor mission must resolve by extracting the
+handoff builder into a leaf package. Retain both for future Universal Wire work.
+
+settlement: SETTLED. Repo compiles, all relevant tests pass, heresy count
+reduced by 3 (4 → 1), agent pipeline and clean substrate verified intact, and
+the synthesis entry point dispatches a real processor run.
 
 ## Suggested Goal String
 

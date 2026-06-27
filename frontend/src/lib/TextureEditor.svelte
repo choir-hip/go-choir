@@ -783,12 +783,7 @@
 
 
   function wantsPlatformReadScope(ctx = appContext) {
-    const sourcePath = typeof ctx?.sourcePath === 'string' ? ctx.sourcePath.toLowerCase() : '';
-    return !!(
-      ctx?.platformRead ||
-      ctx?.createdFrom === 'universal_wire_article' ||
-      (ctx?.appHint === 'universal-wire' && sourcePath.startsWith('universal-wire/') && sourcePath.endsWith('.texture'))
-    );
+    return !!(ctx?.platformRead || ctx?.createdFrom === 'universal_wire_article');
   }
 
   function applyPlatformReadScope(ctx = appContext) {
