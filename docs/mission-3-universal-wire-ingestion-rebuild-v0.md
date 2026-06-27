@@ -1,6 +1,6 @@
 # Mission 3: Universal Wire Ingestion Rebuild
 
-**Status:** planning  
+**Status:** in progress — 3a settled, 3b next  
 **Date:** 2026-06-27  
 **Spikes:** `docs/mission-3-spikes-2026-06-27.md` (all 6 complete, evidence gathered)  
 **Predecessor:** `docs/mission-heresy-deletion-v1.md` (settled — deterministic scaffold deleted, processor dispatch wired)  
@@ -21,20 +21,26 @@ dispatch. Verified state of the pipeline:
 
 1. **GDELT 15-min cadence coupled to universal polling** — the 15-min ticker
    in `cmd/sourcecycled/main.go` ticks ALL sources, not just GDELT. RSS and
-   Telegram should poll faster. Decouple in 3a.
+   Telegram should poll faster. **Decouple in 3b.**
 2. **~~`sourcegraph` heuristic clustering~~** — Verified: `sourcegraph` is
    provenance infrastructure (creates source entities, web captures, edges).
    `cycle.Engine.Cluster` is shallow vertical grouping by metadata field,
    not heuristic token-concept clustering. Both are real infrastructure.
-3. **Processor key duplication** — `cycle.sourceProcessorKey` and
-   `wire_synthesis.go:universalWireSourceProcessorKey` are identical logic
-   duplicated because `runtime` cannot import `cycle` (import cycle:
-   cycle → provider → runtime). Needs extraction to a leaf package. (3a)
-4. **No real embeddings** — Qdrant pipeline used a deterministic hash embedder
-   for tests. OllamaEmbedder exists (Spike 2) but is not wired in. (3b)
-5. **No Dolt object graph** — objectgraph.Store uses SQLite. DoltStore exists
-   (Spike 3) but is not wired in. (3b)
-6. **No Qdrant on staging** — now fixed (Spike 1, deployed via CI).
+3. **~~Processor key duplication~~** — **Fixed in 3a.** 5 functions extracted
+   to `internal/wire/processorkey/` leaf package. Both `cycle` and `runtime`
+   import it. `universalWire*` duplicates deleted.
+4. **~~No real embeddings~~** — **Fixed in 3a.** `OllamaEmbedder` wired into
+   `Runtime.QdrantPipeline()` with configurable URL + model (env:
+   `OLLAMA_URL`, `OLLAMA_EMBEDDING_MODEL`).
+5. **~~No Dolt object graph~~** — **Fixed in 3a.** `DoltStore` replaces
+   `SQLiteStore` as `objectgraph.Store`. Workspace path derived from store
+   path. `Service.Config.SQLite` renamed to `Durable`.
+6. **~~No Qdrant on staging~~** — Fixed (Spike 1, deployed via CI).
+7. **No Qdrant semantic dedup in pipeline** — Qdrant pipeline is wired but
+   not used in the ingestion path. Items are deduped by content hash only.
+   **Add semantic dedup in 3b.**
+8. **No production Qdrant collection** — `EnsureProductionCollection` exists
+   (3a) but hasn't been called on staging startup. **Wire in 3b.**
 
 ## What Works (Keep)
 
@@ -61,31 +67,34 @@ dispatch. Verified state of the pipeline:
 This is an umbrella mission split into 4 sub-missions, each with its own paradoc.
 Sub-missions run sequentially unless noted.
 
-### 3a: Cleanup & Component Wiring
+### 3a: Cleanup & Component Wiring ✅ Settled
 
-**Paradoc:** `docs/mission-3a-cleanup-wiring-v0.md`  
+**Paradoc:** `docs/mission-3a-cleanup-wiring-v0.md` (settled, V=0)  
+**Commit:** `e76aa068`  
 **Confidence:** High — mechanical extraction + connecting proven components  
 **Risk:** Low — wiring bugs, not architecture uncertainty  
 
-Extract duplicated logic and wire spike components into the real pipeline:
-- Extract 5 duplicated processor key functions from `cycle/ingestion_handoff.go` to a leaf package both `cycle` and `runtime` can import
-- Replace deterministic hash embedder with `OllamaEmbedder` in Qdrant pipeline
-- Replace `SQLiteStore` with `DoltStore` as objectgraph.Store
-- Configure Qdrant client to point at node-b instance
-- Confirm source body text reaches Texture agent (verify prior fix still works)
-- Create real Qdrant collection with production schema on node-b
+Completed:
+- Extracted 5 duplicated processor key functions to `internal/wire/processorkey/` leaf package
+- Wired `OllamaEmbedder` into `Runtime.QdrantPipeline()` (lazy init, configurable via env)
+- Replaced `SQLiteStore` with `DoltStore` as `objectgraph.Store` (renamed `Config.SQLite` → `Config.Durable`)
+- Configured Qdrant client for node-b (env: `QDRANT_URL`, default `http://127.0.0.1:6333`)
+- Added `EnsureProductionCollection` for idempotent collection creation (1024-dim, Cosine, payload indexes)
+- Added `CreatePayloadIndex` to `API` interface (removed type assertion hack)
+- Verified source body text reaches Texture agent — all tests pass
 
 ### 3b: New Ingestion Path (E2E)
 
-**Paradoc:** `docs/mission-3b-ingestion-path-v0.md` (to be drafted after 3a)  
+**Paradoc:** `docs/mission-3b-ingestion-path-v0.md`  
 **Confidence:** Medium — real captures, dynamic threshold, synthesis quality, cadence change  
-**Risk:** Medium — E2E flow may reveal integration issues  
+**Risk:** Medium — E2E flow may reveal integration issues, staging deploy required  
 
 Build the new ingestion path end-to-end on a single VM:
-- Decouple GDELT 15-min cadence from universal polling loop — GDELT stays 15-min, RSS/Telegram get faster configurable intervals
-- sourcecycled → Qdrant routing (semantic dedup) → Dolt object graph → Texture synthesis → publish
-- Dynamic routing threshold (function of content volume, shard count, embedding model — not a magic constant)
-- Calibration run with real captures to set initial threshold
+- Per-source-type polling cadences (GDELT 15-min, RSS/Telegram configurable, env vars)
+- Qdrant semantic dedup in runtime before processor dispatch (embed + search + threshold)
+- Configurable routing threshold (env: `QDRANT_DEDUP_THRESHOLD`, default 0.7862, logged)
+- Verify sourcecycled writes web captures to runtime's Dolt-backed objectgraph
+- Call `EnsureProductionCollection` on staging startup
 - Acceptance: real source capture produces a source-grounded article on staging within minutes
 
 ### 3c: Distribution
@@ -134,5 +143,5 @@ Expand source coverage to new protocols:
 ## Suggested Goal String
 
 ```text
-Mission 3 is an umbrella mission with 4 sub-missions (3a-3d). Start with 3a (cleanup & component wiring). See docs/mission-3-universal-wire-ingestion-rebuild-v0.md for the full architecture and docs/mission-3a-cleanup-wiring-v0.md for the 3a paradoc. Spike evidence is in docs/mission-3-spikes-2026-06-27.md. All spikes are merged to main. Qdrant is deployed on node-b.
+Mission 3 is an umbrella mission with 4 sub-missions (3a-3d). 3a (cleanup & component wiring) is settled — commit e76aa068. Next: 3b (new ingestion path E2E). See docs/mission-3-universal-wire-ingestion-rebuild-v0.md for the full architecture, docs/mission-3a-cleanup-wiring-v0.md for 3a (settled), and docs/mission-3b-ingestion-path-v0.md for the 3b paradoc. Spike evidence is in docs/mission-3-spikes-2026-06-27.md. All spikes are merged to main. Qdrant is deployed on node-b.
 ```
