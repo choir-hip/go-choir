@@ -549,17 +549,17 @@ remain outside that product path. Behavior-changing work must name mutation
 class, protected surfaces, admissible evidence, rollback path, conjecture delta,
 and heresy delta before editing.
 
-mutation class / protected surfaces: Current move is orange/red branch-local
-verification for the Universal Wire live-arrival oracle slice. Worker commit
-`28f2b4ead6eb008e46cc6cad986167ba3204c8d5` touches authenticated public
-`/api/universal-wire/*`, sourcecycled-to-runtime projection metadata,
-objectgraph status metadata, and focused runtime/sourcecycled tests. Rollback
-path is revert `28f2b4ead6eb008e46cc6cad986167ba3204c8d5` plus dependent
-evidence commits. The slice must remain read-only from public product routes and
-must not trigger sourcecycled ingestion, seed source items, expose internal
-source payloads, or touch auth/session renewal, vmctl, deployment routing,
-provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
-publication/export outside existing Wire edition helpers.
+mutation class / protected surfaces: Current move is orange/red landing for
+the accepted Universal Wire live-arrival oracle slice. Root commit `f7b73952`
+incorporates worker commit `28f2b4ead6eb008e46cc6cad986167ba3204c8d5`, touching
+authenticated public `/api/universal-wire/*`, sourcecycled-to-runtime projection
+metadata, objectgraph status metadata, and focused runtime/sourcecycled tests.
+Rollback path is revert `f7b73952` plus dependent evidence commits. The slice
+must remain read-only from public product routes and must not trigger
+sourcecycled ingestion, seed source items, expose internal source payloads, or
+touch auth/session renewal, vmctl, deployment routing, provider/gateway
+credentials, Qdrant, promotion/rollback, run acceptance, or publication/export
+outside existing Wire edition helpers.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -801,16 +801,18 @@ findings. The verifier confirmed the `/tmp` observer packet supports the
 
 Worker thread `019f08a0-4ffb-72a3-ba7e-381e77797a96` completed
 `O4-live-arrival-product-oracle-slice-worker` with commit
-`28f2b4ead6eb008e46cc6cad986167ba3204c8d5`. The branch-local slice adds
-authenticated public read-only `GET /api/universal-wire/live-arrival`, carries
-`cycle_id` from sourcecycled into runtime, records a redacted
+`28f2b4ead6eb008e46cc6cad986167ba3204c8d5`. Independent verifier thread
+`019f08a8-3659-74a3-beeb-2a0f23f539d4` returned `accept`, finding no blocking
+or revision-required issues. The branch-local slice adds authenticated public
+read-only `GET /api/universal-wire/live-arrival`, carries `cycle_id` from
+sourcecycled into runtime, records a redacted
 `choir.universal_wire_live_arrival_status` graph object after projection and
 synthesis, and exposes latest boundary/timestamp/status/counts/synthesis
-summary without public ingestion triggers or raw source payloads. Worker evidence
-passed `cmd/sourcecycled` and runtime selectors plus diff hygiene. Verifier
-pending worktree handle `local:be1f75f4-9115-4f0e-b31e-600f446fed7d` is queued
-for `O4-live-arrival-product-oracle-slice-verifier`; do not incorporate or land
-`28f2b4e` until independent verifier acceptance is recorded.
+summary without public ingestion triggers or raw source payloads. Worker and
+verifier evidence passed `cmd/sourcecycled` and runtime selectors plus diff
+hygiene. Root incorporated the accepted slice as `f7b73952`; next required move
+is the behavior-changing landing loop: push, CI/deploy, health identity, and
+deployed oracle acceptance.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -848,5 +850,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=2. Deployed commit a155c663142fd97289a36a2cc3c9eac7ef0902d2 has CI/deploy/health proof and authenticated API/UI/open-Texture proof: temporary user qa-a155c663-1782553302@example.com saw /api/universal-wire/stories return 12 universal-wire-edition-texture stories, Universal Wire render 12 cards, and the first headline open Texture doc 4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf with read_owner=universal-wire-platform and no helper/provenance phrases. Worker O4-live-source-arrival-oracle-product-proof-worker then created qa-o4-oracle-1782553934@example.com and ran a public authenticated observer from 2026-06-27T09:53:30Z through 2026-06-27T10:14:05Z: /api/universal-wire/stories plus Texture revision reads stayed stable at 12 stories, edition doc 5ac77c23-2642-4b74-b557-87d05c87e79f, edition revision 8fb9686a-5cc3-402c-9b08-2a1b43f0ac59, and zero story/revision diffs. Verifier thread 019f0897-8fa3-7460-819a-ff17b95ae173 accepted this docs-only finding. Worker thread 019f08a0-4ffb-72a3-ba7e-381e77797a96 then produced branch-local commit 28f2b4ead6eb008e46cc6cad986167ba3204c8d5 adding authenticated public read-only GET /api/universal-wire/live-arrival backed by redacted sourcecycled live-arrival status metadata; no public ingestion trigger or source seeding is claimed. Verifier pending worktree local:be1f75f4-9115-4f0e-b31e-600f446fed7d is queued for O4-live-arrival-product-oracle-slice-verifier. Next move: read the verifier verdict; if accepted, incorporate 28f2b4e and run the behavior-changing landing loop, then use the deployed oracle to compare before/after /api/universal-wire/stories and Texture revision/source state to decide whether later relevant source arrivals update an existing semantic story/article while preserving unrelated articles. Follow AGENTS.md and Problem Documentation First. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=2. Deployed commit a155c663142fd97289a36a2cc3c9eac7ef0902d2 has CI/deploy/health proof and authenticated API/UI/open-Texture proof: temporary user qa-a155c663-1782553302@example.com saw /api/universal-wire/stories return 12 universal-wire-edition-texture stories, Universal Wire render 12 cards, and the first headline open Texture doc 4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf with read_owner=universal-wire-platform and no helper/provenance phrases. Worker O4-live-source-arrival-oracle-product-proof-worker then created qa-o4-oracle-1782553934@example.com and ran a public authenticated observer from 2026-06-27T09:53:30Z through 2026-06-27T10:14:05Z: /api/universal-wire/stories plus Texture revision reads stayed stable at 12 stories, edition doc 5ac77c23-2642-4b74-b557-87d05c87e79f, edition revision 8fb9686a-5cc3-402c-9b08-2a1b43f0ac59, and zero story/revision diffs. Verifier thread 019f0897-8fa3-7460-819a-ff17b95ae173 accepted this docs-only finding. Worker thread 019f08a0-4ffb-72a3-ba7e-381e77797a96 produced branch-local commit 28f2b4ead6eb008e46cc6cad986167ba3204c8d5 adding authenticated public read-only GET /api/universal-wire/live-arrival backed by redacted sourcecycled live-arrival status metadata; verifier thread 019f08a8-3659-74a3-beeb-2a0f23f539d4 accepted it. Root incorporated the accepted slice as f7b73952. Next move: push f7b73952 plus this evidence, monitor CI/deploy, verify choir.news health reports the pushed SHA, then run authenticated deployed acceptance proving GET /api/universal-wire/live-arrival is authenticated/read-only and exposes a sourcecycled boundary if one exists. After that, use the deployed oracle to compare before/after /api/universal-wire/stories and Texture revision/source state to decide whether later relevant source arrivals update an existing semantic story/article while preserving unrelated articles. Follow AGENTS.md and Problem Documentation First. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

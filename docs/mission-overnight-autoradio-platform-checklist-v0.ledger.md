@@ -13570,3 +13570,109 @@ proof. Actual Delta V: 0. V remains 2.
 Next move: read the independent verifier verdict. If accepted, incorporate
 `28f2b4e`, run the full behavior-changing landing loop, then use the deployed
 oracle to collect a fresh source-arrival before/after product proof.
+
+## 2026-06-27 - O4 Live Arrival Product Oracle Verifier Accepted And Incorporated
+
+Move: accept independent verifier verdict for the live-arrival oracle slice and
+incorporate the worker code into root.
+
+Verifier:
+
+- Thread: `019f08a8-3659-74a3-beeb-2a0f23f539d4`.
+- Work item: `O4-live-arrival-product-oracle-slice-verifier`.
+- Reviewed worker thread `019f08a0-4ffb-72a3-ba7e-381e77797a96`, worker
+  worktree `/Users/wiz/.codex/worktrees/d585/go-choir`, and commit
+  `28f2b4ead6eb008e46cc6cad986167ba3204c8d5`.
+- Verdict: `accept`.
+- Findings: no blocking or revision-required findings. Commit `28f2b4e`
+  supports the branch-local conjecture.
+
+Verifier evidence:
+
+- Public route/auth/read-only behavior: `internal/runtime/api.go` registers
+  public `GET /api/universal-wire/live-arrival`; the handler rejects non-GET,
+  requires normal authenticated user context, reads
+  `latestUniversalWireLiveArrivalStatus`, and writes no ingestion/capture state.
+  No internal caller header is required for the public route.
+- Projection/status boundary: sourcecycled carries `cycle_id` into the runtime
+  projection payload; runtime writes web captures, runs Universal Wire synthesis,
+  then records `choir.universal_wire_live_arrival_status` only after
+  projection/synthesis.
+- Redaction/correlation: the read model exposes boundary/timestamps/status,
+  counts, and synthesis summary, not raw source bodies or source item payloads.
+  Tests cover auth, latest boundary, story/Texture correlation, redaction, and
+  repeated-read non-mutation.
+- Docs/ledger accurately frame this as branch-local/test-tier oracle repair
+  only, with no push/deploy/staging/product acceptance claim.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: no output.
+- `git show --check --oneline 28f2b4ead6eb008e46cc6cad986167ba3204c8d5`
+  passed.
+- `git diff --check 28f2b4ead6eb008e46cc6cad986167ba3204c8d5^..28f2b4ead6eb008e46cc6cad986167ba3204c8d5`
+  passed.
+- `git diff --name-status 28f2b4ead6eb008e46cc6cad986167ba3204c8d5^..28f2b4ead6eb008e46cc6cad986167ba3204c8d5`
+  showed the expected eight modified files.
+- `nix develop -c go test ./cmd/sourcecycled -run 'UniversalWire|Sourcecycled|WebCapture|Runtime' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireLiveArrival|TestHandleUniversalWireStoriesRequiresAuth|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed.
+- Post-test `git status --short --ignored`: no output.
+
+Root incorporation:
+
+- Root cherry-picked the worker code and kept the newer root paradoc/ledger
+  state during expected docs conflicts.
+- Root incorporated the accepted code as
+  `f7b73952 Expose Universal Wire live arrival oracle`.
+- Incorporated source paths: `cmd/sourcecycled/main.go`,
+  `internal/objectgraph/registry.go`, `internal/objectgraph/web_capture.go`,
+  `internal/runtime/api.go`, `internal/runtime/sourcecycled_web_captures.go`,
+  and `internal/runtime/universal_wire_test.go`.
+
+Root commands/results:
+
+- `git diff --cached --check` passed before commit.
+- `nix develop -c go test ./cmd/sourcecycled -run 'UniversalWire|Sourcecycled|WebCapture|Runtime' -count=1`
+  passed in the root checkout.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireLiveArrival|TestHandleUniversalWireStoriesRequiresAuth|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`
+  passed in the root checkout.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed in the root checkout.
+
+Evidence boundary and non-claims: accepted and incorporated only at
+branch-local/root-test tier so far. No push, CI, deploy, staging identity,
+staging authenticated replay, provider/model synthesis, Qdrant/world-model,
+promotion/rollback, run acceptance, or full News benchmark settlement is
+claimed yet. This oracle does not prove that a future sourcecycled cycle will
+include a later matching source or that staging article update semantics are
+correct under load.
+
+Residual risks: staging still needs a deployed acceptance pass using this oracle
+to bracket before/after `/api/universal-wire/stories` and Texture
+revision/source snapshots. The public read model intentionally exposes synthesis
+doc/revision/cluster ids for correlation; verifier found no raw source payload
+leak.
+
+Mutation class: orange/red behavior slice. Protected surfaces:
+authenticated public `/api/universal-wire/*`, internal sourcecycled-to-runtime
+projection metadata, objectgraph status metadata, and focused
+runtime/sourcecycled tests.
+
+Rollback path: revert root commit `f7b73952` plus dependent evidence commits;
+the public oracle route and status object registration disappear, returning C6
+to the documented missing-oracle state.
+
+Heresy delta: `repaired` at branch-local/root-test tier for the missing
+product/public live-arrival oracle. No staging/product repair claim until the
+landing loop and deployed acceptance pass complete.
+
+Expected Delta V: 0 until push/deploy/product proof. Actual Delta V: 0. V
+remains 2.
+
+Next move: push `f7b73952` plus this evidence, monitor CI/deploy, verify
+staging health identity, and run authenticated deployed acceptance for the new
+oracle before using it to decide C6 fresh-arrival update semantics.
