@@ -203,6 +203,28 @@ in
     };
   };
 
+  # Qdrant vector search engine (host service, localhost-only).
+  # The Go qdrant client (internal/qdrant) talks to http://127.0.0.1:6333.
+  # VMs on the tap network cannot reach 127.0.0.1; see VM reachability note
+  # in the mission doc. If VMs need Qdrant access, bind to the tap IP or
+  # 0.0.0.0 (the firewall already blocks 6333 externally).
+  services.qdrant = {
+    enable = true;
+    settings = {
+      service = {
+        host = "127.0.0.1";
+        http_port = 6333;
+        grpc_port = 6334;
+      };
+      storage = {
+        storage_path = "/var/lib/qdrant/storage";
+        snapshots_path = "/var/lib/qdrant/snapshots";
+        hnsw_index.on_disk = true;
+      };
+      telemetry_disabled = true;
+    };
+  };
+
   # ── Systemd services ──────────────────────────────────────────────────
   # Host services: auth, proxy, vmctl, gateway, sandbox, maild, platformd,
   # and sourcecycled.
