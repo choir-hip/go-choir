@@ -384,6 +384,7 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		if !ok {
 			continue
 		}
+		story.SemanticStory = h.universalWireStorySemanticState(ctx, rev)
 		if h.platformdStoryVerificationEnabled() &&
 			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
@@ -393,6 +394,71 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		stories = append(stories, story)
 	}
 	return stories, edition, nil
+}
+
+func (h *APIHandler) universalWireStorySemanticState(ctx context.Context, rev types.Revision) *types.WireStorySemanticState {
+	meta := decodeRevisionMetadata(rev.Metadata)
+	clusterObjectID := metadataString(meta, "universal_wire_story_cluster_object_id")
+	if h != nil && h.rt != nil && h.rt.ObjectGraph() != nil && clusterObjectID != "" {
+		if obj, err := h.rt.ObjectGraph().GetObject(ctx, clusterObjectID); err == nil {
+			var state universalWireSemanticStoryState
+			if err := json.Unmarshal(obj.Body, &state); err == nil && state.StoryID != "" {
+				return wireStorySemanticStateFromClusterState(state)
+			}
+		}
+	}
+	storyID := metadataString(meta, "universal_wire_semantic_story_id")
+	changeType := metadataString(meta, "universal_wire_semantic_change_type")
+	if storyID == "" && changeType == "" {
+		return nil
+	}
+	count := wireMetadataInt(meta["synthesis_source_count"])
+	return &types.WireStorySemanticState{
+		StoryID:             storyID,
+		ChangeType:          changeType,
+		CurrentSourceCount:  count,
+		SourceCount:         count,
+		PreviousSourceCount: 0,
+	}
+}
+
+func wireStorySemanticStateFromClusterState(state universalWireSemanticStoryState) *types.WireStorySemanticState {
+	if state.StoryID == "" {
+		return nil
+	}
+	return &types.WireStorySemanticState{
+		SchemaVersion:       state.SchemaVersion,
+		WorldModelKind:      state.WorldModelKind,
+		StoryID:             state.StoryID,
+		ChangeType:          state.LatestChange.ChangeType,
+		SemanticSignature:   append([]string(nil), state.SemanticSignature...),
+		TopicConcepts:       append([]string(nil), state.TopicConcepts...),
+		SignalConcepts:      append([]string(nil), state.SignalConcepts...),
+		PreviousSourceCount: state.LatestChange.PreviousSourceCount,
+		CurrentSourceCount:  state.LatestChange.CurrentSourceCount,
+		SourceCount:         state.SourceCount,
+		ChangedAt:           state.LatestChange.ChangedAt,
+	}
+}
+
+func wireMetadataInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		n, _ := typed.Int64()
+		return int(n)
+	case string:
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(typed), "%d", &n); err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 func (h *APIHandler) universalWireWebCaptureStories(ctx context.Context, limit int) ([]types.WireStory, universalWireFeedSubstrateDiagnostic, error) {

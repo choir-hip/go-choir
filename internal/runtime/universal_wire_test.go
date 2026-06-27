@@ -191,7 +191,8 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		captureDiagnostic.StoryCount != 2 ||
 		len(captureStories) != 2 ||
 		captureStories[0].SourceState != "objectgraph-web-capture" ||
-		captureStories[0].StoryTextureDoc != "" {
+		captureStories[0].StoryTextureDoc != "" ||
+		captureStories[0].SemanticStory != nil {
 		t.Fatalf("raw graph captures should remain diagnostic substrate, got diagnostic=%+v stories=%+v", captureDiagnostic, captureStories)
 	}
 	firstRev, err := handler.rt.Store().GetRevision(context.Background(), firstProjection.SynthesisRevisionID, universalWirePlatformOwnerID())
@@ -240,6 +241,16 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		!slices.Contains(firstSemanticState.TopicConcepts, "transport") ||
 		!slices.Contains(firstSemanticState.SignalConcepts, "inspection") {
 		t.Fatalf("first semantic story state = %+v metadata=%#v, want durable created world-model state", firstSemanticState, firstClusterMeta)
+	}
+	assertWireStorySemanticStateForTest(t, firstStory, firstSemanticState)
+	firstStoriesJSON, err := json.Marshal(firstStories)
+	if err != nil {
+		t.Fatalf("marshal first stories: %v", err)
+	}
+	if !strings.Contains(string(firstStoriesJSON), `"semantic_story"`) ||
+		strings.Contains(string(firstStoriesJSON), "universal_wire_semantic_story_id") ||
+		strings.Contains(string(firstStoriesJSON), "World-model") {
+		t.Fatalf("first product story response = %s, want structured semantic evidence without raw metadata/prose leaks", string(firstStoriesJSON))
 	}
 	if strings.Contains(firstRev.Content, firstSemanticState.StoryID) ||
 		strings.Contains(firstRev.Content, "World-model") ||
@@ -337,6 +348,22 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		countStrings(secondStories.Edition.IncludedDocIDs, firstProjection.SynthesisDocID) != 1 {
 		t.Fatalf("updated stories = %+v, want one revised article and one edition transclusion", secondStories)
 	}
+	assertWireStorySemanticStateForTest(t, secondStories.Stories[0], secondSemanticState)
+	if secondStories.Stories[0].SemanticStory.StoryID != firstStory.SemanticStory.StoryID ||
+		secondStories.Stories[0].SemanticStory.ChangeType != "source_added" ||
+		secondStories.Stories[0].SemanticStory.PreviousSourceCount != 2 ||
+		secondStories.Stories[0].SemanticStory.CurrentSourceCount != 3 {
+		t.Fatalf("updated product story semantic evidence = %+v, want same story id with typed source_added change", secondStories.Stories[0].SemanticStory)
+	}
+	secondStoriesJSON, err := json.Marshal(secondStories)
+	if err != nil {
+		t.Fatalf("marshal second stories: %v", err)
+	}
+	if !strings.Contains(string(secondStoriesJSON), firstStory.SemanticStory.StoryID) ||
+		strings.Contains(secondStories.Stories[0].TextureContent, firstStory.SemanticStory.StoryID) ||
+		strings.Contains(string(secondStoriesJSON), "universal_wire_semantic_story_id") {
+		t.Fatalf("updated product story response = %s, content=%q; want API-observable story id without reader-copy leak", string(secondStoriesJSON), secondStories.Stories[0].TextureContent)
+	}
 	assertUniversalWireStoryTextureReadableForTest(t, handler, secondStories.Stories[0], secondProjection.SynthesisRevisionID)
 }
 
@@ -368,6 +395,7 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 		t.Fatalf("stories = %+v, want two platform-owned synthesis articles in the Wire edition", stories)
 	}
 	docIDs := map[string]bool{}
+	semanticStoryIDs := map[string]bool{}
 	for _, story := range stories.Stories {
 		if story.StoryTextureDoc == "" ||
 			story.SourceState != "universal-wire-edition-texture" ||
@@ -375,6 +403,14 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 			len(story.Manifest.Lead) != 2 {
 			t.Fatalf("story = %+v, want synthesized Texture article with two source-ref leads", story)
 		}
+		if story.SemanticStory == nil ||
+			story.SemanticStory.StoryID == "" ||
+			story.SemanticStory.ChangeType != "story_created" ||
+			story.SemanticStory.CurrentSourceCount != 2 ||
+			story.SemanticStory.SourceCount != 2 {
+			t.Fatalf("story semantic evidence = %+v, want product-observable created semantic story", story.SemanticStory)
+		}
+		semanticStoryIDs[story.SemanticStory.StoryID] = true
 		assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
 		docIDs[story.StoryTextureDoc] = true
 		assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
@@ -451,8 +487,9 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 	}
 	if !clusterIDs[universalWireLiveSourcecycledClusterID+"-transport-delay-flood-inspection"] ||
 		!clusterIDs[universalWireLiveSourcecycledClusterID+"-transport-strike"] ||
-		len(clusterDocIDs) != 2 {
-		t.Fatalf("clusters = %#v docIDs=%#v, want separate transport rail-reopening and transport-strike articles", clusterIDs, clusterDocIDs)
+		len(clusterDocIDs) != 2 ||
+		len(semanticStoryIDs) != 2 {
+		t.Fatalf("clusters = %#v docIDs=%#v semanticIDs=%#v, want separate transport rail-reopening and transport-strike articles", clusterIDs, clusterDocIDs, semanticStoryIDs)
 	}
 
 	captureStories, captureDiagnostic, err := handler.universalWireWebCaptureStories(ctx, 12)
@@ -465,7 +502,7 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 		t.Fatalf("raw graph captures diagnostic = %+v stories=%+v, want diagnostic-only capture substrate", captureDiagnostic, captureStories)
 	}
 	for _, story := range captureStories {
-		if story.SourceState != "objectgraph-web-capture" || story.StoryTextureDoc != "" {
+		if story.SourceState != "objectgraph-web-capture" || story.StoryTextureDoc != "" || story.SemanticStory != nil {
 			t.Fatalf("raw graph capture helper story = %+v, want diagnostic-only non-article projection", story)
 		}
 	}
@@ -820,6 +857,33 @@ func assertUniversalWireStoryAvoidsHelperCopyForTest(t *testing.T, story types.W
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("story contains helper/meta copy %q: %+v", forbidden, story)
 		}
+	}
+}
+
+func assertWireStorySemanticStateForTest(t *testing.T, story types.WireStory, want universalWireSemanticStoryState) {
+	t.Helper()
+	if story.SemanticStory == nil {
+		t.Fatalf("story semantic evidence = nil for story %+v", story)
+	}
+	got := story.SemanticStory
+	if got.SchemaVersion != want.SchemaVersion ||
+		got.WorldModelKind != want.WorldModelKind ||
+		got.StoryID != want.StoryID ||
+		got.ChangeType != want.LatestChange.ChangeType ||
+		got.PreviousSourceCount != want.LatestChange.PreviousSourceCount ||
+		got.CurrentSourceCount != want.LatestChange.CurrentSourceCount ||
+		got.SourceCount != want.SourceCount ||
+		got.ChangedAt != want.LatestChange.ChangedAt ||
+		!slices.Equal(got.SemanticSignature, want.SemanticSignature) ||
+		!slices.Equal(got.TopicConcepts, want.TopicConcepts) ||
+		!slices.Equal(got.SignalConcepts, want.SignalConcepts) {
+		t.Fatalf("story semantic evidence = %+v, want cluster semantic state %+v", got, want)
+	}
+	readerCopy := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
+	if strings.Contains(readerCopy, got.StoryID) ||
+		strings.Contains(readerCopy, "universal_wire_semantic_story_id") ||
+		strings.Contains(readerCopy, "World-model") {
+		t.Fatalf("reader-facing story copy leaked semantic metadata id/state: story=%+v semantic=%+v", story, got)
 	}
 }
 

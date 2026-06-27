@@ -42,27 +42,44 @@ type WireSourceManifest struct {
 	Context    []WireSourceItem `json:"context"`
 }
 
+// WireStorySemanticState is structured product evidence for Wire story state.
+// It is metadata for authenticated product/API proof, not reader-facing copy.
+type WireStorySemanticState struct {
+	SchemaVersion       string   `json:"schema_version,omitempty"`
+	WorldModelKind      string   `json:"world_model_kind,omitempty"`
+	StoryID             string   `json:"story_id,omitempty"`
+	ChangeType          string   `json:"change_type,omitempty"`
+	SemanticSignature   []string `json:"semantic_signature,omitempty"`
+	TopicConcepts       []string `json:"topic_concepts,omitempty"`
+	SignalConcepts      []string `json:"signal_concepts,omitempty"`
+	PreviousSourceCount int      `json:"previous_source_count"`
+	CurrentSourceCount  int      `json:"current_source_count"`
+	SourceCount         int      `json:"source_count"`
+	ChangedAt           string   `json:"changed_at,omitempty"`
+}
+
 // WireStory is the Wire app projection of a Texture article head (edition index).
 type WireStory struct {
-	ID                    string             `json:"id"`
-	OwnerID               string             `json:"owner_id,omitempty"`
-	Headline              string             `json:"headline"`
-	Dek                   string             `json:"dek"`
-	Freshness             string             `json:"freshness"`
-	Prominence            int                `json:"prominence"`
-	Tension               string             `json:"tension"`
-	ChangeState           string             `json:"changeState"`
-	NodeTone              string             `json:"nodeTone"`
-	Related               []string           `json:"related"`
-	Manifest              WireSourceManifest `json:"manifest"`
-	Claims                []string           `json:"claims"`
-	Projections           map[string]string  `json:"projections"`
-	ProjectionTextureDocs map[string]string  `json:"projection_texture_docs,omitempty"`
-	StyleSources          []WireStyleSource  `json:"style_sources,omitempty"`
-	StoryTextureDoc       string             `json:"story_texture_doc_id,omitempty"`
-	TextureContent        string             `json:"texture_content,omitempty"`
-	PlatformRoutePath     string             `json:"platform_route_path,omitempty"`
-	SourceState           string             `json:"source_state"`
-	CreatedAt             time.Time          `json:"created_at,omitempty"`
-	UpdatedAt             time.Time          `json:"updated_at,omitempty"`
+	ID                    string                  `json:"id"`
+	OwnerID               string                  `json:"owner_id,omitempty"`
+	Headline              string                  `json:"headline"`
+	Dek                   string                  `json:"dek"`
+	Freshness             string                  `json:"freshness"`
+	Prominence            int                     `json:"prominence"`
+	Tension               string                  `json:"tension"`
+	ChangeState           string                  `json:"changeState"`
+	NodeTone              string                  `json:"nodeTone"`
+	Related               []string                `json:"related"`
+	Manifest              WireSourceManifest      `json:"manifest"`
+	Claims                []string                `json:"claims"`
+	Projections           map[string]string       `json:"projections"`
+	ProjectionTextureDocs map[string]string       `json:"projection_texture_docs,omitempty"`
+	StyleSources          []WireStyleSource       `json:"style_sources,omitempty"`
+	StoryTextureDoc       string                  `json:"story_texture_doc_id,omitempty"`
+	TextureContent        string                  `json:"texture_content,omitempty"`
+	PlatformRoutePath     string                  `json:"platform_route_path,omitempty"`
+	SourceState           string                  `json:"source_state"`
+	SemanticStory         *WireStorySemanticState `json:"semantic_story,omitempty"`
+	CreatedAt             time.Time               `json:"created_at,omitempty"`
+	UpdatedAt             time.Time               `json:"updated_at,omitempty"`
 }
