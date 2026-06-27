@@ -12712,3 +12712,35 @@ Worker prompt scope:
 Expected Delta V: 0 immediately; potential Delta V: -1 after worker + independent verifier acceptance and root incorporation/landing evidence. Actual Delta V: 0. V remains 3.
 
 Next orchestration move: read the worker result when the thread is ready, then create an independent verifier thread over any candidate commit before incorporation.
+
+## 2026-06-27 - O4 Live Source Arrival Worker Ready And Verifier Requested
+
+Move: reconnect worker callback, buy fresh staging observer evidence, and route the worker commit to an independent verifier thread.
+
+Worker callback:
+
+- Worker thread: `019f084b-4a32-7bc3-bdbf-b0733f346aaf`.
+- Worktree: `/Users/wiz/.codex/worktrees/13db/go-choir`.
+- Commit: `5ab674102ed2826c4c5a84ec00a38343af160526` (`Prove Wire source arrival DTO carry-forward`).
+- Changed files: `internal/runtime/universal_wire_test.go`, `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`.
+- Worker claim: yellow test/proof strengthening plus green ledger record. It asserts the post-arrival `/api/universal-wire/stories` product DTO exposes same story/article identity, typed `source_added` state, and all prior/new source-viewer-ready manifest entries.
+- Worker evidence: focused `TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster` passed; broader `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed; `git diff --check HEAD^..HEAD` passed; worker worktree clean on detached HEAD.
+- Worker non-claims: no runtime behavior change, push, deploy, staging/product acceptance, provider/model synthesis quality, Qdrant/world-model projection, promotion/rollback, run acceptance, or full News settlement.
+
+Fresh staging observer packet:
+
+- Temporary Playwright product auth state was created outside the repo at `/tmp/choir-news-o4-live-update.storage.json` for user `qa-o4-live-update-1782550786@example.com`.
+- Public authenticated `/api/universal-wire/stories` returned `source: universal-wire-edition-texture`, 12 stories, edition doc `5ac77c23-2642-4b74-b557-87d05c87e79f`, and no duplicate story-doc ids among the visible stories.
+- Platform revision reads through `read_owner=universal-wire-platform` showed same-document revision histories with body docs and source_entities.
+- The fresh packet does not settle deployed live-arrival update semantics: most visible later revisions preserved the same source counts, and one story reported `semantic_story.change_type: source_added` while `previous_source_count` and `current_source_count` were both 2.
+- Conjecture effect: this confirms the product has durable same-doc Wire articles and source metadata, but deployed new-source incorporation remains under-evidenced. It supports verifying the worker's DTO carry-forward proof and keeping product settlement open.
+
+Verifier requested:
+
+- Verifier pending handle: `local:cf9f95d6-200b-49aa-bd33-bd08a92c810e`.
+- Verifier scope: independent review of worker commit `5ab674102ed2826c4c5a84ec00a38343af160526` in `/Users/wiz/.codex/worktrees/13db/go-choir`.
+- Required verifier checks requested: worker worktree status, `git show --check`, commit diff hygiene, diff name-status, focused source-arrival test, and broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime selector if practical.
+
+Expected Delta V: 0 for this orchestration pass. Actual Delta V: 0. V remains 3 pending verifier verdict and any root incorporation. Observer evidence improved: staging now distinguishes durable same-doc revision histories from actual deployed new-source incorporation proof.
+
+Next move: read verifier result, then incorporate worker commit only if accepted. A docs/test-only incorporation would not require staging deploy for behavior, but it still needs root diff hygiene and Docs Truth Check if pushed.
