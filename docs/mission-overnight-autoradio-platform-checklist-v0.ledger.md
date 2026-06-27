@@ -12318,3 +12318,36 @@ the problem and route, but does not repair or verify article quality.
 Next move: create a bounded thread-native worker for the O4 article-quality
 slice with callback to this orchestration thread and stop condition
 `ready_for_verifier`.
+
+## 2026-06-27 - O4 Article Quality Worker Requested
+
+Move type: worker creation -> observer/construct setup.
+
+Worker work item: `O4-article-quality-source-grounded-synthesis-slice`.
+
+Worker pending handle: `local:096b1934-9578-4bd6-bad8-c54f8adfec1b`.
+
+Worker start state: project `/Users/wiz/go-choir`, new worktree from `main`
+after docs-first checkpoint `a076a8a1`.
+
+Requested conjecture: Universal Wire synthesized Texture articles should read
+like English synthesis articles over source facts, not provenance scaffolds or
+pairwise helper templates, while preserving native `source_ref` citations,
+source_entities, semantic story metadata, same-article revision behavior, Wire
+edition linkage, and raw capture diagnostic-only boundaries.
+
+Requested evidence: focused runtime tests for sourcecycled creation/update/split
+behavior; tests proving helper phrases do not appear in new synthesis
+headline/dek/body; preservation of source refs, source_entities, semantic story
+metadata, revision behavior, edition linkage, and diagnostic-only raw captures;
+`git diff --check`; clean dirty-path classification.
+
+Non-claims: no push, deploy, staging acceptance, provider/model-quality
+synthesis, broad semantic clustering, Qdrant, run acceptance, promotion,
+rollback execution, or full News benchmark settlement.
+
+Expected Delta V: 0 until worker returns and independent verifier accepts.
+Actual Delta V: 0. V remains 3.
+
+Next move: await worker readiness, then create/read an independent verifier
+thread before any incorporation.
