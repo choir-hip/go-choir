@@ -12430,3 +12430,93 @@ Expected Delta V: 0 until verifier returns. Actual Delta V: 0. V remains 3.
 
 Next move: read verifier result, then incorporate worker commit only if verdict
 is `accept`.
+
+## 2026-06-27 - O4 Article Quality Verifier Accepted And Root Incorporated
+
+Move type: verifier verdict -> root incorporation -> pre-landing evidence.
+
+Verifier thread: `019f0822-4ac7-7233-baf8-0f9a282ce991`.
+
+Verifier work item:
+`O4-article-quality-source-grounded-synthesis-slice-verifier`.
+
+Verifier verdict: `accept`; findings none blocking.
+
+Accepted worker commit: `569caa443decab24e77640c620ddc83f6145ae40`.
+
+Root incorporation commit: `aac476e4` (`Repair Universal Wire synthesis article
+copy`).
+
+Verifier evidence:
+
+- Read AGENTS.md, Parallax skill, Parallax State/Suggested Goal String, and
+  ledger entries for the article-quality gap, worker request, and worker
+  readiness.
+- Read worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2`; worker report
+  matched commit/worktree/test/non-claim scope.
+- Inspected diff for `569caa443decab24e77640c620ddc83f6145ae40`: changed files
+  only `internal/runtime/wire_synthesis.go`,
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/universal_wire.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- `git show --check --oneline
+  569caa443decab24e77640c620ddc83f6145ae40` passed.
+- `git diff --check
+  569caa443decab24e77640c620ddc83f6145ae40^..569caa443decab24e77640c620ddc83f6145ae40`
+  passed.
+- Focused runtime selector passed in verifier worktree:
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 6.626s`.
+- Broader `UniversalWire|WireProcessor|WireStory|WirePublication` selector
+  passed in verifier worktree:
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 10.323s`.
+- Worker and verifier worktrees were clean, with no temporary proof output or
+  generated artifacts left.
+
+Root evidence after incorporation:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCaptures(ExposeGraphCapturesAsDiagnostics|TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated|MaterializesExistingSourcecycledGraphCaptures)|TestUniversalWireSynthesisSanitizesHelperCopyAndReadsStoryTexture|TestHandleUniversalWireStoriesBackfillsSemanticStoryForLegacySynthesisRevision|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges'
+  -count=1` passed: `ok .../internal/runtime 6.691s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed:
+  `ok .../internal/runtime 10.397s`.
+- `git diff --check HEAD^..HEAD` passed.
+
+Conjecture verdict:
+
+- Supported at branch-local/root-local tier for the deterministic
+  article-quality slice: generated Universal Wire article surfaces no longer use
+  the documented helper/provenance phrases in the covered paths, while native
+  `source_ref` body docs, source entities, semantic metadata, same-article
+  revision behavior, Wire edition linkage, and raw `choir.web_capture`
+  diagnostic-only boundaries remain covered by tests.
+- Not supported yet at deployed product tier. The next push/deploy/product QA
+  must prove the staging surface actually reads the new article copy and still
+  opens Texture/source artifacts.
+
+Mutation class: orange/red root behavior incorporation over Universal Wire
+sourcecycled synthesis copy, semantic story state-to-article rendering, Texture
+revision body creation through existing markdown lineage,
+`source_ref`/source_entities carry-forward, Wire edition story DTO helper-copy
+repair detection, same-article revision behavior tests, and raw web-capture
+diagnostic-only tests.
+
+Non-claims: no deployed product acceptance yet; no provider/model-quality
+synthesis, broad semantic clustering, Qdrant/world-model projection, live
+post-deploy same-story update semantics, run acceptance, promotion/rollback, or
+full News benchmark settlement.
+
+Dirty-path classification after this pass: intentional committed runtime
+source/test changes in `aac476e4`; intentional durable documentation/evidence
+changes in this paradoc and ledger; unrelated pre-existing local WIP remains
+`skills/parallax/SKILL.md`; unrelated untracked report remains
+`docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3 because branch-local/root
+evidence supports the slice but deployed product acceptance is still pending
+and full Universal Wire remains open.
+
+Next move: commit this evidence, push root behavior/evidence commits to
+`origin main`, monitor CI/deploy identity, then run authenticated staging
+acceptance for article readability, Texture headline open, and native
+source/citation surfaces.

@@ -521,12 +521,13 @@ product acceptance.
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
 statement. Current value: 3. Last delta: expected Delta V 0 for the
-article-quality worker slice; actual Delta V 0 because branch-local worker
-evidence exists but awaits independent verifier acceptance before incorporation.
-The deployed product repairs the observed one-article/Texture-404/source-open
-regression, but it still does not prove fresh post-deploy source arrivals
-revising the same live semantic story/article identity, nor provider/model-quality
-English synthesis. Last decided conjecture: deployed commit
+article-quality worker/verifier/root incorporation slice; actual Delta V 0
+because independent branch-local evidence supports the deterministic
+article-quality repair, but staging deployment/product acceptance is still
+pending. The deployed product repairs the observed one-article/Texture-404/
+source-open regression, but it still does not prove fresh post-deploy source
+arrivals revising the same live semantic story/article identity, nor
+provider/model-quality English synthesis. Last decided conjecture: deployed commit
 `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319` supports the narrow claim that the
 current Universal Wire deployed surface is no longer collapsed into one broad
 article and the headline/source-open product paths load. CI run `28282830130`,
@@ -556,18 +557,17 @@ remain outside that product path. Behavior-changing work must name mutation
 class, protected surfaces, admissible evidence, rollback path, conjecture delta,
 and heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green Problem
-Documentation First for the Universal Wire article-quality blocker. The next
-worker is an orange/red branch-local behavior slice over Universal Wire
-sourcecycled synthesis copy, semantic story state-to-article rendering, Texture
-revision body creation, native source_ref/source_entities carry-forward, Wire
-edition story DTOs, and focused product-path tests. Rollback path for the next
-implementation is revert its worker commit(s) back to
-`8d87ff60a97eda842cc847e24c75e30d8ec530eb` plus dependent evidence commits.
-The next move must not touch auth/session renewal, vmctl, deployment routing,
-provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
-publication/export outside existing Wire edition helpers unless a separate
-checkpoint names that broader conjecture.
+mutation class / protected surfaces: Current move is orange/red root
+incorporation and landing for the accepted Universal Wire article-quality slice.
+Root commit `aac476e4` changes Universal Wire sourcecycled synthesis copy,
+semantic story state-to-article rendering, Texture revision body creation
+through existing markdown lineage, native source_ref/source_entities
+carry-forward, Wire edition story DTO helper-copy repair detection, and focused
+same-article/raw-capture tests. Rollback path is revert `aac476e4` plus any
+dependent evidence commits. The landing must not touch auth/session renewal,
+vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, or publication/export outside existing Wire
+edition helpers unless a separate checkpoint names that broader conjecture.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -621,28 +621,18 @@ later relevant source arrivals update existing semantic articles.
 Current C8 article-quality conjecture: if Universal Wire has a semantic story
 state and at least two source-backed captures, the created/revised Texture
 article should read like an English synthesis article over the source facts,
-not like a provenance scaffold or pairwise helper template. The current code
-still builds public copy through deterministic helper phrases in
-`internal/runtime/sourcecycled_web_captures.go` and
-`internal/runtime/wire_synthesis.go`, including "gives the clearest current
-account", "second sourced angle", and "The second account narrows what readers
-can trust now". Staging evidence after `6c5b1d1c` showed the same shape in the
-visible cards and opened Texture article. This is a discovered behavior gap,
-not a regression from the last deploy: the last deploy fixed card count,
-headline open, and source opening, but left article quality below the owner
-definition of Universal Wire.
-
-Worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2` returned
-`ready_for_verifier` for this C8 slice at commit
-`569caa443decab24e77640c620ddc83f6145ae40`. The worker claims a deterministic
-source-grounded renderer that sanitizes helper/provenance headline, summary, and
-tension text; derives English article paragraphs from source/story concepts;
-keeps markdown lineage so `body_doc` carries native `source_ref` citations; and
-reuses the helper phrase detector for legacy repair decisions. Worker evidence
-reported focused Universal Wire sourcecycled/synthesis tests, the broader
-`UniversalWire|WireProcessor|WireStory|WirePublication` runtime selector, and
-`git diff --check` all passing, with a clean worker worktree. This remains
-branch-local until independent verifier acceptance.
+not like a provenance scaffold or pairwise helper template. Worker thread
+`019f0817-a5df-7d40-9c70-8bacaacbb5b2` produced commit
+`569caa443decab24e77640c620ddc83f6145ae40`; independent verifier thread
+`019f0822-4ac7-7233-baf8-0f9a282ce991` returned `accept`; root incorporated it
+as `aac476e4`. Root reran the focused Universal Wire sourcecycled/synthesis
+selector and the broader `UniversalWire|WireProcessor|WireStory|WirePublication`
+runtime selector successfully, and `git diff --check HEAD^..HEAD` passed. This
+supports the branch-local deterministic article-quality slice: helper/provenance
+phrases are sanitized from generated headline/dek/body paths, while markdown
+lineage keeps native `source_ref` citations and source_entities. It remains
+below the final Universal Wire target until staging deploy/product acceptance
+and future provider/model-quality synthesis evidence.
 
 Current C6 source-arrival update conjecture: if a later sourcecycled source
 arrives for an already-materialized Universal Wire semantic story, the product
@@ -691,12 +681,10 @@ and Wrong - Way to Criticize AI`, `semantic_story.change_type: source_added`,
 `energy`, `harbor`, `health`, and 273 signal concepts. This is evidence of a
 live ingestion/update blocker, not product acceptance.
 
-next move: create/read an independent verifier thread for worker commit
-`569caa443decab24e77640c620ddc83f6145ae40` in worktree
-`/Users/wiz/.codex/worktrees/c6e6/go-choir`. If the verifier accepts,
-incorporate the commit into root, rerun the focused checks, update this paradoc
-and ledger, then push and run the landing loop before making any deployed
-product claim.
+next move: push root commit `aac476e4` plus evidence docs, monitor CI and
+staging deploy identity, then run authenticated Chrome/product acceptance for
+Universal Wire article readability, Texture headline open, and source/citation
+surfaces before making any deployed product claim.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -734,5 +722,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`; CI run `28282830130`, Docs Truth Check run `28282830115`, FlakeHub run `28282830126`, deploy job `83801933132`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof in the owner's signed-in Chrome session showed Universal Wire rendering 12 articles, not one broad mega-article; a headline-opened Texture article loaded at v66 with `Sources 24`, native source buttons, and `Document loaded`; expanding a native `source_ref` opened a citation panel; clicking `Open source` opened a reader/source artifact with `Reader snapshot ready` and an `Open original` link. This repairs the observed one-article/headline-404/source-open regression at deployed product tier, but it does not settle full Universal Wire. Current C8 article-quality conjecture: if Universal Wire has a semantic story state and at least two source-backed captures, the created/revised Texture article should read like an English synthesis article over the source facts, not like a provenance scaffold or pairwise helper template. Worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2` returned `ready_for_verifier` at commit `569caa443decab24e77640c620ddc83f6145ae40`, claiming deterministic source-grounded article rendering, native `source_ref` preservation, helper phrase sanitization, focused runtime tests, broader Universal Wire runtime selector, and `git diff --check` all passing. Next move is create/read an independent verifier thread for that worker commit in `/Users/wiz/.codex/worktrees/c6e6/go-choir`; incorporate only on verifier `accept`, then push, monitor CI/deploy identity, and run authenticated staging acceptance. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`; CI run `28282830130`, Docs Truth Check run `28282830115`, FlakeHub run `28282830126`, deploy job `83801933132`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof in the owner's signed-in Chrome session showed Universal Wire rendering 12 articles, not one broad mega-article; a headline-opened Texture article loaded at v66 with `Sources 24`, native source buttons, and `Document loaded`; expanding a native `source_ref` opened a citation panel; clicking `Open source` opened a reader/source artifact with `Reader snapshot ready` and an `Open original` link. This repairs the observed one-article/headline-404/source-open regression at deployed product tier, but it does not settle full Universal Wire. Current C8 article-quality slice is accepted at branch-local/root-local tier: worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2` produced `569caa443decab24e77640c620ddc83f6145ae40`; verifier thread `019f0822-4ac7-7233-baf8-0f9a282ce991` returned `accept`; root incorporated it as `aac476e4` and reran the focused Universal Wire sourcecycled/synthesis selector, the broader `UniversalWire|WireProcessor|WireStory|WirePublication` selector, and `git diff --check HEAD^..HEAD` successfully. Next move is push, monitor CI/deploy identity, and run authenticated staging acceptance for article readability, Texture headline open, and native source/citation surfaces. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
