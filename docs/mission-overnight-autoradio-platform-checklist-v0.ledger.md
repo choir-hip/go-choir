@@ -8650,3 +8650,62 @@ Next move: wait for thread `019f0679-3c97-7860-8765-09e839cf165d` to finish. If
 it returns `ready_for_verifier`, create an independent verifier thread over its
 reported commit and worktree before incorporation. If it returns blocked, record
 the blocker in Parallax State before any alternate repair.
+
+## 2026-06-27 - O4 Zero-Article Worker Ready For Verifier
+
+Claim: worker thread `019f0679-3c97-7860-8765-09e839cf165d` produced a
+branch-local candidate for the post-`d4bd1c65` Universal Wire zero-article
+failure and is ready for independent verification.
+
+Move: read the completed worker thread and record its final report before
+creating a verifier.
+
+Worker result:
+
+- Worktree: `/Users/wiz/.codex/worktrees/1c45/go-choir`.
+- Branch: `codex/o4-zero-wire-direct-readiness`.
+- Docs-first checkpoint: `e76932c2` (`Document O4 direct platformd readiness
+  mismatch`).
+- Code/test repair: `640e7540` (`Repair Universal Wire direct platformd
+  readiness`).
+- Changed files:
+  - `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
+  - `internal/runtime/universal_wire.go`
+  - `internal/runtime/universal_wire_test.go`
+
+Worker claim:
+
+- Direct platformd publication already accepted direct `RUNTIME_PLATFORMD_URL`
+  / runtime config, but `platformdReadBaseURL()` did not use that same direct
+  URL for readiness filtering.
+- The repair makes direct `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL`
+  participate in platformd readiness probing, so direct publication and direct
+  readiness filtering agree.
+- A focused regression covers filtered edition candidates plus sourcecycled
+  graph captures with source-entity provenance, repairing to one
+  platformd-readable synthesis Texture article while raw `choir.web_capture`
+  projections remain diagnostic-only.
+
+Worker-reported commands/results:
+
+- `git diff --check`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesRepairsFilteredEditionWithDirectPlatformdReadiness|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `/Users/wiz/vm-images` was inspected read-only; no DB/JSON state files were
+  found at depth three; nothing was mutated.
+- Worker worktree status was reported clean.
+
+Actual Delta V: 0. The worker candidate is not accepted until an independent
+verifier reviews it. V remains 28.
+
+Evidence boundary/non-claims: worker evidence is branch-local only. It does not
+claim push, deploy, live staging replay, auth/session work, vmctl, Qdrant, run
+acceptance, promotion/rollback, or VM image mutation.
+
+Rollback path: revert `640e7540` for code; revert `e76932c2` only to remove the
+worker's docs checkpoint.
+
+Next move: create independent verifier thread
+`O4-zero-wire-direct-readiness-verifier` over worker commits `e76932c2` and
+`640e7540`.

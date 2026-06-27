@@ -532,11 +532,15 @@ identity sub-obligation. The post-`d4bd1c65` signed-in Computer Use replay
 discharged the ordinary Texture-read concern at product-surface scope, but
 showed Universal Wire rendering `0 articles`: the edition exists, three edition
 candidates are filtered, graph captures remain diagnostic-only, and no synthesis
-article is publishable. Remaining O4 variant is deployed non-empty Universal
-Wire article materialization/readability after direct sync, plus
-cross-source/world-model clustering, article-quality synthesis, and
-authenticated product evidence that existing synthesis articles update when
-later relevant information arrives.
+article is publishable. Worker thread
+`019f0679-3c97-7860-8765-09e839cf165d` returned `ready_for_verifier` for
+branch `codex/o4-zero-wire-direct-readiness` in
+`/Users/wiz/.codex/worktrees/1c45/go-choir`, with docs-first checkpoint
+`e76932c2` and repair commit `640e7540`. Remaining O4 variant is independent
+verification, incorporation/deploy, and deployed non-empty Universal Wire article
+materialization/readability after direct sync, plus cross-source/world-model
+clustering, article-quality synthesis, and authenticated product evidence that
+existing synthesis articles update when later relevant information arrives.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -641,27 +645,24 @@ article proof is impossible while no article is publishable, and semantic
 multi-story clustering/provider-quality synthesis are still future realism axes.
 O5 product path has started through prompt bar/Texture/Super request, but O5
 acceptance should wait for O4 zero-article repair or an explicit owner decision
-to carry O4 as an open edge.
+to carry O4 as an open edge. Worker thread
+`019f0679-3c97-7860-8765-09e839cf165d` has now produced a branch-local candidate:
+`e76932c2` documents a direct platformd publication/readiness mismatch, and
+`640e7540` repairs `platformdReadBaseURL()` so direct `RUNTIME_PLATFORMD_URL` /
+`PROXY_PLATFORMD_URL` is used by readiness filtering. Worker evidence says
+focused filtered-edition readiness, raw-capture suppression, broader
+UniversalWire/WireProcessor/WireStory/WirePublication runtime shard, and proxy
+WirePlatform/PlatformTextureRead tests passed; the worker branch is clean.
 
-next move: monitor thread-native O4 worker thread
-`019f0679-3c97-7860-8765-09e839cf165d` in worktree
-`/Users/wiz/.codex/worktrees/1c45/go-choir` for its branch-local result. This
-worker materialized from pending worktree handle
-`local:c27b4ec5-d079-4f07-8753-35989d436f6c` for work item
-`O4-zero-wire-articles-after-direct-sync-worker`. Its assignment is to
-investigate and repair the
-post-`d4bd1c65` zero-article failure: ordinary Texture loads, Universal Wire
-edition exists, but all three edition candidates filter out and no synthesis
-article is publishable. The worker must preserve the diagnostic-only raw capture
-rule while making the deployed synthesis/edition path produce at least one
-readable platform-owned Texture article again. Owner note: user VM state lives in
-user VM images; `/Users/wiz/vm-images` is an admissible diagnostic pointer for
-state-shape inspection, but the worker must not mutate VM images or persistent
-user-computer state without a separately documented conjecture and rollback
-plan. Expected Delta V: 1 for an accepted branch-local worker repair; another 1
-for independent verifier acceptance; another 1 only after root deploys and
-authenticated product replay shows non-empty Universal Wire and
-headline-to-Texture readability.
+next move: create an independent verifier thread for work item
+`O4-zero-wire-direct-readiness-verifier`, reviewing worker thread
+`019f0679-3c97-7860-8765-09e839cf165d`, worktree
+`/Users/wiz/.codex/worktrees/1c45/go-choir`, docs-first commit `e76932c2`, and
+repair commit `640e7540`. If accepted, incorporate the worker commits into root,
+then push, monitor CI/deploy, verify health identity, and run authenticated
+product replay for non-empty Universal Wire and headline-to-Texture readability.
+Expected Delta V: +1 only after verifier acceptance; another +1 only after root
+deploys and authenticated product replay succeeds.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -720,5 +721,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=28. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. Branch-local commit 8121b4d4ca835d1c334e18144296683098506f59 incorporates verifier-accepted worker commit 1e3e72bed659c7992aa09d4bfd6fcd3a84176d39, proving durable `sourcecycled-live` story-cluster identity and same-article revision when a later relevant source arrives. Root documented the deployed Texture read regression first (`e7ce51eb`), then deployed `3ea24284` for frontend read-owner isolation, `378ab05b` for Universal Wire platform article readiness/filtering, and `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c` for direct-platformd Texture document/revision sync. CI/deploy/health passed. Authenticated Computer Use replay after `d4bd1c65` on the signed-in `YUSEFNATHANSON@ME.COM` tab proved an ordinary Texture document loads and shows `Document loaded`, but Universal Wire renders `0 articles`: the edition exists, three candidates are filtered, graph captures remain diagnostic-only, and no Texture synthesis article is publishable. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Next move: monitor thread-native O4 worker `019f0679-3c97-7860-8765-09e839cf165d` in `/Users/wiz/.codex/worktrees/1c45/go-choir`, then read its branch-local result for `O4-zero-wire-articles-after-direct-sync-worker`. The assignment is to repair the post-`d4bd1c65` zero-article failure while preserving the diagnostic-only raw capture rule; owner note says user VM state lives in user VM images, with `/Users/wiz/vm-images` admissible for diagnostic inspection only unless a new documented conjecture authorizes mutation. Expected branch-local evidence includes focused runtime/proxy/frontend tests as needed, `git diff --check`, clean worktree, and a final report. After worker completion, create an independent verifier thread before incorporation; after incorporation, push, monitor CI/deploy, verify health identity, and run authenticated product replay for non-empty Universal Wire and headline-to-Texture readability. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=28. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. Branch-local commit 8121b4d4ca835d1c334e18144296683098506f59 incorporates verifier-accepted worker commit 1e3e72bed659c7992aa09d4bfd6fcd3a84176d39, proving durable `sourcecycled-live` story-cluster identity and same-article revision when a later relevant source arrives. Root documented the deployed Texture read regression first (`e7ce51eb`), then deployed `3ea24284` for frontend read-owner isolation, `378ab05b` for Universal Wire platform article readiness/filtering, and `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c` for direct-platformd Texture document/revision sync. CI/deploy/health passed. Authenticated Computer Use replay after `d4bd1c65` on the signed-in `YUSEFNATHANSON@ME.COM` tab proved an ordinary Texture document loads and shows `Document loaded`, but Universal Wire renders `0 articles`: the edition exists, three candidates are filtered, graph captures remain diagnostic-only, and no Texture synthesis article is publishable. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Worker thread `019f0679-3c97-7860-8765-09e839cf165d` in `/Users/wiz/.codex/worktrees/1c45/go-choir` returned `ready_for_verifier` for branch `codex/o4-zero-wire-direct-readiness`: docs-first commit `e76932c2` documents a direct platformd publication/readiness mismatch, and repair commit `640e7540` makes direct `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL` participate in platformd readiness filtering. Next move: create an independent verifier thread for `O4-zero-wire-direct-readiness-verifier`; if accepted, incorporate the worker commits, then push, monitor CI/deploy, verify health identity, and run authenticated product replay for non-empty Universal Wire and headline-to-Texture readability. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
