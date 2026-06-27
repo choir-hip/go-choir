@@ -10609,3 +10609,70 @@ made by this pass.
 Next move: push `da4bcb7f` plus this evidence update, monitor CI/deploy, verify
 `choir.news` health identity, and rerun authenticated product proof that visible
 Universal Wire cards and opened Texture articles no longer show scaffold copy.
+
+## 2026-06-27 - O4 Direct Stale Edition Article Repair Deployed Acceptance
+
+Conjecture statement: direct stale-edition Universal Wire article repair can
+revise already-transcluded scaffold-framed Texture articles on read into
+article-facing copy, without loosening raw `choir.web_capture` diagnostic-only
+boundaries.
+
+Verdict: supported at narrow deployed product scope. This settles C11 only; it
+does not settle the full Universal Wire News product claim.
+
+Receipts:
+
+- Pushed root head `ad4d739e5f89e3574d4923b1bc580c50db53785d` to
+  `origin/main`.
+- GitHub CI run `28279556809` completed successfully.
+- Docs Truth Check run `28279556816` and FlakeHub run `28279556808` completed
+  successfully.
+- Deploy job `83792786877` completed successfully.
+- Public `https://choir.news/health` reported proxy and sandbox `commit` and
+  `deployed_commit` equal to
+  `ad4d739e5f89e3574d4923b1bc580c50db53785d`, deployed at
+  `2026-06-27T05:17:49Z`.
+- Public unauthenticated `GET /api/universal-wire/stories` returned HTTP 401
+  with `{"error":"authentication required"}`.
+- Authenticated Computer Use replay in the owner's signed-in Chrome tab showed
+  Universal Wire rendering `11 articles`; visible cards no longer showed
+  `Multiple reports converge on ...`, `incoming reports point to the same
+  developing story`, `A second source in the cluster...`, or `reports read as
+  one developing article`.
+- The same replay opened a visible headline into a repaired Texture article
+  window titled `Telegram Post from Metropoles Telegram`, at v66, with
+  `Sources 24`, native source buttons, rendered article text, and
+  `Document loaded`; the prior 404/blank Texture failure did not reproduce.
+
+Strong definitive statement: `ad4d739e` repaired the stale scaffold article
+read transition at deployed product scope. The root cause of the previous miss
+was that predicate-only repair delegated to the live graph materializer and did
+not directly revise already-transcluded stale Texture documents. The landed
+repair now derives repair inputs from the stale article's own structured source
+entities/reader snapshots and writes a repaired same-cluster Texture revision.
+
+Mutation class: green for this documentation pass. The landed code pass was
+orange/red because it changed Universal Wire read repair and platform-owned
+Texture revision creation through existing helpers.
+
+Protected surfaces touched by the landed code pass: Universal Wire story DTOs,
+runtime synthesis/article materialization, existing article revision/upsert
+semantics, Texture revisions through existing helpers, source entity/source_ref
+projection, Wire edition linkage, and platform Texture sync. Out of scope:
+auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
+Qdrant, promotion/rollback, run acceptance, and publication/export outside
+existing Wire edition helpers.
+
+Expected Delta V: -1 for deciding C11 at deployed read-repair scope. Actual
+Delta V: -1. Mission variant moves from 4 to 3.
+
+Residual risks/non-claims: staging still shows deterministic/formulaic prose and
+some visibly incoherent deterministic clusters. No provider/model-quality
+synthesis, production semantic clustering, Qdrant/world-model projection,
+later-source update proof, run acceptance, promotion, rollback, or full News
+benchmark settlement is claimed.
+
+Next move: choose C6/C8 by expected Delta V and document the next problem before
+touching code. The likely next discriminator is whether live source arrivals can
+update existing semantic article/world-model identities rather than only
+producing deterministic source-group cards.
