@@ -12260,3 +12260,61 @@ post-deploy sourcecycled arrival and prove same-story revision in authenticated
 product state, or document and attack the remaining article-quality gap where
 deterministic source-pair prose is still not provider/model-quality English
 synthesis over a durable world model.
+
+## 2026-06-27 - O4 Article Quality Gap Documented
+
+Move type: Problem Documentation First checkpoint -> next worker setup.
+
+Conjecture: if Universal Wire has a semantic story state and at least two
+source-backed captures, the created/revised Texture article should read like an
+English synthesis article over source facts, not like a provenance scaffold or a
+pairwise helper template.
+
+Problem evidence:
+
+- Deployed authenticated Chrome evidence for `6c5b1d1c` fixed the card-count,
+  headline-open, and source-opening regressions, but the visible cards and
+  opened Texture article still used deterministic helper copy.
+- Current code still builds public synthesis prose through helper phrases in
+  `internal/runtime/sourcecycled_web_captures.go` and
+  `internal/runtime/wire_synthesis.go`, including:
+  - `gives the clearest current account`
+  - `second sourced angle`
+  - `The second account narrows what readers can trust now`
+- This is below the owner-stated Universal Wire target: multilingual source
+  ingestion should produce English synthesis Texture articles, not source-pair
+  summaries about the synthesis system.
+
+Mutation class: green docs checkpoint. No runtime behavior changed in this
+pass.
+
+Heresy delta: `discovered`. This is not a regression from the prior deploy; the
+prior deploy repaired rendering/opening mechanics and left article quality as
+an explicit remaining realism axis.
+
+Next worker mutation class: orange/red branch-local behavior slice over
+Universal Wire sourcecycled synthesis copy, semantic story state-to-article
+rendering, Texture revision body creation, native source_ref/source_entities
+carry-forward, Wire edition story DTOs, and focused product-path tests.
+
+Admissible worker evidence:
+
+- Focused runtime tests for Universal Wire sourcecycled creation/update/split
+  behavior.
+- Tests proving new synthesized article headline/dek/body do not include the
+  helper/provenance phrases above.
+- Tests proving native `source_ref` body_doc citations, source_entities,
+  semantic story metadata, same-article revision behavior, Wire edition
+  linkage, and raw `choir.web_capture` diagnostic-only boundaries remain intact.
+- `git diff --check` and clean dirty-path classification.
+
+Rollback path for the next implementation: revert the worker implementation
+commit(s) back to `8d87ff60a97eda842cc847e24c75e30d8ec530eb` plus dependent
+evidence commits.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3 because this pass records
+the problem and route, but does not repair or verify article quality.
+
+Next move: create a bounded thread-native worker for the O4 article-quality
+slice with callback to this orchestration thread and stop condition
+`ready_for_verifier`.

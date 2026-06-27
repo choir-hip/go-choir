@@ -520,11 +520,13 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 3. Last delta: expected Delta V 0 for the deployed
-source-arrival clustering repair; actual Delta V 0 because the deployed product
-now repairs the observed one-article/Texture-404/source-open regression, but it
-still does not prove a fresh post-deploy source arrival revising the same live
-semantic story/article identity. Last decided conjecture: deployed commit
+statement. Current value: 3. Last delta: expected Delta V 0 for the article
+quality blocker checkpoint; actual Delta V 0 because the pass only records the
+next problem before construction. The deployed product repairs the observed
+one-article/Texture-404/source-open regression, but it still does not prove
+fresh post-deploy source arrivals revising the same live semantic story/article
+identity, nor provider/model-quality English synthesis. Last decided conjecture:
+deployed commit
 `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319` supports the narrow claim that the
 current Universal Wire deployed surface is no longer collapsed into one broad
 article and the headline/source-open product paths load. CI run `28282830130`,
@@ -554,18 +556,18 @@ remain outside that product path. Behavior-changing work must name mutation
 class, protected surfaces, admissible evidence, rollback path, conjecture delta,
 and heresy delta before editing.
 
-mutation class / protected surfaces: The just-landed move was orange/red and
-touched Universal Wire sourcecycled ingestion/materialization,
-`/api/universal-wire/stories`, semantic story cluster state, Texture
-creation/revision through existing helpers, Wire edition linkage, source
-entity/source_ref carry-forward, platform Texture sync/read paths, and product
-acceptance probes. Rollback path is revert pushed root commits `39253cf5`,
-`33863287`, `6c5b1d1c`, and dependent evidence commits back to
-`292de87f9fd8d84f15ea2d69315ae574f9953135`. The next move must not touch
-auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
-Qdrant, promotion/rollback, run acceptance, or publication/export outside
-existing Wire edition helpers unless a separate checkpoint names that broader
-conjecture.
+mutation class / protected surfaces: Current move is green Problem
+Documentation First for the Universal Wire article-quality blocker. The next
+worker is an orange/red branch-local behavior slice over Universal Wire
+sourcecycled synthesis copy, semantic story state-to-article rendering, Texture
+revision body creation, native source_ref/source_entities carry-forward, Wire
+edition story DTOs, and focused product-path tests. Rollback path for the next
+implementation is revert its worker commit(s) back to
+`8d87ff60a97eda842cc847e24c75e30d8ec530eb` plus dependent evidence commits.
+The next move must not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
+publication/export outside existing Wire edition helpers unless a separate
+checkpoint names that broader conjecture.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -616,6 +618,20 @@ topic/signal grouping and formulaic prose are not provider/model-quality
 synthesis, not Qdrant or world-model projection, and not deployed proof that
 later relevant source arrivals update existing semantic articles.
 
+Current C8 article-quality conjecture: if Universal Wire has a semantic story
+state and at least two source-backed captures, the created/revised Texture
+article should read like an English synthesis article over the source facts,
+not like a provenance scaffold or pairwise helper template. The current code
+still builds public copy through deterministic helper phrases in
+`internal/runtime/sourcecycled_web_captures.go` and
+`internal/runtime/wire_synthesis.go`, including "gives the clearest current
+account", "second sourced angle", and "The second account narrows what readers
+can trust now". Staging evidence after `6c5b1d1c` showed the same shape in the
+visible cards and opened Texture article. This is a discovered behavior gap,
+not a regression from the last deploy: the last deploy fixed card count,
+headline open, and source opening, but left article quality below the owner
+definition of Universal Wire.
+
 Current C6 source-arrival update conjecture: if a later sourcecycled source
 arrives for an already-materialized Universal Wire semantic story, the product
 path should revise the same semantic story object and linked Texture article
@@ -663,14 +679,15 @@ and Wrong - Way to Criticize AI`, `semantic_story.change_type: source_added`,
 `energy`, `harbor`, `health`, and 273 signal concepts. This is evidence of a
 live ingestion/update blocker, not product acceptance.
 
-next move: choose the next realism axis. The immediate deploy loop is complete
-for pushed head `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`: CI, deploy,
-health identity, and authenticated Chrome/Computer Use acceptance passed for
-the observed Universal Wire regression. The next O4 move should either buy
-observer evidence for a fresh post-deploy source arrival revising the same live
-semantic story/article, or document and attack the remaining article-quality
-gap: deterministic source-pair prose is still not provider/model-quality
-English synthesis over a durable world model.
+next move: create a bounded worker thread for the O4 article-quality slice. The
+worker should replace the helper/provenance-shaped public article copy with a
+source-grounded English synthesis renderer that still preserves native
+`source_ref` citations, source_entities, semantic story metadata, same-article
+revision behavior, and raw-capture diagnostic-only boundaries. Branch-local
+evidence must include focused tests proving the banned helper phrases do not
+appear in headline/dek/body for new synthesis while source refs and revision
+metadata remain intact. No deployed product claim until verifier acceptance,
+root incorporation, push, CI/deploy identity, and authenticated staging replay.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -708,5 +725,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`; CI run `28282830130`, Docs Truth Check run `28282830115`, FlakeHub run `28282830126`, deploy job `83801933132`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof in the owner's signed-in Chrome session showed Universal Wire rendering 12 articles, not one broad mega-article; a headline-opened Texture article loaded at v66 with `Sources 24`, native source buttons, and `Document loaded`; expanding a native `source_ref` opened a citation panel; clicking `Open source` opened a reader/source artifact with `Reader snapshot ready` and an `Open original` link. This repairs the observed one-article/headline-404/source-open regression at deployed product tier, but it does not settle full Universal Wire. Current C6 source-arrival update conjecture remains open at the stronger live-arrival tier: if a later sourcecycled source arrives for an already-materialized Universal Wire semantic story, the product path should revise the same semantic story object and linked Texture article instead of creating a duplicate card, losing prior citations, or requiring manual reseeding. Worker thread `019f07f3-7ddc-7e72-8b9f-e26bc4af1833` returned `ready_for_verifier` on branch `codex/o4-deployed-source-arrival-clustering-update` with docs-first checkpoint `cad191e3` and implementation commit `f888487b`; verifier callback from source thread `019f07fe-aa55-71a0-a010-2dd004f68390` returned `accept`; root incorporated as `39253cf5` and `33863287`, reran focused plus broader Universal Wire runtime selectors successfully, pushed root docs/evidence head `6c5b1d1c`, and completed CI/deploy/staging UI acceptance. Next move is choose the next realism axis: either buy observer evidence for a fresh post-deploy source arrival revising the same live semantic story/article, or document and attack the remaining article-quality gap where deterministic source-pair prose is still not provider/model-quality English synthesis over a durable world model. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`; CI run `28282830130`, Docs Truth Check run `28282830115`, FlakeHub run `28282830126`, deploy job `83801933132`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof in the owner's signed-in Chrome session showed Universal Wire rendering 12 articles, not one broad mega-article; a headline-opened Texture article loaded at v66 with `Sources 24`, native source buttons, and `Document loaded`; expanding a native `source_ref` opened a citation panel; clicking `Open source` opened a reader/source artifact with `Reader snapshot ready` and an `Open original` link. This repairs the observed one-article/headline-404/source-open regression at deployed product tier, but it does not settle full Universal Wire. Current C8 article-quality conjecture: if Universal Wire has a semantic story state and at least two source-backed captures, the created/revised Texture article should read like an English synthesis article over the source facts, not like a provenance scaffold or pairwise helper template. Current code/staging still exposes helper phrases such as "gives the clearest current account", "second sourced angle", and "The second account narrows what readers can trust now." Next move is create a bounded worker thread for the O4 article-quality slice: replace helper/provenance-shaped public article copy with source-grounded English synthesis rendering while preserving native `source_ref` citations, source_entities, semantic story metadata, same-article revision behavior, and raw-capture diagnostic-only boundaries. Branch-local evidence must include focused tests proving the banned helper phrases do not appear in headline/dek/body for new synthesis while source refs and revision metadata remain intact. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
