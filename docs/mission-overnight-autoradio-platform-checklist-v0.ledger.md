@@ -15850,3 +15850,69 @@ Next move: choose the next O4 realism axis or hand off. The strongest remaining
 axis is provider/reconciler-quality semantic synthesis over durable
 entity/event/world-model state, because deployed proof now covers the
 deterministic substrate but not the owner-stated Universal Wire target.
+
+## 2026-06-27 - O4 Provider/Reconciler Semantic Synthesis Worker Requested
+
+Move: open the next bounded thread-native worker for the remaining O4 realism
+axis after deployed event-frame substrate acceptance.
+
+Worker request:
+
+- Work item: `O4-provider-reconciler-quality-semantic-synthesis-axis-worker`.
+- Project: `/Users/wiz/go-choir`.
+- Starting state: `main` in a new worktree.
+- Pending worktree handle:
+  `local:629c9187-2967-4ae0-9231-b77242632601`.
+- Thread id: not materialized in `list_threads` at request time.
+
+Conjecture under test:
+
+The remaining O4 gap is not another substrate DTO/source-open proof. Universal
+Wire still reads as deterministic/formulaic and does not yet satisfy the
+owner-stated target: many multilingual ingested stories should cluster into
+cross-source durable story/world-model objects, route through
+Texture/processor/reconciler workflows as coherent English synthesis articles,
+and update existing articles/world-model entries when relevant new information
+arrives. The next useful realism axis is provider/reconciler-quality semantic
+synthesis over durable entity/event/world-model state, beyond deterministic
+concept-token event frames.
+
+Worker contract:
+
+- Read `AGENTS.md`, the Parallax State, and latest ledger entries before
+  acting.
+- Start green/yellow; if a behavior problem is found, obey Problem
+  Documentation First with a docs-only checkpoint commit before code.
+- Authorized protected surfaces after docs-first checkpoint: Universal Wire
+  sourcecycled ingestion/materialization; semantic story/entity/event/world-model
+  cluster state; Texture synthesis revision creation/source_ref/source_entities
+  carry-forward; Wire edition linkage; authenticated `/api/universal-wire` DTO
+  observability; focused runtime/sourcecycled tests.
+- Not authorized without stopping and documenting: provider/model calls,
+  gateway credentials, auth/session, vmctl, Qdrant, promotion/rollback, run
+  acceptance, deployment routing, direct Node B tracked-file edits, or
+  publication/export outside existing Wire edition helpers.
+- Target shape must materially improve one of: durable entity/event state used
+  by synthesis; reconciler-like source aggregation that produces less formulaic
+  article prose; same-story update semantics driven by semantic state rather
+  than source order/concept tokens; or an explicit blocker proving
+  provider/reconciler-quality synthesis cannot be reached through the current
+  architecture without a new route/oracle.
+- Preserve native source refs and read paths.
+- Admissible evidence: branch-local focused tests; broader runtime selector for
+  UniversalWire/WireProcessor/WireStory/WirePublication/Sourcecycled/
+  LiveArrival/Oracle as appropriate; `git diff --check`; clean worktree.
+- Stop condition: callback with `ready_for_verifier`, commit SHA(s), changed
+  files, exact commands/results, dirty-path classification, mutation class,
+  protected surfaces touched/not touched, evidence boundary, residual risks,
+  non-claims, rollback path, and conjecture verdict.
+- No push, deploy, staging/product acceptance, or full News settlement claim.
+
+Expected Delta V: 1 if the worker returns a concrete branch-local repair slice
+that improves article-quality/world-model realism beyond deterministic
+event-frame substrate, or a stronger blocker that narrows the remaining O4
+conjecture. Actual Delta V: 0 until callback.
+
+Next move: reconnect with `list_threads` / `read_thread` once pending handle
+`local:629c9187-2967-4ae0-9231-b77242632601` materializes; then request an
+independent verifier if the worker returns `ready_for_verifier`.

@@ -542,14 +542,16 @@ mutation class, protected surfaces, admissible evidence, rollback path,
 conjecture delta, and heresy delta before editing.
 
 mutation class / protected surfaces: Current move is green/yellow
-orchestration plus deployed evidence recording and independent verifier request.
-The landed slice is orange: it touches Universal Wire sourcecycled
-materialization, semantic story cluster state, Texture synthesis revision
+orchestration plus a bounded thread-native worker request. The requested worker
+is orange branch-local if it changes behavior: authorized protected surfaces
+are Universal Wire sourcecycled ingestion/materialization, semantic
+story/entity/event/world-model cluster state, Texture synthesis revision
 creation/source refs, Wire edition linkage, and authenticated
-`/api/universal-wire` DTO observability. It does not claim changes to
-auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
-Qdrant, promotion/rollback, run acceptance, direct Node B tracked-file edits, or
-publication/export outside existing Wire edition helpers.
+`/api/universal-wire` DTO observability. It must not touch auth/session
+renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, direct Node B tracked-file edits, or
+publication/export outside existing Wire edition helpers unless it stops and
+documents why.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -610,14 +612,17 @@ read-owner detail is recorded in the ledger rather than fully embedded in the
 JSON packet, and with the explicit boundary that this is not full News
 benchmark settlement.
 
-next move: choose the next O4 realism axis or hand off. The strongest remaining
-axis is provider/reconciler-quality semantic synthesis over durable
-entity/event/world-model state, because the deployed product now proves the
-deterministic substrate but still reads as formulaic compared with the
-owner-stated Universal Wire target. Do not claim full News benchmark settlement
-without evidence that multilingual live ingestion produces coherent English
-synthesis articles over durable semantic source/world-model objects and updates
-existing articles when relevant information arrives.
+next move: reconnect with worker handle
+`local:629c9187-2967-4ae0-9231-b77242632601` once the
+`O4-provider-reconciler-quality-semantic-synthesis-axis-worker` thread
+materializes. The worker is tasked with the strongest remaining axis:
+provider/reconciler-quality semantic synthesis over durable
+entity/event/world-model state. It must start docs-first for any behavior
+problem, stop at `ready_for_verifier`, and not claim deploy/staging acceptance.
+Do not claim full News benchmark settlement without evidence that multilingual
+live ingestion produces coherent English synthesis articles over durable
+semantic source/world-model objects and updates existing articles when relevant
+information arrives.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -648,5 +653,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Semantic/world-model article-quality event-frame slice is landed, deployed, and independently accepted: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1; root commit 1fd26b67 applied the runtime slice; root head 4c7c42a197852aa72afa847eb3473aa3dc93be51 passed CI run 28292061672, Docs Truth Check 28292061688, FlakeHub publish 28292061671, deploy job 83825912482, and staging health identity at 2026-06-27T14:34:10Z. Authenticated staging proof at 2026-06-27T14:41:35Z observed live-arrival cycle_05a4d8b2152c125752259ac2, 547 source items, 546 captures, synthesis ok, 12 Wire Texture stories, 12 semantic stories, 4 event_frame stories, and 3 source_added stories. UI proof at 2026-06-27T14:43:32Z opened the first Wire Texture through read_owner=universal-wire-platform with no Get document failed toast, 6 sources, and article source-ref text. Verifier thread 019f098b-ce66-7583-88c6-abc379b9e842 accepted the deployed event-frame substrate proof. The remaining O4 News benchmark gap is quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: choose that provider/reconciler-quality semantic synthesis axis or hand off with V=1. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Semantic/world-model article-quality event-frame slice is landed, deployed, and independently accepted: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1; root commit 1fd26b67 applied the runtime slice; root head 4c7c42a197852aa72afa847eb3473aa3dc93be51 passed CI run 28292061672, Docs Truth Check 28292061688, FlakeHub publish 28292061671, deploy job 83825912482, and staging health identity at 2026-06-27T14:34:10Z. Authenticated staging proof at 2026-06-27T14:41:35Z observed live-arrival cycle_05a4d8b2152c125752259ac2, 547 source items, 546 captures, synthesis ok, 12 Wire Texture stories, 12 semantic stories, 4 event_frame stories, and 3 source_added stories. UI proof at 2026-06-27T14:43:32Z opened the first Wire Texture through read_owner=universal-wire-platform with no Get document failed toast, 6 sources, and article source-ref text. Verifier thread 019f098b-ce66-7583-88c6-abc379b9e842 accepted the deployed event-frame substrate proof. The remaining O4 News benchmark gap is quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: reconnect with pending worker handle local:629c9187-2967-4ae0-9231-b77242632601 for O4-provider-reconciler-quality-semantic-synthesis-axis-worker; it must start docs-first for any behavior problem, stop at ready_for_verifier, and not claim deploy/staging acceptance. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
