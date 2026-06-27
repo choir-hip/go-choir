@@ -10220,3 +10220,53 @@ Open edge: reconnect to pending handle
 `local:429785dd-7621-45a1-91de-6ae793a91bac`; if it materializes and returns
 `ready_for_verifier`, create an independent verifier thread before any root
 incorporation.
+
+## 2026-06-27 - O4 Semantic Source Worker Ready For Verifier
+
+Conjecture statement: worker thread
+`019f074f-13a2-7793-a02e-16b6bf0a45fc` produced a branch-local candidate commit
+that may support the narrow source-aware clustering and article-quality
+synthesis slice.
+
+Verdict: testing. The worker returned `ready_for_verifier`; an independent
+verifier has not yet accepted, rejected, blocked, or superseded the claim.
+
+Move:
+
+- Reconnected to pending worktree handle
+  `local:429785dd-7621-45a1-91de-6ae793a91bac`.
+- It materialized as Codex thread
+  `019f074f-13a2-7793-a02e-16b6bf0a45fc`, titled
+  `Improve source clustering quality`, in worktree
+  `/Users/wiz/.codex/worktrees/29be/go-choir`.
+- Worker callback reported commit
+  `880c3ac5021e86395a98551123e0f503f9c1a70e` (`Refine Universal Wire
+  source-aware synthesis slice`).
+
+Worker-reported changed files:
+
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/wire_synthesis.go`
+- `internal/runtime/universal_wire_test.go`
+
+Worker-reported evidence:
+
+- Focused runtime selector for sourcecycled materialization/update/split/legacy
+  repair/direct synthesis passed: `ok internal/runtime 5.106s`.
+- Broader selector
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed: `ok internal/runtime 9.962s`.
+- `git diff --check` and `git diff --check HEAD^..HEAD` passed.
+- Worker worktree was clean.
+
+Worker-reported scope/non-claims: branch-local only; no push, deploy, staging,
+provider-quality synthesis, or production semantic clustering claim.
+
+Residual risk: the candidate remains a bounded deterministic signal map, not
+production semantic clustering or provider-quality synthesis.
+
+Expected Delta V: 1 if an independent verifier accepts, rejects, blocks, or
+supersedes commit `880c3ac5`. Actual Delta V: 0 until verifier verdict.
+
+Open edge: create an independent verifier thread for worker commit
+`880c3ac5021e86395a98551123e0f503f9c1a70e` before any root incorporation.
