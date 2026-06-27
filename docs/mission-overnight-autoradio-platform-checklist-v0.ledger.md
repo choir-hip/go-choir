@@ -11730,3 +11730,68 @@ Next move: push root incorporation and this evidence update to `origin/main`,
 monitor GitHub checks, then record the landing result. Do not claim deployed
 product source-arrival update behavior unless a subsequent staging/product
 proof exercises real or product-path source arrival into an existing article.
+
+## 2026-06-27 - O4 Source Arrival Test Incorporation Landed
+
+Root pushed head `cef040aa549a95f606eceb8297860287091a1fe9` to `origin/main`.
+
+Included commits:
+
+- `a4eb00b3f3f2c754c3e0562dc6b6407e0efe4d23` (`Prove Wire source arrival
+  carries citations`): cherry-picked worker test-only proof from
+  `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`.
+- `cef040aa549a95f606eceb8297860287091a1fe9` (`Record O4 source arrival
+  incorporation evidence`): docs evidence update.
+
+GitHub Actions for head `cef040aa549a95f606eceb8297860287091a1fe9`:
+
+- CI run `28281983661`: success.
+- Docs Truth Check run `28281983679`: success.
+- Publish every Git push to main to FlakeHub run `28281983665`: success.
+
+CI job detail:
+
+- `Go Vet + Build`: success.
+- `Go Test (integration-tagged smoke)`: success.
+- `Detect Staging Deploy Impact`: success.
+- `TLA+ Model Check (specs/)`: success.
+- `Go Test (non-runtime)`: success.
+- `Go Test (internal/runtime shard 0)`: success.
+- `Go Test (internal/runtime shard 1)`: success.
+- `Go Test (internal/runtime shard 2)`: success.
+- `Go Test (internal/runtime shard 3)`: success.
+- `Docs Truth Check`: success.
+- `Go Vet + Test + Build`: success.
+- `Build Frontend`: skipped.
+- `Deploy to Staging (Node B)` job `83799590147`: skipped.
+
+Deploy/staging boundary: no staging deploy was produced for this head because
+the deploy-impact classifier found no deployed artifact change. Therefore there
+is no new deployed commit identity or staging product replay to claim for
+`cef040aa549a95f606eceb8297860287091a1fe9`; the last deployed product evidence
+remains the earlier deployed head
+`a10254d2072c8cc63c910551f3d1fb588fe87605`.
+
+Dirty/generated classification after landing:
+
+- Root tracked status still has pre-existing unrelated
+  `skills/parallax/SKILL.md`.
+- Root untracked status still has pre-existing unrelated
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- No temporary proof output or generated artifact was introduced by this
+  landing pass.
+
+Evidence boundary/non-claims: the landing establishes reviewed, CI-passing
+test coverage on `main` for source-arrival citation carry-forward. It does not
+claim deployed source-provider arrival, provider/model-quality synthesis,
+production semantic clustering, Qdrant/world-model projection, promotion or
+rollback execution, run acceptance, publication/export beyond existing Wire
+edition helpers, or full News benchmark settlement.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3.
+
+Next move: decide the smallest product-path discriminator for deployed
+source-arrival realism. Either produce authenticated/product evidence that a
+new relevant source arrival updates an existing Universal Wire semantic
+story/article, or document the exact blocker first under Problem Documentation
+First before building the next slice.
