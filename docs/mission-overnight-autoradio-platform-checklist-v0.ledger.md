@@ -10504,3 +10504,54 @@ made by this pass.
 Next move: push `32ee51f1` plus this evidence update, monitor CI/deploy, verify
 `choir.news` health identity, and rerun authenticated product proof against the
 visible Universal Wire articles.
+
+## 2026-06-27 - O4 Scaffold Predicate Repair Deployed But Still Failing
+
+Conjecture statement: expanding the Universal Wire read-repair predicate to
+detect newer deployed scaffold phrases is sufficient for existing scaffold
+Texture articles to revise on read in staging.
+
+Verdict: falsified by authenticated deployed product proof.
+
+Receipts:
+
+- Pushed root head `9e4b3baa7cc394ec8a59138a40a7598177ac1c2d` to
+  `origin/main`.
+- GitHub CI run `28279219223` completed successfully. Deploy job
+  `83791870176` completed successfully. Docs Truth Check run `28279219233` and
+  FlakeHub run `28279219236` completed successfully.
+- Public `https://choir.news/health` reported proxy and sandbox `commit` and
+  `deployed_commit` equal to
+  `9e4b3baa7cc394ec8a59138a40a7598177ac1c2d`, deployed at
+  `2026-06-27T05:01:33Z`.
+- Public unauthenticated `GET /api/universal-wire/stories` returned HTTP 401
+  with `{"error":"authentication required"}`.
+- Authenticated Computer Use replay in the owner's signed-in Chrome tab opened
+  Universal Wire after deploy and showed `11 articles`.
+- The same replay still showed scaffold copy after a hard reload:
+  `Multiple reports converge on Telegram Post from TASS Telegram`,
+  `24 incoming reports point to the same developing story...`,
+  `A second source in the cluster...`, and `reports read as one developing
+  article`.
+
+Strong definitive statement: `9e4b3baa` repaired the detector but not the
+deployed state transition. The read-repair path still delegates to the live graph
+materializer; existing transcluded Texture articles remain stale when that graph
+pass does not revise the exact stale article documents. The next repair must
+revise stale edition Texture documents directly from their current revision
+source metadata/source entities, while preserving raw `choir.web_capture`
+diagnostic-only boundaries.
+
+Mutation class for this pass: green documentation-first checkpoint. Next
+implementation move is orange/red because it changes runtime read repair and
+creates Texture revisions through existing Universal Wire/Texture helpers.
+
+Protected surfaces for the next move: Universal Wire read route, platform-owned
+Texture document/revision mutation through existing synthesis helpers, source
+entity/source_ref carry-forward, Wire edition linkage, and platform Texture sync
+for repaired revisions. Out of scope: auth/session renewal, vmctl, deployment
+routing, provider/gateway credentials, Qdrant, promotion/rollback, run
+acceptance, and publication/export outside existing Wire edition helpers.
+
+Expected Delta V: 0 for this documentation-first pass. Actual Delta V: 0; it
+keeps C11 open with a narrower next discriminator.

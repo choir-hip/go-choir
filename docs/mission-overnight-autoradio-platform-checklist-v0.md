@@ -353,16 +353,23 @@ helper-style prose, some visibly incoherent deterministic clusters, no
 production-quality provider/model synthesis, no Qdrant/world-model projection,
 and no deployed evidence that later relevant sources update existing articles.
 
-Current root repair candidate: root documented the read-repair gap in
-`2c94a9ed971ca435d5331a8668b900e64f6857aa`, then repaired the runtime predicate
-and regression in `32ee51f11e976a7b41c7dd554966d332da824759`. The repair is
-narrow: `universalWireStoriesNeedArticleSurfaceRepair` now also detects
-`incoming reports point to the same developing story`, `A second source in the
-cluster`, and `reports read as one developing article`; the existing read-time
-repair/materialization path remains responsible for revising the Texture
-article. Focused repair/materialization tests and the broader Universal Wire
-runtime selector passed locally. This is not deployed proof until the landing
-loop completes for the repair commit.
+Current failed repair evidence: root documented the read-repair gap in
+`2c94a9ed971ca435d5331a8668b900e64f6857aa`, repaired the runtime predicate in
+`32ee51f11e976a7b41c7dd554966d332da824759`, recorded local proof in
+`9e4b3baa7cc394ec8a59138a40a7598177ac1c2d`, then pushed and deployed that
+stack. CI run `28279219223`, Docs Truth Check run `28279219233`, FlakeHub run
+`28279219236`, deploy job `83791870176`, public health identity, and
+unauthenticated 401 proof all passed for `9e4b3baa`. Authenticated Computer Use
+replay in the owner's signed-in Chrome tab still showed `11 articles` with the
+same scaffold copy: `Multiple reports converge on ...`, `incoming reports point
+to the same developing story`, `A second source in the cluster...`, and
+`reports read as one developing article`. A hard reload did not repair them.
+The likely cause is that the read-repair path only asks the live graph
+synthesizer to run; existing stale edition Texture documents remain stale when
+that graph pass does not directly revise the already-transcluded documents. The
+next repair must operate on stale edition Texture articles themselves, deriving
+repair sources from their current revision/source entities or metadata instead
+of depending only on the live graph materializer.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty English synthesis Texture articles from multilingual ingested
