@@ -10303,3 +10303,78 @@ Open edge: reconnect to pending verifier handle
 `local:dd0dbdad-5135-493c-bf12-794f8aefa21a`; if it accepts, decide root
 incorporation. If it returns `revise_before_continue`, `blocked`, or
 `supersede`, record that verdict and choose the next discriminator.
+
+## 2026-06-27 - O4 Semantic Source Slice Accepted And Incorporated
+
+Conjecture statement: worker commit
+`880c3ac5021e86395a98551123e0f503f9c1a70e` supports the branch-local narrow
+source-aware Universal Wire clustering and article-quality synthesis slice, and
+root can incorporate it without local runtime regression.
+
+Verdict: supported at branch-local/root-local evidence tier.
+
+Move:
+
+- Independent verifier thread `019f0758-5908-7e40-894f-740fa798a44c` returned
+  `accept` with no findings.
+- Verifier reviewed `AGENTS.md`, the mission Parallax State/Suggested Goal
+  String, relevant ledger entries, worker final report, direct worker diff, and
+  code/test evidence.
+- Verifier accepted the branch-local claim that grouping now requires shared
+  topic plus shared specific story signal, generated fallback copy avoids
+  Universal Wire helper/meta framing, existing Texture/Wire/source paths remain
+  intact, and raw `choir.web_capture` remains diagnostic-only.
+- Root incorporated worker commit `880c3ac5` as
+  `5083ee36` (`Refine Universal Wire source-aware synthesis slice`).
+
+Strong definitive statements:
+
+- `internal/runtime/sourcecycled_web_captures.go` now requires a shared broad
+  topic and a shared specific story signal before grouping graph-backed captures
+  for synthesis.
+- `internal/runtime/wire_synthesis.go` and sourcecycled fallback copy no longer
+  frame synthesized articles around Universal Wire helper/meta prose in the
+  focused paths.
+- The candidate remains on the existing Texture synthesis, `BodyDoc`,
+  `SourceEntities`, Wire edition, and cluster-upsert path; it does not create a
+  parallel public article route.
+- Focused tests cover same-article revision for related later sources, split
+  same-topic/unrelated stories into distinct clusters/docs, helper-copy guards,
+  native `source_ref`, `body_doc`, source entities, reader snapshots, and
+  diagnostic-only raw captures.
+
+Receipts:
+
+- Verifier command receipts: clean worker status; `git rev-parse HEAD` returned
+  `880c3ac5021e86395a98551123e0f503f9c1a70e`; `git show --check --oneline` and
+  `git diff --check 880c3ac5^..880c3ac5` passed; changed files were exactly
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/universal_wire_test.go`, and
+  `internal/runtime/wire_synthesis.go`; focused selector passed in `4.792s`;
+  broader selector passed in `10.209s`.
+- Root incorporation receipts: `git diff --check 5083ee36^..5083ee36`,
+  `git show --check --oneline 5083ee36`, and
+  `git diff --name-status 5083ee36^..5083ee36` passed; changed files are the
+  same three runtime/test files.
+- Root focused selector passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters)|TestHandleUniversalWireStories(MaterializesExistingSourcecycledGraphCaptures|RepairsLegacyMetaCopyAndReadsStoryTexture)|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition' -count=1`
+  returned `ok github.com/yusefmosiah/go-choir/internal/runtime 4.775s`.
+- Root broader selector passed:
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  returned `ok github.com/yusefmosiah/go-choir/internal/runtime 9.992s`.
+
+Expected Delta V: 1. Actual Delta V: 1 at branch-local/root-local evidence tier,
+but V remains 4 because a new deployment conjecture is now live: the
+source-aware/article-copy slice must survive CI/deploy and authenticated staging
+product proof.
+
+Evidence boundary/non-claims: no CI, deploy, staging/product acceptance,
+production semantic clustering, provider/model-quality synthesis, Qdrant,
+promotion/rollback, run acceptance, auth/session, vmctl, deployment routing,
+gateway/provider credential, publication/export, or full live world-model claim
+is made by this pass.
+
+Residual risks: the grouping remains a bounded deterministic topic/signal map;
+cluster IDs can still be affected by vocabulary and slug truncation in broader
+live data; deployed product proof remains required before claiming staging
+behavior.
