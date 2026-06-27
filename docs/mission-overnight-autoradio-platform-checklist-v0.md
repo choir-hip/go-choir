@@ -645,28 +645,29 @@ article proof is impossible while no article is publishable, and semantic
 multi-story clustering/provider-quality synthesis are still future realism axes.
 O5 product path has started through prompt bar/Texture/Super request, but O5
 acceptance should wait for O4 zero-article repair or an explicit owner decision
-to carry O4 as an open edge. Worker thread
-`019f0679-3c97-7860-8765-09e839cf165d` has now produced a branch-local candidate:
-`e76932c2` documents a direct platformd publication/readiness mismatch, and
-Verifier review rejected worker repair `640e7540` before incorporation: it
-accepted direct `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL` values too early
-and would break the existing sibling-service derivation where vmctl packages set
-`RUNTIME_PLATFORMD_URL` to the proxy/wire `:8082` service and runtime rewrites it
-to direct platformd `:8086`. A separate source inspection after the owner's
-"all textures do not load" report found the deployed platform Texture sync path
-also strips structured `body_doc` and `source_entities` before platformd
-persists synced revisions, so platform-owned Universal Wire articles cannot
-survive as native source-backed Texture articles. O4 now needs a revised repair
-that preserves `:8082 -> :8086` derivation, accepts true direct platformd URLs,
-and syncs the full structured Texture revision state.
+to carry O4 as an open edge. Verifier review rejected worker repair `640e7540`
+before incorporation: it accepted direct `RUNTIME_PLATFORMD_URL` /
+`PROXY_PLATFORMD_URL` values too early and would break the existing
+sibling-service derivation where vmctl packages set `RUNTIME_PLATFORMD_URL` to
+the proxy/wire `:8082` service and runtime rewrites it to direct platformd
+`:8086`. A separate source inspection after the owner's "all textures do not
+load" report found the deployed platform Texture sync path also strips
+structured `body_doc` and `source_entities` before platformd persists synced
+revisions, so platform-owned Universal Wire articles cannot survive as native
+source-backed Texture articles. Root documented that problem first in
+`e7ca44a6`, then committed local repair `3d2afccb`: preserve
+`:8082 -> :8086` derivation, accept true direct `:8086` platformd URLs, add
+structured `body_doc`/`source_entities` to platformd Texture sync schema and
+DTOs, and prove old-schema additive migration plus runtime/proxy sync
+preservation in focused tests. The repair is not yet verifier-accepted,
+pushed, deployed, or product-accepted.
 
-next move: repair the revised O4 platform Texture read/write boundary in root:
-documented problem first, then code. The repair should preserve sibling
-platformd URL derivation, accept actual direct platformd endpoints, add
-structured `body_doc` and `source_entities` to platformd Texture sync, and rerun
-focused runtime/proxy/platform tests before any push/deploy. Expected Delta V:
-+1 only after local tests and a verifier accept the revised repair; another +1
-only after root deploys and authenticated product replay succeeds.
+next move: request independent verifier review for root commits `e7ca44a6` and
+`3d2afccb`. If accepted, push to `origin/main`, monitor CI/deploy, verify
+health identity, and run authenticated product replay for non-empty Universal
+Wire and headline-to-Texture readability. Expected Delta V: +1 only after
+verifier acceptance; another +1 only after root deploys and authenticated
+product replay succeeds.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

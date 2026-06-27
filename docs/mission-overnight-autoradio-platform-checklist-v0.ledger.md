@@ -8804,3 +8804,46 @@ provider freshness, semantic clustering, Qdrant, run acceptance, or
 promotion/rollback execution.
 
 Actual Delta V: 0. V remains 28.
+
+## 2026-06-27 - O4 Structured Platform Texture Sync Local Repair
+
+Claim: root commit `3d2afccb` repairs the revised local O4 platform
+Texture read/write boundary without incorporating rejected worker commit
+`640e7540`.
+
+Move: committed the code repair after docs-first commit `e7ca44a6`.
+
+Repair scope:
+
+- `internal/runtime/universal_wire.go` now accepts only true direct platformd
+  `:8086` URLs before sibling derivation. Package-generated
+  `RUNTIME_PLATFORMD_URL=http://<host>:8082` still derives to
+  `http://<host>:8086`.
+- `internal/platform/types.go`, `internal/platform/store.go`, and
+  `internal/platform/service.go` add additive platform persistence for
+  `body_doc` and `source_entities` on synced Texture revisions.
+- `internal/runtime/wire_platform_publish.go` sends structured revision fields
+  in direct runtime-to-platformd sync.
+- `internal/proxy/wire_platform_publish.go` forwards structured revision
+  fields in proxy-mediated async sync.
+- Tests cover old platform schema migration, structured sync persistence,
+  proxy async sync forwarding, direct runtime sync forwarding, and platformd
+  readiness URL derivation.
+
+Commands/results:
+
+- `git diff --check`: passed.
+- `nix develop -c go test ./internal/platform -run 'TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+
+Actual Delta V: 0. The repair is local and unverified. V remains 28.
+
+Evidence boundary/non-claims: no independent verifier accept, push, CI, deploy,
+health identity, authenticated staging proof, provider freshness, semantic
+clustering, Qdrant, run acceptance, promotion/rollback, or VM image mutation is
+claimed.
+
+Next move: create independent verifier thread for root commits `e7ca44a6` and
+`3d2afccb`; if accepted, push/deploy and run product proof.
