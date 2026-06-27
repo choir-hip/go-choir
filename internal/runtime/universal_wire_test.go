@@ -1644,7 +1644,7 @@ func TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit(t *t
 	}
 }
 
-func TestHandleUniversalWireStoriesDeRanksStaleSynthesisAfterSkippedLiveArrival(t *testing.T) {
+func TestHandleUniversalWireStoriesFiltersStaleSynthesisAfterSkippedLiveArrival(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
 	now := time.Date(2026, 6, 27, 12, 30, 0, 0, time.UTC)
@@ -1712,20 +1712,19 @@ func TestHandleUniversalWireStoriesDeRanksStaleSynthesisAfterSkippedLiveArrival(
 	}
 
 	resp := getUniversalWireStoriesForTest(t, handler)
-	if len(resp.Stories) < 2 {
-		t.Fatalf("stories = %+v, want valid and stale edition articles", resp)
+	if len(resp.Stories) != 1 {
+		t.Fatalf("stories = %+v, want stale synthesis filtered from public stories", resp)
 	}
 	if resp.Stories[0].StoryTextureDoc != valid.DocID {
-		t.Fatalf("first story = %+v, want older valid article ahead of stale synthesis doc %s", resp.Stories[0], staleDoc.DocID)
+		t.Fatalf("first story = %+v, want older valid article after stale synthesis filter", resp.Stories[0])
 	}
-	staleStory := universalWireStoryWithDocForTest(resp.Stories, staleDoc.DocID)
-	if staleStory == nil {
-		t.Fatalf("stories = %+v, want stale synthesis retained for audit below current article", resp.Stories)
+	if staleStory := universalWireStoryWithDocForTest(resp.Stories, staleDoc.DocID); staleStory != nil {
+		t.Fatalf("stories = %+v, stale synthesis should not be public after skipped classifier boundary", resp.Stories)
 	}
-	if staleStory.Prominence >= resp.Stories[0].Prominence ||
-		staleStory.UpdatedAt.Before(staleRev.CreatedAt) ||
-		!strings.Contains(staleStory.Headline, "South Korea plans to train") {
-		t.Fatalf("stale story = %+v, first = %+v, stale rev = %+v", staleStory, resp.Stories[0], staleRev)
+	if resp.Edition == nil ||
+		!slices.Contains(resp.Edition.IncludedDocIDs, staleDoc.DocID) ||
+		!slices.Contains(resp.Edition.IncludedDocIDs, valid.DocID) {
+		t.Fatalf("edition = %+v, want stale doc retained in edition metadata for audit; stale rev = %+v", resp.Edition, staleRev)
 	}
 }
 

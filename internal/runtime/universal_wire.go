@@ -354,8 +354,7 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
 	}
 	type editionStoryCandidate struct {
-		story             types.WireStory
-		staleAfterArrival bool
+		story types.WireStory
 	}
 	candidates := make([]editionStoryCandidate, 0, len(includedDocIDs))
 	for _, docID := range includedDocIDs {
@@ -385,16 +384,15 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
+		if h.universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx, rev) {
+			continue
+		}
 		story.SourceState = "universal-wire-edition-texture"
 		candidates = append(candidates, editionStoryCandidate{
-			story:             story,
-			staleAfterArrival: h.universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx, rev),
+			story: story,
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].staleAfterArrival != candidates[j].staleAfterArrival {
-			return !candidates[i].staleAfterArrival
-		}
 		left := candidates[i].story.UpdatedAt
 		right := candidates[j].story.UpdatedAt
 		if left.Equal(right) {

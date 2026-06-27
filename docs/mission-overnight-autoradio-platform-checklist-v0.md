@@ -1008,6 +1008,16 @@ list while remaining present in edition metadata and direct Texture reads for
 audit. Next move: filter stale synthesis candidates out of public
 `/api/universal-wire/stories` before the 12-story cap.
 
+Local stale-synthesis filter repair now excludes stale synthesis candidates
+from the public story list before sorting, capping, and prominence assignment,
+while preserving `edition.included_doc_ids` for audit/direct Texture access.
+Focused proof covers the deployed shape with a stale synthesis revision that
+lacks the boolean but carries cluster/article metadata; after a later skipped
+live-arrival boundary, only the valid article is public and the stale doc
+remains in edition metadata. Broader Universal Wire runtime selector passed
+locally. Next move: commit, push, monitor CI/deploy, verify health identity, and
+rerun authenticated staging proof.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

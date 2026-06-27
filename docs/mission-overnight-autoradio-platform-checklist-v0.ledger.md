@@ -14592,3 +14592,57 @@ Next move: filter stale synthesis candidates out of
 `/api/universal-wire/stories` before the 12-story cap, keep the edition metadata
 intact for audit, add a regression that stale docs are excluded rather than
 merely de-ranked, then replay local tests and staging.
+
+## 2026-06-27 - O4 Stale Synthesis Public Filter Local Proof
+
+Move: repair the public product symptom by filtering stale Universal Wire
+synthesis candidates out of `/api/universal-wire/stories` before sorting,
+capping, and prominence assignment.
+
+Repair summary:
+
+- `universalWireEditionTextureStories` now skips candidates that
+  `universalWireSynthesisStoryStaleAfterLatestLiveArrival` marks stale.
+- The canonical edition response still reports `included_doc_ids`, so stale
+  Texture docs remain auditable and directly readable; they are just not public
+  live stories after a later classifier/grouping boundary invalidates them.
+- The regression was renamed to
+  `TestHandleUniversalWireStoriesFiltersStaleSynthesisAfterSkippedLiveArrival`
+  and now asserts the stale doc is absent from `Stories` but present in
+  `Edition.IncludedDocIDs`.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(FiltersStaleSynthesisAfterSkippedLiveArrival|SurfacesNewestEditionTexturesBeforeLimit)|TestHandleInternalSourcecycledWebCapturesDoesNotTreatTrainVerbAsRailSignal' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.882s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 15.693s`.
+- `git diff --check -- internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed as part of the command chain.
+
+Conjecture verdict: supported locally for public stale-synthesis filtering. The
+remaining required evidence is staging replay showing the South Korea/train doc
+is no longer in the public story list while the edition metadata remains
+available.
+
+Mutation class: orange behavior repair. Protected surfaces: authenticated
+Universal Wire story projection, live-arrival status interpretation,
+synthesized Texture article public filtering, and story prominence assignment.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming stale-synthesis filter commit plus this
+evidence entry; stale synthesis candidates return to the public story list.
+
+Heresy delta: `repaired` locally for stale synthesis winning or occupying the
+public live feed after a later skipped boundary; not yet repaired at staging.
+
+Expected Delta V: 1 if deployed replay shows the bad South Korea/train article
+is absent from public `/api/universal-wire/stories` while retained in edition
+metadata. Actual Delta V: 0 until deployed proof. V remains 1.
+
+Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
+identity, refresh auth, and replay authenticated Universal Wire product proof.
