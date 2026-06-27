@@ -11795,3 +11795,107 @@ source-arrival realism. Either produce authenticated/product evidence that a
 new relevant source arrival updates an existing Universal Wire semantic
 story/article, or document the exact blocker first under Problem Documentation
 First before building the next slice.
+
+## 2026-06-27 - O4 Deployed Source Arrival Clustering Blocker Documented
+
+Move type: probe -> Problem Documentation First checkpoint.
+
+Claim under test: deployed source arrival should let Universal Wire prove that
+new sourcecycled arrivals update existing semantic story/articles only when
+they match, while unrelated arrivals form separate coherent articles instead of
+one broad mega-story.
+
+Staging health/deploy identity:
+
+- `https://choir.news/health` returned proxy and sandbox deployed commit
+  `a10254d2072c8cc63c910551f3d1fb588fe87605`.
+- Proxy/sandbox deployed at `2026-06-27T06:42:31Z`.
+- Public unauthenticated `https://choir.news/api/universal-wire/stories`
+  returned 401, as expected.
+
+Sourcecycled staging evidence:
+
+- `go-choir-sourcecycled` is active on Node B.
+- Sourcecycled health returned `item_count: 1004474`, `fetch_count: 405851`,
+  and `checked_at: 2026-06-27T07:13:38.347383005Z`.
+- Latest cycle `cycle_aab51c4b894bba17afea9fb2` started at
+  `2026-06-27T07:10:21Z`, ended at `2026-06-27T07:11:38Z`, and completed.
+- The cycle fetched 562 new items from 211 configured sources.
+- Source health for the cycle reported 194 successful fetches, 17 failed
+  fetches, 136 item-producing sources, and 3725 raw item count before dedupe.
+- The cycle recorded `web_captures_graph_written` with:
+  - `objectgraph_mode: runtime_api`
+  - `objectgraph_target: http://unix/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/objectgraph/web-captures`
+  - `capture_count: 561`
+  - `source_entity_count: 561`
+  - `captured_from_edges: 561`
+  - `skipped_item_count: 1`
+- The same cycle emitted 562 ingestion events, queued 24 processor requests,
+  superseded 24 previous processor requests, and dispatched 1 runtime run
+  `468a12d1-43df-437c-8bd1-17d573d4e314`.
+
+Runtime/Wire diagnostic:
+
+- Chrome extension automation could not complete authenticated replay because
+  another extension UI blocked the Chrome extension session. This remains a
+  product-proof gap, not acceptance.
+- As a lower-tier diagnostic only, root queried the Node B sandbox runtime
+  route with `X-Authenticated-User`/`X-Authenticated-Email` headers:
+  `http://127.0.0.1:8085/api/universal-wire/stories`.
+- The proxy route on `8082` rejected header injection with 401, preserving the
+  public auth boundary.
+- The sandbox diagnostic returned:
+  - `source: universal-wire-edition-texture`
+  - `story_count: 1`
+  - edition doc `95afb28c-1095-4b96-bdf8-c1b89b13bc56`
+  - edition revision `43748e13-d44c-43fa-acc3-95fef2d0906a`
+  - included doc `d3661377-4731-4617-a351-63236b08597d`
+  - headline `Cory Doctorow on the Right - and Wrong - Way to Criticize AI`
+  - `semantic_story.schema_version: choir.universal_wire_story_cluster.semantic.v1`
+  - `semantic_story.change_type: source_added`
+  - `semantic_story.previous_source_count: 24`
+  - `semantic_story.current_source_count: 24`
+  - topic concepts `energy`, `harbor`, `health`
+  - 273 signal concepts
+  - `changed_at: 2026-06-27T07:15:42.921551181Z`
+- The article copy still reads as formulaic synthesis over mismatched sources:
+  the Doctorow AI headline/dek pairs with a Meta/butcher-shop video as the
+  second sourced angle.
+
+Problem documented: live sourcecycled arrival is happening on staging, and it
+does write through the runtime graph-capture endpoint, but the deployed Wire
+surface still does not prove the intended Universal Wire behavior. It currently
+returns one broad source-added article with noisy concepts and unchanged
+24-source count, not multiple coherent stories or a narrowly updated existing
+story/article.
+
+Conjecture delta: C6 is sharpened. The missing predicate is no longer "does
+source arrival happen?" It does. The missing predicate is "does deployed-shaped
+source arrival partition unrelated sources into coherent semantic stories and
+update only matching existing articles?"
+
+Mutation class for this checkpoint: green docs/evidence only.
+
+Protected surfaces for the next worker: Universal Wire sourcecycled
+ingestion/materialization, deterministic/semantic clustering, live source
+selection limits, `choir.universal_wire_story_cluster` state, Texture synthesis
+article revision, source_ref/source_entities carry-forward, Wire edition
+linkage, `/api/universal-wire/stories`, and staging/product acceptance probes.
+
+Rollback path for the next worker: revert implementation commits back to root
+checkpoint `292de87f9fd8d84f15ea2d69315ae574f9953135` plus dependent evidence
+commits.
+
+Heresy delta: `discovered`. Source arrival is live, but the route collapses
+unrelated arrivals into one broad article/update surface.
+
+Expected Delta V: 0 for documentation-first checkpoint. Actual Delta V: 0. V
+remains 3.
+
+Next move: create worker thread
+`O4-deployed-source-arrival-clustering-update-worker`. The worker must produce
+branch-local proof that a deployed-shaped sourcecycled batch with many unrelated
+items yields multiple coherent Wire Texture articles and that a later matching
+arrival updates only the existing semantic story/article. It must not push,
+deploy, mutate staging, claim authenticated Chrome product acceptance, claim
+provider/model-quality synthesis, or claim full News benchmark settlement.

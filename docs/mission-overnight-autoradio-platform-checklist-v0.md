@@ -520,10 +520,11 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 3. Last delta: expected Delta V 0 for C6
-source-arrival citation carry-forward proof; actual Delta V 0 after
-independent verifier acceptance and root incorporation because this remains
-branch-local/test-only evidence, not deployed source-arrival proof. Last decided
+statement. Current value: 3. Last delta: expected Delta V 0 for the deployed
+source-arrival discriminator; actual Delta V 0 because staging evidence found
+live source arrival but also exposed a blocker: the public Wire read still
+collapses into one broad article rather than a coherent multi-story/update
+surface. Last decided
 conjecture: deployed commit
 `a10254d2072c8cc63c910551f3d1fb588fe87605` supports the narrow claim that
 current/stale synthesized Universal Wire Texture articles expose product-visible
@@ -557,17 +558,18 @@ class, protected surfaces, admissible evidence, rollback path, conjecture delta,
 and heresy delta before editing.
 
 mutation class / protected surfaces: Current move is a green Problem
-Documentation First checkpoint for the next O4 realism axis. The next worker is
-an orange/red branch-local behavior slice over Universal Wire sourcecycled
-ingestion/materialization, `/api/universal-wire/stories`, semantic story cluster
-state, Texture revision creation/revision, Wire edition linkage, source
-entity/source_ref carry-forward, platform Texture sync/read paths, and product
-acceptance probes. Rollback path is revert the next implementation commit(s)
-back to `7e87b74208b19f9d97f125fb904c3ab1e7031c5c` plus dependent evidence
-commits. The next move must not touch auth/session renewal, vmctl, deployment
-routing, provider/gateway credentials, Qdrant, promotion/rollback, run
-acceptance, or publication/export outside existing Wire edition helpers unless a
-separate checkpoint names that broader conjecture.
+Documentation First checkpoint for the deployed source-arrival clustering/update
+blocker. The next worker is an orange/red branch-local behavior slice over
+Universal Wire sourcecycled ingestion/materialization,
+`/api/universal-wire/stories`, semantic story cluster state, Texture revision
+creation/revision, Wire edition linkage, source entity/source_ref carry-forward,
+platform Texture sync/read paths, and product acceptance probes. Rollback path
+is revert the next implementation commit(s) back to
+`292de87f9fd8d84f15ea2d69315ae574f9953135` plus dependent evidence commits.
+The next move must not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
+publication/export outside existing Wire edition helpers unless a separate
+checkpoint names that broader conjecture.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -609,30 +611,40 @@ Current C6 source-arrival update conjecture: if a later sourcecycled source
 arrives for an already-materialized Universal Wire semantic story, the product
 path should revise the same semantic story object and linked Texture article
 instead of creating a duplicate card, losing prior citations, or requiring
-manual reseeding. Branch-local root evidence now proves the test predicate that
-the later/second Texture revision preserves prior/new `source_item_ids`, source
-entities, and three native `source_ref` citations while the surrounding test
-holds same story/article/edition identity.
+manual reseeding. Branch-local root evidence proves the test predicate that the
+later/second Texture revision preserves prior/new `source_item_ids`, source
+entities, and native `source_ref` citations while the surrounding test holds
+same story/article/edition identity. Staging evidence now gives the next
+blocker: sourcecycled is live and did deliver new source arrivals, but the Wire
+surface is still not the intended multi-story/update product.
 
-next move: choose the next discriminator for deployed source-arrival realism:
-either product-path ingestion evidence that a new relevant source updates an
-existing Universal Wire semantic story/article, or a docs-first checkpoint for
-the precise blocker that prevents that product proof. Verifier thread
-`019f07de-0a66-7781-af66-781a8369f728` accepted worker commit
-`3af1c3a5ca41e02b01829eb0af03004f1f0045b9`, and root cherry-picked it as
-`a4eb00b3f3f2c754c3e0562dc6b6407e0efe4d23`. Root reran
-`git show --check --oneline HEAD`, `git diff --check HEAD^..HEAD`,
-`nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`,
-and
-`nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`;
-all passed. Root pushed incorporation/evidence head
-`cef040aa549a95f606eceb8297860287091a1fe9` to `origin/main`; CI run
-`28281983661`, Docs Truth Check run `28281983679`, and FlakeHub run
-`28281983665` all passed. The CI staging deploy job `83799590147` was skipped
-because the deploy-impact classifier found no deployed artifact change. No
-deployed source-provider arrival, provider/model-quality synthesis, Qdrant,
-promotion/rollback, run acceptance, or full News benchmark claim is made from
-this test-only incorporation.
+Deployed discriminator evidence: Node B sourcecycled is active and its latest
+cycle `cycle_aab51c4b894bba17afea9fb2` ran from `2026-06-27T07:10:21Z` to
+`2026-06-27T07:11:38Z`, fetched 562 new items from 211 configured sources, and
+recorded `web_captures_graph_written` with `capture_count: 561`,
+`source_entity_count: 561`, `captured_from_edges: 561`,
+`objectgraph_mode: runtime_api`, and target
+`http://unix/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/objectgraph/web-captures`.
+The unauthenticated public API remains 401 as expected, and Chrome automation
+could not complete an authenticated replay because another extension UI blocked
+the Chrome extension session. A lower-tier sandbox route diagnostic with
+`X-Authenticated-User` showed `/api/universal-wire/stories` returning
+`source: universal-wire-edition-texture`, `story_count: 1`, edition
+`95afb28c-1095-4b96-bdf8-c1b89b13bc56`, included doc
+`d3661377-4731-4617-a351-63236b08597d`, headline `Cory Doctorow on the Right -
+and Wrong - Way to Criticize AI`, `semantic_story.change_type: source_added`,
+`previous_source_count: 24`, `current_source_count: 24`, topic concepts
+`energy`, `harbor`, `health`, and 273 signal concepts. This is evidence of a
+live ingestion/update blocker, not product acceptance.
+
+next move: create a worker thread
+`O4-deployed-source-arrival-clustering-update-worker`. The worker should repair
+the branch-local predicate that a deployed-shaped sourcecycled cycle with many
+unrelated new source items yields multiple coherent Wire Texture articles and
+updates only matching existing semantic story/articles, rather than refreshing
+one 24-source mega-article with broad noisy signatures. Stop at clean committed
+branch-local proof and return `ready_for_verifier`; no push/deploy/product claim
+from the worker.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -669,5 +681,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `a10254d2072c8cc63c910551f3d1fb588fe87605`; CI run `28281421752`, Docs Truth Check run `28281421753`, FlakeHub run `28281421747`, deploy job `83798061615`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof loaded `https://choir.news/api/universal-wire/stories` in the owner's signed-in Chrome session and showed 12 stories, `semanticStoryCount: 12`, literal `semantic_story`, first-story schema `choir.universal_wire_story_cluster.semantic.legacy.v1`, change type `legacy_revision_projection`, `source_count: 24`, and `copyLeak: false`; UI smoke showed 12 readable articles, Texture v66, `Sources 24`, native source buttons, and `Document loaded`. This settles only semantic DTO observability for current/stale synthesized Wire articles. Current C6 source-arrival update conjecture: if a later sourcecycled source arrives for an already-materialized Universal Wire semantic story, the product path should revise the same semantic story object and linked Texture article instead of creating a duplicate card, losing prior citations, or requiring manual reseeding. Worker thread `019f07d9-bfd2-7353-8ac8-81201f0cd55f` returned `ready_for_verifier` for commit `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`; verifier thread `019f07de-0a66-7781-af66-781a8369f728` accepted it; root incorporated it as `a4eb00b3f3f2c754c3e0562dc6b6407e0efe4d23`, reran focused source-arrival plus broader Universal Wire runtime selectors successfully, and pushed `cef040aa549a95f606eceb8297860287091a1fe9` to `origin/main`. CI run `28281983661`, Docs Truth Check run `28281983679`, and FlakeHub run `28281983665` passed; staging deploy job `83799590147` was skipped because no deployed artifact changed. Next move is to choose the next discriminator for deployed source-arrival realism: product-path ingestion evidence that a new relevant source updates an existing Universal Wire semantic story/article, or a docs-first checkpoint for the blocker preventing that proof. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `a10254d2072c8cc63c910551f3d1fb588fe87605`; CI run `28281421752`, Docs Truth Check run `28281421753`, FlakeHub run `28281421747`, deploy job `83798061615`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof loaded `https://choir.news/api/universal-wire/stories` in the owner's signed-in Chrome session and showed 12 stories, `semanticStoryCount: 12`, literal `semantic_story`, first-story schema `choir.universal_wire_story_cluster.semantic.legacy.v1`, change type `legacy_revision_projection`, `source_count: 24`, and `copyLeak: false`; UI smoke showed 12 readable articles, Texture v66, `Sources 24`, native source buttons, and `Document loaded`. This settles only semantic DTO observability for current/stale synthesized Wire articles. Current C6 source-arrival update conjecture: if a later sourcecycled source arrives for an already-materialized Universal Wire semantic story, the product path should revise the same semantic story object and linked Texture article instead of creating a duplicate card, losing prior citations, or requiring manual reseeding. Sourcecycled staging evidence now shows the real blocker: latest cycle `cycle_aab51c4b894bba17afea9fb2` fetched 562 new items and wrote 561 runtime graph captures, but a sandbox route diagnostic of `/api/universal-wire/stories` still returns one broad article with `change_type: source_added`, unchanged 24-source count, broad topics `energy/harbor/health`, and 273 signal concepts. Chrome authenticated replay is still needed but was blocked by an extension UI in this pass; do not count the sandbox-header diagnostic as product acceptance. Next move is to create `O4-deployed-source-arrival-clustering-update-worker` to repair the branch-local deployed-shaped predicate: many unrelated sourcecycled arrivals should yield multiple coherent Wire Texture articles, and matching later arrivals should update only the existing semantic story/article. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
