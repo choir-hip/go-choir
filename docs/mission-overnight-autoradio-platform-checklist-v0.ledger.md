@@ -13759,3 +13759,52 @@ Next move: repair `protectedAPIResolveTarget` so
 `/api/universal-wire/live-arrival` uses the same always-on platform computer
 target as `/api/universal-wire/stories`, add a focused proxy regression, run
 targeted tests, then repeat the landing loop and authenticated staging proof.
+
+## 2026-06-27 - O4 Live Arrival Oracle Platform Route Repair Landed Locally
+
+Move: repair the documented route-target mismatch from the previous checkpoint.
+
+Repair commit: `b7b012c8 Route Wire live arrival oracle to platform computer`.
+
+What changed:
+
+- `internal/proxy/handlers.go` now treats
+  `/api/universal-wire/live-arrival` like `/api/universal-wire/stories` in
+  `protectedAPIResolveTarget`, routing authenticated public reads to
+  `UniversalWirePlatformOwnerID` and `UniversalWirePlatformDesktopID`.
+- `internal/proxy/handlers_test.go` widens the existing Universal Wire platform
+  routing regression to cover both `/api/universal-wire/stories` and
+  `/api/universal-wire/live-arrival`, while preserving normal caller-desktop
+  routing for `/api/prompt-bar`.
+
+Commands/results:
+
+- `gofmt -w internal/proxy/handlers.go internal/proxy/handlers_test.go`
+  passed.
+- `git diff --check -- internal/proxy/handlers.go internal/proxy/handlers_test.go`
+  passed.
+- `nix develop -c go test ./internal/proxy -run 'TestProtectedAPIResolveTarget_UniversalWirePlatformRoutesUsePlatformComputer|WirePlatform|PlatformTextureRead' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/proxy 0.301s`.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireLiveArrival|TestHandleUniversalWireStoriesRequiresAuth|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 4.010s`.
+
+Evidence boundary: local/root test tier only. No push, CI, deploy, staging
+identity, authenticated staging proof, sourcecycled fresh-cycle proof,
+provider/model synthesis, Qdrant/world-model, promotion/rollback, run
+acceptance, or full News benchmark settlement is claimed yet.
+
+Mutation class: orange/red behavior repair. Protected surfaces:
+authenticated public `/api/universal-wire/*` proxy routing and always-on
+platform computer routing.
+
+Rollback path: revert `b7b012c8` plus dependent evidence commits; deployed
+live-arrival reads return to caller-runtime routing.
+
+Heresy delta: `repaired` locally for the route-target mismatch; not repaired
+at staging/product tier until landing loop and authenticated proof pass.
+
+Expected Delta V: 0 until deployed proof. Actual Delta V: 0. V remains 2.
+
+Next move: push `50dc5428` and `b7b012c8` plus this evidence, monitor CI and
+staging deploy, verify `choir.news` health identity, and rerun authenticated
+deployed proof for `/api/universal-wire/live-arrival`.
