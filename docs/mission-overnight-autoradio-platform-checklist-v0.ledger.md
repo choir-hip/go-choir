@@ -14100,3 +14100,54 @@ public Wire feed surfaces newest edition Texture articles before older
 transclusions, preserving edition inclusion metadata and source/open behavior;
 then rerun focused tests, push, CI/deploy, health identity, and authenticated
 staging proof.
+
+## 2026-06-27 - O4 Wire Feed Ordering Repair Local Proof
+
+Move: repair the documented first-12 edition ordering bug in the public
+Universal Wire stories projection.
+
+Repair summary:
+
+- `internal/runtime/universal_wire.go` now collects all publishable Texture
+  stories transcluded in `universal-wire/Wire.texture`, sorts them by
+  `UpdatedAt` descending, then applies the existing 12-story product cap and
+  assigns prominence in displayed order.
+- Canonical edition inclusion order and `edition.included_doc_ids` remain
+  unchanged; the repair affects only the public story-card projection order.
+- `internal/runtime/universal_wire_test.go` adds
+  `TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit`,
+  proving a newest appended article appears first while the oldest of 13
+  included docs falls outside the 12-story cap.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- `git diff --check -- internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- Initial focused test run failed only because `sort` was missing from imports;
+  the import was added and the same selector was rerun.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(IndexesEditionTranscludedTextureHeads|SurfacesNewestEditionTexturesBeforeLimit)|TestHandleInternalSourcecycledWebCapturesReportsNoDeterministicGroups|TestHandleUniversalWireLiveArrival' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 4.581s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 14.320s`.
+
+Mutation class: orange behavior repair. Protected surfaces: authenticated
+public `/api/universal-wire/stories` read ordering, edition Texture story
+projection, product cap ordering, and story prominence assignment.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming ordering repair commit plus this evidence
+entry; `/api/universal-wire/stories` returns to first-12 stored edition order.
+
+Heresy delta: `repaired` locally for hidden fresh live articles; not yet
+repaired at staging/product tier.
+
+Expected Delta V: 0 until deployed proof confirms the live synthesized doc is
+visible in the product story feed. Actual Delta V: 0. V remains 1.
+
+Next move: commit the ordering repair/evidence, push to `origin main`, monitor
+CI/deploy, verify health identity, and rerun authenticated stories proof for
+doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`.

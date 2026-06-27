@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -352,11 +353,8 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		IncludedDocIDs: includedDocIDs,
 		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
 	}
-	stories := make([]types.WireStory, 0, min(len(includedDocIDs), limit))
+	stories := make([]types.WireStory, 0, len(includedDocIDs))
 	for _, docID := range includedDocIDs {
-		if limit > 0 && len(stories) >= limit {
-			break
-		}
 		doc, err := h.rt.Store().GetDocument(ctx, docID, platformOwner)
 		if err != nil {
 			if err == store.ErrNotFound {
@@ -383,9 +381,22 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
-		story.Prominence = 100 - len(stories)
 		story.SourceState = "universal-wire-edition-texture"
 		stories = append(stories, story)
+	}
+	sort.SliceStable(stories, func(i, j int) bool {
+		left := stories[i].UpdatedAt
+		right := stories[j].UpdatedAt
+		if left.Equal(right) {
+			return stories[i].StoryTextureDoc < stories[j].StoryTextureDoc
+		}
+		return left.After(right)
+	})
+	if limit > 0 && len(stories) > limit {
+		stories = stories[:limit]
+	}
+	for i := range stories {
+		stories[i].Prominence = 100 - i
 	}
 	return stories, edition, nil
 }

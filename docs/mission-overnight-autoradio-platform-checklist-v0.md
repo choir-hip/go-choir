@@ -891,6 +891,17 @@ can be linked into the edition but hidden behind older docs. Next move:
 document/repair story ordering/limit semantics so newest live synthesized
 Texture articles surface in Universal Wire.
 
+Local ordering repair changes only the read projection: collect all publishable
+edition Texture stories, sort them by `UpdatedAt` descending, then apply the
+12-story product cap and assign prominence. The canonical edition inclusion
+order and included-doc metadata remain intact. Focused tests now cover a
+13-doc edition where the newest appended live article surfaces first and the
+oldest article falls outside the product cap; the broader Universal Wire
+runtime selector passed locally. Next move: commit, push, monitor CI/deploy,
+verify health identity, and rerun authenticated staging proof that doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` appears in
+`/api/universal-wire/stories`.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

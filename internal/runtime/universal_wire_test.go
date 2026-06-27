@@ -1296,12 +1296,21 @@ func universalWireDiagnosticForSubstrate(diag *universalWireFeedDiagnostics, sub
 
 func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handler *APIHandler, docID string, published bool) types.Document {
 	t.Helper()
+	return seedPlatformSourceNetworkTextureFixtureAtWithPublishState(t, handler, docID, "Madrid dispatch", time.Now().UTC(), published)
+}
+
+func seedPlatformSourceNetworkTextureFixtureAt(t *testing.T, handler *APIHandler, docID, headline string, now time.Time) types.Document {
+	t.Helper()
+	return seedPlatformSourceNetworkTextureFixtureAtWithPublishState(t, handler, docID, headline, now, true)
+}
+
+func seedPlatformSourceNetworkTextureFixtureAtWithPublishState(t *testing.T, handler *APIHandler, docID, headline string, now time.Time, published bool) types.Document {
+	t.Helper()
 	ctx := context.Background()
-	now := time.Now().UTC()
 	doc := types.Document{
 		DocID:     docID,
 		OwnerID:   "universal-wire-platform",
-		Title:     "Madrid dispatch.texture",
+		Title:     headline + ".texture",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -1319,11 +1328,11 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 		"source_item_ids":                []string{"srcitem_live_1", "srcitem_live_2"},
 	}
 	if published {
-		metaMap["platformd_route_path"] = "/pub/texture/madrid-dispatch"
+		metaMap["platformd_route_path"] = "/pub/texture/" + universalWireSlug(docID)
 	}
 	meta, _ := json.Marshal(metaMap)
 	content := strings.Join([]string{
-		"# Madrid dispatch",
+		"# " + headline,
 		"",
 		"MADRID -- Pope Leo XIV addressed a packed crowd while city officials adjusted transport and security plans around the visit.",
 		"",
@@ -1562,6 +1571,40 @@ func TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads(t *test
 		strings.Contains(claimText, "Style.texture Source") ||
 		!strings.Contains(claimText, "Source and style provenance are carried by the Texture revision metadata and citations") {
 		t.Fatalf("indexed source-network story claims did not preserve provenance/body separation: %+v", story.Claims)
+	}
+}
+
+func TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 27, 12, 5, 0, 0, time.UTC)
+	includedDocIDs := []string{}
+	for i := 0; i < 12; i++ {
+		docID := fmt.Sprintf("doc-wire-old-%02d", i)
+		seedPlatformSourceNetworkTextureFixtureAt(t, handler, docID, fmt.Sprintf("Older wire article %02d", i), now.Add(time.Duration(i)*time.Minute))
+		includedDocIDs = append(includedDocIDs, docID)
+	}
+	newest := seedPlatformSourceNetworkTextureFixtureAt(t, handler, "doc-wire-newest-live", "Newest live synthesis article", now.Add(2*time.Hour))
+	includedDocIDs = append(includedDocIDs, newest.DocID)
+	seedUniversalWireEditionFixture(t, handler, includedDocIDs...)
+
+	resp := getUniversalWireStoriesForTest(t, handler)
+	if resp.Source != "universal-wire-edition-texture" ||
+		resp.Edition == nil ||
+		len(resp.Edition.IncludedDocIDs) != 13 ||
+		len(resp.Stories) != 12 {
+		t.Fatalf("stories = %+v, want 12-story capped edition response over 13 included docs", resp)
+	}
+	if resp.Stories[0].StoryTextureDoc != newest.DocID ||
+		resp.Stories[0].Headline != "Newest live synthesis article" ||
+		resp.Stories[0].Prominence != 100 {
+		t.Fatalf("first story = %+v, want newest appended edition doc surfaced first", resp.Stories[0])
+	}
+	if universalWireStoryWithDocForTest(resp.Stories, "doc-wire-old-00") != nil {
+		t.Fatalf("stories = %+v, oldest edition doc should fall outside the 12-story product cap", resp.Stories)
+	}
+	if !slices.Contains(resp.Edition.IncludedDocIDs, "doc-wire-old-00") ||
+		!slices.Contains(resp.Edition.IncludedDocIDs, newest.DocID) {
+		t.Fatalf("edition included docs = %+v, want canonical edition metadata preserved", resp.Edition.IncludedDocIDs)
 	}
 }
 
