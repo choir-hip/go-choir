@@ -14864,3 +14864,102 @@ boundary with `/api/universal-wire/live-arrival`, `/api/universal-wire/stories`,
 and direct Texture document/revision reads, and prove that a later matching
 source updates an existing coherent article instead of creating a duplicate or
 reviving stale synthesis.
+
+## 2026-06-27 - O4 Post-Deploy Arrival Proof Finds Stale Re-Entry
+
+Move: wait for a post-deploy sourcecycled boundary after body-concept repair and
+probe live-arrival, public stories, and direct Texture reads with a fresh
+authenticated product user.
+
+Observer:
+
+- Auth state: `/tmp/choir-auth/live-arrival-1782566508.json`.
+- Temporary user: `qa-live-arrival-1782566508@example.com`.
+- Observation time: `2026-06-27T13:23:35.885Z`.
+- Deployed behavior commit under test:
+  `f6dd1294260aec623664e10a090f63e520fedb79`.
+
+Post-deploy live-arrival evidence:
+
+- `GET /api/universal-wire/live-arrival` returned 200.
+- Latest boundary: `cycle_30753fe322e0c4c9b14034f6`.
+- Boundary observed_at: `2026-06-27T13:22:26.79142549Z`, after the
+  `2026-06-27T13:12:43Z` deploy.
+- `synthesis_status: ok`.
+- `source_item_count: 562`, `capture_count: 562`, `skipped_item_count: 0`.
+- `synthesis_known_source_count: 392`, `synthesis_candidate_groups: 326`,
+  `synthesis_cluster_count: 3`.
+- Runtime reported synthesis doc
+  `30a79a8e-3378-40b8-b0a3-a28b80284d7f`, revision
+  `15f97026-7d60-4477-8f8f-25a47f8e74cb`, cluster
+  `sourcecycled-live-energy-flood-harbor-health`, source_count `65`, and
+  edition ref
+  `texture_edition:5ac77c23-2642-4b74-b557-87d05c87e79f/8da14ed7-2f82-43ae-837c-65fdcc5d5e12`.
+
+Story and Texture evidence:
+
+- `GET /api/universal-wire/stories?limit=30` returned 200, source
+  `universal-wire-edition-texture`, edition revision
+  `8da14ed7-2f82-43ae-837c-65fdcc5d5e12`, 24 edition included docs, and 12
+  public stories.
+- Same-article update conjecture is supported for doc
+  `30a79a8e-3378-40b8-b0a3-a28b80284d7f`: the doc was already public in the
+  pre-boundary five-story cohort and after the boundary became index 0 with
+  `change_type: source_added`, `previous_source_count: 61`,
+  `current_source_count: 65`, `changed_at:
+  2026-06-27T13:22:26.79142549Z`, and semantic signature
+  `[energy, harbor, health, transport, delay, flood, inspection, rail-corridor, strike]`.
+- Direct platform Texture reads for this doc returned 200 for document and
+  revision `15f97026-7d60-4477-8f8f-25a47f8e74cb`; the revision had 65
+  `source_entities` and native `source_ref` body_doc citations.
+- New docs `562a6b43-a1ec-472d-a6e8-c8f45e3cb6e4` and
+  `9b71c539-8110-443b-9349-59c991dae4f3` were created at the same boundary,
+  had 2 source entities each, and direct Texture revisions with native
+  `source_ref` body_doc.
+
+New problem discovered:
+
+- The stale South Korea drone military training article
+  `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` re-entered the public story list at
+  index 7 after the successful live-arrival cycle.
+- Its semantic story remains stale and mismatched:
+  `changed_at: 2026-06-27T11:52:35.826378314Z`, `previous_source_count: 6`,
+  `current_source_count: 7`, signature `[harbor, transport, rail-corridor]`,
+  and headline `South Korea plans to train entire military as "drone warriors"`.
+- It should remain reachable through edition metadata/direct Texture audit, but
+  it should not occupy the public 12-story cap after a current successful
+  synthesis boundary.
+
+Conjecture verdict: split. Post-deploy same-article source-arrival update is
+supported for doc `30a79a8e-3378-40b8-b0a3-a28b80284d7f`; stale-public filtering
+is falsified for successful `ok` live-arrival cycles.
+
+Problem Documentation First: satisfied. This entry and the Parallax State update
+record the newly discovered stale re-entry problem before any code repair.
+
+Mutation class for next move: orange behavior repair. Protected surfaces:
+Universal Wire public story candidate filtering, live-arrival freshness
+interpretation, stale semantic/projection article handling, story cap, edition
+audit metadata, direct Texture readability, and source_ref/source_entities proof.
+
+Admissible evidence for repair: focused runtime regression covering a successful
+live-arrival cycle with current synthesized stories plus an older stale
+synthesis candidate in the edition; broader Universal Wire runtime selector;
+diff hygiene; push to `origin/main`; CI/deploy identity; authenticated staging
+proof that post-deploy `/api/universal-wire/stories` excludes stale doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` while preserving direct Texture reads and
+at least one same-doc source-arrival update.
+
+Rollback path: revert the stale successful-cycle filter repair commit and its
+dependent evidence commit; the public list may again include stale edition
+members after successful synthesis cycles.
+
+Heresy delta: `discovered` for stale public re-entry after successful synthesis;
+next repair should mark this edge `repaired` only after deployed proof.
+
+Expected Delta V: 1 for the stale re-entry edge. Actual Delta V: 0 until repair
+and deployed acceptance.
+
+Next move: implement the successful-cycle stale-public filter repair without
+weakening edition/direct Texture audit reads, run focused and broader runtime
+tests, push/deploy, then replay authenticated live-arrival/stories/Texture proof.
