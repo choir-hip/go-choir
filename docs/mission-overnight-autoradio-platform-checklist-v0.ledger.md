@@ -9020,6 +9020,50 @@ promotion/rollback execution is claimed.
 
 Actual Delta V: 0 until verifier and deployed product proof. V remains 27.
 
+## 2026-06-27 - O4 Platform Texture Revision List Envelope Verifier Accepts
+
+Verifier thread `019f06f0-03a4-7982-ba01-67b1fb8a34a6` returned `accept`
+for the platform Texture revision-list envelope repair.
+
+Findings: no blocking findings.
+
+Verifier conclusions:
+
+- Problem Documentation First is satisfied: `992dce9c` is docs-only and
+  precedes repair commit `af417087`.
+- The repair is narrow: platformd's successful internal Texture revision-list
+  response now uses `PlatformTextureRevisionListResponse`, while the method,
+  internal-caller, doc-id, proxy authentication, read-owner routing, and
+  read-only platform pass-through gates are unchanged.
+- Proxy routing still requires authenticated `GET`/`HEAD` Texture requests with
+  `read_owner=universal-wire-platform` before platformd pass-through.
+- Raw Universal Wire diagnostic filtering was not modified; graph-backed
+  captures remain diagnostic-only when no publishable Texture synthesis article
+  exists.
+
+Verifier commands/results:
+
+- `git diff --check 992dce9c^..HEAD`: passed.
+- `git show --check --oneline 992dce9c`: passed.
+- `git show --check --oneline af417087`: passed.
+- `nix develop -c go test ./internal/platform -run 'TestInternalListTextureRevisionsUsesTextureEnvelope|TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandlePlatformTextureReadForwardsCurrentRevisionID|TestHandlePlatformTextureReadForwardsRevisionListEnvelope|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+
+Dirty/generated artifact classification: verifier worktree clean; no dirty
+tracked paths, untracked scratch files, or ignored generated artifacts reported
+by verifier `git status --short --ignored`.
+
+Evidence boundary/non-claims: verifier acceptance is local only. No push, deploy,
+CI, staging health identity, authenticated product replay, run acceptance,
+provider/search freshness, semantic clustering, Qdrant, promotion, or rollback
+execution is claimed yet.
+
+Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
+the accepted stack to `origin/main`, monitor CI/deploy, verify health identity,
+and run authenticated Universal Wire headline-to-Texture replay.
+
 ## 2026-06-27 - O4 Platform Texture Current-Head Verifier Accepts
 
 Verifier thread `019f06d0-830a-78e3-a475-e31db86f252e` returned `accept`
