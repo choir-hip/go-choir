@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -27,6 +28,10 @@ type internalSourcecycledWebCapturesResponse struct {
 	SourceEntityCount        int    `json:"source_entity_count"`
 	CapturedFromEdges        int    `json:"captured_from_edges"`
 	SkippedItemCount         int    `json:"skipped_item_count"`
+	DedupDroppedCount        int    `json:"dedup_dropped_count,omitempty"`
+	DedupSkipped             bool   `json:"dedup_skipped,omitempty"`
+	DedupSkipReason          string `json:"dedup_skip_reason,omitempty"`
+	DedupThreshold           float32 `json:"dedup_threshold,omitempty"`
 	SynthesisStatus          string `json:"synthesis_status,omitempty"`
 	SynthesisDocID           string `json:"synthesis_doc_id,omitempty"`
 	SynthesisRevisionID      string `json:"synthesis_revision_id,omitempty"`
@@ -75,7 +80,20 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		}
 		now = parsed.UTC()
 	}
-	result, err := sourcegraph.WriteWebCaptureGraphObjects(r.Context(), h.rt.ObjectGraph(), req.Items, sourcegraph.WebCaptureGraphProjectionConfig{
+	// Semantic dedup pass: embed each item, search Qdrant for near-duplicates
+	// above the configured threshold, and drop duplicates before they enter
+	// the object graph and reach the processor. Best-effort: if Qdrant or
+	// Ollama are unavailable, all items pass through unchanged.
+	dedup := h.rt.dedupSourceItemsWithTimeout(r.Context(), req.Items, ownerID, 30*time.Second)
+	if dedup.Skipped {
+		log.Printf("sourcecycled web captures: semantic dedup skipped (%s); projecting %d items",
+			dedup.SkipReason, len(dedup.Kept))
+	} else if len(dedup.Dropped) > 0 {
+		log.Printf("sourcecycled web captures: semantic dedup dropped %d/%d items (threshold=%.4f)",
+			len(dedup.Dropped), len(req.Items), dedup.Threshold)
+	}
+	items := dedup.Kept
+	result, err := sourcegraph.WriteWebCaptureGraphObjects(r.Context(), h.rt.ObjectGraph(), items, sourcegraph.WebCaptureGraphProjectionConfig{
 		OwnerID:    ownerID,
 		ComputerID: strings.TrimSpace(req.ComputerID),
 		Now:        now,
@@ -101,6 +119,10 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		SourceEntityCount:        len(result.SourceEntities),
 		CapturedFromEdges:        result.EdgeCount,
 		SkippedItemCount:         result.Skipped,
+		DedupDroppedCount:        len(dedup.Dropped),
+		DedupSkipped:             dedup.Skipped,
+		DedupSkipReason:          dedup.SkipReason,
+		DedupThreshold:           dedup.Threshold,
 		SynthesisStatus:          synthesisStatus,
 		SynthesisDocID:           synthesis.Doc.DocID,
 		SynthesisRevisionID:      synthesis.Revision.RevisionID,

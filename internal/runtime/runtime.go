@@ -349,11 +349,31 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.sweepPendingUpdateActors(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
 	rt.reconcileAllTextureDocuments(ctx)
+	// Best-effort: ensure the production Qdrant collection exists so the
+	// semantic dedup pass on ingestion has a target. Runs asynchronously so
+	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
+	// path also ensures the collection lazily on first use.
+	go rt.ensureProductionQdrantCollectionBestEffort(ctx)
 	go func() {
 		<-ctx.Done()
 		rt.closeAllBrowserCDPSessions()
 	}()
 	log.Printf("runtime: started (sandbox=%s)", rt.cfg.SandboxID)
+}
+
+// ensureProductionQdrantCollectionBestEffort attempts to create the production
+// Qdrant collection with a short timeout. Failures are logged but never
+// propagated: the ingestion dedup path falls back to pass-through when the
+// collection is missing.
+func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Context) {
+	if rt == nil || rt.QdrantPipeline() == nil {
+		return
+	}
+	ensureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := rt.EnsureProductionQdrantCollection(ensureCtx); err != nil {
+		log.Printf("runtime: ensure production qdrant collection (best-effort): %v", err)
+	}
 }
 
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.

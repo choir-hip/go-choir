@@ -28,6 +28,14 @@ type PollAllResult struct {
 }
 
 func (e *Engine) PollAll(ctx context.Context) PollAllResult {
+	return e.PollBySourceType(ctx, "")
+}
+
+// PollBySourceType polls only sources whose Type matches sourceType. An empty
+// sourceType polls every source (equivalent to PollAll). The filter lets the
+// sourcecycled daemon run per-source-type tickers at independent cadences
+// (GDELT 15m, RSS/Telegram faster) without spawning separate engines.
+func (e *Engine) PollBySourceType(ctx context.Context, sourceType sources.SourceType) PollAllResult {
 	var allItems []sources.Item
 	var fetches []sources.FetchRecord
 	var mu sync.Mutex
@@ -39,6 +47,9 @@ func (e *Engine) PollAll(ctx context.Context) PollAllResult {
 
 	for i := range e.Registry.Sources {
 		s := &e.Registry.Sources[i]
+		if sourceType != "" && s.Type != sourceType {
+			continue
+		}
 		wg.Add(1)
 		go func(src *sources.Source) {
 			defer wg.Done()

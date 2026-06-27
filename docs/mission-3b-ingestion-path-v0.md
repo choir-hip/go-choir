@@ -172,13 +172,13 @@ staging within minutes of the source being polled.
 
 ## Checklist
 
-- [ ] W1: Per-source-type polling cadence (split ticker, PollBySourceType)
-- [ ] W2: Qdrant semantic dedup in runtime ingestion handoff
-- [ ] W3: Dynamic routing threshold (configurable, env var, logged)
-- [ ] W4: sourcecycled objectgraph writes via runtime API to Dolt
-- [ ] Verify repo compiles: `nix develop -c go build ./...`
-- [ ] Verify tests pass: `nix develop -c go test ./internal/cycle/... ./internal/runtime/... ./internal/qdrant/... ./internal/objectgraph/...`
-- [ ] Run runtime shards: `nix develop -c scripts/go-test-runtime-shards`
+- [x] W1: Per-source-type polling cadence (split ticker, PollBySourceType)
+- [x] W2: Qdrant semantic dedup in runtime ingestion handoff
+- [x] W3: Dynamic routing threshold (configurable, env var, logged)
+- [x] W4: sourcecycled objectgraph writes via runtime API to Dolt
+- [x] Verify repo compiles: `nix develop -c go build ./...`
+- [x] Verify tests pass: `nix develop -c go test ./internal/cycle/... ./internal/runtime/... ./internal/qdrant/... ./internal/objectgraph/...`
+- [x] Run runtime shards: `nix develop -c scripts/go-test-runtime-shards`
 - [ ] W5: Push to main, monitor CI, verify staging E2E
 - [ ] Update this document with evidence
 
@@ -195,7 +195,7 @@ staging within minutes of the source being polled.
 
 ## Parallax State
 
-status: ready
+status: working
 
 mission conjecture: if per-source-type cadences replace the universal 15-min
 ticker, Qdrant semantic dedup filters near-duplicate captures before
@@ -218,21 +218,29 @@ invariants / qualities / domain ramp (I/Q/D):
 - D: Local build + test → staging deploy → staging verification. This mission
   must reach staging.
 
-variant (conjecture descent) V: count uncompleted work items. V = 5
-(W1, W2, W3, W4, W5). Each completed item decreases V by 1. W5 (staging
-verification) is the settlement gate — the mission is not settled until real
-articles appear on staging.
+variant (conjecture descent) V: count uncompleted work items. V = 1
+(W5 staging verification remaining). W1-W4 decided this pass:
+  - C1 (supported): PollBySourceType filters by source type without changing
+    PollAll semantics — cycle tests green.
+  - C2 (supported): QdrantDedupThreshold is configurable via env, defaults to
+    0.7862 in production, 0 (disabled) in test configs — config tests green.
+  - C3 (supported): semantic dedup runs in HandleInternalSourcecycledWebCaptures
+    before objectgraph projection; best-effort pass-through when Qdrant/Ollama
+    unavailable — web captures test green with dedup disabled.
+  - C4 (supported): sourcecycled → runtime web-captures endpoint → Dolt-backed
+    objectgraph is the production path (VMCTL_SANDBOX_PROXY_SOCK on node-b);
+    local SQLite is dev-only fallback.
 
-budget: 2-3 passes. W1-W4 are implementation. W5 is staging verification,
-which may reveal integration issues requiring fixes. Allow extra budget for
-staging iteration.
+budget: 2-3 passes. Pass 1 spent on W1-W4 implementation + verification.
+Pass 2 reserved for W5 staging verification + any integration fixes.
 
 authority / bounds: may modify `cmd/sourcecycled/main.go` (ticker logic),
 `internal/cycle/cycle.go` (PollBySourceType), `internal/runtime/config.go`
 (threshold config), `internal/runtime/` (semantic dedup, ingestion handoff),
-`internal/runtime/qdrant_runtime.go`. May push to main (triggers CI + staging
-deploy). May not touch agent pipeline logic, cycle/synthesize.go, O1-O3,
-spike tests, source poller implementations, sourcegraph.
+`internal/runtime/qdrant_runtime.go`, `internal/qdrant/pipeline.go` (Embedder
+accessor). May push to main (triggers CI + staging deploy). May not touch
+agent pipeline logic, cycle/synthesize.go, O1-O3, spike tests, source poller
+implementations, sourcegraph.
 
 mutation class / protected surfaces: Orange/Red — changes polling cadence
 (orange), adds semantic dedup to ingestion path (orange), requires staging
@@ -244,9 +252,30 @@ revert the specific commit that caused the issue. The 15-min universal
 ticker can be restored by reverting W1.
 
 conjecture delta / heresy delta:
-- `discovered`: any integration issues found during staging E2E (not regressions)
+- `discovered`: test configs leave QdrantDedupThreshold zero; treating 0 as
+  "use default 0.7862" caused the web-captures test to hit real Qdrant and
+  drop its only item. Fixed by making 0 mean "disabled" — production gets
+  0.7862 via LoadConfig env default, test configs pass through.
 - `introduced`: none expected (wiring proven components + cadence change)
 - `repaired`: none (3a repaired the duplication, 3b builds on clean state)
+
+position / live conjectures / open edges:
+- W1-W4 implemented and locally verified. The bridge to G (staging produces
+  real articles) is still unproven — that is W5.
+- Open edge: staging Qdrant/Ollama availability. The dedup pass is
+  best-effort, so ingestion proceeds even if Qdrant is down; but then no
+  semantic dedup happens. W5 must confirm Qdrant is reachable from the
+  runtime on staging.
+- Open edge: per-source-type tickers mean more frequent cycles. The drain
+  ticker is unchanged; backpressure logic in dispatch is unchanged. W5 must
+  confirm no overload.
+
+next move: commit W1-W4, push to main, monitor CI, verify staging E2E.
+
+ledger file: docs/mission-3b-ingestion-path-v0.ledger.md
+version / lineage: v0, successor to mission-3a (settled)
+learning state: retained here / promoted outward / successor links
+settlement: open until W5 staging verification produces a real article.
 
 ## Suggested Goal String
 

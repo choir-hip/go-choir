@@ -987,3 +987,16 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
+- id: mission-3b-ingestion-path-v0
+  title: 'Mission 3b: New Ingestion Path (E2E)'
+  path: docs/mission-3b-ingestion-path-v0.md
+  ledger: docs/mission-3b-ingestion-path-v0.ledger.md
+  status: working
+  kind: spine
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-3-universal-wire-ingestion-rebuild-v0.md
+  - docs/mission-3a-cleanup-wiring-v0.md
+  - docs/mission-3-spikes-2026-06-27.md
+  - AGENTS.md

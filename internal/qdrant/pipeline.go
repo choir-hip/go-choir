@@ -36,6 +36,13 @@ func (p *Pipeline) Client() API {
 	return p.client
 }
 
+// Embedder returns the underlying embedder used by the pipeline. Callers that
+// need to embed arbitrary texts (e.g. semantic dedup probes) use this instead
+// of constructing a separate embedder.
+func (p *Pipeline) Embedder() Embedder {
+	return p.embedder
+}
+
 func (p *Pipeline) BuildFromObjectSource(ctx context.Context, source ObjectSource, spec BuildSpec) (BuildResult, error) {
 	if spec.Filter.Kind == "" {
 		spec.Filter.Kind = spec.ObjectKind

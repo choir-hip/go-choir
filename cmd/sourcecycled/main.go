@@ -172,9 +172,18 @@ func main() {
 
 	server := startSourceServiceAPI(ctx, store)
 
-	// 3. Main Ingestion Loop (15-minute source cycle plus queue drain)
-	ticker := time.NewTicker(15 * time.Minute)
-	defer ticker.Stop()
+	// 3. Main Ingestion Loop (per-source-type tickers plus queue drain)
+	//
+	// GDELT stays on a 15-minute cadence. RSS and Telegram get faster
+	// configurable intervals so high-frequency sources are not gated by the
+	// slowest one. Each ticker runs its own cycle filtered to that source
+	// type; the drain ticker is shared and unchanged.
+	rssTicker := time.NewTicker(sourceCycledRSSIntervalFromEnv())
+	defer rssTicker.Stop()
+	telegramTicker := time.NewTicker(sourceCycledTelegramIntervalFromEnv())
+	defer telegramTicker.Stop()
+	gdeltTicker := time.NewTicker(sourceCycledGDELTIntervalFromEnv())
+	defer gdeltTicker.Stop()
 	drainTicker := time.NewTicker(ingestionQueueDrainIntervalFromEnv())
 	defer drainTicker.Stop()
 	defer func() {
@@ -185,18 +194,24 @@ func main() {
 		}
 	}()
 
-	// Run the first cycle immediately
-	log.Println("Initiating first cycle...")
-	runCycle(ctx, &registry, store)
+	// Run the first cycle for every source type immediately.
+	log.Println("Initiating first cycle (all source types)...")
+	runCycle(ctx, &registry, store, "")
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Daemon stopped.")
 			return
-		case <-ticker.C:
-			log.Println("Initiating scheduled cycle...")
-			runCycle(ctx, &registry, store)
+		case <-rssTicker.C:
+			log.Println("Initiating scheduled RSS cycle...")
+			runCycle(ctx, &registry, store, sources.SourceTypeRSS)
+		case <-telegramTicker.C:
+			log.Println("Initiating scheduled Telegram cycle...")
+			runCycle(ctx, &registry, store, sources.SourceTypeTelegram)
+		case <-gdeltTicker.C:
+			log.Println("Initiating scheduled GDELT cycle...")
+			runCycle(ctx, &registry, store, sources.SourceTypeGDELT)
 		case <-drainTicker.C:
 			log.Println("Initiating queued ingestion handoff dispatch drain...")
 			dispatchQueuedIngestionHandoffs(ctx, store)
@@ -482,6 +497,52 @@ func ingestionQueueDrainIntervalFromEnv() time.Duration {
 		seconds = 10
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+const (
+	defaultSourceCycledRSSInterval     = 5 * time.Minute
+	defaultSourceCycledTelegramInterval = 5 * time.Minute
+	defaultSourceCycledGDELTInterval   = 15 * time.Minute
+)
+
+// sourceCycledRSSIntervalFromEnv resolves the RSS poll interval. Accepts
+// SOURCECYCLED_RSS_INTERVAL as a Go duration (e.g. "5m", "90s") or
+// SOURCECYCLED_RSS_INTERVAL_SECONDS as an integer number of seconds.
+func sourceCycledRSSIntervalFromEnv() time.Duration {
+	if d := sourceCycledIntervalFromEnv("SOURCECYCLED_RSS_INTERVAL", "SOURCECYCLED_RSS_INTERVAL_SECONDS"); d > 0 {
+		return d
+	}
+	return defaultSourceCycledRSSInterval
+}
+
+// sourceCycledTelegramIntervalFromEnv resolves the Telegram poll interval.
+func sourceCycledTelegramIntervalFromEnv() time.Duration {
+	if d := sourceCycledIntervalFromEnv("SOURCECYCLED_TELEGRAM_INTERVAL", "SOURCECYCLED_TELEGRAM_INTERVAL_SECONDS"); d > 0 {
+		return d
+	}
+	return defaultSourceCycledTelegramInterval
+}
+
+// sourceCycledGDELTIntervalFromEnv resolves the GDELT poll interval. Defaults
+// to 15 minutes to match the historical universal ticker cadence.
+func sourceCycledGDELTIntervalFromEnv() time.Duration {
+	if d := sourceCycledIntervalFromEnv("SOURCECYCLED_GDELT_INTERVAL", "SOURCECYCLED_GDELT_INTERVAL_SECONDS"); d > 0 {
+		return d
+	}
+	return defaultSourceCycledGDELTInterval
+}
+
+func sourceCycledIntervalFromEnv(durationKey, secondsKey string) time.Duration {
+	if raw := strings.TrimSpace(os.Getenv(durationKey)); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			return d
+		}
+	}
+	seconds := parsePositiveInt(os.Getenv(secondsKey), 0)
+	if seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	return 0
 }
 
 func firstEnv(keys ...string) string {
@@ -1291,7 +1352,7 @@ func formatSourceTime(value time.Time) string {
 
 var engine *cycle.Engine
 
-func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Storage) {
+func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Storage, sourceType sources.SourceType) {
 	if engine == nil {
 		engine = cycle.NewEngine(registry)
 	}
@@ -1302,11 +1363,11 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 		log.Printf("Failed to start durable cycle: %v", err)
 		return
 	}
-	log.Printf("Cycle started at %v", cycleStartTime)
-	_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_started", "source cycle started", nil)
+	log.Printf("Cycle started at %v (source_type=%q)", cycleStartTime, string(sourceType))
+	_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_started", "source cycle started", map[string]any{"source_type": string(sourceType)})
 
 	// Phase 1 & 2: Source Polling & Deduplication
-	pollResult := engine.PollAll(ctx)
+	pollResult := engine.PollBySourceType(ctx, sourceType)
 	if err := store.SaveSourcePollState(registry); err != nil {
 		log.Printf("Failed to save source poll state: %v", err)
 	}
