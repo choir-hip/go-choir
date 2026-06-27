@@ -13368,3 +13368,53 @@ minimally a sourcecycled cycle handle/timestamp or product work-item event that
 can be correlated with before/after `/api/universal-wire/stories` and Texture
 revision/source snapshots without seeding success through internal or test-only
 routes.
+
+## 2026-06-27 - O4 Live Arrival Oracle Verifier Accepted
+
+Move: independent prover review for the docs-only oracle-gap checkpoint.
+
+Verifier:
+
+- Thread: `019f0897-8fa3-7460-819a-ff17b95ae173`.
+- Work item: `O4-live-source-arrival-oracle-product-proof-verifier`.
+- Reviewed worker thread `019f087c-c573-7cb3-8c06-82f029047f46`, worktree
+  `/Users/wiz/.codex/worktrees/2634/go-choir`, and commit
+  `88ade5258cc254de6133618418d7b5950c420116`.
+- Verdict: `accept`.
+- Findings: no blocking or revision-required findings. The verifier confirmed
+  the commit is docs-only, records the observer packet accurately, keeps V at
+  2, names the missing product/public live-arrival oracle as `discovered`
+  rather than `repaired`, and does not overclaim no sourcecycled arrivals or
+  same-article update semantics.
+
+Verifier commands/results:
+
+- `git status --short --ignored` in the worker worktree produced no output.
+- `git show --check --oneline 88ade5258cc254de6133618418d7b5950c420116`
+  passed.
+- `git diff --check 88ade5258cc254de6133618418d7b5950c420116^..88ade5258cc254de6133618418d7b5950c420116`
+  passed.
+- `git diff --name-status 88ade5258cc254de6133618418d7b5950c420116^..88ade5258cc254de6133618418d7b5950c420116`
+  showed only the mission paradoc and ledger.
+- The verifier inspected `/tmp/o4-live-arrival-oracle-1782554000721.json` and
+  confirmed it supports the 21-snapshot stable-public-surface summary.
+
+Root incorporation:
+
+- Root incorporated the accepted worker checkpoint as
+  `4b5ba553 Document O4 live arrival oracle gap`.
+- Conflict resolution preserved the prior `O4 Live Source Arrival Oracle Worker
+  Requested` ledger entry and added the worker's missing-oracle documentation
+  after it.
+
+Evidence boundary and non-claims: accepted only as documentation of the missing
+authorized product/public live-arrival oracle. It is not proof that no
+sourcecycled arrival occurred, not proof or falsification of same-article update
+semantics, and not a code/deploy/run-acceptance claim. The observer packet is
+temporary `/tmp` evidence rather than tracked durable evidence, acceptable for
+this docs-only scope but not permanent provenance.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 2.
+
+Next move: implement or expose the narrow public authenticated live-arrival
+oracle before attempting another C6 fresh-arrival update proof.
