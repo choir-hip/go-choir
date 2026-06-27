@@ -15176,3 +15176,82 @@ until deployed proof.
 
 Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
 identity, and rerun authenticated staging proof.
+
+## 2026-06-27 - O4 Subset Stale Filter Deployed Acceptance
+
+Move: land the subset-stale filter and replay authenticated staging proof.
+
+Landing evidence:
+
+- Behavior commit:
+  `8b53b967926fb8ba591e96c207022c49db9f72e5` (`Filter subset-stale Wire
+  syntheses`).
+- GitHub Actions for `8b53b967`:
+  - Docs Truth Check `28291043484` passed.
+  - FlakeHub `28291043480` passed.
+  - CI `28291043478` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed_commit
+  `8b53b967926fb8ba591e96c207022c49db9f72e5`, deployed_at
+  `2026-06-27T13:50:35Z`.
+
+Authenticated staging proof:
+
+- Fresh auth state: `/tmp/choir-auth/final-8b53-1782568322.json`.
+- Temporary user: `qa-final-8b53-1782568322@example.com`.
+- Observation time: `2026-06-27T13:52:21.215Z`.
+- `/auth/session` returned 200 and `authenticated: true`.
+- `GET /api/universal-wire/live-arrival` returned 200 with latest boundary
+  `cycle_d363c81f0d411d1fcafa052f`, observed_at
+  `2026-06-27T13:37:23.091533987Z`, `synthesis_status: ok`,
+  `source_item_count: 610`, `capture_count: 606`, `skipped_item_count: 4`,
+  `synthesis_doc_id: 9b71c539-8110-443b-9349-59c991dae4f3`,
+  `synthesis_revision_id: 0dfe0776-402a-4a90-b7ef-c69b6da0b26a`,
+  `synthesis_cluster_id: sourcecycled-live-health-delay`,
+  `synthesis_source_count: 33`, `synthesis_known_source_count: 326`,
+  `synthesis_candidate_groups: 275`, and `synthesis_cluster_count: 3`.
+- `GET /api/universal-wire/stories?limit=30` returned 200 with 7 public
+  `universal-wire-edition-texture` stories.
+- The stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public
+  stories (`stale_doc_public_index: -1`) while still present in edition metadata
+  for audit.
+- Direct Texture audit reads for stale doc had just confirmed document and
+  revision `60ccdcb4-322d-4c31-b7f9-d12d026413c9` returned 200, with 7 source
+  entities and native `source_ref` body_doc.
+- Same-article update visibility remained intact: top public story
+  `0d9eac95-ec18-4a2f-9470-802b8db7aef1` had `change_type: source_added`,
+  `previous_source_count: 3`, `current_source_count: 4`, `changed_at:
+  2026-06-27T13:37:23.091533987Z`, and direct Texture revision
+  `a4f73c76-7702-4634-b748-36cac8d75067` was readable with 4 source entities and
+  native `source_ref` body_doc.
+
+Conjecture verdict: supported at staging for the stale subset-contamination
+filter. The public feed excludes the known stale South Korea/drone article after
+successful live-arrival synthesis while preserving edition/direct Texture audit
+reads and same-doc source-arrival update visibility.
+
+Evidence boundary: authenticated staging product proof over public
+`/auth/session`, `/api/universal-wire/live-arrival`,
+`/api/universal-wire/stories`, and platform Texture reads. No provider/model
+synthesis quality, production semantic clustering beyond deterministic
+topic/signal grouping, Qdrant/world-model projection, promotion/rollback
+execution, or full News benchmark settlement is claimed.
+
+Mutation class: orange behavior repair deployed to staging. Protected surfaces:
+Universal Wire public story filtering, source entity reclassification, story cap,
+edition audit metadata, direct Texture reads, same-doc update visibility, and
+source_ref/source_entities preservation.
+
+Rollback path: revert `8b53b967926fb8ba591e96c207022c49db9f72e5` and dependent
+evidence commits to return to the `c7910000` behavior, where subset-stale
+sourcecycled-live articles can remain public.
+
+Heresy delta: `repaired` at deployed/product tier for stale subset-contamination
+public exposure after successful synthesis cycles.
+
+Expected Delta V: 1. Actual Delta V: 1 for this stale-public edge. Broader
+mission V remains 1 because the owner-level Universal Wire target still requires
+better article coherence/semantic synthesis and no legacy projection noise.
+
+Next move: choose the next O4 realism axis or open a bounded verifier/product QA
+thread for the current deployed state; do not claim full News benchmark
+settlement.

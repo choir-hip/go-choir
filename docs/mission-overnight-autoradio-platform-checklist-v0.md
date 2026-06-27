@@ -1144,6 +1144,28 @@ edition/direct Texture audit evidence; broader Universal Wire selector passes.
 Next move: commit/push this second repair, monitor CI/deploy, verify health
 identity, and rerun authenticated staging proof against the real stale doc.
 
+Subset stale-filter repair deployed at
+`8b53b967926fb8ba591e96c207022c49db9f72e5`; CI run `28291043478`, Docs Truth
+Check `28291043484`, FlakeHub `28291043480`, and deploy identity passed.
+Staging health reported proxy/sandbox at `8b53b967`, deployed_at
+`2026-06-27T13:50:35Z`. Fresh authenticated proof with
+`qa-final-8b53-1782568322@example.com` at `2026-06-27T13:52:21Z` observed
+authenticated session true, live-arrival 200, boundary
+`cycle_d363c81f0d411d1fcafa052f`, `synthesis_status: ok`, 610 source items,
+326 known synthesis sources, 275 candidate groups, and 3 synthesized clusters.
+Public `/api/universal-wire/stories?limit=30` returned 7 stories; stale doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public stories while
+remaining in edition metadata. Direct Texture audit read for the stale doc had
+already confirmed revision `60ccdcb4-322d-4c31-b7f9-d12d026413c9`, seven source
+entities, and native `source_ref` body_doc. Top public doc
+`0d9eac95-ec18-4a2f-9470-802b8db7aef1` remained a same-article update with
+source_count 4, changed_at `2026-06-27T13:37:23.091533987Z`, and direct Texture
+revision `a4f73c76-7702-4634-b748-36cac8d75067` readable with source refs.
+Conjecture verdict: stale subset-contamination filter is supported at staging.
+The broader News benchmark still remains open because article coherence is still
+deterministic/formulaic rather than provider-quality semantic synthesis, and the
+feed still includes older legacy projection stories.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -1180,5 +1202,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path after body-concept repair head f6dd1294260aec623664e10a090f63e520fedb79 passed CI run 28290135800, deploy job 83820886261, health identity, and authenticated staging proof. Fresh authenticated post-deploy boundary proof supports same-article update behavior, but stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c re-entered public stories after ok synthesis cycles. First repair c7910000bfc7643664fe512f0172469da825ae80 deployed but failed: staging still showed the stale doc public at index 5. Deployed revision inspection showed one unrelated drone-training lead source plus a valid rail/port freight cluster; the first repair missed it because the stored cluster was reproducible from only a subset of cited sources. Local subset-filter repair now treats sourcecycled-live synthesis revisions as public-stale when the stored cluster is produced only by a subset of cited source entities, and focused plus broader Universal Wire runtime tests pass. Next move: commit/push the subset-filter repair, monitor CI/deploy, verify health identity, and replay authenticated staging proof that stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c is absent while same-doc update stories and direct Texture/source_ref reads remain intact. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article update behavior is supported by post-deploy live-arrival proof, and stale subset-contamination filtering is now supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, and authenticated proof at 2026-06-27T13:52:21Z. Live-arrival cycle_d363c81f0d411d1fcafa052f returned synthesis_status ok, 326 known sources, 275 candidate groups, 3 synthesized clusters; /api/universal-wire/stories returned 7 stories; stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c was absent from public stories but retained in edition/direct Texture audit evidence; top doc 0d9eac95-ec18-4a2f-9470-802b8db7aef1 remained a same-article source_added update with 4 sources and native source_ref Texture revision. Remaining O4 realism edge: feed/article quality is still deterministic and includes legacy projection stories; the actual owner target wants coherent English synthesis from multilingual ingestion over durable semantic/world-model objects with later relevant sources updating existing articles. Next move: choose the next O4 realism axis or open handoff to a bounded verifier/product QA thread; do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
