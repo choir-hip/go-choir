@@ -15986,3 +15986,25 @@ accepts, incorporate the worker commits into root, run focused checks, and then
 perform the required landing loop before any deployed product claim. If it asks
 for revision, route the finding back to the worker or document the blocker
 before code.
+
+## 2026-06-27 - O4 Source-Map Synthesis Verifier Materialized
+
+Move: replace the verifier pending-handle reference with the materialized thread
+id in the active Parallax State.
+
+Receipt:
+
+- Pending verifier handle:
+  `local:194d7a9c-425d-48ea-a71a-95f127efa1ca`.
+- Materialized verifier thread:
+  `019f09a2-3a5e-7a23-b61f-04c17fb0f7c9` (`Review Wire synthesis verifier`).
+- Verifier worktree: `/Users/wiz/.codex/worktrees/de69/go-choir`.
+- Thread status at materialization check: active.
+- Root docs commit `d0d695acfcd2381c44ceb27074d1079452f6529c`
+  passed Docs Truth Check run `28293111750`.
+
+Expected Delta V: 0; this is operator hygiene, not a new proof. Actual Delta V:
+0. Mission V remains 1.
+
+Next move: read verifier thread `019f09a2-3a5e-7a23-b61f-04c17fb0f7c9` when it
+returns a verdict.
