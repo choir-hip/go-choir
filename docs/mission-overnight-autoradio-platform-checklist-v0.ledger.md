@@ -14646,3 +14646,75 @@ metadata. Actual Delta V: 0 until deployed proof. V remains 1.
 
 Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
 identity, refresh auth, and replay authenticated Universal Wire product proof.
+
+## 2026-06-27 - O4 Stale Synthesis Filter Deployed Acceptance
+
+Move: complete the landing loop for the public stale-synthesis filter repair.
+
+Landing evidence:
+
+- Pushed commit `97eccc6aa1bafb8517fcb136d94b15d68e62cbec` to `origin/main`.
+- CI run `28289790939` passed, including runtime shards, non-runtime tests,
+  Go vet/build, integration smoke, TLA+, and deploy gate.
+- Docs Truth Check run `28289790944` passed.
+- FlakeHub run `28289790946` passed.
+- Staging deploy job `83820005241` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `97eccc6aa1bafb8517fcb136d94b15d68e62cbec`, deployed_at
+  `2026-06-27T12:58:21Z`.
+
+Authenticated staging proof:
+
+- Created temporary product user `qa-wire-filter-final-1782565167@example.com`.
+- Authenticated `/auth/session` returned authenticated true.
+- Authenticated `/api/universal-wire/live-arrival` returned latest boundary
+  `cycle_4f579bb598b84515abf2c045`, observed_at
+  `2026-06-27T12:52:21.075958428Z`, `synthesis_status: skipped`,
+  `synthesis_source_count: 768`, `synthesis_known_source_count: 1`,
+  `synthesis_candidate_groups: 1`, and skip reason
+  `no deterministic story group reached two sources with a shared topic and
+  story signal`.
+- Authenticated `/api/universal-wire/stories?limit=30` returned status 200,
+  source `universal-wire-edition-texture`, and zero public stories.
+- Bad stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` had public story index
+  `-1`, proving it is absent from public stories.
+- The same doc remains present in edition metadata:
+  `bad_doc_in_edition: true` with `edition_count: 18`.
+- Direct authenticated Texture document read for the stale doc returned 200.
+- Direct authenticated Texture revision read for
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9` returned 200 with created_at
+  `2026-06-27T11:52:38Z`, 7 source entities, `universal_wire_synthesis: true`,
+  and `body_doc` containing native `source_ref`.
+
+Conjecture verdict: supported at staging for stale false-article cleanup. A
+stale synthesis whose semantic signature is no longer reproduced by the latest
+sourcecycled graph no longer appears as a public Universal Wire story, while it
+remains auditable through edition metadata and direct Texture reads.
+
+Residual product reality: Universal Wire now returns zero public stories because
+the latest sourcecycled graph still does not produce a valid deterministic
+multi-source group. This is a better failure mode than showing a false synthesis,
+but it does not satisfy the broader News goal. The next realism axis is valid
+story production: semantic clustering and synthesis must find real multilingual
+news groups and produce current English Texture articles instead of either
+false clusters or an empty feed.
+
+Mutation class: orange behavior repair deployed to staging. Protected surfaces:
+authenticated Universal Wire story projection, live-arrival status
+interpretation, synthesized Texture article public filtering, story cap, and
+prominence assignment.
+
+Rollback path: revert `97eccc6aa1bafb8517fcb136d94b15d68e62cbec` and dependent
+evidence commits; stale synthesis candidates return to the public story list.
+
+Heresy delta: `repaired` for stale synthesis public exposure; `discovered` /
+still open for empty current story production under deterministic clustering.
+
+Expected Delta V: 1. Actual Delta V: 1. V descends from 1 to 0 for the stale
+false-article cleanup conjecture, while a new C6 conjecture remains open for
+valid live story production.
+
+Next move: start the next Parallax descent on current story production:
+instrument or repair the deterministic/semantic clustering layer so the live
+sourcecycled graph yields valid multi-source English Texture articles, then
+prove those articles through live-arrival, stories, and direct Texture reads.

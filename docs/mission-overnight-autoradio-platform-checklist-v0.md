@@ -1018,6 +1018,27 @@ remains in edition metadata. Broader Universal Wire runtime selector passed
 locally. Next move: commit, push, monitor CI/deploy, verify health identity, and
 rerun authenticated staging proof.
 
+Stale-synthesis filter deployed at
+`97eccc6aa1bafb8517fcb136d94b15d68e62cbec`; CI run `28289790939`, Docs Truth
+Check run `28289790944`, FlakeHub run `28289790946`, and Node B deploy job
+`83820005241` passed. Staging health reported proxy/sandbox deployed at
+`97eccc6a` with deployed_at `2026-06-27T12:58:21Z`. Authenticated proof with
+`qa-wire-filter-final-1782565167@example.com` at `2026-06-27T12:59:59Z` observed
+latest live-arrival boundary `cycle_4f579bb598b84515abf2c045`, observed_at
+`2026-06-27T12:52:21.075958428Z`, `synthesis_status: skipped`,
+`synthesis_source_count: 768`, `synthesis_known_source_count: 1`,
+`synthesis_candidate_groups: 1`, and skip reason `no deterministic story group
+reached two sources with a shared topic and story signal`. Public
+`/api/universal-wire/stories?limit=30` returned zero stories, and the bad doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public stories while
+still present in the edition's 18 included doc IDs. Direct Texture document and
+revision reads for the bad doc returned 200; revision
+`60ccdcb4-322d-4c31-b7f9-d12d026413c9` still has 7 source entities and native
+`source_ref` body_doc. Conjecture verdict: stale false article cleanup is
+supported at staging; the remaining Universal Wire realism gap is now empty
+current story production because deterministic clustering finds no valid
+multi-source story groups in the live sourcecycled graph.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
