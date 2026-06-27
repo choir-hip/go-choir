@@ -16008,3 +16008,63 @@ Expected Delta V: 0; this is operator hygiene, not a new proof. Actual Delta V:
 
 Next move: read verifier thread `019f09a2-3a5e-7a23-b61f-04c17fb0f7c9` when it
 returns a verdict.
+
+## 2026-06-27 - O4 Source-Map Synthesis Verifier Accepted And Root Incorporated
+
+Move: incorporate independent verifier acceptance for the source-map synthesis
+slice and cherry-pick the verified runtime commit into root.
+
+Verifier callback:
+
+- Verifier thread: `019f09a2-3a5e-7a23-b61f-04c17fb0f7c9`.
+- Verdict: `accept`.
+- Findings: no blocking findings.
+- Verifier accepted Problem Documentation First ordering across worker commits
+  `14e06df7` -> `1f12a612` -> `b3ed0e61`.
+- Verifier confirmed runtime changes are limited to Universal Wire sourcecycled
+  materialization, semantic story cluster state, Texture synthesis revisions and
+  source refs, Wire edition linkage, and existing DTO projection paths.
+- Verifier confirmed no provider/gateway credentials, auth/session renewal,
+  vmctl, Qdrant, promotion/rollback, run acceptance, deployment routing, Node B
+  edits, or export/publication outside existing Wire edition helpers were
+  touched.
+- Verifier reran/passed the focused sourcecycled synthesis test and broader
+  UniversalWire/WireProcessor/WireStory/WirePublication/Sourcecycled/
+  LiveArrival/Oracle selector.
+- Evidence boundary: branch-local only; no push, deploy, staging/product
+  acceptance, or full News benchmark claim.
+- Incorporation permission: orchestration may incorporate the commits with that
+  boundary.
+
+Root incorporation:
+
+- Existing root docs checkpoint before behavior change:
+  `37c154a3c7ffc27213de2a0d9b7c0365079cf674` (`Record Wire source-map verifier thread`).
+- Runtime incorporation commit:
+  `4de0a874` (`Add Wire semantic source-map synthesis`), cherry-picked from
+  worker commit `1f12a6129164827dca1018e122fce7f85d5c75bf` with `-x`.
+- Intentional root source/test changes in the runtime commit:
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/wire_synthesis.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- Local focused check passed:
+  `nix develop -c go test ./internal/runtime -run TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster -count=1`
+  -> `ok github.com/yusefmosiah/go-choir/internal/runtime 2.929s`.
+- Local broader selector passed:
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  -> `ok github.com/yusefmosiah/go-choir/internal/runtime 16.188s`.
+- `git diff --check HEAD^..HEAD` passed before the docs update.
+- Nix emitted a non-fatal warning that the Git tree had uncommitted changes;
+  those were pre-existing unrelated WIP paths (`skills/parallax/SKILL.md` and
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`),
+  not files touched by the root runtime incorporation.
+
+Expected Delta V: 1 for branch-local verifier acceptance plus root
+incorporation. Actual Delta V: 0 at settlement tier because the behavior is not
+yet pushed, deployed, or staging-accepted. Mission V remains 1.
+
+Next move: commit this evidence update, push root head to `origin/main`, monitor
+CI/Docs Truth/FlakeHub/deploy, confirm staging health identity, and run
+authenticated staging acceptance for Universal Wire source-map synthesis and
+source/open preservation. Do not claim provider/model quality, Qdrant/world-model
+projection, run acceptance, or full News benchmark settlement.
