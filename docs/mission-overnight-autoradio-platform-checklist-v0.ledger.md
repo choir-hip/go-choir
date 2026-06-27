@@ -15382,3 +15382,33 @@ for this verifier edge; broader mission V remains 1.
 
 Next move: choose the next O4 realism axis. Do not claim full News benchmark
 settlement.
+
+## 2026-06-27 - Parallax State Compacted For Next O4 Realism Axis
+
+Move: compact the active Parallax State after verifier incorporation so the
+next worker does not inherit stale live-arrival-oracle landing text or the
+log-shaped O4 history that now belongs in this ledger.
+
+Receipt:
+
+- Rewrote `docs/mission-overnight-autoradio-platform-checklist-v0.md`
+  `Parallax State` in place to a compact current-state form.
+- Updated the `Suggested Goal String` to point at the next O4 realism axis:
+  semantic/world-model article quality and update behavior, not the already
+  accepted subset-stale verifier.
+- Preserved the current variant as `V=1`.
+- Preserved the accepted deployed evidence for `8b53b967`, verifier thread
+  `019f095d-5901-79c1-9feb-4bc2c77ba83a`, and the non-claim that full News
+  benchmark settlement remains open.
+
+Conjecture delta: no behavior claim changed. This is a green documentation
+state compaction so the next construct can target the real remaining O4 bridge:
+from deterministic/formulaic Universal Wire substrate to coherent English
+synthesis over durable semantic/world-model objects, with relevant later
+sources updating existing articles.
+
+Expected Delta V: 0. Actual Delta V: 0; this buys observer clarity and prevents
+stale-state routing error.
+
+Next move: create a bounded implementation/probe worker for the next O4 realism
+axis.

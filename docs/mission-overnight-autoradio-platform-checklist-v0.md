@@ -513,53 +513,39 @@ and successor paradocs.
 invariants / qualities / domain ramp (I/Q/D): Follow Choir Doctrine and
 `AGENTS.md`; document behavior problems before fixes; use Codex thread tools
 for independent worker/verifier evidence when exposed; never treat same-context
-review as independent proof; Source Viewer/reader artifacts are the durable
-source surface and Web Lens is explicit live/original inspection. Domain ramp:
+review as independent proof; keep Source Viewer/reader artifacts as the durable
+source surface and Web Lens as explicit live/original inspection. Domain ramp:
 checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
 product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 2. Last delta: expected Delta V 1 for restoring
-authenticated deployed Universal Wire acceptance after the 768-capture repair;
-actual Delta V 1. Deployed commit
-`a155c663142fd97289a36a2cc3c9eac7ef0902d2` is CI/deploy/health verified, and
-authenticated Playwright product proof with temporary user
-`qa-a155c663-1782553302@example.com` showed `/api/universal-wire/stories`
-returning 12 stories, the Universal Wire UI rendering 12 cards, and the first
-headline opening Texture doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` through
-`read_owner=universal-wire-platform` with no 404 and no helper/provenance
-phrases. This proves deployed API/UI/open-Texture acceptance after the window
-repair, but it still does not witness a fresh post-deploy source arrival
-updating an existing article. Current live conjectures remain: C6 later
-relevant sources update existing articles/world-model identities at deployed
-source-arrival scope; C8/C9 broader semantic/world-model quality plus O5-O8
-embed the Autoradio benchmark into durable Choir product paths.
+statement. Current value: 1. Last delta: expected Delta V 1 for independent
+verifier incorporation of the deployed subset-stale public-filter acceptance;
+actual Delta V 1 via verifier thread `019f095d-5901-79c1-9feb-4bc2c77ba83a`.
+Remaining driving conjecture: the full News/Universal Wire target still needs a
+coherent semantic/world-model article surface, not just deterministic
+multi-article readability and stale-filter hygiene.
 
-budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
-for broader O5-O8 unless the owner grants a new long run.
+budget: Solvency is tight. Use one bounded O4 realism-axis worker and verifier;
+if that does not create a credible route to News settlement, hand off with the
+remaining O4 gap explicit before broad O5-O8 work.
 
 authority / bounds: Orchestration may create Codex worker/verifier threads,
 inspect worktrees, make docs/checkpoint commits, and land reviewed code through
 the repo loop. User granted staging deploy by pushing to `origin/main` and
-authenticated Chrome QA on `choir.news`. The visible Chrome app shell and a
-direct Chrome tab to `/api/universal-wire/stories` are authenticated enough for
-product UI/API proof in the owner's session; unauthenticated shell/API calls
-remain outside that product path. Behavior-changing work must name mutation
-class, protected surfaces, admissible evidence, rollback path, conjecture delta,
-and heresy delta before editing.
+authenticated Chrome QA on `choir.news`. Behavior-changing work must name
+mutation class, protected surfaces, admissible evidence, rollback path,
+conjecture delta, and heresy delta before editing.
 
-mutation class / protected surfaces: Current move is orange/red landing for
-the accepted Universal Wire live-arrival oracle slice. Root commit `f7b73952`
-incorporates worker commit `28f2b4ead6eb008e46cc6cad986167ba3204c8d5`, touching
-authenticated public `/api/universal-wire/*`, sourcecycled-to-runtime projection
-metadata, objectgraph status metadata, and focused runtime/sourcecycled tests.
-Rollback path is revert `f7b73952` plus dependent evidence commits. The slice
-must remain read-only from public product routes and must not trigger
-sourcecycled ingestion, seed source items, expose internal source payloads, or
-touch auth/session renewal, vmctl, deployment routing, provider/gateway
-credentials, Qdrant, promotion/rollback, run acceptance, or publication/export
-outside existing Wire edition helpers.
+mutation class / protected surfaces: Current move is green/yellow planning plus
+thread creation. The next likely construct is orange/red because it may touch
+Universal Wire sourcecycled ingestion/materialization, semantic story cluster
+state, Texture revision creation/source_ref/source_entities carry-forward, Wire
+edition linkage, platform Texture sync/read paths, and `/api/universal-wire/*`.
+It must not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
+publication/export unless a docs-first checkpoint names why that is unavoidable.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -569,616 +555,41 @@ worker proof may stop at focused tests, `git diff --check`, commit SHA, dirty
 classification, residual risks, and non-claims. Docs-only moves need diff
 hygiene and Docs Truth Check if pushed.
 
-heresy delta: `repaired` at deployed product tier for the observed Universal
-Wire one-article/Texture-404/source-open regression: pushed commit
-`6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319` deploys the source-arrival
-clustering repair, and authenticated Chrome shows 12 cards, a loaded Texture
-article, and a reader/source artifact opening from a native source ref.
-`repaired` at branch-local tier for the stronger O4 deployed-shaped
-source-arrival clustering/update predicate: noisy unrelated sourcecycled arrivals
-no longer fall back into one broad `sourcecycled-live` mega-article, semantic
-signatures exclude raw body-token residue and cap topic/signal lists, matching
-later arrivals reuse the existing story/article identity, and unchanged
-unrelated clusters are left untouched. `repaired` at deployed product API tier
-for the narrow C6/C8
-semantic story DTO observability gap: current/stale synthesized Wire Texture
-articles now return `semantic_story` evidence through authenticated
-`/api/universal-wire/stories` without exposing internal semantic ids in
-reader-facing copy. `repaired` remains at branch-local tier for the semantic
-story-state slice that records semantic story identity/change in graph/revision
-metadata and revises the linked Texture article. `repaired` remains at deployed
-product scope for C11, the stale scaffold-framed Universal Wire Texture article
-read-repair gap. `repaired` also remains for prior read-owner, platformd
-current-head, revision envelope, source-copy, supplied-revision sync,
-zero-article, deterministic multi-article readability, and source-opening
-regressions recorded in the ledger. `discovered` remains for semantic production
-cluster selection, provider/model synthesis quality, source freshness, the
-missing product/public live-arrival oracle, deployed later-source arrival update
-proof, Qdrant/world-model projection, and the fact that the product is still
-below the intended semantic multi-article world model.
+heresy delta: `repaired` at deployed/product tier for deterministic
+multi-article readability, source opening/read-owner, scaffold copy removal,
+current/stale semantic DTO observability, same-doc source-arrival visibility,
+and subset-stale public filtering. `discovered` remains for production semantic
+cluster selection, provider/model-quality synthesis, source freshness,
+Qdrant/world-model projection, and the fact that current public articles still
+read as deterministic/formulaic artifacts rather than the owner-stated live
+world model.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
-evidence. O4 is accepted for deployed deterministic multi-article readability,
-direct stale-edition read repair, product-visible semantic DTO observability,
-and the deployed repair of the observed one-article/headline-404/source-open
-regression. The article-quality repair is deployed at
-`ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`; CI, Docs Truth Check, FlakeHub,
-deploy, and health identity passed. Authenticated public API proof returned 12
-Wire stories and the first story no longer contained the documented helper copy
-phrases. Product UI acceptance is not accepted: a fresh authenticated Playwright
-session opened Universal Wire and saw `0 articles`/empty state even though the
-same session's public stories API returned 12 stories. The stronger News
-conjecture remains open: current deterministic topic/signal grouping and
-formulaic prose are not provider/model-quality synthesis, not Qdrant or
-world-model projection, and not deployed proof that later relevant source
-arrivals update existing semantic articles.
+evidence. O4 is accepted only for deployed deterministic substrate behavior:
+Universal Wire renders platform-owned Texture articles, opens Texture/source
+surfaces, preserves source_ref/source_entities, shows same-doc source_added
+updates, and filters the known subset-stale public article after successful live
+arrival. The latest accepted repair is `8b53b967926fb8ba591e96c207022c49db9f72e5`,
+with CI `28291043478`, deploy identity `2026-06-27T13:50:35Z`, authenticated
+proof at `2026-06-27T13:52:21Z`, and independent verifier acceptance in thread
+`019f095d-5901-79c1-9feb-4bc2c77ba83a`. The actual News benchmark remains open:
+unchecked O4 checklist items still require many multilingual ingested stories to
+cluster into cross-source story/world-model objects, route through
+Texture/processor/reconciler workflows as coherent English synthesis articles,
+and update existing articles/world-model entries when relevant new information
+arrives. Prior evidence supports parts of this locally and at staging, but not
+as a final semantic/world-model product claim.
 
-Current C8 article-quality conjecture: if Universal Wire has a semantic story
-state and at least two source-backed captures, the created/revised Texture
-article should read like an English synthesis article over the source facts,
-not like a provenance scaffold or pairwise helper template. Worker thread
-`019f0817-a5df-7d40-9c70-8bacaacbb5b2` produced commit
-`569caa443decab24e77640c620ddc83f6145ae40`; independent verifier thread
-`019f0822-4ac7-7233-baf8-0f9a282ce991` returned `accept`; root incorporated it
-as `aac476e4`. Root reran the focused Universal Wire sourcecycled/synthesis
-selector and the broader `UniversalWire|WireProcessor|WireStory|WirePublication`
-runtime selector successfully, and `git diff --check HEAD^..HEAD` passed. This
-supports the branch-local deterministic article-quality slice: helper/provenance
-phrases are sanitized from generated headline/dek/body paths, while markdown
-lineage keeps native `source_ref` citations and source_entities. It remains
-below the final Universal Wire target until staging deploy/product acceptance
-and future provider/model-quality synthesis evidence.
-
-Current C6 source-arrival update conjecture: if a later sourcecycled source
-arrives for an already-materialized Universal Wire semantic story, the product
-path should revise the same semantic story object and linked Texture article
-instead of creating a duplicate card, losing prior citations, or requiring
-manual reseeding. Branch-local root evidence proves the test predicate that the
-later/second Texture revision preserves prior/new `source_item_ids`, source
-entities, and native `source_ref` citations while the surrounding test holds
-same story/article/edition identity. Staging evidence now gives the next
-blocker: sourcecycled is live and did deliver new source arrivals, but the Wire
-surface is still not the intended multi-story/update product.
-
-Current C6 deployed-cycle window conjecture: the branch/root DTO carry-forward
-proof is necessary but not sufficient for live product reality. The deployed
-sourcecycled cycle recorded 561 graph captures in one pass, while
-`synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` only selects
-the 24 most recently updated `choir.web_capture` objects before grouping. A
-later matching arrival can therefore be separated from the prior sources for its
-existing story by cycle volume/order before clustering or cluster-id resolution
-can update the existing Texture article. This is a newly sharpened product
-behavior problem inside C6, not a deployed acceptance claim. Branch-local worker
-evidence now repairs this at test tier by raising the synthesis capture window
-to a deployed-sized cycle limit and proving a later matching source still
-updates the same story/article while 32 newer unrelated captures separate it
-from the prior story sources.
-
-Branch-local worker construction also exposed a sharper sub-blocker inside that
-same problem: a later matching source arrival caused unrelated existing story
-clusters to be rewritten as `state_refreshed` revisions during the same
-sourcecycled synthesis pass. That would make "matching later arrivals update
-only the existing story/article" false even when clustering split the initial
-batch.
-
-Branch-local implementation evidence now supports the worker-scope predicate:
-`TestHandleInternalSourcecycledWebCapturesKeepsDeployedShapedArrivalsSeparated`
-simulates a noisy deployed-shaped batch, proves two coherent Wire Texture
-articles instead of a mega-article, proves a later rail arrival updates only the
-existing rail article/story while preserving prior/new native `source_ref`
-citations and `source_entities`, and proves a later unrelated health arrival
-creates a third separate article. The requested selector
-`nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
-passed, as did `git diff --check`. The follow-up worker slice adds
-`TestHandleInternalSourcecycledWebCapturesUpdatesExistingStoryAcrossDeployedSizedCycle`,
-which models the deployed-cycle window gap directly. This is branch-local
-evidence only.
-
-Deployed discriminator evidence: Node B sourcecycled is active and its latest
-cycle `cycle_aab51c4b894bba17afea9fb2` ran from `2026-06-27T07:10:21Z` to
-`2026-06-27T07:11:38Z`, fetched 562 new items from 211 configured sources, and
-recorded `web_captures_graph_written` with `capture_count: 561`,
-`source_entity_count: 561`, `captured_from_edges: 561`,
-`objectgraph_mode: runtime_api`, and target
-`http://unix/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/objectgraph/web-captures`.
-The unauthenticated public API remains 401 as expected, and Chrome automation
-could not complete an authenticated replay because another extension UI blocked
-the Chrome extension session. A lower-tier sandbox route diagnostic with
-`X-Authenticated-User` showed `/api/universal-wire/stories` returning
-`source: universal-wire-edition-texture`, `story_count: 1`, edition
-`95afb28c-1095-4b96-bdf8-c1b89b13bc56`, included doc
-`d3661377-4731-4617-a351-63236b08597d`, headline `Cory Doctorow on the Right -
-and Wrong - Way to Criticize AI`, `semantic_story.change_type: source_added`,
-`previous_source_count: 24`, `current_source_count: 24`, topic concepts
-`energy`, `harbor`, `health`, and 273 signal concepts. This is evidence of a
-live ingestion/update blocker, not product acceptance.
-
-Latest deployed repair: root documented the UI/API mismatch in `9509d708`,
-then repaired stale Universal Wire Texture restore read scope in `bef7fa0c`.
-The code delta is narrow: restored Texture windows with legacy Universal Wire
-`.texture` source paths now infer `read_owner=universal-wire-platform`, while
-ordinary Texture document reads remain owner-scoped. Local evidence passed
-`nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`,
-the focused Playwright regression
-`npx playwright test tests/universal-wire-app.spec.js -g "Universal Wire platform read does not taint ordinary Texture document reads" --timeout=120000`,
-and `git diff --check`.
-
-Deployed evidence for `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`: CI run
-`28284272706`, FlakeHub run `28284272684`, and deploy job `83805645285`
-succeeded. `https://choir.news/health` reports proxy and sandbox
-`deployed_commit` as `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`, deployed at
-`2026-06-27T08:50:34Z`. Authenticated Playwright product proof with temporary
-user `qa-bef7fa0c-1782550286@example.com` showed
-`/api/universal-wire/stories` returning HTTP 200,
-`source: universal-wire-edition-texture`, 12 stories, first story
-`Telegram Post from Metropoles Telegram`, doc
-`4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, no documented helper/provenance
-phrases in API/UI/Texture surfaces, Universal Wire UI rendering 12 cards, and
-opening the first headline loading the Texture article through
-`read_owner=universal-wire-platform` with no ordinary-owner Texture document
-requests.
-
-Latest O4 live-arrival worker/verifier result: worker thread
-`019f084b-4a32-7bc3-bdbf-b0733f346aaf` committed
-`5ab674102ed2826c4c5a84ec00a38343af160526`; independent verifier thread
-`019f084f-b19e-77d2-9ba6-15b359ec7176` returned `accept`; root incorporated
-the slice as `bacf3e0a`. The slice is yellow/green only: it strengthens
-`TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster`
-so the post-arrival `/api/universal-wire/stories` DTO must expose same
-story/article identity, typed `source_added` semantic state, and all prior/new
-source-viewer-ready manifest entries. It changes only
-`internal/runtime/universal_wire_test.go` and this ledger. Root checks passed:
-focused source-arrival test, broader
-`UniversalWire|WireProcessor|WireStory|WirePublication` runtime selector,
-`git diff --check HEAD^..HEAD`, and `git show --check --oneline HEAD`. No
-runtime behavior, deploy, or staging acceptance is claimed for this test/evidence
-commit. Root pushed the incorporation/evidence chain to origin main as
-`91772b065e193e443723810d50092d66d12cd935`; GitHub CI run `28284738983`,
-Docs Truth Check run `28284738984`, and FlakeHub run `28284738982` all passed.
-The CI job intentionally skipped `Build Frontend` and `Deploy to Staging (Node
-B)`, so this landing did not mutate staging or add product acceptance evidence.
-
-Fresh staging observer evidence from temporary user
-`qa-o4-live-update-1782550786@example.com` is decision-changing but not
-settling: `/api/universal-wire/stories` returned 12 edition Texture stories
-with no duplicate story-doc ids; platform revision reads show multiple same-doc
-revision histories, native body docs, and source_entities. However most visible
-later revisions preserve the same source counts rather than proving new source
-arrivals were incorporated; one story reports `source_added` while
-previous/current source counts are both 2. This supports the need for the
-worker's DTO carry-forward proof and keeps deployed live-arrival update
-settlement open.
-
-latest authenticated staging proof for deployed commit
-`a155c663142fd97289a36a2cc3c9eac7ef0902d2`: after Chrome auth control failed,
-root used the repo-supported Playwright passkey setup to create temporary user
-`qa-a155c663-1782553302@example.com` through public auth routes. Authenticated
-product proof returned `/api/universal-wire/stories` HTTP 200,
-`source: universal-wire-edition-texture`, 12 stories, edition
-`universal-wire/Wire.texture`, and 12 rendered Universal Wire cards. Opening
-the first headline loaded Texture doc
-`4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` with all observed Texture document,
-revision, and stream requests using
-`read_owner=universal-wire-platform`; no 404 and no helper/provenance phrases
-were observed. This supports the deployed open/read path after the 768-capture
-repair but still does not settle full source-arrival semantics: the proof
-observes current deployed data, including a `source_added` semantic story whose
-previous/current source counts are both 2, rather than witnessing a fresh
-post-deploy source arrival update an existing article. Next move is an observer
-shift through worker handle `local:66c4a018-6109-4ada-aeb2-b47a4c3f11f1`
-(`O4-live-source-arrival-oracle-product-proof-worker`) to trigger or wait for a
-real sourcecycled arrival and compare article state before/after, or document
-the missing live-arrival oracle as the next runtime/product gap.
-
-O4 live-arrival oracle probe: worker
-`O4-live-source-arrival-oracle-product-proof-worker` found no authorized
-product/public route to trigger a sourcecycled cycle or read a sourcecycled
-cycle boundary. The admissible public observer found is authenticated
-`/api/universal-wire/stories` plus public Texture document/revision reads.
-Temporary user `qa-o4-oracle-1782553934@example.com` captured 21 authenticated
-snapshots from `2026-06-27T09:53:30Z` through `2026-06-27T10:14:05Z` against
-deployed commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`; the surface stayed
-stable at 12 `universal-wire-edition-texture` stories, edition doc
-`5ac77c23-2642-4b74-b557-87d05c87e79f`, edition revision
-`8fb9686a-5cc3-402c-9b08-2a1b43f0ac59`, and zero story/revision diffs. This is
-not proof that no sourcecycled arrival happened. It is proof that the product
-currently lacks a public live-arrival oracle strong enough to decide the C6
-fresh-arrival update predicate without either waiting opportunistically for a
-visible story transition or using forbidden internal/source-service evidence.
-
-Next C6 move: add or expose an authorized product live-arrival oracle before
-claiming fresh-arrival update semantics. A safe oracle would minimally expose a
-public authenticated sourcecycled cycle handle/timestamp or product work-item
-event that can be correlated with before/after `/api/universal-wire/stories` and
-Texture revision/source snapshots without seeding success through internal or
-test-only routes.
-
-Independent verifier thread `019f0897-8fa3-7460-819a-ff17b95ae173` accepted
-worker commit `88ade5258cc254de6133618418d7b5950c420116` with no blocking
-findings. The verifier confirmed the `/tmp` observer packet supports the
-21-snapshot stable-public-surface summary, the commit is docs-only, V remains
-2, and the claim is limited to the missing product/public live-arrival oracle.
-
-Worker thread `019f08a0-4ffb-72a3-ba7e-381e77797a96` completed
-`O4-live-arrival-product-oracle-slice-worker` with commit
-`28f2b4ead6eb008e46cc6cad986167ba3204c8d5`. Independent verifier thread
-`019f08a8-3659-74a3-beeb-2a0f23f539d4` returned `accept`, finding no blocking
-or revision-required issues. The branch-local slice adds authenticated public
-read-only `GET /api/universal-wire/live-arrival`, carries `cycle_id` from
-sourcecycled into runtime, records a redacted
-`choir.universal_wire_live_arrival_status` graph object after projection and
-synthesis, and exposes latest boundary/timestamp/status/counts/synthesis
-summary without public ingestion triggers or raw source payloads. Worker and
-verifier evidence passed `cmd/sourcecycled` and runtime selectors plus diff
-hygiene. Root incorporated the accepted slice as `f7b73952` and pushed
-`06d5ba4e73069d0b14b6094fa5a245d43fc2f255`; CI run `28286893633`, Docs Truth
-Check run `28286893628`, and FlakeHub run `28286893648` passed, and staging
-health reported proxy/sandbox/platformd deployed at `06d5ba4e`. Deployed
-oracle acceptance discovered a new product-route heresy instead of completing
-C6: authenticated `GET /api/universal-wire/live-arrival` returns `200` but
-`status: unavailable` after sourcecycled was rebuilt/restarted, while
-`/api/universal-wire/stories` still returns 12 platform Wire Texture stories.
-The proxy routes `/api/universal-wire/stories` to the always-on platform
-computer, but does not route `/api/universal-wire/live-arrival` the same way;
-sourcecycled writes the live-arrival status into the platform runtime while
-normal authenticated users read their own runtime. Next move: repair the proxy
-route target for the read-only live-arrival oracle, then rerun CI/deploy and
-authenticated staging proof.
-
-Repair commit `b7b012c8 Route Wire live arrival oracle to platform computer`
-updates `protectedAPIResolveTarget` so `/api/universal-wire/live-arrival` uses
-the same always-on platform computer target as `/api/universal-wire/stories`.
-Focused proxy and runtime proof passed locally. Root pushed
-`daeff1ced630210b5ec7b8c943a7e7b2215b19e1`; CI run `28287504060`, Docs Truth
-Check run `28287504034`, FlakeHub run `28287504070`, and staging deploy job
-`83814144276` passed. Staging health reported proxy/sandbox deployed at
-`daeff1ce`. Authenticated deployed proof with temporary user
-`qa-1782559069281-h2pcpp@example.com` showed unauthenticated
-`/api/universal-wire/live-arrival` returns `401`, authenticated reads return
-`200` with `status: available`, latest boundary
-`cycle_ca4f264e16e9031961db155e`, 908 source items, 894 captures, 894 source
-entities, 14 skipped items, no raw payload leak patterns, and stable repeated
-reads. The same proof saw `/api/universal-wire/stories` return 12
-`universal-wire-edition-texture` stories. This repairs the public oracle route;
-it does not settle fresh source-arrival article update semantics because the
-latest cycle reports `synthesis_status: skipped`. Next move: use the now-live
-oracle to bracket subsequent sourcecycled cycles and compare Wire stories plus
-Texture revision/source state.
-
-The first post-repair oracle resample with temporary user
-`qa-live-skip-1782559728@example.com` at `2026-06-27T11:29:16Z` observed a newer
-boundary, `cycle_585b664dfe90c813c24e1ac7`, but the same failure class:
-585 source items, 585 captures/source entities, zero skipped items, 768
-synthesis sources, `synthesis_status: skipped`, and the same
-`synthesis_skip_reason` of `fewer than two eligible graph-backed source
-captures`. Code inspection shows that reason is not precise for this case:
-`synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` may have
-hundreds of synthesis sources but return no article when the deterministic
-topic/signal grouping layer forms zero multi-source groups. The current oracle
-does not report candidate concept/group counts, so it cannot yet distinguish
-missing source extraction from overly narrow grouping or all-groups-refreshed
-state. Next move: document/repair the live-arrival synthesis diagnostics so
-the product oracle reports the actual classifier boundary, then use that
-evidence to repair article update behavior without guessing.
-
-Local repair commit in progress adds additive live-arrival synthesis
-diagnostics without loosening article creation: `synthesis_known_source_count`,
-`synthesis_candidate_groups`, `synthesis_refreshed_groups`, and precise skip
-reasons. Focused runtime proof covers the deployed-shaped no-group case where
-two graph-backed synthesis sources have known concepts but do not share a
-topic/signal story group; the public oracle reports the no-group classifier
-boundary and still redacts source payloads. Broader Universal Wire runtime
-selector also passed locally. Next move: commit, push, monitor CI/deploy,
-verify staging identity, and rerun authenticated staging proof; if the live
-oracle reports no deterministic groups on deployed data, the next behavior
-repair is grouping extraction/semantic clustering, not route or Texture read
-repair.
-
-After deployment of the diagnostics repair, a post-deploy sourcecycled cycle
-`cycle_490a914358c36f1b5a27e1e5` at `2026-06-27T11:52:35Z` proved the oracle
-repair and changed the remaining edge. The live status now reports
-`synthesis_status: ok`, `synthesis_doc_id`
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`, revision
-`60ccdcb4-322d-4c31-b7f9-d12d026413c9`, 7 synthesized sources, 15 known-concept
-sources, 6 candidate groups, 1 synthesized cluster, and 1 refreshed group. The
-new Texture doc/revision is directly readable with 7 source entities and native
-`source_ref` body_doc citations. However `/api/universal-wire/stories` still
-returns only 12 stories and does not include that synthesized doc even when
-called with `?limit=30`, while the edition lists the doc among 18 included
-documents. Code inspection shows the route hard-codes a 12-story read and
-iterates edition transclusions in stored order, so newly appended live articles
-can be linked into the edition but hidden behind older docs. Next move:
-document/repair story ordering/limit semantics so newest live synthesized
-Texture articles surface in Universal Wire.
-
-Local ordering repair changes only the read projection: collect all publishable
-edition Texture stories, sort them by `UpdatedAt` descending, then apply the
-12-story product cap and assign prominence. The canonical edition inclusion
-order and included-doc metadata remain intact. Focused tests now cover a
-13-doc edition where the newest appended live article surfaces first and the
-oldest article falls outside the product cap; the broader Universal Wire
-runtime selector passed locally. Next move: commit, push, monitor CI/deploy,
-verify health identity, and rerun authenticated staging proof that doc
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` appears in
-`/api/universal-wire/stories`.
-
-Ordering repair deployed at `210cc9bf3731733b80cc95791c5d0d761b4c2543` and
-authenticated staging proof with `qa-wire-order-1782562090@example.com` now
-shows the synthesized doc as story index 0 in `/api/universal-wire/stories`.
-The story is directly readable through Texture and carries 7 source entities
-with native `source_ref` body_doc citations. This supports the route/read/order
-conjecture, but it also exposes the next semantic failure: the article headline
-is `South Korea plans to train entire military as "drone warriors"` while the
-semantic story is `harbor`/`transport`/`rail-corridor`, because the bounded
-token concept map treats the English verb "train" as a rail signal. The
-remaining C6 edge is now semantic clustering/lexical disambiguation, not
-source ingestion, route access, Texture read ownership, or feed ordering.
-
-Local homonym repair removes bare English `train`/`trains` from the
-rail-corridor concept signal, preserving explicit rail/railway/railroad terms
-for transport grouping. Focused proof covers a deployed-shaped batch with two
-harbor sources plus `South Korea plans to train entire military as drone
-warriors`; the military training source no longer contributes known concepts,
-does not enter the harbor article's source entities, and does not appear in the
-article copy. Broader Universal Wire runtime selector passed locally. Next
-move: commit, push, monitor CI/deploy, and rerun authenticated staging proof on
-the next live sourcecycled boundary.
-
-Homonym repair deployed at `68c5dc497c6d46bf432831361fe511bad9ff8815`;
-CI run `28288870586`, Docs Truth Check run `28288870591`, FlakeHub run
-`28288870595`, and Node B deploy job `83817708485` all passed. Staging health
-reported proxy and sandbox deployed at `68c5dc49` with deployed_at
-`2026-06-27T12:20:37Z`. Authenticated proof with
-`qa-train-homonym-1782562920@example.com` observed the first post-deploy
-sourcecycled boundary `cycle_f8195609729672a6fd7a6798` at
-`2026-06-27T12:22:27.686289396Z`. The oracle reported 544 source items, 542
-captures/source entities, 768 graph-backed synthesis sources, and
-`synthesis_status: skipped` with `synthesis_skip_reason:
-no graph-backed synthesis sources matched known story concepts`. That supports
-the narrow homonym repair for future grouping: the next live cycle did not
-re-materialize the military-training item as a rail-corridor story.
-
-New problem discovered: the previously synthesized bad Texture article remains
-public and first in `/api/universal-wire/stories` because no post-repair
-synthesis replaced, revised, retired, or de-ranked it. The visible top story is
-still doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`, headline `South Korea plans
-to train entire military as "drone warriors"`, with semantic signature
-`harbor`/`transport`/`rail-corridor` and changed_at
-`2026-06-27T11:52:35.826378314Z`. The remaining C6 edge is stale synthesized
-article invalidation/repair after a classifier correction, not merely lexical
-concept extraction.
-
-Next move: document and repair the Universal Wire stale-synthesis path so
-articles whose current semantic signature can no longer be reproduced from the
-latest sourcecycled graph are retired, revised, or de-ranked before the public
-feed ranks them above fresh valid stories.
-
-Local stale-synthesis repair now de-ranks, rather than deletes, Universal Wire
-synthesis articles when a later live-arrival boundary reports a classifier or
-grouping skip that means the current sourcecycled graph did not produce a valid
-synthesis group. The article remains in the edition for audit/source review,
-but it sorts behind still-current edition stories before the 12-story cap and
-prominence assignment. Focused proof covers the deployed shape: a newer stale
-synthesis article plus an older valid story, followed by a later skipped
-live-arrival boundary, returns the older valid story first while retaining the
-stale article below it. Broader Universal Wire runtime selector passed locally.
-Next move: commit, push, monitor CI/deploy, verify health identity, and rerun
-authenticated staging proof that doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`
-no longer wins the public feed after boundary
-`cycle_f8195609729672a6fd7a6798`.
-
-Deployed stale-synthesis de-rank at
-`cc2962ecaec88f8af1fb9475faade2fe125edeaa` did not settle the product
-conjecture. CI run `28289238542`, Docs Truth Check run `28289238541`, FlakeHub
-run `28289238544`, and Node B deploy job `83818562207` passed; staging health
-reported proxy/sandbox deployed at `cc2962ec` with deployed_at
-`2026-06-27T12:34:30Z`. Authenticated proof at `2026-06-27T12:36:26Z` still
-returned doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` as story index 0 with
-prominence 100, while live-arrival still reported post-fix skipped boundary
-`cycle_f8195609729672a6fd7a6798`. New problem discovered: the stale detector is
-too narrow for deployed/platform-visible synthesis revisions. It keys only on
-the `universal_wire_synthesis` boolean, while older or platform-synced
-Universal Wire synthesis revisions can still carry cluster/article metadata and
-semantic story state without that exact boolean shape. Next move: broaden
-synthesis revision recognition to the same legacy-compatible metadata contract
-already used for semantic projection, then replay local and staging proof.
-
-Local metadata-recognition repair broadens `wireRevisionIsUniversalWireSynthesis`
-to accept the legacy/platform-synced synthesis metadata shapes already used by
-semantic projection: synthesis-cluster handoff kind, article alias path, story
-cluster id, or story cluster object id, in addition to the boolean. The focused
-stale de-rank regression now omits `universal_wire_synthesis: true` while
-retaining cycle/cluster/article metadata, and still proves the stale synthesis
-sorts below an older valid article after a later skipped live-arrival boundary.
-Broader Universal Wire runtime selector passed locally. Next move: commit,
-push, monitor CI/deploy, verify health identity, refresh auth if needed, and
-rerun the deployed story-order proof.
-
-Deployed metadata-recognition repair at
-`557a02f0b3e7d9d41e1c50437f9a31ff7cc2dbaa` still did not settle the product
-conjecture: authenticated proof with `qa-wire-stale-final-1782564538@example.com`
-at `2026-06-27T12:49:22Z` still returned the bad doc at index 0. Direct Texture
-revision read confirmed the doc has synthesis metadata and `created_at`
-`2026-06-27T11:52:38Z`, while live-arrival boundary
-`cycle_bf681b0c3b55a65d2ae51703` was observed at
-`2026-06-27T12:37:26.382055539Z` with skipped grouping. New problem discovered:
-de-ranking stale syntheses is insufficient when the top feed cohort is itself
-mostly stale synthesis; stale articles must be excluded from the public story
-list while remaining present in edition metadata and direct Texture reads for
-audit. Next move: filter stale synthesis candidates out of public
-`/api/universal-wire/stories` before the 12-story cap.
-
-Local stale-synthesis filter repair now excludes stale synthesis candidates
-from the public story list before sorting, capping, and prominence assignment,
-while preserving `edition.included_doc_ids` for audit/direct Texture access.
-Focused proof covers the deployed shape with a stale synthesis revision that
-lacks the boolean but carries cluster/article metadata; after a later skipped
-live-arrival boundary, only the valid article is public and the stale doc
-remains in edition metadata. Broader Universal Wire runtime selector passed
-locally. Next move: commit, push, monitor CI/deploy, verify health identity, and
-rerun authenticated staging proof.
-
-Stale-synthesis filter deployed at
-`97eccc6aa1bafb8517fcb136d94b15d68e62cbec`; CI run `28289790939`, Docs Truth
-Check run `28289790944`, FlakeHub run `28289790946`, and Node B deploy job
-`83820005241` passed. Staging health reported proxy/sandbox deployed at
-`97eccc6a` with deployed_at `2026-06-27T12:58:21Z`. Authenticated proof with
-`qa-wire-filter-final-1782565167@example.com` at `2026-06-27T12:59:59Z` observed
-latest live-arrival boundary `cycle_4f579bb598b84515abf2c045`, observed_at
-`2026-06-27T12:52:21.075958428Z`, `synthesis_status: skipped`,
-`synthesis_source_count: 768`, `synthesis_known_source_count: 1`,
-`synthesis_candidate_groups: 1`, and skip reason `no deterministic story group
-reached two sources with a shared topic and story signal`. Public
-`/api/universal-wire/stories?limit=30` returned zero stories, and the bad doc
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public stories while
-still present in the edition's 18 included doc IDs. Direct Texture document and
-revision reads for the bad doc returned 200; revision
-`60ccdcb4-322d-4c31-b7f9-d12d026413c9` still has 7 source entities and native
-`source_ref` body_doc. Conjecture verdict: stale false article cleanup is
-supported at staging; the remaining Universal Wire realism gap is now empty
-current story production because deterministic clustering finds no valid
-multi-source story groups in the live sourcecycled graph.
-
-Local current-story-production repair addresses a structural extraction miss:
-previously, a source with an opaque title contributed no concepts even when its
-reader/body text contained clear story concepts. `universalWireStoryConceptSet`
-now lets body concepts seed a story when the title has no topic, while preserving
-title-topic constraints when a title is informative. A small negation guard
-prevents opaque-title bodies that explicitly say "no relation to" / "unrelated
-to" a topic from becoming false positives. Focused proof covers two opaque-title
-rail/inspection sources forming one article from body concepts, while an
-unrelated opaque-title culture item is excluded; the noisy deployed-shaped
-split/update tests and broader Universal Wire selector still pass. Next move:
-commit, push, monitor CI/deploy, verify health identity, and replay
-authenticated staging proof to see whether the live sourcecycled graph now
-produces at least one valid public story.
-
-Body-concept repair deployed at
-`f6dd1294260aec623664e10a090f63e520fedb79`; CI run `28290135800`, Docs Truth
-Check run `28290135796`, FlakeHub run `28290135787`, and Node B deploy job
-`83820886261` passed. Staging health reported proxy/sandbox deployed at
-`f6dd1294` with deployed_at `2026-06-27T13:12:43Z`. Authenticated proof with
-`qa-body-concepts-1782566036@example.com` at `2026-06-27T13:16:24Z` observed
-`/api/universal-wire/stories?limit=30` returning five public
-`universal-wire-edition-texture` stories. The former stale doc
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public stories while
-remaining in edition metadata for audit. Top story
-`0d9eac95-ec18-4a2f-9470-802b8db7aef1` had revision
-`dd541b01-8e77-430c-9e50-9703429bcd68`, three source entities, native
-`source_ref` body_doc, semantic signature
-`[harbor, health, transport, inspection]`, and `source_added` state changed at
-`2026-06-27T13:13:13.937580052Z`. Direct platform Texture document and revision
-reads returned 200. The live-arrival oracle still reported a pre-deploy
-boundary `cycle_737e0f2a6db2c3a9d04b036c` observed at
-`2026-06-27T13:07:22.918065535Z` with skipped synthesis, so this is deployed
-read-time materialization/product story proof, not a post-deploy sourcecycled
-arrival-cycle proof. Next realism axis: wait for or induce a post-deploy
-sourcecycled boundary, bracket it with the live-arrival oracle, and prove that a
-later matching source updates an existing coherent article instead of creating
-or reviving a stale one.
-
-Post-deploy live-arrival boundary proof found a mixed result. With fresh
-authenticated user `qa-live-arrival-1782566508@example.com`, boundary
-`cycle_30753fe322e0c4c9b14034f6` arrived after deploy at
-`2026-06-27T13:22:26.79142549Z` with `synthesis_status: ok`, 562 captured
-items, 392 known synthesis sources, 326 candidate groups, 3 synthesized
-clusters, and edition revision `8da14ed7-2f82-43ae-837c-65fdcc5d5e12`.
-The proof supports the same-article source-arrival conjecture for doc
-`30a79a8e-3378-40b8-b0a3-a28b80284d7f`: it was already public before the
-boundary and updated in place from 61 to 65 sources with revision
-`15f97026-7d60-4477-8f8f-25a47f8e74cb`, 65 source entities, and native
-`source_ref` body_doc. New problem discovered: the known stale South Korea
-drone military training article
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` re-entered public stories at index 7
-after this `ok` live-arrival cycle, even though it remained semantically stale
-and older (`changed_at 2026-06-27T11:52:35.826378314Z`). The stale-public
-filter is therefore incomplete for `ok` synthesis cycles; it handled skipped
-boundaries but still allows stale edition members back into the 12-story public
-cap when enough current stories exist. Next move: repair public stale-synthesis
-filtering so stale semantic/projection articles are excluded across both skipped
-and successful live-arrival cycles while direct Texture and edition audit paths
-remain readable.
-
-Local stale re-entry repair now revalidates sourcecycled-live synthesis
-revisions against the current deterministic classifier before admitting them to
-the public story list. The filter only applies when a synthesis revision has a
-`sourcecycled-live-*` cluster id and reconstructable source entities; it leaves
-legacy/direct synthesis fixtures and direct Texture/edition audit metadata
-intact. Focused proof covers the deployed shape: a successful live-arrival
-status, a valid current synthesis story, and an older stale South Korea training
-synthesis whose cited sources no longer reproduce the stored rail-corridor
-cluster. The stale article is filtered from public stories while retained in
-edition metadata and direct Texture/source_ref evidence. Broader Universal Wire
-runtime selector passes. Next move: commit, push, monitor CI/deploy, verify
-health identity, and replay authenticated staging proof that the stale doc is
-absent after a successful live-arrival boundary while same-doc source-arrival
-updates remain visible.
-
-Deployed stale re-entry repair `c7910000bfc7643664fe512f0172469da825ae80`
-failed the product proof. CI run `28290689038`, Docs Truth Check
-`28290689026`, FlakeHub `28290689034`, and deploy identity all passed; health
-reported proxy/sandbox at `c7910000`, deployed_at `2026-06-27T13:35:42Z`.
-Fresh authenticated proof at `2026-06-27T13:37:28Z` observed post-deploy
-boundary `cycle_d363c81f0d411d1fcafa052f`, `synthesis_status: ok`,
-610 source items, 326 known synthesis sources, 275 candidate groups, and
-synthesis doc `9b71c539-8110-443b-9349-59c991dae4f3`. Public stories still
-included stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` at index 5, so the
-current-classifier cluster-id filter does not catch the real deployed stale
-revision. The stale doc remains directly readable with revision
-`60ccdcb4-322d-4c31-b7f9-d12d026413c9`, seven source entities, and native
-`source_ref` body_doc. New conjecture: the deployed stale article's cited source
-entities still reproduce the old cluster under the current lexical classifier,
-or the revision lacks the expected metadata shape for the local filter. Next
-move: inspect the deployed stale revision/source entities, add a regression that
-matches the real revision shape, and repair public filtering without weakening
-same-doc update stories or direct audit reads.
-
-Second local stale-filter repair models the real deployed revision shape. The
-stale article cited one unrelated South Korea drone-training source plus a valid
-rail/port freight cluster; the first repair missed it because the cited sources
-still reproduced the stored `sourcecycled-live-harbor-transport-rail-corridor`
-cluster as a subset. The revised filter now treats a sourcecycled-live synthesis
-revision as public-stale when its stored cluster is produced only by a subset of
-its cited source entities. Focused proof matches this shape and preserves
-edition/direct Texture audit evidence; broader Universal Wire selector passes.
-Next move: commit/push this second repair, monitor CI/deploy, verify health
-identity, and rerun authenticated staging proof against the real stale doc.
-
-Subset stale-filter repair deployed at
-`8b53b967926fb8ba591e96c207022c49db9f72e5`; CI run `28291043478`, Docs Truth
-Check `28291043484`, FlakeHub `28291043480`, and deploy identity passed.
-Staging health reported proxy/sandbox at `8b53b967`, deployed_at
-`2026-06-27T13:50:35Z`. Fresh authenticated proof with
-`qa-final-8b53-1782568322@example.com` at `2026-06-27T13:52:21Z` observed
-authenticated session true, live-arrival 200, boundary
-`cycle_d363c81f0d411d1fcafa052f`, `synthesis_status: ok`, 610 source items,
-326 known synthesis sources, 275 candidate groups, and 3 synthesized clusters.
-Public `/api/universal-wire/stories?limit=30` returned 7 stories; stale doc
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public stories while
-remaining in edition metadata. Direct Texture audit read for the stale doc had
-already confirmed revision `60ccdcb4-322d-4c31-b7f9-d12d026413c9`, seven source
-entities, and native `source_ref` body_doc. Top public doc
-`0d9eac95-ec18-4a2f-9470-802b8db7aef1` remained a same-article update with
-source_count 4, changed_at `2026-06-27T13:37:23.091533987Z`, and direct Texture
-revision `a4f73c76-7702-4634-b748-36cac8d75067` readable with source refs.
-Conjecture verdict: stale subset-contamination filter is supported at staging.
-The broader News benchmark still remains open because article coherence is still
-deterministic/formulaic rather than provider-quality semantic synthesis, and the
-feed still includes older legacy projection stories.
-
-Independent verifier thread `019f095d-5901-79c1-9feb-4bc2c77ba83a`
-materialized from pending worktree handle
-`local:a89e265a-2bd9-423d-841b-1761e73ef82a` and accepted this deployed
-acceptance. The verifier confirmed health identity at `8b53b967`, public
-authenticated story count 7, stale doc
-`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` absent from public stories and retained
-in edition/direct Texture audit evidence, direct stale revision
-`60ccdcb4-322d-4c31-b7f9-d12d026413c9` readable with 7 source entities and
-native `source_ref`, and current source_added doc
-`0d9eac95-ec18-4a2f-9470-802b8db7aef1` readable with 4 source entities and
-native `source_ref`. Verifier reran diff hygiene and focused/broader runtime
-selectors successfully. Next move: choose the next O4 realism axis; do not
-claim full News benchmark settlement.
+next move: create a bounded implementation/probe worker for the next O4 realism
+axis: inspect the current deployed Universal Wire story set and implement or
+document the smallest slice that moves from deterministic/formulaic story cards
+toward coherent semantic/world-model articles. The worker must start from
+Problem Documentation First if it finds a new behavior gap, and must return a
+ready_for_verifier callback with exact commits, tests, dirty-path classification,
+evidence boundary, residual risks, and non-claims. Expected Delta V: observer
+evidence or one repair slice toward the final O4 News conjecture; do not claim
+full News benchmark settlement without deployed product proof and independent
+verifier acceptance.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -1187,37 +598,24 @@ queue ordering from `docs/worktree-review-2026-06-23.md` for overnight execution
 order while preserving that report as evidence.
 
 learning state: Thread tools are exposed and usable in this environment. The
-Parallax skill now measures conjecture descent, not obligation count; each pass
-must produce a strong, clear, definitive statement or buy observer evidence. The
 main O4 learning is that local route tests repeatedly missed staging product
-edges: publication eligibility, platformd synchronization, current-head reads,
-revision-list envelope shape, supplied-revision fallback, stale edition state,
-Texture open behavior, and legacy/current semantic DTO projection all required
-deployed product replay. The current product is better but still below the
-owner-stated Universal Wire target: deterministic grouping and formulaic prose
-are only a substrate for a future semantic live world model. Product proof for
-semantic observability must include legacy/current article fallback behavior,
-not only fresh branch-local synthesis fixtures. The next hard proof is
-source-arrival update behavior, not DTO existence.
+edges; deployed product replay and independent thread review are mandatory for
+claims about Universal Wire behavior. The current product is better but still
+below the owner-stated Universal Wire target: deterministic grouping and
+formulaic prose are only a substrate for a future semantic live world model.
 
 settlement: not settled. O4 is accepted for deployed deterministic
-multi-article readability, direct stale-edition read repair, current/stale
-semantic DTO observability, the observed one-article/headline-404/source-open
-regression repair through `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`,
-article-copy repair through `ca30a35b`, and the API/UI/open-Texture repair
-through `bef7fa0c`. The deployed subset-stale public-filter repair is accepted
-through `8b53b967` plus independent verifier thread
-`019f095d-5901-79c1-9feb-4bc2c77ba83a`. The actual News benchmark remains open
-until authenticated
-staging evidence shows multilingual live ingestion producing coherent English
-synthesis Texture articles over durable semantic source/world-model objects,
-with later relevant sources updating existing articles. O5 has started through
-prompt-bar/Texture/Super request evidence; O5-O8 remain open. Exit requires
-`settled`, `open_handoff`, `blocked`, or `superseded` with remaining V and next
-assignment explicit.
+multi-article readability, source/open Texture paths, source_ref/source_entities
+carry-forward, same-doc source-arrival visibility, and subset-stale filtering.
+The actual News benchmark remains open until authenticated staging evidence
+shows multilingual live ingestion producing coherent English synthesis Texture
+articles over durable semantic source/world-model objects, with later relevant
+sources updating existing articles. O5 has started through prompt-bar/Texture/Super
+request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
+`blocked`, or `superseded` with remaining V and next assignment explicit.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article update behavior is supported by post-deploy live-arrival proof, and stale subset-contamination filtering is supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Verifier replay saw health at 8b53b967, latest live-arrival cycle_e46363cf8600f1f56509047b with synthesis_status ok, /api/universal-wire/stories returned 7 stories, stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c was absent from public stories but retained in edition/direct Texture audit evidence, direct stale revision 60ccdcb4-322d-4c31-b7f9-d12d026413c9 remained readable with 7 source entities and native source_ref, and doc 0d9eac95-ec18-4a2f-9470-802b8db7aef1 remained a same-article source_added update with 4 sources and native source_ref Texture revision. Next move: choose the next O4 realism axis. Do not claim full News benchmark settlement yet: feed/article quality is still deterministic and includes legacy projection stories; the owner target wants coherent English synthesis from multilingual ingestion over durable semantic/world-model objects with later relevant sources updating existing articles. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. The remaining O4 News benchmark gap is semantic/world-model quality: the product still needs many multilingual ingested stories to cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: create a bounded implementation/probe worker for this O4 realism axis. The worker must inspect the current deployed Universal Wire story set, document any new behavior gap before code, and implement or report the smallest slice that moves from deterministic/formulaic story cards toward coherent semantic/world-model articles. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
