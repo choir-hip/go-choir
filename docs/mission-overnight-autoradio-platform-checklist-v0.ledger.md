@@ -15916,3 +15916,73 @@ conjecture. Actual Delta V: 0 until callback.
 Next move: reconnect with `list_threads` / `read_thread` once pending handle
 `local:629c9187-2967-4ae0-9231-b77242632601` materializes; then request an
 independent verifier if the worker returns `ready_for_verifier`.
+
+## 2026-06-27 - O4 Source-Map Synthesis Worker Completed And Verifier Requested
+
+Move: reconnect completed worker thread and open the independent verifier thread
+for the branch-local provider/reconciler-quality semantic synthesis axis.
+
+Worker callback:
+
+- Worker thread: `019f0995-97e1-7842-b48e-71db2b28d4ca`.
+- Worker worktree: `/Users/wiz/.codex/worktrees/6fb5/go-choir`.
+- Work item: `O4-provider-reconciler-quality-semantic-synthesis-axis-worker`.
+- Status: `ready_for_verifier`.
+- Commits:
+  - `14e06df7ed6e02c7025942e3c96c833abc7c9cac` (`Document Wire synthesis quality gap`).
+  - `1f12a6129164827dca1018e122fce7f85d5c75bf` (`Add Wire semantic source-map synthesis`).
+  - `b3ed0e615a83ae54d6eaa10b22671cc1f1c8c963` (`Record Wire source-map synthesis evidence`).
+- Changed files: this paradoc, this ledger,
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/wire_synthesis.go`, and
+  `internal/runtime/universal_wire_test.go`.
+
+Worker claim/evidence boundary:
+
+- Docs-first checkpoint recorded the remaining deterministic/formulaic synthesis
+  problem before runtime code.
+- Runtime slice adds durable `synthesis_frame` state, language-aware source
+  accounts, source-map Texture prose with native `source_ref` citations, and
+  preserves same-story `source_added` update behavior.
+- Worker reported passing:
+  - `nix develop -c go test ./internal/runtime -run TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster -count=1`.
+  - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`.
+  - `git diff --check`.
+  - `git status --short` clean.
+- Mutation class: orange branch-local runtime behavior, preceded by green
+  docs-first checkpoint.
+- Protected surfaces touched: Universal Wire sourcecycled materialization,
+  semantic story cluster state, Texture synthesis revision creation/source refs,
+  Wire edition linkage, and authenticated `/api/universal-wire` DTO
+  observability through existing projection tests.
+- Protected surfaces not touched: provider/gateway credentials, auth/session
+  renewal, vmctl, Qdrant, promotion/rollback, run acceptance, deployment
+  routing, or direct Node B tracked-file edits.
+- Non-claims: no provider/model quality, no Qdrant/world-model projection, no
+  staging identity, no authenticated staging proof, no run acceptance, and no
+  full News benchmark settlement.
+
+Verifier request:
+
+- Work item: `O4-provider-reconciler-quality-semantic-synthesis-axis-verifier`.
+- Pending verifier worktree handle:
+  `local:194d7a9c-425d-48ea-a71a-95f127efa1ca`.
+- Verifier target project: `/Users/wiz/go-choir`, fresh worktree from `main`.
+- Review target: worker worktree `/Users/wiz/.codex/worktrees/6fb5/go-choir`,
+  base `b0a2b5e0879b1a30818f64a6964e96ebccc6ff98`, commits
+  `14e06df7`, `1f12a612`, and `b3ed0e61`.
+- Verifier question: whether the commits support the branch-local conjecture
+  that semantic source-map synthesis materially improves Universal Wire
+  semantic/world-model article quality beyond deterministic event-frame
+  substrate while preserving native source refs/entities, same-story update
+  behavior, Wire edition linkage, and DTO observability through existing paths.
+
+Expected Delta V: 1 if the verifier accepts the branch-local repair slice as a
+credible next step toward the remaining O4 quality gap. Actual Delta V: 0 until
+verifier callback. Mission V remains 1.
+
+Next move: read the verifier thread once the pending handle materializes; if it
+accepts, incorporate the worker commits into root, run focused checks, and then
+perform the required landing loop before any deployed product claim. If it asks
+for revision, route the finding back to the worker or document the blocker
+before code.
