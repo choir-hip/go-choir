@@ -13676,3 +13676,86 @@ remains 2.
 Next move: push `f7b73952` plus this evidence, monitor CI/deploy, verify
 staging health identity, and run authenticated deployed acceptance for the new
 oracle before using it to decide C6 fresh-arrival update semantics.
+
+## 2026-06-27 - O4 Deployed Live Arrival Oracle Route Target Mismatch Documented
+
+Problem Documentation First checkpoint after deployed acceptance falsified part
+of the live-arrival oracle conjecture.
+
+Conjecture under test: once branch-local live-arrival oracle code lands, normal
+authenticated product users can read a redacted sourcecycled boundary from
+`GET /api/universal-wire/live-arrival`, because sourcecycled records
+`choir.universal_wire_live_arrival_status` after projection/synthesis and the
+public route reads that status.
+
+Deployed evidence:
+
+- Root pushed `06d5ba4e73069d0b14b6094fa5a245d43fc2f255`, containing code
+  commit `f7b73952 Expose Universal Wire live arrival oracle`.
+- CI run `28286893633` passed, including runtime shards and deploy job
+  `83812558465`.
+- Docs Truth Check run `28286893628` passed.
+- FlakeHub run `28286893648` passed.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  deployed commit `06d5ba4e73069d0b14b6094fa5a245d43fc2f255`; deploy logs also
+  reported platformd at the same commit and `go-choir-sourcecycled.service`
+  restarted at `2026-06-27T10:51:14Z`.
+- Temporary authenticated user
+  `qa-live-arrival-1782557571@example.com` proved unauthenticated
+  `/api/universal-wire/live-arrival` returns `401`, authenticated
+  `/auth/session` returns `authenticated: true`, authenticated
+  `/api/universal-wire/live-arrival` returns `200`, repeated reads are stable,
+  and the response did not contain redaction leak patterns
+  `source_items`, `source_ids`, `raw_source`, `body_text`,
+  `extracted_text`, or `content_html`.
+- The same product probe found live-arrival `status: unavailable` while
+  `/api/universal-wire/stories` returned `200`, source
+  `universal-wire-edition-texture`, 12 stories, edition doc
+  `5ac77c23-2642-4b74-b557-87d05c87e79f`, and edition revision
+  `73f494de-1e01-4763-bd23-adafb96652aa`.
+- Renewal-aware authenticated samples from `2026-06-27T10:59:28Z` through
+  `2026-06-27T11:05:30Z` continued to return live-arrival
+  `status: unavailable` with the same 12-story platform Wire edition.
+
+Root cause hypothesis supported by code inspection:
+
+- `internal/proxy/handlers.go` routes authenticated
+  `/api/universal-wire/stories` to `UniversalWirePlatformOwnerID` and
+  `UniversalWirePlatformDesktopID` because Universal Wire edition state lives
+  on the always-on platform computer.
+- The new `/api/universal-wire/live-arrival` path is not included in that
+  proxy target rule.
+- Sourcecycled posts web-capture projections to the platform runtime owner
+  (`universal-wire-platform`) and the runtime writes live-arrival status there.
+- Normal authenticated users therefore read their own runtime's objectgraph for
+  live-arrival while `/stories` correctly reads the platform runtime. That
+  explains authenticated `200` plus `status: unavailable` after sourcecycled
+  restart without contradicting the branch-local status object tests.
+
+Mutation class for the next repair: orange/red. Protected surfaces:
+authenticated public `/api/universal-wire/*` proxy routing, always-on platform
+computer routing, Universal Wire status read model, and deployed staging
+acceptance.
+
+Admissible evidence for repair: focused proxy test proving
+`/api/universal-wire/live-arrival` resolves to the same platform owner/desktop
+as `/api/universal-wire/stories`; focused runtime live-arrival tests remain
+green; CI/deploy/health identity; authenticated staging proof showing
+unauthenticated `401`, authenticated `200`, and either `available` latest
+platform status or a precisely documented sourcecycled no-cycle blocker after
+the route reads the platform runtime.
+
+Rollback path: revert the proxy route-target repair commit and dependent
+evidence commits, returning the deployed oracle to the current
+authenticated-but-user-runtime `unavailable` behavior.
+
+Heresy delta: `discovered`. The branch-local oracle was real but its product
+route target was incomplete. No repair has happened in this checkpoint.
+
+Expected Delta V: 0 until the proxy route is repaired and deployed acceptance
+can read the platform live-arrival status. Actual Delta V: 0. V remains 2.
+
+Next move: repair `protectedAPIResolveTarget` so
+`/api/universal-wire/live-arrival` uses the same always-on platform computer
+target as `/api/universal-wire/stories`, add a focused proxy regression, run
+targeted tests, then repeat the landing loop and authenticated staging proof.
