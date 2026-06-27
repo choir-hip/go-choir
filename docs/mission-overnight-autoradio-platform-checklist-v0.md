@@ -520,31 +520,21 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 4. Last delta: expected Delta V 0 for the
-article-quality landing; actual Delta V +1 because staging deploy/API evidence
-supports the deterministic article-copy repair, but product UI acceptance found
-a new mismatch: authenticated `/api/universal-wire/stories` returned 12 stories
-while the Universal Wire app surface showed `0 articles` in the same temporary
-authenticated Playwright session. The deployed product repairs the observed
-one-article/Texture-404/source-open regression, but it still does not prove
-fresh post-deploy source arrivals revising the same live semantic story/article
-identity, nor provider/model-quality English synthesis. Last decided conjecture:
-deployed commit
-`6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319` supports the narrow claim that the
-current Universal Wire deployed surface is no longer collapsed into one broad
-article and the headline/source-open product paths load. CI run `28282830130`,
-Docs Truth Check run `28282830115`, FlakeHub run `28282830126`, deploy job
-`83801933132`, health identity, and authenticated Chrome/Computer Use replay all
-passed. The replay showed Universal Wire rendering 12 articles, including
-multiple distinct synthesized Texture cards; a headline-opened Texture article
-loaded at v66 with `Sources 24`, native source buttons, and `Document loaded`;
-expanding a native source ref opened a source citation panel; clicking `Open
-source` opened a reader/source artifact with `Reader snapshot ready` and an
-`Open original` link. Current live conjectures remain: C6 later relevant sources
-update existing articles/world-model identities at deployed source-arrival scope;
-C8 semantic/world-model clustering beyond bounded deterministic signals replaces
-heuristic grouping; C9 O5-O8 embed the Autoradio benchmark into durable Choir
-product paths.
+statement. Current value: 2. Last delta: expected Delta V 1 for restoring
+authenticated deployed Universal Wire acceptance after the 768-capture repair;
+actual Delta V 1. Deployed commit
+`a155c663142fd97289a36a2cc3c9eac7ef0902d2` is CI/deploy/health verified, and
+authenticated Playwright product proof with temporary user
+`qa-a155c663-1782553302@example.com` showed `/api/universal-wire/stories`
+returning 12 stories, the Universal Wire UI rendering 12 cards, and the first
+headline opening Texture doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` through
+`read_owner=universal-wire-platform` with no 404 and no helper/provenance
+phrases. This proves deployed API/UI/open-Texture acceptance after the window
+repair, but it still does not witness a fresh post-deploy source arrival
+updating an existing article. Current live conjectures remain: C6 later
+relevant sources update existing articles/world-model identities at deployed
+source-arrival scope; C8/C9 broader semantic/world-model quality plus O5-O8
+embed the Autoradio benchmark into durable Choir product paths.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -758,21 +748,25 @@ previous/current source counts are both 2. This supports the need for the
 worker's DTO carry-forward proof and keeps deployed live-arrival update
 settlement open.
 
-next move: rerun authenticated product acceptance after browser auth control is
-available. Root incorporated the accepted deployed-cycle window repair as
-`e670a036` and `a155c663`, pushed `a155c663142fd97289a36a2cc3c9eac7ef0902d2`
-to origin main, and completed CI/deploy: CI run `28285181588` passed, Docs
-Truth Check `28285181580` passed, FlakeHub `28285181587` passed, deploy job
-`83808065484` passed, and `https://choir.news/health` reports proxy and sandbox
-deployed_commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`. Public
-unauthenticated `/api/universal-wire/stories` still returns 401 as expected.
-Authenticated acceptance is still open: the controllable Chrome tab for
-`choir.news` was signed out, two other `choir.news` tabs were blocked by an
-extension UI overlay, and no `frontend/playwright/.auth/*.storage.json` state
-exists. The accepted repair raises the live synthesis capture limit to 768 and
-adds a high-volume regression, but this is not full Universal Wire settlement
-until authenticated staging evidence proves later live source arrivals update
-existing articles.
+latest authenticated staging proof for deployed commit
+`a155c663142fd97289a36a2cc3c9eac7ef0902d2`: after Chrome auth control failed,
+root used the repo-supported Playwright passkey setup to create temporary user
+`qa-a155c663-1782553302@example.com` through public auth routes. Authenticated
+product proof returned `/api/universal-wire/stories` HTTP 200,
+`source: universal-wire-edition-texture`, 12 stories, edition
+`universal-wire/Wire.texture`, and 12 rendered Universal Wire cards. Opening
+the first headline loaded Texture doc
+`4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` with all observed Texture document,
+revision, and stream requests using
+`read_owner=universal-wire-platform`; no 404 and no helper/provenance phrases
+were observed. This supports the deployed open/read path after the 768-capture
+repair but still does not settle full source-arrival semantics: the proof
+observes current deployed data, including a `source_added` semantic story whose
+previous/current source counts are both 2, rather than witnessing a fresh
+post-deploy source arrival update an existing article. Next move is an observer
+shift to trigger or wait for a real sourcecycled arrival and compare article
+state before/after, or document the missing live-arrival oracle as the next
+runtime/product gap.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -810,5 +804,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root documented the Universal Wire API/UI mismatch in `9509d708`, repaired stale Universal Wire Texture restore read scope in `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`, pushed to origin main, and completed the landing loop: CI run `28284272706`, FlakeHub run `28284272684`, deploy job `83805645285`, and health identity passed with proxy and sandbox deployed_commit `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`. Authenticated Playwright product proof in temporary user `qa-bef7fa0c-1782550286@example.com` showed `/api/universal-wire/stories` returning 12 `universal-wire-edition-texture` stories, the Universal Wire UI rendering 12 cards, the first headline opening a Texture article, and Texture document/revision/stream requests using `read_owner=universal-wire-platform`; no documented helper/provenance phrases appeared in API/UI/Texture surfaces. The API/UI mismatch and headline-open 404 are repaired for the tested staging path. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Worker thread `019f084b-4a32-7bc3-bdbf-b0733f346aaf` produced branch-local test/evidence commit `5ab674102ed2826c4c5a84ec00a38343af160526` for `O4-live-source-arrival-update-product-reality-slice`; verifier thread `019f084f-b19e-77d2-9ba6-15b359ec7176` accepted it; root incorporated it as `bacf3e0a`. The accepted slice proves the post-arrival product DTO carries same story/article identity, typed `source_added` semantic state, and all prior/new source-viewer-ready manifest entries in branch/root tests only. Root pushed the incorporation/evidence chain as `91772b065e193e443723810d50092d66d12cd935`; GitHub CI run `28284738983`, Docs Truth Check run `28284738984`, and FlakeHub run `28284738982` passed, with frontend build and staging deploy skipped. Fresh staging observer evidence with temporary user `qa-o4-live-update-1782550786@example.com` returned 12 edition stories and same-doc revision histories but did not prove deployed new-source incorporation because visible later revisions mostly preserve source counts; one `source_added` story has previous/current source counts both 2. Worker thread `019f085c-cd49-7630-8e4a-31a22e26c8a9` produced docs-first commit `b0e89b21` and repair commit `bbd9f2db` for the deployed-cycle window gap; verifier thread `019f0862-4633-7a02-99ff-4b5e29a4c7d4` accepted; root incorporated as `e670a036` and `a155c663` and pushed `a155c663142fd97289a36a2cc3c9eac7ef0902d2`. CI run `28285181588`, Docs Truth Check `28285181580`, FlakeHub `28285181587`, and deploy job `83808065484` passed; health reports proxy/sandbox deployed_commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`; unauthenticated `/api/universal-wire/stories` returns 401. Authenticated product acceptance is blocked until browser auth control is restored: the controllable Chrome tab is signed out, two other Choir tabs are blocked by an extension UI overlay, and no Playwright auth state exists. Next move: dismiss the Chrome extension UI or create auth state, then rerun authenticated Universal Wire API/UI/headline-open/source-arrival acceptance on staging. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=2 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root documented the Universal Wire API/UI mismatch in `9509d708`, repaired stale Universal Wire Texture restore read scope in `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`, pushed to origin main, and completed the landing loop: CI run `28284272706`, FlakeHub run `28284272684`, deploy job `83805645285`, and health identity passed with proxy and sandbox deployed_commit `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`. Authenticated Playwright product proof in temporary user `qa-bef7fa0c-1782550286@example.com` showed `/api/universal-wire/stories` returning 12 `universal-wire-edition-texture` stories, the Universal Wire UI rendering 12 cards, the first headline opening a Texture article, and Texture document/revision/stream requests using `read_owner=universal-wire-platform`; no documented helper/provenance phrases appeared in API/UI/Texture surfaces. The API/UI mismatch and headline-open 404 are repaired for the tested staging path. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Worker thread `019f084b-4a32-7bc3-bdbf-b0733f346aaf` produced branch-local test/evidence commit `5ab674102ed2826c4c5a84ec00a38343af160526` for `O4-live-source-arrival-update-product-reality-slice`; verifier thread `019f084f-b19e-77d2-9ba6-15b359ec7176` accepted it; root incorporated it as `bacf3e0a`. The accepted slice proves the post-arrival product DTO carries same story/article identity, typed `source_added` semantic state, and all prior/new source-viewer-ready manifest entries in branch/root tests only. Root pushed the incorporation/evidence chain as `91772b065e193e443723810d50092d66d12cd935`; GitHub CI run `28284738983`, Docs Truth Check run `28284738984`, and FlakeHub run `28284738982` passed, with frontend build and staging deploy skipped. Fresh staging observer evidence with temporary user `qa-o4-live-update-1782550786@example.com` returned 12 edition stories and same-doc revision histories but did not prove deployed new-source incorporation because visible later revisions mostly preserve source counts; one `source_added` story has previous/current source counts both 2. Worker thread `019f085c-cd49-7630-8e4a-31a22e26c8a9` produced docs-first commit `b0e89b21` and repair commit `bbd9f2db` for the deployed-cycle window gap; verifier thread `019f0862-4633-7a02-99ff-4b5e29a4c7d4` accepted; root incorporated as `e670a036` and `a155c663` and pushed `a155c663142fd97289a36a2cc3c9eac7ef0902d2`. CI run `28285181588`, Docs Truth Check `28285181580`, FlakeHub `28285181587`, and deploy job `83808065484` passed; health reports proxy/sandbox deployed_commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`; unauthenticated `/api/universal-wire/stories` returns 401. Root then created temporary user `qa-a155c663-1782553302@example.com` through the repo-supported Playwright passkey auth path and ran authenticated deployed proof: `/api/universal-wire/stories` returned 12 `universal-wire-edition-texture` stories, Universal Wire UI rendered 12 cards, and opening the first headline loaded Texture doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` through `read_owner=universal-wire-platform` with no 404 and no helper/provenance phrases. This proves the deployed API/UI/open-Texture path after the 768-capture repair, but not fresh post-deploy source-arrival update semantics; the next move is an observer shift to trigger or wait for a real sourcecycled arrival and compare article state before/after, or document the missing live-arrival oracle as the next runtime/product gap. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

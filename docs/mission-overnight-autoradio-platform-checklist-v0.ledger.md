@@ -13174,3 +13174,74 @@ Next move: dismiss the Chrome extension UI or create a fresh Playwright auth
 state for `https://choir.news`, then rerun authenticated Universal Wire
 API/UI/headline-open/source-arrival acceptance against deployed commit
 `a155c663142fd97289a36a2cc3c9eac7ef0902d2`.
+
+## 2026-06-27 - O4 Authenticated Wire Acceptance After Window Repair
+
+Move: observer shift from blocked Chrome session to repo-supported Playwright
+passkey auth state and authenticated staging probe.
+
+Auth setup:
+
+- Command from `/Users/wiz/go-choir/frontend`:
+  `CHOIR_DEPLOYED_BASE_URL=https://choir.news CHOIR_AUTH_EMAIL=qa-a155c663-$(date +%s)@example.com node scripts/setup-auth-state.mjs --baseUrl https://choir.news --force`.
+- Result: created temporary staging user
+  `qa-a155c663-1782553302@example.com`, user id
+  `6e901f3d-1b4e-4ae4-a484-1068c05d2df3`, through the public passkey auth
+  flow; wrote local generated auth state to
+  `frontend/playwright/.auth/choir-news.storage.json`.
+
+Authenticated product proof:
+
+- Authenticated `/auth/session` returned HTTP 200 and authenticated user
+  `qa-a155c663-1782553302@example.com`.
+- Authenticated `/api/universal-wire/stories` returned HTTP 200 with
+  `source: universal-wire-edition-texture`, 12 stories, and edition
+  `universal-wire/Wire.texture`.
+- Edition doc id: `5ac77c23-2642-4b74-b557-87d05c87e79f`; revision id:
+  `8fb9686a-5cc3-402c-9b08-2a1b43f0ac59`.
+- First story: `Telegram Post from Metropoles Telegram`, doc
+  `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, semantic story
+  `src_b17b0dfd4c259187`, `change_type: legacy_revision_projection`,
+  `current_source_count: 24`, and manifest lead count 3.
+- Universal Wire UI rendered 12 cards, matching the API count.
+- Opening the first headline loaded a Texture window for doc
+  `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`; observed Texture requests were all
+  HTTP 200 and all used `read_owner=universal-wire-platform`:
+  document read, revisions read, selected revision read, and stream reads.
+- No `Get document failed (404)` alert or Texture 404 response was observed.
+- No helper/provenance phrases were observed in the API/UI proof packet:
+  `Universal Wire selected`, `graph-backed source captures`,
+  `published one English synthesis article instead of exposing raw capture
+  cards`, `source cluster`, or `reports read as one developing article`.
+- The UI still shows formulaic article copy in places, e.g. repeated
+  "A further update adds detail on telegram post from metropoles telegram";
+  this remains below provider/model-quality synthesis.
+
+Source-arrival boundary:
+
+- This proof observes the deployed state after the 768-capture repair; it does
+  not witness a fresh post-deploy source arrival and compare before/after
+  article state.
+- The current 12-story API payload includes one `source_added` semantic story
+  (`Telegram Post from Slavyangrad Telegram`, doc
+  `a0115ae7-9a5b-48a2-b219-8be33cd3a33a`) with
+  `previous_source_count: 2` and `current_source_count: 2`, so it does not by
+  itself prove source-count growth.
+
+Conjecture effect: the previous auth-control blocker is cleared. Deployed
+Universal Wire API/UI/open-Texture acceptance is supported for commit
+`a155c663142fd97289a36a2cc3c9eac7ef0902d2`; the remaining C6 conjecture is
+now specifically a live-arrival oracle problem, not an API/UI/open-path problem.
+
+Mutation class: green documentation/evidence only in this pass. Product state
+mutation was limited to creating a temporary QA user via the public auth flow
+for acceptance.
+
+Expected Delta V: 1 if authenticated acceptance could be restored while naming
+the remaining live-arrival oracle. Actual Delta V: 1. V decreases from 3 to 2.
+
+Next move: trigger or wait for a real sourcecycled source arrival, then compare
+authenticated `/api/universal-wire/stories` and Texture article state before
+and after to prove or falsify later-source same-article update semantics. If no
+public/product oracle can trigger or observe the arrival boundary, document
+that missing oracle before repairing it.
