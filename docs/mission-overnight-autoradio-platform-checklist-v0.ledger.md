@@ -11331,3 +11331,114 @@ existing synthesized Wire articles, run focused tests, push to `origin/main`,
 monitor CI/deploy, verify staging health identity, and replay authenticated
 Chrome product API proof until at least one deployed story exposes
 `semantic_story` without visible article-copy leakage.
+
+## 2026-06-27 - O4 Semantic DTO Backfill Repaired And Deployed
+
+Conjecture statement: existing synthesized Universal Wire Texture articles whose
+current revisions predate semantic metadata can still expose honest
+product-visible `semantic_story` evidence through the authenticated
+`/api/universal-wire/stories` route without mutating unrelated Texture articles
+or leaking internal ids into reader-facing copy.
+
+Verdict: supported at the narrow deployed product API tier.
+
+Problem Documentation First lineage:
+
+- Gap checkpoint commit:
+  `d6d18a9f70fbfdb77f57f50f1b26eda9cafba5ec` (`Document O4 semantic DTO
+  staging backfill gap`).
+- Repair commit:
+  `a10254d2072c8cc63c910551f3d1fb588fe87605` (`Backfill Wire semantic story
+  DTOs`).
+
+Repair summary: `internal/runtime/universal_wire.go` now has a narrow read-time
+fallback for known synthesized Universal Wire Texture article revisions that
+lack the newer semantic revision metadata. The fallback derives a stable
+legacy semantic state from existing durable Wire synthesis metadata such as
+cluster/cycle ids, source item ids, and source counts. It marks the DTO with
+schema `choir.universal_wire_story_cluster.semantic.legacy.v1` and change type
+`legacy_revision_projection`. It does not relax raw `choir.web_capture`
+diagnostic-only behavior and does not add internal ids to article prose.
+
+Local verification before push:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesBackfillsSemanticStoryForLegacySynthesisRevision' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 4.207s`.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics|TestHandleUniversalWireStoriesBackfillsSemanticStoryForLegacySynthesisRevision' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 4.964s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 10.863s`.
+- `git diff --check`: passed.
+
+Landing evidence:
+
+- Pushed commit:
+  `a10254d2072c8cc63c910551f3d1fb588fe87605`.
+- GitHub Actions CI run `28281421752`: success.
+- Docs Truth Check run `28281421753`: success.
+- FlakeHub run `28281421747`: success.
+- Deploy job `83798061615`: success.
+- `https://choir.news/health` reported proxy build/deployed commit
+  `a10254d2072c8cc63c910551f3d1fb588fe87605` and upstream sandbox
+  build/deployed commit
+  `a10254d2072c8cc63c910551f3d1fb588fe87605`.
+
+Authenticated staging product proof:
+
+- Used the owner's signed-in Google Chrome session through Computer Use.
+- Reloaded `https://choir.news/api/universal-wire/stories`; the page returned
+  authenticated JSON rather than 401.
+- A page-local JavaScript summary over the live response reported:
+  - `storyCount: 12`
+  - `semanticStoryCount: 12`
+  - `hasSemanticStoryLiteral: true`
+  - first story id
+    `source-network-texture-4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`
+  - first headline `Telegram Post from Metropoles Telegram`
+  - first semantic schema
+    `choir.universal_wire_story_cluster.semantic.legacy.v1`
+  - first `world_model_kind: universal_wire_semantic_story`
+  - first `change_type: legacy_revision_projection`
+  - first `source_count: 24`, `current_source_count: 24`,
+    `previous_source_count: 0`
+  - `copyLeak: false` for internal semantic-id/helper phrasing in
+    headline/dek/content.
+- Visible UI smoke in the same authenticated Chrome session showed Universal
+  Wire rendering `12 articles`; a headline-opened Texture article loaded at
+  `v66` with `Sources 24`, native source buttons, rendered article content, and
+  `Document loaded`.
+
+Dirty/generated artifact classification:
+
+- Root tracked changes for this evidence commit are intentional documentation:
+  `docs/mission-overnight-autoradio-platform-checklist-v0.md` and
+  `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`.
+- Pre-existing unrelated dirty paths remain preserved and unstaged:
+  `skills/parallax/SKILL.md` and
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- No temporary proof output or generated artifacts were introduced for this
+  final evidence update.
+
+Evidence boundary and non-claims: this settles only the narrow deployed
+semantic DTO observability predicate for existing/current synthesized Wire
+Texture articles. It does not prove provider/model-quality synthesis, production
+semantic clustering, Qdrant/world-model projection, publication/export,
+promotion/rollback/run acceptance, fresh source-provider ingestion, or deployed
+later-source update behavior.
+
+Heresy delta: `repaired` for the deployed semantic DTO backfill gap discovered
+after `b8cdcc75`. The broader News-system heresy remains `discovered`: the
+product is still using bounded deterministic grouping and formulaic synthesis
+rather than the owner's intended live multilingual semantic world model.
+
+Expected Delta V: 0 for this deployed backfill repair because it supports
+observability of C6/C8 state but does not decide the stronger live source-arrival
+or semantic clustering conjectures. Actual Delta V: 0. V remains 3.
+
+Next move: choose between another O4 realism slice and an O5-O8 handoff. If
+continuing O4, the next documented conjecture should target deployed
+source-arrival update behavior: a later relevant source should update the same
+semantic story/article through the product path rather than producing only
+stale DTO evidence or a separate card. A separate stronger conjecture remains
+needed for semantic/world-model clustering beyond the bounded deterministic
+topic/signal map.

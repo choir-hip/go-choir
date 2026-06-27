@@ -520,19 +520,24 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 3. Last delta: expected Delta V -1 for C11 direct
-stale-edition read repair; actual Delta V -1 after deployed proof. Last decided
+statement. Current value: 3. Last delta: expected Delta V 0 for C6/C8 semantic
+DTO backfill repair; actual Delta V 0 after deployed proof. Last decided
 conjecture: deployed commit
-`ad4d739e5f89e3574d4923b1bc580c50db53785d` supports C11 at the narrow product
-scope. CI run `28279556809`, Docs Truth Check run `28279556816`, FlakeHub run
-`28279556808`, deploy job `83792786877`, public health identity, and
-authenticated Computer Use replay all passed. The replay showed Universal Wire
-rendering `11 articles`, visible cards no longer carrying the old scaffold
-phrases, and a headline-opened Texture article loading at v66 with `Sources 24`,
-native source buttons, rendered article text, and `Document loaded`. Current
-live conjectures are: C6 later relevant sources update existing
-articles/world-model identities at deployed product scope; C8
-semantic/world-model clustering beyond bounded deterministic signals replaces
+`a10254d2072c8cc63c910551f3d1fb588fe87605` supports the narrow claim that
+current/stale synthesized Universal Wire Texture articles expose product-visible
+`semantic_story` DTO evidence through the authenticated product API without
+leaking internal semantic ids into article copy. CI run `28281421752`, Docs
+Truth Check run `28281421753`, FlakeHub run `28281421747`, deploy job
+`83798061615`, health identity, and authenticated Computer Use replay all
+passed. The replay showed 12 stories, `semanticStoryCount: 12`, literal
+`semantic_story` present, the first story using
+`choir.universal_wire_story_cluster.semantic.legacy.v1` with
+`legacy_revision_projection`, `source_count: 24`, and `copyLeak: false`. UI
+smoke still showed Universal Wire rendering 12 articles and a headline-opened
+Texture article loading at v66 with `Sources 24`, native source buttons, and
+`Document loaded`. Current live conjectures remain: C6 later relevant sources
+update existing articles/world-model identities at deployed source-arrival scope;
+C8 semantic/world-model clustering beyond bounded deterministic signals replaces
 heuristic grouping; C9 O5-O8 embed the Autoradio benchmark into durable Choir
 product paths.
 
@@ -542,29 +547,25 @@ for broader O5-O8 unless the owner grants a new long run.
 authority / bounds: Orchestration may create Codex worker/verifier threads,
 inspect worktrees, make docs/checkpoint commits, and land reviewed code through
 the repo loop. User granted staging deploy by pushing to `origin/main` and
-authenticated Chrome QA on `choir.news`. The visible Chrome app shell is now
-authenticated enough for product UI proof, while direct raw navigation to
-`/api/universal-wire/stories` still returns HTTP 401 and should not be mistaken
-for a non-empty product result. Behavior-changing work must name mutation class,
-protected surfaces, admissible evidence, rollback path, conjecture delta, and
-heresy delta before editing.
+authenticated Chrome QA on `choir.news`. The visible Chrome app shell and a
+direct Chrome tab to `/api/universal-wire/stories` are authenticated enough for
+product UI/API proof in the owner's session; unauthenticated shell/API calls
+remain outside that product path. Behavior-changing work must name mutation
+class, protected surfaces, admissible evidence, rollback path, conjecture delta,
+and heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green documentation-first
-checkpoint for the C6/C8 product-observability gap discovered after deploying
-the accepted semantic story-state slice. The next implementation move is
-orange/red because it will likely change public Universal Wire story DTOs,
-Texture revision projection, authenticated product acceptance probes, or
-runtime diagnostics for semantic story state. Protected surfaces are Universal
-Wire sourcecycled ingestion, `/api/universal-wire/stories`, Wire story DTO
-contracts, `choir.universal_wire_story_cluster` object body/metadata, Texture
-revision metadata projection, source entity/source_ref projection, Wire edition
-linkage, and platform Texture sync/read paths. Rollback path is revert the next
-implementation commit(s) to deployed baseline
-`7744b1ea443113b358436899f664f95796bad135` plus dependent evidence commits. The
-next move must not touch auth/session renewal, vmctl, deployment routing,
-provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
-publication/export outside existing Wire edition helpers unless a separate
-checkpoint names that broader conjecture.
+mutation class / protected surfaces: Current move is green documentation
+settlement after an orange/red deployed repair. The repaired protected surfaces
+were `/api/universal-wire/stories`, Wire story DTO projection, Universal Wire
+Texture article revision metadata fallback, source_ref/source_entity boundaries,
+raw `choir.web_capture` diagnostic-only behavior, and staging product
+acceptance. Rollback path is revert
+`a10254d2072c8cc63c910551f3d1fb588fe87605` and, if needed, revert
+`b8cdcc75dd8d88e933c791f7cd4dc113423ae232` plus dependent docs/evidence
+commits. The next move must not touch auth/session renewal, vmctl, deployment
+routing, provider/gateway credentials, Qdrant, promotion/rollback, run
+acceptance, or publication/export outside existing Wire edition helpers unless a
+separate checkpoint names that broader conjecture.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -574,23 +575,21 @@ worker proof may stop at focused tests, `git diff --check`, commit SHA, dirty
 classification, residual risks, and non-claims. Docs-only moves need diff
 hygiene and Docs Truth Check if pushed.
 
-heresy delta: `repaired` at branch-local tier for the narrow C6/C8 semantic
-story-state slice: the accepted code records semantic story identity/change in
-graph/revision metadata and revises the linked Texture article without exposing
-internal ids in public copy. `repaired` at deployed smoke tier for not regressing
-Universal Wire/Texture readability after the semantic-state landing: staging
-health identity and authenticated Chrome UI showed Universal Wire and a loaded
-Texture article still work. `discovered` remains at deployed product scope for a
-stronger C6/C8 claim: product evidence still does not expose or exercise the
-semantic state/update contract directly. `repaired` remains at deployed product
-scope for C11, the stale scaffold-framed Universal Wire Texture article
+heresy delta: `repaired` at deployed product API tier for the narrow C6/C8
+semantic story DTO observability gap: current/stale synthesized Wire Texture
+articles now return `semantic_story` evidence through authenticated
+`/api/universal-wire/stories` without exposing internal semantic ids in
+reader-facing copy. `repaired` remains at branch-local tier for the semantic
+story-state slice that records semantic story identity/change in graph/revision
+metadata and revises the linked Texture article. `repaired` remains at deployed
+product scope for C11, the stale scaffold-framed Universal Wire Texture article
 read-repair gap. `repaired` also remains for prior read-owner, platformd
 current-head, revision envelope, source-copy, supplied-revision sync,
 zero-article, deterministic multi-article readability, and source-opening
 regressions recorded in the ledger. `discovered` remains for semantic production
-cluster selection, provider/model synthesis quality, source freshness, live
-world-model maintenance beyond the deterministic state slice, and the fact that
-the product is still below the intended semantic multi-article world model.
+cluster selection, provider/model synthesis quality, source freshness, deployed
+later-source arrival update proof, Qdrant/world-model projection, and the fact
+that the product is still below the intended semantic multi-article world model.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
 evidence. O4 has climbed from zero articles, raw capture cards, blank Texture
@@ -628,32 +627,33 @@ authenticated tabs for structured API replay because another extension UI was
 blocking automation, so product proof remains UI-smoke level for the semantic
 state slice.
 
-New product-evidence gap: verifier thread
+Deployed semantic DTO backfill repaired: verifier thread
 `019f07b9-44a8-7b50-8984-e97afbe0d7a1` accepted worker commit
 `8007d00c2803c65b7b32323debe340bef95fd87e`; root incorporated it as
-`b8cdcc75dd8d88e933c791f7cd4dc113423ae232`, pushed it, and CI run
-`28281037662`, FlakeHub run `28281037672`, and staging deploy passed. Health
-reports proxy and sandbox deployed commit
-`b8cdcc75dd8d88e933c791f7cd4dc113423ae232`. Authenticated Chrome product API
+`b8cdcc75dd8d88e933c791f7cd4dc113423ae232`, then staging product proof
+discovered that current/stale Wire Texture article revisions lacked the new
+semantic metadata. Root documented that gap in
+`d6d18a9f70fbfdb77f57f50f1b26eda9cafba5ec` and repaired the read-time fallback
+in `a10254d2072c8cc63c910551f3d1fb588fe87605`. CI run `28281421752`, Docs
+Truth Check run `28281421753`, FlakeHub run `28281421747`, and deploy job
+`83798061615` passed. Health reports proxy and sandbox deployed commit
+`a10254d2072c8cc63c910551f3d1fb588fe87605`. Authenticated Chrome product API
 proof loaded `https://choir.news/api/universal-wire/stories` in the owner's
-signed-in Chrome session and returned 12 stories, but a page-local summary over
-that response found `semanticStoryCount: 0` and no literal `semantic_story`
-field. The visible UI still shows 12 readable articles, loaded Texture v66,
-`Sources 24`, native source buttons, and no internal-id leak. Therefore the
-branch-local DTO projection is not enough for deployed product acceptance:
-current/stale Wire Texture article revisions lack the new semantic metadata, so
-the read route returns article data without the new semantic predicate.
+signed-in Chrome session and returned 12 stories; a page-local summary found
+`semanticStoryCount: 12`, literal `semantic_story`, first-story schema
+`choir.universal_wire_story_cluster.semantic.legacy.v1`, change type
+`legacy_revision_projection`, `source_count: 24`, and `copyLeak: false`. Visible
+UI smoke still showed Universal Wire with 12 articles and the opened Texture
+article at v66 with `Sources 24`, native source buttons, and `Document loaded`.
 
-next move: repair the deployed semantic DTO backfill/read path. The smallest
-root repair should make existing Universal Wire Texture article stories return
-an honest `semantic_story` field when they are known synthesized Wire articles
-but their current revisions predate semantic metadata. Prefer a narrow
-read-time fallback from existing durable revision metadata such as
-`universal_wire_story_cluster_id`, `source_network_cycle_id`, source counts, and
-source item ids, or an equivalent repair that does not mutate unrelated Texture
-articles and does not put internal ids into reader-facing article copy. Then
-run focused tests, push, monitor CI/deploy, and replay authenticated product API
-proof until semantic DTO evidence is present on staging.
+next move: decide the next realism axis. The most valuable O4 observer is no
+longer whether a semantic DTO exists; it is whether deployed source arrival
+updates the same semantic story/article without manual reseeding, and whether
+bounded deterministic grouping can be replaced or constrained by a stronger
+semantic/world-model source selection layer. If continuing O4, document that
+specific conjecture before changing sourcecycled ingestion, clustering, or
+Texture synthesis behavior. Otherwise hand off to O5-O8 with the remaining V
+and residual Universal Wire limits explicit.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -680,24 +680,29 @@ shows the UI did not regress, but the useful next observer is a product-visible
 semantic update proof rather than another card readability check. Worker thread
 `019f07b2-e6d9-7593-9f23-5e93410ceb94` produced commit `8007d00c`, verifier
 thread `019f07b9-44a8-7b50-8984-e97afbe0d7a1` accepted it, and root deployed it
-as `b8cdcc75`. The new learning is that additive DTO code is not enough when
-the staging edition is served from existing article revisions that predate the
-semantic metadata. Product proof must include legacy/current article backfill or
-fallback behavior, not only fresh branch-local synthesis fixtures.
+as `b8cdcc75`. The follow-up learning is that additive DTO code was not enough
+when the staging edition was served from existing article revisions that
+predated the semantic metadata. Root commit `a10254d2` repaired that read-time
+fallback and deployed proof now shows 12/12 current stories carrying
+`semantic_story`. Product proof for semantic observability must include
+legacy/current article fallback behavior, not only fresh branch-local synthesis
+fixtures. The next hard proof is source-arrival update behavior, not DTO
+existence.
 
 settlement: not settled. O4 is accepted for deployed deterministic
-multi-article readability and direct stale-edition read repair at
-`ad4d739e5f89e3574d4923b1bc580c50db53785d`: CI/deploy, health identity, and
-authenticated product replay support that narrow claim. The actual News
-benchmark remains open until authenticated staging evidence shows multilingual
-live ingestion producing coherent English synthesis Texture articles over
-durable semantic source/world-model objects, with later relevant sources
-updating existing articles. O5 has started through prompt-bar/Texture/Super
-request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
-`blocked`, or `superseded` with remaining V and next assignment explicit.
+multi-article readability, direct stale-edition read repair, and current/stale
+semantic DTO observability through `a10254d2072c8cc63c910551f3d1fb588fe87605`:
+CI/deploy, health identity, and authenticated product replay support those
+narrow claims. The actual News benchmark remains open until authenticated
+staging evidence shows multilingual live ingestion producing coherent English
+synthesis Texture articles over durable semantic source/world-model objects,
+with later relevant sources updating existing articles. O5 has started through
+prompt-bar/Texture/Super request evidence; O5-O8 remain open. Exit requires
+`settled`, `open_handoff`, `blocked`, or `superseded` with remaining V and next
+assignment explicit.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `b8cdcc75dd8d88e933c791f7cd4dc113423ae232`; CI run `28281037662`, FlakeHub run `28281037672`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. This deploy includes root behavior commit `b8cdcc75`, accepted by verifier thread `019f07b9-44a8-7b50-8984-e97afbe0d7a1`, which adds additive structured `semantic_story` evidence to authenticated WireStory DTOs for synthesized Universal Wire Texture articles. Authenticated Chrome/Computer Use proof loaded `https://choir.news/api/universal-wire/stories` in the owner's signed-in Chrome session: it returned 12 stories, but a page-local summary found `semanticStoryCount: 0` and no literal `semantic_story` field. Visible UI smoke still shows 12 readable articles, Texture v66, `Sources 24`, native source buttons, and no internal semantic-id leak. Current gap: existing/stale Wire Texture article revisions on staging predate semantic metadata, so the deployed read route does not backfill the new product-observable semantic predicate. Next move: repair the semantic DTO backfill/read path for existing synthesized Wire articles without mutating unrelated Texture articles or leaking internal ids into reader-facing copy, then rerun focused tests, push, monitor CI/deploy, and replay authenticated product API proof. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `a10254d2072c8cc63c910551f3d1fb588fe87605`; CI run `28281421752`, Docs Truth Check run `28281421753`, FlakeHub run `28281421747`, deploy job `83798061615`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. This deploy includes docs-first gap commit `d6d18a9f70fbfdb77f57f50f1b26eda9cafba5ec` and repair commit `a10254d2072c8cc63c910551f3d1fb588fe87605`, which backfills authenticated WireStory `semantic_story` DTO evidence for existing synthesized Universal Wire Texture articles whose revisions predate semantic metadata. Authenticated Chrome/Computer Use proof loaded `https://choir.news/api/universal-wire/stories` in the owner's signed-in Chrome session: it returned 12 stories, `semanticStoryCount: 12`, literal `semantic_story`, first-story schema `choir.universal_wire_story_cluster.semantic.legacy.v1`, change type `legacy_revision_projection`, `source_count: 24`, and `copyLeak: false`. Visible UI smoke still shows 12 readable articles, Texture v66, `Sources 24`, native source buttons, and `Document loaded`. This settles only semantic DTO observability for current/stale synthesized Wire articles. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Next move: decide whether to continue O4 on deployed later-source update behavior and stronger semantic/world-model clustering, or hand off to O5-O8 with these residual O4 limits explicit. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
