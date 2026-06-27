@@ -8513,3 +8513,74 @@ individually depending on which deployed replay regresses.
 Heresy delta: `repaired` at code/deploy-identity scope for the read-owner leak
 and direct-platformd sync gap; `discovered` remains for missing final
 authenticated product replay and the broader O4 product target.
+
+## 2026-06-27 - O4 Post-Direct-Sync Product Replay Shows Zero Wire Articles
+
+Claim: the broad deployed Texture read failure is no longer reproduced in the
+signed-in product surface after `d4bd1c65`, but Universal Wire still fails the
+article-surface objective because it renders zero publishable articles.
+
+Move: authenticated Computer Use product replay on `https://choir.news`, then
+Problem Documentation First before assigning a code repair.
+
+Evidence:
+
+- Public health still reports proxy and sandbox deployed commit
+  `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c`.
+- Chrome Computer Use selected a signed-in Choir tab; the Desk surface showed
+  account `YUSEFNATHANSON@ME.COM` and `Online`.
+- Ordinary Texture product surface loaded
+  `untitled-texture-b754241a.texture`, title/body beginning `Fix This Code`,
+  and explicit status text `Document loaded`; no `Get document failed (404)` was
+  present in that surface.
+- Opening Universal Wire from the signed-in Desk rendered `0 articles` and the
+  empty article screen `No Wire edition articles yet`.
+- Universal Wire diagnostics in the product UI:
+  - Texture edition: edition exists, but no transcluded Texture story is
+    currently publishable (`3 candidates, 0 stories, 3 filtered`).
+  - Graph captures: graph-backed web captures are available, but Universal Wire
+    does not publish raw capture projections as articles; Texture synthesis has
+    not published an edition yet (`12 candidates, 12 stories`).
+  - Source provenance: no Texture synthesis article is available for source
+    citation provenance (`0 candidates, 0 stories`).
+- The direct raw `/api/universal-wire/stories` tab still displayed
+  `{"error":"authentication required"}`, so it is not treated as the
+  authenticated product result.
+- Owner clarified after the replay that user VM state is in user VM images.
+  `/Users/wiz/vm-images` exists locally and is admissible for diagnostic
+  state-shape inspection by the next worker; this checkpoint does not authorize
+  mutation of VM images or persistent user-computer state.
+
+Actual Delta V: 0. The replay bought observer evidence and narrowed the failure,
+but it does not decrease O4 because Universal Wire still has no readable article
+headline to open. V remains 28.
+
+Evidence boundary/non-claims: this proves ordinary Texture document loading in
+one signed-in Chrome tab and proves Universal Wire zero-article rendering in the
+same product session. It does not prove native API auth state, provider/search
+freshness, semantic clustering, full world-model maintenance, update-existing
+article behavior, Qdrant, promotion/rollback, run acceptance, or O5-O8 progress.
+
+Mutation class / protected surfaces: this checkpoint is green documentation.
+The next worker is expected to be orange/yellow if it changes Universal Wire
+runtime materialization, story filtering, platform Texture read/publish sync,
+frontend rendering, or tests. It must preserve the diagnostic-only raw capture
+rule and must not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance,
+candidate computers, or publication/export outside existing Wire helpers unless
+a new documented conjecture justifies it.
+
+Rollback path: revert this docs checkpoint for wording only. Runtime rollback
+remains commit-specific: `d4bd1c65`, `378ab05b`, and/or `3ea24284` can be
+reverted independently if the next repair proves one introduced the zero-article
+filtering behavior.
+
+Heresy delta: `repaired` for broad Texture read failure at product-surface scope;
+`discovered` for post-direct-sync Universal Wire zero-article state despite an
+existing edition and three filtered edition candidates.
+
+Next thread assignment: create a bounded O4 worker thread to investigate and
+repair why the deployed direct-sync path leaves Universal Wire with zero
+publishable articles after `d4bd1c65`, while preserving raw graph captures as
+diagnostic-only substrate and treating `/Users/wiz/vm-images` as a diagnostic
+pointer, not a mutation target.
