@@ -1075,8 +1075,14 @@ func universalWireSourcecycledTestItem(id, sourceID, fetchID, title, url, langua
 
 func postInternalSourcecycledWebCapturesForTest(t *testing.T, handler *APIHandler, items []sources.Item, now time.Time) internalSourcecycledWebCapturesResponse {
 	t.Helper()
+	return postInternalSourcecycledWebCapturesWithCycleForTest(t, handler, "", items, now)
+}
+
+func postInternalSourcecycledWebCapturesWithCycleForTest(t *testing.T, handler *APIHandler, cycleID string, items []sources.Item, now time.Time) internalSourcecycledWebCapturesResponse {
+	t.Helper()
 	body, err := json.Marshal(internalSourcecycledWebCapturesRequest{
 		OwnerID: universalWirePlatformOwnerID(),
+		CycleID: cycleID,
 		Items:   items,
 		Now:     now.Format(time.RFC3339Nano),
 	})
@@ -2118,6 +2124,97 @@ func TestHandleUniversalWireStoriesRequiresAuth(t *testing.T) {
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth story status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUniversalWireLiveArrivalRequiresAuth(t *testing.T) {
+	_, handler := testAPISetup(t)
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/live-arrival", "", "")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth live-arrival status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleUniversalWireLiveArrivalExposesLatestSourcecycledBoundary(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 27, 11, 2, 3, 0, time.UTC)
+	items := []sources.Item{
+		universalWireSourcecycledTestItem("rail-live-1", "railwire", "fetch-rail-1", "Metro rail expansion opens", "https://example.test/rail/live-1", "es", "The metro rail expansion opened with new cross-city service and crowded morning platforms.", now.Add(-3*time.Minute)),
+		universalWireSourcecycledTestItem("rail-live-2", "railwire", "fetch-rail-2", "Rail expansion draws morning riders", "https://example.test/rail/live-2", "pt", "Morning riders used the new cross-city metro rail expansion as service began downtown.", now.Add(-2*time.Minute)),
+	}
+
+	projection := postInternalSourcecycledWebCapturesWithCycleForTest(t, handler, "cycle_live_arrival_test", items, now)
+	if projection.SynthesisStatus != "ok" || projection.SynthesisDocID == "" || projection.SynthesisRevisionID == "" {
+		t.Fatalf("projection = %+v, want synthesized Texture article", projection)
+	}
+	beforeObjects, err := handler.rt.ObjectGraph().ListObjects(context.Background(), objectgraph.ListFilter{
+		Kind:    objectgraph.WebCaptureObjectKind,
+		OwnerID: universalWirePlatformOwnerID(),
+		Limit:   10,
+	})
+	if err != nil {
+		t.Fatalf("list captures before oracle read: %v", err)
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/live-arrival", "", "reader-1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/live-arrival status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireLiveArrivalResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode live-arrival response: %v", err)
+	}
+	if resp.Status != "available" || resp.Latest == nil {
+		t.Fatalf("live-arrival response = %+v, want available latest status", resp)
+	}
+	latest := *resp.Latest
+	if latest.CycleID != "cycle_live_arrival_test" ||
+		latest.BoundaryID != "cycle_live_arrival_test" ||
+		latest.ObservedAt != now.Format(time.RFC3339Nano) ||
+		latest.Phase != "web_captures_graph_written" ||
+		latest.Status != "ok" ||
+		latest.SourceItemCount != 2 ||
+		latest.CaptureCount != 2 ||
+		latest.SourceEntityCount != 2 ||
+		latest.CapturedFromEdges != 2 ||
+		latest.SynthesisStatus != "ok" ||
+		latest.SynthesisDocID != projection.SynthesisDocID ||
+		latest.SynthesisRevisionID != projection.SynthesisRevisionID ||
+		latest.SynthesisClusterID != projection.SynthesisClusterID {
+		t.Fatalf("latest live-arrival = %+v, projection = %+v", latest, projection)
+	}
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal live-arrival response: %v", err)
+	}
+	if strings.Contains(string(encoded), "The metro rail expansion opened") ||
+		strings.Contains(string(encoded), "Morning riders used") ||
+		strings.Contains(string(encoded), "rail-live-1") {
+		t.Fatalf("live-arrival response leaked source payload or raw source ids: %s", string(encoded))
+	}
+
+	stories := getUniversalWireStoriesForTest(t, handler)
+	story := universalWireStoryWithDocForTest(stories.Stories, projection.SynthesisDocID)
+	if story == nil || story.SemanticStory == nil || story.SemanticStory.ChangeType != "story_created" {
+		t.Fatalf("stories = %+v, want oracle synthesis doc correlated with public Wire story", stories)
+	}
+	assertUniversalWireStoryTextureReadableForTest(t, handler, *story, projection.SynthesisRevisionID)
+
+	second := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/live-arrival", "", "reader-1")
+	if second.Code != http.StatusOK {
+		t.Fatalf("second GET /api/universal-wire/live-arrival status = %d body=%s", second.Code, second.Body.String())
+	}
+	afterObjects, err := handler.rt.ObjectGraph().ListObjects(context.Background(), objectgraph.ListFilter{
+		Kind:    objectgraph.WebCaptureObjectKind,
+		OwnerID: universalWirePlatformOwnerID(),
+		Limit:   10,
+	})
+	if err != nil {
+		t.Fatalf("list captures after oracle read: %v", err)
+	}
+	if len(afterObjects) != len(beforeObjects) {
+		t.Fatalf("live-arrival oracle changed graph capture count from %d to %d", len(beforeObjects), len(afterObjects))
 	}
 }
 

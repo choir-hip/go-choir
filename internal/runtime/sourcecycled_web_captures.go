@@ -19,6 +19,7 @@ import (
 type internalSourcecycledWebCapturesRequest struct {
 	OwnerID    string         `json:"owner_id"`
 	ComputerID string         `json:"computer_id,omitempty"`
+	CycleID    string         `json:"cycle_id,omitempty"`
 	Items      []sources.Item `json:"items"`
 	Now        string         `json:"now,omitempty"`
 }
@@ -98,6 +99,34 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		synthesisStatus = "ok"
 		synthesisSkipReason = ""
 	}
+	status := universalWireLiveArrivalStatus{
+		SchemaVersion:            objectgraph.UniversalWireLiveArrivalStatusSchemaVersion,
+		BoundaryID:               universalWireLiveArrivalBoundaryID(req.CycleID, now),
+		CycleID:                  strings.TrimSpace(req.CycleID),
+		ObservedAt:               now.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:                now.UTC().Format(time.RFC3339Nano),
+		Phase:                    "web_captures_graph_written",
+		Status:                   "ok",
+		ObjectGraphMode:          "runtime_api",
+		SourceItemCount:          len(req.Items),
+		CaptureCount:             len(result.Captures),
+		SourceEntityCount:        len(result.SourceEntities),
+		CapturedFromEdges:        result.EdgeCount,
+		SkippedItemCount:         result.Skipped,
+		SynthesisStatus:          synthesisStatus,
+		SynthesisDocID:           synthesis.Doc.DocID,
+		SynthesisRevisionID:      synthesis.Revision.RevisionID,
+		SynthesisClusterID:       synthesis.ClusterID,
+		SynthesisClusterObjectID: synthesis.ClusterObjectID,
+		SynthesisSourceCount:     synthesis.SourceCount,
+		SynthesisClusterCount:    synthesis.ClusterCount,
+		SynthesisEditionRef:      synthesis.EditionRef,
+		SynthesisSkipReason:      synthesisSkipReason,
+	}
+	if err := h.rt.recordUniversalWireLiveArrivalStatus(r.Context(), status, now); err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
 	writeAPIJSON(w, http.StatusCreated, internalSourcecycledWebCapturesResponse{
 		Status:                   "ok",
 		CaptureCount:             len(result.Captures),
@@ -114,6 +143,128 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		SynthesisEditionRef:      synthesis.EditionRef,
 		SynthesisSkipReason:      synthesisSkipReason,
 	})
+}
+
+type universalWireLiveArrivalResponse struct {
+	Status string                          `json:"status"`
+	Latest *universalWireLiveArrivalStatus `json:"latest,omitempty"`
+}
+
+type universalWireLiveArrivalStatus struct {
+	SchemaVersion            string `json:"schema_version"`
+	BoundaryID               string `json:"boundary_id"`
+	CycleID                  string `json:"cycle_id,omitempty"`
+	ObservedAt               string `json:"observed_at"`
+	UpdatedAt                string `json:"updated_at"`
+	Phase                    string `json:"phase"`
+	Status                   string `json:"status"`
+	ObjectGraphMode          string `json:"objectgraph_mode,omitempty"`
+	SourceItemCount          int    `json:"source_item_count"`
+	CaptureCount             int    `json:"capture_count"`
+	SourceEntityCount        int    `json:"source_entity_count"`
+	CapturedFromEdges        int    `json:"captured_from_edges"`
+	SkippedItemCount         int    `json:"skipped_item_count"`
+	SynthesisStatus          string `json:"synthesis_status,omitempty"`
+	SynthesisDocID           string `json:"synthesis_doc_id,omitempty"`
+	SynthesisRevisionID      string `json:"synthesis_revision_id,omitempty"`
+	SynthesisClusterID       string `json:"synthesis_cluster_id,omitempty"`
+	SynthesisClusterObjectID string `json:"synthesis_cluster_object_id,omitempty"`
+	SynthesisSourceCount     int    `json:"synthesis_source_count,omitempty"`
+	SynthesisClusterCount    int    `json:"synthesis_cluster_count,omitempty"`
+	SynthesisEditionRef      string `json:"synthesis_edition_ref,omitempty"`
+	SynthesisSkipReason      string `json:"synthesis_skip_reason,omitempty"`
+}
+
+func (h *APIHandler) HandleUniversalWireLiveArrival(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if _, err := authenticateUser(r); err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	status, ok, err := h.rt.latestUniversalWireLiveArrivalStatus(r.Context())
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	if !ok {
+		writeAPIJSON(w, http.StatusOK, universalWireLiveArrivalResponse{Status: "unavailable"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, universalWireLiveArrivalResponse{Status: "available", Latest: &status})
+}
+
+func (rt *Runtime) recordUniversalWireLiveArrivalStatus(ctx context.Context, status universalWireLiveArrivalStatus, now time.Time) error {
+	if rt == nil || rt.ObjectGraph() == nil {
+		return nil
+	}
+	if status.SchemaVersion == "" {
+		status.SchemaVersion = objectgraph.UniversalWireLiveArrivalStatusSchemaVersion
+	}
+	if status.BoundaryID == "" {
+		status.BoundaryID = universalWireLiveArrivalBoundaryID(status.CycleID, now)
+	}
+	if status.ObservedAt == "" {
+		status.ObservedAt = now.UTC().Format(time.RFC3339Nano)
+	}
+	status.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
+	if status.Status == "" {
+		status.Status = "ok"
+	}
+	if status.Phase == "" {
+		status.Phase = "web_captures_graph_written"
+	}
+	_, err := rt.ObjectGraph().CreateObject(ctx, objectgraph.CreateObjectRequest{
+		Kind:        objectgraph.UniversalWireLiveArrivalStatusObjectKind,
+		OwnerID:     universalWirePlatformOwnerID(),
+		IdentityKey: "latest",
+		VersionID:   status.BoundaryID,
+		Metadata:    status,
+		Now:         now,
+	})
+	if err != nil {
+		return fmt.Errorf("record universal wire live-arrival status: %w", err)
+	}
+	return nil
+}
+
+func (rt *Runtime) latestUniversalWireLiveArrivalStatus(ctx context.Context) (universalWireLiveArrivalStatus, bool, error) {
+	if rt == nil || rt.ObjectGraph() == nil {
+		return universalWireLiveArrivalStatus{}, false, nil
+	}
+	notTombstoned := false
+	objects, err := rt.ObjectGraph().ListObjects(ctx, objectgraph.ListFilter{
+		Kind:      objectgraph.UniversalWireLiveArrivalStatusObjectKind,
+		OwnerID:   universalWirePlatformOwnerID(),
+		Limit:     1,
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		return universalWireLiveArrivalStatus{}, false, fmt.Errorf("read universal wire live-arrival status: %w", err)
+	}
+	if len(objects) == 0 {
+		return universalWireLiveArrivalStatus{}, false, nil
+	}
+	var status universalWireLiveArrivalStatus
+	if err := json.Unmarshal(objects[0].Metadata, &status); err != nil {
+		return universalWireLiveArrivalStatus{}, false, fmt.Errorf("decode universal wire live-arrival status: %w", err)
+	}
+	if status.UpdatedAt == "" && !objects[0].UpdatedAt.IsZero() {
+		status.UpdatedAt = objects[0].UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return status, true, nil
+}
+
+func universalWireLiveArrivalBoundaryID(cycleID string, observedAt time.Time) string {
+	if cycleID = strings.TrimSpace(cycleID); cycleID != "" {
+		return cycleID
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	return "sourcecycled-observed-" + observedAt.UTC().Format("20060102T150405.000000000Z")
 }
 
 type universalWireGraphSynthesisResult struct {

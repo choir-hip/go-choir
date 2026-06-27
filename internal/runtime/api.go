@@ -1723,6 +1723,7 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)
 	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
 	s.HandleFunc("/api/content/", h.HandleContentRouter)
+	s.HandleFunc("/api/universal-wire/live-arrival", h.HandleUniversalWireLiveArrival)
 	s.HandleFunc("/api/universal-wire/stories", h.HandleUniversalWireStories)
 	s.HandleFunc("/api/ws", h.HandleLiveWS)
 	s.HandleFunc("/api/browser/capabilities", h.HandleBrowserCapabilities)
