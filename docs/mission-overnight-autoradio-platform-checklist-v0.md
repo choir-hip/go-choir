@@ -592,9 +592,10 @@ read-repair gap. `repaired` also remains for prior read-owner, platformd
 current-head, revision envelope, source-copy, supplied-revision sync,
 zero-article, deterministic multi-article readability, and source-opening
 regressions recorded in the ledger. `discovered` remains for semantic production
-cluster selection, provider/model synthesis quality, source freshness, deployed
-later-source arrival update proof, Qdrant/world-model projection, and the fact
-that the product is still below the intended semantic multi-article world model.
+cluster selection, provider/model synthesis quality, source freshness, the
+missing product/public live-arrival oracle, deployed later-source arrival update
+proof, Qdrant/world-model projection, and the fact that the product is still
+below the intended semantic multi-article world model.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
 evidence. O4 is accepted for deployed deterministic multi-article readability,
@@ -769,6 +770,29 @@ shift through worker handle `local:66c4a018-6109-4ada-aeb2-b47a4c3f11f1`
 real sourcecycled arrival and compare article state before/after, or document
 the missing live-arrival oracle as the next runtime/product gap.
 
+O4 live-arrival oracle probe: worker
+`O4-live-source-arrival-oracle-product-proof-worker` found no authorized
+product/public route to trigger a sourcecycled cycle or read a sourcecycled
+cycle boundary. The admissible public observer found is authenticated
+`/api/universal-wire/stories` plus public Texture document/revision reads.
+Temporary user `qa-o4-oracle-1782553934@example.com` captured 21 authenticated
+snapshots from `2026-06-27T09:53:30Z` through `2026-06-27T10:14:05Z` against
+deployed commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`; the surface stayed
+stable at 12 `universal-wire-edition-texture` stories, edition doc
+`5ac77c23-2642-4b74-b557-87d05c87e79f`, edition revision
+`8fb9686a-5cc3-402c-9b08-2a1b43f0ac59`, and zero story/revision diffs. This is
+not proof that no sourcecycled arrival happened. It is proof that the product
+currently lacks a public live-arrival oracle strong enough to decide the C6
+fresh-arrival update predicate without either waiting opportunistically for a
+visible story transition or using forbidden internal/source-service evidence.
+
+Next C6 move: add or expose an authorized product live-arrival oracle before
+claiming fresh-arrival update semantics. A safe oracle would minimally expose a
+public authenticated sourcecycled cycle handle/timestamp or product work-item
+event that can be correlated with before/after `/api/universal-wire/stories` and
+Texture revision/source snapshots without seeding success through internal or
+test-only routes.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -805,5 +829,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=2 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root documented the Universal Wire API/UI mismatch in `9509d708`, repaired stale Universal Wire Texture restore read scope in `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`, pushed to origin main, and completed the landing loop: CI run `28284272706`, FlakeHub run `28284272684`, deploy job `83805645285`, and health identity passed with proxy and sandbox deployed_commit `bef7fa0c7ec24fbc7f3e73bf765c11a6d8cd0a35`. Authenticated Playwright product proof in temporary user `qa-bef7fa0c-1782550286@example.com` showed `/api/universal-wire/stories` returning 12 `universal-wire-edition-texture` stories, the Universal Wire UI rendering 12 cards, the first headline opening a Texture article, and Texture document/revision/stream requests using `read_owner=universal-wire-platform`; no documented helper/provenance phrases appeared in API/UI/Texture surfaces. The API/UI mismatch and headline-open 404 are repaired for the tested staging path. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Worker thread `019f084b-4a32-7bc3-bdbf-b0733f346aaf` produced branch-local test/evidence commit `5ab674102ed2826c4c5a84ec00a38343af160526` for `O4-live-source-arrival-update-product-reality-slice`; verifier thread `019f084f-b19e-77d2-9ba6-15b359ec7176` accepted it; root incorporated it as `bacf3e0a`. The accepted slice proves the post-arrival product DTO carries same story/article identity, typed `source_added` semantic state, and all prior/new source-viewer-ready manifest entries in branch/root tests only. Root pushed the incorporation/evidence chain as `91772b065e193e443723810d50092d66d12cd935`; GitHub CI run `28284738983`, Docs Truth Check run `28284738984`, and FlakeHub run `28284738982` passed, with frontend build and staging deploy skipped. Fresh staging observer evidence with temporary user `qa-o4-live-update-1782550786@example.com` returned 12 edition stories and same-doc revision histories but did not prove deployed new-source incorporation because visible later revisions mostly preserve source counts; one `source_added` story has previous/current source counts both 2. Worker thread `019f085c-cd49-7630-8e4a-31a22e26c8a9` produced docs-first commit `b0e89b21` and repair commit `bbd9f2db` for the deployed-cycle window gap; verifier thread `019f0862-4633-7a02-99ff-4b5e29a4c7d4` accepted; root incorporated as `e670a036` and `a155c663` and pushed `a155c663142fd97289a36a2cc3c9eac7ef0902d2`. CI run `28285181588`, Docs Truth Check `28285181580`, FlakeHub `28285181587`, and deploy job `83808065484` passed; health reports proxy/sandbox deployed_commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`; unauthenticated `/api/universal-wire/stories` returns 401. Root then created temporary user `qa-a155c663-1782553302@example.com` through the repo-supported Playwright passkey auth path and ran authenticated deployed proof: `/api/universal-wire/stories` returned 12 `universal-wire-edition-texture` stories, Universal Wire UI rendered 12 cards, and opening the first headline loaded Texture doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` through `read_owner=universal-wire-platform` with no 404 and no helper/provenance phrases. This proves the deployed API/UI/open-Texture path after the 768-capture repair, but not fresh post-deploy source-arrival update semantics. Worker handle `local:66c4a018-6109-4ada-aeb2-b47a4c3f11f1` is queued for `O4-live-source-arrival-oracle-product-proof-worker`: decide whether a product/public oracle can trigger or observe a real sourcecycled arrival boundary, collect before/after evidence if possible, or document the missing oracle before repair. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=2. Deployed commit a155c663142fd97289a36a2cc3c9eac7ef0902d2 has CI/deploy/health proof and authenticated API/UI/open-Texture proof: temporary user qa-a155c663-1782553302@example.com saw /api/universal-wire/stories return 12 universal-wire-edition-texture stories, Universal Wire render 12 cards, and the first headline open Texture doc 4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf with read_owner=universal-wire-platform and no helper/provenance phrases. Worker O4-live-source-arrival-oracle-product-proof-worker then created qa-o4-oracle-1782553934@example.com and ran a public authenticated observer from 2026-06-27T09:53:30Z through 2026-06-27T10:14:05Z: /api/universal-wire/stories plus Texture revision reads stayed stable at 12 stories, edition doc 5ac77c23-2642-4b74-b557-87d05c87e79f, edition revision 8fb9686a-5cc3-402c-9b08-2a1b43f0ac59, and zero story/revision diffs. This does not prove no sourcecycled arrival happened. It proves the remaining C6 gap is now a missing authorized product/public live-arrival oracle: there is no public trigger or cycle-boundary handle that can be correlated with before/after story and Texture revision state without using forbidden internal/source-service routes. Next move: add or expose a narrow public authenticated live-arrival oracle, then compare before/after /api/universal-wire/stories and Texture revision/source state to decide whether later relevant source arrivals update an existing semantic story/article while preserving unrelated articles. Follow AGENTS.md and Problem Documentation First. Do not push or deploy unless separately authorized. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

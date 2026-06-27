@@ -13292,3 +13292,79 @@ the worker produces a narrow branch-local repair/proof.
 Expected Delta V: 0 until worker callback and verifier evidence; possible
 future Delta V: 1 if the worker decides C6 with deployed before/after evidence
 or documents/repairs the missing oracle. Actual Delta V: 0. V remains 2.
+
+## 2026-06-27 - O4 Live Arrival Oracle Missing At Product Boundary
+
+Move: observer-shift/probe from authenticated current-state proof to public
+live-arrival boundary proof.
+
+Claim decided: there is no authorized product/public trigger or cycle-boundary
+oracle exposed for sourcecycled live arrivals. Authenticated
+`/api/universal-wire/stories` and public Texture document/revision reads can
+observe current story/article state, but they cannot prove that a fresh
+sourcecycled arrival boundary occurred unless a visible story/revision change
+happens during opportunistic polling.
+
+Product-path observer:
+
+- Created temporary staging user `qa-o4-oracle-1782553934@example.com` through
+  the repo-supported public passkey auth setup.
+- Public authenticated observer packet:
+  `/tmp/o4-live-arrival-oracle-1782554000721.json`.
+- Poll window: 21 snapshots from `2026-06-27T09:53:30Z` through
+  `2026-06-27T10:14:05Z`, crossing the daemon's documented 15-minute
+  sourcecycled cadence.
+- Routes used: `/auth/session`, `/api/universal-wire/stories`, and
+  `/api/texture/documents/{doc_id}/revisions` with Universal Wire platform read
+  resolution. No internal source-service, test-only, raw event mutation, vmctl,
+  provider/gateway, promotion/rollback, or run-acceptance route was used.
+- Result: 12 `universal-wire-edition-texture` stories stayed stable; edition
+  doc `5ac77c23-2642-4b74-b557-87d05c87e79f`, edition revision
+  `8fb9686a-5cc3-402c-9b08-2a1b43f0ac59`, and zero story/revision diffs.
+- Representative story state stayed unchanged: doc
+  `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, semantic story
+  `src_b17b0dfd4c259187`, `change_type: legacy_revision_projection`,
+  `previous_source_count: 0`, `current_source_count: 24`, manifest source
+  count 24, latest public Texture revision
+  `0359f930-4830-47fd-b7f1-c6a136f291d9` with 24 source entities.
+- The one visible `source_added` story from prior evidence remained doc
+  `a0115ae7-9a5b-48a2-b219-8be33cd3a33a`, semantic story
+  `src_3d4f8b743ebf25a3`, `previous_source_count: 2`,
+  `current_source_count: 2`, changed at
+  `2026-06-27T08:23:07.996026915Z`; the probe did not witness a fresh
+  post-deploy source addition.
+
+Problem Documentation First status: satisfied by this docs-only checkpoint
+before any oracle repair. No code change was made.
+
+Mutation class: green documentation/evidence. Protected surfaces not touched:
+Universal Wire ingestion/materialization runtime behavior, semantic story
+cluster state, Texture canonical writes, Wire edition linkage, auth/session
+renewal, vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, and publication/export.
+
+Rollback path: revert this docs-only checkpoint. Starting worktree HEAD for the
+probe was `d5d8c0d300418b409637974d64420e21c503600d`; deployed proof target
+was `a155c663142fd97289a36a2cc3c9eac7ef0902d2`.
+
+Heresy delta: `discovered` for the missing product/public live-arrival oracle.
+No `repaired` claim.
+
+Evidence boundary and non-claims: this does not prove that no sourcecycled
+arrival occurred, and it does not prove or falsify same-article update
+semantics. It proves only that the public product surface lacks a boundary
+handle strong enough to decide the fresh-arrival predicate without
+opportunistic visible changes or forbidden internal/source-service evidence.
+No code, push, deploy, CI, provider/model synthesis, Qdrant/world-model,
+promotion/rollback, run acceptance, or full News benchmark settlement is
+claimed.
+
+Expected Delta V: 0 or 1 if a public oracle produced a fresh source-arrival
+before/after proof. Actual Delta V: 0 for C6 settlement, but the missing oracle
+is now explicitly documented. V remains 2.
+
+Next move: add or expose a narrow public authenticated live-arrival oracle,
+minimally a sourcecycled cycle handle/timestamp or product work-item event that
+can be correlated with before/after `/api/universal-wire/stories` and Texture
+revision/source snapshots without seeding success through internal or test-only
+routes.
