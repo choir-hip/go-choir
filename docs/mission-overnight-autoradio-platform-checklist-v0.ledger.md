@@ -14408,3 +14408,67 @@ Next move: commit the stale-synthesis feed de-rank repair, push to `origin
 main`, monitor CI/deploy, verify staging identity, and rerun authenticated
 `/api/universal-wire/stories` proof against the existing post-repair skipped
 boundary.
+
+## 2026-06-27 - O4 Stale De-Rank Metadata Recognition Gap Documented
+
+Move: complete the landing loop for `cc2962ecaec88f8af1fb9475faade2fe125edeaa`
+and document the staging failure before a second behavior repair.
+
+Landing evidence:
+
+- Pushed commit `cc2962ecaec88f8af1fb9475faade2fe125edeaa` to `origin/main`.
+- CI run `28289238542` passed, including non-runtime Go tests, Go vet/build,
+  integration smoke, TLA+ model checks, runtime shards 0-3, and deploy gate.
+- Sibling Docs Truth Check run `28289238541` passed.
+- Sibling FlakeHub publish run `28289238544` passed.
+- Staging deploy job `83818562207` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `cc2962ecaec88f8af1fb9475faade2fe125edeaa`, deployed_at
+  `2026-06-27T12:34:30Z`.
+
+Authenticated staging proof:
+
+- Reused product user `qa-train-homonym-1782562920@example.com` while its
+  session was still valid.
+- Authenticated `GET /api/universal-wire/live-arrival` returned latest boundary
+  `cycle_f8195609729672a6fd7a6798`, observed_at
+  `2026-06-27T12:22:27.686289396Z`, `synthesis_status: skipped`,
+  `synthesis_source_count: 768`, and skip reason
+  `no graph-backed synthesis sources matched known story concepts`.
+- Authenticated `GET /api/universal-wire/stories?limit=30` still returned 12
+  stories with doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` at index 0,
+  prominence 100, headline `South Korea plans to train entire military as
+  "drone warriors"`, and semantic signature `harbor`, `transport`,
+  `rail-corridor`.
+
+Conjecture verdict: not supported at staging. The read-side de-rank logic did
+not recognize the deployed bad article as stale synthesis even though the live
+arrival boundary and story semantic state were visible.
+
+New problem discovered: stale synthesis recognition uses the exact
+`universal_wire_synthesis: true` revision metadata boolean. Deployed or
+platform-synced Universal Wire synthesis revisions may still carry
+`universal_wire_story_cluster_id`, `universal_wire_story_cluster_object_id`,
+`universal_wire_article_alias_path`, or `ingestion_handoff_request_kind:
+synthesis_cluster` and project `semantic_story` correctly, while missing or
+normalizing away that boolean. The stale detector must share the
+legacy-compatible synthesis metadata contract already used for semantic
+projection/legacy state, not a single boolean.
+
+Mutation class: green documentation/evidence checkpoint. Protected surfaces
+touched: none in this commit. The next repair will touch Universal Wire
+synthesis revision recognition and public feed ordering.
+
+Rollback path: revert this evidence checkpoint; no runtime state changes were
+made.
+
+Heresy delta: `discovered`. The stale article lifecycle problem remains open;
+the next repair target is synthesis metadata recognition, not live-arrival
+routing or story ordering.
+
+Expected Delta V: 0 for documentation only. Actual Delta V: 0. V remains 1.
+
+Next move: broaden `wireRevisionIsUniversalWireSynthesis` to recognize
+legacy/platform-synced synthesis metadata shapes, add a regression where a
+stale synthesis revision lacks the boolean but carries cluster/article metadata,
+then rerun local tests and the landing loop.

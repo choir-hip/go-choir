@@ -967,6 +967,22 @@ authenticated staging proof that doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`
 no longer wins the public feed after boundary
 `cycle_f8195609729672a6fd7a6798`.
 
+Deployed stale-synthesis de-rank at
+`cc2962ecaec88f8af1fb9475faade2fe125edeaa` did not settle the product
+conjecture. CI run `28289238542`, Docs Truth Check run `28289238541`, FlakeHub
+run `28289238544`, and Node B deploy job `83818562207` passed; staging health
+reported proxy/sandbox deployed at `cc2962ec` with deployed_at
+`2026-06-27T12:34:30Z`. Authenticated proof at `2026-06-27T12:36:26Z` still
+returned doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` as story index 0 with
+prominence 100, while live-arrival still reported post-fix skipped boundary
+`cycle_f8195609729672a6fd7a6798`. New problem discovered: the stale detector is
+too narrow for deployed/platform-visible synthesis revisions. It keys only on
+the `universal_wire_synthesis` boolean, while older or platform-synced
+Universal Wire synthesis revisions can still carry cluster/article metadata and
+semantic story state without that exact boolean shape. Next move: broaden
+synthesis revision recognition to the same legacy-compatible metadata contract
+already used for semantic projection, then replay local and staging proof.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
