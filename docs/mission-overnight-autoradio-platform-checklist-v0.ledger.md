@@ -15255,3 +15255,49 @@ better article coherence/semantic synthesis and no legacy projection noise.
 Next move: choose the next O4 realism axis or open a bounded verifier/product QA
 thread for the current deployed state; do not claim full News benchmark
 settlement.
+
+## 2026-06-27 - O4 Subset Stale Filter Verifier Requested
+
+Move: request a thread-native independent verifier for the deployed
+subset-stale filter acceptance.
+
+Thread-tool action:
+
+- Used `codex_app.list_projects`; project `/Users/wiz/go-choir` was available.
+- Used `codex_app.create_thread` with project `/Users/wiz/go-choir`, worktree
+  environment from branch `main`, and work item
+  `O4-subset-stale-wire-synthesis-filter-deployed-verifier`.
+- Pending worktree handle returned:
+  `local:a89e265a-2bd9-423d-841b-1761e73ef82a`.
+- Immediate `list_threads` query for the work item returned no materialized
+  thread yet.
+
+Verifier contract:
+
+- Read `AGENTS.md`, Parallax State/Suggested Goal String, and latest ledger
+  entries from stale re-entry discovery through subset-filter acceptance.
+- Review commits `8b53b967926fb8ba591e96c207022c49db9f72e5` and
+  `e327dc9619b4c9af247d495718394b7fcd256b53`.
+- Verify deployed health identity for `8b53b967`.
+- Use only public authenticated product APIs for staging proof:
+  `/auth/session`, `/api/universal-wire/live-arrival`,
+  `/api/universal-wire/stories`, `/api/texture/documents/*`, and
+  `/api/texture/revisions/*`.
+- Verify the scoped claim: stale doc
+  `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` absent from public stories while
+  retained in edition/direct Texture audit evidence, and at least one current
+  source_added story remains visible with source_ref/source_entities preserved.
+- Check diff hygiene and changed-file scope for the repair/evidence commits.
+- Return `accept` or `revise_before_continue`, findings first, with exact
+  commands/results, evidence boundary, dirty/generated artifact classification,
+  residual risks, and non-claims.
+
+Evidence boundary: verifier request only. No verifier verdict exists yet, and
+this does not settle the broader News benchmark.
+
+Expected Delta V: 1 if verifier accepts the deployed acceptance. Actual Delta V:
+0 until callback/verdict.
+
+Next move: reconnect with `list_threads` / `read_thread` once the pending
+worktree materializes, incorporate or revise based on verifier verdict, then
+choose the next O4 realism axis.
