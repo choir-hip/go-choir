@@ -388,6 +388,7 @@ type universalWireSemanticStoryState struct {
 	SemanticSignature []string                         `json:"semantic_signature"`
 	TopicConcepts     []string                         `json:"topic_concepts"`
 	SignalConcepts    []string                         `json:"signal_concepts"`
+	EventFrame        universalWireSemanticEventFrame  `json:"event_frame,omitempty"`
 	SourceItemIDs     []string                         `json:"source_item_ids"`
 	SourceCaptureIDs  []string                         `json:"source_capture_ids,omitempty"`
 	SourceCount       int                              `json:"source_count"`
@@ -406,6 +407,13 @@ type universalWireSemanticStoryChange struct {
 	AddedCaptureIDs     []string `json:"added_capture_ids,omitempty"`
 	AddedConcepts       []string `json:"added_concepts,omitempty"`
 	ChangedAt           string   `json:"changed_at"`
+}
+
+type universalWireSemanticEventFrame struct {
+	Lead               string `json:"lead,omitempty"`
+	CurrentAccount     string `json:"current_account,omitempty"`
+	LatestDevelopment  string `json:"latest_development,omitempty"`
+	ContinuityQuestion string `json:"continuity_question,omitempty"`
 }
 
 func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterID string, sources []universalWireSynthesisSource, now time.Time) universalWireSemanticStoryState {
@@ -472,6 +480,7 @@ func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterI
 			ChangedAt:           now.UTC().Format(time.RFC3339Nano),
 		},
 	}
+	state.EventFrame = universalWireSemanticEventFrameFromSources(sources, state)
 	state.Headline = universalWireSemanticStoryHeadline(sources, state)
 	state.Summary = universalWireSemanticStorySummary(sources, state)
 	state.Tension = universalWireSemanticStoryTension(state)
@@ -548,17 +557,15 @@ func universalWireSemanticStoryHeadline(sources []universalWireSynthesisSource, 
 }
 
 func universalWireSemanticStorySummary(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) string {
-	if len(sources) == 0 {
-		return "The available reporting describes a developing story that remains open to revision."
-	}
-	summary := universalWireSynthesisSummaryFromSources(sources)
-	if state.LatestChange.ChangeType == "source_added" && len(state.LatestChange.AddedSourceItemIDs) > 0 {
-		added := universalWireLatestAddedSourceTitle(sources, state.LatestChange.AddedSourceItemIDs[0])
-		if added != "" {
-			return summary + " The latest arrival adds detail from " + added + "."
+	frame := state.EventFrame
+	if frame.CurrentAccount != "" {
+		summary := universalWireEnsureSentence(frame.CurrentAccount)
+		if frame.LatestDevelopment != "" {
+			summary += " " + universalWireEnsureSentence(frame.LatestDevelopment)
 		}
+		return summary
 	}
-	return summary
+	return universalWireSynthesisSummaryFromSources(sources)
 }
 
 func universalWireLatestAddedSourceTitle(sources []universalWireSynthesisSource, itemID string) string {
@@ -574,6 +581,9 @@ func universalWireLatestAddedSourceTitle(sources []universalWireSynthesisSource,
 }
 
 func universalWireSemanticStoryTension(state universalWireSemanticStoryState) string {
+	if state.EventFrame.ContinuityQuestion != "" {
+		return state.EventFrame.ContinuityQuestion
+	}
 	switch state.LatestChange.ChangeType {
 	case "source_added":
 		return "This article should be revised here while later reporting still fits the same event and should split only when a new timeline, location, or official explanation emerges."
@@ -581,6 +591,88 @@ func universalWireSemanticStoryTension(state universalWireSemanticStoryState) st
 		return "Later reporting should update this account if the timeline, affected people, or official explanation changes."
 	default:
 		return "This article remains open to revision as reporting develops."
+	}
+}
+
+func universalWireSemanticEventFrameFromSources(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) universalWireSemanticEventFrame {
+	sources = normalizedUniversalWireSynthesisSources(sources)
+	if len(sources) == 0 {
+		return universalWireSemanticEventFrame{
+			CurrentAccount:     "The available reporting describes a developing story that remains open to revision",
+			ContinuityQuestion: "Watch whether later reporting changes the timeline, affected people, location, or official explanation",
+		}
+	}
+	concepts := universalWireSynthesisConcepts(sources)
+	topic := universalWireArticleTopicPhrase(concepts)
+	signals := universalWireArticleSignalPhrases(concepts)
+	leadTitle := universalWireEventFrameTitle(sources[0].Title)
+	current := leadTitle
+	if len(sources) > 1 {
+		current = leadTitle + " and " + universalWireEventFrameTitle(sources[1].Title) + " belong to one account of " + topic
+	} else {
+		current = leadTitle + " anchors the current account of " + topic
+	}
+	if len(signals) > 0 {
+		current += ", with " + universalWireHumanList(signals) + " as the main signals"
+	}
+	latestTitle := ""
+	if state.LatestChange.ChangeType == "source_added" && len(state.LatestChange.AddedSourceItemIDs) > 0 {
+		latestTitle = universalWireLatestAddedSourceTitle(sources, state.LatestChange.AddedSourceItemIDs[0])
+	}
+	if latestTitle == "" && len(sources) > 1 {
+		latestTitle = sources[len(sources)-1].Title
+	}
+	latest := ""
+	if latestTitle != "" {
+		switch state.LatestChange.ChangeType {
+		case "source_added":
+			latest = universalWireEventFrameTitle(latestTitle) + " adds later information to the same story rather than opening a separate article"
+		default:
+			latest = universalWireEventFrameTitle(latestTitle) + " supplies another sourced angle on the same story"
+		}
+	}
+	return universalWireSemanticEventFrame{
+		Lead:               leadTitle,
+		CurrentAccount:     current,
+		LatestDevelopment:  latest,
+		ContinuityQuestion: universalWireContinuityQuestion(concepts),
+	}
+}
+
+func universalWireEventFrameTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "A sourced report"
+	}
+	return truncateRunes(title, 112)
+}
+
+func universalWireContinuityQuestion(concepts map[string]bool) string {
+	switch universalWireArticlePrimaryTopic(concepts) {
+	case "transport":
+		return "Watch whether later reports change the reopening timetable, passenger impact, location, or official explanation"
+	case "harbor":
+		return "Watch whether later reports change the access restrictions, vessel impact, location, or official explanation"
+	case "energy":
+		return "Watch whether later reports change the outage timeline, affected customers, location, or official explanation"
+	case "health":
+		return "Watch whether later reports change the patient impact, service timeline, location, or official explanation"
+	default:
+		return "Watch whether later reports change the timeline, affected people, location, or official explanation"
+	}
+}
+
+func universalWireHumanList(values []string) string {
+	values = append([]string(nil), values...)
+	switch len(values) {
+	case 0:
+		return ""
+	case 1:
+		return values[0]
+	case 2:
+		return values[0] + " and " + values[1]
+	default:
+		return strings.Join(values[:len(values)-1], ", ") + " and " + values[len(values)-1]
 	}
 }
 

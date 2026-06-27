@@ -353,7 +353,10 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		firstSemanticState.LatestChange.CurrentSourceCount != 2 ||
 		len(firstSemanticState.LatestChange.AddedSourceItemIDs) != 2 ||
 		!slices.Contains(firstSemanticState.TopicConcepts, "transport") ||
-		!slices.Contains(firstSemanticState.SignalConcepts, "inspection") {
+		!slices.Contains(firstSemanticState.SignalConcepts, "inspection") ||
+		!strings.Contains(firstSemanticState.EventFrame.CurrentAccount, "Corredor ferroviario reabre parcialmente") ||
+		!strings.Contains(firstSemanticState.EventFrame.LatestDevelopment, "Autoridades advierten demoras regionales") ||
+		!strings.Contains(firstSemanticState.EventFrame.ContinuityQuestion, "passenger impact") {
 		t.Fatalf("first semantic story state = %+v metadata=%#v, want durable created world-model state", firstSemanticState, firstClusterMeta)
 	}
 	assertWireStorySemanticStateForTest(t, firstStory, firstSemanticState)
@@ -368,8 +371,8 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if strings.Contains(firstRev.Content, firstSemanticState.StoryID) ||
 		strings.Contains(firstRev.Content, "World-model") ||
-		!strings.Contains(firstRev.Content, "disrupted rail corridor") ||
-		!strings.Contains(firstRev.Content, "Later reporting should update this account") {
+		!strings.Contains(firstRev.Content, "Corredor ferroviario reabre parcialmente") ||
+		!strings.Contains(firstRev.Content, "Watch whether later reports change") {
 		t.Fatalf("first synthesis article content = %q, want article-like semantic-state update without internal ids", firstRev.Content)
 	}
 	firstClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
@@ -427,7 +430,9 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		secondSemanticState.LatestChange.ChangeType != "source_added" ||
 		secondSemanticState.LatestChange.PreviousSourceCount != 2 ||
 		secondSemanticState.LatestChange.CurrentSourceCount != 3 ||
-		!slices.Contains(secondSemanticState.LatestChange.AddedSourceItemIDs, "srcitem-live-fr") {
+		!slices.Contains(secondSemanticState.LatestChange.AddedSourceItemIDs, "srcitem-live-fr") ||
+		!strings.Contains(secondSemanticState.EventFrame.LatestDevelopment, "La reprise reste partielle") ||
+		!strings.Contains(secondSemanticState.EventFrame.LatestDevelopment, "same story rather than opening a separate article") {
 		t.Fatalf("updated semantic story state = %+v first=%+v, want typed later-source update on same identity", secondSemanticState, firstSemanticState)
 	}
 	secondRev, err := handler.rt.Store().GetRevision(context.Background(), secondProjection.SynthesisRevisionID, universalWirePlatformOwnerID())
@@ -442,7 +447,8 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		metadataString(secondRevMeta, "universal_wire_semantic_change_type") != "source_added" ||
 		strings.Contains(secondRev.Content, secondSemanticState.StoryID) ||
 		strings.Contains(secondRev.Content, "World-model") ||
-		!strings.Contains(secondRev.Content, "should be revised here while later reporting still fits the same event") {
+		!strings.Contains(secondRev.Content, "La reprise reste partielle") ||
+		!strings.Contains(secondRev.Content, "same story rather than opening a separate article") {
 		t.Fatalf("second revision meta/content = %#v / %q, want Texture revision from semantic metadata and article-like public copy", secondRevMeta, secondRev.Content)
 	}
 	secondSourceItemIDs := metadataStringSliceValue(secondRevMeta, "source_item_ids")
@@ -1269,6 +1275,15 @@ func assertWireStorySemanticStateForTest(t *testing.T, story types.WireStory, wa
 		!slices.Equal(got.TopicConcepts, want.TopicConcepts) ||
 		!slices.Equal(got.SignalConcepts, want.SignalConcepts) {
 		t.Fatalf("story semantic evidence = %+v, want cluster semantic state %+v", got, want)
+	}
+	if want.EventFrame.CurrentAccount != "" {
+		if got.EventFrame == nil ||
+			got.EventFrame.Lead != want.EventFrame.Lead ||
+			got.EventFrame.CurrentAccount != want.EventFrame.CurrentAccount ||
+			got.EventFrame.LatestDevelopment != want.EventFrame.LatestDevelopment ||
+			got.EventFrame.ContinuityQuestion != want.EventFrame.ContinuityQuestion {
+			t.Fatalf("story event frame = %+v, want %+v", got.EventFrame, want.EventFrame)
+		}
 	}
 	readerCopy := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
 	if strings.Contains(readerCopy, got.StoryID) ||
@@ -2183,7 +2198,10 @@ func TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceE
 		story.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(story.SourceState, "objectgraph-web-capture") ||
 		strings.Contains(story.TextureContent, "Universal Wire selected") ||
-		!strings.Contains(story.TextureContent, "available reporting") ||
+		!strings.Contains(story.TextureContent, "belong to one account") ||
+		story.SemanticStory == nil ||
+		story.SemanticStory.EventFrame == nil ||
+		!strings.Contains(story.SemanticStory.EventFrame.CurrentAccount, "Rail corridor reopens") ||
 		len(story.Manifest.Lead) != 2 {
 		t.Fatalf("story = %+v, want synthesized Texture article with two graph-capture cited sources", story)
 	}

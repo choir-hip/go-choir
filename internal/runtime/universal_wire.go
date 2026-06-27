@@ -547,6 +547,18 @@ func wireStorySemanticStateFromClusterState(state universalWireSemanticStoryStat
 	if state.StoryID == "" {
 		return nil
 	}
+	var frame *types.WireStoryEventFrame
+	if state.EventFrame.Lead != "" ||
+		state.EventFrame.CurrentAccount != "" ||
+		state.EventFrame.LatestDevelopment != "" ||
+		state.EventFrame.ContinuityQuestion != "" {
+		frame = &types.WireStoryEventFrame{
+			Lead:               state.EventFrame.Lead,
+			CurrentAccount:     state.EventFrame.CurrentAccount,
+			LatestDevelopment:  state.EventFrame.LatestDevelopment,
+			ContinuityQuestion: state.EventFrame.ContinuityQuestion,
+		}
+	}
 	return &types.WireStorySemanticState{
 		SchemaVersion:       state.SchemaVersion,
 		WorldModelKind:      state.WorldModelKind,
@@ -555,6 +567,7 @@ func wireStorySemanticStateFromClusterState(state universalWireSemanticStoryStat
 		SemanticSignature:   append([]string(nil), state.SemanticSignature...),
 		TopicConcepts:       append([]string(nil), state.TopicConcepts...),
 		SignalConcepts:      append([]string(nil), state.SignalConcepts...),
+		EventFrame:          frame,
 		PreviousSourceCount: state.LatestChange.PreviousSourceCount,
 		CurrentSourceCount:  state.LatestChange.CurrentSourceCount,
 		SourceCount:         state.SourceCount,

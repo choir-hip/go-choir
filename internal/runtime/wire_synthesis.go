@@ -506,18 +506,22 @@ func universalWireSynthesisRevisionSentence(sources []universalWireSynthesisSour
 func universalWireSourceFactSentence(source universalWireSynthesisSource, prefix string) string {
 	concepts := universalWireKnownConceptSet(strings.Join([]string{source.Title, source.Body}, " "))
 	signals := universalWireArticleSignalPhrases(concepts)
+	title := strings.TrimSpace(source.Title)
 	if len(signals) == 0 {
-		title := strings.TrimSpace(source.Title)
 		if title == "" {
 			return universalWireEnsureSentence(prefix + " adds another verified detail to the developing account")
 		}
-		return universalWireEnsureSentence(prefix + " adds detail on " + strings.ToLower(title))
+		return universalWireEnsureSentence(prefix + " centers on " + title)
+	}
+	label := prefix
+	if title != "" {
+		label += " from " + title
 	}
 	switch len(signals) {
 	case 1:
-		return universalWireEnsureSentence(prefix + " adds " + signals[0])
+		return universalWireEnsureSentence(label + " adds " + signals[0])
 	default:
-		return universalWireEnsureSentence(prefix + " adds " + strings.Join(signals[:len(signals)-1], ", ") + " and " + signals[len(signals)-1])
+		return universalWireEnsureSentence(label + " adds " + strings.Join(signals[:len(signals)-1], ", ") + " and " + signals[len(signals)-1])
 	}
 }
 
