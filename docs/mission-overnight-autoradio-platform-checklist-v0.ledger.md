@@ -10448,3 +10448,59 @@ articles checked.
 Expected Delta V: 0 for this documentation-first discovery pass. Actual Delta V:
 0; it adds C11 as the next discriminator and prevents accepting `b11e4fa2` as an
 article-quality settlement.
+
+## 2026-06-27 - O4 Scaffold Read-Repair Candidate Local Proof
+
+Conjecture statement: expanding the Universal Wire article-surface repair
+predicate to include the newer deployed scaffold phrases is enough for the
+existing read-time materialization path to revise stale/newer scaffold Texture
+articles into article-facing copy.
+
+Verdict: supported at local-test tier, not yet deployed.
+
+Commits:
+
+- Documentation-first checkpoint:
+  `2c94a9ed971ca435d5331a8668b900e64f6857aa` (`Document O4 deployed read
+  repair gap`).
+- Repair candidate:
+  `32ee51f11e976a7b41c7dd554966d332da824759` (`Repair Universal Wire scaffold
+  article read repair`).
+
+What changed:
+
+- `internal/runtime/universal_wire.go` now treats the newer deployed scaffold
+  phrases as repair triggers: `incoming reports point to the same developing
+  story`, `A second source in the cluster`, and `reports read as one developing
+  article`.
+- `internal/runtime/universal_wire_test.go` keeps the legacy
+  `Universal Wire selected... graph-backed source captures` repair case and
+  adds a deployed-shaped `Multiple reports converge... incoming reports point...`
+  case through the same public `/api/universal-wire/stories` read path.
+- The repair path still uses existing Texture synthesis/materialization,
+  source entities, source refs, Wire edition linkage, and readable Texture API
+  checks; it does not reclassify raw `choir.web_capture` diagnostics as public
+  articles.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  completed.
+- `git diff --check` passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture|TestHandleUniversalWireStories(MaterializesExistingSourcecycledGraphCaptures|DoesNotPublishGraphBackedWebCapturesAsArticles)' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 4.083s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 10.043s`.
+- `git show --check --oneline 2c94a9ed` and
+  `git show --check --oneline 32ee51f1` passed.
+- `git diff --check 2c94a9ed^..HEAD` passed.
+
+Evidence boundary/non-claims: local proof only. No push, CI, deploy, staging
+health identity, authenticated product proof, provider/model-quality synthesis,
+semantic world-model clustering, Qdrant, promotion/rollback, run acceptance,
+auth/session, vmctl, gateway/provider credential, or publication/export claim is
+made by this pass.
+
+Next move: push `32ee51f1` plus this evidence update, monitor CI/deploy, verify
+`choir.news` health identity, and rerun authenticated product proof against the
+visible Universal Wire articles.

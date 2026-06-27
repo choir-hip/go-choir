@@ -353,6 +353,17 @@ helper-style prose, some visibly incoherent deterministic clusters, no
 production-quality provider/model synthesis, no Qdrant/world-model projection,
 and no deployed evidence that later relevant sources update existing articles.
 
+Current root repair candidate: root documented the read-repair gap in
+`2c94a9ed971ca435d5331a8668b900e64f6857aa`, then repaired the runtime predicate
+and regression in `32ee51f11e976a7b41c7dd554966d332da824759`. The repair is
+narrow: `universalWireStoriesNeedArticleSurfaceRepair` now also detects
+`incoming reports point to the same developing story`, `A second source in the
+cluster`, and `reports read as one developing article`; the existing read-time
+repair/materialization path remains responsible for revising the Texture
+article. Focused repair/materialization tests and the broader Universal Wire
+runtime selector passed locally. This is not deployed proof until the landing
+loop completes for the repair commit.
+
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty English synthesis Texture articles from multilingual ingested
 source clusters, with native source citations, durable source artifacts, and
@@ -497,13 +508,16 @@ branch-local source-aware/article-copy slice, and root incorporated it as
 `5083ee36` with the same focused and broader runtime selectors passing. Current
 value remains 4 because C10 split: CI/deploy/health survived, but authenticated
 product proof discovered C11, the deployed read-repair gap for already-published
-newer scaffold articles. Current live conjectures are: C6 later relevant sources
-update existing articles/world-model identities at deployed product scope; C8
-semantic/world-model clustering beyond bounded deterministic signals replaces
-heuristic grouping; C9 O5-O8 still embed the Autoradio benchmark into durable
-Choir product paths; C11 read-time repair can detect and revise existing
-scaffold-framed Universal Wire Texture articles into article-facing copy without
-loosening raw-capture diagnostic boundaries.
+newer scaffold articles. Root commit
+`32ee51f11e976a7b41c7dd554966d332da824759` supports C11 at local-test tier but
+has not yet survived CI/deploy/product replay. Current live conjectures are: C6
+later relevant sources update existing articles/world-model identities at
+deployed product scope; C8 semantic/world-model clustering beyond bounded
+deterministic signals replaces heuristic grouping; C9 O5-O8 still embed the
+Autoradio benchmark into durable Choir product paths; C11 read-time repair can
+detect and revise existing scaffold-framed Universal Wire Texture articles into
+article-facing copy without loosening raw-capture diagnostic boundaries at
+deployed product scope.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -639,11 +653,16 @@ strings for new article content, but `universalWireStoriesNeedArticleSurfaceRepa
 does not recognize those phrases, so existing newer scaffold articles bypass
 read-time repair.
 
-next move: repair `universalWireStoriesNeedArticleSurfaceRepair` and its tests
-so deployed-shaped newer scaffold articles are revised on read into
-article-facing copy, then rerun focused/broader Universal Wire tests, push,
-monitor CI/deploy, verify health identity, and repeat authenticated staging
-product proof.
+Root implemented the narrow read-repair predicate fix in `32ee51f1`: focused
+repair/materialization tests passed, and the broader
+`UniversalWire|WireProcessor|WireStory|WirePublication` selector passed. The
+repair remains local until pushed and replayed on staging.
+
+next move: push `32ee51f1` plus this evidence update to `origin/main`, monitor
+CI/deploy, verify health identity, and repeat authenticated staging product
+proof. Product proof must show existing scaffold-framed Universal Wire articles
+revise on read or that remaining visible scaffold text is precisely explained by
+a fresh non-repaired edge.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -669,7 +688,9 @@ world-model article. The latest deployed learning is that branch-local article
 copy guards are insufficient when old Texture articles already exist: read-time
 repair predicates must include every product-visible scaffold frame that prior
 slices emitted, otherwise staging can deploy new code while continuing to serve
-old article text.
+old article text. The latest local repair learning is that the existing
+read-repair path is adequate if the predicate recognizes the deployed scaffold
+phrases.
 
 settlement: not settled. O4 is accepted for deployed deterministic multi-article
 readability at `4f8cae7a`: CI/deploy, health identity, and authenticated product
@@ -684,5 +705,5 @@ O5-O8 remain open. Exit requires `settled`, `open_handoff`, `blocked`, or
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=4 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `b11e4fa29168fc25c070316e5189b777c9688443`; CI run `28278867763`, Docs Truth Check run `28278867758`, FlakeHub run `28278867761`, deploy job `83790960862`, and public health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved ordinary Texture still loads, Universal Wire renders `11 articles`, and headline-opened Texture windows contain version controls, source counts, native source buttons, rendered article text, and `Document loaded`. This supports the scoped deployed conjecture that deterministic graph-backed source groups can publish multiple readable Texture-backed Universal Wire articles. It falsifies the source-aware/article-copy repair conjecture for existing deployed articles: staging still serves newer scaffold phrases such as `incoming reports point to the same developing story`, `A second source in the cluster...`, and `reports read as one developing article`. Code inspection shows the new generator avoids those phrases for newly generated copy, but `universalWireStoriesNeedArticleSurfaceRepair` only detects older legacy meta phrases, so existing articles bypass read-time repair. Next move: repair that predicate and focused tests so deployed-shaped newer scaffold articles revise on read into article-facing copy, then rerun focused/broader Universal Wire tests, push, monitor CI/deploy, verify staging health identity, and repeat authenticated product proof. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=4 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `b11e4fa29168fc25c070316e5189b777c9688443`; CI run `28278867763`, Docs Truth Check run `28278867758`, FlakeHub run `28278867761`, deploy job `83790960862`, and public health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved ordinary Texture still loads, Universal Wire renders `11 articles`, and headline-opened Texture windows contain version controls, source counts, native source buttons, rendered article text, and `Document loaded`. This supports the scoped deployed conjecture that deterministic graph-backed source groups can publish multiple readable Texture-backed Universal Wire articles. It falsifies the source-aware/article-copy repair conjecture for existing deployed articles: staging still serves newer scaffold phrases such as `incoming reports point to the same developing story`, `A second source in the cluster...`, and `reports read as one developing article`. Root documented this in `2c94a9ed971ca435d5331a8668b900e64f6857aa`, then repaired the read-repair predicate and regression locally in `32ee51f11e976a7b41c7dd554966d332da824759`; focused repair/materialization tests and the broader Universal Wire runtime selector passed. Next move: push `32ee51f1` plus this evidence update to `origin/main`, monitor CI/deploy, verify staging health identity, and repeat authenticated product proof that existing scaffold-framed articles revise on read or that any remaining scaffold text is explained by a fresh edge. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
