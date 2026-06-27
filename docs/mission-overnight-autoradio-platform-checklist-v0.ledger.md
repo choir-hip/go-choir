@@ -8971,6 +8971,101 @@ captures without those edges.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
 
+## 2026-06-27 - O4 Deployed Proxy Platform Sync Misses Runtime-Owned Wire Article
+
+Mutation class: red documentation-first checkpoint for proxy/platformd Texture
+sync repair.
+
+Problem: deployed `376086de` includes the platformd revision-list envelope
+repair and passes CI/deploy/health identity, but a clean authenticated Universal
+Wire tab still renders zero publishable articles. The currently materialized
+runtime-owned Universal Wire synthesis article exists in the sandbox runtime,
+but platformd never receives the corresponding Texture document/revision rows,
+so `/api/universal-wire/stories` filters the edition candidate at the platformd
+verification gate.
+
+Evidence:
+
+- Root pushed `376086ded5c6500972b762e172f1cf1dba46026b` to `origin/main`.
+- CI run `28276240728` passed.
+- Docs Truth Check `28276240754` passed.
+- FlakeHub run `28276240727` passed.
+- Deploy job `83783563194` passed.
+- `https://choir.news/health` reports proxy and sandbox deployed commit
+  `376086ded5c6500972b762e172f1cf1dba46026b`.
+- Public unauthenticated `/api/universal-wire/stories` still returns 401.
+- Authenticated Chrome/Computer Use replay on a clean `choir.news` tab shows
+  Universal Wire rendering `0 articles` with diagnostics:
+  `texture_edition` filtered, one candidate, zero stories; graph captures
+  available as diagnostic-only substrate.
+- Internal Node B sandbox diagnostic:
+  `GET http://127.0.0.1:8085/api/universal-wire/stories` with an authenticated
+  owner header returns edition doc
+  `95afb28c-1095-4b96-bdf8-c1b89b13bc56`, revision
+  `43748e13-d44c-43fa-acc3-95fef2d0906a`, included doc
+  `d3661377-4731-4617-a351-63236b08597d`, and zero stories.
+- Runtime Texture diagnostics for doc
+  `d3661377-4731-4617-a351-63236b08597d` under owner
+  `universal-wire-platform` show current revision
+  `efbf6dda-3c86-43d4-9e13-b15172dfbd09`, `body_doc`, native
+  `source_ref` nodes, source entities, and `platformd_publication_ref`.
+- Direct platformd diagnostics for the same doc return 404 for
+  `/internal/platform/texture/documents/d3661377-4731-4617-a351-63236b08597d`
+  and `{"revisions":null}` for the document revision list.
+- Node B proxy logs show:
+  `proxy: sync texture to platformd: fetch revisions for d3661377-4731-4617-a351-63236b08597d: sandbox status 404: {"error":"document not found"}`
+  at `2026-06-27T02:56:40Z` and again at `2026-06-27T02:56:49Z`.
+
+Diagnosis:
+
+- The proxy-mediated autonomous Wire publish path accepts a request that already
+  includes the current Texture document title, revision content, structured
+  `body_doc`, source entities, citations, and metadata.
+- Publication to platformd succeeds enough for runtime to persist
+  `platformd_publication_ref`.
+- The asynchronous full-history platformd sync then calls
+  `fetchSandboxJSONWithContext` against the resolved platform sandbox for
+  `/api/texture/documents/{doc}/revisions`.
+- For runtime-owned Universal Wire synthesis articles, that resolved sandbox can
+  return 404 even though the publishing runtime owns and can read the document.
+- Because the async sync has no fallback to the already supplied current
+  revision payload, platformd keeps no document/revision rows for the published
+  article and the public Universal Wire route filters it.
+
+Conjecture delta: proxy-mediated autonomous Wire publication should still
+prefer full revision-history sync from the platform sandbox, but when that read
+misses for a runtime-owned article and the publish request supplied a structured
+current revision, proxy should sync at least that current revision to platformd.
+The public route should continue to require platformd verification and should
+not expose raw `choir.web_capture` projections as articles.
+
+Protected surfaces: proxy autonomous Wire publish/sync, platformd Texture sync,
+Universal Wire platform verification, Texture canonical write/read shape,
+source_ref/source entity preservation.
+
+Admissible evidence:
+
+- Focused proxy test proving a supplied current revision is synced to platformd
+  when the full-history sandbox fetch returns 404.
+- Existing proxy test still proves full-history sync when sandbox revisions are
+  available.
+- Focused Universal Wire runtime selector still proves materialization and raw
+  capture diagnostic-only behavior.
+- Focused platform Texture sync/read tests still pass.
+- Post-landing CI/deploy/health plus authenticated product replay showing one
+  readable Universal Wire synthesis article and headline-to-Texture content.
+
+Rollback path: revert the proxy fallback sync repair; the platformd verification
+gate remains conservative and Universal Wire returns to empty diagnostics rather
+than exposing raw capture cards.
+
+Heresy delta: discovered. The prior local and deployed envelope repairs assumed
+proxy could always re-read platform-owned revisions from the resolved platform
+sandbox after publication. Staging shows runtime-owned Universal Wire articles
+can publish with payload data while that later full-history re-read misses.
+
+Actual Delta V: 0. This is documentation-first only; V remains 27.
+
 ## 2026-06-27 - O4 Platform Texture Revision List Envelope Repair
 
 Mutation class: red platform Texture read repair after the documented

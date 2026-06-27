@@ -799,15 +799,29 @@ health identity, and authenticated product replay proves ordinary Texture loads,
 but Universal Wire then rendered `0 articles`, so there was no headline to open.
 Deployed `7e8138e6` restores one article and reader-facing copy, but the headline
 still opens a blank v0 Texture because platformd revision-list reads do not yet
-match the Texture API envelope in production. A local envelope repair now exists
-and has focused local evidence plus independent verifier acceptance, but no
-deploy/product acceptance yet.
+match the Texture API envelope in production. Root repaired that response shape
+in `af417087`, verifier thread `019f06f0-03a4-7982-ba01-67b1fb8a34a6`
+accepted it, and root pushed/deployed `376086de`. CI run `28276240728`, Docs
+Truth Check `28276240754`, FlakeHub run `28276240727`, deploy job
+`83783563194`, and health identity all passed. Fresh authenticated staging
+replay then showed a stricter failure: a clean Universal Wire tab renders
+`0 articles`, the runtime edition includes one current synthesis doc, and
+platformd returns 404 for that doc while the runtime can read the doc/revision
+with native `body_doc` and source entities. Node B proxy logs show
+`sync texture to platformd` fetched revisions for the Universal Wire doc from
+the resolved platform sandbox and got `404 {"error":"document not found"}` even
+though the proxy publish request already carried the current revision payload.
+The next repair should preserve the platformd verification gate while making
+proxy-mediated autonomous Wire publication sync at least the supplied current
+revision to platformd when full-history fetch misses the runtime-owned
+platform article.
 The actual product benchmark remains open until deployed Texture documents load
 without 404 or blank v0, Universal Wire renders at least one readable Texture
 article, the headline opens that article, article copy is not platform meta-copy,
 multilingual live ingestion produces/upserts English synthesis Texture articles,
 and authenticated product evidence shows the world model/existing articles
-update. O5 has started through product
+update. The immediate blocker is platformd sync for runtime-owned autonomous
+Wire article revisions after proxy publish. O5 has started through product
 prompt-bar/Texture/Super-request evidence. The first O5 handoff repair is landed
 and deployed but not product-accepted in this pass. This mission remains
 `working` because O4 deployed article materialization is still failing, broader
@@ -819,5 +833,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=27. Root deployed `7e8138e64b259f141d1b3e6b53218367122a68e9`; CI run `28275421927`, Docs Truth Check `28275421953`, FlakeHub run `28275421923`, deploy job `83781323493`, and health identity passed. Authenticated Computer Use replay on the signed-in Chrome tab proves ordinary Texture `untitled-texture-b754241a.texture` loads, Universal Wire renders `1 article`, and the card copy is reader-facing, but clicking the Universal Wire headline still opens blank v0 (`Start typing the document...`, `Blank document ready`) instead of article content. That failure was documented first in `992dce9c`. Root then found and locally repaired the immediate cause in `af417087`: platformd revision-list reads for `read_owner=universal-wire-platform` returned a bare array instead of the normal Texture `{ "revisions": [...] }` envelope, so the editor saw zero revisions despite the document current-head field. Independent verifier thread `019f06f0-03a4-7982-ba01-67b1fb8a34a6` accepted the docs-first checkpoint plus repair after rerunning platform/proxy/runtime selectors. Next move: push to `origin/main`, monitor CI/deploy, verify health identity, and run authenticated Computer Use replay showing the Universal Wire headline opens rendered article content with source affordances. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=27. Root deployed `376086ded5c6500972b762e172f1cf1dba46026b`; CI run `28276240728`, Docs Truth Check `28276240754`, FlakeHub run `28276240727`, deploy job `83783563194`, and health identity passed. Authenticated replay proved ordinary Texture still loads, but a clean Universal Wire tab renders `0 articles`. Internal Node B diagnostics show runtime edition `95afb28c-1095-4b96-bdf8-c1b89b13bc56` includes synthesis doc `d3661377-4731-4617-a351-63236b08597d`, and runtime can read that doc plus revision `efbf6dda-3c86-43d4-9e13-b15172dfbd09` with `body_doc`, source refs, source entities, and platform publication metadata. Platformd returns 404 for the doc and no revisions. Proxy logs show `sync texture to platformd` failed for that doc because it fetched revisions from the resolved platform sandbox and got `404 {"error":"document not found"}` even though the proxy publish request carried the current revision payload. Next move: repair proxy-mediated autonomous Wire publication so platformd sync persists at least the supplied current revision when full-history sandbox fetch misses, while preserving the raw-capture diagnostic-only invariant and platformd verification gate. Then run focused proxy/runtime/platform tests, request independent verifier, push to `origin/main`, monitor CI/deploy, verify health identity, and run authenticated Computer Use replay showing Universal Wire renders a readable synthesis article whose headline opens rendered Texture content with source affordances. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
