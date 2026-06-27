@@ -13245,3 +13245,50 @@ authenticated `/api/universal-wire/stories` and Texture article state before
 and after to prove or falsify later-source same-article update semantics. If no
 public/product oracle can trigger or observe the arrival boundary, document
 that missing oracle before repairing it.
+
+## 2026-06-27 - O4 Live Source Arrival Oracle Worker Requested
+
+Move: queue bounded worker thread for the remaining C6 live-arrival oracle.
+
+Worker handle:
+
+- Pending worktree handle:
+  `local:66c4a018-6109-4ada-aeb2-b47a4c3f11f1`.
+- Work item: `O4-live-source-arrival-oracle-product-proof-worker`.
+- Starting state requested: `main` in a fresh worktree.
+
+Conjecture to decide: after deployed commit
+`a155c663142fd97289a36a2cc3c9eac7ef0902d2`, the remaining O4 gap is whether
+real later sourcecycled arrivals update existing Universal Wire semantic
+story/Texture articles while preserving unrelated articles. Root has proven
+authenticated deployed API/UI/open-Texture behavior for current state, but not
+a fresh source-arrival before/after boundary.
+
+Mutation class: start yellow/probe. If a behavior problem is found and code
+changes are needed, the worker must satisfy Problem Documentation First with a
+docs-only checkpoint before repair.
+
+Protected surfaces: Universal Wire sourcecycled ingestion/materialization,
+semantic story cluster state, Texture revision creation/source_ref/source_entity
+carry-forward, Wire edition linkage, platform Texture sync path, and
+`/api/universal-wire/stories` DTO. Worker was instructed to avoid auth/session,
+vmctl, deployment routing, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, and publication/export unless documented as
+unavoidable.
+
+Admissible evidence: staging/product-path before/after evidence if a safe
+public/product oracle exists; authenticated `/api/universal-wire/stories`
+snapshots; Texture article/revision state through public authenticated API/UI;
+focused local tests only if code repair becomes necessary; `git diff --check`;
+clean worker worktree. Browser-public internal/test-only routes must not seed
+success.
+
+Rollback path: revert worker commit(s) back to starting main SHA plus any
+dependent evidence commits.
+
+Heresy delta: likely `discovered` if the oracle is missing; `repaired` only if
+the worker produces a narrow branch-local repair/proof.
+
+Expected Delta V: 0 until worker callback and verifier evidence; possible
+future Delta V: 1 if the worker decides C6 with deployed before/after evidence
+or documents/repairs the missing oracle. Actual Delta V: 0. V remains 2.
