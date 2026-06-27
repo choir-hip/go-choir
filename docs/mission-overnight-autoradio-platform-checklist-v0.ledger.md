@@ -12796,3 +12796,46 @@ proof only. Actual Delta V: 0. V remains 3.
 Next move: verifier should review whether the strengthened product DTO
 assertions are sufficient for this bounded worker slice, then orchestration can
 decide whether to incorporate or wait for deployed post-arrival evidence.
+
+## 2026-06-27 - O4 Live Source Arrival DTO Proof Incorporated
+
+Move: incorporate accepted worker proof into root.
+
+Verifier result:
+
+- Verifier thread: `019f084f-b19e-77d2-9ba6-15b359ec7176`.
+- Verdict: `accept`; no blocking findings.
+- Verified worker commit: `5ab674102ed2826c4c5a84ec00a38343af160526`.
+- Verifier evidence: worker worktree clean, `git show --check` passed, commit diff hygiene passed, diff touched only `internal/runtime/universal_wire_test.go` and the mission ledger, focused sourcecycled DTO carry-forward test passed, broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime selector passed, post-test worker worktree clean.
+- Evidence boundary: branch-local test/proof only; no runtime behavior change, no push/deploy/staging acceptance, provider/model synthesis, Qdrant/world-model, promotion/rollback/run acceptance, or full News claim.
+
+Root incorporation:
+
+- Cherry-picked worker commit into root as `bacf3e0a Prove Wire source arrival DTO carry-forward`.
+- Conflict resolution: the only conflict was adjacent mission-ledger entries. Root preserved the existing worker-request and verifier-request entries and kept the worker's `O4 Live Source Arrival Product DTO Proof Worker Ready` entry below them. No source conflict occurred.
+- Root changed files: `internal/runtime/universal_wire_test.go` and `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`.
+
+Root verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.874s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 11.272s`; Nix emitted an ignored eval-cache SQLite busy warning.
+- `git diff --check HEAD^..HEAD` passed.
+- `git show --check --oneline HEAD` passed.
+
+Conjecture verdict: supported at branch/root test tier for the DTO carry-forward predicate: post-arrival `/api/universal-wire/stories` projection must expose same story/article identity, typed `source_added` semantic state, and all prior/new source-viewer-ready manifest entries.
+
+Expected Delta V: 0 because this is accepted branch/root test proof, not deployed product proof. Actual Delta V: 0. V remains 3.
+
+Residual risks/non-claims:
+
+- No runtime behavior changed.
+- No deploy/staging behavior changed by this commit.
+- Deployed live source-arrival update semantics remain under-evidenced until product evidence proves real new source arrivals change existing article/story state.
+- Provider/model-quality synthesis, broad semantic clustering, Qdrant/world-model projection, promotion/rollback, run acceptance, and full News settlement remain open.
+
+Dirty/generated artifact classification:
+
+- Intentional source/test and durable ledger changes are committed in `bacf3e0a`.
+- Intentional paradoc/ledger evidence update follows in root.
+- Existing unrelated local WIP remains `skills/parallax/SKILL.md`.
+- Existing unrelated untracked report remains `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
