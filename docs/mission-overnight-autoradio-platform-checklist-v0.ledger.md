@@ -13087,3 +13087,90 @@ or full News benchmark settlement is claimed.
 Expected Delta V: 0 for branch-local worker evidence. Actual Delta V: 0. V
 remains 3 pending independent verifier acceptance and any root incorporation or
 deployed product proof.
+
+## 2026-06-27 - O4 Live Arrival Window Repair Landed, Auth Acceptance Blocked
+
+Move: incorporate accepted worker repair, push, monitor CI/deploy, and attempt
+staging acceptance.
+
+Verifier callback:
+
+- Verifier thread: `019f0862-4633-7a02-99ff-4b5e29a4c7d4`.
+- Work item: `O4-deployed-live-source-arrival-update-product-reality-verifier`.
+- Verdict: `accept`.
+- Verified worker thread `019f085c-cd49-7630-8e4a-31a22e26c8a9` in
+  `/Users/wiz/.codex/worktrees/4963/go-choir` for commits `b0e89b21` and
+  `bbd9f2db`.
+- Verifier found no blocking findings. It reran `git status --short --ignored`,
+  `git show --check` for both commits, `git diff --check b0e89b21^..bbd9f2db`,
+  verified docs-first ordering, and passed both the focused high-volume live
+  arrival regression and the broader
+  `UniversalWire|WireProcessor|WireStory|WirePublication` runtime selector.
+
+Root incorporation:
+
+- Root incorporated worker docs-first evidence as
+  `e670a036 Document O4 live arrival synthesis window gap`.
+- Root incorporated worker repair as
+  `a155c663 Repair Wire live arrival synthesis window`.
+- Root conflict resolution preserved the newer verifier/root state while
+  keeping the docs-first problem record and repair evidence.
+
+Root local checks:
+
+- `git diff --check HEAD~2..HEAD` passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesUpdatesExistingStoryAcrossDeployedSizedCycle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 2.892s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 11.942s`.
+
+Landing:
+
+- Pushed commit: `a155c663142fd97289a36a2cc3c9eac7ef0902d2`.
+- GitHub CI run `28285181588`: `success`.
+- Docs Truth Check run `28285181580`: `success`.
+- FlakeHub run `28285181587`: `success`.
+- Staging deploy job `83808065484`: `success`.
+- `https://choir.news/health` returned `status: ok`; proxy and sandbox both
+  report deployed_commit `a155c663142fd97289a36a2cc3c9eac7ef0902d2`.
+- Public unauthenticated `GET https://choir.news/api/universal-wire/stories`
+  returned HTTP 401 with `{"error":"authentication required"}`, as expected.
+
+Authenticated product acceptance attempt:
+
+- Chrome-control connected to the user's Chrome and found three open
+  `https://choir.news/` tabs.
+- The controllable tab `557` was signed out and rendered the local preview
+  surface, not an authenticated computer.
+- Tabs `550` and `549` could not be inspected because Chrome reported another
+  extension UI was open on those pages: "Complete or dismiss that extension UI
+  in Chrome, then ask me to continue."
+- `frontend/playwright/.auth` exists but contains no saved
+  `*.storage.json` auth state.
+- Therefore authenticated staging product acceptance was not completed and is
+  not claimed.
+
+Conjecture effect: the deployed code identity for the accepted 768-capture
+window repair is proven on staging. The remaining C6 conjecture is narrowed to
+authenticated product behavior: real later source arrivals must be observed
+updating existing Universal Wire Texture articles while preserving unrelated
+articles.
+
+Mutation class: orange runtime behavior landed to staging. Protected surfaces:
+Universal Wire sourcecycled ingestion/materialization and downstream
+semantic-story/Texture article update selection. No auth/session renewal, vmctl,
+deployment routing code, provider/gateway credentials, Qdrant,
+promotion/rollback, run acceptance, provider/model calls, or publication/export
+outside the existing Wire edition path was changed.
+
+Rollback refs: revert `a155c663` plus docs-first `e670a036` and this evidence
+commit if the deployed product path regresses. The pushed deploy identity to
+roll back from is `a155c663142fd97289a36a2cc3c9eac7ef0902d2`.
+
+Expected Delta V: 0 or 1 depending on authenticated product proof. Actual
+Delta V: 0 because authenticated acceptance is blocked. V remains 3.
+
+Next move: dismiss the Chrome extension UI or create a fresh Playwright auth
+state for `https://choir.news`, then rerun authenticated Universal Wire
+API/UI/headline-open/source-arrival acceptance against deployed commit
+`a155c663142fd97289a36a2cc3c9eac7ef0902d2`.
