@@ -12189,3 +12189,74 @@ Delta V: 0. V remains 3.
 Next move: push root incorporation head to `origin/main`, monitor CI/deploy
 identity, then run authenticated staging acceptance for source-arrival
 clustering/update behavior before making a deployed product claim.
+
+## 2026-06-27 - O4 Deployed Clustering Repair Landing And Chrome Acceptance
+
+Move type: landing loop -> deployed product proof.
+
+Pushed head: `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`.
+
+Included root commits:
+
+- `39253cf5` - root incorporation of worker docs-first blocker checkpoint
+  `cad191e3`.
+- `33863287` - root incorporation of worker implementation commit `f888487b`.
+- `6c5b1d1c` - root evidence/paradoc update recording verifier acceptance and
+  root incorporation before push.
+
+CI/deploy receipts:
+
+- Pushed `d9be47db..6c5b1d1c` to `origin/main`.
+- Docs Truth Check run `28282830115`: success.
+- FlakeHub run `28282830126`: success.
+- CI run `28282830130`: success.
+- CI deploy job `83801933132`: success.
+- Health at `https://choir.news/health` reported `status: ok`, proxy
+  `build.commit` and `deployed_commit`
+  `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`, sandbox upstream build commit and
+  deployed commit `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`, deployed at
+  `2026-06-27T07:46:06Z`.
+
+Authenticated Chrome/Computer Use acceptance:
+
+- The owner's logged-in Chrome session on `https://choir.news/` showed the
+  authenticated Choir desktop, not the signed-out preview.
+- Universal Wire rendered `12 articles`, not the prior one broad article.
+- The visible cards were multiple synthesized Texture article cards, including
+  distinct Telegram, GDELT, earthquake, and other source-derived stories.
+- Clicking/opening the first Universal Wire headline loaded a Texture article
+  window titled `Telegram Post from Metropoles Telegram`.
+- The opened Texture article showed `v66`, `Sources 24`, native source buttons,
+  and `Document loaded`; the prior `Get document failed (404)` symptom was not
+  present.
+- Expanding a native source ref opened a citation panel with the source title
+  and source text.
+- Clicking `Open source` opened a reader/source artifact window showing
+  `Available source`, `Reader snapshot ready`, source title/text, and an
+  `Open original` link.
+
+Conjecture verdict:
+
+- Supported at deployed product tier for the observed Universal Wire regression:
+  the product is no longer one broad article, headline-open no longer fails
+  with 404, and native source refs open durable reader/source artifacts.
+- Not supported yet for the stronger Universal Wire target: this did not observe
+  a fresh post-deploy sourcecycled arrival revising the same live semantic
+  story/article identity, and it did not prove provider/model-quality English
+  synthesis, broad semantic clustering, Qdrant projection, or a live world
+  model.
+
+Dirty-path classification after landing evidence: intentional durable docs
+changes in this paradoc and ledger; unrelated pre-existing local WIP remains
+`skills/parallax/SKILL.md`; unrelated untracked report remains
+`docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3 because the deployed
+regression is repaired, but the stronger later-arrival update/world-model
+conjecture remains unproven on live data.
+
+Next move: choose the next O4 realism axis: wait for or induce a real
+post-deploy sourcecycled arrival and prove same-story revision in authenticated
+product state, or document and attack the remaining article-quality gap where
+deterministic source-pair prose is still not provider/model-quality English
+synthesis over a durable world model.
