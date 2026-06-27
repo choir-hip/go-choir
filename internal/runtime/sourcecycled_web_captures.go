@@ -236,16 +236,17 @@ func (rt *Runtime) universalWireSynthesisSourceFromGraphCapture(ctx context.Cont
 		if err != nil {
 			return universalWireSynthesisSource{}, false, err
 		}
-		if fields.ItemID == "" {
-			return universalWireSynthesisSource{}, false, nil
+		if fields.ItemID != "" {
+			source.ItemID = fields.ItemID
+			source.SourceID = fields.SourceID
+			source.FetchID = fields.FetchID
+			source.Language = fields.Language
+			source.CanonicalURL = firstNonEmpty(fields.CanonicalURL, source.CanonicalURL)
+			source.URL = firstNonEmpty(fields.URL, source.URL)
 		}
-		source.ItemID = firstNonEmpty(fields.ItemID, source.ItemID)
-		source.SourceID = fields.SourceID
-		source.FetchID = fields.FetchID
-		source.Language = fields.Language
-		source.CanonicalURL = firstNonEmpty(fields.CanonicalURL, source.CanonicalURL)
-		source.URL = firstNonEmpty(fields.URL, source.URL)
 	}
+	source.SourceID = firstNonEmpty(source.SourceID, "objectgraph:web_capture")
+	source.FetchID = firstNonEmpty(source.FetchID, capture.VersionID)
 	return source, true, nil
 }
 

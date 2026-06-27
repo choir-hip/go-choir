@@ -998,11 +998,6 @@ func TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition(t *testing
 func TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
-	older := seedUniversalWireWebCaptureFixture(t, handler,
-		"Regional harbor notice",
-		"https://example.test/harbor",
-		"PORTO -- Harbor pilots reopened the inner channel after overnight inspections.\n\nOfficials said the next update will follow the afternoon tide window.",
-		now.Add(-2*time.Hour))
 	newer := seedUniversalWireWebCaptureFixture(t, handler,
 		"Rail corridor reopens",
 		"https://example.test/rail",
@@ -1031,8 +1026,8 @@ func TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticle
 	}
 	graphDiag := universalWireDiagnosticForSubstrate(resp.Diagnostics, "web_capture_graph")
 	if graphDiag.State != "diagnostic_only" ||
-		graphDiag.CandidateCount != 2 ||
-		graphDiag.StoryCount != 2 ||
+		graphDiag.CandidateCount != 1 ||
+		graphDiag.StoryCount != 1 ||
 		!strings.Contains(graphDiag.Reason, "Texture synthesis has not published an edition yet") {
 		t.Fatalf("graph diagnostic = %+v, want diagnostic-only graph captures", graphDiag)
 	}
@@ -1041,10 +1036,10 @@ func TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticle
 	if err != nil {
 		t.Fatalf("read graph capture helper: %v", err)
 	}
-	if captureDiagnostic.State != "available" || captureDiagnostic.StoryCount != 2 {
+	if captureDiagnostic.State != "available" || captureDiagnostic.StoryCount != 1 {
 		t.Fatalf("capture helper diagnostic = %+v, want available substrate stories", captureDiagnostic)
 	}
-	if len(captureStories) != 2 {
+	if len(captureStories) != 1 {
 		t.Fatalf("capture helper stories length = %d, want graph-backed captures: %+v", len(captureStories), captureStories)
 	}
 	story := captureStories[0]
@@ -1102,13 +1097,52 @@ func TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticle
 	if strings.Contains(string(storyJSON), `"source_ref"`) || strings.Contains(string(storyJSON), `"story_texture_doc_id"`) {
 		t.Fatalf("graph-backed capture story JSON should not claim Texture source_ref/publication fields: %s", string(storyJSON))
 	}
-	if captureStories[1].ID != "web-capture-"+older.CanonicalID {
-		t.Fatalf("second story id = %q, want older capture %s", captureStories[1].ID, older.CanonicalID)
-	}
 	claims := strings.Join(story.Claims, "\n")
 	if !strings.Contains(claims, "choir.web_capture") ||
 		!strings.Contains(claims, "not a Texture article publication") {
 		t.Fatalf("graph-backed capture claims did not bound the projection: %+v", story.Claims)
+	}
+}
+
+func TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 27, 1, 18, 0, 0, time.UTC)
+	seedUniversalWireWebCaptureFixture(t, handler,
+		"Regional harbor notice",
+		"https://example.test/harbor",
+		"PORTO -- Harbor pilots reopened the inner channel after overnight inspections. Officials said the next update will follow the afternoon tide window.",
+		now.Add(-2*time.Hour))
+	seedUniversalWireWebCaptureFixture(t, handler,
+		"Rail corridor reopens",
+		"https://example.test/rail",
+		"PARIS -- Emergency crews reopened the rail corridor after flooding, with regional authorities saying inspections will continue through the afternoon.",
+		now)
+
+	resp := getUniversalWireStoriesForTest(t, handler)
+	if resp.Source != "universal-wire-edition-texture" ||
+		resp.Diagnostics != nil ||
+		resp.Edition == nil ||
+		len(resp.Stories) != 1 {
+		t.Fatalf("stories = %+v, want read-time materialized Texture article from legacy graph captures", resp)
+	}
+	story := resp.Stories[0]
+	if story.StoryTextureDoc == "" ||
+		story.SourceState != "universal-wire-edition-texture" ||
+		strings.Contains(story.SourceState, "objectgraph-web-capture") ||
+		strings.Contains(story.TextureContent, "Universal Wire selected") ||
+		!strings.Contains(story.TextureContent, "incoming reports point to the same developing story") ||
+		len(story.Manifest.Lead) != 2 {
+		t.Fatalf("story = %+v, want synthesized Texture article with two graph-capture cited sources", story)
+	}
+	assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
+	for _, lead := range story.Manifest.Lead {
+		if lead.OpenSurface != sourcecontract.OpenSurfaceSource ||
+			lead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+			lead.ReaderSnapshot == nil ||
+			lead.ReaderSnapshot.TextContent == "" ||
+			lead.SourceKind != "source_service_item" {
+			t.Fatalf("lead lacks source-viewer reader provenance: %+v", lead)
+		}
 	}
 }
 
