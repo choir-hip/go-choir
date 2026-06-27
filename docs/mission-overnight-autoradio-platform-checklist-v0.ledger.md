@@ -12688,3 +12688,27 @@ Dirty/generated artifact classification:
 - Intentional durable docs/evidence changes in this paradoc and ledger.
 - Existing unrelated local WIP remains `skills/parallax/SKILL.md`.
 - Existing unrelated untracked report remains `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+## 2026-06-27 - O4 Live Source Arrival Update Worker Requested
+
+Move: observer/construct shift through a fresh Codex worktree thread.
+
+Conjecture assigned: if later relevant sourcecycled arrivals reach an already-materialized Universal Wire semantic story, the product path should revise the existing semantic story object and linked Texture article, preserve prior/new `source_ref` citations and source_entities, and avoid rewriting unrelated clusters or falling back to deterministic mega-article behavior.
+
+Worker handle: `local:90f1b195-bd94-423d-98b4-7870ddd88172`.
+
+Worker prompt scope:
+
+- Work item: `O4-live-source-arrival-update-product-reality-slice`.
+- Project: `/Users/wiz/go-choir`, separate Codex worktree from `main`.
+- Mutation class: likely orange/red if behavior changes; green/yellow only for documentation/probe-only work.
+- Protected surfaces: Universal Wire sourcecycled ingestion/materialization, runtime story clustering/update policy, `choir.universal_wire_story_cluster` state, Texture revision creation/source_ref/source_entities carry-forward, Wire edition linkage, and public `/api/universal-wire/stories` DTO.
+- Admissible evidence: focused local tests, broader runtime selector `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`, touched-package tests, `git diff --check`, and clean worktree. No push/deploy from worker.
+- Problem Documentation First: document any new behavior problem before code; existing C6/O4 problem may be reused only if explicitly tied to the new evidence.
+- Rollback: revert worker commit(s) plus dependent evidence commits.
+- Heresy delta: expected `repaired` for documented update/cluster rewrite gap, `discovered` for a distinct blocker.
+- Stop condition: commit coherent branch-local slice and return `ready_for_verifier` with commit, changed files, commands/results, dirty-path classification, evidence boundary, residual risks, and non-claims; or return `blocked` with smallest needed authority/evidence.
+
+Expected Delta V: 0 immediately; potential Delta V: -1 after worker + independent verifier acceptance and root incorporation/landing evidence. Actual Delta V: 0. V remains 3.
+
+Next orchestration move: read the worker result when the thread is ready, then create an independent verifier thread over any candidate commit before incorporation.
