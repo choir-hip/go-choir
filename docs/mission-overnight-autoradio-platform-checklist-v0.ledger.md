@@ -8971,6 +8971,55 @@ captures without those edges.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
 
+## 2026-06-27 - O4 Platform Texture Revision List Envelope Repair
+
+Mutation class: red platform Texture read repair after the documented
+headline-open blank-v0 failure.
+
+Claim: root found and locally repaired the next deployed Universal Wire
+headline-to-Texture readability gap. The platform document read now exposes a
+current head, but the sibling platformd revision-list endpoint returned a bare
+JSON array while the Texture frontend client expects the owner-scoped Texture API
+shape `{ "revisions": [...] }`. The editor therefore saw zero revisions and
+rendered blank v0 even though platformd had synced article revision rows.
+
+Repair scope:
+
+- `internal/platform/types.go` adds
+  `PlatformTextureRevisionListResponse`.
+- `internal/platform/handlers.go` now returns
+  `{ "revisions": [...] }` from
+  `/internal/platform/texture/documents/{doc}/revisions`.
+- `internal/platform/handlers_test.go` proves platformd's direct internal list
+  endpoint uses the Texture revision-list envelope.
+- `internal/proxy/handlers_test.go` proves the browser-facing
+  `/api/texture/documents/{doc}/revisions?read_owner=universal-wire-platform`
+  pass-through preserves the enveloped platform response.
+
+Commands/results:
+
+- `nix develop -c go test ./internal/platform -run 'TestInternalListTextureRevisionsUsesTextureEnvelope|TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandlePlatformTextureReadForwardsCurrentRevisionID|TestHandlePlatformTextureReadForwardsRevisionListEnvelope|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed. Nix emitted a non-fatal FlakeHub 401 warning and fetched from cache.nixos.org.
+- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+- `git diff --check`: passed.
+
+Protected surfaces: platformd Texture revision-list DTO, proxy read-only
+platform Texture pass-through, Universal Wire headline-to-Texture readability,
+and source_ref/source entity preservation through the existing revision read
+path.
+
+Rollback path: revert the revision-list envelope repair commit; platformd
+revision lists will again be shape-incompatible with the Texture editor, so the
+deployed headline may continue opening blank v0.
+
+Evidence boundary/non-claims: local repair only. No independent verifier yet,
+no push, CI, deploy, staging health identity, authenticated product replay, run
+acceptance, provider/search freshness, semantic clustering, Qdrant, or
+promotion/rollback execution is claimed.
+
+Actual Delta V: 0 until verifier and deployed product proof. V remains 27.
+
 ## 2026-06-27 - O4 Platform Texture Current-Head Verifier Accepts
 
 Verifier thread `019f06d0-830a-78e3-a475-e31db86f252e` returned `accept`

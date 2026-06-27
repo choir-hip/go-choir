@@ -3072,6 +3072,53 @@ func TestHandlePlatformTextureReadForwardsCurrentRevisionID(t *testing.T) {
 	}
 }
 
+func TestHandlePlatformTextureReadForwardsRevisionListEnvelope(t *testing.T) {
+	handler, priv, _ := testProxyEnv(t)
+
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/platform/texture/documents/doc-wire-1/revisions" {
+			t.Fatalf("platformd path = %q, want revision list read", r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller header")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"revisions": []map[string]any{{
+				"revision_id": "rev-wire-head",
+				"doc_id":      "doc-wire-1",
+				"owner_id":    vmctl.UniversalWirePlatformOwnerID,
+				"content":     "Wire article body",
+				"created_at":  "2026-06-26T22:00:00Z",
+			}},
+		})
+	}))
+	t.Cleanup(platformd.Close)
+	handler.cfg.PlatformdURL = platformd.URL
+
+	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1/revisions?limit=10000&read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "reader-1")})
+	rr := httptest.NewRecorder()
+
+	handler.HandlePlatformTextureRead(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Revisions []struct {
+			RevisionID string `json:"revision_id"`
+			Content    string `json:"content"`
+		} `json:"revisions"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got.Revisions) != 1 || got.Revisions[0].RevisionID != "rev-wire-head" || got.Revisions[0].Content != "Wire article body" {
+		t.Fatalf("revision list response = %+v, want wrapped platform revision", got)
+	}
+}
+
 func TestVMctlRouting_ProtectedAPIThroughVM(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	_ = vmctlSrv

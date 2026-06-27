@@ -69,3 +69,46 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 		t.Fatalf("platformd public HTML route should be disabled, got %d", publicW.Code)
 	}
 }
+
+func TestInternalListTextureRevisionsUsesTextureEnvelope(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts"), ""))
+
+	syncReq := SyncTextureDocumentRequest{
+		DocID:   "doc-wire-1",
+		OwnerID: "universal-wire-platform",
+		Title:   "Wire article",
+		Revisions: []SyncTextureRevision{{
+			RevisionID:  "rev-wire-head",
+			AuthorKind:  "appagent",
+			AuthorLabel: "Universal Wire",
+			Content:     "Wire article body",
+		}},
+	}
+	body, err := json.Marshal(syncReq)
+	if err != nil {
+		t.Fatalf("marshal sync request: %v", err)
+	}
+	sync := httptest.NewRequest(http.MethodPost, "/internal/platform/texture/sync", bytes.NewReader(body))
+	sync.Header.Set("X-Internal-Caller", "true")
+	syncW := httptest.NewRecorder()
+	handler.HandleInternalSyncTextureDocument(syncW, sync)
+	if syncW.Code != http.StatusOK {
+		t.Fatalf("sync status = %d body=%s", syncW.Code, syncW.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/platform/texture/documents/doc-wire-1/revisions", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	w := httptest.NewRecorder()
+	handler.HandleInternalListTextureRevisions(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
+	}
+	var got PlatformTextureRevisionListResponse
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode revision envelope: %v", err)
+	}
+	if len(got.Revisions) != 1 || got.Revisions[0].RevisionID != "rev-wire-head" || got.Revisions[0].Content != "Wire article body" {
+		t.Fatalf("revision envelope = %+v, want synced revision", got)
+	}
+}

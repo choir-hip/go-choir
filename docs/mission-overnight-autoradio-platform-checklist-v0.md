@@ -738,7 +738,18 @@ clicking the Universal Wire headline opens a new Texture window titled
 still shows v0 blank state (`Start typing the document...`, `Blank document
 ready`) instead of article content. Public API guards remain correct
 (`/api/universal-wire/stories` and platform Texture reads return 401
-unauthenticated; `/internal/*` returns 403 at the public edge).
+unauthenticated; `/internal/*` returns 403 at the public edge). Root documented
+that failure first in `992dce9c` and then found the stricter platform read shape
+gap: `GET /api/texture/documents/{doc}/revisions?read_owner=universal-wire-platform`
+was proxied to platformd, but platformd returned a bare JSON array while the
+Texture API client expects the normal `{ "revisions": [...] }` envelope. That
+made the editor treat the platform-owned document as having zero revisions even
+after the current-head repair. Root locally repaired platformd to return
+`PlatformTextureRevisionListResponse` and added platform/proxy regression tests;
+focused platform, proxy, and Universal Wire runtime selectors plus `git diff
+--check` passed. This repair still needs an independent verifier thread, push,
+CI/deploy, health identity, and authenticated product replay before deployed O4
+headline-readability acceptance can move.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -768,7 +779,10 @@ reader before `/api/universal-wire/stories` advertises the story id. The
 post-`d4bd1c65` replay adds a third O4 learning: avoiding unreadable story links
 is not enough; the route must leave at least one readable synthesis article
 publishable instead of filtering all edition candidates and falling back to
-diagnostics. The key O5 learning is that prompt bar and Texture
+diagnostics. The post-`7e8138e6` replay adds a fourth O4 learning: matching the
+document DTO is insufficient unless sibling platformd read endpoints preserve
+the whole owner-scoped Texture API response shape. The key O5 learning is that
+prompt bar and Texture
 materialization work, but Texture-to-Super acceptance still needs authenticated
 staging replay.
 
@@ -779,10 +793,14 @@ world-model/same-article identity scope, and branch-local article-surface
 readability/copy-repair scope. Deployed `d15ef3fb` proves only the copy half of
 that last scope; deployed `d4bd1c65` proves the repair has passed CI/deploy and
 health identity, and authenticated product replay proves ordinary Texture loads,
-but Universal Wire now renders `0 articles`, so there is no headline to open.
+but Universal Wire then rendered `0 articles`, so there was no headline to open.
+Deployed `7e8138e6` restores one article and reader-facing copy, but the headline
+still opens a blank v0 Texture because platformd revision-list reads do not yet
+match the Texture API envelope in production. A local envelope repair now exists
+and has focused local evidence, but no verifier/deploy/product acceptance yet.
 The actual product benchmark remains open until deployed Texture documents load
-without 404, Universal Wire renders at least one readable Texture article, the
-headline opens that article, article copy is not platform meta-copy,
+without 404 or blank v0, Universal Wire renders at least one readable Texture
+article, the headline opens that article, article copy is not platform meta-copy,
 multilingual live ingestion produces/upserts English synthesis Texture articles,
 and authenticated product evidence shows the world model/existing articles
 update. O5 has started through product
@@ -797,5 +815,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=27. Root deployed `7e8138e64b259f141d1b3e6b53218367122a68e9`; CI run `28275421927`, Docs Truth Check `28275421953`, FlakeHub run `28275421923`, deploy job `83781323493`, and health identity passed. Authenticated Computer Use replay on the signed-in Chrome tab proves ordinary Texture `untitled-texture-b754241a.texture` loads, Universal Wire renders `1 article`, and the card copy is reader-facing. The current deployed O4 failure is headline-to-Texture readability: clicking the Universal Wire headline opens a new Texture window titled `Multiple reports converge on Telegram Post from Metropoles Telegram`, but it still shows v0 blank state (`Start typing the document...`, `Blank document ready`) instead of article content. This failure is now documented first in the paradoc/ledger; do not code before committing that checkpoint. Next move: investigate why the platform-owned Universal Wire article opens without selecting/rendering its synced revision despite the platform current-head repair, then make a narrow repair with focused platform/proxy/frontend/runtime evidence, independent verifier thread review, push/deploy, health identity, and authenticated replay showing headline-to-Texture article content. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=27. Root deployed `7e8138e64b259f141d1b3e6b53218367122a68e9`; CI run `28275421927`, Docs Truth Check `28275421953`, FlakeHub run `28275421923`, deploy job `83781323493`, and health identity passed. Authenticated Computer Use replay on the signed-in Chrome tab proves ordinary Texture `untitled-texture-b754241a.texture` loads, Universal Wire renders `1 article`, and the card copy is reader-facing, but clicking the Universal Wire headline still opens blank v0 (`Start typing the document...`, `Blank document ready`) instead of article content. That failure was documented first in `992dce9c`. Root then found and locally repaired the immediate cause: platformd revision-list reads for `read_owner=universal-wire-platform` returned a bare array instead of the normal Texture `{ "revisions": [...] }` envelope, so the editor saw zero revisions despite the document current-head field. Local repair changes platformd to return `PlatformTextureRevisionListResponse` and adds platform/proxy regressions; focused platform/proxy/runtime selectors and `git diff --check` passed. Next move: commit the repair, open an independent verifier thread for `992dce9c` plus the repair commit, then if accepted push to `origin/main`, monitor CI/deploy, verify health identity, and run authenticated Computer Use replay showing the Universal Wire headline opens rendered article content with source affordances. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

@@ -376,3 +376,7 @@ type PlatformTextureRevision struct {
 	Metadata         json.RawMessage `json:"metadata"`
 	CreatedAt        time.Time       `json:"created_at"`
 }
+
+type PlatformTextureRevisionListResponse struct {
+	Revisions []PlatformTextureRevision `json:"revisions"`
+}

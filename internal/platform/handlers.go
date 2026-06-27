@@ -284,7 +284,7 @@ func (h *Handler) HandleInternalListTextureRevisions(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list texture revisions"})
 		return
 	}
-	writeJSON(w, http.StatusOK, revisions)
+	writeJSON(w, http.StatusOK, PlatformTextureRevisionListResponse{Revisions: revisions})
 }
 
 func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *http.Request) {
