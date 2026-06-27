@@ -12125,3 +12125,67 @@ Delta V: 0. V remains 3.
 
 Next move: read verifier verdict; incorporate `cad191e3` and `f888487b` only
 if the independent verifier returns `accept`.
+
+## 2026-06-27 - O4 Source Arrival Clustering Verifier Accepted And Root Incorporated
+
+Move type: verifier acceptance -> root incorporation.
+
+Verifier callback: source thread `019f07fe-aa55-71a0-a010-2dd004f68390`
+reported verdict `accept` for
+`O4-deployed-source-arrival-clustering-update-verifier`.
+
+Verifier reviewed worker branch `codex/o4-deployed-source-arrival-clustering-update`
+at `f888487ba4f99698290b15e9bf70ffde009bad1f`, including `cad191e3` and
+`f888487b`.
+
+Verifier findings: none.
+
+Verifier evidence boundary: branch-local only. No staging/product acceptance,
+push/deploy, auth/session, vmctl, gateway, Qdrant, promotion, rollback, or
+run-acceptance claim.
+
+Verifier reran:
+
+- `git status --short --ignored`: clean.
+- `git rev-parse --abbrev-ref HEAD`: `HEAD` detached, branch also containing
+  `codex/o4-deployed-source-arrival-clustering-update`.
+- `git rev-parse HEAD`: `f888487ba4f99698290b15e9bf70ffde009bad1f`.
+- `git show --check --oneline cad191e3`: clean.
+- `git show --check --oneline f888487b`: clean.
+- `git diff --check 55a3d9ee..HEAD`: clean.
+- `git diff --name-status 55a3d9ee..HEAD`: mission paradoc, ledger,
+  `internal/runtime/sourcecycled_web_captures.go`, and
+  `internal/runtime/universal_wire_test.go`.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated|MaterializesExistingSourcecycledGraphCaptures)' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 6.262s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 16.792s`.
+
+Root incorporation:
+
+- Cherry-picked worker docs checkpoint `cad191e3` as root commit `39253cf5`.
+- Cherry-picked worker implementation `f888487b` as root commit `33863287`.
+- Resolved mission-doc conflicts by preserving root orchestration/verifier
+  handoff state while adding the worker's Problem Documentation First
+  sub-blocker and branch-local repair evidence.
+
+Root reran:
+
+- `git show --check --oneline HEAD`: passed for `33863287`.
+- `git diff --check 55a3d9ee..HEAD`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated|MaterializesExistingSourcecycledGraphCaptures)' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 4.167s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 10.815s`.
+
+Root dirty-path classification at incorporation time: intentional committed
+source/test/docs in `39253cf5` and `33863287`; unrelated pre-existing local
+WIP remains `skills/parallax/SKILL.md`; unrelated untracked report remains
+`docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+Expected Delta V: 0 until push, CI/deploy, and staging product proof. Actual
+Delta V: 0. V remains 3.
+
+Next move: push root incorporation head to `origin/main`, monitor CI/deploy
+identity, then run authenticated staging acceptance for source-arrival
+clustering/update behavior before making a deployed product claim.
