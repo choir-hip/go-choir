@@ -8900,3 +8900,73 @@ Actual Delta V: +1 for accepted local repair and stale-handoff cleanup. V moves
 from 28 to 27. Next move: push to `origin/main`, monitor CI/deploy, verify
 health identity, and run authenticated product replay for non-empty Universal
 Wire and headline-to-Texture readability.
+
+## 2026-06-27 - O4 Deployed Legacy Graph Capture Synthesis Gap
+
+Mutation class: red documentation-first checkpoint for a runtime/Texture
+publication repair.
+
+Problem: deployed `690284db` fixes the structured platform Texture sync
+boundary, but Universal Wire still has no publishable article on staging.
+
+Evidence:
+
+- Root pushed `690284db06bd2fa8f36c4fe9db3b78a0ef74f238` to `origin/main`.
+- CI run `28273795518` passed, including Go gates, runtime shards, and deploy.
+- Deploy job `83776715959` passed.
+- FlakeHub run `28273795522` passed.
+- `https://choir.news/health` reports proxy and sandbox deployed commit
+  `690284db06bd2fa8f36c4fe9db3b78a0ef74f238`.
+- Authenticated Chrome/Computer Use replay signed in with the owner passkey for
+  `yusefnathanson@me.com`.
+- Ordinary Texture loaded and showed `Document loaded`.
+- Universal Wire rendered `0 articles`.
+- Product diagnostics on the authenticated Universal Wire app:
+  - Texture edition exists with 5 candidates, 0 stories, 5 filtered.
+  - Graph captures are available with 12 candidates and 12 diagnostic stories.
+  - Source provenance is unavailable because no Texture synthesis article is
+    publishable.
+
+Diagnosis:
+
+- This is not the structured sync bug repaired by `3d2afccb`; staging now runs
+  that code and health identity confirms it.
+- `HandleUniversalWireStories` attempts read-time materialization when edition
+  stories are empty.
+- `synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` only accepts
+  graph captures that can be converted by
+  `universalWireSynthesisSourceFromGraphCapture`.
+- `universalWireSynthesisSourceFromGraphCapture` currently rejects otherwise
+  readable graph captures when they lack a `captured_from` source-entity edge
+  with an `item_id`.
+- Staging's existing graph captures are usable as reader-backed diagnostic web
+  capture cards, but they do not satisfy that stricter source-entity edge
+  requirement, so synthesis is skipped and the public feed remains empty.
+
+Conjecture delta: Universal Wire should preserve the invariant that raw
+`choir.web_capture` projections are not public articles, while allowing legacy
+graph captures with durable URL/title/body reader snapshots to become cited
+sources inside a Texture synthesis article.
+
+Protected surfaces: Universal Wire route semantics, Texture canonical writes,
+source_ref/source entity citation provenance, platform publication/readiness
+filtering, and read-time materialization.
+
+Admissible evidence:
+
+- Focused runtime test proving two legacy graph captures without
+  `captured_from` edges materialize one Texture synthesis article.
+- Existing raw-capture diagnostic invariant remains covered for fewer-than-two
+  or otherwise non-synthesis cases.
+- Existing structured sourcecycled edge-backed tests still pass.
+- CI/deploy/health and authenticated product replay after landing.
+
+Rollback path: revert the code repair commit that broadens synthesis source
+eligibility; the deployed state returns to empty Universal Wire diagnostics
+instead of exposing raw capture cards.
+
+Heresy delta: discovered. The prior local proof covered sourcecycled captures
+with source-entity edges, but staging's existing captures are older/legacy graph
+captures without those edges.
+
+Actual Delta V: 0. This is documentation-first only; V remains 27.
