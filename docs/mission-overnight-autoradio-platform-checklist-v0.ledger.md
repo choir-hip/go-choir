@@ -11945,3 +11945,56 @@ Expected Delta V: 0 for opening worker. Actual Delta V: 0. V remains 3.
 
 Next move: monitor pending worker handle for a `ready_for_verifier` callback,
 then create an independent verifier thread before incorporation.
+
+## 2026-06-27 - O4 Deployed Source Arrival Worker Ready For Verifier
+
+Move type: worker result -> prover shift.
+
+Worker thread: `019f07f3-7ddc-7e72-8b9f-e26bc4af1833`.
+
+Worker branch: `codex/o4-deployed-source-arrival-clustering-update`.
+
+Worker commits:
+
+- `cad191e3` - docs-only Problem Documentation First checkpoint for the
+  branch-local unrelated-cluster refresh sub-blocker.
+- `f888487b` - implementation/test proof.
+
+Worker claimed changes:
+
+- Removed the catch-all `sourcecycled-live` mega-article fallback.
+- Reused existing Wire story cluster IDs when grouped sources overlap prior
+  source IDs.
+- Skipped synthesis for unchanged `state_refreshed` groups, so unrelated
+  existing articles are not rewritten on later arrivals.
+- Capped semantic topic/signal signatures and excluded raw noisy body-token
+  residue from story identity.
+- Added deployed-shaped regression coverage in
+  `TestHandleInternalSourcecycledWebCapturesKeepsDeployedShapedArrivalsSeparated`.
+
+Worker reported verification:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated|MaterializesExistingSourcecycledGraphCaptures)' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed.
+- `git diff --check` passed.
+- Final `git status --short --branch` showed a clean worker branch.
+
+Worker non-claims: branch-local runtime evidence only. No push, deploy,
+staging mutation, authenticated Chrome/product acceptance, auth/session, vmctl,
+deployment routing, gateway/provider credentials, Qdrant, promotion/rollback,
+run acceptance, provider/model-quality synthesis, or full News benchmark
+settlement.
+
+Independent verifier opened:
+`O4-deployed-source-arrival-clustering-update-verifier`.
+
+Verifier pending handle:
+`local:60ba30c4-6e1c-4c6f-8b7e-8c09f760bf33`.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation. Actual
+Delta V: 0. V remains 3.
+
+Next move: read verifier verdict; incorporate `cad191e3` and `f888487b` only
+if the independent verifier returns `accept`.
