@@ -229,8 +229,7 @@ test('Universal Wire platform read does not taint ordinary Texture document read
             app_context: {
               windowTitle: 'Wire article',
               docId: 'doc-wire-platform',
-              createdFrom: 'universal_wire_article',
-              platformRead: true,
+              appHint: 'universal-wire',
               sourcePath: 'universal-wire/story.story.texture',
             },
           },
