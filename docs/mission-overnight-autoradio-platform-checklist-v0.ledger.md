@@ -12878,3 +12878,58 @@ Non-claims: no new staging identity, no authenticated product acceptance for
 this landed commit, no provider/model-quality synthesis, no Qdrant/world-model
 projection, no promotion/rollback, no run acceptance, and no full News
 settlement.
+
+## 2026-06-27 - O4 Deployed Live Arrival Product Reality Worker Requested
+
+Move: create bounded worker thread for the remaining O4 product-realism axis.
+
+Worker handle:
+
+- Pending worktree handle:
+  `local:15c30a66-1c35-4c4e-a956-48f3ef22c201`.
+- Work item: `O4-deployed-live-source-arrival-update-product-reality`.
+- Starting state requested: `main` in a fresh worktree.
+
+Conjecture to decide: the remaining Universal Wire gap is not DTO existence;
+it is whether real deployed sourcecycled arrivals cause existing semantic story
+Texture articles to gain or materially change source-backed state while
+preserving unrelated story articles. The worker should decide whether current
+code can satisfy that deployed predicate, and if not, produce the smallest
+branch-local docs-first repair/proof slice that moves toward it.
+
+Mutation class: start yellow/probe. If a behavior problem is found and code
+changes are needed, classify orange/red before editing.
+
+Protected surfaces: Universal Wire sourcecycled ingestion/materialization,
+semantic story cluster state, Texture revision creation and
+source_ref/source_entities carry-forward, Wire edition linkage, platform
+Texture sync path, and `/api/universal-wire/stories` DTO. Worker was instructed
+to avoid auth/session, vmctl, deployment routing, provider/gateway credentials,
+Qdrant, promotion/rollback, and run acceptance unless unavoidable and
+documented.
+
+Problem Documentation First: if a new behavior problem is found, the first
+commit after discovery must be docs-only in the paradoc and/or ledger. Fix
+commit(s) must follow that checkpoint.
+
+Admissible evidence: focused runtime tests modeling deployed-shaped real source
+arrivals; broader `nix develop -c go test ./internal/runtime -run
+'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`;
+`git diff --check`; clean worker worktree. Staging observer evidence is allowed
+only with honest scope and is not product acceptance unless authenticated
+product-path proof.
+
+Rollback path: revert worker commit(s) back to starting main SHA plus any
+dependent evidence commits.
+
+Heresy delta: likely `discovered` for a new deployed predicate gap; `repaired`
+only for branch-local proof/implementation.
+
+Callback target: this root orchestration thread. Stop condition: one coherent
+docs-first plus code/test slice, or a decisive no-code proof that no repair is
+currently justified. Worker must not push, deploy, or mutate staging.
+
+Expected Delta V: 0 until worker callback and independent verifier evidence;
+possible future Delta V: 1 if the worker/verifier pair decides and repairs the
+source-arrival update predicate in a way that can be landed and product-tested.
+Actual Delta V: 0. V remains 3.
