@@ -13883,3 +13883,73 @@ Next move: use the deployed oracle to bracket subsequent sourcecycled cycles
 and compare before/after `/api/universal-wire/stories` plus Texture
 revision/source state, or document and repair why deployed live cycles report
 `synthesis_status: skipped` despite available synthesis sources.
+
+## 2026-06-27 - O4 Live Synthesis Skip Diagnostic Gap Documented
+
+Move: resample the deployed product oracle after the route-target repair and
+document the next C6 problem before any behavior change.
+
+Authenticated staging probe:
+
+- Temporary user: `qa-live-skip-1782559728@example.com`.
+- Observed at: `2026-06-27T11:29:16.553Z`.
+- `/auth/session`: `200`, `authenticated: true`.
+- Authenticated `/api/universal-wire/live-arrival`: `200`,
+  `status: available`.
+- Latest boundary:
+  - `boundary_id`: `cycle_585b664dfe90c813c24e1ac7`
+  - `cycle_id`: `cycle_585b664dfe90c813c24e1ac7`
+  - `observed_at`: `2026-06-27T11:22:25.415073875Z`
+  - `source_item_count`: 585
+  - `capture_count`: 585
+  - `source_entity_count`: 585
+  - `captured_from_edges`: 585
+  - `skipped_item_count`: 0
+  - `synthesis_status`: `skipped`
+  - `synthesis_source_count`: 768
+  - `synthesis_skip_reason`: `fewer than two eligible graph-backed source captures`
+- Authenticated `/api/universal-wire/stories`: `200`, source
+  `universal-wire-edition-texture`, 12 stories, edition doc
+  `5ac77c23-2642-4b74-b557-87d05c87e79f`; first story remained legacy
+  projection doc `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf` with headline
+  `Telegram Post from Metropoles Telegram`.
+
+Code inspection:
+
+- `HandleInternalSourcecycledWebCaptures` still assigns the same skip reason
+  whenever synthesis is not triggered.
+- `synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` can have
+  hundreds of graph-backed synthesis sources and still produce no article when
+  `universalWireDeterministicStorySourceGroups` returns zero multi-source
+  groups.
+- `universalWireDeterministicStorySourceGroups` currently only emits groups
+  that share a known topic and specific signal from the bounded concept map.
+  The live-arrival oracle does not expose known-concept source counts,
+  singleton candidate groups, filtered group count, refreshed group count, or
+  an exact skip reason.
+
+Conjecture verdict: the public oracle route is useful, but the current oracle
+does not yet contain enough synthesis-boundary evidence to decide the next
+article-update repair. The latest deployed cycle falsifies the literal skip
+reason: 768 synthesis sources is not "fewer than two eligible graph-backed
+source captures."
+
+Mutation class: green documentation/evidence only.
+
+Protected surfaces touched: none in this checkpoint. The next likely repair
+will touch authenticated public `/api/universal-wire/live-arrival` DTO shape,
+internal sourcecycled-to-runtime synthesis status, and Universal Wire
+sourcecycled grouping diagnostics.
+
+Rollback path: revert this docs checkpoint; no runtime state changes were made.
+
+Heresy delta: `discovered`. The route oracle repair exposed a classifier/skip
+diagnostic gap under deployed sourcecycled data.
+
+Expected Delta V: 0 for documentation only, plus observer evidence to choose
+the next repair. Actual Delta V: 0. V remains 1.
+
+Next move: repair live-arrival synthesis diagnostics so skipped cycles report
+the actual classifier boundary, with focused tests for "many synthesis sources
+but zero deterministic story groups"; then land and replay staging proof before
+choosing a grouping/article-update behavior repair.
