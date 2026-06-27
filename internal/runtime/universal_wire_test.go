@@ -600,65 +600,98 @@ func TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd(t *tes
 }
 
 func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *testing.T) {
-	_, handler := testAPISetup(t)
-	ctx := context.Background()
-	now := time.Date(2026, 6, 26, 23, 5, 0, 0, time.UTC)
-	items := []sources.Item{
-		universalWireSourcecycledTestItem("srcitem-legacy-pt", "rss:pt-wire", "fetch-legacy-pt", "Telegram Post from Metropoles Telegram", "https://example.com/pt/telegram", "pt", "Autoridades locais relataram novas medidas enquanto equipes acompanhavam os efeitos regionais.", now.Add(-20*time.Minute)),
-		universalWireSourcecycledTestItem("srcitem-legacy-en", "rss:en-wire", "fetch-legacy-en", "Regional officials describe the same developing update", "https://example.com/en/update", "en", "Officials described the same developing update and said additional details would follow later in the day.", now.Add(-16*time.Minute)),
-	}
-	projection, err := sourcegraph.WriteWebCaptureGraphObjects(ctx, handler.rt.ObjectGraph(), items, sourcegraph.WebCaptureGraphProjectionConfig{
-		OwnerID:    universalWirePlatformOwnerID(),
-		ComputerID: "computer-universal-wire-platform",
-		Now:        now,
-	})
-	if err != nil {
-		t.Fatalf("seed legacy graph captures: %v", err)
-	}
-	if len(projection.Captures) != 2 {
-		t.Fatalf("projection captures len = %d, want two captures", len(projection.Captures))
-	}
-	sourcesForSynthesis, err := handler.rt.universalWireSynthesisSourcesFromGraphCaptures(ctx, projection.Captures)
-	if err != nil {
-		t.Fatalf("load synthesis sources from seeded captures: %v", err)
-	}
-	legacyDoc, legacyRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: universalWireLiveSourcecycledClusterID,
-		Headline:  "Universal Wire live synthesis: " + sourcesForSynthesis[0].Title,
-		Summary:   "Universal Wire selected 2 graph-backed source captures from the live sourcecycled feed and published one English synthesis article instead of exposing raw capture cards.",
-		Tension:   "Later relevant source arrivals should revise this same live synthesis article until semantic story clustering can split independent events.",
-		Sources:   sourcesForSynthesis,
-		Now:       now,
-	})
-	if err != nil {
-		t.Fatalf("seed legacy synthesis article: %v", err)
-	}
-	if !strings.Contains(legacyRev.Content, "Universal Wire selected") {
-		t.Fatalf("legacy revision did not contain old meta-copy: %q", legacyRev.Content)
-	}
+	for _, tc := range []struct {
+		name           string
+		headline       func([]universalWireSynthesisSource) string
+		summary        func([]universalWireSynthesisSource) string
+		tension        string
+		wantSeededText string
+	}{
+		{
+			name: "legacy universal wire meta copy",
+			headline: func(sources []universalWireSynthesisSource) string {
+				return "Universal Wire live synthesis: " + sources[0].Title
+			},
+			summary: func([]universalWireSynthesisSource) string {
+				return "Universal Wire selected 2 graph-backed source captures from the live sourcecycled feed and published one English synthesis article instead of exposing raw capture cards."
+			},
+			tension:        "Later relevant source arrivals should revise this same live synthesis article until semantic story clustering can split independent events.",
+			wantSeededText: "Universal Wire selected",
+		},
+		{
+			name: "deployed scaffold copy",
+			headline: func(sources []universalWireSynthesisSource) string {
+				return "Multiple reports converge on " + sources[0].Title
+			},
+			summary: func(sources []universalWireSynthesisSource) string {
+				return fmt.Sprintf("2 incoming reports point to the same developing story. %s provides the lead signal, while %s adds a second angle for readers.", sources[0].Title, sources[1].Title)
+			},
+			tension:        "A second source in the cluster adds a separate angle rather than repeating the same capture, so the reports read as one developing article instead of two isolated updates.",
+			wantSeededText: "incoming reports point to the same developing story",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, handler := testAPISetup(t)
+			ctx := context.Background()
+			now := time.Date(2026, 6, 26, 23, 5, 0, 0, time.UTC)
+			items := []sources.Item{
+				universalWireSourcecycledTestItem("srcitem-legacy-pt", "rss:pt-wire", "fetch-legacy-pt", "Telegram Post from Metropoles Telegram", "https://example.com/pt/telegram", "pt", "Autoridades locais relataram novas medidas enquanto equipes acompanhavam os efeitos regionais.", now.Add(-20*time.Minute)),
+				universalWireSourcecycledTestItem("srcitem-legacy-en", "rss:en-wire", "fetch-legacy-en", "Regional officials describe the same developing update", "https://example.com/en/update", "en", "Officials described the same developing update and said additional details would follow later in the day.", now.Add(-16*time.Minute)),
+			}
+			projection, err := sourcegraph.WriteWebCaptureGraphObjects(ctx, handler.rt.ObjectGraph(), items, sourcegraph.WebCaptureGraphProjectionConfig{
+				OwnerID:    universalWirePlatformOwnerID(),
+				ComputerID: "computer-universal-wire-platform",
+				Now:        now,
+			})
+			if err != nil {
+				t.Fatalf("seed legacy graph captures: %v", err)
+			}
+			if len(projection.Captures) != 2 {
+				t.Fatalf("projection captures len = %d, want two captures", len(projection.Captures))
+			}
+			sourcesForSynthesis, err := handler.rt.universalWireSynthesisSourcesFromGraphCaptures(ctx, projection.Captures)
+			if err != nil {
+				t.Fatalf("load synthesis sources from seeded captures: %v", err)
+			}
+			legacyDoc, legacyRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+				ClusterID: universalWireLiveSourcecycledClusterID,
+				Headline:  tc.headline(sourcesForSynthesis),
+				Summary:   tc.summary(sourcesForSynthesis),
+				Tension:   tc.tension,
+				Sources:   sourcesForSynthesis,
+				Now:       now,
+			})
+			if err != nil {
+				t.Fatalf("seed legacy synthesis article: %v", err)
+			}
+			if !strings.Contains(legacyRev.Content, tc.wantSeededText) {
+				t.Fatalf("seeded revision did not contain expected repair trigger %q: %q", tc.wantSeededText, legacyRev.Content)
+			}
 
-	stories := getUniversalWireStoriesForTest(t, handler)
-	if stories.Source != "universal-wire-edition-texture" ||
-		stories.Diagnostics != nil ||
-		stories.Edition == nil ||
-		len(stories.Stories) != 1 {
-		t.Fatalf("stories = %+v, want repaired edition Texture story", stories)
-	}
-	story := stories.Stories[0]
-	if story.StoryTextureDoc != legacyDoc.DocID ||
-		strings.Contains(story.Headline, "Universal Wire live synthesis") ||
-		strings.Contains(story.TextureContent, "Universal Wire selected") ||
-		strings.Contains(story.TextureContent, "graph-backed source captures") ||
-		!strings.Contains(story.TextureContent, "clearest current account") {
-		t.Fatalf("story was not repaired to article-facing copy: %+v", story)
-	}
-	assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
-	docResp, revsResp := assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
-	if docResp.CurrentRevisionID == legacyRev.RevisionID {
-		t.Fatalf("readable Texture document still points at legacy revision %s", legacyRev.RevisionID)
-	}
-	if len(revsResp.Revisions) == 0 || revsResp.Revisions[0].RevisionID != docResp.CurrentRevisionID {
-		t.Fatalf("revision list did not expose repaired current revision: doc=%+v revisions=%+v", docResp, revsResp.Revisions)
+			stories := getUniversalWireStoriesForTest(t, handler)
+			if stories.Source != "universal-wire-edition-texture" ||
+				stories.Diagnostics != nil ||
+				stories.Edition == nil ||
+				len(stories.Stories) != 1 {
+				t.Fatalf("stories = %+v, want repaired edition Texture story", stories)
+			}
+			story := stories.Stories[0]
+			if story.StoryTextureDoc != legacyDoc.DocID ||
+				strings.Contains(story.Headline, "Universal Wire live synthesis") ||
+				strings.Contains(story.TextureContent, "Universal Wire selected") ||
+				strings.Contains(story.TextureContent, "graph-backed source captures") ||
+				!strings.Contains(story.TextureContent, "clearest current account") {
+				t.Fatalf("story was not repaired to article-facing copy: %+v", story)
+			}
+			assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
+			docResp, revsResp := assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
+			if docResp.CurrentRevisionID == legacyRev.RevisionID {
+				t.Fatalf("readable Texture document still points at legacy revision %s", legacyRev.RevisionID)
+			}
+			if len(revsResp.Revisions) == 0 || revsResp.Revisions[0].RevisionID != docResp.CurrentRevisionID {
+				t.Fatalf("revision list did not expose repaired current revision: doc=%+v revisions=%+v", docResp, revsResp.Revisions)
+			}
+		})
 	}
 }
 

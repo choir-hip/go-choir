@@ -668,7 +668,10 @@ func universalWireStoriesNeedArticleSurfaceRepair(stories []types.WireStory) boo
 		if strings.Contains(text, "Universal Wire live synthesis:") ||
 			strings.Contains(text, "Universal Wire selected ") ||
 			strings.Contains(text, "graph-backed source captures") ||
-			strings.Contains(text, "Universal Wire treats") {
+			strings.Contains(text, "Universal Wire treats") ||
+			strings.Contains(text, "incoming reports point to the same developing story") ||
+			strings.Contains(text, "A second source in the cluster") ||
+			strings.Contains(text, "reports read as one developing article") {
 			return true
 		}
 	}
