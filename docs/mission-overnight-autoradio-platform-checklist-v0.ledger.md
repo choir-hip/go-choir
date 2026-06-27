@@ -11072,3 +11072,89 @@ Next move: document the deployed product-evidence gap before code. The smallest
 next discriminator should make semantic story identity/change observable through
 an authenticated product path or produce a staging proof where a later source
 updates an existing semantic article/world-model identity.
+
+## 2026-06-27 - O4 Semantic Story Product Observability Gap Documented
+
+Conjecture statement: the deployed semantic-story-state landing cannot settle
+C6/C8 until semantic story identity/change and same-story later-source updates
+are observable through an authenticated product path. A branch-local graph
+metadata test is not enough; the product must expose a predicate that can be
+accepted in staging without reading private internals or leaking internal ids
+into article prose.
+
+Current finding: deployed `7744b1ea443113b358436899f664f95796bad135` preserves
+Universal Wire/Texture readability after the semantic-state landing, but the
+deployed smoke proof only sees public article/UI behavior. It does not directly
+observe the semantic story state recorded by the runtime, and it does not prove
+that a later live source arrival updated the same semantic story/article on
+staging.
+
+Evidence inspected:
+
+- `internal/runtime/sourcecycled_web_captures.go` builds semantic state with
+  `WorldModelKind: universal_wire_semantic_story`, a stable `StoryID`,
+  topic/signal signature, source ids, and typed latest changes.
+- `internal/runtime/wire_synthesis.go` writes
+  `universal_wire_semantic_story_id` and
+  `universal_wire_semantic_change_type` into Texture revision metadata, and
+  writes `semantic_story_id` and `latest_change_type` into the
+  `choir.universal_wire_story_cluster` object metadata/body.
+- `internal/runtime/universal_wire.go` still returns article/read-oriented
+  `WireStory` DTOs from `/api/universal-wire/stories`; that route is the
+  authenticated product read used by the frontend, but it does not currently
+  expose a product-level semantic-state predicate suitable for staging
+  acceptance.
+- `frontend/src/lib/UniversalWireApp.svelte` consumes
+  `/api/universal-wire/stories` and renders cards plus Texture opens; it can
+  prove readability and source opening, but not semantic story identity/change
+  metadata unless the product contract adds that evidence.
+- Authenticated Chrome smoke after deploy saw `12 articles`, a loaded Texture
+  article at `v66`, `Sources 24`, native source buttons, article-like update
+  language, and no visible scaffold/id leaks. That proves no-regression and
+  no-leak smoke, not C6/C8 semantic update behavior.
+
+Mutation class: green documentation-first checkpoint. The next implementation
+move is orange/red.
+
+Protected surfaces for the next move: Universal Wire sourcecycled ingestion,
+`/api/universal-wire/stories`, Wire story DTO contracts,
+`choir.universal_wire_story_cluster` object body/metadata, Texture revision
+metadata projection, source entity/source_ref projection, Wire edition linkage,
+platform Texture sync/read paths, and authenticated staging/product acceptance
+tests.
+
+Admissible evidence for a branch-local slice:
+
+- Focused runtime/API tests showing an authenticated product route can observe
+  semantic story identity and typed change state for Universal Wire stories
+  without exposing internal ids as reader-facing article prose.
+- Focused tests showing a later relevant source updates the same semantic story
+  and linked Texture article, while unrelated sources split.
+- Tests preserving raw `choir.web_capture` diagnostic-only behavior,
+  source_ref/source_entity boundaries, and visible article copy no-leak
+  invariants.
+- `git diff --check`, clean committed worktree, residual risks, and non-claims.
+
+Admissible deployed evidence after incorporation: CI, deploy identity,
+authenticated product API/UI proof on `choir.news` that observes semantic story
+identity/change through the approved product path, plus no visible internal id
+leak in article copy. Do not claim full provider/model-quality synthesis,
+production semantic clustering, Qdrant, promotion/rollback, run acceptance, or
+full News benchmark settlement.
+
+Rollback path: revert the implementation commit(s) to deployed baseline
+`7744b1ea443113b358436899f664f95796bad135` plus dependent docs/evidence
+commits.
+
+Heresy delta: `discovered`. The product now stores semantic state internally
+and keeps the UI readable, but still lacks a product-observable semantic update
+contract.
+
+Expected Delta V: 0 for this checkpoint; it buys the observer predicate for the
+next construct. Actual Delta V: 0. V remains 3.
+
+Next move: create bounded worker thread
+`O4-semantic-story-state-product-observability-slice-worker`. Stop condition is
+branch-local focused proof and clean commit only; no push, deploy,
+staging/product acceptance, provider/model-quality synthesis, Qdrant,
+promotion/rollback, run acceptance, or full News benchmark claim.
