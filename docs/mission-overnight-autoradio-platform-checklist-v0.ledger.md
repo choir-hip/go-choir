@@ -12839,3 +12839,42 @@ Dirty/generated artifact classification:
 - Intentional paradoc/ledger evidence update follows in root.
 - Existing unrelated local WIP remains `skills/parallax/SKILL.md`.
 - Existing unrelated untracked report remains `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+## 2026-06-27 - O4 Live Source Arrival DTO Proof Landing Recorded
+
+Move: finish landing evidence for accepted yellow/green DTO proof.
+
+Pushed identity:
+
+- Root pushed the incorporation and evidence chain to origin main as
+  `91772b065e193e443723810d50092d66d12cd935`.
+- Incorporated worker proof commit in root history:
+  `bacf3e0a Prove Wire source arrival DTO carry-forward`.
+- Evidence/doc commit before push:
+  `91772b06 Record O4 live arrival DTO proof incorporation`.
+
+GitHub results:
+
+- CI run `28284738983`: completed `success` for
+  `91772b065e193e443723810d50092d66d12cd935`.
+- Docs Truth Check run `28284738984`: completed `success`.
+- FlakeHub run `28284738982`: completed `success`.
+- CI job `Build Frontend` was `skipped`.
+- CI job `Deploy to Staging (Node B)` was `skipped`.
+
+Conjecture effect: this closes the root incorporation/landing hygiene for the
+accepted DTO carry-forward proof, but it does not reduce the deployed product
+variant. The landed change is test/evidence only; no runtime behavior changed
+and no staging deploy occurred.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3.
+
+Next move: product-level live-arrival proof or repair. The needed evidence is
+not another DTO-existence proof; it is deployed evidence that real later source
+arrivals increase or materially modify an existing semantic story/article while
+preserving unrelated articles.
+
+Non-claims: no new staging identity, no authenticated product acceptance for
+this landed commit, no provider/model-quality synthesis, no Qdrant/world-model
+projection, no promotion/rollback, no run acceptance, and no full News
+settlement.
