@@ -245,7 +245,7 @@ through direct runtime synthesis.
 
 ## Parallax State
 
-status: proposed
+status: active
 
 mission conjecture: if the Texture agent prompt is fixed to include source
 body text, and the existing agent pipeline (processor → Texture agent →
@@ -257,28 +257,32 @@ event understanding, English synthesis, live article updates. Running
 through the agent pipeline with gpt-5.5, not through deterministic runtime
 code.
 
-witness/spec (A/S): fixed prompt with source body text, processor run
-with typed decisions, Texture agent revision with LLM-synthesized content,
-platformd publication, Wire edition entry, authenticated staging product
-replay.
+witness/spec (A/S): fixed prompt with source body text (DONE commit
+d38d3afd), processor run with typed decisions, Texture agent revision
+with LLM-synthesized content, platformd publication, Wire edition entry,
+authenticated staging product replay.
 
 invariants / qualities / domain ramp (I/Q/D): Do not reintroduce
 deterministic synthesis. Do not add a 12-story cap. Do not use source
 labels as headlines. Use the existing agent pipeline. Use the configured
 models. Do not touch Texture core, O1-O3, or delete agent pipeline code.
-Domain ramp: local test with mock provider → local test with real
-provider → staging deploy → authenticated staging acceptance.
+Domain ramp: local test with mock provider → staging deploy →
+authenticated staging acceptance.
 
 variant (conjecture descent) V: count conjectures about the agent pipeline.
-Current: 4.
-- C1: sourcecycled ingestion dispatches processor runs (PROVEN by Mission 1)
-- C2: processor agent routes newsworthy items to Texture agent
+Current: 2.
+- C1: sourcecycled ingestion dispatches processor runs (SUPPORTED, Mission 1)
+- C2: processor agent routes newsworthy items to Texture agent (SUPPORTED
+  structurally — AllowCoAgentTools=true, AllowedDelegateTargets=[texture],
+  spawn_agent tool registered, prompt instructs routing. Runtime behavior
+  requires staging verification.)
 - C3: Texture agent produces article-grade English from source text
-  (BLOCKED by missing source body text in prompt)
-- C4: publication pipeline publishes the article to staging
+  (UNBLOCKED — prompt now includes excerpt_text. Local tests pass.
+  Staging verification needed.)
+- C4: publication pipeline publishes the article to staging (UNDICIDED)
 Target: 0.
 
-budget: 3-5 passes. Prompt fix, local verification, staging acceptance.
+budget: 3-5 passes. Pass 1 spent (prompt fix + local tests). 2-4 remaining.
 
 authority / bounds: may modify `tools_coagent.go` (prompt fix),
 `texture_agent_revision.go` (prompt), `tool_profiles.go` (tool registry
@@ -289,17 +293,23 @@ mutation class / protected surfaces: Orange/Red — fixing agent prompts,
 wiring runtime behavior, deploying to staging. Protected: Texture revision
 creation, platformd sync contract, source entity graph.
 
-evidence packet: fixed prompt diff, processor run log, Texture agent
-revision content, staging commit SHA, CI/deploy status, authenticated
-product replay.
+evidence packet: commit d38d3afd (prompt diff + tests), local test output,
+staging commit SHA (pending), CI/deploy status (pending), authenticated
+product replay (pending).
 
 heresy delta: `repaired` for H-WIRE-SOFT-GUARDRAIL (if gpt-5.5 produces
-real article output). `discovered` for any quality gaps.
+real article output on staging). `discovered` for any quality gaps.
 
-next move: fix `buildCoagentTextureRevisionPrompt` in `tools_coagent.go`
-to include source body text (excerpt_text from each source entity). This
-is the critical gap — the Texture agent cannot synthesize without source
-text.
+position / live conjectures / open edges: The prompt fix is the critical
+construct. C2 is structurally sound — processor has spawn_agent with
+texture target, prompt says "spawn Texture agents when a story should be
+opened or revised." The open edge is whether gpt-5.5 actually calls
+spawn_agent for newsworthy items and produces article-grade output. This
+can only be decided on staging with real model calls.
+
+next move: push to origin main, monitor CI, deploy to staging, trigger a
+sourcecycled cycle, verify one real LLM-synthesized article appears on
+choir.news with event-grade headline, English body, and cited sources.
 
 ledger file: `docs/mission-universal-wire-agent-pipeline-v1.ledger.md`
 
