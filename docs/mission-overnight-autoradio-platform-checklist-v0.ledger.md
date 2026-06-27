@@ -11236,3 +11236,98 @@ Next move: resolve and monitor verifier pending handle
 `local:2f3daeb6-8c46-45de-987d-b729b51a5819`. If accepted, incorporate
 `8007d00c2803c65b7b32323debe340bef95fd87e` and run the full behavior landing
 loop before claiming deployed product acceptance.
+
+## 2026-06-27 - O4 Deployed Semantic DTO Backfill Gap Documented
+
+Conjecture statement: deploying the additive `semantic_story` WireStory DTO
+field should make Universal Wire semantic story state observable through the
+authenticated product API. Staging falsified that conjecture for existing Wire
+edition articles: the code field exists, but current deployed stories do not
+carry it because their current Texture article revisions predate semantic
+metadata.
+
+Evidence:
+
+- Independent verifier thread `019f07b9-44a8-7b50-8984-e97afbe0d7a1` accepted
+  worker commit `8007d00c2803c65b7b32323debe340bef95fd87e`.
+- Root incorporated that worker as
+  `b8cdcc75dd8d88e933c791f7cd4dc113423ae232` and pushed it to `origin/main`.
+- Local root verification before push:
+  - `git diff --check HEAD^..HEAD && git show --check --oneline HEAD` passed.
+  - `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics' -count=1`
+    passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 3.731s`.
+  - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+    passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 10.359s`.
+- GitHub Actions for `b8cdcc75dd8d88e933c791f7cd4dc113423ae232`:
+  - CI run `28281037662`: success, including Go vet/build, integration smoke,
+    non-runtime tests, runtime shards 0-3, Docs Truth Check, and staging deploy.
+  - FlakeHub run `28281037672`: success.
+- `https://choir.news/health` reported proxy and sandbox deployed commit
+  `b8cdcc75dd8d88e933c791f7cd4dc113423ae232`.
+- Unauthenticated `https://choir.news/api/health` returned 401, preserving the
+  authenticated API boundary.
+- Authenticated product proof in the owner's signed-in Google Chrome session:
+  - Computer Use opened `https://choir.news/api/universal-wire/stories` in a new
+    Chrome tab.
+  - The page returned JSON rather than 401.
+  - A page-local JavaScript summary over that returned JSON showed:
+    `storyCount: 12`, `semanticStoryCount: 0`,
+    `hasSemanticStoryLiteral: false`, `sourceCount: null`, and
+    `copyLeak: false`.
+  - Visible UI state still showed Universal Wire with `12 articles`, a
+    headline-opened Texture article at `v66`, `Sources 24`, native source
+    buttons, and `Document loaded`.
+
+Code inspection after the failed product proof:
+
+- `internal/types/wire.go` defines `WireStorySemanticState` and the additive
+  `json:"semantic_story,omitempty"` field.
+- `internal/runtime/universal_wire.go` only populates that field from
+  `universal_wire_story_cluster_object_id`,
+  `universal_wire_semantic_story_id`, or
+  `universal_wire_semantic_change_type` in the current article revision
+  metadata.
+- `internal/runtime/wire_synthesis.go` writes those semantic metadata fields
+  only for revisions created by the newer semantic synthesis path.
+
+Finding: staging's current Universal Wire edition reads existing synthesized
+Texture article revisions whose article copy/source refs are readable, but whose
+current revision metadata does not include the new semantic fields. The read
+route therefore returns 12 story DTOs with no `semantic_story` field even though
+the code supports the field for fresh branch-local fixtures.
+
+Mutation class: green documentation-first checkpoint. The next repair is
+orange/red because it changes `/api/universal-wire/stories` DTO projection for
+existing Universal Wire article revisions.
+
+Protected surfaces for next repair: `/api/universal-wire/stories`, WireStory DTO
+projection, Universal Wire Texture article revision metadata fallback,
+source_ref/source_entity boundaries, raw `choir.web_capture` diagnostic-only
+behavior, and staging product acceptance.
+
+Admissible next repair: a narrow read-time fallback or backfill that returns an
+honest `semantic_story` field for existing synthesized Universal Wire Texture
+articles when they are known Wire synthesis articles but lack new semantic
+metadata. Acceptable fallback evidence can derive stable story id/change/source
+counts from existing durable revision metadata such as
+`universal_wire_story_cluster_id`, `source_network_cycle_id`,
+`synthesis_source_count`, and `source_item_ids`. The repair must not mutate
+unrelated Texture articles, must not publish raw `choir.web_capture` objects as
+articles, and must not leak internal ids into reader-facing headline/dek/article
+copy.
+
+Rollback path: revert the next repair commit and, if needed, revert
+`b8cdcc75dd8d88e933c791f7cd4dc113423ae232` to return to deployed readable
+articles without semantic DTO evidence.
+
+Heresy delta: `discovered`. Branch-local fixtures proved the new DTO for fresh
+semantic revisions, but staging showed existing article revisions need legacy
+semantic evidence repair.
+
+Expected Delta V: 0 for this checkpoint. Actual Delta V: 0. V remains 3.
+
+Next move: implement the smallest root repair for semantic DTO fallback on
+existing synthesized Wire articles, run focused tests, push to `origin/main`,
+monitor CI/deploy, verify staging health identity, and replay authenticated
+Chrome product API proof until at least one deployed story exposes
+`semantic_story` without visible article-copy leakage.
