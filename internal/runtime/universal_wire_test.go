@@ -1649,47 +1649,51 @@ func TestHandleUniversalWireStoriesDeRanksStaleSynthesisAfterSkippedLiveArrival(
 	ctx := context.Background()
 	now := time.Date(2026, 6, 27, 12, 30, 0, 0, time.UTC)
 	valid := seedPlatformSourceNetworkTextureFixtureAt(t, handler, "doc-wire-valid-current", "Valid current Wire article", now.Add(-2*time.Hour))
-	validRev, err := handler.rt.Store().GetRevision(ctx, "rev-"+valid.DocID, universalWirePlatformOwnerID())
-	if err != nil {
-		t.Fatalf("load valid revision: %v", err)
+	staleDoc := types.Document{
+		DocID:     "doc-wire-stale-synthesis",
+		OwnerID:   universalWirePlatformOwnerID(),
+		Title:     "South Korea plans to train entire military as drone warriors.texture",
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
-	staleDoc, staleRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: "sourcecycled-live-harbor-transport-rail-corridor",
-		Headline:  "South Korea plans to train entire military as drone warriors",
-		Summary:   "Two reports were previously treated as one transport story.",
-		Tension:   "This stale article should no longer win the live feed after the latest classifier boundary skips synthesis.",
-		Sources: []universalWireSynthesisSource{
-			{
-				ItemID:       "srcitem-stale-harbor",
-				SourceID:     "rss:harbor",
-				FetchID:      "fetch-stale-harbor",
-				Title:        "Harbor pilots reopen cargo channel",
-				URL:          "https://example.test/stale/harbor",
-				CanonicalURL: "https://example.test/stale/harbor",
-				Language:     "en",
-				Body:         "Port pilots reopened the cargo channel after tide soundings near the harbor.",
-				FetchedAt:    now.Add(-10 * time.Minute),
-			},
-			{
-				ItemID:       "srcitem-stale-train-verb",
-				SourceID:     "rss:defense",
-				FetchID:      "fetch-stale-train-verb",
-				Title:        "South Korea plans to train entire military as drone warriors",
-				URL:          "https://example.test/stale/defense",
-				CanonicalURL: "https://example.test/stale/defense",
-				Language:     "en",
-				Body:         "Defense officials described drone instruction for soldiers and commanders.",
-				FetchedAt:    now.Add(-9 * time.Minute),
-			},
-		},
-		Now: now,
+	if err := handler.rt.Store().CreateDocument(ctx, staleDoc); err != nil {
+		t.Fatalf("create stale synthesis doc: %v", err)
+	}
+	staleMeta, _ := json.Marshal(map[string]any{
+		"source":                                 "edit_texture",
+		"revision_role":                          textureRevisionRoleCanonical,
+		"artifact_kind":                          "article_revision",
+		"source_network_cycle_id":                "sourcecycled-live-harbor-transport-rail-corridor",
+		"ingestion_handoff_cycle_id":             "sourcecycled-live-harbor-transport-rail-corridor",
+		"ingestion_handoff_request_kind":         "synthesis_cluster",
+		"universal_wire_story_cluster_id":        "sourcecycled-live-harbor-transport-rail-corridor",
+		"universal_wire_story_cluster_object_id": "obj:choir.universal_wire_story_cluster:test-stale",
+		"universal_wire_article_alias_path":      "universal-wire/articles/sourcecycled-live-harbor-transport-rail-corridor.texture",
+		"source_item_ids":                        []string{"srcitem-stale-harbor", "srcitem-stale-train-verb"},
+		"synthesis_source_count":                 2,
+		"platformd_route_path":                   "/pub/texture/universal-wire/sourcecycled-live-harbor-transport-rail-corridor",
 	})
-	if err != nil {
-		t.Fatalf("synthesize stale article fixture: %v", err)
+	staleContent := strings.Join([]string{
+		"# South Korea plans to train entire military as drone warriors",
+		"",
+		"This stale synthesis was created before the classifier stopped treating the verb train as a rail signal.",
+	}, "\n")
+	staleRev := types.Revision{
+		RevisionID:  "rev-" + staleDoc.DocID,
+		DocID:       staleDoc.DocID,
+		OwnerID:     staleDoc.OwnerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "texture:" + staleDoc.DocID,
+		Content:     staleContent,
+		BodyDoc:     runtimeTestTextureBodyDoc(t, staleDoc.DocID, "rev-"+staleDoc.DocID, staleContent),
+		Citations:   json.RawMessage("[]"),
+		Metadata:    staleMeta,
+		CreatedAt:   now,
 	}
-	if _, err := handler.rt.ensureUniversalWireEditionIncludes(ctx, valid, validRev, now.Add(time.Minute)); err != nil {
-		t.Fatalf("include valid article in edition: %v", err)
+	if err := handler.rt.Store().CreateRevision(ctx, staleRev); err != nil {
+		t.Fatalf("create stale synthesis revision: %v", err)
 	}
+	seedUniversalWireEditionFixture(t, handler, valid.DocID, staleDoc.DocID)
 	if err := handler.rt.recordUniversalWireLiveArrivalStatus(ctx, universalWireLiveArrivalStatus{
 		SchemaVersion:        objectgraph.UniversalWireLiveArrivalStatusSchemaVersion,
 		BoundaryID:           "cycle-post-classifier-skip",

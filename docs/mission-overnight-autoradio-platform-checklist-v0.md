@@ -983,6 +983,17 @@ semantic story state without that exact boolean shape. Next move: broaden
 synthesis revision recognition to the same legacy-compatible metadata contract
 already used for semantic projection, then replay local and staging proof.
 
+Local metadata-recognition repair broadens `wireRevisionIsUniversalWireSynthesis`
+to accept the legacy/platform-synced synthesis metadata shapes already used by
+semantic projection: synthesis-cluster handoff kind, article alias path, story
+cluster id, or story cluster object id, in addition to the boolean. The focused
+stale de-rank regression now omits `universal_wire_synthesis: true` while
+retaining cycle/cluster/article metadata, and still proves the stale synthesis
+sorts below an older valid article after a later skipped live-arrival boundary.
+Broader Universal Wire runtime selector passed locally. Next move: commit,
+push, monitor CI/deploy, verify health identity, refresh auth if needed, and
+rerun the deployed story-order proof.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

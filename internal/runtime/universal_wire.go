@@ -853,8 +853,11 @@ func (h *APIHandler) platformdStoryVerificationEnabled() bool {
 
 func wireRevisionIsUniversalWireSynthesis(rev types.Revision) bool {
 	meta := decodeRevisionMetadata(rev.Metadata)
-	value, ok := meta["universal_wire_synthesis"].(bool)
-	return ok && value
+	return metadataBoolValue(meta, "universal_wire_synthesis") ||
+		metadataString(meta, "ingestion_handoff_request_kind") == "synthesis_cluster" ||
+		metadataString(meta, "universal_wire_article_alias_path") != "" ||
+		metadataString(meta, "universal_wire_story_cluster_id") != "" ||
+		metadataString(meta, "universal_wire_story_cluster_object_id") != ""
 }
 
 func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {

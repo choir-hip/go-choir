@@ -14472,3 +14472,62 @@ Next move: broaden `wireRevisionIsUniversalWireSynthesis` to recognize
 legacy/platform-synced synthesis metadata shapes, add a regression where a
 stale synthesis revision lacks the boolean but carries cluster/article metadata,
 then rerun local tests and the landing loop.
+
+## 2026-06-27 - O4 Stale Synthesis Metadata Recognition Local Proof
+
+Move: repair the staged recognition gap by sharing the same
+legacy-compatible synthesis metadata contract across stale detection and
+semantic projection.
+
+Repair summary:
+
+- `wireRevisionIsUniversalWireSynthesis` now recognizes Universal Wire
+  synthesis revisions by any of:
+  `universal_wire_synthesis: true`, `ingestion_handoff_request_kind:
+  synthesis_cluster`, `universal_wire_article_alias_path`,
+  `universal_wire_story_cluster_id`, or
+  `universal_wire_story_cluster_object_id`.
+- The stale-feed de-rank guard therefore applies to platform-visible synthesis
+  revisions whose cluster/article metadata survived sync even if the boolean
+  shape is absent.
+- `TestHandleUniversalWireStoriesDeRanksStaleSynthesisAfterSkippedLiveArrival`
+  now models that deployed shape by omitting `universal_wire_synthesis: true`
+  while retaining cycle, cluster, and article alias metadata.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(DeRanksStaleSynthesisAfterSkippedLiveArrival|SurfacesNewestEditionTexturesBeforeLimit)|TestHandleInternalSourcecycledWebCapturesDoesNotTreatTrainVerbAsRailSignal' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.732s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 15.640s`.
+- `git diff --check -- internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed as part of the command chain.
+
+Conjecture verdict: supported locally for the metadata recognition repair. The
+remaining proof must be deployed replay showing doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` no longer ranks first after skipped
+boundary `cycle_f8195609729672a6fd7a6798`.
+
+Mutation class: orange behavior repair. Protected surfaces: Universal Wire
+synthesis revision recognition, stale live-arrival interpretation, public story
+ordering, and prominence assignment.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming metadata recognition repair plus this
+evidence entry; stale detection again requires the exact
+`universal_wire_synthesis` boolean.
+
+Heresy delta: `repaired` locally for the staged metadata-recognition miss; not
+yet repaired at staging.
+
+Expected Delta V: 1 if deployed replay shows the bad South Korea/train article
+is retained for audit but no longer wins the public feed. Actual Delta V: 0
+until deployed proof. V remains 1.
+
+Next move: commit, push to `origin main`, monitor CI/deploy, verify health
+identity, refresh auth if needed, and rerun authenticated `/api/universal-wire`
+proof.
