@@ -13808,3 +13808,78 @@ Expected Delta V: 0 until deployed proof. Actual Delta V: 0. V remains 2.
 Next move: push `50dc5428` and `b7b012c8` plus this evidence, monitor CI and
 staging deploy, verify `choir.news` health identity, and rerun authenticated
 deployed proof for `/api/universal-wire/live-arrival`.
+
+## 2026-06-27 - O4 Live Arrival Oracle Platform Route Repair Deployed
+
+Move: complete the landing loop for the live-arrival oracle route-target repair.
+
+Pushed head: `daeff1ced630210b5ec7b8c943a7e7b2215b19e1`.
+
+Included commits:
+
+- `50dc5428 Document O4 live arrival route target mismatch`
+- `b7b012c8 Route Wire live arrival oracle to platform computer`
+- `daeff1ce Record O4 live arrival route repair evidence`
+
+CI/deploy evidence:
+
+- CI run `28287504060` passed.
+- Deploy job `83814144276` passed.
+- Docs Truth Check run `28287504034` passed.
+- FlakeHub run `28287504070` passed.
+- Staging health at `https://choir.news/health` reported proxy and sandbox
+  deployed commit `daeff1ced630210b5ec7b8c943a7e7b2215b19e1`, with proxy
+  `status: ok`, upstream `ok`, and vmctl routing/status enabled/ok.
+
+Authenticated deployed proof:
+
+- Temporary user: `qa-1782559069281-h2pcpp@example.com`.
+- `/auth/session`: `200`, `authenticated: true`.
+- Unauthenticated `/api/universal-wire/live-arrival`: `401`.
+- Authenticated `/api/universal-wire/live-arrival`: `200`,
+  `status: available`.
+- Latest live-arrival status:
+  - `boundary_id`: `cycle_ca4f264e16e9031961db155e`
+  - `cycle_id`: `cycle_ca4f264e16e9031961db155e`
+  - `observed_at`: `2026-06-27T11:07:22.02003871Z`
+  - `phase`: `web_captures_graph_written`
+  - `status`: `ok`
+  - `objectgraph_mode`: `runtime_api`
+  - `source_item_count`: 908
+  - `capture_count`: 894
+  - `source_entity_count`: 894
+  - `captured_from_edges`: 894
+  - `skipped_item_count`: 14
+  - `synthesis_status`: `skipped`
+  - `synthesis_source_count`: 768
+  - `synthesis_skip_reason`: `fewer than two eligible graph-backed source captures`
+- Repeated live-arrival reads were byte-equivalent.
+- Redaction check found no response keys/patterns:
+  `source_items`, `source_ids`, `raw_source`, `body_text`,
+  `extracted_text`, or `content_html`.
+- Authenticated `/api/universal-wire/stories`: `200`, source
+  `universal-wire-edition-texture`, 12 stories, edition doc
+  `5ac77c23-2642-4b74-b557-87d05c87e79f`, edition revision
+  `73f494de-1e01-4763-bd23-adafb96652aa`.
+
+Conjecture verdict: supported for the deployed route-target repair. Normal
+authenticated product users can now read the platform Universal Wire
+live-arrival oracle instead of their own runtime's empty status object.
+
+Boundary/non-claims: this does not settle fresh source-arrival article update
+semantics. The latest observed cycle was readable but reported
+`synthesis_status: skipped`, so the oracle is now useful precisely because it
+shows the next realism axis: why a live sourcecycled cycle with 908 items and
+768 synthesis sources did not synthesize/update Wire Texture articles.
+
+Heresy delta: `repaired` for the public live-arrival oracle route target at
+staging/product tier. A new/remaining open edge is exposed: live cycle synthesis
+skip under deployed data.
+
+Expected Delta V: -1 for the missing product/public live-arrival oracle.
+Actual Delta V: -1. V moves from 2 to 1.
+
+Next move: use the deployed oracle to bracket subsequent sourcecycled cycles
+and compare before/after `/api/universal-wire/stories` plus Texture
+revision/source state, or document and repair why deployed live cycles report
+`synthesis_status: skipped` despite available synthesis sources.
