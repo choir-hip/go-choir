@@ -12989,3 +12989,47 @@ Verifier requested:
 Expected Delta V: 0 until verifier verdict. Actual Delta V: 0. V remains 3.
 
 Next move: read verifier result; incorporate only if accepted.
+
+## 2026-06-27 - O4 Deployed Live Arrival Window Problem Documented
+
+Move: probe/position update before code repair.
+
+Claim decided: current branch/root DTO carry-forward proof does not decide the
+deployed live-source-arrival predicate. The runtime can preserve prior/new
+sources once the relevant captures are in the same synthesis group, but deployed
+sourcecycled cycles can write hundreds of captures before synthesis runs.
+
+Problem evidence:
+
+- The deployed observer packet already recorded Node B sourcecycled cycle
+  `cycle_aab51c4b894bba17afea9fb2` writing 561 graph captures.
+- `synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` selects
+  only the 24 most recently updated `choir.web_capture` objects before
+  deterministic grouping and cluster-id resolution.
+- Therefore a later matching source arrival can be separated from the prior
+  sources for an existing semantic story by cycle volume/order before the update
+  path can revise the existing Texture article.
+
+Problem Documentation First status: satisfied by this docs-only checkpoint
+before any runtime repair.
+
+Mutation class: green docs for the problem record. The possible next repair is
+orange because it touches Universal Wire sourcecycled materialization,
+semantic story cluster state, Texture revision creation/source carry-forward,
+Wire edition linkage, and `/api/universal-wire/stories` DTO behavior.
+
+Admissible next evidence: a branch-local test that models a high-volume
+deployed-shaped sourcecycled cycle with the relevant prior/new captures outside
+the 24-capture window, plus focused runtime selectors and `git diff --check`.
+
+Rollback path: revert this documentation checkpoint and any dependent repair
+commit(s) back to starting SHA `1b354ba2b973cd04ae5c02dfafebcab75918275a`.
+
+Heresy delta: `discovered` for the sharpened C6 deployed-cycle window gap.
+No deployed product acceptance, staging mutation, provider/model synthesis,
+Qdrant/world-model, promotion/rollback, run acceptance, or full News settlement
+is claimed.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3, but the next discriminator
+is narrower: prove or repair high-volume later-arrival update semantics while
+preserving unrelated articles.

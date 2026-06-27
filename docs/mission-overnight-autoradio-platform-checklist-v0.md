@@ -649,6 +649,16 @@ same story/article/edition identity. Staging evidence now gives the next
 blocker: sourcecycled is live and did deliver new source arrivals, but the Wire
 surface is still not the intended multi-story/update product.
 
+Current C6 deployed-cycle window conjecture: the branch/root DTO carry-forward
+proof is necessary but not sufficient for live product reality. The deployed
+sourcecycled cycle recorded 561 graph captures in one pass, while
+`synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures` only selects
+the 24 most recently updated `choir.web_capture` objects before grouping. A
+later matching arrival can therefore be separated from the prior sources for its
+existing story by cycle volume/order before clustering or cluster-id resolution
+can update the existing Texture article. This is a newly sharpened product
+behavior problem inside C6, not a deployed acceptance claim.
+
 Branch-local worker construction also exposed a sharper sub-blocker inside that
 same problem: a later matching source arrival caused unrelated existing story
 clusters to be rewritten as `state_refreshed` revisions during the same
@@ -741,15 +751,15 @@ previous/current source counts are both 2. This supports the need for the
 worker's DTO carry-forward proof and keeps deployed live-arrival update
 settlement open.
 
-next move: independent verifier handle
-`local:08b06908-c7e7-4cbf-b5e9-cf76218c907c` is queued to review worker thread
-`019f085c-cd49-7630-8e4a-31a22e26c8a9` commits `b0e89b21` and `bbd9f2db`.
-Worker evidence discovered and branch-locally repaired a deployed-cycle window
-gap: deployed sourcecycled can write hundreds of captures while live synthesis
-previously grouped only the latest 24, so later matching arrivals could miss
-prior story sources before cluster update. The repair raises the live synthesis
-capture limit to 768 and adds a high-volume regression. Do not incorporate until
-the verifier returns `accept`. The API/UI mismatch and headline-open 404 are
+next move: incorporate the accepted branch-local deployed-cycle window repair
+from worker thread `019f085c-cd49-7630-8e4a-31a22e26c8a9`, then run root
+evidence and the staging landing loop. Worker evidence discovered and
+branch-locally repaired a deployed-cycle window gap: deployed sourcecycled can
+write hundreds of captures while live synthesis previously grouped only the
+latest 24, so later matching arrivals could miss prior story sources before
+cluster update. The accepted repair raises the live synthesis capture limit to
+768 and adds a high-volume regression. The API/UI mismatch and headline-open 404
+are
 repaired on staging for the tested product path, and the branch/root DTO
 carry-forward regression is accepted and CI-clean, but this is not full
 Universal Wire settlement.
