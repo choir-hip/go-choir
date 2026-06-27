@@ -12744,3 +12744,55 @@ Verifier requested:
 Expected Delta V: 0 for this orchestration pass. Actual Delta V: 0. V remains 3 pending verifier verdict and any root incorporation. Observer evidence improved: staging now distinguishes durable same-doc revision histories from actual deployed new-source incorporation proof.
 
 Next move: read verifier result, then incorporate worker commit only if accepted. A docs/test-only incorporation would not require staging deploy for behavior, but it still needs root diff hygiene and Docs Truth Check if pushed.
+## 2026-06-27 - O4 Live Source Arrival Product DTO Proof Worker Ready
+
+Move type: worker construct/probe.
+
+Claim under test: after a later relevant sourcecycled arrival updates an
+already-materialized Universal Wire semantic story, the authenticated product
+story DTO should expose the same story/article identity, typed `source_added`
+semantic evidence, and all prior/new native source manifest entries rather than
+only proving the lower-level Texture revision state.
+
+Problem Documentation First status: no distinct new behavior problem was
+discovered. This strengthens the already documented C6/O4 source-arrival update
+and unrelated-cluster rewrite blocker, so the existing problem record covers
+the work.
+
+Implementation: tightened
+`TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster`
+to assert that the post-arrival `/api/universal-wire/stories` projection carries
+three source-viewer-ready manifest leads for both prior sources and the later
+arrival, while preserving the same semantic story id and same linked Texture
+article.
+
+Receipts:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed.
+
+Evidence class: branch-local runtime regression proof only. No push, deploy,
+staging mutation, authenticated Chrome product acceptance, provider/model
+synthesis-quality claim, Qdrant/world-model projection claim, promotion,
+rollback, run acceptance, or full News benchmark settlement.
+
+Mutation class: yellow test/proof strengthening plus green mission ledger
+record. Protected surfaces observed by the test are Universal Wire
+sourcecycled materialization, semantic story cluster state, Texture revision
+source_ref/source_entities carry-forward, Wire edition linkage, and
+`/api/universal-wire/stories`; runtime behavior was not changed.
+
+Rollback path: revert this worker commit to return to the starting checkpoint.
+
+Heresy delta: `repaired` remains branch-local for the documented C6/O4 update
+predicate; this pass introduces no new heresy and makes no deployed product
+claim.
+
+Expected Delta V: 0 against deployed/staging V because this is branch-local
+proof only. Actual Delta V: 0. V remains 3.
+
+Next move: verifier should review whether the strengthened product DTO
+assertions are sufficient for this bounded worker slice, then orchestration can
+decide whether to incorporate or wait for deployed post-arrival evidence.

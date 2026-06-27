@@ -359,6 +359,31 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		countStrings(secondStories.Edition.IncludedDocIDs, firstProjection.SynthesisDocID) != 1 {
 		t.Fatalf("updated stories = %+v, want one revised article and one edition transclusion", secondStories)
 	}
+	updatedManifestTitles := []string{}
+	for _, lead := range secondStories.Stories[0].Manifest.Lead {
+		updatedManifestTitles = append(updatedManifestTitles, lead.Title)
+		if lead.OpenSurface != sourcecontract.OpenSurfaceSource ||
+			lead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+			lead.ReaderSnapshot == nil {
+			t.Fatalf("updated product story lead lacks source-viewer reader provenance: %+v", lead)
+		}
+	}
+	for _, wantTitle := range []string{
+		"Corredor ferroviario reabre parcialmente",
+		"Autoridades advierten demoras regionales",
+		"La reprise reste partielle sur le corridor ferroviaire",
+	} {
+		found := false
+		for _, gotTitle := range updatedManifestTitles {
+			if strings.Contains(gotTitle, wantTitle) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("updated product story manifest titles = %v, want prior and later source_refs including %q", updatedManifestTitles, wantTitle)
+		}
+	}
 	assertWireStorySemanticStateForTest(t, secondStories.Stories[0], secondSemanticState)
 	if secondStories.Stories[0].SemanticStory.StoryID != firstStory.SemanticStory.StoryID ||
 		secondStories.Stories[0].SemanticStory.ChangeType != "source_added" ||
