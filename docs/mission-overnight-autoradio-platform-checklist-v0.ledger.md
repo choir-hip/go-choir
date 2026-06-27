@@ -9102,6 +9102,57 @@ Next move: request independent verifier for docs-first commit `7c9db378` and
 the proxy fallback repair, then push/deploy and replay authenticated Universal
 Wire if accepted.
 
+## 2026-06-27 - O4 Proxy Supplied Revision Platform Sync Verifier Accepts
+
+Verifier thread `019f070c-85d3-7b51-ba0f-0c22a66e542a` returned `accept` for
+docs-first commit `7c9db378` and repair commit `7f3b42b6`.
+
+Findings: none.
+
+Verifier conclusions:
+
+- Docs-first ordering is satisfied: `7c9db378` is documentation-only and records
+  the deployed proxy/platformd sync miss before code repair.
+- The repair remains behind existing internal-caller, platform-owner,
+  source/body consistency, and `wirepublish.EligibleForAutonomousPublish`
+  checks.
+- Full-history sandbox revision sync remains preferred.
+- The supplied-current-revision fallback is used only after the full-history
+  fetch fails and the fallback revision has non-empty revision id and content.
+- The fallback carries `body_doc`, enriched `source_entities`, citations, and
+  metadata into platformd sync.
+- The repair does not bypass platformd verification and does not publish raw
+  graph captures as articles.
+- Regression coverage includes the 404 history-miss fallback and asserts one
+  supplied revision reaches platformd with content, `body_doc`, and source
+  entities.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean.
+- `git show --check --oneline 7c9db378`: passed.
+- `git show --check --oneline 7f3b42b6`: passed.
+- `git diff --check 376086ded5c6500972b762e172f1cf1dba46026b..HEAD`: passed.
+- `git diff --name-status 376086ded5c6500972b762e172f1cf1dba46026b..HEAD`: only
+  mission docs/ledger plus proxy source/test.
+- Focused proxy selector: passed.
+- Focused platform selector: passed.
+- Focused runtime boundary selector: passed.
+- Broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime
+  selector: passed.
+
+Evidence boundary/non-claims: verifier acceptance is local only. No CI, deploy
+identity, staging platformd row verification, authenticated product replay, run
+acceptance, provider/search freshness, or promotion/rollback execution is
+claimed yet.
+
+Residual risks: staging may still expose timing or data-shape issues around
+async sync and runtime publication-ref persistence that local tests do not
+cover.
+
+Actual Delta V: 0 until deployed product proof. V remains 27. Orchestration may
+push/deploy after incorporating this verdict.
+
 ## 2026-06-27 - O4 Platform Texture Revision List Envelope Repair
 
 Mutation class: red platform Texture read repair after the documented
