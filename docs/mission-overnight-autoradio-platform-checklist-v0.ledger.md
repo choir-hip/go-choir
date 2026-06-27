@@ -9872,3 +9872,32 @@ or rollback claim is made.
 Actual Delta V: 0. V remains 26. Next move: reconnect to the worker thread when
 the pending worktree materializes; if it returns `ready_for_verifier`, create an
 independent verifier thread with the same evidence boundary.
+
+## 2026-06-27 - O4 Semantic Story Clustering Worker Materialized
+
+Claim: the previously pending deterministic story-clustering worker has
+materialized as a Codex thread and remains active.
+
+Move:
+
+- Reconnected to the worker request with Codex thread tools.
+- Pending worktree handle
+  `local:0d6a1c85-5367-481b-953c-0b7070774214` materialized as thread
+  `019f0728-81cb-7193-9f0d-e65f3263768f`, titled
+  `Split Universal Wire clusters`.
+- Worker checkout: `/Users/wiz/.codex/worktrees/1fe8/go-choir`.
+- Read-thread status showed the worker is still `active`, has patched
+  `internal/runtime/sourcecycled_web_captures.go` and
+  `internal/runtime/universal_wire_test.go`, got the focused changed-path tests
+  passing, and is updating broader Universal Wire selector expectations around
+  the new split semantics.
+
+Evidence boundary: this is orchestration/thread-state evidence only. No worker
+commit, verifier verdict, root incorporation, CI, deploy, staging acceptance,
+semantic clustering quality, provider/model, Qdrant, run acceptance, promotion,
+or rollback claim is made.
+
+Actual Delta V: 0. V remains 26. Next move: monitor worker thread
+`019f0728-81cb-7193-9f0d-e65f3263768f`; if it returns `ready_for_verifier`,
+create an independent verifier thread for the branch-local deterministic
+story-clustering slice before any root incorporation.
