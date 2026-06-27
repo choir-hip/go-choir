@@ -11515,3 +11515,59 @@ commands/results, dirty classification, residual risks, non-claims, and the
 callback target. No push, deploy, staging acceptance, Qdrant, provider/model
 synthesis, run acceptance, or full News benchmark settlement may be claimed by
 the worker.
+
+## 2026-06-27 - O4 Source Arrival Update Worker Requested
+
+Root committed the Problem Documentation First checkpoint:
+`09158883790993480c0c2f06b7629565e96a4059` (`Document O4 source arrival update
+conjecture`).
+
+Root pushed the checkpoint to `origin/main`. Docs Truth Check run
+`28281718700` passed for head
+`09158883790993480c0c2f06b7629565e96a4059`. No behavior CI/deploy was expected
+for this docs-only checkpoint.
+
+Thread tool evidence:
+
+- `tool_search` exposed Codex app thread tools including `list_projects`,
+  `create_thread`, `read_thread`, `send_message_to_thread`,
+  `set_thread_title`, and `set_thread_pinned`.
+- `list_projects` returned project id `/Users/wiz/go-choir`.
+- Root created a project-scoped worktree worker from `main` with prompt
+  `O4-deployed-source-arrival-update-slice-worker`.
+- Pending worker handle:
+  `local:1d9581f4-ff75-427b-8224-dcaa1e14fcc3`.
+
+Worker assignment summary:
+
+- Conjecture: later relevant sourcecycled source arrival should update the same
+  Universal Wire semantic story object and linked Texture article instead of
+  duplicating the public story, losing citations, or requiring manual reseeding.
+- Mutation class: orange/red branch-local behavior slice.
+- Protected surfaces in scope: Universal Wire sourcecycled
+  ingestion/materialization, runtime synthesis/update policy,
+  `choir.universal_wire_story_cluster`, Texture revision creation/revision
+  metadata, source_ref/source_entities, `/api/universal-wire/stories`, Wire
+  edition transclusion, platform Texture sync/read paths if touched by existing
+  helpers, and raw `choir.web_capture` diagnostic-only behavior.
+- Stop condition: clean branch-local commit and `ready_for_verifier` callback
+  with commands/results, dirty/generated classification, residual risks,
+  non-claims, and evidence boundary.
+- Explicit non-claims: no push to `origin/main`, no deploy, no staging product
+  acceptance, no Qdrant, no provider/model-quality synthesis, no run acceptance,
+  no promotion/rollback, and no full News benchmark settlement.
+
+Dirty/generated classification at root after worker request:
+
+- Root tracked status still has pre-existing unrelated
+  `skills/parallax/SKILL.md`.
+- Root untracked status still has pre-existing unrelated
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- These paths were preserved and not staged by the checkpoint.
+
+Expected Delta V: 0 for worker request. Actual Delta V: 0. V remains 3.
+
+Next move: monitor pending handle
+`local:1d9581f4-ff75-427b-8224-dcaa1e14fcc3` if it resolves in the thread list, or
+otherwise wait for a worker callback. If the worker returns `ready_for_verifier`,
+create a separate read-only verifier thread before any root incorporation.
