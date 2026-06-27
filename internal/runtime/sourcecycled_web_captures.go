@@ -871,7 +871,7 @@ func universalWireFoldRune(r rune) rune {
 
 func universalWireStoryConcepts(token string) []string {
 	switch token {
-	case "rail", "railway", "railroad", "train", "trains", "ferroviario", "ferroviaire", "corredor", "corridor":
+	case "rail", "railway", "railroad", "ferroviario", "ferroviaire", "corredor", "corridor":
 		return []string{"topic:transport", "signal:rail-corridor"}
 	case "transport", "transit", "commuter", "commuters", "passenger", "passengers", "pasajeros", "estacion", "estaciones", "station", "stations", "bus", "buses", "drivers":
 		return []string{"topic:transport"}

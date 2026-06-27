@@ -14228,3 +14228,51 @@ the next repair. Actual Delta V: 0. V remains 1.
 Next move: repair the concept extractor so generic verb `train` does not
 materialize `rail-corridor` without nearby rail/transit evidence, then replay
 runtime tests and the landing loop.
+
+## 2026-06-27 - O4 Train Homonym Semantic Repair Local Proof
+
+Move: repair the documented lexical homonym failure in the deterministic
+Universal Wire concept map.
+
+Repair summary:
+
+- `internal/runtime/sourcecycled_web_captures.go` no longer maps bare English
+  `train` or `trains` tokens to `topic:transport` / `signal:rail-corridor`.
+- Explicit rail terms remain mapped: `rail`, `railway`, `railroad`,
+  `ferroviario`, `ferroviaire`, `corredor`, and `corridor`.
+- `internal/runtime/universal_wire_test.go` adds
+  `TestHandleInternalSourcecycledWebCapturesDoesNotTreatTrainVerbAsRailSignal`,
+  proving a military/drone source titled `South Korea plans to train entire
+  military as drone warriors` is not absorbed into a harbor article, is not
+  cited in the synthesis source entities, and does not appear in article copy.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/sourcecycled_web_captures.go internal/runtime/universal_wire_test.go`
+  passed.
+- `git diff --check -- internal/runtime/sourcecycled_web_captures.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(DoesNotTreatTrainVerbAsRailSignal|ReportsNoDeterministicGroups|TriggersTextureSynthesisAndUpdatesCluster)|TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 4.126s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 15.015s`.
+
+Mutation class: orange behavior repair. Protected surfaces: Universal Wire
+sourcecycled concept extraction, deterministic grouping, source entity
+selection, and live synthesis article creation/update policy.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming homonym repair commit plus this evidence
+entry; bare `train`/`trains` again materialize rail-corridor concepts.
+
+Heresy delta: `repaired` locally for the observed `train` verb false-positive;
+not yet repaired at staging/product tier.
+
+Expected Delta V: 0 until deployed proof observes a post-repair sourcecycled
+boundary. Actual Delta V: 0. V remains 1.
+
+Next move: commit the homonym repair/evidence, push to `origin main`, monitor
+CI/deploy, verify health identity, and rerun authenticated live-arrival/stories
+proof after a new sourcecycled boundary.

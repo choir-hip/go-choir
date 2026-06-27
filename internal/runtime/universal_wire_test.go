@@ -182,6 +182,42 @@ func TestHandleInternalSourcecycledWebCapturesReportsNoDeterministicGroups(t *te
 	}
 }
 
+func TestHandleInternalSourcecycledWebCapturesDoesNotTreatTrainVerbAsRailSignal(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 27, 12, 20, 0, 0, time.UTC)
+	projection := postInternalSourcecycledWebCapturesForTest(t, handler, []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-harbor-context-1", "rss:harbor-a", "fetch-harbor-context-1", "Harbor pilots reopen cargo channel", "https://example.com/train-homonym/harbor-1", "en", "Port pilots reopened the cargo channel after tide soundings near the harbor.", now.Add(-5*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-harbor-context-2", "rss:harbor-b", "fetch-harbor-context-2", "Cargo vessels face delays at harbor channel", "https://example.com/train-homonym/harbor-2", "en", "Maritime officials said cargo vessels faced delay while pilots checked channel soundings near the port.", now.Add(-4*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-military-train-verb", "rss:defense", "fetch-military-train-verb", "South Korea plans to train entire military as drone warriors", "https://example.com/train-homonym/defense", "en", "Defense officials described drone instruction for soldiers and commanders across combat units.", now.Add(-3*time.Minute)),
+	}, now)
+	if projection.SynthesisStatus != "ok" ||
+		projection.SynthesisSourceCount != 2 ||
+		projection.SynthesisKnownSourceCount != 2 ||
+		projection.SynthesisCandidateGroups != 1 ||
+		projection.SynthesisClusterCount != 1 {
+		t.Fatalf("projection = %+v, want harbor synthesis without military train-verb source", projection)
+	}
+	stories := getUniversalWireStoriesForTest(t, handler)
+	if len(stories.Stories) != 1 {
+		t.Fatalf("stories = %+v, want one harbor article", stories)
+	}
+	story := stories.Stories[0]
+	if story.SemanticStory == nil ||
+		!slices.Contains(story.SemanticStory.TopicConcepts, "harbor") ||
+		slices.Contains(story.SemanticStory.TopicConcepts, "transport") ||
+		slices.Contains(story.SemanticStory.SignalConcepts, "rail-corridor") ||
+		strings.Contains(story.TextureContent, "drone warriors") {
+		t.Fatalf("story = %+v, want no train-verb source absorbed into harbor/transport cluster", story)
+	}
+	rev, err := handler.rt.Store().GetRevision(context.Background(), projection.SynthesisRevisionID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load synthesis revision: %v", err)
+	}
+	if strings.Contains(string(rev.SourceEntities), "srcitem-military-train-verb") {
+		t.Fatalf("source_entities = %s, train-verb source should not be cited", string(rev.SourceEntities))
+	}
+}
+
 func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 22, 5, 0, 0, time.UTC)
