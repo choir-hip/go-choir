@@ -902,6 +902,18 @@ verify health identity, and rerun authenticated staging proof that doc
 `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` appears in
 `/api/universal-wire/stories`.
 
+Ordering repair deployed at `210cc9bf3731733b80cc95791c5d0d761b4c2543` and
+authenticated staging proof with `qa-wire-order-1782562090@example.com` now
+shows the synthesized doc as story index 0 in `/api/universal-wire/stories`.
+The story is directly readable through Texture and carries 7 source entities
+with native `source_ref` body_doc citations. This supports the route/read/order
+conjecture, but it also exposes the next semantic failure: the article headline
+is `South Korea plans to train entire military as "drone warriors"` while the
+semantic story is `harbor`/`transport`/`rail-corridor`, because the bounded
+token concept map treats the English verb "train" as a rail signal. The
+remaining C6 edge is now semantic clustering/lexical disambiguation, not
+source ingestion, route access, Texture read ownership, or feed ordering.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -938,5 +950,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, and authenticated product users can read the platform live-arrival oracle at /api/universal-wire/live-arrival. Latest deployed diagnostic repair head 336685a082ff31bdba1c89ddfbd9636e6bb770b8 passed CI run 28288015026, deploy job 83815434234, health identity, and authenticated staging proof. Post-deploy boundary cycle_490a914358c36f1b5a27e1e5 showed synthesis_status ok with synthesized doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c, revision 60ccdcb4-322d-4c31-b7f9-d12d026413c9, 7 sources, 15 known-concept sources, 6 candidate groups, 1 synthesized cluster, and 1 refreshed group; the Texture doc/revision is directly readable with 7 source entities and native source_ref body_doc citations. New discovered edge: /api/universal-wire/stories still returns 12 older stories and does not include the synthesized doc even with ?limit=30, while the edition includes 18 docs. Code inspection shows the route hard-codes 12 and walks edition transclusions in stored order, hiding newly appended live articles behind older docs. Next move: Problem Documentation First is recorded; repair stories ordering/limit semantics so newest live synthesized Texture articles surface, then push/CI/deploy and rerun authenticated staging proof. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, authenticated product users can read the platform live-arrival oracle, and deployed ordering repair head 210cc9bf3731733b80cc95791c5d0d761b4c2543 passed CI run 28288616235, deploy job 83816943646, health identity, and authenticated staging proof. Boundary cycle_490a914358c36f1b5a27e1e5 produced synthesized doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c, revision 60ccdcb4-322d-4c31-b7f9-d12d026413c9, 7 sources, 15 known-concept sources, 6 candidate groups, 1 synthesized cluster, and 1 refreshed group; the Texture doc/revision is directly readable with 7 source entities and native source_ref body_doc citations, and /api/universal-wire/stories now surfaces it at index 0. The remaining C6 edge is semantic correctness: the top article headline is South Korea drone military training while semantic story metadata is harbor/transport/rail-corridor because the concept map treats "train" as rail. Next move: document/repair lexical disambiguation so generic verb "train" does not merge unrelated military/drone stories into transport clusters, then push/CI/deploy and rerun authenticated staging proof. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

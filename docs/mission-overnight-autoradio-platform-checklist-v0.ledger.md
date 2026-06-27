@@ -14151,3 +14151,80 @@ visible in the product story feed. Actual Delta V: 0. V remains 1.
 Next move: commit the ordering repair/evidence, push to `origin main`, monitor
 CI/deploy, verify health identity, and rerun authenticated stories proof for
 doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`.
+
+## 2026-06-27 - O4 Wire Feed Ordering Repair Deployed
+
+Move: complete the landing loop for the public Wire feed ordering repair.
+
+Pushed head: `210cc9bf3731733b80cc95791c5d0d761b4c2543`.
+
+Included commits:
+
+- `074a9ff7 Document O4 live article feed ordering gap`
+- `210cc9bf Surface newest Wire edition stories first`
+
+CI/deploy evidence:
+
+- CI run `28288616235` passed.
+- Deploy job `83816943646` passed.
+- Docs Truth Check run `28288616238` passed.
+- FlakeHub run `28288616252` passed.
+- Staging health reported proxy and sandbox deployed commit
+  `210cc9bf3731733b80cc95791c5d0d761b4c2543`, deployed at
+  `2026-06-27T12:07:06Z`, with proxy `status: ok`, upstream `ok`, and vmctl
+  routing/status enabled/ok.
+
+Authenticated deployed proof:
+
+- Temporary user: `qa-wire-order-1782562090@example.com`.
+- `/auth/session`: `200`, `authenticated: true`.
+- `/api/universal-wire/live-arrival`: `200`, latest boundary
+  `cycle_490a914358c36f1b5a27e1e5`, `synthesis_status: ok`, synthesized doc
+  `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`, revision
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9`, 7 synthesis sources, 15
+  known-concept sources, 6 candidate groups, 1 synthesized cluster, and 1
+  refreshed group.
+- `/api/universal-wire/stories`: `200`, source
+  `universal-wire-edition-texture`, 12 stories. Story index 0 is now doc
+  `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`.
+- Synthesized story at index 0:
+  - headline: `South Korea plans to train entire military as "drone warriors"`
+  - source state: `universal-wire-edition-texture`
+  - semantic story id: `src_1d926525ef654d78`
+  - change type: `source_added`
+  - semantic signature: `harbor`, `transport`, `rail-corridor`
+  - previous/current source counts: 6/7
+  - manifest lead count: 3
+  - helper-copy detector: false
+- Direct Texture document read for the synthesized doc: `200`.
+- Direct Texture revision read for
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9`: `200`, with 7 source entities and
+  `body_doc` containing native `source_ref` citations.
+
+Conjecture verdict: route/read/order surfaces are now supported at staging for
+the latest live synthesized article. The remaining C6 edge is semantic
+correctness, not source ingestion, route access, Texture read ownership, or
+feed ordering.
+
+New problem discovered: the deterministic concept map treats the English verb
+`train` in `South Korea plans to train entire military as "drone warriors"` as
+the rail/transport signal, causing an unrelated military/drone item to merge
+into a harbor/transport cluster. This is visible in the top story's semantic
+signature and content preview.
+
+Mutation class: green documentation/evidence for this checkpoint.
+
+Protected surfaces touched: none in this checkpoint. The next repair will
+touch Universal Wire sourcecycled semantic concept extraction/grouping.
+
+Rollback path: revert this docs checkpoint; no runtime state changes were made.
+
+Heresy delta: `discovered`. Feed ordering is repaired, and a lexical
+disambiguation failure is now the next evidence-backed blocker.
+
+Expected Delta V: 0 for documentation only, plus observer evidence that changes
+the next repair. Actual Delta V: 0. V remains 1.
+
+Next move: repair the concept extractor so generic verb `train` does not
+materialize `rail-corridor` without nearby rail/transit evidence, then replay
+runtime tests and the landing loop.
