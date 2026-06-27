@@ -10186,3 +10186,37 @@ return `ready_for_verifier` with commit SHA, changed files, commands/results,
 dirty/generated artifact classification, residual risks, non-claims, and
 evidence boundary. No push, deploy, staging, provider/model quality, Qdrant,
 run acceptance, promotion, or rollback claim.
+
+## 2026-06-27 - O4 Semantic Source Worker Requested
+
+Conjecture statement: a fresh Codex worker thread can decide the narrow
+branch-local semantic/source-aware clustering and article-quality synthesis
+slice without contaminating the root worktree or claiming staging acceptance.
+
+Verdict: testing. The worker request has been created but has not yet
+materialized as a readable thread id.
+
+Move:
+
+- Created worker request
+  `O4-semantic-source-clustering-article-quality-slice-worker` using Codex
+  thread tools against project `/Users/wiz/go-choir`.
+- Target environment: fresh worktree from branch
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- Pending worktree handle:
+  `local:429785dd-7621-45a1-91de-6ae793a91bac`.
+- Worker prompt names the current paradoc/ledger, docs-first checkpoint
+  `15821fce`, mutation class, protected surfaces, out-of-scope protected
+  surfaces, admissible evidence, rollback path, and stop condition.
+- `list_threads` query for
+  `O4-semantic-source-clustering-article-quality-slice-worker` returned no
+  materialized thread yet.
+
+Expected Delta V: 1 if the worker returns a branch-local `ready_for_verifier`,
+`blocked`, or `supersede` verdict that decides the narrow implementation
+conjecture. Actual Delta V: 0 until the worker materializes and reports.
+
+Open edge: reconnect to pending handle
+`local:429785dd-7621-45a1-91de-6ae793a91bac`; if it materializes and returns
+`ready_for_verifier`, create an independent verifier thread before any root
+incorporation.
