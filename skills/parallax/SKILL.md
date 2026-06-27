@@ -1,6 +1,6 @@
 ---
 name: parallax
-description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant under an explicit budget. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
+description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant measured in decided conjectures under an explicit budget. Each pass produces a strong, clear, definitive statement about the system. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
 metadata:
   hermes:
     tags: [parallax, conjecture-learning, proof-search, long-running-agents]
@@ -56,32 +56,47 @@ status:      proposed | active | testing | supported | weakened | falsified | su
 An assertion is a supported conjecture with receipts and an explicit scope;
 when a premise dies, it reverts — visibly.
 
-## The Variant (Ranking Function)
+## The Variant (Conjecture Descent)
 
 Invariants prove a loop safe; a **variant** proves it terminates. Every
 mission document must declare one: a concrete, well-founded measure of
 remaining distance to settlement that each productive pass strictly
-decreases. Counts beat adjectives — count the things that must reach zero:
+decreases.
+
+Each step of a coding agent is a step forward in the cognitive state of the
+modeling of the system. The variant measures **conjectures**, not
+obligations. A conjecture is a strong, clear, definitive statement about the
+system that can be decided by evidence. Each pass must produce one:
 
 ```text
-V = open obligations without a typed record
-  + control reads the route-switch must delete
-  + domain rungs remaining to the acceptance target
-  + driving conjectures still undecided
+V = driving conjectures still undecided
+  + conjectures whose evidence class is below the settlement tier
+  + conjectures with no strong definitive statement yet recorded
 ```
+
+A conjecture is **decided** when it has a typed verdict from admissible
+evidence: `supported` (receipts, scope), `weakened` (evidence narrowed the
+claim), `falsified` (evidence refuted it), or `superseded` (a better
+conjecture replaced it). An undecided conjecture is one where the agent
+cannot yet make a strong, clear, definitive statement.
 
 The variant is stated per mission, in the mission document, in the mission's
 own vocabulary. The skill requires only that it exists, that move selection
-names the expected decrease (ΔV), and that the update step records the
-actual decrease against prediction.
+names the conjecture the move will decide (expected ΔV), and that the update
+step records the actual conjecture verdict against prediction.
 
 The variant is the move-selection criterion: among admissible moves, prefer
-the largest expected ΔV per unit budget — not the smallest honest step.
-Smallest-step descent is how a mission spends thirty passes approaching a
-gate it never reaches. "The gap is narrower" is not a measurement; ΔV is.
+the one that decides the most conjectures per unit budget — not the
+smallest honest step. Smallest-step descent is how a mission spends thirty
+passes approaching a gate it never reaches. "The gap is narrower" is not a
+measurement; a decided conjecture is.
 
-A pass that decreases no variant and buys no observer evidence changed
-nothing — that is the forcing rule's trigger, now typed.
+A pass that decides no conjecture and buys no observer evidence changed
+nothing — that is the forcing rule's trigger, now typed. But a pass that
+discovers a new conjecture (e.g., staging evidence reveals an unknown
+failure mode) **does** advance the cognitive state even when V increases:
+the agent now knows something it did not know before. Record the discovery
+as conjecture state change, not as zero progress.
 
 ## Budget
 
@@ -168,7 +183,8 @@ mission conjecture: if A satisfies S under I/Q over D, then G advances
 deeper goal (G):
 witness/spec (A/S):
 invariants / qualities / domain ramp (I/Q/D):
-variant (ranking function) V: definition; current value; last ΔV
+variant (conjecture descent) V: definition; current value; last ΔV;
+          conjectures decided this pass (strong definitive statements)
 budget: granted / spent / remaining; solvency verdict
 authority / bounds:        (standing bounds stated once, not per pass)
 mutation class / protected surfaces:
@@ -213,20 +229,27 @@ differ — and the budget is declared, checked, and spent visibly.
 1. CLAIM     What conjecture currently decides this mission?
 2. POSITION  From where am I looking? State it: "from here I can see X
              cheaply; I cannot see Y at all." Name the edge class.
-3. MOVE      one of four — and name the expected ΔV, or the observer
-             evidence the move buys:
+3. MOVE      one of four — and name the conjecture the move will decide,
+             or the observer evidence the move buys:
              probe      test a conjecture under the current observer
              shift      move the observer (see catalog below)
              construct  build or extend the witness
              settle     decide the conjecture, or accept-and-name the edge
+             Each move must produce a strong, clear, definitive statement
+             about the system. "The code works" is not a statement;
+             "platformd returns bare arrays for revision lists, breaking
+             the Texture editor's revision selection" is.
 4. BOUND     smallest substrate that can carry the move; stay inside the
              authority envelope; mutations reversible (candidate/capsule
              when risky; for canonical mutations, the S1–S5 decomposition
              in the proof-theory doc Part II). Batch when the route is
              unambiguous (see Batching).
 5. UPDATE    Rewrite Parallax State in place; append one terse entry to the
-             ledger file; record actual ΔV against expected. A move that
+             ledger file; record the conjecture verdict (strong definitive
+             statement) and actual ΔV against expected. A move that
              changed nothing is evidence about the OBSERVER, not the world.
+             A move that discovered a new conjecture advanced the cognitive
+             state even if V increased — record it as discovery, not zero.
 6. EXIT?     conjecture decided | superseded | edges accepted and named |
              obligation only another authority can discharge | budget
              insolvent → re-plan or hand off.
@@ -355,10 +378,12 @@ is variant, not optional polish.
 
 ## The Ledger
 
-Each pass appends one entry to the ledger file. Terse schema — claim with
-its scope, move, expected vs actual ΔV, receipt (command, artifact path,
-trace ref), the edge it leaves open. Standing bounds live once in Parallax
-State; do not restate them per entry. Three rules bind everything:
+Each pass appends one entry to the ledger file. Terse schema — the
+conjecture statement (strong, clear, definitive), its verdict
+(`supported` / `weakened` / `falsified` / `superseded` / `discovered`),
+move, expected vs actual ΔV, receipt (command, artifact path, trace ref),
+the edge it leaves open. Standing bounds live once in Parallax State; do
+not restate them per entry. Three rules bind everything:
 
 1. **No claim outruns its evidence class.** Tests are existential; model
    checks are universal over the model; contracts cover the artifact
@@ -428,9 +453,12 @@ review.
   history lives in the ledger file, which is written, not re-read.
 - **No double-entry:** cross-mission links are one-line pointers, never
   transcriptions.
-- **No paperwork as progress:** if the circuit changes no decision, say so.
-- **No descent-free passes:** a pass with no ΔV and no observer evidence is
-  a stuck observer; force the shift.
+- **No paperwork as progress:** if the circuit decides no conjecture, say so.
+  Recording what you already knew is not a decided conjecture.
+- **No descent-free passes:** a pass with no decided conjecture and no
+  observer evidence is a stuck observer; force the shift. But a pass that
+  discovers a new conjecture is not descent-free — it advanced the
+  cognitive state even if V increased.
 - **No smallest-step default:** the bound limits blast radius, not
   ambition; pick moves by expected ΔV per budget, batch the foreseeable.
 - **No fixed-position grinding:** repeated confirmation is a stuck observer.
@@ -459,15 +487,16 @@ Use Parallax on docs/<mission>.md. Treat the mission document as the single
 source program and handoff: read it and its required references, compile or
 update a compact Parallax State section in place (state, not log; move
 history appends to docs/<mission>.ledger.md), declare the variant
-(ranking function) and budget, then run the circuit. Each pass states
-position/blind spot, chooses probe / shift / construct / settle by expected
-ΔV per budget, bounds mutation, batches unambiguous construct sequences with
-a deviation tripwire, records actual ΔV, and checks budget solvency. Full
-suite + consolidation at batch boundaries; widest checker + independent
-prover before any exit. Exit only at settled, open_handoff, blocked, or
-superseded. Platform behavior settlement requires repo landing proof in the
-same document. No claim outruns its evidence class; no self-checked proofs;
-no fake islands; no descent-free passes.
+(conjecture descent) and budget, then run the circuit. Each pass states
+position/blind spot, chooses probe / shift / construct / settle by which
+conjecture it will decide, bounds mutation, batches unambiguous construct
+sequences with a deviation tripwire, records the conjecture verdict as a
+strong clear definitive statement and actual ΔV, and checks budget
+solvency. Full suite + consolidation at batch boundaries; widest checker
++ independent prover before any exit. Exit only at settled, open_handoff,
+blocked, or superseded. Platform behavior settlement requires repo landing
+proof in the same document. No claim outruns its evidence class; no
+self-checked proofs; no fake islands; no descent-free passes.
 ```
 
 When authoring a new paradoc, include a mission-specific version of that goal
