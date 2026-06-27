@@ -98,6 +98,8 @@ func (s *Service) SyncTextureDocument(ctx context.Context, req SyncTextureDocume
 			AuthorKind:       strings.TrimSpace(rev.AuthorKind),
 			AuthorLabel:      strings.TrimSpace(rev.AuthorLabel),
 			Content:          rev.Content,
+			BodyDoc:          rev.BodyDoc,
+			SourceEntities:   rev.SourceEntities,
 			Citations:        rev.Citations,
 			Metadata:         rev.Metadata,
 			CreatedAt:        rev.CreatedAt,

@@ -318,8 +318,10 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 				OwnerID   string `json:"owner_id"`
 				Title     string `json:"title"`
 				Revisions []struct {
-					RevisionID string `json:"revision_id"`
-					Content    string `json:"content"`
+					RevisionID     string          `json:"revision_id"`
+					Content        string          `json:"content"`
+					BodyDoc        json.RawMessage `json:"body_doc"`
+					SourceEntities json.RawMessage `json:"source_entities"`
 				} `json:"revisions"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -328,10 +330,16 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 			if req.DocID == "" || req.OwnerID != universalWirePlatformOwnerID() || len(req.Revisions) == 0 {
 				t.Fatalf("platformd sync request = %+v, want platform document with revisions", req)
 			}
+			if !strings.Contains(string(req.Revisions[0].BodyDoc), `"source_ref"`) {
+				t.Fatalf("platformd sync body_doc missing native source refs: %s", req.Revisions[0].BodyDoc)
+			}
+			if !strings.Contains(string(req.Revisions[0].SourceEntities), `"source_entity_id"`) {
+				t.Fatalf("platformd sync source_entities missing: %s", req.Revisions[0].SourceEntities)
+			}
 			syncCount++
 			publishedDocs[req.DocID] = types.Document{DocID: req.DocID, OwnerID: req.OwnerID, Title: req.Title}
 			for _, rev := range req.Revisions {
-				publishedRevs[rev.RevisionID] = types.Revision{RevisionID: rev.RevisionID, DocID: req.DocID, OwnerID: req.OwnerID, Content: rev.Content}
+				publishedRevs[rev.RevisionID] = types.Revision{RevisionID: rev.RevisionID, DocID: req.DocID, OwnerID: req.OwnerID, Content: rev.Content, BodyDoc: rev.BodyDoc, SourceEntities: rev.SourceEntities}
 			}
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": req.DocID, "revision_count": len(req.Revisions)})
@@ -424,6 +432,35 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 		secondStories.Stories[0].StoryTextureDoc != firstStory.StoryTextureDoc ||
 		countStrings(secondStories.Edition.IncludedDocIDs, firstStory.StoryTextureDoc) != 1 {
 		t.Fatalf("second stories/doc = %+v / %+v, want idempotent read after edition exists", secondStories, secondDoc)
+	}
+}
+
+func TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd(t *testing.T) {
+	for _, key := range []string{
+		"RUNTIME_PLATFORMD_URL",
+		"PROXY_PLATFORMD_URL",
+		"RUNTIME_VMCTL_URL",
+		"PROXY_VMCTL_URL",
+		"RUNTIME_GATEWAY_URL",
+		"RUNTIME_MAILD_URL",
+	} {
+		t.Setenv(key, "")
+	}
+
+	t.Setenv("RUNTIME_PLATFORMD_URL", "http://10.203.154.1:8082")
+	if got := platformdReadBaseURL(); got != "http://10.203.154.1:8086" {
+		t.Fatalf("sibling runtime platformd URL = %q, want derived :8086", got)
+	}
+
+	t.Setenv("RUNTIME_PLATFORMD_URL", "http://127.0.0.1:8086")
+	if got := platformdReadBaseURL(); got != "http://127.0.0.1:8086" {
+		t.Fatalf("direct runtime platformd URL = %q, want direct :8086", got)
+	}
+
+	t.Setenv("RUNTIME_PLATFORMD_URL", "")
+	t.Setenv("RUNTIME_VMCTL_URL", "http://10.203.154.1:8083")
+	if got := platformdReadBaseURL(); got != "http://10.203.154.1:8086" {
+		t.Fatalf("vmctl URL = %q, want derived :8086", got)
 	}
 }
 

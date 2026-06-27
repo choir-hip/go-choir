@@ -328,6 +328,8 @@ CREATE TABLE IF NOT EXISTS platform_texture_revisions (
 	author_kind VARCHAR(64) NOT NULL DEFAULT '',
 	author_label VARCHAR(255) NOT NULL DEFAULT '',
 	content LONGTEXT NOT NULL,
+	body_doc LONGTEXT NOT NULL DEFAULT '',
+	source_entities LONGTEXT NOT NULL DEFAULT '',
 	citations LONGTEXT NOT NULL DEFAULT '[]',
 	metadata LONGTEXT NOT NULL DEFAULT '{}',
 	created_at DATETIME NOT NULL,
@@ -389,7 +391,32 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, schemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap schema: %w", err)
 	}
+	if err := s.ensurePlatformTextureRevisionColumn(ctx, "body_doc", "ALTER TABLE platform_texture_revisions ADD COLUMN body_doc LONGTEXT NOT NULL DEFAULT '' AFTER content"); err != nil {
+		return fmt.Errorf("platform store: bootstrap body_doc migration: %w", err)
+	}
+	if err := s.ensurePlatformTextureRevisionColumn(ctx, "source_entities", "ALTER TABLE platform_texture_revisions ADD COLUMN source_entities LONGTEXT NOT NULL DEFAULT '' AFTER body_doc"); err != nil {
+		return fmt.Errorf("platform store: bootstrap source_entities migration: %w", err)
+	}
 	return nil
+}
+
+func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, ddl string) error {
+	if name != "body_doc" && name != "source_entities" {
+		return fmt.Errorf("unsupported platform texture revision column %q", name)
+	}
+	rows, err := s.db.QueryContext(ctx, "SHOW COLUMNS FROM platform_texture_revisions LIKE '"+name+"'")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return rows.Err()
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, ddl)
+	return err
 }
 
 func (s *Store) commitDolt(ctx context.Context, message string) error {
@@ -425,8 +452,8 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 		rev.Metadata = json.RawMessage("{}")
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), citations=VALUES(citations), metadata=VALUES(metadata)`,
-		rev.RevisionID, rev.DocID, rev.OwnerID, rev.ParentRevisionID, rev.AuthorKind, rev.AuthorLabel, rev.Content, string(rev.Citations), string(rev.Metadata), rev.CreatedAt)
+		`INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), body_doc=VALUES(body_doc), source_entities=VALUES(source_entities), citations=VALUES(citations), metadata=VALUES(metadata)`,
+		rev.RevisionID, rev.DocID, rev.OwnerID, rev.ParentRevisionID, rev.AuthorKind, rev.AuthorLabel, rev.Content, string(rev.BodyDoc), string(rev.SourceEntities), string(rev.Citations), string(rev.Metadata), rev.CreatedAt)
 	return err
 }
 
@@ -442,7 +469,7 @@ func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*Platform
 
 func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]PlatformTextureRevision, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_texture_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
+		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at FROM platform_texture_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
 	if err != nil {
 		return nil, err
 	}
@@ -450,10 +477,12 @@ func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]Platf
 	var revisions []PlatformTextureRevision
 	for rows.Next() {
 		var rev PlatformTextureRevision
-		var citationsStr, metadataStr string
-		if err := rows.Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt); err != nil {
+		var bodyDocStr, sourceEntitiesStr, citationsStr, metadataStr string
+		if err := rows.Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &bodyDocStr, &sourceEntitiesStr, &citationsStr, &metadataStr, &rev.CreatedAt); err != nil {
 			return nil, err
 		}
+		rev.BodyDoc = json.RawMessage(bodyDocStr)
+		rev.SourceEntities = json.RawMessage(sourceEntitiesStr)
 		rev.Citations = json.RawMessage(citationsStr)
 		rev.Metadata = json.RawMessage(metadataStr)
 		revisions = append(revisions, rev)
@@ -463,12 +492,14 @@ func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]Platf
 
 func (s *Store) GetTextureRevision(ctx context.Context, revisionID string) (*PlatformTextureRevision, error) {
 	var rev PlatformTextureRevision
-	var citationsStr, metadataStr string
+	var bodyDocStr, sourceEntitiesStr, citationsStr, metadataStr string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at FROM platform_texture_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &citationsStr, &metadataStr, &rev.CreatedAt)
+		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at FROM platform_texture_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &bodyDocStr, &sourceEntitiesStr, &citationsStr, &metadataStr, &rev.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	rev.BodyDoc = json.RawMessage(bodyDocStr)
+	rev.SourceEntities = json.RawMessage(sourceEntitiesStr)
 	rev.Citations = json.RawMessage(citationsStr)
 	rev.Metadata = json.RawMessage(metadataStr)
 	return &rev, nil

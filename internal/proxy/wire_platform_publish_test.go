@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
@@ -24,6 +25,9 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 		"revision_role":              wirepublish.RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-proxy",
 	})
+	bodyDoc := json.RawMessage(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Proxy story"},{"type":"source_ref","attrs":{"source_entity_id":"src-proxy"}}]}]}}`)
+	sourceEntities := json.RawMessage(`[{"source_entity_id":"src-proxy","target":{"kind":"url","uri":"https://example.com/proxy"},"display":{"mode":"numbered_ref","title":"Proxy source"},"evidence":{"state":"available","open_surface":"source"}}]`)
+	syncSeen := make(chan platform.SyncTextureDocumentRequest, 1)
 
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != platformOwner {
@@ -39,14 +43,16 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 			})
 		case "/internal/texture/revisions/rev-wire-proxy", "/api/texture/revisions/rev-wire-proxy":
 			_ = json.NewEncoder(w).Encode(sandboxTextureRevision{
-				RevisionID: "rev-wire-proxy",
-				DocID:      "doc-wire-proxy",
-				OwnerID:    platformOwner,
-				Content:    "# Proxy story\n\nMADRID -- Officials confirmed the route change.",
-				Metadata:   meta,
+				RevisionID:     "rev-wire-proxy",
+				DocID:          "doc-wire-proxy",
+				OwnerID:        platformOwner,
+				Content:        "# Proxy story\n\nMADRID -- Officials confirmed the route change.",
+				BodyDoc:        bodyDoc,
+				SourceEntities: sourceEntities,
+				Metadata:       meta,
 			})
 		case "/api/texture/documents/doc-wire-proxy/revisions":
-			_ = json.NewEncoder(w).Encode([]sandboxTextureRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", Metadata: meta}})
+			_ = json.NewEncoder(w).Encode([]sandboxTextureRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", BodyDoc: bodyDoc, SourceEntities: sourceEntities, Metadata: meta}})
 		default:
 			// Async sync goroutine may hit unexpected paths; log instead of fatal.
 			w.WriteHeader(http.StatusNotFound)
@@ -73,7 +79,11 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				RoutePath:     "wire/proxy-story",
 			})
 		case "/internal/platform/texture/sync":
-			// Async sync of all revisions — just accept it.
+			var req platform.SyncTextureDocumentRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode sync request: %v", err)
+			}
+			syncSeen <- req
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": "test", "revision_count": 0})
 		default:
@@ -112,6 +122,20 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	}
 	if resp.RoutePath != "wire/proxy-story" {
 		t.Fatalf("route_path = %q", resp.RoutePath)
+	}
+	select {
+	case syncReq := <-syncSeen:
+		if len(syncReq.Revisions) != 1 {
+			t.Fatalf("sync revisions = %d, want 1", len(syncReq.Revisions))
+		}
+		if !strings.Contains(string(syncReq.Revisions[0].BodyDoc), `"source_ref"`) {
+			t.Fatalf("sync body_doc not forwarded: %s", syncReq.Revisions[0].BodyDoc)
+		}
+		if !strings.Contains(string(syncReq.Revisions[0].SourceEntities), `"src-proxy"`) {
+			t.Fatalf("sync source_entities not forwarded: %s", syncReq.Revisions[0].SourceEntities)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for async platform texture sync")
 	}
 }
 

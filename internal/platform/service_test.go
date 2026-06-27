@@ -212,6 +212,12 @@ func TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows(t *testing.T) 
 	ctx := context.Background()
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 
+	if _, err := store.db.ExecContext(ctx, `ALTER TABLE platform_texture_revisions DROP COLUMN source_entities`); err != nil {
+		t.Fatalf("drop source_entities to simulate old schema: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `ALTER TABLE platform_texture_revisions DROP COLUMN body_doc`); err != nil {
+		t.Fatalf("drop body_doc to simulate old schema: %v", err)
+	}
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
 		"doc-existing", "owner-existing", "Existing Texture", now, now); err != nil {
 		t.Fatalf("insert existing document: %v", err)
@@ -252,6 +258,9 @@ func TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows(t *testing.T) 
 	}
 	if rev.DocID != "doc-existing" || rev.Content != "existing table content" {
 		t.Fatalf("existing revision = %+v, want preserved revision", rev)
+	}
+	if string(rev.BodyDoc) != "" || string(rev.SourceEntities) != "" {
+		t.Fatalf("migrated old revision structured fields = %q/%q, want empty defaults", rev.BodyDoc, rev.SourceEntities)
 	}
 }
 
@@ -504,6 +513,8 @@ func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 				AuthorKind:       "human",
 				AuthorLabel:      "Wiz",
 				Content:          "second revision",
+				BodyDoc:          json.RawMessage(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"second revision"},{"type":"source_ref","attrs":{"source_entity_id":"src-wire"}}]}]}}`),
+				SourceEntities:   json.RawMessage(`[{"source_entity_id":"src-wire","target":{"kind":"url","uri":"https://example.com/source"},"display":{"mode":"numbered_ref","title":"Wire source"},"evidence":{"state":"available","open_surface":"source"}}]`),
 				Citations:        json.RawMessage(`[{"kind":"url","value":"https://example.com"}]`),
 				Metadata:         json.RawMessage(`{"source":"test"}`),
 				CreatedAt:        createdAt.Add(time.Minute),
@@ -556,6 +567,12 @@ func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 	}
 	if string(rev.Metadata) != `{"source":"test"}` {
 		t.Fatalf("revision metadata mismatch: %s", rev.Metadata)
+	}
+	if !strings.Contains(string(rev.BodyDoc), `"source_ref"`) {
+		t.Fatalf("revision body_doc not preserved: %s", rev.BodyDoc)
+	}
+	if !strings.Contains(string(rev.SourceEntities), `"src-wire"`) {
+		t.Fatalf("revision source_entities not preserved: %s", rev.SourceEntities)
 	}
 }
 

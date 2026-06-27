@@ -191,6 +191,8 @@ type sandboxRevisionEntry struct {
 	AuthorKind       string          `json:"author_kind,omitempty"`
 	AuthorLabel      string          `json:"author_label,omitempty"`
 	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
 	Citations        json.RawMessage `json:"citations"`
 	Metadata         json.RawMessage `json:"metadata"`
 }
@@ -225,6 +227,8 @@ func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, d
 			AuthorKind:       rev.AuthorKind,
 			AuthorLabel:      rev.AuthorLabel,
 			Content:          rev.Content,
+			BodyDoc:          rev.BodyDoc,
+			SourceEntities:   rev.SourceEntities,
 			Citations:        rev.Citations,
 			Metadata:         rev.Metadata,
 		})

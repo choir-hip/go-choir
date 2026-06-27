@@ -577,6 +577,12 @@ func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, re
 }
 
 func platformdReadBaseURL() string {
+	if url := directPlatformdBaseURL([]string{
+		strings.TrimSpace(os.Getenv("RUNTIME_PLATFORMD_URL")),
+		strings.TrimSpace(os.Getenv("PROXY_PLATFORMD_URL")),
+	}); url != "" {
+		return url
+	}
 	bases := []string{
 		strings.TrimSpace(getenvFirst("RUNTIME_PLATFORMD_URL", "PROXY_PLATFORMD_URL")),
 		strings.TrimSpace(getenvFirst("RUNTIME_VMCTL_URL", "PROXY_VMCTL_URL")),
@@ -601,6 +607,23 @@ func platformdReadBaseURL() string {
 		}
 		if url := rewriteHostServicePort(cmdBases, ":8086"); url != "" {
 			return url
+		}
+	}
+	return ""
+}
+
+func directPlatformdBaseURL(bases []string) string {
+	for _, raw := range bases {
+		base := strings.TrimRight(strings.TrimSpace(raw), "/")
+		if base == "" {
+			continue
+		}
+		parsed, err := url.Parse(base)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			continue
+		}
+		if parsed.Port() == "8086" {
+			return base
 		}
 	}
 	return ""
