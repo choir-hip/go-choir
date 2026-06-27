@@ -549,20 +549,22 @@ for a non-empty product result. Behavior-changing work must name mutation class,
 protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green documentation-first
-checkpoint for C6/C8. The next implementation move is orange/red because it
-changes Universal Wire runtime clustering/update semantics and may create or
-revise objectgraph world-model objects plus Texture article revisions. Protected
-surfaces are Universal Wire sourcecycled ingestion, runtime synthesis/update
-policy, `choir.universal_wire_story_cluster` or successor objectgraph kinds,
-Texture revision creation through existing helpers, source entity/source_ref
-projection, Wire edition linkage, platform Texture sync, and public Wire story
-DTOs. Rollback path is revert the implementation commit(s) to
-`b9ec5f83dc574111410d1bc53dc2b36bc985d3c8` plus any dependent docs/evidence
-commits. The next move must not touch auth/session renewal, vmctl, deployment
-routing, provider/gateway credentials, Qdrant, promotion/rollback, run
-acceptance, or publication/export outside existing Wire edition helpers unless a
-separate checkpoint names that broader conjecture.
+mutation class / protected surfaces: Current move is green orchestration
+evidence after an orange/red branch-local worker slice. Worker commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` changes Universal Wire runtime
+clustering/update semantics, records semantic state on
+`choir.universal_wire_story_cluster`, and revises Texture articles through the
+existing synthesis helpers. Protected surfaces under verifier review are
+Universal Wire sourcecycled ingestion, runtime synthesis/update policy,
+objectgraph story/world-model object body/metadata, Texture revision creation,
+source entity/source_ref projection, Wire edition linkage, platform Texture sync,
+and public Wire story DTOs. Rollback path is revert worker commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` to checkpoint
+`5e0d3578ec51702bcc45e7d256c509003240595f` plus any dependent evidence commits.
+The next move must not touch auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
+publication/export outside existing Wire edition helpers unless a separate
+checkpoint names that broader conjecture.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -601,18 +603,22 @@ session. The scoped read-repair conjecture is supported. The stronger News
 conjecture remains open: deterministic topic/signal grouping and fallback prose
 are not semantic clustering, not provider/model-quality synthesis, not Qdrant or
 world-model projection, and not deployed proof that later relevant source
-arrivals update existing semantic articles.
+arrivals update existing semantic articles. Worker thread
+`019f0790-b4aa-74c1-8e2c-f0cbf9232606` is now ready for verifier at commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f`, claiming branch-local proof that
+sourcecycled synthesis records a durable semantic story state, typed change
+delta, and revision metadata while keeping internal ids out of reader-facing
+copy.
 
-next move: monitor bounded worker thread
-`O4-semantic-world-model-update-slice-worker`: Codex thread
-`019f0790-b4aa-74c1-8e2c-f0cbf9232606`, worktree
-`/Users/wiz/.codex/worktrees/909c/go-choir`, pending-worktree origin
-`local:e0a6b59a-9d8f-4b0e-8c1d-1b944c752fe7`. The worker should implement the
-smallest local slice that records a durable semantic story/world-model identity
-from sourcecycled captures, updates that identity when a later relevant source
-arrives, and revises the same linked Texture article from that object state. It
-must preserve raw capture diagnostic-only behavior and stop at branch-local
-focused proof plus clean commit.
+next move: create a read-only verifier thread
+`O4-semantic-world-model-update-slice-verifier` for worker commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` in worktree
+`/Users/wiz/.codex/worktrees/909c/go-choir`. The verifier should inspect the
+worker diff and tests, rerun focused evidence, and decide whether the
+branch-local C6/C8 slice is accepted, needs revision, is blocked, or should be
+superseded. No push, deploy, staging/product acceptance, provider/model-quality
+synthesis, Qdrant, promotion/rollback, run acceptance, or full News benchmark
+claim is permitted at this verifier tier.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -632,8 +638,10 @@ existing stale edition Texture documents needed direct revision from their own
 structured source entities/reader snapshots. The current product is better but
 still below the owner-stated Universal Wire target: deterministic grouping and
 formulaic prose are only a substrate for a future semantic live world model. The
-next useful observer is not another card-copy proof; it is a proof that a stable
-semantic object changes and carries an article update.
+current branch-local observer is worker commit `0b1e58b3`, which records
+semantic story identity/change in graph and revision metadata while avoiding
+internal helper copy in the public article. Independent verification is required
+before this can be incorporated.
 
 settlement: not settled. O4 is accepted for deployed deterministic
 multi-article readability and direct stale-edition read repair at
@@ -649,5 +657,5 @@ request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `ad4d739e5f89e3574d4923b1bc580c50db53785d`; CI run `28279556809`, Docs Truth Check run `28279556816`, FlakeHub run `28279556808`, deploy job `83792786877`, and public health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved Universal Wire renders `11 articles`; old scaffold phrases were gone from visible cards; opening a headline loaded a repaired Texture article at v66 with `Sources 24`, native source buttons, rendered article text, and `Document loaded`. This supports C11 only at the narrow deployed read-repair scope. Current C6/C8 checkpoint: Universal Wire still lacks a semantic world-model update contract; deterministic topic/signal clusters and formulaic article revisions are not durable semantic event/entity state. Active worker: `O4-semantic-world-model-update-slice-worker`, thread `019f0790-b4aa-74c1-8e2c-f0cbf9232606`, worktree `/Users/wiz/.codex/worktrees/909c/go-choir`, tasked to implement the smallest branch-local slice where sourcecycled captures create a durable semantic story/world-model identity, a later relevant source updates that same identity, and the linked Texture article revises from that object state. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, staging acceptance, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `ad4d739e5f89e3574d4923b1bc580c50db53785d`; CI run `28279556809`, Docs Truth Check run `28279556816`, FlakeHub run `28279556808`, deploy job `83792786877`, and public health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved Universal Wire renders `11 articles`; old scaffold phrases were gone from visible cards; opening a headline loaded a repaired Texture article at v66 with `Sources 24`, native source buttons, rendered article text, and `Document loaded`. This supports C11 only at the narrow deployed read-repair scope. Current C6/C8 checkpoint: Universal Wire still lacks deployed semantic world-model update proof. Worker thread `019f0790-b4aa-74c1-8e2c-f0cbf9232606` is ready for verifier at commit `0b1e58b3a5f39ce7df9a050908794af9b6f6e85f`, claiming a branch-local slice where sourcecycled captures create a durable semantic story/world-model identity, a later relevant source updates that same identity, and the linked Texture article revises from graph/revision metadata without exposing internal ids in public copy. Next move: run read-only verifier `O4-semantic-world-model-update-slice-verifier` against worker worktree `/Users/wiz/.codex/worktrees/909c/go-choir`; do not incorporate until verifier accepts. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, staging acceptance, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

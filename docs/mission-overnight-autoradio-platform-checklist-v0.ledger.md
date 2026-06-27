@@ -10789,3 +10789,86 @@ Assignment contract:
 
 Expected Delta V: 0 for worker creation. Actual Delta V: 0. V remains 3 until
 the worker/verifier pair decides C6/C8 at branch-local tier.
+
+## 2026-06-27 - O4 Semantic World-Model Update Worker Ready For Verifier
+
+Worker: `O4-semantic-world-model-update-slice-worker`.
+
+Worker thread: `019f0790-b4aa-74c1-8e2c-f0cbf9232606`.
+
+Worker worktree: `/Users/wiz/.codex/worktrees/909c/go-choir`.
+
+Worker commit: `0b1e58b3a5f39ce7df9a050908794af9b6f6e85f`
+(`0b1e58b3`).
+
+Status: `ready_for_verifier`.
+
+Claimed branch-local construct: Universal Wire sourcecycled synthesis now builds
+a durable semantic story state for each live story cluster, records stable
+semantic story identity plus topic/signal signature and typed change delta in
+the `choir.universal_wire_story_cluster` object body/metadata, carries semantic
+story id/change type in synthesis revision metadata, and uses that semantic
+state to choose article summary/tension before creating or revising the linked
+Texture article. Reader-facing article copy is claimed not to expose internal
+story ids or `World-model` helper phrasing; the ids/change proof is in graph and
+revision metadata.
+
+Changed files:
+
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/wire_synthesis.go`
+- `internal/runtime/universal_wire_test.go`
+
+Worker commands/results:
+
+- `gofmt -w internal/runtime/sourcecycled_web_captures.go internal/runtime/wire_synthesis.go internal/runtime/universal_wire_test.go`:
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics' -count=1`:
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed.
+- `git diff --check`: passed.
+- `git diff --check HEAD~1 HEAD`: passed.
+
+Dirty/generated classification: worker worktree was clean after commit. No
+untracked scratch files or generated artifacts were reported. The three changed
+files are intentional source/test changes.
+
+Mutation class: orange/red branch-local runtime and Texture synthesis behavior
+slice.
+
+Protected surfaces touched by worker claim: Universal Wire sourcecycled
+ingestion/materialization, runtime synthesis/update policy,
+`choir.universal_wire_story_cluster` object body/metadata, Texture revision
+creation through existing synthesis helpers, source_ref/source_entity
+carry-forward through the existing synthesis path, Wire edition linkage,
+platform Texture sync path through existing helper call sites, and the public
+Wire story DTO path indirectly through existing article revisions.
+
+Rollback path: revert commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` to return the worker worktree to
+checkpoint `5e0d3578ec51702bcc45e7d256c509003240595f` plus any later dependent
+evidence commits.
+
+Residual risks/non-claims: semantic identity is still deterministic and bounded
+to local topic/signal extraction, not provider/model-quality synthesis or true
+entity/event reconciliation. It records typed deltas for source additions and
+concept changes but does not prove production-scale multilingual clustering,
+sibling-event decisions beyond existing heuristic grouping, staging behavior, or
+owner-visible product acceptance. No push to `origin/main`, CI/deploy/staging
+acceptance, provider/model-quality synthesis, Qdrant, auth/session/vmctl,
+deployment routing, gateway credential change, promotion/rollback,
+run-acceptance, or publication/export outside existing Universal Wire edition
+helpers is claimed.
+
+Heresy delta claimed by worker: `repaired` branch-local slice of the previously
+documented semantic world-model update gap; no materially different problem
+discovered.
+
+Expected Delta V: 0 for worker readiness. Actual Delta V: 0 until independent
+verifier decides the branch-local C6/C8 claim. V remains 3.
+
+Next move: create a read-only verifier thread
+`O4-semantic-world-model-update-slice-verifier` for commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` in worker worktree
+`/Users/wiz/.codex/worktrees/909c/go-choir`.
