@@ -8584,3 +8584,36 @@ repair why the deployed direct-sync path leaves Universal Wire with zero
 publishable articles after `d4bd1c65`, while preserving raw graph captures as
 diagnostic-only substrate and treating `/Users/wiz/vm-images` as a diagnostic
 pointer, not a mutation target.
+
+## 2026-06-27 - O4 Zero-Article Worker Thread Requested
+
+Claim: after documenting the post-`d4bd1c65` zero-article product replay, the
+next admissible descent is a bounded thread-native worker repair rather than a
+same-thread speculative patch.
+
+Move: used Codex app thread tools after `list_projects` exposed project
+`/Users/wiz/go-choir`, then requested a new project worktree thread from branch
+`main` for work item `O4-zero-wire-articles-after-direct-sync-worker`.
+
+Evidence:
+
+- Docs-only checkpoint commit `25e1522ed8b481288f8261995316d2ff841701e5`
+  (`Document O4 zero Wire article replay`) was pushed to `origin/main`.
+- Docs Truth Check run `28272784759` completed successfully for the checkpoint.
+- `create_thread` returned pending worktree handle
+  `local:c27b4ec5-d079-4f07-8753-35989d436f6c`; a concrete thread id was not
+  yet available when this ledger entry was written.
+- Worker prompt names the documented problem, owner intent for Universal Wire,
+  mutation class, protected surfaces, admissible evidence, rollback path, heresy
+  delta, VM-image diagnostic boundary, and stop condition.
+
+Actual Delta V: 0. The worker has been requested but no repair or verifier
+evidence exists yet. V remains 28.
+
+Evidence boundary/non-claims: this entry records orchestration only. It does not
+claim worker completion, verifier acceptance, incorporation, deployment,
+staging/product acceptance, or any runtime repair.
+
+Next move: monitor the pending worktree/thread until a thread id or final worker
+verdict is available; then create an independent verifier thread before any
+incorporation.
