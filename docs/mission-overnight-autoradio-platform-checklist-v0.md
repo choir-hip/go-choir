@@ -520,14 +520,16 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 3. Last delta: expected Delta V 0 for the
-article-quality worker/verifier/root incorporation slice; actual Delta V 0
-because independent branch-local evidence supports the deterministic
-article-quality repair, but staging deployment/product acceptance is still
-pending. The deployed product repairs the observed one-article/Texture-404/
-source-open regression, but it still does not prove fresh post-deploy source
-arrivals revising the same live semantic story/article identity, nor
-provider/model-quality English synthesis. Last decided conjecture: deployed commit
+statement. Current value: 4. Last delta: expected Delta V 0 for the
+article-quality landing; actual Delta V +1 because staging deploy/API evidence
+supports the deterministic article-copy repair, but product UI acceptance found
+a new mismatch: authenticated `/api/universal-wire/stories` returned 12 stories
+while the Universal Wire app surface showed `0 articles` in the same temporary
+authenticated Playwright session. The deployed product repairs the observed
+one-article/Texture-404/source-open regression, but it still does not prove
+fresh post-deploy source arrivals revising the same live semantic story/article
+identity, nor provider/model-quality English synthesis. Last decided conjecture:
+deployed commit
 `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319` supports the narrow claim that the
 current Universal Wire deployed surface is no longer collapsed into one broad
 article and the headline/source-open product paths load. CI run `28282830130`,
@@ -608,15 +610,17 @@ position / live conjectures / open edges: O0-O3 are accepted from prior ledger
 evidence. O4 is accepted for deployed deterministic multi-article readability,
 direct stale-edition read repair, product-visible semantic DTO observability,
 and the deployed repair of the observed one-article/headline-404/source-open
-regression. The supported deployed head is
-`6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`; root evidence shows CI/deploy,
-health identity, authenticated Chrome UI proof with 12 articles, headline-opened
-Texture v66 with `Sources 24` and `Document loaded`, expanded native source
-refs, and a reader/source artifact with `Reader snapshot ready` and `Open
-original`. The stronger News conjecture remains open: current deterministic
-topic/signal grouping and formulaic prose are not provider/model-quality
-synthesis, not Qdrant or world-model projection, and not deployed proof that
-later relevant source arrivals update existing semantic articles.
+regression. The article-quality repair is deployed at
+`ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`; CI, Docs Truth Check, FlakeHub,
+deploy, and health identity passed. Authenticated public API proof returned 12
+Wire stories and the first story no longer contained the documented helper copy
+phrases. Product UI acceptance is not accepted: a fresh authenticated Playwright
+session opened Universal Wire and saw `0 articles`/empty state even though the
+same session's public stories API returned 12 stories. The stronger News
+conjecture remains open: current deterministic topic/signal grouping and
+formulaic prose are not provider/model-quality synthesis, not Qdrant or
+world-model projection, and not deployed proof that later relevant source
+arrivals update existing semantic articles.
 
 Current C8 article-quality conjecture: if Universal Wire has a semantic story
 state and at least two source-backed captures, the created/revised Texture
@@ -681,10 +685,11 @@ and Wrong - Way to Criticize AI`, `semantic_story.change_type: source_added`,
 `energy`, `harbor`, `health`, and 273 signal concepts. This is evidence of a
 live ingestion/update blocker, not product acceptance.
 
-next move: push root commit `aac476e4` plus evidence docs, monitor CI and
-staging deploy identity, then run authenticated Chrome/product acceptance for
-Universal Wire article readability, Texture headline open, and source/citation
-surfaces before making any deployed product claim.
+next move: repair the deployed Universal Wire UI/API mismatch documented in the
+ledger first. The next code move must explain why the app surface shows the
+empty state while `/api/universal-wire/stories` returns 12 stories for the same
+authenticated session, then preserve article-copy improvements and source
+surfaces.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -709,18 +714,19 @@ source-arrival update behavior, not DTO existence.
 settlement: not settled. O4 is accepted for deployed deterministic
 multi-article readability, direct stale-edition read repair, current/stale
 semantic DTO observability, and the observed one-article/headline-404/source-open
-regression repair through `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`:
-CI/deploy, health identity, and authenticated product replay support those
-narrow claims. The actual News benchmark remains open until authenticated
-staging evidence shows multilingual live ingestion producing coherent English
-synthesis Texture articles over durable semantic source/world-model objects,
-with later relevant sources updating existing articles. O5 has started through
-prompt-bar/Texture/Super request evidence; O5-O8 remain open. Exit requires
-`settled`, `open_handoff`, `blocked`, or `superseded` with remaining V and next
-assignment explicit.
+regression repair through `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`.
+Article-copy repair is deployed through `ca30a35b` and public API copy evidence
+is positive, but product UI acceptance is blocked by the new API/UI mismatch.
+The actual News benchmark remains open until authenticated staging evidence
+shows multilingual live ingestion producing coherent English synthesis Texture
+articles over durable semantic source/world-model objects, with later relevant
+sources updating existing articles. O5 has started through prompt-bar/Texture/
+Super request evidence; O5-O8 remain open. Exit requires `settled`,
+`open_handoff`, `blocked`, or `superseded` with remaining V and next assignment
+explicit.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=3 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `6c5b1d1ccb1b74d7603c1bd8f2dcd6bce8e67319`; CI run `28282830130`, Docs Truth Check run `28282830115`, FlakeHub run `28282830126`, deploy job `83801933132`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. Authenticated Chrome/Computer Use proof in the owner's signed-in Chrome session showed Universal Wire rendering 12 articles, not one broad mega-article; a headline-opened Texture article loaded at v66 with `Sources 24`, native source buttons, and `Document loaded`; expanding a native `source_ref` opened a citation panel; clicking `Open source` opened a reader/source artifact with `Reader snapshot ready` and an `Open original` link. This repairs the observed one-article/headline-404/source-open regression at deployed product tier, but it does not settle full Universal Wire. Current C8 article-quality slice is accepted at branch-local/root-local tier: worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2` produced `569caa443decab24e77640c620ddc83f6145ae40`; verifier thread `019f0822-4ac7-7233-baf8-0f9a282ce991` returned `accept`; root incorporated it as `aac476e4` and reran the focused Universal Wire sourcecycled/synthesis selector, the broader `UniversalWire|WireProcessor|WireStory|WirePublication` selector, and `git diff --check HEAD^..HEAD` successfully. Next move is push, monitor CI/deploy identity, and run authenticated staging acceptance for article readability, Texture headline open, and native source/citation surfaces. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=4 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`; CI run `28283668088`, Docs Truth Check run `28283668078`, FlakeHub run `28283668077`, deploy job `83804075934`, and health identity passed, with proxy and sandbox reporting that exact deployed commit. This deployed the accepted C8 article-quality slice: worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2` produced `569caa443decab24e77640c620ddc83f6145ae40`; verifier thread `019f0822-4ac7-7233-baf8-0f9a282ce991` returned `accept`; root incorporated it as `aac476e4`; root-local focused and broader Universal Wire runtime selectors passed. Staging public API proof in a temporary authenticated Playwright product session returned 12 stories from `/api/universal-wire/stories`, source `universal-wire-edition-texture`, and no documented helper/provenance phrases in the first story headline/dek/semantic surface. Product UI acceptance failed: opening the Universal Wire app in that same session showed `0 articles` and the empty state. Next move is document-first repair of the Universal Wire UI/API mismatch, then redeploy and rerun acceptance for UI card count, article readability, Texture headline open, and native source/citation surfaces. Do not claim full Universal Wire: provider/model-quality synthesis, broad semantic clustering, Qdrant, production update semantics, and full News benchmark settlement remain open. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

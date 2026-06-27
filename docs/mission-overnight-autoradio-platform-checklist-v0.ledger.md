@@ -12520,3 +12520,109 @@ Next move: commit this evidence, push root behavior/evidence commits to
 `origin main`, monitor CI/deploy identity, then run authenticated staging
 acceptance for article readability, Texture headline open, and native
 source/citation surfaces.
+
+## 2026-06-27 - O4 Article Quality Landing Exposes Wire UI/API Mismatch
+
+Move type: staging landing evidence -> Problem Documentation First checkpoint.
+
+Pushed commits:
+
+- `aac476e4` (`Repair Universal Wire synthesis article copy`)
+- `ca30a35b` (`Record O4 article quality verifier acceptance`)
+
+CI/deploy evidence:
+
+- `git push origin HEAD:main` succeeded; `origin/main` now points at
+  `ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`.
+- CI run `28283668088` completed successfully for
+  `ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`.
+- Docs Truth Check run `28283668078` completed successfully.
+- FlakeHub publish run `28283668077` completed successfully.
+- CI deploy job `83804075934` completed successfully.
+- `https://choir.news/health` reported `status: ok`, proxy
+  `build.commit`/`deployed_commit`
+  `ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`, sandbox upstream
+  `commit`/`deployed_commit`
+  `ca30a35ba5be3c7cabca0ff88e9a7d8b5d3062eb`, deployed at
+  `2026-06-27T08:22:50Z`.
+
+Authenticated product evidence:
+
+- Chrome extension automation connected to the owner's logged-in Chrome profile
+  but became unreliable after claiming an existing `/api/universal-wire/stories`
+  tab; the native pipe repeatedly closed when attempting to claim the logged-in
+  app tab. No acceptance claim is made from that broken automation path.
+- A temporary Playwright product auth state was created outside the repo at
+  `/tmp/choir-news-ca30a35b.storage.json` through the deployed passkey product
+  flow for user `qa-ca30a35b-1782549274@example.com`; no repo auth artifact was
+  written.
+- In that authenticated Playwright session, public
+  `/api/universal-wire/stories` returned HTTP 200 with
+  `source: universal-wire-edition-texture`, `story_count: 12`, edition
+  `universal-wire/Wire.texture`, and 17 included doc ids.
+- The first returned story was
+  `source-network-texture-4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, headline
+  `Telegram Post from Metropoles Telegram`, `story_texture_doc_id`
+  `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`, and dek:
+  `The available reporting describes a developing story that remains open to
+  revision as more details arrive. [1]`
+- The first story surface did not contain the documented helper/provenance
+  phrases: `gives the clearest current account`, `second sourced angle`,
+  `The second account narrows what readers can trust now`,
+  `Universal Wire selected`, `graph-backed source captures`,
+  `incoming reports point to the same developing story`, or
+  `reports read as one developing article`.
+- In the same authenticated Playwright session, opening the Universal Wire app
+  via `[data-desk-menu-button]` and
+  `[data-desk-sheet-app][data-desk-app-id="universal-wire"]` showed
+  `[data-universal-wire-app]` with `cardCount: 0` and text:
+  `LIVING SOURCE NETWORK / Universal Wire / 0 articles / No Wire edition
+  articles yet / Universal Wire will show Texture-owned articles here after
+  platform source processing and Texture authoring publish an edition.`
+
+Conjecture verdict:
+
+- Supported at deployed public API tier for the narrow article-copy repair:
+  the first returned Wire story no longer uses the documented helper/provenance
+  phrases in headline/dek/semantic surface.
+- Rejected for deployed product UI acceptance: the Universal Wire app surface
+  did not render the same 12 stories returned by the public API in the same
+  authenticated product session.
+
+Problem statement:
+
+The deployed Universal Wire app can show the empty state even when the
+authenticated public stories API returns a non-empty edition. This is a new
+product-surface mismatch discovered during the article-quality landing. It must
+be repaired before claiming deployed C8 product acceptance, headline open, or
+source/citation UI behavior for this deploy.
+
+Mutation class: green docs checkpoint. No code changed in this pass.
+
+Heresy delta: `discovered`. This is not a regression claim against
+`aac476e4`; it is a staging product UI/API mismatch exposed by the acceptance
+probe after that deploy.
+
+Rollback refs: behavior rollback remains revert `aac476e4` plus dependent
+evidence commits. The docs checkpoint can be reverted separately only if later
+evidence proves the UI/API mismatch was a probe artifact.
+
+Dirty/generated artifact classification:
+
+- Intentional durable docs changes in this paradoc and ledger.
+- Temporary auth artifacts were written outside the repo:
+  `/tmp/choir-news-ca30a35b.storage.json` and
+  `/tmp/choir-news-ca30a35b.meta.json`.
+- Existing unrelated local WIP remains `skills/parallax/SKILL.md`.
+- Existing unrelated untracked report remains
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+Expected Delta V: 0. Actual Delta V: +1. V becomes 4 because article-copy API
+evidence improved, but product UI acceptance found a new non-empty API/empty UI
+blocker.
+
+Next move: before code repair, inspect why the Universal Wire app fetch/render
+path shows empty state while `/api/universal-wire/stories` returns 12 stories in
+the same authenticated session. A valid repair must preserve the article-copy
+improvement, public API behavior, Texture headline open, and native
+source/citation surfaces.
