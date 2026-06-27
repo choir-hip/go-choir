@@ -9142,3 +9142,44 @@ acceptance, provider/search freshness, semantic clustering, Qdrant, or
 promotion/rollback execution is claimed.
 
 Actual Delta V: 0 until verifier and deployed product proof. V remains 27.
+
+## 2026-06-27 - O4 Platformd Texture Sync Envelope Verifier Accepts
+
+Verifier thread `019f06be-3066-7110-acc6-40223efdc15d` returned
+`accept` for the platformd Texture sync envelope repair.
+
+Findings: no blocking findings.
+
+Verifier conclusions:
+
+- Problem Documentation First is satisfied: `491a0db1` documents the deployed
+  platformd sync envelope gap before code commit `095b0d36`.
+- `syncTextureToPlatformd` now decodes the runtime revision-list envelope
+  `{"revisions":[...]}` before building the platformd sync request.
+- The proxy test fixture now returns the same enveloped shape and would fail on
+  the old bare-array decoder.
+- The repair preserves the platformd verification gate; Universal Wire still
+  filters through `platformdHasPublishedTexture`.
+- Diff scope is limited to mission docs/ledger plus
+  `internal/proxy/wire_platform_publish.go` and its test.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean.
+- `git show --check --oneline 491a0db1`: passed.
+- `git show --check --oneline 095b0d36`: passed.
+- `git diff --check 54742969..HEAD`: passed.
+- `git diff --name-status 54742969..HEAD`: expected docs and proxy files only.
+- Focused proxy test selector: passed.
+- Focused Universal Wire runtime materialization selector: passed.
+- Broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime
+  selector: passed.
+
+Evidence boundary/non-claims: verifier acceptance is local only. No push,
+deploy, staging mutation, browser acceptance, platformd row verification, or
+product acceptance is claimed yet.
+
+Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
+the accepted repair stack to `origin/main`, monitor CI/deploy, verify health
+identity, verify platformd document presence, and run authenticated Universal
+Wire product acceptance.
