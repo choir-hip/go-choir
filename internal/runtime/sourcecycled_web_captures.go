@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
@@ -33,6 +35,7 @@ type internalSourcecycledWebCapturesResponse struct {
 	SynthesisClusterID       string `json:"synthesis_cluster_id,omitempty"`
 	SynthesisClusterObjectID string `json:"synthesis_cluster_object_id,omitempty"`
 	SynthesisSourceCount     int    `json:"synthesis_source_count,omitempty"`
+	SynthesisClusterCount    int    `json:"synthesis_cluster_count,omitempty"`
 	SynthesisEditionRef      string `json:"synthesis_edition_ref,omitempty"`
 	SynthesisSkipReason      string `json:"synthesis_skip_reason,omitempty"`
 }
@@ -107,6 +110,7 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		SynthesisClusterID:       synthesis.ClusterID,
 		SynthesisClusterObjectID: synthesis.ClusterObjectID,
 		SynthesisSourceCount:     synthesis.SourceCount,
+		SynthesisClusterCount:    synthesis.ClusterCount,
 		SynthesisEditionRef:      synthesis.EditionRef,
 		SynthesisSkipReason:      synthesisSkipReason,
 	})
@@ -120,6 +124,7 @@ type universalWireGraphSynthesisResult struct {
 	ClusterID       string
 	ClusterObjectID string
 	SourceCount     int
+	ClusterCount    int
 }
 
 const universalWireLiveSourcecycledClusterID = "sourcecycled-live"
@@ -142,29 +147,225 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	if err != nil {
 		return universalWireGraphSynthesisResult{}, err
 	}
-	if len(sources) < 2 {
+	groups := universalWireDeterministicStorySourceGroups(sources)
+	if len(groups) == 0 {
+		if len(sources) >= 2 && !universalWireSourcesHaveKnownStoryConcept(sources) {
+			doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+				ClusterID: universalWireLiveSourcecycledClusterID,
+				Headline:  universalWireLiveSynthesisHeadline(sources),
+				Summary:   universalWireLiveSynthesisSummary(sources),
+				Tension:   "Further reporting should revise this article if the timeline, affected people, or official account changes.",
+				Sources:   sources,
+				Now:       now,
+			})
+			if err != nil {
+				return universalWireGraphSynthesisResult{}, err
+			}
+			return universalWireGraphSynthesisResult{
+				Triggered:       true,
+				Doc:             doc,
+				Revision:        rev,
+				EditionRef:      editionRef,
+				ClusterID:       universalWireLiveSourcecycledClusterID,
+				ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), universalWireLiveSourcecycledClusterID),
+				SourceCount:     len(sources),
+				ClusterCount:    1,
+			}, nil
+		}
 		return universalWireGraphSynthesisResult{SourceCount: len(sources)}, nil
 	}
-	doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: universalWireLiveSourcecycledClusterID,
-		Headline:  universalWireLiveSynthesisHeadline(sources),
-		Summary:   universalWireLiveSynthesisSummary(sources),
-		Tension:   "Further reporting should revise this article if the timeline, affected people, or official account changes.",
-		Sources:   sources,
-		Now:       now,
-	})
-	if err != nil {
-		return universalWireGraphSynthesisResult{}, err
+	var out universalWireGraphSynthesisResult
+	for _, group := range groups {
+		doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+			ClusterID: group.ClusterID,
+			Headline:  universalWireLiveSynthesisHeadline(group.Sources),
+			Summary:   universalWireLiveSynthesisSummary(group.Sources),
+			Tension:   "Further reporting should revise this article if the timeline, affected people, or official account changes.",
+			Sources:   group.Sources,
+			Now:       now,
+		})
+		if err != nil {
+			return universalWireGraphSynthesisResult{}, err
+		}
+		out = universalWireGraphSynthesisResult{
+			Triggered:       true,
+			Doc:             doc,
+			Revision:        rev,
+			EditionRef:      editionRef,
+			ClusterID:       group.ClusterID,
+			ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), group.ClusterID),
+			SourceCount:     len(group.Sources),
+			ClusterCount:    out.ClusterCount + 1,
+		}
 	}
-	return universalWireGraphSynthesisResult{
-		Triggered:       true,
-		Doc:             doc,
-		Revision:        rev,
-		EditionRef:      editionRef,
-		ClusterID:       universalWireLiveSourcecycledClusterID,
-		ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), universalWireLiveSourcecycledClusterID),
-		SourceCount:     len(sources),
-	}, nil
+	return out, nil
+}
+
+type universalWireDeterministicStorySourceGroup struct {
+	ClusterID string
+	Sources   []universalWireSynthesisSource
+	concepts  map[string]bool
+}
+
+func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesisSource) []universalWireDeterministicStorySourceGroup {
+	var groups []universalWireDeterministicStorySourceGroup
+	for _, source := range normalizedUniversalWireSynthesisSources(sources) {
+		concepts := universalWireStoryConceptSet(source)
+		if len(concepts) == 0 {
+			continue
+		}
+		best := -1
+		bestOverlap := 0
+		for i := range groups {
+			overlap := universalWireStoryConceptOverlap(groups[i].concepts, concepts)
+			if overlap > bestOverlap {
+				best = i
+				bestOverlap = overlap
+			}
+		}
+		if best >= 0 {
+			groups[best].Sources = append(groups[best].Sources, source)
+			for concept := range concepts {
+				groups[best].concepts[concept] = true
+			}
+			continue
+		}
+		groups = append(groups, universalWireDeterministicStorySourceGroup{
+			Sources:  []universalWireSynthesisSource{source},
+			concepts: concepts,
+		})
+	}
+	out := make([]universalWireDeterministicStorySourceGroup, 0, len(groups))
+	for _, group := range groups {
+		if len(group.Sources) < 2 {
+			continue
+		}
+		group.ClusterID = universalWireLiveSourcecycledClusterID + "-" + universalWireStoryClusterSlug(group.concepts)
+		out = append(out, group)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Sources[0].FetchedAt.After(out[j].Sources[0].FetchedAt)
+	})
+	return out
+}
+
+func universalWireStoryConceptOverlap(left, right map[string]bool) int {
+	overlap := 0
+	for concept := range right {
+		if left[concept] {
+			overlap++
+		}
+	}
+	return overlap
+}
+
+func universalWireStoryClusterSlug(concepts map[string]bool) string {
+	tokens := make([]string, 0, len(concepts))
+	for concept := range concepts {
+		tokens = append(tokens, concept)
+	}
+	sort.Strings(tokens)
+	if len(tokens) > 3 {
+		tokens = tokens[:3]
+	}
+	if len(tokens) == 0 {
+		return "uncategorized"
+	}
+	return strings.Join(tokens, "-")
+}
+
+func universalWireStoryConceptSet(source universalWireSynthesisSource) map[string]bool {
+	text := strings.Join([]string{source.Title, source.Body, source.CanonicalURL, source.URL}, " ")
+	concepts := map[string]bool{}
+	fallback := map[string]bool{}
+	for _, token := range universalWireStoryTokens(text) {
+		if concept := universalWireStoryConcept(token); concept != "" {
+			concepts[concept] = true
+			continue
+		}
+		if !universalWireStoryTokenStopword(token) && len(token) >= 5 {
+			fallback[token] = true
+		}
+	}
+	if len(concepts) > 0 {
+		return concepts
+	}
+	concepts = fallback
+	return concepts
+}
+
+func universalWireSourcesHaveKnownStoryConcept(sources []universalWireSynthesisSource) bool {
+	for _, source := range sources {
+		text := strings.Join([]string{source.Title, source.Body, source.CanonicalURL, source.URL}, " ")
+		for _, token := range universalWireStoryTokens(text) {
+			if universalWireStoryConcept(token) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func universalWireStoryTokens(text string) []string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(text) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(universalWireFoldRune(r))
+		default:
+			b.WriteByte(' ')
+		}
+	}
+	return strings.Fields(b.String())
+}
+
+func universalWireFoldRune(r rune) rune {
+	switch r {
+	case 'á', 'à', 'â', 'ã', 'ä', 'å':
+		return 'a'
+	case 'ç':
+		return 'c'
+	case 'é', 'è', 'ê', 'ë':
+		return 'e'
+	case 'í', 'ì', 'î', 'ï':
+		return 'i'
+	case 'ñ':
+		return 'n'
+	case 'ó', 'ò', 'ô', 'õ', 'ö':
+		return 'o'
+	case 'ú', 'ù', 'û', 'ü':
+		return 'u'
+	default:
+		return ' '
+	}
+}
+
+func universalWireStoryConcept(token string) string {
+	switch token {
+	case "rail", "railway", "railroad", "train", "trains", "transport", "transit", "commuter", "commuters", "passenger", "passengers", "pasajeros", "estacion", "estaciones", "station", "stations", "ferroviario", "ferroviaire", "corredor", "corridor":
+		return "transport"
+	case "harbor", "harbour", "port", "porto", "channel", "pilots", "pilot", "tide", "maritime":
+		return "harbor"
+	case "river", "gauges", "gauge":
+		return "flood"
+	case "energy", "power", "grid", "electric", "electricity", "substation", "blackout":
+		return "energy"
+	case "health", "hospital", "clinic", "patients", "patient", "vaccine", "disease":
+		return "health"
+	default:
+		return ""
+	}
+}
+
+func universalWireStoryTokenStopword(token string) bool {
+	switch token {
+	case "https", "http", "www", "example", "test", "com", "after", "about", "above", "while", "with", "without", "into", "from", "that", "this", "they", "their", "them", "were", "will", "para", "por", "las", "los", "uma", "que", "des", "les", "une", "and", "the", "for", "are", "was", "said", "officials", "authorities", "regional", "source", "report", "reports", "update", "updates":
+		return true
+	default:
+		return false
+	}
 }
 
 func universalWireLiveSynthesisHeadline(sources []universalWireSynthesisSource) string {

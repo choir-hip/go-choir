@@ -140,6 +140,7 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 22, 5, 0, 0, time.UTC)
+	wantClusterID := universalWireLiveSourcecycledClusterID + "-transport"
 	firstBatch := []sources.Item{
 		universalWireSourcecycledTestItem("srcitem-live-pt", "rss:pt-transport", "fetch-live-pt", "Corredor ferroviario reabre parcialmente", "https://example.com/pt/rail", "pt", "Equipes de emergencia informaram que o corredor ferroviario reabriu parcialmente depois das enchentes, com inspecoes ainda em andamento.", now.Add(-18*time.Minute)),
 		universalWireSourcecycledTestItem("srcitem-live-es", "rss:es-commuters", "fetch-live-es", "Autoridades advierten demoras regionales", "https://example.com/es/commuters", "es", "Las autoridades pidieron a los pasajeros prever demoras mientras continuaban las revisiones de seguridad en estaciones afectadas.", now.Add(-12*time.Minute)),
@@ -148,9 +149,10 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if firstProjection.SynthesisStatus != "ok" ||
 		firstProjection.SynthesisDocID == "" ||
 		firstProjection.SynthesisRevisionID == "" ||
-		firstProjection.SynthesisClusterID != universalWireLiveSourcecycledClusterID ||
+		firstProjection.SynthesisClusterID != wantClusterID ||
 		firstProjection.SynthesisClusterObjectID == "" ||
 		firstProjection.SynthesisSourceCount != 2 ||
+		firstProjection.SynthesisClusterCount != 1 ||
 		firstProjection.SynthesisEditionRef == "" {
 		t.Fatalf("first projection synthesis = %+v, want two-source Texture synthesis", firstProjection)
 	}
@@ -203,9 +205,9 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if err := json.Unmarshal(firstRev.Metadata, &firstRevMeta); err != nil {
 		t.Fatalf("decode first synthesis revision metadata: %v", err)
 	}
-	if metadataString(firstRevMeta, "universal_wire_story_cluster_id") != universalWireLiveSourcecycledClusterID ||
+	if metadataString(firstRevMeta, "universal_wire_story_cluster_id") != wantClusterID ||
 		metadataString(firstRevMeta, "universal_wire_story_cluster_object_id") != firstProjection.SynthesisClusterObjectID {
-		t.Fatalf("first synthesis revision cluster metadata = %#v, want %s/%s", firstRevMeta, universalWireLiveSourcecycledClusterID, firstProjection.SynthesisClusterObjectID)
+		t.Fatalf("first synthesis revision cluster metadata = %#v, want %s/%s", firstRevMeta, wantClusterID, firstProjection.SynthesisClusterObjectID)
 	}
 	firstCluster, err := handler.rt.ObjectGraph().GetObject(context.Background(), firstProjection.SynthesisClusterObjectID)
 	if err != nil {
@@ -217,7 +219,7 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if firstCluster.ObjectKind != objectgraph.UniversalWireStoryClusterObjectKind ||
 		metadataString(firstClusterMeta, "schema_version") != objectgraph.UniversalWireStoryClusterSchemaVersion ||
-		metadataString(firstClusterMeta, "cluster_id") != universalWireLiveSourcecycledClusterID ||
+		metadataString(firstClusterMeta, "cluster_id") != wantClusterID ||
 		metadataString(firstClusterMeta, "article_doc_id") != firstProjection.SynthesisDocID ||
 		metadataString(firstClusterMeta, "article_revision_id") != firstProjection.SynthesisRevisionID ||
 		int(firstClusterMeta["source_count"].(float64)) != 2 {
@@ -241,7 +243,9 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if secondProjection.SynthesisStatus != "ok" ||
 		secondProjection.SynthesisDocID != firstProjection.SynthesisDocID ||
 		secondProjection.SynthesisRevisionID == firstProjection.SynthesisRevisionID ||
-		secondProjection.SynthesisSourceCount != 3 {
+		secondProjection.SynthesisSourceCount != 3 ||
+		secondProjection.SynthesisClusterID != wantClusterID ||
+		secondProjection.SynthesisClusterCount != 1 {
 		t.Fatalf("second projection synthesis = %+v, want same article revised with three sources", secondProjection)
 	}
 	updatedDoc, err := handler.rt.Store().GetDocument(context.Background(), firstProjection.SynthesisDocID, universalWirePlatformOwnerID())
@@ -286,6 +290,136 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		t.Fatalf("updated stories = %+v, want one revised article and one edition transclusion", secondStories)
 	}
 	assertUniversalWireStoryTextureReadableForTest(t, handler, secondStories.Stories[0], secondProjection.SynthesisRevisionID)
+}
+
+func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 27, 3, 15, 0, 0, time.UTC)
+	batch := []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-split-rail-1", "rss:rail", "fetch-rail-1", "Rail corridor reopens after inspections", "https://example.com/rail/reopen", "en", "Emergency crews reopened the rail corridor after flood inspections, and commuters returned to central stations.", now.Add(-35*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-split-rail-2", "rss:commuters", "fetch-rail-2", "Commuters return to railway stations", "https://example.com/rail/commuters", "en", "Transit officials said passengers should expect slower railway service while station inspections continue.", now.Add(-31*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-split-harbor-1", "rss:harbor", "fetch-harbor-1", "Harbor pilots reopen the inner channel", "https://example.com/harbor/channel", "en", "Harbor pilots reopened the inner channel after overnight checks, with cargo vessels waiting for the next tide window.", now.Add(-25*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-split-harbor-2", "rss:port", "fetch-harbor-2", "Port access expands with afternoon tide", "https://example.com/harbor/tide", "en", "Port officials said the afternoon tide would expand vessel access after pilot boats completed channel soundings.", now.Add(-22*time.Minute)),
+	}
+	projection := postInternalSourcecycledWebCapturesForTest(t, handler, batch, now)
+	if projection.SynthesisStatus != "ok" ||
+		projection.SynthesisClusterCount != 2 ||
+		projection.SynthesisDocID == "" ||
+		projection.SynthesisRevisionID == "" ||
+		projection.SynthesisClusterID == "" {
+		t.Fatalf("projection synthesis = %+v, want two deterministic story clusters materialized", projection)
+	}
+
+	stories := getUniversalWireStoriesForTest(t, handler)
+	if stories.Source != "universal-wire-edition-texture" ||
+		stories.Diagnostics != nil ||
+		stories.Edition == nil ||
+		len(stories.Stories) != 2 ||
+		len(stories.Edition.IncludedDocIDs) != 2 {
+		t.Fatalf("stories = %+v, want two platform-owned synthesis articles in the Wire edition", stories)
+	}
+	docIDs := map[string]bool{}
+	for _, story := range stories.Stories {
+		if story.StoryTextureDoc == "" ||
+			story.SourceState != "universal-wire-edition-texture" ||
+			strings.Contains(story.SourceState, "objectgraph-web-capture") ||
+			len(story.Manifest.Lead) != 2 {
+			t.Fatalf("story = %+v, want synthesized Texture article with two source-ref leads", story)
+		}
+		docIDs[story.StoryTextureDoc] = true
+		assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
+		for _, lead := range story.Manifest.Lead {
+			if lead.OpenSurface != sourcecontract.OpenSurfaceSource ||
+				lead.ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
+				lead.ReaderSnapshot == nil ||
+				lead.ReaderSnapshot.TextContent == "" {
+				t.Fatalf("story lead lacks Source Viewer reader provenance: %+v", lead)
+			}
+		}
+		doc, err := handler.rt.Store().GetDocument(ctx, story.StoryTextureDoc, universalWirePlatformOwnerID())
+		if err != nil {
+			t.Fatalf("load story doc %s: %v", story.StoryTextureDoc, err)
+		}
+		rev, err := handler.rt.Store().GetRevision(ctx, doc.CurrentRevisionID, universalWirePlatformOwnerID())
+		if err != nil {
+			t.Fatalf("load story revision %s: %v", doc.CurrentRevisionID, err)
+		}
+		if !strings.Contains(string(rev.BodyDoc), `"source_ref"`) {
+			t.Fatalf("revision body_doc missing native source_ref citations: %s", string(rev.BodyDoc))
+		}
+		var entities []texturedoc.SourceEntity
+		if err := json.Unmarshal(rev.SourceEntities, &entities); err != nil {
+			t.Fatalf("decode source_entities: %v", err)
+		}
+		if len(entities) != 2 {
+			t.Fatalf("source_entities len = %d, want two cited sources: %#v", len(entities), entities)
+		}
+	}
+	for _, docID := range stories.Edition.IncludedDocIDs {
+		if !docIDs[docID] || countStrings(stories.Edition.IncludedDocIDs, docID) != 1 {
+			t.Fatalf("edition included docs = %+v, want each synthesized doc exactly once", stories.Edition.IncludedDocIDs)
+		}
+	}
+
+	clusterObjects, err := handler.rt.ObjectGraph().ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    objectgraph.UniversalWireStoryClusterObjectKind,
+		OwnerID: universalWirePlatformOwnerID(),
+		Limit:   12,
+	})
+	if err != nil {
+		t.Fatalf("list story clusters: %v", err)
+	}
+	if len(clusterObjects) != 2 {
+		t.Fatalf("cluster object count = %d, want two durable story clusters: %+v", len(clusterObjects), clusterObjects)
+	}
+	clusterIDs := map[string]bool{}
+	clusterDocIDs := map[string]bool{}
+	for _, cluster := range clusterObjects {
+		var meta map[string]any
+		if err := json.Unmarshal(cluster.Metadata, &meta); err != nil {
+			t.Fatalf("decode cluster metadata: %v", err)
+		}
+		clusterID := metadataString(meta, "cluster_id")
+		clusterIDs[clusterID] = true
+		clusterDocIDs[metadataString(meta, "article_doc_id")] = true
+		if metadataString(meta, "schema_version") != objectgraph.UniversalWireStoryClusterSchemaVersion ||
+			int(meta["source_count"].(float64)) != 2 ||
+			metadataString(meta, "article_revision_id") == "" ||
+			metadataString(meta, "wire_edition_ref") == "" {
+			t.Fatalf("cluster metadata = %#v, want two-source article cluster", meta)
+		}
+		edges, err := handler.rt.ObjectGraph().ListEdges(ctx, objectgraph.EdgeFilter{
+			FromID: cluster.CanonicalID,
+			Kind:   "contains",
+		})
+		if err != nil {
+			t.Fatalf("list cluster edges: %v", err)
+		}
+		if len(edges) != 2 {
+			t.Fatalf("cluster %s edges len = %d, want two source captures: %#v", clusterID, len(edges), edges)
+		}
+	}
+	if !clusterIDs[universalWireLiveSourcecycledClusterID+"-transport"] ||
+		!clusterIDs[universalWireLiveSourcecycledClusterID+"-harbor"] ||
+		len(clusterDocIDs) != 2 {
+		t.Fatalf("clusters = %#v docIDs=%#v, want separate transport and harbor articles", clusterIDs, clusterDocIDs)
+	}
+
+	captureStories, captureDiagnostic, err := handler.universalWireWebCaptureStories(ctx, 12)
+	if err != nil {
+		t.Fatalf("read raw graph capture helper: %v", err)
+	}
+	if captureDiagnostic.State != "available" ||
+		captureDiagnostic.StoryCount != 4 ||
+		len(captureStories) != 4 {
+		t.Fatalf("raw graph captures diagnostic = %+v stories=%+v, want diagnostic-only capture substrate", captureDiagnostic, captureStories)
+	}
+	for _, story := range captureStories {
+		if story.SourceState != "objectgraph-web-capture" || story.StoryTextureDoc != "" {
+			t.Fatalf("raw graph capture helper story = %+v, want diagnostic-only non-article projection", story)
+		}
+	}
 }
 
 func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures(t *testing.T) {
@@ -1108,9 +1242,9 @@ func TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceE
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 27, 1, 18, 0, 0, time.UTC)
 	seedUniversalWireWebCaptureFixture(t, handler,
-		"Regional harbor notice",
-		"https://example.test/harbor",
-		"PORTO -- Harbor pilots reopened the inner channel after overnight inspections. Officials said the next update will follow the afternoon tide window.",
+		"Rail corridor inspection update",
+		"https://example.test/rail-inspection",
+		"PARIS -- Transit officials said rail corridor inspections would continue while commuters returned to central stations.",
 		now.Add(-2*time.Hour))
 	seedUniversalWireWebCaptureFixture(t, handler,
 		"Rail corridor reopens",
