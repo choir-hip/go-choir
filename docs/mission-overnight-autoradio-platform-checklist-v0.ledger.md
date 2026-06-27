@@ -11899,3 +11899,49 @@ items yields multiple coherent Wire Texture articles and that a later matching
 arrival updates only the existing semantic story/article. It must not push,
 deploy, mutate staging, claim authenticated Chrome product acceptance, claim
 provider/model-quality synthesis, or claim full News benchmark settlement.
+
+## 2026-06-27 - O4 Deployed Source Arrival Worker Opened
+
+Move type: orchestration/handoff.
+
+Docs-first checkpoint `98f38396fa08c0f94a26d55e362433b160d06864`
+(`Document O4 deployed source arrival clustering blocker`) was pushed to
+`origin/main`; Docs Truth Check run `28282334682` passed.
+
+Worker opened: `O4-deployed-source-arrival-clustering-update-worker`.
+
+Pending worktree handle:
+`local:7027bbe8-85dc-483e-95c2-d247a47c415e`.
+
+Worker conjecture: a deployed-shaped sourcecycled batch with many unrelated
+source items should yield multiple coherent Universal Wire Texture articles,
+and later matching source arrivals should update only the existing semantic
+story/article. It must not collapse unrelated arrivals into one broad
+24-source mega-article with noisy topic/signal signatures.
+
+Mutation class: orange/red branch-local runtime behavior slice.
+
+Protected surfaces named in the worker prompt: Universal Wire sourcecycled
+ingestion/materialization, deterministic/semantic clustering, live source
+selection limits, `choir.universal_wire_story_cluster` state, Texture synthesis
+article revision, source_ref/source_entities carry-forward, Wire edition
+linkage, `/api/universal-wire/stories`, and platform Texture sync/read paths if
+touched.
+
+Out-of-scope surfaces named in the worker prompt: auth/session, vmctl,
+deployment routing, gateway/provider credentials, Qdrant, promotion/rollback,
+run acceptance, publication/export outside existing Wire helpers, staging
+mutation, push/deploy/product acceptance claims.
+
+Admissible worker evidence: regression fixture for deployed-shaped noisy batch
+splitting, later matching arrival updating the same article/story, later
+unrelated arrival remaining separate, capped/story-identity signatures,
+preserved native source_ref/body_doc/source_entities, diagnostic-only raw
+captures, Wire edition linkage, focused runtime tests, broader
+`UniversalWire|WireProcessor|WireStory|WirePublication` selector, `git diff
+--check`, and clean worktree.
+
+Expected Delta V: 0 for opening worker. Actual Delta V: 0. V remains 3.
+
+Next move: monitor pending worker handle for a `ready_for_verifier` callback,
+then create an independent verifier thread before incorporation.
