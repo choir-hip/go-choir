@@ -12933,3 +12933,59 @@ Expected Delta V: 0 until worker callback and independent verifier evidence;
 possible future Delta V: 1 if the worker/verifier pair decides and repairs the
 source-arrival update predicate in a way that can be landed and product-tested.
 Actual Delta V: 0. V remains 3.
+
+## 2026-06-27 - O4 Deployed Live Arrival Window Worker Ready And Verifier Requested
+
+Move: reconnect worker thread and request independent verifier.
+
+Worker callback:
+
+- Worker thread: `019f085c-cd49-7630-8e4a-31a22e26c8a9`.
+- Worktree: `/Users/wiz/.codex/worktrees/4963/go-choir`.
+- Status: `ready_for_verifier`.
+- Commits:
+  - `b0e89b21` (`Document O4 live arrival synthesis window gap`).
+  - `bbd9f2db` (`Repair Wire live arrival synthesis window`).
+- Changed files: `docs/mission-overnight-autoradio-platform-checklist-v0.md`,
+  `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`,
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/universal_wire_test.go`.
+
+Worker claim:
+
+- The pre-repair code could not reliably satisfy deployed live-arrival update
+  semantics because deployed sourcecycled wrote 561 captures in an observed
+  cycle, while synthesis grouped only the latest 24 captures.
+- The docs-first commit records this C6 deployed-cycle window gap before code.
+- The repair raises the live sourcecycled synthesis window to `768`.
+- A new regression proves a later matching rail source updates the same
+  story/article even when 32 newer unrelated captures separate it from prior
+  story sources, while the unrelated harbor article remains unchanged.
+
+Worker evidence:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesUpdatesExistingStoryAcrossDeployedSizedCycle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.000s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 10.802s`.
+- `git diff --check` passed.
+- `git show --check --stat --oneline HEAD` passed.
+- Worker `git status --short` clean.
+
+Evidence boundary/non-claims: branch-local runtime proof only. No push, deploy,
+staging mutation, authenticated product acceptance, provider/model-quality
+synthesis, Qdrant/world-model projection, promotion/rollback, run acceptance,
+or full News settlement is claimed.
+
+Verifier requested:
+
+- Pending verifier handle:
+  `local:08b06908-c7e7-4cbf-b5e9-cf76218c907c`.
+- Verifier scope: independent review of worker commits `b0e89b21` and
+  `bbd9f2db`, including docs-first ordering, diff hygiene, focused high-volume
+  source-arrival test, broader runtime selector, dirty-path classification, and
+  evidence boundary.
+
+Expected Delta V: 0 until verifier verdict. Actual Delta V: 0. V remains 3.
+
+Next move: read verifier result; incorporate only if accepted.
