@@ -10872,3 +10872,48 @@ Next move: create a read-only verifier thread
 `O4-semantic-world-model-update-slice-verifier` for commit
 `0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` in worker worktree
 `/Users/wiz/.codex/worktrees/909c/go-choir`.
+
+## 2026-06-27 - O4 Semantic World-Model Update Verifier Requested
+
+Verifier: `O4-semantic-world-model-update-slice-verifier`.
+
+Pending worktree handle: `local:4b7506dd-553d-4dff-88f6-eea25081b8ab`.
+
+Resolved thread/worktree: Codex thread
+`019f0799-fdfc-7bd0-8c2d-f8782e89a0d8`, titled `Verify O4 world-model
+update`, in verifier worktree `/Users/wiz/.codex/worktrees/8ec0/go-choir`. The
+thread was pinned for operator hygiene after resolution.
+
+Worker under review: commit
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` in worker worktree
+`/Users/wiz/.codex/worktrees/909c/go-choir`.
+
+Verifier contract:
+
+- Read `AGENTS.md`, the paradoc Parallax State, the Suggested Goal String, and
+  the latest ledger entries for the C6/C8 semantic world-model update gap,
+  worker request, and worker-ready evidence.
+- Inspect the worker thread context if thread tools are available.
+- Confirm the worker worktree is at the target commit and classify dirty or
+  generated state.
+- Inspect the diff for the intended files and no out-of-scope protected surface
+  changes.
+- Decide whether semantic state is durable in graph/revision metadata/body and
+  not merely reader-facing copy.
+- Check that reader-facing Texture article copy does not expose internal ids or
+  helper phrases such as `World-model identity:`.
+- Verify tests prove durable semantic story creation, same-identity typed
+  updates for later relevant captures, linked Texture article revision from that
+  state, unrelated capture split behavior, raw `choir.web_capture`
+  diagnostic-only behavior, and source_ref/source_entity boundaries.
+- Rerun focused diff hygiene and runtime selectors if feasible.
+
+Admissible verdicts: `accept`, `revise_before_continue`, `blocked`, or
+`supersede`.
+
+Evidence boundary: read-only verifier; no product code edits, push, deploy,
+staging/product acceptance, provider/model-quality synthesis, Qdrant,
+promotion/rollback, run acceptance, or full News benchmark claim.
+
+Expected Delta V: 0 for verifier creation. Actual Delta V: 0. V remains 3 until
+the verifier returns a verdict.
