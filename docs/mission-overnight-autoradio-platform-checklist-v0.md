@@ -994,6 +994,20 @@ Broader Universal Wire runtime selector passed locally. Next move: commit,
 push, monitor CI/deploy, verify health identity, refresh auth if needed, and
 rerun the deployed story-order proof.
 
+Deployed metadata-recognition repair at
+`557a02f0b3e7d9d41e1c50437f9a31ff7cc2dbaa` still did not settle the product
+conjecture: authenticated proof with `qa-wire-stale-final-1782564538@example.com`
+at `2026-06-27T12:49:22Z` still returned the bad doc at index 0. Direct Texture
+revision read confirmed the doc has synthesis metadata and `created_at`
+`2026-06-27T11:52:38Z`, while live-arrival boundary
+`cycle_bf681b0c3b55a65d2ae51703` was observed at
+`2026-06-27T12:37:26.382055539Z` with skipped grouping. New problem discovered:
+de-ranking stale syntheses is insufficient when the top feed cohort is itself
+mostly stale synthesis; stale articles must be excluded from the public story
+list while remaining present in edition metadata and direct Texture reads for
+audit. Next move: filter stale synthesis candidates out of public
+`/api/universal-wire/stories` before the 12-story cap.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

@@ -14531,3 +14531,64 @@ until deployed proof. V remains 1.
 Next move: commit, push to `origin main`, monitor CI/deploy, verify health
 identity, refresh auth if needed, and rerun authenticated `/api/universal-wire`
 proof.
+
+## 2026-06-27 - O4 Stale De-Rank No-Op Gap Documented
+
+Move: complete deployed replay for `557a02f0b3e7d9d41e1c50437f9a31ff7cc2dbaa`
+and document the remaining failure before the next behavior change.
+
+Landing evidence:
+
+- CI run `28289546523` passed, including runtime shards, non-runtime tests,
+  Go vet/build, integration smoke, TLA+, and deploy gate.
+- Docs Truth Check run `28289546512` passed.
+- FlakeHub run `28289546511` passed.
+- Staging health reported proxy and sandbox deployed at
+  `557a02f0b3e7d9d41e1c50437f9a31ff7cc2dbaa`, deployed_at
+  `2026-06-27T12:47:46Z`.
+
+Authenticated staging proof:
+
+- Created temporary product user `qa-wire-stale-final-1782564538@example.com`.
+- Authenticated `/api/universal-wire/live-arrival` returned boundary
+  `cycle_bf681b0c3b55a65d2ae51703`, observed_at
+  `2026-06-27T12:37:26.382055539Z`, `synthesis_status: skipped`,
+  `synthesis_source_count: 768`, `synthesis_known_source_count: 2`,
+  `synthesis_candidate_groups: 2`, and skip reason
+  `no deterministic story group reached two sources with a shared topic and
+  story signal`.
+- Authenticated `/api/universal-wire/stories?limit=30` still returned bad doc
+  `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` at index 0, prominence 100.
+- Direct authenticated Texture revision read showed revision
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9`, created_at
+  `2026-06-27T11:52:38Z`, with `universal_wire_synthesis: true`,
+  `universal_wire_article_alias_path`,
+  `universal_wire_story_cluster_id`, and
+  `universal_wire_story_cluster_object_id` metadata present.
+
+Conjecture verdict: not supported at staging. Metadata recognition is not the
+remaining blocker. The stale detector can identify stale synthesis, but merely
+sorting stale syntheses behind non-stale stories is ineffective when the public
+cohort is itself dominated by stale synthesis articles.
+
+New problem discovered: stale synthesis lifecycle repair must filter stale
+synthesis candidates out of the public story list, while preserving canonical
+edition inclusion and direct Texture readability for audit. De-rank-only repair
+does not change product reality for the observed feed.
+
+Mutation class: green documentation/evidence checkpoint. Protected surfaces
+touched: none in this commit. The next repair will touch Universal Wire public
+story filtering before the product cap.
+
+Rollback path: revert this evidence checkpoint; no runtime state changes were
+made.
+
+Heresy delta: `discovered`. The stale article lifecycle problem remains open;
+the next repair target is public story filtering, not metadata recognition.
+
+Expected Delta V: 0 for documentation only. Actual Delta V: 0. V remains 1.
+
+Next move: filter stale synthesis candidates out of
+`/api/universal-wire/stories` before the 12-story cap, keep the edition metadata
+intact for audit, add a regression that stale docs are excluded rather than
+merely de-ranked, then replay local tests and staging.
