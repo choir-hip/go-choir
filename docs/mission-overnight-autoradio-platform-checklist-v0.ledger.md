@@ -8971,6 +8971,53 @@ captures without those edges.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
 
+## 2026-06-27 - O4 Platform Texture Current-Head Verifier Accepts
+
+Verifier thread `019f06d0-830a-78e3-a475-e31db86f252e` returned `accept`
+for the platform Texture current-head repair.
+
+Findings: no blocking findings.
+
+Verifier conclusions:
+
+- Problem Documentation First is satisfied: `0140f17e` documents the deployed
+  current-head gap before code commit `4d95b97e`.
+- `PlatformTextureDocument` now exposes `current_revision_id`.
+- `GetTextureDocument` derives the head from the latest platform revision
+  without adding write authority.
+- Platform sync/store tests cover one revision and two synced revisions with
+  `rev-2` as current.
+- Proxy read-only platform Texture pass-through preserves `current_revision_id`.
+- Universal Wire/platformd filtering was not bypassed; runtime code is
+  unchanged and still requires platformd document/revision verification.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean.
+- `git show --check --oneline 0140f17e`: passed.
+- `git show --check --oneline 4d95b97e`: passed.
+- `git diff --check 432ecd5a..HEAD`: passed.
+- `git diff --name-status 432ecd5a..HEAD`: docs, `internal/platform`, and
+  proxy test only.
+- Focused platform test selector: passed.
+- Focused proxy test selector: passed.
+- Focused Universal Wire runtime guard selector: passed.
+- Broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime
+  selector: passed.
+
+Dirty/generated artifact classification: clean worktree; no untracked scratch
+or generated artifacts.
+
+Evidence boundary/non-claims: verifier acceptance is local only. No push,
+deploy, staging mutation, authenticated product replay, run acceptance,
+promotion/rollback execution, provider freshness, semantic clustering, or
+Qdrant behavior is claimed.
+
+Actual Delta V: 0 until deployed headline-to-Texture proof. V remains 27. Next
+move: push the accepted stack to `origin/main`, monitor CI/deploy, verify
+health identity, and replay authenticated Universal Wire headline-to-Texture
+readability.
+
 ## 2026-06-27 - O4 Legacy Graph Capture Synthesis Local Repair
 
 Claim: root commit `c813bff4` repairs the deployed zero-article condition for
