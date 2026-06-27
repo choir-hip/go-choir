@@ -646,12 +646,26 @@ showed the platform read-owner Texture open path with no 404/empty-placeholder
 failure. The accepted boundary is explicit: public Wire DTO `synthesis_frame`
 remains absent, so the deployed proof rests on the platform Texture read-owner
 revision/body_doc/metadata path; this is acceptable for deterministic
-source-map synthesis, not provider/model-quality synthesis.
+source-map synthesis, not provider/model-quality synthesis. Current worker
+checkpoint `O4-provider-reconciler-quality-world-model-axis-worker` documents a
+new branch-local problem before repair: the existing cluster object records
+source_added and source-map prose, but it does not make the semantic update
+decision itself durable and inspectable. The remaining error field is the gap
+between "new source caused a revision" and "the world model records why the
+source belonged to this existing story, what continuity predicates were used,
+and what a future reconciler/provider must revisit or split." This is a
+`discovered` heresy at docs-first checkpoint tier, not a regression and not yet
+repair.
 
-next move: descend the remaining O4 realism axis beyond deterministic
-source-map prose. The next useful move should either produce a provider/
-reconciler-quality semantic synthesis/world-model slice or document why the
-current architecture cannot yet support that route. Do not claim Qdrant/
+next move: branch-local orange repair may add a typed world-model update
+decision to `choir.universal_wire_story_cluster`, carry that decision into
+Texture revision metadata/article copy, and expose the decision through
+`semantic_story` DTO observability with focused tests. It must preserve native
+source refs, same-article updates, stale filtering, platform Texture open/read
+paths, and edition linkage. Do not touch auth/session renewal, vmctl, deployment
+routing, provider/gateway credentials, Qdrant, promotion/rollback, run
+acceptance, direct Node B tracked files, staging, or publication/export outside
+existing Wire edition helpers. Do not claim provider/model quality, Qdrant/
 world-model projection, run acceptance, promotion/rollback, or full News
 benchmark settlement until deployed product evidence and independent verifier
 acceptance support those claims.

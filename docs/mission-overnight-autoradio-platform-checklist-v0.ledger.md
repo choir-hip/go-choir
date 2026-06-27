@@ -16234,3 +16234,86 @@ architectural blocker that prevents that route. Do not claim Qdrant/world-model
 projection, run acceptance, promotion/rollback, or full News benchmark
 settlement until deployed product evidence and independent verifier acceptance
 support those claims.
+
+## 2026-06-27 - O4 Provider/Reconciler World-Model Decision Checkpoint
+
+Move: docs-first Problem Documentation checkpoint for worker item
+`O4-provider-reconciler-quality-world-model-axis-worker`.
+
+Problem:
+
+- Existing Universal Wire cluster state records `source_added`, source counts,
+  source-map prose, event-frame text, and native Texture source refs, but it
+  does not make the semantic update decision itself a durable, inspectable
+  object inside the story/world-model state.
+- The remaining owner target is not "another source appeared." It is durable
+  world-model behavior: when a later source arrives, the system should record
+  why that source updates the existing story rather than opening a sibling
+  event, what continuity predicates were used, which predicates remain
+  unresolved, and what a future provider/reconciler must revisit.
+
+Evidence:
+
+- Local code inspection at root/docs head
+  `2c55636658353e9b894d3e0e575151eb7767421b` found
+  `universalWireSemanticStoryState` and public `semantic_story` DTO fields for
+  latest change, event frame, source counts, topics/signals, and source-map
+  synthesis frame.
+- The same inspection found no typed update-decision field or DTO contract
+  carrying continuity predicates, matched/new evidence, split predicates, or
+  unresolved questions.
+- Prior accepted staging evidence remains bounded to deterministic source-map
+  synthesis through behavior head `fe13c3d5e3ec787c75d2ae8e82580091e7bc00d4`;
+  this checkpoint does not redo or weaken that proof.
+
+Belief state:
+
+- The next smallest useful branch-local slice is not provider credentials,
+  Qdrant, or model routing. It is a typed semantic update decision attached to
+  the durable `choir.universal_wire_story_cluster` state and carried into
+  Texture revision metadata/article copy plus authenticated public DTO
+  observability.
+
+Remaining error field:
+
+- This still will not prove provider/model-quality synthesis or full News
+  benchmark settlement. It will only move the bridge from deterministic
+  source-map rendering toward a reconciler-readable world-model update
+  contract.
+
+Conjecture delta:
+
+- If Universal Wire persists and exposes a typed update decision for later
+  source arrivals, then the system is materially closer to provider/reconciler
+  quality because the future provider has an explicit world-model state contract
+  to revise or refute instead of reconstructing intent from formulaic prose.
+
+Protected surfaces and rollback:
+
+- Authorized branch-local repair surfaces: Universal Wire sourcecycled
+  materialization, semantic story/entity/event/world-model cluster state,
+  Texture synthesis revision metadata/body/source refs, Wire edition linkage,
+  and authenticated public `/api/universal-wire/*` DTO observability.
+- Not authorized: auth/session renewal, vmctl, deployment routing,
+  provider/gateway credentials, Qdrant, promotion/rollback, run acceptance,
+  direct Node B tracked-file edits, staging mutation, and publication/export
+  outside existing Wire edition helpers.
+- Rollback path: revert this docs checkpoint and any dependent runtime/test
+  commit(s) back to starting main SHA
+  `2c55636658353e9b894d3e0e575151eb7767421b`.
+
+Mutation class / heresy delta:
+
+- Current checkpoint is yellow/green docs-only. Planned repair is orange
+  branch-local if implemented.
+- Heresy delta: `discovered`; `repaired` only if a later runtime commit adds the
+  typed semantic update decision while preserving source citations,
+  same-article updates, stale filtering, platform Texture open/read paths, and
+  edition linkage.
+
+Expected Delta V: 1 at branch-local realism-axis tier if focused tests prove
+the durable update-decision contract and no protected non-authorized surfaces
+are touched. Actual Delta V: 0 for this docs-first checkpoint.
+
+Next move: implement the bounded typed update-decision slice or stop with this
+checkpoint if code inspection reveals the architecture cannot support it.
