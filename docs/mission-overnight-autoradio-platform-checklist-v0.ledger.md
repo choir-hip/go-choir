@@ -11001,3 +11001,74 @@ Next move: push root commit `f8040f2e1f297b3026715965c80b4c55c6840f8e` plus
 this evidence to `origin/main`, monitor CI/deploy, verify staging build
 identity, and run authenticated product acceptance for the narrow semantic
 story-state slice.
+
+## 2026-06-27 - O4 Semantic Story State Deployed Smoke
+
+Pushed commit: `7744b1ea443113b358436899f664f95796bad135`.
+
+Included behavior commit: `f8040f2e1f297b3026715965c80b4c55c6840f8e` (`Add
+Universal Wire semantic story state`).
+
+Included evidence commit: `7744b1ea443113b358436899f664f95796bad135` (`Record
+O4 semantic story verifier acceptance`).
+
+GitHub Actions:
+
+- CI run `28280432812`: success. Job-level inspection showed TLA, runtime
+  shards 0-3, integration smoke, Go vet/build, non-runtime tests, deploy impact
+  detection, and CI doccheck succeeded; frontend build was skipped by deploy
+  impact detection.
+- Docs Truth Check run `28280432815`: success.
+- FlakeHub publish run `28280432827`: success.
+
+Staging health/build identity:
+
+- `https://choir.news/health` returned `status: ok`, `service: proxy`,
+  `upstream: ok`, and proxy build/deployed commit
+  `7744b1ea443113b358436899f664f95796bad135`.
+- The same health response reported upstream sandbox build/deployed commit
+  `7744b1ea443113b358436899f664f95796bad135`.
+- Direct unauthenticated `https://choir.news/api/health` returned 401, as
+  expected for an authenticated API surface.
+
+Authenticated Chrome product smoke:
+
+- Computer Use inspected the owner's signed-in Google Chrome window at
+  `https://choir.news`.
+- Visible Universal Wire window rendered `12 articles`.
+- A headline-opened Texture article was loaded at `v66`.
+- The article toolbar showed `Sources 24`.
+- The article body rendered native source buttons, article-like update language
+  including `Further reporting should revise this article if the timeline,
+  affected people, or official account changes.`, and `Document loaded`.
+- Visible old scaffold phrases such as `Universal Wire selected` and
+  `graph-backed source captures` were absent in the inspected window.
+- Visible internal semantic-state leaks such as `World-model identity` and
+  `universal_wire_semantic_story_id` were absent in the inspected window.
+
+Acceptance boundary: this is deployed UI smoke for the semantic-story-state
+landing and a no-regression check for Universal Wire/Texture readability. It
+does not directly observe the graph/revision semantic metadata in the product
+surface and does not prove a live later-source update on staging. Chrome
+extension automation could enumerate the authenticated tabs but could not claim
+the two signed-in tabs because another extension UI was blocking automation;
+therefore no authenticated structured API replay is claimed from Chrome.
+
+Non-claims: no provider/model-quality synthesis, production semantic clustering,
+Qdrant projection, promotion/rollback, run acceptance, full News benchmark
+settlement, or direct product-visible semantic metadata/update proof.
+
+Dirty/generated classification: root worktree still had pre-existing unrelated
+dirty path `skills/parallax/SKILL.md` and untracked report artifact
+`docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`;
+neither was staged or included in the behavior/evidence commits. Chrome-created
+signed-out controlled tab was finalized/closed; authenticated user tabs were
+left in Chrome.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3 because C6/C8 still require
+a product-visible semantic story identity/change and later-source update proof.
+
+Next move: document the deployed product-evidence gap before code. The smallest
+next discriminator should make semantic story identity/change observable through
+an authenticated product path or produce a staging proof where a later source
+updates an existing semantic article/world-model identity.
