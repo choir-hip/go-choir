@@ -9828,3 +9828,47 @@ multi-story, live-updating world model the owner asked for.
 Actual Delta V: 0. This is documentation-first only; V remains 26. Next move:
 create a bounded worker thread for the first deterministic story-clustering and
 same-article update slice.
+
+## 2026-06-27 - O4 Semantic Story Clustering Worker Requested
+
+Claim: root requested the bounded implementation worker for the first
+deterministic story-clustering slice after documenting the problem first.
+
+Move:
+
+- Pushed docs-first checkpoint `2b324eb6352f6aed768d022717aa15c63fcea5b8` to
+  `origin/main`.
+- Docs Truth Check run `28277468193` passed.
+- Created a project-scoped Codex worker request from project
+  `/Users/wiz/go-choir` on a worktree starting from `main`.
+- Pending worktree handle:
+  `local:0d6a1c85-5367-481b-953c-0b7070774214`.
+
+Worker contract summary:
+
+- Work item: `O4-deterministic-story-clustering-slice-worker`.
+- Mutation class: orange/red if runtime Universal Wire selection, objectgraph
+  cluster state, Texture writes, or public story semantics change.
+- Required first slice: two unrelated eligible graph-backed source groups should
+  produce two durable story clusters, two platform-owned Texture article docs,
+  and two Wire edition transclusions; a later related source should revise the
+  matching article instead of duplicating it.
+- Preserve raw `choir.web_capture` diagnostic-only behavior, native
+  `source_ref`, `body_doc`, source entities, and Source Viewer reader
+  provenance.
+- Do not touch auth/session renewal, vmctl, deployment routing,
+  gateway/provider credentials, Qdrant, promotion/rollback, run acceptance, or
+  publication/export outside existing Wire edition helpers.
+- Stop condition: commit branch-local work with clean worktree and return
+  `ready_for_verifier` with commit SHA, changed files, commands/results,
+  dirty/generated artifact classification, residual risks, non-claims, and
+  evidence boundary. No push/deploy/staging claim.
+
+Evidence boundary: worker has been requested but not yet materialized or
+accepted. No implementation, verifier, CI, deploy, staging, product acceptance,
+semantic clustering quality, provider/model, Qdrant, run acceptance, promotion,
+or rollback claim is made.
+
+Actual Delta V: 0. V remains 26. Next move: reconnect to the worker thread when
+the pending worktree materializes; if it returns `ready_for_verifier`, create an
+independent verifier thread with the same evidence boundary.
