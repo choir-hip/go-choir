@@ -9153,6 +9153,72 @@ cover.
 Actual Delta V: 0 until deployed product proof. V remains 27. Orchestration may
 push/deploy after incorporating this verdict.
 
+## 2026-06-27 - O4 Proxy Fallback Sync Deployed Acceptance
+
+Claim: deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0` repairs the
+immediate Universal Wire zero-article regression caused by proxy/platformd sync
+dropping the runtime-owned current revision when full-history sandbox fetch
+missed.
+
+Landing evidence:
+
+- Root pushed `cb79fa39284ad11ad2da211f500b11ecf3747dd0` to `origin/main`.
+- CI run `28276917439` passed.
+- Docs Truth Check run `28276917427` passed.
+- FlakeHub run `28276917425` passed.
+- Deploy job `83785540377` passed.
+- Public health reports proxy and sandbox deployed commit
+  `cb79fa39284ad11ad2da211f500b11ecf3747dd0`, deployed at
+  `2026-06-27T03:17:44Z`.
+- Platformd direct health on Node B reports deployed commit
+  `cb79fa39284ad11ad2da211f500b11ecf3747dd0`.
+- Public unauthenticated `/api/universal-wire/stories` returns 401.
+
+Authenticated product replay:
+
+- Computer Use on the owner's signed-in Chrome tab showed ordinary Texture still
+  loaded with `Document loaded`.
+- Universal Wire rendered `1 article`.
+- The article card was reader-facing, not a raw graph-capture card.
+- Opening the headline produced a nonblank Texture article window with
+  `v60`, `Sources 24`, source-ref buttons, expanded source content, and
+  `Document loaded`.
+- Source affordances were visible inside the opened article.
+
+Node B diagnostic replay:
+
+- Authenticated sandbox `/api/universal-wire/stories` returned one
+  `universal-wire-edition-texture` story for Texture doc
+  `d3661377-4731-4617-a351-63236b08597d`.
+- The story carried `story_texture_doc_id`, `texture_content`, a platform route,
+  source manifests, source-service ids, canonical URLs, and reader snapshots.
+- Platformd direct document read for
+  `d3661377-4731-4617-a351-63236b08597d` returned 200 with owner
+  `universal-wire-platform`, title
+  `Multiple reports converge on Cory Doctorow on the Right – and Wrong – Way to
+  Criticize AI.texture`, and current revision
+  `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`.
+- Platformd direct revision list for that doc returned one revision with content
+  length 733, `body_doc`, and 24 source entities.
+- Runtime public Texture read with
+  `read_owner=universal-wire-platform` returned the same document and current
+  revision id.
+
+Evidence boundary/non-claims: this accepts the deployed fix for the immediate
+zero-article/readable-headline regression. It does not claim production-quality
+semantic clustering, model/provider synthesis quality, more than one public
+article, Qdrant projection, run acceptance, promotion/rollback execution, or a
+complete live world model. The current article is still deterministic synthesis
+copy over a broad source cluster and should be treated as the next realism axis,
+not as full Universal Wire product completion.
+
+Actual Delta V: +1 for deployed readable Universal Wire Texture article
+materialization after the zero-article regression. V moves from 27 to 26. Next
+move: document and repair the next realism gap: Universal Wire still produces a
+single broad deterministic synthesis article rather than multiple coherent
+English news syntheses with semantic clustering and ongoing same-article updates
+from later relevant sources.
+
 ## 2026-06-27 - O4 Platform Texture Revision List Envelope Repair
 
 Mutation class: red platform Texture read repair after the documented
