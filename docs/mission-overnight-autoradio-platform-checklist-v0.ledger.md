@@ -16317,3 +16317,93 @@ are touched. Actual Delta V: 0 for this docs-first checkpoint.
 
 Next move: implement the bounded typed update-decision slice or stop with this
 checkpoint if code inspection reveals the architecture cannot support it.
+
+## 2026-06-27 - O4 Provider/Reconciler Update-Decision Slice
+
+Move: branch-local orange repair after docs-first checkpoint.
+
+Commits:
+
+- `dc76ced7` - docs-first checkpoint naming the world-model update-decision gap.
+- `d4a98a02` - runtime/test repair adding durable Universal Wire update
+  decisions.
+
+Changed files:
+
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/universal_wire.go`
+- `internal/runtime/wire_synthesis.go`
+- `internal/runtime/universal_wire_test.go`
+- `internal/types/wire.go`
+- `docs/mission-overnight-autoradio-platform-checklist-v0.md`
+- `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
+
+Behavior:
+
+- `choir.universal_wire_story_cluster` semantic state now includes a typed
+  `update_decision` with decision, rationale, continuity predicates, matched
+  prior source IDs, added source IDs, split predicates, and unresolved
+  questions.
+- Texture synthesis revision metadata carries `universal_wire_update_decision`
+  alongside the existing story id/change type.
+- Reader-facing article copy now names the update/split basis without exposing
+  internal story ids or "World-model" prose.
+- Public authenticated Universal Wire story DTOs expose
+  `semantic_story.update_decision` for product acceptance and future provider/
+  reconciler review.
+
+Evidence:
+
+- `nix develop -c go test ./internal/runtime -run TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed.
+- `nix develop -c go test ./internal/types -count=1` passed. Nix printed a
+  transient ignored eval-cache SQLite busy warning before the package passed.
+- `git diff --check` passed.
+
+Protected surfaces:
+
+- Touched authorized surfaces: Universal Wire sourcecycled
+  materialization/semantic story state, Texture synthesis revision
+  metadata/body/source-ref path, Wire edition-linked article synthesis, and
+  authenticated public Wire DTO observability.
+- Not touched: auth/session renewal, vmctl, deployment routing,
+  provider/gateway credentials, Qdrant, promotion/rollback, run acceptance,
+  direct Node B tracked-file edits, staging mutation, and publication/export
+  outside existing Wire edition helpers.
+
+Non-claims and residual risks:
+
+- This is branch-local evidence only. It is not pushed, deployed, staged, or
+  independently verified.
+- This does not prove provider/model-quality prose, Qdrant projection, full
+  world-model ontology, run acceptance, promotion/rollback, or News benchmark
+  settlement.
+- The update decision remains deterministic over the current topic/signal
+  classifier. The useful gain is that future provider/reconciler work now has a
+  durable decision contract to revise or refute.
+
+Conjecture verdict:
+
+- Supported at branch-local tier: a small durable update-decision contract
+  materially moves Universal Wire beyond source-map rendering toward
+  reconciler/world-model behavior, while preserving source refs, same-article
+  updates, and edition linkage in local tests.
+- Not settled at product tier: requires independent verifier review, then root
+  incorporation/deploy/staging proof before any stronger claim.
+
+Heresy delta:
+
+- `repaired` at branch-local tier for the documented update-decision
+  inspectability gap.
+- `discovered` remains for provider/model-quality synthesis, production semantic
+  cluster selection, Qdrant/world-model projection, and deployed News benchmark
+  settlement.
+
+Actual Delta V: 1 at branch-local realism-axis tier. Mission V remains 1 until
+root/verifier/staging evidence can decide the product-tier News benchmark claim.
+
+Next move: independent verifier review of this branch-local slice. If accepted,
+root can choose whether to incorporate, deploy, and stage-prove it; otherwise
+revise before continuing.

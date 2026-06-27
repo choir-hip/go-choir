@@ -655,20 +655,24 @@ between "new source caused a revision" and "the world model records why the
 source belonged to this existing story, what continuity predicates were used,
 and what a future reconciler/provider must revisit or split." This is a
 `discovered` heresy at docs-first checkpoint tier, not a regression and not yet
-repair.
+repair. Runtime commit `d4a98a02` then adds branch-local repair evidence: the
+durable cluster body now carries `update_decision`, synthesized Texture revision
+metadata stores the same decision, article copy names the update/split basis in
+reader-facing language, and the authenticated public Wire DTO exposes
+`semantic_story.update_decision`. Focused proof passed for the multilingual
+source-arrival same-story update, the broader O4 runtime selector passed, and
+`internal/types` package tests plus `git diff --check` passed. This is
+branch-local evidence only; it is not deployed, independently verified, or a
+provider/model-quality claim.
 
-next move: branch-local orange repair may add a typed world-model update
-decision to `choir.universal_wire_story_cluster`, carry that decision into
-Texture revision metadata/article copy, and expose the decision through
-`semantic_story` DTO observability with focused tests. It must preserve native
-source refs, same-article updates, stale filtering, platform Texture open/read
-paths, and edition linkage. Do not touch auth/session renewal, vmctl, deployment
-routing, provider/gateway credentials, Qdrant, promotion/rollback, run
-acceptance, direct Node B tracked files, staging, or publication/export outside
-existing Wire edition helpers. Do not claim provider/model quality, Qdrant/
-world-model projection, run acceptance, promotion/rollback, or full News
-benchmark settlement until deployed product evidence and independent verifier
-acceptance support those claims.
+next move: independent verifier review of branch commits `dc76ced7` and
+`d4a98a02`. The verifier should check that the update-decision slice is a real
+world-model/reconciler contract rather than merely a DTO label, and that it
+does not weaken native source refs, same-article updates, stale filtering,
+platform Texture open/read paths, or edition linkage. Do not claim provider/model
+quality, Qdrant/world-model projection, run acceptance, promotion/rollback, or
+full News benchmark settlement until deployed product evidence and independent
+verifier acceptance support those claims.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
