@@ -356,9 +356,10 @@ type SyncTextureDocumentResponse struct {
 }
 
 type PlatformTextureDocument struct {
-	DocID   string `json:"doc_id"`
-	OwnerID string `json:"owner_id"`
-	Title   string `json:"title"`
+	DocID             string `json:"doc_id"`
+	OwnerID           string `json:"owner_id"`
+	Title             string `json:"title"`
+	CurrentRevisionID string `json:"current_revision_id,omitempty"`
 }
 
 type PlatformTextureRevision struct {

@@ -3033,6 +3033,45 @@ func TestIsPlatformTextureReadRequest(t *testing.T) {
 	}
 }
 
+func TestHandlePlatformTextureReadForwardsCurrentRevisionID(t *testing.T) {
+	handler, priv, _ := testProxyEnv(t)
+
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/platform/texture/documents/doc-wire-1" {
+			t.Fatalf("platformd path = %q, want document read", r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("missing internal caller header")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"doc_id":              "doc-wire-1",
+			"owner_id":            vmctl.UniversalWirePlatformOwnerID,
+			"title":               "Wire article",
+			"current_revision_id": "rev-wire-head",
+		})
+	}))
+	t.Cleanup(platformd.Close)
+	handler.cfg.PlatformdURL = platformd.URL
+
+	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "reader-1")})
+	rr := httptest.NewRecorder()
+
+	handler.HandlePlatformTextureRead(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got["current_revision_id"] != "rev-wire-head" {
+		t.Fatalf("current_revision_id = %q, want rev-wire-head; body=%s", got["current_revision_id"], rr.Body.String())
+	}
+}
+
 func TestVMctlRouting_ProtectedAPIThroughVM(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	_ = vmctlSrv

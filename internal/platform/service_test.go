@@ -198,6 +198,9 @@ func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
 	if doc.Title != "Current Texture" {
 		t.Fatalf("document title = %q, want Current Texture", doc.Title)
 	}
+	if doc.CurrentRevisionID != "rev-current" {
+		t.Fatalf("document current revision = %q, want rev-current", doc.CurrentRevisionID)
+	}
 	revs, err := store.ListTextureRevisions(ctx, "doc-current")
 	if err != nil {
 		t.Fatalf("ListTextureRevisions: %v", err)
@@ -539,6 +542,9 @@ func TestSyncTextureDocumentPersistsDocumentAndRevisions(t *testing.T) {
 	}
 	if doc.OwnerID != req.OwnerID || doc.Title != req.Title {
 		t.Fatalf("document mismatch: %#v", doc)
+	}
+	if doc.CurrentRevisionID != "rev-2" {
+		t.Fatalf("document current revision = %q, want rev-2", doc.CurrentRevisionID)
 	}
 
 	revisions, err := svc.ListPlatformTextureRevisions(context.Background(), req.DocID)

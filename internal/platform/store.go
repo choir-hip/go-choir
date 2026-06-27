@@ -460,7 +460,7 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*PlatformTextureDocument, error) {
 	var doc PlatformTextureDocument
 	err := s.db.QueryRowContext(ctx,
-		`SELECT doc_id, owner_id, title FROM platform_texture_documents WHERE doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title)
+		`SELECT d.doc_id, d.owner_id, d.title, COALESCE((SELECT r.revision_id FROM platform_texture_revisions r WHERE r.doc_id = d.doc_id ORDER BY r.created_at DESC, r.revision_id DESC LIMIT 1), '') FROM platform_texture_documents d WHERE d.doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title, &doc.CurrentRevisionID)
 	if err != nil {
 		return nil, err
 	}
