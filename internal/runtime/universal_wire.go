@@ -410,7 +410,7 @@ func (h *APIHandler) universalWireStorySemanticState(ctx context.Context, rev ty
 	storyID := metadataString(meta, "universal_wire_semantic_story_id")
 	changeType := metadataString(meta, "universal_wire_semantic_change_type")
 	if storyID == "" && changeType == "" {
-		return nil
+		return wireStoryLegacySemanticStateFromMetadata(meta)
 	}
 	count := wireMetadataInt(meta["synthesis_source_count"])
 	return &types.WireStorySemanticState{
@@ -419,6 +419,42 @@ func (h *APIHandler) universalWireStorySemanticState(ctx context.Context, rev ty
 		CurrentSourceCount:  count,
 		SourceCount:         count,
 		PreviousSourceCount: 0,
+	}
+}
+
+func wireStoryLegacySemanticStateFromMetadata(meta map[string]any) *types.WireStorySemanticState {
+	if meta == nil {
+		return nil
+	}
+	clusterID := firstNonEmpty(
+		metadataString(meta, "universal_wire_story_cluster_id"),
+		metadataString(meta, "source_network_cycle_id"),
+		metadataString(meta, "ingestion_handoff_cycle_id"),
+	)
+	if clusterID == "" {
+		return nil
+	}
+	isWireSynthesis := metadataBoolValue(meta, "universal_wire_synthesis") ||
+		metadataString(meta, "ingestion_handoff_request_kind") == "synthesis_cluster" ||
+		metadataString(meta, "universal_wire_article_alias_path") != ""
+	if !isWireSynthesis {
+		return nil
+	}
+	sourceItemIDs := metadataStringSliceValue(meta, "source_item_ids")
+	count := wireMetadataInt(meta["synthesis_source_count"])
+	if count == 0 {
+		count = len(sourceItemIDs)
+	}
+	signature := append([]string{clusterID}, sourceItemIDs...)
+	return &types.WireStorySemanticState{
+		SchemaVersion:       "choir.universal_wire_story_cluster.semantic.legacy.v1",
+		WorldModelKind:      "universal_wire_semantic_story",
+		StoryID:             stableSourceEntityID("universal_wire_semantic_story", strings.Join(signature, "|")),
+		ChangeType:          "legacy_revision_projection",
+		SemanticSignature:   signature,
+		PreviousSourceCount: 0,
+		CurrentSourceCount:  count,
+		SourceCount:         count,
 	}
 }
 

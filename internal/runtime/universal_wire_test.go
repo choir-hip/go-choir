@@ -789,6 +789,50 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 	}
 }
 
+func TestHandleUniversalWireStoriesBackfillsSemanticStoryForLegacySynthesisRevision(t *testing.T) {
+	_, handler := testAPISetup(t)
+	doc := seedLegacyUniversalWireSynthesisTextureFixture(t, handler, "doc-legacy-wire-semantic")
+	seedUniversalWireEditionFixture(t, handler, doc.DocID)
+
+	resp := getUniversalWireStoriesForTest(t, handler)
+	if resp.Source != "universal-wire-edition-texture" ||
+		resp.Diagnostics != nil ||
+		resp.Edition == nil ||
+		len(resp.Stories) != 1 {
+		t.Fatalf("stories = %+v, want one edition Texture story", resp)
+	}
+	story := resp.Stories[0]
+	if story.StoryTextureDoc != doc.DocID || story.SemanticStory == nil {
+		t.Fatalf("story = %+v, want semantic evidence for legacy Wire synthesis article", story)
+	}
+	if story.SemanticStory.SchemaVersion != "choir.universal_wire_story_cluster.semantic.legacy.v1" ||
+		story.SemanticStory.WorldModelKind != "universal_wire_semantic_story" ||
+		story.SemanticStory.StoryID == "" ||
+		story.SemanticStory.ChangeType != "legacy_revision_projection" ||
+		story.SemanticStory.CurrentSourceCount != 2 ||
+		story.SemanticStory.SourceCount != 2 ||
+		!slices.Contains(story.SemanticStory.SemanticSignature, "sourcecycled-live-legacy") ||
+		!slices.Contains(story.SemanticStory.SemanticSignature, "srcitem-legacy-wire-a") ||
+		!slices.Contains(story.SemanticStory.SemanticSignature, "srcitem-legacy-wire-b") {
+		t.Fatalf("semantic evidence = %+v, want legacy projection from durable synthesis metadata", story.SemanticStory)
+	}
+	assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
+	readerCopy := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
+	if strings.Contains(readerCopy, story.SemanticStory.StoryID) ||
+		strings.Contains(readerCopy, "universal_wire_semantic_story_id") ||
+		strings.Contains(readerCopy, "World-model") {
+		t.Fatalf("reader-facing story copy leaked semantic metadata: story=%+v", story)
+	}
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal stories response: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"semantic_story"`) ||
+		strings.Contains(string(encoded), "universal_wire_semantic_story_id") {
+		t.Fatalf("encoded product response = %s, want semantic_story without internal revision metadata key", string(encoded))
+	}
+}
+
 func universalWireSourcecycledTestItem(id, sourceID, fetchID, title, url, language, body string, fetchedAt time.Time) sources.Item {
 	return sources.Item{
 		ID:           id,
@@ -1007,6 +1051,63 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 
 func seedPlatformSourceNetworkTextureFixture(t *testing.T, handler *APIHandler, docID string) types.Document {
 	return seedPlatformSourceNetworkTextureFixtureWithPublishState(t, handler, docID, true)
+}
+
+func seedLegacyUniversalWireSynthesisTextureFixture(t *testing.T, handler *APIHandler, docID string) types.Document {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{
+		DocID:     docID,
+		OwnerID:   universalWirePlatformOwnerID(),
+		Title:     "Legacy Wire synthesis.texture",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create legacy Wire synthesis doc: %v", err)
+	}
+	meta, _ := json.Marshal(map[string]any{
+		"source":                            "edit_texture",
+		"revision_role":                     textureRevisionRoleCanonical,
+		"artifact_kind":                     "article_revision",
+		"texture_version_stage":             "article_revision",
+		"source_network_cycle_id":           "sourcecycled-live-legacy",
+		"ingestion_handoff_cycle_id":        "sourcecycled-live-legacy",
+		"ingestion_handoff_request_id":      "universal-wire-synthesis-cluster:sourcecycled-live-legacy",
+		"ingestion_handoff_request_kind":    "synthesis_cluster",
+		"universal_wire_synthesis":          true,
+		"universal_wire_story_cluster_id":   "sourcecycled-live-legacy",
+		"universal_wire_article_alias_path": "universal-wire/articles/sourcecycled-live-legacy.texture",
+		"synthesis_source_count":            2,
+		"source_item_ids":                   []string{"srcitem-legacy-wire-a", "srcitem-legacy-wire-b"},
+		"selected_style_sources":            []map[string]any{{"title": "Style.texture: Universal Wire"}},
+		"selected_style_rationale":          "Legacy deployed Wire article created before semantic metadata projection.",
+		"platformd_route_path":              "/pub/texture/universal-wire/sourcecycled-live-legacy",
+	})
+	content := strings.Join([]string{
+		"# Legacy Wire synthesis",
+		"",
+		"Legacy Wire synthesis gives the clearest current account, while a second source adds a separate angle for readers.",
+		"",
+		"Further reporting should revise this article if the timeline, affected people, or official account changes.",
+	}, "\n")
+	rev := types.Revision{
+		RevisionID:  "rev-" + doc.DocID,
+		DocID:       doc.DocID,
+		OwnerID:     doc.OwnerID,
+		AuthorKind:  types.AuthorAppAgent,
+		AuthorLabel: "texture:" + doc.DocID,
+		Content:     content,
+		BodyDoc:     runtimeTestTextureBodyDoc(t, doc.DocID, "rev-"+doc.DocID, content),
+		Citations:   json.RawMessage("[]"),
+		Metadata:    meta,
+		CreatedAt:   now,
+	}
+	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("create legacy Wire synthesis revision: %v", err)
+	}
+	return doc
 }
 
 func seedUniversalWireEditionFixture(t *testing.T, handler *APIHandler, includedDocIDs ...string) types.Document {
