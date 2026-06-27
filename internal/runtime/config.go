@@ -79,6 +79,16 @@ const (
 	DefaultAppPromotionUIBuildCommand      = "npm --prefix frontend ci --no-audit --no-fund && NODE_OPTIONS=--max-old-space-size=768 npm --prefix frontend run build"
 	DefaultAppPromotionUIArtifactPath      = "frontend/dist"
 	DefaultAppPromotionBuildTimeout        = 15 * time.Minute
+
+	// DefaultQdrantURL is the node-b Qdrant instance URL.
+	DefaultQdrantURL = "http://127.0.0.1:6333"
+
+	// DefaultOllamaURL is the local Ollama instance URL for embeddings.
+	DefaultOllamaURL = "http://localhost:11434"
+
+	// DefaultOllamaEmbeddingModel is the default embedding model for Qdrant
+	// semantic routing.
+	DefaultOllamaEmbeddingModel = "batiai/qwen3-embedding:0.6b"
 )
 
 // Config holds runtime configuration resolved from environment variables.
@@ -188,6 +198,17 @@ type Config struct {
 	AppPromotionUIBuildCommand      string
 	AppPromotionUIArtifactPath      string
 	AppPromotionBuildTimeout        time.Duration
+
+	// QdrantURL is the Qdrant instance URL for semantic routing and indexing.
+	// Defaults to the node-b local instance.
+	QdrantURL string
+
+	// OllamaURL is the Ollama instance URL for embedding generation.
+	// Defaults to localhost:11434.
+	OllamaURL string
+
+	// OllamaEmbeddingModel is the model name for Ollama embeddings.
+	OllamaEmbeddingModel string
 }
 
 // LoadConfig resolves runtime configuration from environment variables.
@@ -254,6 +275,9 @@ func LoadConfig() Config {
 			"RUNTIME_APP_PROMOTION_BUILD_TIMEOUT",
 			DefaultAppPromotionBuildTimeout,
 		),
+		QdrantURL:            envOr("QDRANT_URL", DefaultQdrantURL),
+		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
+		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
 	})
 }
 
@@ -303,6 +327,15 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.AppPromotionBuildTimeout <= 0 {
 		cfg.AppPromotionBuildTimeout = DefaultAppPromotionBuildTimeout
+	}
+	if strings.TrimSpace(cfg.QdrantURL) == "" {
+		cfg.QdrantURL = DefaultQdrantURL
+	}
+	if strings.TrimSpace(cfg.OllamaURL) == "" {
+		cfg.OllamaURL = DefaultOllamaURL
+	}
+	if strings.TrimSpace(cfg.OllamaEmbeddingModel) == "" {
+		cfg.OllamaEmbeddingModel = DefaultOllamaEmbeddingModel
 	}
 	return cfg
 }

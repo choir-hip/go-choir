@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sources"
+	"github.com/yusefmosiah/go-choir/internal/wire/processorkey"
 )
 
 const (
@@ -63,7 +64,7 @@ func NewIngestionEventFromItem(cycleID string, item sources.Item, now time.Time)
 	if contentHash == "" {
 		contentHash = sources.ContentHash(item.Title, item.Body, item.CanonicalURL, item.URL)
 	}
-	eventID := stableRequestID("ingestionevt", cycleID, artifactID, sourceID, contentHash)
+	eventID := processorkey.StableRequestID("ingestionevt", cycleID, artifactID, sourceID, contentHash)
 	return IngestionEvent{
 		EventID:     eventID,
 		CycleID:     cycleID,

@@ -109,4 +109,5 @@ type API interface {
 	Search(ctx context.Context, collectionOrAlias string, vector []float32, limit int) ([]ScoredPoint, error)
 	ListAliases(ctx context.Context) ([]AliasInfo, error)
 	UpdateAliases(ctx context.Context, actions []AliasAction) error
+	CreatePayloadIndex(ctx context.Context, collectionName, fieldName, fieldType string) error
 }

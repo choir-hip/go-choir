@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/wire/processorkey"
 )
 
 // This file historically carried the deterministic Universal Wire synthesis
@@ -24,17 +25,10 @@ import (
 // so sourcecycled ingestion and tests compile against it, but its body now
 // dispatches into the agent pipeline instead of synthesizing directly: it
 // translates the cluster request into sources.Items, derives the processor
-// key/batch (mirroring cycle.sourceProcessorKey, which runtime cannot import
-// because cycle -> provider -> runtime), and submits a processor run. The
-// processor agent decides whether to open a Texture story; the Texture agent
-// writes the revision via the LLM provider; wire publication/reconciler
-// carries it to the edition.
-//
-// The processor-key derivation is inlined here rather than imported from cycle
-// to avoid the cycle->provider->runtime import cycle. It mirrors
-// cycle.sourceProcessorKey/cycle.stableRequestID; if cycle ever moves to a
-// leaf package both can import, this should call it instead. Tracked as
-// consolidation debt for the successor agent-pipeline mission.
+// key/batch via the shared processorkey leaf package, and submits a processor
+// run. The processor agent decides whether to open a Texture story; the
+// Texture agent writes the revision via the LLM provider; wire
+// publication/reconciler carries it to the edition.
 
 type universalWireSynthesisClusterRequest struct {
 	ClusterID         string
@@ -157,7 +151,7 @@ func buildUniversalWireProcessorRequests(cycleID string, items []sources.Item, n
 	}
 	batches := map[string][]sources.Item{}
 	for _, item := range items {
-		key := universalWireSourceProcessorKey(item)
+		key := processorkey.SourceProcessorKey(item)
 		batches[key] = append(batches[key], item)
 	}
 	keys := make([]string, 0, len(batches))
@@ -170,94 +164,17 @@ func buildUniversalWireProcessorRequests(cycleID string, items []sources.Item, n
 	for _, key := range keys {
 		itemsForKey := batches[key]
 		for batchIndex, batch := range chunkUniversalWireItems(itemsForKey, maxProcessorBatchItems) {
-			sourceItemIDs := universalWireOrderedSourceItemIDs(batch)
+			sourceItemIDs := processorkey.OrderedSourceItemIDs(batch)
 			out = append(out, universalWireProcessorRequest{
-				requestID:     universalWireStableRequestID("processor", cycleID, key, fmt.Sprintf("%d", batchIndex)),
+				requestID:     processorkey.StableRequestID("processor", cycleID, key, fmt.Sprintf("%d", batchIndex)),
 				processorKey:  key,
 				sourceItemIDs: sourceItemIDs,
 				continuityRef: "sourcecycled://processor/" + key + "/latest",
-				prompt:        universalWireProcessorHandoffPrompt(key, batch),
+				prompt:        processorkey.ProcessorHandoffPrompt(key, batch),
 			})
 		}
 	}
 	return out
-}
-
-// universalWireSourceProcessorKey mirrors cycle.sourceProcessorKey: GDELT items
-// route to the global firehose processor by region; everything else routes by
-// primary vertical:region:type. Kept in sync with cycle so dispatched runs land
-// in the same processor batch the source-service handoff would produce.
-func universalWireSourceProcessorKey(item sources.Item) string {
-	if item.SourceType == sources.SourceTypeGDELT {
-		region := strings.TrimSpace(strings.ToLower(item.Region))
-		if region == "" {
-			region = "global"
-		}
-		return "processor:global_firehose:" + universalWireSafeKeyPart(region) + ":gdelt"
-	}
-	vertical := "general"
-	for _, candidate := range item.Verticals {
-		candidate = strings.TrimSpace(strings.ToLower(candidate))
-		if candidate != "" {
-			vertical = universalWireSafeKeyPart(candidate)
-			break
-		}
-	}
-	region := strings.TrimSpace(strings.ToLower(item.Region))
-	if region == "" {
-		region = "global"
-	}
-	sourceType := strings.TrimSpace(strings.ToLower(string(item.SourceType)))
-	if sourceType == "" {
-		sourceType = "source"
-	}
-	return "processor:" + vertical + ":" + universalWireSafeKeyPart(region) + ":" + universalWireSafeKeyPart(sourceType)
-}
-
-func universalWireSafeKeyPart(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return "unknown"
-	}
-	var b strings.Builder
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			continue
-		}
-		if r == '_' || r == '-' || r == '.' {
-			b.WriteRune(r)
-		}
-	}
-	out := strings.Trim(b.String(), "-_.")
-	if out == "" {
-		return "unknown"
-	}
-	return out
-}
-
-func universalWireProcessorHandoffPrompt(key string, items []sources.Item) string {
-	return fmt.Sprintf("Processor %s: ingest %d SourceItems by handle, update live understanding, preserve unresolved questions/watch items, and spawn Texture agents when a story should be opened or revised.", key, len(items))
-}
-
-func universalWireStableRequestID(kind, cycleID string, parts ...string) string {
-	segments := append([]string{kind, cycleID}, parts...)
-	return kind + "_" + sources.ContentHash(segments...)[:24]
-}
-
-func universalWireOrderedSourceItemIDs(items []sources.Item) []string {
-	ids := make([]string, 0, len(items))
-	seen := map[string]bool{}
-	for _, item := range items {
-		id := strings.TrimSpace(item.ID)
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
 }
 
 func chunkUniversalWireItems(items []sources.Item, size int) [][]sources.Item {

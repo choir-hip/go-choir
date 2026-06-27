@@ -90,8 +90,8 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		rt.Stop()
 		_ = s.Close()
 		_ = os.Remove(dbPath)
-		if graphPath, err := runtimeObjectGraphPath(rt.cfg, s); err == nil && graphPath != ":memory:" {
-			_ = os.Remove(graphPath)
+		if wsPath, _, err := runtimeObjectGraphDoltWorkspace(rt.cfg, s); err == nil {
+			_ = os.RemoveAll(wsPath)
 		}
 		_ = os.RemoveAll(promptRoot)
 	})

@@ -15,7 +15,7 @@ import (
 func TestWriteWebCaptureGraphObjectsProjectsSourceItems(t *testing.T) {
 	ctx := context.Background()
 	store := objectgraph.NewMemoryStore()
-	graph := objectgraph.NewService(objectgraph.Config{Memory: store, SQLite: store})
+	graph := objectgraph.NewService(objectgraph.Config{Memory: store, Durable: store})
 	defer graph.Close()
 
 	fetchedAt := time.Date(2026, 6, 26, 10, 15, 0, 0, time.UTC)

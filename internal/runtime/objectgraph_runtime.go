@@ -51,21 +51,21 @@ func (rt *Runtime) closeObjectGraph() {
 }
 
 func newRuntimeObjectGraphService(cfg Config, s *store.Store) (*objectgraph.Service, error) {
-	path, err := runtimeObjectGraphPath(cfg, s)
+	workspacePath, dbName, err := runtimeObjectGraphDoltWorkspace(cfg, s)
 	if err != nil {
 		return nil, err
 	}
-	sqliteStore, err := objectgraph.NewSQLiteStore(path)
+	doltStore, err := objectgraph.OpenDoltStore(workspacePath, dbName)
 	if err != nil {
 		return nil, err
 	}
 	return objectgraph.NewService(objectgraph.Config{
-		Memory: objectgraph.NewMemoryStore(),
-		SQLite: sqliteStore,
+		Memory:  objectgraph.NewMemoryStore(),
+		Durable: doltStore,
 	}), nil
 }
 
-func runtimeObjectGraphPath(cfg Config, s *store.Store) (string, error) {
+func runtimeObjectGraphDoltWorkspace(cfg Config, s *store.Store) (workspacePath, dbName string, err error) {
 	base := ""
 	if s != nil {
 		base = strings.TrimSpace(s.Path())
@@ -74,10 +74,11 @@ func runtimeObjectGraphPath(cfg Config, s *store.Store) (string, error) {
 		base = strings.TrimSpace(cfg.StorePath)
 	}
 	if base == "" {
-		return "", fmt.Errorf("runtime store path is required")
+		return "", "", fmt.Errorf("runtime store path is required")
 	}
-	if base == ":memory:" {
-		return ":memory:", nil
+	dir := filepath.Dir(base)
+	if dir == "" || dir == "." {
+		dir = "/tmp/go-choir-m3"
 	}
-	return filepath.Join(filepath.Dir(base), filepath.Base(base)+".objectgraph.db"), nil
+	return filepath.Join(dir, "objectgraph-dolt"), "objectgraph", nil
 }

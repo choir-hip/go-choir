@@ -31,6 +31,11 @@ func NewPipeline(client API, embedder Embedder) *Pipeline {
 	return &Pipeline{client: client, embedder: embedder}
 }
 
+// Client returns the underlying Qdrant API client.
+func (p *Pipeline) Client() API {
+	return p.client
+}
+
 func (p *Pipeline) BuildFromObjectSource(ctx context.Context, source ObjectSource, spec BuildSpec) (BuildResult, error) {
 	if spec.Filter.Kind == "" {
 		spec.Filter.Kind = spec.ObjectKind

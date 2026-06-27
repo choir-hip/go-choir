@@ -9,13 +9,13 @@ import (
 type Service struct {
 	registry *Registry
 	memory   Store
-	sqlite   Store
+	durable  Store
 }
 
 type Config struct {
 	Registry *Registry
 	Memory   Store
-	SQLite   Store
+	Durable  Store
 }
 
 type CreateObjectRequest struct {
@@ -33,7 +33,7 @@ func NewService(cfg Config) *Service {
 	s := &Service{
 		registry: cfg.Registry,
 		memory:   cfg.Memory,
-		sqlite:   cfg.SQLite,
+		durable:  cfg.Durable,
 	}
 	if s.registry == nil {
 		s.registry = DefaultRegistry()
@@ -41,8 +41,8 @@ func NewService(cfg Config) *Service {
 	if s.memory == nil {
 		s.memory = NewMemoryStore()
 	}
-	if s.sqlite == nil {
-		s.sqlite = s.memory
+	if s.durable == nil {
+		s.durable = s.memory
 	}
 	return s
 }
@@ -115,7 +115,7 @@ func (s *Service) ListObjects(ctx context.Context, filter ListFilter) ([]Object,
 	}
 	seen := map[string]bool{}
 	var out []Object
-	for _, store := range []Store{s.memory, s.sqlite} {
+	for _, store := range []Store{s.memory, s.durable} {
 		objs, err := store.ListObjects(ctx, filter)
 		if err != nil {
 			return nil, err
@@ -175,7 +175,7 @@ func (s *Service) PutEdge(ctx context.Context, fromID, toID string, kind EdgeKin
 func (s *Service) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, error) {
 	var out []Edge
 	seen := map[string]bool{}
-	for _, store := range []Store{s.memory, s.sqlite} {
+	for _, store := range []Store{s.memory, s.durable} {
 		edges, err := store.ListEdges(ctx, filter)
 		if err != nil {
 			return nil, err
@@ -200,8 +200,8 @@ func (s *Service) Close() error {
 	if s.memory != nil {
 		err = s.memory.Close()
 	}
-	if s.sqlite != nil && s.sqlite != s.memory {
-		if closeErr := s.sqlite.Close(); closeErr != nil && err == nil {
+	if s.durable != nil && s.durable != s.memory {
+		if closeErr := s.durable.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}
@@ -212,5 +212,5 @@ func (s *Service) storeFor(storeType StoreType) Store {
 	if storeType == StoreTypeMemory {
 		return s.memory
 	}
-	return s.sqlite
+	return s.durable
 }

@@ -17,7 +17,7 @@ import (
 func TestProjectObjectsUsesObjectGraphTruth(t *testing.T) {
 	ctx := context.Background()
 	store := objectgraph.NewMemoryStore()
-	svc := objectgraph.NewService(objectgraph.Config{Memory: store, SQLite: store})
+	svc := objectgraph.NewService(objectgraph.Config{Memory: store, Durable: store})
 	defer svc.Close()
 
 	obj, err := svc.CreateObject(ctx, objectgraph.CreateObjectRequest{
@@ -79,7 +79,7 @@ func TestNamingAndPointIDAreQdrantSafeAndStable(t *testing.T) {
 func TestPipelineBuildsFromObjectGraphAndCreatesAlias(t *testing.T) {
 	ctx := context.Background()
 	store := objectgraph.NewMemoryStore()
-	svc := objectgraph.NewService(objectgraph.Config{Memory: store, SQLite: store})
+	svc := objectgraph.NewService(objectgraph.Config{Memory: store, Durable: store})
 	defer svc.Close()
 
 	source, err := svc.CreateObject(ctx, objectgraph.CreateObjectRequest{
@@ -336,5 +336,9 @@ func (f *fakeAPI) UpdateAliases(_ context.Context, actions []AliasAction) error 
 			})
 		}
 	}
+	return nil
+}
+
+func (f *fakeAPI) CreatePayloadIndex(_ context.Context, _, _, _ string) error {
 	return nil
 }

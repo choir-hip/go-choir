@@ -130,6 +130,43 @@ func (c *Client) UpdateAliases(ctx context.Context, actions []AliasAction) error
 	return err
 }
 
+// CreatePayloadIndex creates a payload field index on the given collection.
+// Qdrant supports indexing payload fields for filtered search.
+func (c *Client) CreatePayloadIndex(ctx context.Context, collectionName, fieldName, fieldType string) error {
+	body := map[string]any{
+		"field_name": fieldName,
+		"field_schema": map[string]any{
+			"type": fieldType,
+		},
+	}
+	_, _, err := c.do(ctx, http.MethodPut, "/collections/"+collectionName+"/index", body)
+	return err
+}
+
+// EnsureProductionCollection creates the production Qdrant collection if it does
+// not already exist, configured for 1024-dim Cosine distance with payload
+// indexes on vm_owner and content_hash. It is idempotent.
+func EnsureProductionCollection(ctx context.Context, client API, collectionName string) error {
+	// Check if collection already exists.
+	if _, err := client.GetCollectionInfo(ctx, collectionName); err == nil {
+		return nil
+	}
+	cfg := CollectionConfig{
+		VectorSize: 1024,
+		Distance:   DefaultDistance,
+		OnDisk:     false,
+	}
+	if err := client.CreateCollection(ctx, collectionName, cfg); err != nil {
+		return fmt.Errorf("ensure production collection: create: %w", err)
+	}
+	for _, field := range []string{"vm_owner", "content_hash"} {
+		if err := client.CreatePayloadIndex(ctx, collectionName, field, "keyword"); err != nil {
+			return fmt.Errorf("ensure production collection: index %s: %w", field, err)
+		}
+	}
+	return nil
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte, int, error) {
 	var reqBody io.Reader
 	if body != nil {

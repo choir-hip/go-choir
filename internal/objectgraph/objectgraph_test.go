@@ -59,7 +59,7 @@ func TestDefaultRegistryIncludesNewsAndAutoradioKinds(t *testing.T) {
 func TestServiceCreatesDeterministicContentAddressedObjects(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
-	svc := NewService(Config{Memory: store, SQLite: store})
+	svc := NewService(Config{Memory: store, Durable: store})
 	defer svc.Close()
 
 	req := CreateObjectRequest{
@@ -90,7 +90,7 @@ func TestServiceExternalIdentityKeepsIDWhileContentChanges(t *testing.T) {
 	registry := NewRegistry()
 	registry.RegisterKind(KindRegistration{Kind: "choir.autoradio_run_sheet", Store: StoreTypeMemory, IdentityMode: IdentityExternalKey, Versioned: true})
 	store := NewMemoryStore()
-	svc := NewService(Config{Registry: registry, Memory: store, SQLite: store})
+	svc := NewService(Config{Registry: registry, Memory: store, Durable: store})
 	defer svc.Close()
 
 	first, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.autoradio_run_sheet", OwnerID: "user:alice", IdentityKey: "station:morning", Body: []byte("v1")})
@@ -112,7 +112,7 @@ func TestServiceExternalIdentityKeepsIDWhileContentChanges(t *testing.T) {
 func TestMemoryStoreObjectsAndEdges(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
-	svc := NewService(Config{Memory: store, SQLite: store})
+	svc := NewService(Config{Memory: store, Durable: store})
 	defer svc.Close()
 
 	source, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.source_entity", OwnerID: "user:alice", Body: []byte("source")})
@@ -145,7 +145,7 @@ func TestSQLiteStoreObjectsAndEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	svc := NewService(Config{SQLite: store})
+	svc := NewService(Config{Durable: store})
 	defer svc.Close()
 
 	source, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.source_entity", OwnerID: "user:alice", Body: []byte("source")})
@@ -171,7 +171,7 @@ func TestSQLiteStoreObjectsAndEdges(t *testing.T) {
 func TestCreateWebCaptureUsesTypedMetadataAndDeterministicIdentity(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
-	svc := NewService(Config{Memory: store, SQLite: store})
+	svc := NewService(Config{Memory: store, Durable: store})
 	defer svc.Close()
 
 	req := CreateWebCaptureRequest{
@@ -219,7 +219,7 @@ func TestCreateWebCaptureUsesTypedMetadataAndDeterministicIdentity(t *testing.T)
 func TestCreateWebCaptureRejectsIncompleteMetadata(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
-	svc := NewService(Config{Memory: store, SQLite: store})
+	svc := NewService(Config{Memory: store, Durable: store})
 	defer svc.Close()
 
 	_, err := svc.CreateWebCapture(ctx, CreateWebCaptureRequest{
@@ -251,7 +251,7 @@ func TestWebCapturePersistsWithCapturedFromEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	svc := NewService(Config{SQLite: store})
+	svc := NewService(Config{Durable: store})
 
 	source, err := svc.CreateObject(ctx, CreateObjectRequest{
 		Kind:    "choir.source_entity",
@@ -289,7 +289,7 @@ func TestWebCapturePersistsWithCapturedFromEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen SQLite store: %v", err)
 	}
-	reopenedSvc := NewService(Config{SQLite: reopenedStore})
+	reopenedSvc := NewService(Config{Durable: reopenedStore})
 	defer reopenedSvc.Close()
 
 	got, err := reopenedSvc.GetObject(ctx, capture.CanonicalID)
@@ -320,7 +320,7 @@ func TestSQLiteStoreReopenPreservesObjectsAndEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	svc := NewService(Config{SQLite: store})
+	svc := NewService(Config{Durable: store})
 	source, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.source_entity", OwnerID: "user:alice", Body: []byte("source")})
 	if err != nil {
 		t.Fatal(err)
@@ -341,7 +341,7 @@ func TestSQLiteStoreReopenPreservesObjectsAndEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen SQLite store: %v", err)
 	}
-	reopenedSvc := NewService(Config{SQLite: reopened})
+	reopenedSvc := NewService(Config{Durable: reopened})
 	defer reopenedSvc.Close()
 
 	got, err := reopenedSvc.GetObject(ctx, transcript.CanonicalID)
@@ -363,7 +363,7 @@ func TestSQLiteStoreReopenPreservesObjectsAndEdges(t *testing.T) {
 func TestServiceRejectsMissingEndpointForEdge(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
-	svc := NewService(Config{Memory: store, SQLite: store})
+	svc := NewService(Config{Memory: store, Durable: store})
 	defer svc.Close()
 	source, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.source_entity", OwnerID: "user:alice", Body: []byte("source")})
 	if err != nil {

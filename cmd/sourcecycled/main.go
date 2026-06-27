@@ -280,7 +280,7 @@ func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, erro
 	}
 	return objectgraph.NewService(objectgraph.Config{
 		Memory: objectgraph.NewMemoryStore(),
-		SQLite: sqliteStore,
+		Durable: sqliteStore,
 	}), dbPath, nil
 }
 

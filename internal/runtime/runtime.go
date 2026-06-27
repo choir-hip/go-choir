@@ -15,6 +15,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -69,6 +70,9 @@ type Runtime struct {
 	objectGraphMu         sync.Mutex
 	objectGraph           *objectgraph.Service
 	objectGraphInitErr    error
+	qdrantPipelineMu      sync.Mutex
+	qdrantPipeline        *qdrant.Pipeline
+	qdrantPipelineInitErr error
 }
 
 type textureWakeTimer interface {
