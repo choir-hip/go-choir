@@ -371,6 +371,18 @@ next repair must operate on stale edition Texture articles themselves, deriving
 repair sources from their current revision/source entities or metadata instead
 of depending only on the live graph materializer.
 
+Current direct-repair candidate: root documented the deployed miss in
+`d6ab80f9b0d8a0898491517498f51792837d89fb`, then repaired stale edition article
+handling in `da4bcb7f133569b6847c5a14f95fba9b40898897`. The new path detects
+scaffolded Universal Wire edition stories, loads their platform-owned Texture
+documents/current revisions, reconstructs synthesis sources from structured
+source entities/reader snapshots, creates a new article-facing revision for the
+same cluster/doc through the existing synthesis helper, and normalizes the
+document title away from stale `Multiple reports converge...` framing. Focused
+repair/materialization tests and the broader Universal Wire runtime selector
+passed locally. This remains a local candidate until pushed, deployed, and
+accepted by authenticated staging replay.
+
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty English synthesis Texture articles from multilingual ingested
 source clusters, with native source citations, durable source artifacts, and

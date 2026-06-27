@@ -10555,3 +10555,57 @@ acceptance, and publication/export outside existing Wire edition helpers.
 
 Expected Delta V: 0 for this documentation-first pass. Actual Delta V: 0; it
 keeps C11 open with a narrower next discriminator.
+
+## 2026-06-27 - O4 Direct Stale Edition Article Repair Local Proof
+
+Conjecture statement: when Universal Wire detects a stale scaffolded edition
+story, repairing the already-transcluded platform Texture article from its own
+structured source entities is sufficient to replace scaffold copy and stale
+document titles without relying on the live graph materializer.
+
+Verdict: supported at local-test tier, not yet deployed.
+
+Commits:
+
+- Documentation-first checkpoint:
+  `d6ab80f9b0d8a0898491517498f51792837d89fb` (`Document O4 deployed scaffold
+  repair miss`).
+- Repair candidate:
+  `da4bcb7f133569b6847c5a14f95fba9b40898897` (`Repair Universal Wire stale
+  edition articles directly`).
+
+What changed:
+
+- `HandleUniversalWireStories` now tries direct stale-edition repair before the
+  graph materializer fallback.
+- Direct repair loads the story's platform-owned Texture document/current
+  revision, confirms it is a Universal Wire synthesis revision with scaffold
+  copy, reconstructs source items from structured `source_entities` and reader
+  snapshots, and creates a new same-cluster article revision through the
+  existing synthesis helper.
+- The synthesis helper now normalizes an existing synthesis document title to
+  the repaired headline when it creates/revises that document, so cards do not
+  keep stale `Multiple reports converge...` titles.
+- The focused regression now seeds bad edition articles without graph captures,
+  forcing repair to come from the article's own source entities rather than the
+  live graph materializer.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/wire_synthesis.go internal/runtime/universal_wire_test.go`
+  completed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture|TestHandleUniversalWireStories(MaterializesExistingSourcecycledGraphCaptures|DoesNotPublishGraphBackedWebCapturesAsArticles)' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 4.152s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 10.032s`.
+- `git diff --check` passed.
+
+Evidence boundary/non-claims: local proof only. No push, CI, deploy, staging
+health identity, authenticated product proof, provider/model-quality synthesis,
+semantic world-model clustering, Qdrant, promotion/rollback, run acceptance,
+auth/session, vmctl, gateway/provider credential, or publication/export claim is
+made by this pass.
+
+Next move: push `da4bcb7f` plus this evidence update, monitor CI/deploy, verify
+`choir.news` health identity, and rerun authenticated product proof that visible
+Universal Wire cards and opened Texture articles no longer show scaffold copy.
