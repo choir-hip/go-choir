@@ -14276,3 +14276,76 @@ boundary. Actual Delta V: 0. V remains 1.
 Next move: commit the homonym repair/evidence, push to `origin main`, monitor
 CI/deploy, verify health identity, and rerun authenticated live-arrival/stories
 proof after a new sourcecycled boundary.
+
+## 2026-06-27 - O4 Homonym Repair Deployed, Stale Synthesized Article Edge Discovered
+
+Move: complete the landing loop for the train-homonym repair and use the public
+live-arrival oracle to observe the first post-deploy sourcecycled boundary.
+
+Landing evidence:
+
+- Pushed commit `68c5dc497c6d46bf432831361fe511bad9ff8815` to `origin/main`.
+- CI run `28288870586` passed, including non-runtime Go tests, Go vet/build,
+  integration smoke, TLA+ model checks, runtime shards 0-3, and the deploy gate.
+- Sibling Docs Truth Check run `28288870591` passed.
+- Sibling FlakeHub publish run `28288870595` passed.
+- Staging deploy job `83817708485` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed at
+  `68c5dc497c6d46bf432831361fe511bad9ff8815`, deployed_at
+  `2026-06-27T12:20:37Z`.
+
+Authenticated staging proof:
+
+- Created temporary product user `qa-train-homonym-1782562920@example.com`
+  through the repo-supported public passkey auth flow.
+- Initial authenticated read at `2026-06-27T12:22:26Z` still observed the
+  pre-fix boundary `cycle_490a914358c36f1b5a27e1e5` from
+  `2026-06-27T11:52:35.826378314Z`; it still showed the bad rail-corridor
+  synthesis doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`.
+- The first post-deploy boundary was `cycle_f8195609729672a6fd7a6798`,
+  observed_at `2026-06-27T12:22:27.686289396Z`.
+- That boundary reported 544 source items, 542 captures, 542 source entities,
+  2 skipped items, 768 graph-backed synthesis sources, and
+  `synthesis_status: skipped`.
+- The post-deploy skip reason was precise:
+  `no graph-backed synthesis sources matched known story concepts`.
+- The public story feed still returned 12 stories. Its first story remained
+  `source-network-texture-1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`, headline
+  `South Korea plans to train entire military as "drone warriors"`, with
+  semantic signature `harbor`, `transport`, `rail-corridor` and changed_at
+  `2026-06-27T11:52:35.826378314Z`.
+
+Conjecture verdict:
+
+- Supported: the homonym repair prevents the next deployed cycle from
+  re-materializing bare English verb `train` as a rail-corridor story signal.
+  The post-deploy cycle skipped synthesis instead of creating or refreshing the
+  prior false rail-corridor cluster.
+- Not supported yet: Universal Wire product truth after semantic classifier
+  corrections. The already-synthesized bad Texture article remains first in
+  the public feed when the later cycle produces no replacement.
+
+New problem discovered: stale synthesized Universal Wire articles can remain
+public after the deterministic classifier no longer reproduces their semantic
+signature from current sourcecycled graph state. The system lacks an
+invalidation/repair/de-rank path for a previously published synthesis whose
+evidence cluster is no longer valid under the current classifier.
+
+Mutation class: green documentation/evidence checkpoint. Protected surfaces
+touched: none in this commit. The next repair will touch Universal Wire story
+projection and/or synthesis cluster lifecycle policy.
+
+Rollback path: revert this evidence checkpoint; no runtime state changes were
+made.
+
+Heresy delta: `repaired` for the future-cycle train homonym false positive;
+`discovered` for stale synthesized article state after classifier correction.
+
+Expected Delta V: 0 for documentation only, but the evidence changes the next
+move from lexical extraction to stale synthesis lifecycle repair. Actual Delta
+V: 0. V remains 1.
+
+Next move: document/repair the stale-synthesis lifecycle path so articles whose
+semantic signature can no longer be reproduced from current sourcecycled graph
+state are retired, revised, or de-ranked before `/api/universal-wire/stories`
+surfaces them as live top stories.

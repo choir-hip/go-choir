@@ -924,6 +924,35 @@ article copy. Broader Universal Wire runtime selector passed locally. Next
 move: commit, push, monitor CI/deploy, and rerun authenticated staging proof on
 the next live sourcecycled boundary.
 
+Homonym repair deployed at `68c5dc497c6d46bf432831361fe511bad9ff8815`;
+CI run `28288870586`, Docs Truth Check run `28288870591`, FlakeHub run
+`28288870595`, and Node B deploy job `83817708485` all passed. Staging health
+reported proxy and sandbox deployed at `68c5dc49` with deployed_at
+`2026-06-27T12:20:37Z`. Authenticated proof with
+`qa-train-homonym-1782562920@example.com` observed the first post-deploy
+sourcecycled boundary `cycle_f8195609729672a6fd7a6798` at
+`2026-06-27T12:22:27.686289396Z`. The oracle reported 544 source items, 542
+captures/source entities, 768 graph-backed synthesis sources, and
+`synthesis_status: skipped` with `synthesis_skip_reason:
+no graph-backed synthesis sources matched known story concepts`. That supports
+the narrow homonym repair for future grouping: the next live cycle did not
+re-materialize the military-training item as a rail-corridor story.
+
+New problem discovered: the previously synthesized bad Texture article remains
+public and first in `/api/universal-wire/stories` because no post-repair
+synthesis replaced, revised, retired, or de-ranked it. The visible top story is
+still doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`, headline `South Korea plans
+to train entire military as "drone warriors"`, with semantic signature
+`harbor`/`transport`/`rail-corridor` and changed_at
+`2026-06-27T11:52:35.826378314Z`. The remaining C6 edge is stale synthesized
+article invalidation/repair after a classifier correction, not merely lexical
+concept extraction.
+
+Next move: document and repair the Universal Wire stale-synthesis path so
+articles whose current semantic signature can no longer be reproduced from the
+latest sourcecycled graph are retired, revised, or de-ranked before the public
+feed ranks them above fresh valid stories.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
