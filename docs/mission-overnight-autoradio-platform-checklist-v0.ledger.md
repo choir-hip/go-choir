@@ -12409,3 +12409,24 @@ incorporation. Actual Delta V: 0. V remains 3.
 
 Next move: create/read an independent verifier thread for worker commit
 `569caa443decab24e77640c620ddc83f6145ae40`; incorporate only on `accept`.
+
+## 2026-06-27 - O4 Article Quality Verifier Requested
+
+Move type: independent verifier request -> observer shift.
+
+Verifier work item: `O4-article-quality-source-grounded-synthesis-slice-verifier`.
+
+Verifier pending handle: `local:502075cc-130c-4e96-b659-1a5a0de49d71`.
+
+Verifier target: worker thread `019f0817-a5df-7d40-9c70-8bacaacbb5b2`, worker
+worktree `/Users/wiz/.codex/worktrees/c6e6/go-choir`, worker commit
+`569caa443decab24e77640c620ddc83f6145ae40`.
+
+Verifier charge: independently inspect worker diff/tests for the C8
+article-quality slice and return findings plus verdict
+`accept`, `revise_before_continue`, `blocked`, or `supersede`.
+
+Expected Delta V: 0 until verifier returns. Actual Delta V: 0. V remains 3.
+
+Next move: read verifier result, then incorporate worker commit only if verdict
+is `accept`.
