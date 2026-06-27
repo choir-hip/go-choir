@@ -16163,3 +16163,74 @@ Next move: open an independent verifier thread over this deployed proof. The
 verifier should review the CI/deploy receipts, health identity, temporary proof
 packets, and source-map/source-ref boundary before orchestration treats the
 deployed slice as accepted.
+
+## 2026-06-27 - O4 Source-Map Synthesis Deployed Verifier Acceptance
+
+Move: record independent deployed verifier acceptance for the source-map
+synthesis product proof.
+
+Verifier:
+
+- Thread: `019f09b3-b157-7ff0-89f8-901352b7f23a`.
+- Work item: `O4-source-map-synthesis-deployed-product-proof-verifier`.
+- Verdict: `accept`.
+- Findings: none blocking.
+
+Evidence accepted:
+
+- Root HEAD and `origin/main` include docs proof commit `f5b7bce5` and deployed
+  behavior head `fe13c3d5e3ec787c75d2ae8e82580091e7bc00d4`.
+- `git show --check` passed for both `f5b7bce5` and `fe13c3d5`.
+- CI run `28293268846`, Docs Truth Check `28293268830`, FlakeHub publish
+  `28293268843`, and deploy job `83829030818` are completed/success for
+  `fe13c3d5e3ec787c75d2ae8e82580091e7bc00d4`.
+- Live `https://choir.news/health` reports proxy and sandbox deployed commit
+  `fe13c3d5e3ec787c75d2ae8e82580091e7bc00d4`, deployed at
+  `2026-06-27T15:23:43Z`.
+- API proof packet `/tmp/o4-source-map-staging-proof-1782573998882.json`
+  supports the narrow claim: 12 Universal Wire Texture stories, 12 semantic
+  stories, 3 `source_added` stories, 5 event-frame stories, target doc
+  `d7fd814c-cd50-419b-a7d8-53f7a709d1bd`, revision
+  `705478ad-1a7f-438d-bfed-3fb3f6822987`, platform read-owner document/revision
+  200s, `body_doc` present with 44 `source_ref` nodes and 44 source entities,
+  `universal_wire_synthesis` true, semantic story `src_bcad87d784fa036b`,
+  change type `source_added`, and source-map article text.
+- Plain document read without `read_owner` returned 404; verifier treated this
+  as expected boundary evidence for platform-owned Wire Texture documents.
+- UI packet `/tmp/o4-source-map-ui-open-proof-1782574036832.json` and screenshot
+  `/tmp/o4-source-map-ui-open-1782574047124.png` show Texture opening through
+  `read_owner=universal-wire-platform` with document/revisions/revision/stream
+  requests returning 200, no `Get document failed` / 404 toast, no empty
+  placeholder, visible source-ref text, and `Sources 44`.
+
+Accepted boundary/non-claims:
+
+- Public Wire DTO `synthesis_frame_count` remains 0; the accepted proof rests on
+  the platform Texture read-owner revision/body_doc/metadata path.
+- Accepted claim is deployed deterministic source-map synthesis, source refs/
+  entities preservation, and platform-owned Wire Texture opening.
+- Not accepted as provider/model-quality synthesis, Qdrant/world-model
+  projection, run acceptance, promotion/rollback, or full News benchmark
+  settlement.
+
+Dirty/generated artifact classification:
+
+- Verifier reported clean worktree.
+- Root repo still has pre-existing unrelated WIP in `skills/parallax/SKILL.md`
+  and untracked
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- Proof packets and screenshot are temporary `/tmp` artifacts outside the repo.
+
+Conjecture delta:
+
+- Actual Delta V: 1 at deployed deterministic source-map synthesis tier. Mission
+  V remains 1 because the remaining News benchmark still requires
+  provider/reconciler-quality semantic synthesis and durable live world-model
+  behavior beyond deterministic source-map prose.
+
+Next move: descend the remaining O4 realism axis. Either produce a
+provider/reconciler-quality semantic synthesis/world-model slice or document the
+architectural blocker that prevents that route. Do not claim Qdrant/world-model
+projection, run acceptance, promotion/rollback, or full News benchmark
+settlement until deployed product evidence and independent verifier acceptance
+support those claims.
