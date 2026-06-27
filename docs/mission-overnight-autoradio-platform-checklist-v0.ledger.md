@@ -15777,3 +15777,76 @@ mission V remains 1 because final News benchmark quality remains open.
 
 Next move: request independent deployed verifier review for commit `4c7c42a1`,
 CI/deploy receipts, and the two authenticated staging proof packets.
+
+## 2026-06-27 - O4 Semantic Event Frame Deployed Verifier Accepted
+
+Move: incorporate independent verifier verdict from thread
+`019f098b-ce66-7583-88c6-abc379b9e842` for
+`O4-semantic-event-frame-deployed-product-proof-verifier`.
+
+Verifier verdict: `accept`.
+
+Findings: no blocking findings. The verifier accepted the narrow deployed
+claim that Universal Wire event-frame substrate is live in the authenticated
+product path: live-arrival status is observable, `semantic_story.event_frame`
+DTOs are present for post-deploy Wire stories, platform-owned Texture articles
+open through the intended `read_owner=universal-wire-platform` UI path, and
+source/body read-path preservation is visible through the UI proof.
+
+Verifier evidence reviewed:
+
+- Verifier worktree was clean before and after review.
+- Verifier checkout had `HEAD == origin/main ==
+  918c2eb5bdd6b92787eb9d0c4e70f262e9b8493c`.
+- `918c2eb5` is docs-only and changes only this paradoc and ledger.
+- `4c7c42a197852aa72afa847eb3473aa3dc93be51` and
+  `1fd26b67a2c13d3d6155d55499f7c228e8c89722` are ancestors of `origin/main`.
+- CI run `28292061672`, Docs Truth Check `28292061688`, FlakeHub publish
+  `28292061671`, and deploy job `83825912482` all succeeded for `4c7c42a1`.
+- Live `https://choir.news/health` reported proxy and sandbox both deployed at
+  `4c7c42a197852aa72afa847eb3473aa3dc93be51`, deployed at
+  `2026-06-27T14:34:10Z`.
+- Proof packet `/tmp/o4-event-frame-staging-proof-1782571285333.json`
+  recorded live-arrival `available`, latest status `ok`, 547 source items, 546
+  captures, synthesis `ok`, 12 Wire Texture stories, 12 semantic stories, 4
+  event-frame stories, and 3 `source_added` stories.
+- Proof packet `/tmp/o4-event-frame-ui-open-proof-1782571394412.json` recorded
+  opening doc `33463e29-9a74-40c5-b066-ae159bcc11d6`, no error toast, no empty
+  placeholder, article text displayed, `Sources 6`, and network requests using
+  `read_owner=universal-wire-platform`.
+- Unauthenticated live probes correctly returned `401`, so the verifier did
+  not create another staging user just to duplicate the authenticated proof.
+
+Verifier caveat:
+
+The `/tmp/o4-event-frame-staging-proof-1782571285333.json` packet records the
+plain Texture 404 and Wire API/story DTO details, while raw platform
+`read_owner` API 200/body_doc/source_entities details are recorded in the
+ledger rather than fully embedded in that JSON packet. The UI proof packet
+independently shows the intended read-owner requests, no Texture load error,
+article text, source-ref numbers, and `Sources 6`, so the verifier did not
+require revision.
+
+Dirty/generated artifact classification:
+
+- Repo dirty paths in verifier worktree: none.
+- Temporary proof outputs remain outside the repo under `/tmp`.
+- No generated or scratch artifacts were created by the verifier pass.
+
+Conjecture verdict: accepted within the stated boundary. Orchestration may
+treat the deployed event-frame substrate proof as accepted.
+
+Evidence boundary/non-claims: this is not full News benchmark settlement. It
+does not prove provider/model-quality synthesis, Qdrant/world-model projection,
+run acceptance, promotion/rollback, or that a fresh later source arrival updated
+a specific existing article. Current article prose may still be
+deterministic/formulaic.
+
+Expected Delta V: 1 for independent deployed verifier acceptance. Actual Delta
+V: 1 at deployed deterministic event-frame substrate tier. Mission V remains 1
+because final News benchmark quality remains open.
+
+Next move: choose the next O4 realism axis or hand off. The strongest remaining
+axis is provider/reconciler-quality semantic synthesis over durable
+entity/event/world-model state, because deployed proof now covers the
+deterministic substrate but not the owner-stated Universal Wire target.
