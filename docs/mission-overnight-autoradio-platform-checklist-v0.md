@@ -1114,6 +1114,25 @@ health identity, and replay authenticated staging proof that the stale doc is
 absent after a successful live-arrival boundary while same-doc source-arrival
 updates remain visible.
 
+Deployed stale re-entry repair `c7910000bfc7643664fe512f0172469da825ae80`
+failed the product proof. CI run `28290689038`, Docs Truth Check
+`28290689026`, FlakeHub `28290689034`, and deploy identity all passed; health
+reported proxy/sandbox at `c7910000`, deployed_at `2026-06-27T13:35:42Z`.
+Fresh authenticated proof at `2026-06-27T13:37:28Z` observed post-deploy
+boundary `cycle_d363c81f0d411d1fcafa052f`, `synthesis_status: ok`,
+610 source items, 326 known synthesis sources, 275 candidate groups, and
+synthesis doc `9b71c539-8110-443b-9349-59c991dae4f3`. Public stories still
+included stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` at index 5, so the
+current-classifier cluster-id filter does not catch the real deployed stale
+revision. The stale doc remains directly readable with revision
+`60ccdcb4-322d-4c31-b7f9-d12d026413c9`, seven source entities, and native
+`source_ref` body_doc. New conjecture: the deployed stale article's cited source
+entities still reproduce the old cluster under the current lexical classifier,
+or the revision lacks the expected metadata shape for the local filter. Next
+move: inspect the deployed stale revision/source entities, add a regression that
+matches the real revision shape, and repair public filtering without weakening
+same-doc update stories or direct audit reads.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -1150,5 +1169,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path after body-concept repair head f6dd1294260aec623664e10a090f63e520fedb79 passed CI run 28290135800, deploy job 83820886261, health identity, and authenticated staging proof. Fresh authenticated post-deploy boundary proof at 2026-06-27T13:23:35Z observed live-arrival cycle_30753fe322e0c4c9b14034f6, synthesis_status ok, 392 known sources, 326 candidate groups, 3 synthesized clusters, and 12 public stories. Same-article update is supported for doc 30a79a8e-3378-40b8-b0a3-a28b80284d7f: it was already public before the boundary and updated in place from 61 to 65 sources, revision 15f97026-7d60-4477-8f8f-25a47f8e74cb, with 65 source entities and native source_ref body_doc. New problem documented: stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c re-entered public stories at index 7 after the ok synthesis cycle. Local repair now revalidates sourcecycled-live synthesis revisions against their cited source entities under the current classifier and passes focused plus broader Universal Wire runtime tests. Next move: commit/push the stale re-entry repair, monitor CI/deploy, verify health identity, and replay authenticated staging proof that stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c is absent from public stories while same-doc source-arrival updates and direct Texture/source_ref reads remain intact. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path after body-concept repair head f6dd1294260aec623664e10a090f63e520fedb79 passed CI run 28290135800, deploy job 83820886261, health identity, and authenticated staging proof. Fresh authenticated post-deploy boundary proof supports same-article update behavior, but stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c re-entered public stories after ok synthesis cycles. First repair c7910000bfc7643664fe512f0172469da825ae80 passed CI run 28290689038 and deployed at 2026-06-27T13:35:42Z, but staging proof at 2026-06-27T13:37:28Z still showed the stale doc public at index 5 after cycle_d363c81f0d411d1fcafa052f, while direct Texture audit reads remained intact. Next move: inspect the deployed stale revision/source entity shape, add a regression matching that real shape, and repair public stale filtering without dropping valid same-doc update stories or edition/direct Texture audit metadata; then rerun focused tests, push/deploy, verify health identity, and replay authenticated staging proof. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

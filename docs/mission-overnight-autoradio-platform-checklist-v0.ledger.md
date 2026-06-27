@@ -15027,3 +15027,82 @@ remain intact. Actual Delta V: 0 until deployed proof.
 
 Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
 identity, and replay authenticated live-arrival/stories/Texture proof.
+
+## 2026-06-27 - O4 Stale Re-Entry Repair Deployed But Failed
+
+Move: land `c7910000` and replay authenticated staging proof.
+
+Landing evidence:
+
+- Problem checkpoint: `316b012e` (`Document Wire stale re-entry after live
+  arrival`).
+- Behavior commit:
+  `c7910000bfc7643664fe512f0172469da825ae80` (`Filter classifier-stale Wire
+  syntheses`).
+- GitHub Actions for `c7910000`:
+  - Docs Truth Check `28290689026` passed.
+  - FlakeHub `28290689034` passed.
+  - CI `28290689038` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed_commit
+  `c7910000bfc7643664fe512f0172469da825ae80`, deployed_at
+  `2026-06-27T13:35:42Z`.
+
+Authenticated staging proof:
+
+- Auth state: `/tmp/choir-auth/live-arrival-1782566508.json`.
+- Temporary user: `qa-live-arrival-1782566508@example.com`.
+- Observation time: `2026-06-27T13:37:28.647Z`.
+- `GET /api/universal-wire/live-arrival` returned boundary
+  `cycle_d363c81f0d411d1fcafa052f`, observed_at
+  `2026-06-27T13:37:23.091533987Z`, `synthesis_status: ok`,
+  `source_item_count: 610`, `capture_count: 606`, `skipped_item_count: 4`,
+  `synthesis_known_source_count: 326`, `synthesis_candidate_groups: 275`,
+  `synthesis_cluster_count: 3`, and synthesis doc
+  `9b71c539-8110-443b-9349-59c991dae4f3` revision
+  `0dfe0776-402a-4a90-b7ef-c69b6da0b26a`.
+- `GET /api/universal-wire/stories?limit=30` returned 8 public stories.
+- Failure: stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` remained public at
+  index 5 with headline `South Korea plans to train entire military as "drone
+  warriors"` and old `changed_at: 2026-06-27T11:52:35.826378314Z`.
+- Direct audit path remained intact: stale doc and revision
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9` returned 200, with 7 source entities
+  and native `source_ref` body_doc.
+- Same-doc update/product route remained live for another article: public doc
+  `0d9eac95-ec18-4a2f-9470-802b8db7aef1` updated at the `13:37:23Z` boundary
+  to revision `a4f73c76-7702-4634-b748-36cac8d75067`, with 4 source entities
+  and native `source_ref` body_doc.
+
+Conjecture verdict: falsified at deployed/product tier. The local
+current-classifier cluster-id filter is too weak for the real stale revision.
+Likely explanations: the deployed stale article's cited source entities still
+reproduce the old `sourcecycled-live-harbor-transport-rail-corridor` cluster
+under the current lexical classifier, or its metadata/source entity shape does
+not match the local regression.
+
+Problem Documentation First: satisfied for the next repair. This entry records
+the failed deployed repair before further code changes.
+
+Mutation class for next move: orange behavior repair. Protected surfaces:
+Universal Wire public story filtering, source entity reclassification, story cap,
+edition audit metadata, direct Texture reads, same-doc update visibility, and
+source_ref/source_entities preservation.
+
+Admissible evidence for next repair: inspect the deployed stale revision/source
+entities through authenticated public Texture reads; add a local regression that
+matches the real metadata/source shape; run focused and broader runtime tests;
+push to `origin/main`; monitor CI/deploy; prove on staging that stale doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` is absent from public stories while
+direct Texture audit reads and current update stories remain intact.
+
+Rollback path: revert the next repair commit and dependent evidence; the current
+deployed behavior remains available as rollback anchor even though it fails the
+stale public-filter acceptance.
+
+Heresy delta: `introduced` for the insufficient local repair conjecture;
+`discovered` for the real deployed stale-revision shape still being unmodeled.
+
+Expected Delta V: 0 for this proof pass because it falsified the repair while
+buying stronger observer evidence. Actual Delta V: 0. V remains 1.
+
+Next move: inspect the real stale revision/source entities, build a matching
+regression, and repair the public filter again.
