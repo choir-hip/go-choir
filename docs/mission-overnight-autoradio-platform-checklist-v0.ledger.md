@@ -9112,3 +9112,33 @@ payloads, but did not verify that the proxy could decode the runtime revision
 list response envelope on the asynchronous platformd sync path.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
+
+## 2026-06-27 - O4 Platformd Texture Sync Envelope Local Repair
+
+Claim: root repaired the proxy/platformd sync envelope mismatch that kept
+Universal Wire Texture documents absent from platformd after publication.
+
+Repair scope:
+
+- `internal/proxy/wire_platform_publish.go` now decodes the runtime Texture
+  revision-list response as `{"revisions":[...]}` before building the
+  `platform.SyncTextureDocumentRequest`.
+- `internal/proxy/wire_platform_publish_test.go` now uses the same envelope
+  shape in the async sync fixture, so the regression fails if proxy expects a
+  bare array again.
+- The repair does not bypass platformd verification; it restores the sync path
+  required for platformd to make published Texture docs readable.
+
+Commands/results:
+
+- `git diff --check`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed. Nix emitted an ignored eval-cache SQLite busy warning.
+
+Evidence boundary/non-claims: local repair only. No independent verifier yet,
+no push, CI, deploy, staging health identity, authenticated product replay, run
+acceptance, provider/search freshness, semantic clustering, Qdrant, or
+promotion/rollback execution is claimed.
+
+Actual Delta V: 0 until verifier and deployed product proof. V remains 27.

@@ -197,6 +197,10 @@ type sandboxRevisionEntry struct {
 	Metadata         json.RawMessage `json:"metadata"`
 }
 
+type sandboxTextureRevisionListResponse struct {
+	Revisions []sandboxRevisionEntry `json:"revisions"`
+}
+
 // syncTextureToPlatformd fetches all revisions of a Texture document from the
 // platform sandbox and syncs them to platformd's DoltDB. This runs
 // asynchronously after a successful publication so the publish response is
@@ -205,11 +209,12 @@ func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, d
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var revisions []sandboxRevisionEntry
-	if err := h.fetchSandboxJSONWithContext(ctx, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &revisions); err != nil {
+	var list sandboxTextureRevisionListResponse
+	if err := h.fetchSandboxJSONWithContext(ctx, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &list); err != nil {
 		log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v", docID, err)
 		return
 	}
+	revisions := list.Revisions
 	if len(revisions) == 0 {
 		log.Printf("proxy: sync texture to platformd: no revisions for %s", docID)
 		return

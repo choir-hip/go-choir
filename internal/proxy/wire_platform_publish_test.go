@@ -52,7 +52,7 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 				Metadata:       meta,
 			})
 		case "/api/texture/documents/doc-wire-proxy/revisions":
-			_ = json.NewEncoder(w).Encode([]sandboxTextureRevision{{RevisionID: "rev-wire-proxy", DocID: "doc-wire-proxy", OwnerID: platformOwner, Content: "# Proxy story", BodyDoc: bodyDoc, SourceEntities: sourceEntities, Metadata: meta}})
+			_ = json.NewEncoder(w).Encode(sandboxTextureRevisionListResponse{Revisions: []sandboxRevisionEntry{{RevisionID: "rev-wire-proxy", Content: "# Proxy story", BodyDoc: bodyDoc, SourceEntities: sourceEntities, Metadata: meta}}})
 		default:
 			// Async sync goroutine may hit unexpected paths; log instead of fatal.
 			w.WriteHeader(http.StatusNotFound)
