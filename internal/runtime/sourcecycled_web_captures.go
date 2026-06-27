@@ -25,20 +25,23 @@ type internalSourcecycledWebCapturesRequest struct {
 }
 
 type internalSourcecycledWebCapturesResponse struct {
-	Status                   string `json:"status"`
-	CaptureCount             int    `json:"capture_count"`
-	SourceEntityCount        int    `json:"source_entity_count"`
-	CapturedFromEdges        int    `json:"captured_from_edges"`
-	SkippedItemCount         int    `json:"skipped_item_count"`
-	SynthesisStatus          string `json:"synthesis_status,omitempty"`
-	SynthesisDocID           string `json:"synthesis_doc_id,omitempty"`
-	SynthesisRevisionID      string `json:"synthesis_revision_id,omitempty"`
-	SynthesisClusterID       string `json:"synthesis_cluster_id,omitempty"`
-	SynthesisClusterObjectID string `json:"synthesis_cluster_object_id,omitempty"`
-	SynthesisSourceCount     int    `json:"synthesis_source_count,omitempty"`
-	SynthesisClusterCount    int    `json:"synthesis_cluster_count,omitempty"`
-	SynthesisEditionRef      string `json:"synthesis_edition_ref,omitempty"`
-	SynthesisSkipReason      string `json:"synthesis_skip_reason,omitempty"`
+	Status                    string `json:"status"`
+	CaptureCount              int    `json:"capture_count"`
+	SourceEntityCount         int    `json:"source_entity_count"`
+	CapturedFromEdges         int    `json:"captured_from_edges"`
+	SkippedItemCount          int    `json:"skipped_item_count"`
+	SynthesisStatus           string `json:"synthesis_status,omitempty"`
+	SynthesisDocID            string `json:"synthesis_doc_id,omitempty"`
+	SynthesisRevisionID       string `json:"synthesis_revision_id,omitempty"`
+	SynthesisClusterID        string `json:"synthesis_cluster_id,omitempty"`
+	SynthesisClusterObjectID  string `json:"synthesis_cluster_object_id,omitempty"`
+	SynthesisSourceCount      int    `json:"synthesis_source_count,omitempty"`
+	SynthesisKnownSourceCount int    `json:"synthesis_known_source_count,omitempty"`
+	SynthesisCandidateGroups  int    `json:"synthesis_candidate_groups,omitempty"`
+	SynthesisClusterCount     int    `json:"synthesis_cluster_count,omitempty"`
+	SynthesisRefreshedGroups  int    `json:"synthesis_refreshed_groups,omitempty"`
+	SynthesisEditionRef       string `json:"synthesis_edition_ref,omitempty"`
+	SynthesisSkipReason       string `json:"synthesis_skip_reason,omitempty"`
 }
 
 // HandleInternalSourcecycledWebCaptures projects source-service items into this
@@ -94,54 +97,60 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		return
 	}
 	synthesisStatus := "skipped"
-	synthesisSkipReason := "fewer than two eligible graph-backed source captures"
+	synthesisSkipReason := universalWireLiveSynthesisSkipReason(synthesis)
 	if synthesis.Triggered {
 		synthesisStatus = "ok"
 		synthesisSkipReason = ""
 	}
 	status := universalWireLiveArrivalStatus{
-		SchemaVersion:            objectgraph.UniversalWireLiveArrivalStatusSchemaVersion,
-		BoundaryID:               universalWireLiveArrivalBoundaryID(req.CycleID, now),
-		CycleID:                  strings.TrimSpace(req.CycleID),
-		ObservedAt:               now.UTC().Format(time.RFC3339Nano),
-		UpdatedAt:                now.UTC().Format(time.RFC3339Nano),
-		Phase:                    "web_captures_graph_written",
-		Status:                   "ok",
-		ObjectGraphMode:          "runtime_api",
-		SourceItemCount:          len(req.Items),
-		CaptureCount:             len(result.Captures),
-		SourceEntityCount:        len(result.SourceEntities),
-		CapturedFromEdges:        result.EdgeCount,
-		SkippedItemCount:         result.Skipped,
-		SynthesisStatus:          synthesisStatus,
-		SynthesisDocID:           synthesis.Doc.DocID,
-		SynthesisRevisionID:      synthesis.Revision.RevisionID,
-		SynthesisClusterID:       synthesis.ClusterID,
-		SynthesisClusterObjectID: synthesis.ClusterObjectID,
-		SynthesisSourceCount:     synthesis.SourceCount,
-		SynthesisClusterCount:    synthesis.ClusterCount,
-		SynthesisEditionRef:      synthesis.EditionRef,
-		SynthesisSkipReason:      synthesisSkipReason,
+		SchemaVersion:             objectgraph.UniversalWireLiveArrivalStatusSchemaVersion,
+		BoundaryID:                universalWireLiveArrivalBoundaryID(req.CycleID, now),
+		CycleID:                   strings.TrimSpace(req.CycleID),
+		ObservedAt:                now.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:                 now.UTC().Format(time.RFC3339Nano),
+		Phase:                     "web_captures_graph_written",
+		Status:                    "ok",
+		ObjectGraphMode:           "runtime_api",
+		SourceItemCount:           len(req.Items),
+		CaptureCount:              len(result.Captures),
+		SourceEntityCount:         len(result.SourceEntities),
+		CapturedFromEdges:         result.EdgeCount,
+		SkippedItemCount:          result.Skipped,
+		SynthesisStatus:           synthesisStatus,
+		SynthesisDocID:            synthesis.Doc.DocID,
+		SynthesisRevisionID:       synthesis.Revision.RevisionID,
+		SynthesisClusterID:        synthesis.ClusterID,
+		SynthesisClusterObjectID:  synthesis.ClusterObjectID,
+		SynthesisSourceCount:      synthesis.SourceCount,
+		SynthesisKnownSourceCount: synthesis.KnownSourceCount,
+		SynthesisCandidateGroups:  synthesis.CandidateGroupCount,
+		SynthesisClusterCount:     synthesis.ClusterCount,
+		SynthesisRefreshedGroups:  synthesis.RefreshedGroupCount,
+		SynthesisEditionRef:       synthesis.EditionRef,
+		SynthesisSkipReason:       synthesisSkipReason,
 	}
 	if err := h.rt.recordUniversalWireLiveArrivalStatus(r.Context(), status, now); err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}
 	writeAPIJSON(w, http.StatusCreated, internalSourcecycledWebCapturesResponse{
-		Status:                   "ok",
-		CaptureCount:             len(result.Captures),
-		SourceEntityCount:        len(result.SourceEntities),
-		CapturedFromEdges:        result.EdgeCount,
-		SkippedItemCount:         result.Skipped,
-		SynthesisStatus:          synthesisStatus,
-		SynthesisDocID:           synthesis.Doc.DocID,
-		SynthesisRevisionID:      synthesis.Revision.RevisionID,
-		SynthesisClusterID:       synthesis.ClusterID,
-		SynthesisClusterObjectID: synthesis.ClusterObjectID,
-		SynthesisSourceCount:     synthesis.SourceCount,
-		SynthesisClusterCount:    synthesis.ClusterCount,
-		SynthesisEditionRef:      synthesis.EditionRef,
-		SynthesisSkipReason:      synthesisSkipReason,
+		Status:                    "ok",
+		CaptureCount:              len(result.Captures),
+		SourceEntityCount:         len(result.SourceEntities),
+		CapturedFromEdges:         result.EdgeCount,
+		SkippedItemCount:          result.Skipped,
+		SynthesisStatus:           synthesisStatus,
+		SynthesisDocID:            synthesis.Doc.DocID,
+		SynthesisRevisionID:       synthesis.Revision.RevisionID,
+		SynthesisClusterID:        synthesis.ClusterID,
+		SynthesisClusterObjectID:  synthesis.ClusterObjectID,
+		SynthesisSourceCount:      synthesis.SourceCount,
+		SynthesisKnownSourceCount: synthesis.KnownSourceCount,
+		SynthesisCandidateGroups:  synthesis.CandidateGroupCount,
+		SynthesisClusterCount:     synthesis.ClusterCount,
+		SynthesisRefreshedGroups:  synthesis.RefreshedGroupCount,
+		SynthesisEditionRef:       synthesis.EditionRef,
+		SynthesisSkipReason:       synthesisSkipReason,
 	})
 }
 
@@ -151,28 +160,31 @@ type universalWireLiveArrivalResponse struct {
 }
 
 type universalWireLiveArrivalStatus struct {
-	SchemaVersion            string `json:"schema_version"`
-	BoundaryID               string `json:"boundary_id"`
-	CycleID                  string `json:"cycle_id,omitempty"`
-	ObservedAt               string `json:"observed_at"`
-	UpdatedAt                string `json:"updated_at"`
-	Phase                    string `json:"phase"`
-	Status                   string `json:"status"`
-	ObjectGraphMode          string `json:"objectgraph_mode,omitempty"`
-	SourceItemCount          int    `json:"source_item_count"`
-	CaptureCount             int    `json:"capture_count"`
-	SourceEntityCount        int    `json:"source_entity_count"`
-	CapturedFromEdges        int    `json:"captured_from_edges"`
-	SkippedItemCount         int    `json:"skipped_item_count"`
-	SynthesisStatus          string `json:"synthesis_status,omitempty"`
-	SynthesisDocID           string `json:"synthesis_doc_id,omitempty"`
-	SynthesisRevisionID      string `json:"synthesis_revision_id,omitempty"`
-	SynthesisClusterID       string `json:"synthesis_cluster_id,omitempty"`
-	SynthesisClusterObjectID string `json:"synthesis_cluster_object_id,omitempty"`
-	SynthesisSourceCount     int    `json:"synthesis_source_count,omitempty"`
-	SynthesisClusterCount    int    `json:"synthesis_cluster_count,omitempty"`
-	SynthesisEditionRef      string `json:"synthesis_edition_ref,omitempty"`
-	SynthesisSkipReason      string `json:"synthesis_skip_reason,omitempty"`
+	SchemaVersion             string `json:"schema_version"`
+	BoundaryID                string `json:"boundary_id"`
+	CycleID                   string `json:"cycle_id,omitempty"`
+	ObservedAt                string `json:"observed_at"`
+	UpdatedAt                 string `json:"updated_at"`
+	Phase                     string `json:"phase"`
+	Status                    string `json:"status"`
+	ObjectGraphMode           string `json:"objectgraph_mode,omitempty"`
+	SourceItemCount           int    `json:"source_item_count"`
+	CaptureCount              int    `json:"capture_count"`
+	SourceEntityCount         int    `json:"source_entity_count"`
+	CapturedFromEdges         int    `json:"captured_from_edges"`
+	SkippedItemCount          int    `json:"skipped_item_count"`
+	SynthesisStatus           string `json:"synthesis_status,omitempty"`
+	SynthesisDocID            string `json:"synthesis_doc_id,omitempty"`
+	SynthesisRevisionID       string `json:"synthesis_revision_id,omitempty"`
+	SynthesisClusterID        string `json:"synthesis_cluster_id,omitempty"`
+	SynthesisClusterObjectID  string `json:"synthesis_cluster_object_id,omitempty"`
+	SynthesisSourceCount      int    `json:"synthesis_source_count,omitempty"`
+	SynthesisKnownSourceCount int    `json:"synthesis_known_source_count,omitempty"`
+	SynthesisCandidateGroups  int    `json:"synthesis_candidate_groups,omitempty"`
+	SynthesisClusterCount     int    `json:"synthesis_cluster_count,omitempty"`
+	SynthesisRefreshedGroups  int    `json:"synthesis_refreshed_groups,omitempty"`
+	SynthesisEditionRef       string `json:"synthesis_edition_ref,omitempty"`
+	SynthesisSkipReason       string `json:"synthesis_skip_reason,omitempty"`
 }
 
 func (h *APIHandler) HandleUniversalWireLiveArrival(w http.ResponseWriter, r *http.Request) {
@@ -268,14 +280,17 @@ func universalWireLiveArrivalBoundaryID(cycleID string, observedAt time.Time) st
 }
 
 type universalWireGraphSynthesisResult struct {
-	Triggered       bool
-	Doc             types.Document
-	Revision        types.Revision
-	EditionRef      string
-	ClusterID       string
-	ClusterObjectID string
-	SourceCount     int
-	ClusterCount    int
+	Triggered           bool
+	Doc                 types.Document
+	Revision            types.Revision
+	EditionRef          string
+	ClusterID           string
+	ClusterObjectID     string
+	SourceCount         int
+	KnownSourceCount    int
+	CandidateGroupCount int
+	ClusterCount        int
+	RefreshedGroupCount int
 }
 
 const universalWireLiveSourcecycledClusterID = "sourcecycled-live"
@@ -301,16 +316,23 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	if err != nil {
 		return universalWireGraphSynthesisResult{}, err
 	}
-	groups := universalWireDeterministicStorySourceGroups(sources)
-	if len(groups) == 0 {
-		return universalWireGraphSynthesisResult{SourceCount: len(sources)}, nil
+	groups, grouping := universalWireDeterministicStorySourceGroupsWithDiagnostics(sources)
+	result := universalWireGraphSynthesisResult{
+		SourceCount:         len(sources),
+		KnownSourceCount:    grouping.KnownSourceCount,
+		CandidateGroupCount: grouping.CandidateGroupCount,
+		ClusterCount:        len(groups),
 	}
-	var out universalWireGraphSynthesisResult
+	if len(groups) == 0 {
+		return result, nil
+	}
+	out := result
 	synthesizedClusterCount := 0
 	for _, group := range groups {
 		group.ClusterID = rt.resolveUniversalWireStoryClusterID(ctx, group)
 		semanticState := rt.universalWireSemanticStoryState(ctx, group.ClusterID, group.Sources, now)
 		if semanticState.LatestChange.ChangeType == "state_refreshed" {
+			out.RefreshedGroupCount++
 			continue
 		}
 		doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
@@ -327,17 +349,35 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 		}
 		synthesizedClusterCount++
 		out = universalWireGraphSynthesisResult{
-			Triggered:       true,
-			Doc:             doc,
-			Revision:        rev,
-			EditionRef:      editionRef,
-			ClusterID:       group.ClusterID,
-			ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), group.ClusterID),
-			SourceCount:     len(group.Sources),
-			ClusterCount:    synthesizedClusterCount,
+			Triggered:           true,
+			Doc:                 doc,
+			Revision:            rev,
+			EditionRef:          editionRef,
+			ClusterID:           group.ClusterID,
+			ClusterObjectID:     universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), group.ClusterID),
+			SourceCount:         len(group.Sources),
+			KnownSourceCount:    grouping.KnownSourceCount,
+			CandidateGroupCount: grouping.CandidateGroupCount,
+			ClusterCount:        synthesizedClusterCount,
+			RefreshedGroupCount: out.RefreshedGroupCount,
 		}
 	}
 	return out, nil
+}
+
+func universalWireLiveSynthesisSkipReason(result universalWireGraphSynthesisResult) string {
+	switch {
+	case result.SourceCount < 2:
+		return "fewer than two graph-backed synthesis sources"
+	case result.KnownSourceCount == 0:
+		return "no graph-backed synthesis sources matched known story concepts"
+	case result.ClusterCount == 0:
+		return "no deterministic story group reached two sources with a shared topic and story signal"
+	case result.RefreshedGroupCount >= result.ClusterCount:
+		return "all deterministic story groups were already current"
+	default:
+		return "no deterministic story group produced a new or updated Texture article"
+	}
 }
 
 type universalWireSemanticStoryState struct {
@@ -569,13 +609,25 @@ type universalWireDeterministicStorySourceGroup struct {
 	concepts  map[string]bool
 }
 
+type universalWireStoryGroupingDiagnostics struct {
+	KnownSourceCount    int
+	CandidateGroupCount int
+}
+
 func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesisSource) []universalWireDeterministicStorySourceGroup {
+	groups, _ := universalWireDeterministicStorySourceGroupsWithDiagnostics(sources)
+	return groups
+}
+
+func universalWireDeterministicStorySourceGroupsWithDiagnostics(sources []universalWireSynthesisSource) ([]universalWireDeterministicStorySourceGroup, universalWireStoryGroupingDiagnostics) {
 	var groups []universalWireDeterministicStorySourceGroup
+	var diagnostics universalWireStoryGroupingDiagnostics
 	for _, source := range normalizedUniversalWireSynthesisSources(sources) {
 		concepts := universalWireStoryConceptSet(source)
 		if len(concepts) == 0 {
 			continue
 		}
+		diagnostics.KnownSourceCount++
 		best := -1
 		bestOverlap := 0
 		for i := range groups {
@@ -597,6 +649,7 @@ func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesi
 			concepts: concepts,
 		})
 	}
+	diagnostics.CandidateGroupCount = len(groups)
 	out := make([]universalWireDeterministicStorySourceGroup, 0, len(groups))
 	for _, group := range groups {
 		if len(group.Sources) < 2 {
@@ -608,7 +661,7 @@ func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesi
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Sources[0].FetchedAt.After(out[j].Sources[0].FetchedAt)
 	})
-	return out
+	return out, diagnostics
 }
 
 func (rt *Runtime) resolveUniversalWireStoryClusterID(ctx context.Context, group universalWireDeterministicStorySourceGroup) string {

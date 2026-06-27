@@ -137,6 +137,51 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 	}
 }
 
+func TestHandleInternalSourcecycledWebCapturesReportsNoDeterministicGroups(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 27, 11, 45, 0, 0, time.UTC)
+	projection := postInternalSourcecycledWebCapturesWithCycleForTest(t, handler, "cycle-live-no-groups", []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-live-oracle-rail", "rss:oracle-rail", "fetch-oracle-rail", "Rail corridor reopens after inspections", "https://example.com/oracle/rail", "en", "Railway crews reopened the corridor after safety inspections.", now.Add(-5*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-live-oracle-harbor", "rss:oracle-harbor", "fetch-oracle-harbor", "Harbor pilots reopen cargo channel", "https://example.com/oracle/harbor", "en", "Port pilots reopened the cargo channel after tide soundings.", now.Add(-4*time.Minute)),
+	}, now)
+	if projection.SynthesisStatus != "skipped" ||
+		projection.SynthesisSourceCount != 2 ||
+		projection.SynthesisKnownSourceCount != 2 ||
+		projection.SynthesisCandidateGroups != 2 ||
+		projection.SynthesisClusterCount != 0 ||
+		projection.SynthesisSkipReason != "no deterministic story group reached two sources with a shared topic and story signal" {
+		t.Fatalf("projection = %+v, want honest no-deterministic-group skip diagnostics", projection)
+	}
+
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/live-arrival", "", "reader-1")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/live-arrival status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireLiveArrivalResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode live-arrival response: %v", err)
+	}
+	if resp.Status != "available" || resp.Latest == nil {
+		t.Fatalf("live-arrival response = %+v, want latest status", resp)
+	}
+	latest := *resp.Latest
+	if latest.SynthesisSourceCount != 2 ||
+		latest.SynthesisKnownSourceCount != 2 ||
+		latest.SynthesisCandidateGroups != 2 ||
+		latest.SynthesisClusterCount != 0 ||
+		latest.SynthesisSkipReason != projection.SynthesisSkipReason {
+		t.Fatalf("latest live-arrival = %+v, projection = %+v", latest, projection)
+	}
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal live-arrival response: %v", err)
+	}
+	if strings.Contains(string(encoded), "Railway crews reopened") ||
+		strings.Contains(string(encoded), "srcitem-live-oracle-rail") {
+		t.Fatalf("live-arrival no-group diagnostics leaked source payloads: %s", string(encoded))
+	}
+}
+
 func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 22, 5, 0, 0, time.UTC)

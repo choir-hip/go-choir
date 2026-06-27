@@ -861,6 +861,19 @@ state. Next move: document/repair the live-arrival synthesis diagnostics so
 the product oracle reports the actual classifier boundary, then use that
 evidence to repair article update behavior without guessing.
 
+Local repair commit in progress adds additive live-arrival synthesis
+diagnostics without loosening article creation: `synthesis_known_source_count`,
+`synthesis_candidate_groups`, `synthesis_refreshed_groups`, and precise skip
+reasons. Focused runtime proof covers the deployed-shaped no-group case where
+two graph-backed synthesis sources have known concepts but do not share a
+topic/signal story group; the public oracle reports the no-group classifier
+boundary and still redacts source payloads. Broader Universal Wire runtime
+selector also passed locally. Next move: commit, push, monitor CI/deploy,
+verify staging identity, and rerun authenticated staging proof; if the live
+oracle reports no deterministic groups on deployed data, the next behavior
+repair is grouping extraction/semantic clustering, not route or Texture read
+repair.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -897,5 +910,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, and authenticated product users can read the platform live-arrival oracle at /api/universal-wire/live-arrival. Latest landed behavior head daeff1ced630210b5ec7b8c943a7e7b2215b19e1 passed CI run 28287504060, deploy job 83814144276, health identity, and authenticated staging proof for the oracle route repair. The remaining C6 edge is not route access; it is live synthesis/update realism. Product resample with qa-live-skip-1782559728@example.com at 2026-06-27T11:29:16Z observed boundary cycle_585b664dfe90c813c24e1ac7 with 585 source items, 585 captures/source entities, 768 synthesis sources, synthesis_status skipped, and the stale skip reason "fewer than two eligible graph-backed source captures." Code inspection shows the skip reason can be misleading when deterministic topic/signal grouping forms zero multi-source groups despite many synthesis sources, and the oracle does not yet expose candidate concept/group counts. Next move: first repair live-arrival synthesis diagnostics/skip reasons with Problem Documentation First already recorded, then land through push/CI/deploy/staging proof and use the improved oracle to decide whether grouping extraction or article update behavior is the next repair. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, and authenticated product users can read the platform live-arrival oracle at /api/universal-wire/live-arrival. Latest landed behavior head daeff1ced630210b5ec7b8c943a7e7b2215b19e1 passed CI run 28287504060, deploy job 83814144276, health identity, and authenticated staging proof for the oracle route repair. The remaining C6 edge is not route access; it is live synthesis/update realism. Product resample with qa-live-skip-1782559728@example.com at 2026-06-27T11:29:16Z observed boundary cycle_585b664dfe90c813c24e1ac7 with 585 source items, 585 captures/source entities, 768 synthesis sources, synthesis_status skipped, and the stale skip reason "fewer than two eligible graph-backed source captures." Problem Documentation First checkpoint e796124f recorded this. Local runtime repair adds additive synthesis diagnostics/precise skip reasons for /api/universal-wire/live-arrival and passes focused plus broader Universal Wire runtime selectors; next move is commit/push, CI/deploy, health identity, and authenticated staging proof. Use the improved oracle to decide whether deployed data has no deterministic groups, no known concepts, all-current groups, or another classifier boundary. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

@@ -13953,3 +13953,61 @@ Next move: repair live-arrival synthesis diagnostics so skipped cycles report
 the actual classifier boundary, with focused tests for "many synthesis sources
 but zero deterministic story groups"; then land and replay staging proof before
 choosing a grouping/article-update behavior repair.
+
+## 2026-06-27 - O4 Live Synthesis Diagnostics Repair Local Proof
+
+Move: implement the documented diagnostic repair without changing synthesis
+eligibility.
+
+Repair summary:
+
+- `internal/runtime/sourcecycled_web_captures.go` now carries additive
+  synthesis diagnostics through the internal projection response and public
+  live-arrival status: known-concept source count, deterministic candidate
+  group count, refreshed group count, existing cluster count, and exact skip
+  reason.
+- The deterministic grouping path is unchanged for article creation: it still
+  only synthesizes groups with at least two sources sharing a known topic and
+  specific story signal.
+- Skip reasons now distinguish fewer than two graph-backed synthesis sources,
+  no known story concepts, no deterministic two-source topic/signal group, all
+  groups already current, and unexpected no-article outcomes.
+- `internal/runtime/universal_wire_test.go` adds
+  `TestHandleInternalSourcecycledWebCapturesReportsNoDeterministicGroups`,
+  proving two graph-backed synthesis sources with known but unrelated
+  topic/signal concepts report a no-group skip through both the internal
+  response and authenticated public live-arrival oracle while redacting source
+  payloads.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/sourcecycled_web_captures.go internal/runtime/universal_wire_test.go`
+  passed.
+- `git diff --check -- internal/runtime/sourcecycled_web_captures.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(ExposeGraphCapturesAsDiagnostics|ReportsNoDeterministicGroups|TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated)|TestHandleUniversalWireLiveArrival' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 5.312s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 13.864s`.
+
+Mutation class: orange/red behavior observability repair. Protected surfaces:
+authenticated public `/api/universal-wire/live-arrival` DTO shape, internal
+sourcecycled projection response, Universal Wire grouping diagnostics, and
+sourcecycled status recording.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming runtime repair commit plus this evidence
+entry; live-arrival returns to the prior coarse skip reason and lacks grouping
+diagnostics.
+
+Heresy delta: `repaired` locally for the misleading skip diagnostic; not yet
+repaired at staging/product tier.
+
+Expected Delta V: 0 until deployed oracle replay. Actual Delta V: 0. V remains
+1.
+
+Next move: commit this runtime/evidence repair, push to `origin main`, monitor
+CI/deploy, verify `choir.news` health identity, and rerun authenticated
+live-arrival plus stories proof against staging.
