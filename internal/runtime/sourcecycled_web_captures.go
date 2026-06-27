@@ -357,16 +357,16 @@ func universalWireSemanticStoryHeadline(sources []universalWireSynthesisSource, 
 
 func universalWireSemanticStorySummary(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) string {
 	if len(sources) == 0 {
-		return "A developing story needs continued source-grounded revision."
+		return "The available reporting describes a developing story that remains open to revision."
 	}
-	if len(sources) == 1 {
-		return fmt.Sprintf("%s gives the clearest current account.", sources[0].Title)
-	}
-	second := sources[1].Title
+	summary := universalWireSynthesisSummaryFromSources(sources)
 	if state.LatestChange.ChangeType == "source_added" && len(state.LatestChange.AddedSourceItemIDs) > 0 {
-		second = universalWireLatestAddedSourceTitle(sources, state.LatestChange.AddedSourceItemIDs[0])
+		added := universalWireLatestAddedSourceTitle(sources, state.LatestChange.AddedSourceItemIDs[0])
+		if added != "" {
+			return summary + " The latest arrival adds detail from " + added + "."
+		}
 	}
-	return fmt.Sprintf("%s gives the clearest current account, while %s changes what the live account should track next.", sources[0].Title, second)
+	return summary
 }
 
 func universalWireLatestAddedSourceTitle(sources []universalWireSynthesisSource, itemID string) string {
@@ -384,11 +384,11 @@ func universalWireLatestAddedSourceTitle(sources []universalWireSynthesisSource,
 func universalWireSemanticStoryTension(state universalWireSemanticStoryState) string {
 	switch state.LatestChange.ChangeType {
 	case "source_added":
-		return "The latest source keeps the account on the same developing event: it adds a later angle without changing the core frame, so this article updates here instead of starting a separate report."
+		return "This article should be revised here while later reporting still fits the same event and should split only when a new timeline, location, or official explanation emerges."
 	case "story_created":
-		return "The available sources describe the same developing event; later reporting should update this account if the timeline, affected people, or official explanation changes."
+		return "Later reporting should update this account if the timeline, affected people, or official explanation changes."
 	default:
-		return "The latest source check does not change the core account, but this article remains open to revision as reporting develops."
+		return "This article remains open to revision as reporting develops."
 	}
 }
 
@@ -713,12 +713,9 @@ func universalWireLiveSynthesisHeadline(sources []universalWireSynthesisSource) 
 
 func universalWireLiveSynthesisSummary(sources []universalWireSynthesisSource) string {
 	if len(sources) == 0 {
-		return "The available sources describe a developing story that needs continued source-grounded revision."
+		return "The available reporting describes a developing story that remains open to revision."
 	}
-	if len(sources) == 1 {
-		return fmt.Sprintf("%s gives the clearest current account.", sources[0].Title)
-	}
-	return fmt.Sprintf("%s gives the clearest current account, while %s adds a second sourced angle.", sources[0].Title, sources[1].Title)
+	return universalWireSynthesisSummaryFromSources(sources)
 }
 
 func (rt *Runtime) universalWireSynthesisSourcesFromGraphCaptures(ctx context.Context, captures []objectgraph.Object) ([]universalWireSynthesisSource, error) {

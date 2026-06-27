@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,6 +15,20 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+var universalWireArticleSurfaceHelperPhrases = []string{
+	"Universal Wire live synthesis:",
+	"Universal Wire selected ",
+	"graph-backed source captures",
+	"Universal Wire treats",
+	"incoming reports point to the same developing story",
+	"A second source in the cluster",
+	"reports read as one developing article",
+	"gives the clearest current account",
+	"second sourced angle",
+	"The second account narrows what readers can trust now",
+	"Multiple reports converge",
+}
 
 type universalWireSynthesisClusterRequest struct {
 	ClusterID         string
@@ -52,7 +67,7 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 		now = time.Now().UTC()
 	}
 	headline := strings.TrimSpace(req.Headline)
-	if headline == "" {
+	if headline == "" || universalWireTextContainsArticleSurfaceHelper(headline) {
 		headline = universalWireSynthesisHeadline(sources)
 	}
 	clusterID := strings.TrimSpace(req.ClusterID)
@@ -425,33 +440,172 @@ func universalWireSynthesisSourceEntities(sources []universalWireSynthesisSource
 }
 
 func universalWireSynthesisArticleMarkdown(headline, summary, tension string, sources []universalWireSynthesisSource, entities []textureSourceEntity) string {
-	first := sources[0]
 	second := sources[1]
 	firstRef := entities[0].EntityID
 	secondRef := entities[1].EntityID
-	if summary = strings.TrimSpace(summary); summary == "" {
-		summary = fmt.Sprintf("%s gives the clearest current account, while %s adds a second sourced angle.", first.Title, second.Title)
+	summary = strings.TrimSpace(summary)
+	if summary == "" || universalWireTextContainsArticleSurfaceHelper(summary) {
+		summary = universalWireSynthesisSummaryFromSources(sources)
 	}
-	if tension = strings.TrimSpace(tension); tension == "" {
-		tension = "The next update should revise the account if later source arrivals change the timeline, affected people, or official explanation."
+	tension = strings.TrimSpace(tension)
+	if tension == "" || universalWireTextContainsArticleSurfaceHelper(tension) {
+		tension = universalWireSynthesisRevisionSentence(sources)
 	}
 	var b strings.Builder
 	b.WriteString("# ")
 	b.WriteString(headline)
 	b.WriteString("\n\n")
-	b.WriteString(summary)
+	b.WriteString(universalWireEnsureSentence(summary))
 	b.WriteString(" ")
-	b.WriteString(fmt.Sprintf("[lead source](source:%s)", firstRef))
+	b.WriteString(fmt.Sprintf("[lead report](source:%s)", firstRef))
 	b.WriteString("\n\n")
-	b.WriteString("The second account narrows what readers can trust now: it confirms the same event frame while adding a distinct detail that the lead source does not carry. ")
-	b.WriteString(fmt.Sprintf("[second source](source:%s)", secondRef))
+	b.WriteString(universalWireSourceFactSentence(second, "The later dispatch"))
+	b.WriteString(" ")
+	b.WriteString(fmt.Sprintf("[supporting report](source:%s)", secondRef))
 	b.WriteString("\n\n")
-	b.WriteString(tension)
+	b.WriteString(universalWireEnsureSentence(tension))
 	for i := 2; i < len(sources) && i < len(entities); i++ {
+		b.WriteString(" ")
+		b.WriteString(universalWireSourceFactSentence(sources[i], "A further update"))
 		b.WriteString(" ")
 		b.WriteString(fmt.Sprintf("[additional source](source:%s)", entities[i].EntityID))
 	}
 	return b.String()
+}
+
+func universalWireSynthesisSummaryFromSources(sources []universalWireSynthesisSource) string {
+	concepts := universalWireSynthesisConcepts(sources)
+	topic := universalWireArticleTopicPhrase(concepts)
+	signals := universalWireArticleSignalPhrases(concepts)
+	switch {
+	case len(signals) == 0:
+		return "The available reporting describes " + topic + " that remains open to revision as more details arrive."
+	case len(signals) == 1:
+		return "The available reporting describes " + topic + ", with " + signals[0] + " shaping the latest account."
+	default:
+		return "The available reporting describes " + topic + ", with " + strings.Join(signals[:len(signals)-1], ", ") + " and " + signals[len(signals)-1] + " shaping the latest account."
+	}
+}
+
+func universalWireSynthesisRevisionSentence(sources []universalWireSynthesisSource) string {
+	concepts := universalWireSynthesisConcepts(sources)
+	switch universalWireArticlePrimaryTopic(concepts) {
+	case "transport":
+		return "This article should be revised if later reporting changes the reopening timetable, passenger impact, or official explanation."
+	case "harbor":
+		return "This article should be revised if later reporting changes the access restrictions, vessel impact, or official explanation."
+	case "energy":
+		return "This article should be revised if later reporting changes the outage timeline, affected customers, or official explanation."
+	case "health":
+		return "This article should be revised if later reporting changes the patient impact, service timeline, or official explanation."
+	default:
+		return "This article should be revised if later reporting changes the timeline, affected people, or official explanation."
+	}
+}
+
+func universalWireSourceFactSentence(source universalWireSynthesisSource, prefix string) string {
+	concepts := universalWireKnownConceptSet(strings.Join([]string{source.Title, source.Body}, " "))
+	signals := universalWireArticleSignalPhrases(concepts)
+	if len(signals) == 0 {
+		title := strings.TrimSpace(source.Title)
+		if title == "" {
+			return universalWireEnsureSentence(prefix + " adds another verified detail to the developing account")
+		}
+		return universalWireEnsureSentence(prefix + " adds detail on " + strings.ToLower(title))
+	}
+	switch len(signals) {
+	case 1:
+		return universalWireEnsureSentence(prefix + " adds " + signals[0])
+	default:
+		return universalWireEnsureSentence(prefix + " adds " + strings.Join(signals[:len(signals)-1], ", ") + " and " + signals[len(signals)-1])
+	}
+}
+
+func universalWireSynthesisConcepts(sources []universalWireSynthesisSource) map[string]bool {
+	concepts := map[string]bool{}
+	for _, source := range sources {
+		for concept := range universalWireKnownConceptSet(strings.Join([]string{source.Title, source.Body}, " ")) {
+			concepts[concept] = true
+		}
+	}
+	return concepts
+}
+
+func universalWireArticleTopicPhrase(concepts map[string]bool) string {
+	switch universalWireArticlePrimaryTopic(concepts) {
+	case "transport":
+		if concepts["signal:rail-corridor"] {
+			return "a disrupted rail corridor"
+		}
+		return "a regional transport disruption"
+	case "harbor":
+		return "a harbor access disruption"
+	case "flood":
+		return "a flood-driven disruption"
+	case "energy":
+		return "a power and grid disruption"
+	case "health":
+		return "a health-service disruption"
+	default:
+		return "a developing story"
+	}
+}
+
+func universalWireArticlePrimaryTopic(concepts map[string]bool) string {
+	topics := []string{}
+	for concept := range concepts {
+		if strings.HasPrefix(concept, "topic:") {
+			topics = append(topics, strings.TrimPrefix(concept, "topic:"))
+		}
+	}
+	sort.Strings(topics)
+	if len(topics) == 0 {
+		return ""
+	}
+	return topics[0]
+}
+
+func universalWireArticleSignalPhrases(concepts map[string]bool) []string {
+	candidates := []struct {
+		concept string
+		phrase  string
+	}{
+		{"signal:flood", "flooding pressure"},
+		{"signal:reopening", "partial reopening"},
+		{"signal:delay", "regional delays"},
+		{"signal:inspection", "continued inspections"},
+		{"signal:strike", "strike disruption"},
+		{"signal:harbor-access", "constrained harbor access"},
+	}
+	out := []string{}
+	for _, candidate := range candidates {
+		if concepts[candidate.concept] {
+			out = append(out, candidate.phrase)
+		}
+	}
+	return out
+}
+
+func universalWireTextContainsArticleSurfaceHelper(text string) bool {
+	for _, phrase := range universalWireArticleSurfaceHelperPhrases {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func universalWireEnsureSentence(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return text
+	}
+	switch text[len(text)-1] {
+	case '.', '!', '?':
+		return text
+	default:
+		return text + "."
+	}
 }
 
 func universalWireSynthesisHeadline(sources []universalWireSynthesisSource) string {

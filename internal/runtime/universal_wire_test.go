@@ -167,7 +167,7 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if firstStory.StoryTextureDoc != firstProjection.SynthesisDocID ||
 		firstStory.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(firstStory.SourceState, "objectgraph-web-capture") ||
-		!strings.Contains(firstStory.TextureContent, "clearest current account") ||
+		!strings.Contains(firstStory.TextureContent, "disrupted rail corridor") ||
 		!strings.Contains(firstStory.TextureContent, "[1]") ||
 		!strings.Contains(firstStory.TextureContent, "[2]") {
 		t.Fatalf("first story is not the synthesized Texture article: %+v", firstStory)
@@ -254,7 +254,8 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if strings.Contains(firstRev.Content, firstSemanticState.StoryID) ||
 		strings.Contains(firstRev.Content, "World-model") ||
-		!strings.Contains(firstRev.Content, "same developing event") {
+		!strings.Contains(firstRev.Content, "disrupted rail corridor") ||
+		!strings.Contains(firstRev.Content, "Later reporting should update this account") {
 		t.Fatalf("first synthesis article content = %q, want article-like semantic-state update without internal ids", firstRev.Content)
 	}
 	firstClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
@@ -327,7 +328,7 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		metadataString(secondRevMeta, "universal_wire_semantic_change_type") != "source_added" ||
 		strings.Contains(secondRev.Content, secondSemanticState.StoryID) ||
 		strings.Contains(secondRev.Content, "World-model") ||
-		!strings.Contains(secondRev.Content, "updates here instead of starting a separate report") {
+		!strings.Contains(secondRev.Content, "should be revised here while later reporting still fits the same event") {
 		t.Fatalf("second revision meta/content = %#v / %q, want Texture revision from semantic metadata and article-like public copy", secondRevMeta, secondRev.Content)
 	}
 	secondSourceItemIDs := metadataStringSliceValue(secondRevMeta, "source_item_ids")
@@ -747,7 +748,7 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 	if firstStory.StoryTextureDoc == "" ||
 		firstStory.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(firstStory.SourceState, "objectgraph-web-capture") ||
-		!strings.Contains(firstStory.TextureContent, "clearest current account") ||
+		!strings.Contains(firstStory.TextureContent, "disrupted rail corridor") ||
 		len(firstStory.Manifest.Lead) != 2 {
 		t.Fatalf("first story = %+v, want synthesized Texture article with two source_ref leads", firstStory)
 	}
@@ -815,13 +816,12 @@ func TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd(t *tes
 	}
 }
 
-func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *testing.T) {
+func TestUniversalWireSynthesisSanitizesHelperCopyAndReadsStoryTexture(t *testing.T) {
 	for _, tc := range []struct {
-		name           string
-		headline       func([]universalWireSynthesisSource) string
-		summary        func([]universalWireSynthesisSource) string
-		tension        string
-		wantSeededText string
+		name     string
+		headline func([]universalWireSynthesisSource) string
+		summary  func([]universalWireSynthesisSource) string
+		tension  string
 	}{
 		{
 			name: "legacy universal wire meta copy",
@@ -831,8 +831,7 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 			summary: func([]universalWireSynthesisSource) string {
 				return "Universal Wire selected 2 graph-backed source captures from the live sourcecycled feed and published one English synthesis article instead of exposing raw capture cards."
 			},
-			tension:        "Later relevant source arrivals should revise this same live synthesis article until semantic story clustering can split independent events.",
-			wantSeededText: "Universal Wire selected",
+			tension: "Later relevant source arrivals should revise this same live synthesis article until semantic story clustering can split independent events.",
 		},
 		{
 			name: "deployed scaffold copy",
@@ -842,8 +841,7 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 			summary: func(sources []universalWireSynthesisSource) string {
 				return fmt.Sprintf("2 incoming reports point to the same developing story. %s provides the lead signal, while %s adds a second angle for readers.", sources[0].Title, sources[1].Title)
 			},
-			tension:        "A second source in the cluster adds a separate angle rather than repeating the same capture, so the reports read as one developing article instead of two isolated updates.",
-			wantSeededText: "incoming reports point to the same developing story",
+			tension: "A second source in the cluster adds a separate angle rather than repeating the same capture, so the reports read as one developing article instead of two isolated updates.",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -885,10 +883,6 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 			if err != nil {
 				t.Fatalf("seed legacy synthesis article: %v", err)
 			}
-			if !strings.Contains(legacyRev.Content, tc.wantSeededText) {
-				t.Fatalf("seeded revision did not contain expected repair trigger %q: %q", tc.wantSeededText, legacyRev.Content)
-			}
-
 			stories := getUniversalWireStoriesForTest(t, handler)
 			if stories.Source != "universal-wire-edition-texture" ||
 				stories.Diagnostics != nil ||
@@ -901,20 +895,17 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 				strings.Contains(story.Headline, "Universal Wire live synthesis") ||
 				strings.Contains(story.TextureContent, "Universal Wire selected") ||
 				strings.Contains(story.TextureContent, "graph-backed source captures") ||
-				!strings.Contains(story.TextureContent, "clearest current account") {
-				t.Fatalf("story was not repaired to article-facing copy: %+v", story)
+				!strings.Contains(story.TextureContent, "available reporting") {
+				t.Fatalf("story was not synthesized as article-facing copy: %+v", story)
 			}
 			assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
 			docResp, revsResp := assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
-			if docResp.CurrentRevisionID == legacyRev.RevisionID {
-				t.Fatalf("readable Texture document still points at legacy revision %s", legacyRev.RevisionID)
-			}
 			if strings.Contains(docResp.Title, "Universal Wire live synthesis") ||
 				strings.Contains(docResp.Title, "Multiple reports converge") {
-				t.Fatalf("readable Texture document title was not repaired: %+v", docResp)
+				t.Fatalf("readable Texture document title was not sanitized: %+v", docResp)
 			}
-			if len(revsResp.Revisions) == 0 || revsResp.Revisions[0].RevisionID != docResp.CurrentRevisionID {
-				t.Fatalf("revision list did not expose repaired current revision: doc=%+v revisions=%+v", docResp, revsResp.Revisions)
+			if len(revsResp.Revisions) == 0 || revsResp.Revisions[0].RevisionID != docResp.CurrentRevisionID || legacyRev.RevisionID != docResp.CurrentRevisionID {
+				t.Fatalf("revision list did not expose sanitized current revision: doc=%+v revisions=%+v", docResp, revsResp.Revisions)
 			}
 		})
 	}
@@ -1028,6 +1019,10 @@ func assertUniversalWireStoryAvoidsHelperCopyForTest(t *testing.T, story types.W
 		"incoming reports point to the same developing story",
 		"source cluster",
 		"reports read as one developing article",
+		"gives the clearest current account",
+		"second sourced angle",
+		"The second account narrows what readers can trust now",
+		"Multiple reports converge",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("story contains helper/meta copy %q: %+v", forbidden, story)
@@ -1239,7 +1234,7 @@ func seedLegacyUniversalWireSynthesisTextureFixture(t *testing.T, handler *APIHa
 	content := strings.Join([]string{
 		"# Legacy Wire synthesis",
 		"",
-		"Legacy Wire synthesis gives the clearest current account, while a second source adds a separate angle for readers.",
+		"Legacy Wire synthesis describes a developing story that remains open to revision as more details arrive.",
 		"",
 		"Further reporting should revise this article if the timeline, affected people, or official account changes.",
 	}, "\n")
@@ -1689,7 +1684,7 @@ func TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceE
 		story.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(story.SourceState, "objectgraph-web-capture") ||
 		strings.Contains(story.TextureContent, "Universal Wire selected") ||
-		!strings.Contains(story.TextureContent, "clearest current account") ||
+		!strings.Contains(story.TextureContent, "available reporting") ||
 		len(story.Manifest.Lead) != 2 {
 		t.Fatalf("story = %+v, want synthesized Texture article with two graph-capture cited sources", story)
 	}

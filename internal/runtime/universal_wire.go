@@ -301,13 +301,7 @@ func universalWireRevisionNeedsArticleSurfaceRepair(rev types.Revision) bool {
 }
 
 func universalWireRevisionTextNeedsArticleSurfaceRepair(text string) bool {
-	return strings.Contains(text, "Universal Wire live synthesis:") ||
-		strings.Contains(text, "Universal Wire selected ") ||
-		strings.Contains(text, "graph-backed source captures") ||
-		strings.Contains(text, "Universal Wire treats") ||
-		strings.Contains(text, "incoming reports point to the same developing story") ||
-		strings.Contains(text, "A second source in the cluster") ||
-		strings.Contains(text, "reports read as one developing article")
+	return universalWireTextContainsArticleSurfaceHelper(text)
 }
 
 func universalWireStoryNeedsArticleSurfaceRepair(story types.WireStory) bool {
@@ -933,13 +927,7 @@ func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {
 func universalWireStoriesNeedArticleSurfaceRepair(stories []types.WireStory) bool {
 	for _, story := range stories {
 		text := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
-		if strings.Contains(text, "Universal Wire live synthesis:") ||
-			strings.Contains(text, "Universal Wire selected ") ||
-			strings.Contains(text, "graph-backed source captures") ||
-			strings.Contains(text, "Universal Wire treats") ||
-			strings.Contains(text, "incoming reports point to the same developing story") ||
-			strings.Contains(text, "A second source in the cluster") ||
-			strings.Contains(text, "reports read as one developing article") {
+		if universalWireTextContainsArticleSurfaceHelper(text) {
 			return true
 		}
 	}
