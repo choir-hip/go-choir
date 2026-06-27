@@ -1761,6 +1761,134 @@ func TestHandleUniversalWireStoriesFiltersStaleSynthesisAfterSkippedLiveArrival(
 	}
 }
 
+func TestHandleUniversalWireStoriesFiltersClassifierStaleSynthesisAfterOkLiveArrival(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 27, 13, 25, 0, 0, time.UTC)
+
+	validSources := []universalWireSynthesisSource{
+		{
+			ItemID:       "srcitem-current-harbor-flood-a",
+			SourceID:     "rss:current-harbor-a",
+			FetchID:      "fetch-current-harbor-a",
+			Title:        "Harbor crews reopen cargo channel after flood inspections",
+			URL:          "https://example.test/current/harbor-a",
+			CanonicalURL: "https://example.test/current/harbor-a",
+			Language:     "en",
+			Body:         "Port officials said the harbor channel reopened after flood inspections, though cargo vessels still faced delay.",
+			FetchedAt:    now.Add(-8 * time.Minute),
+		},
+		{
+			ItemID:       "srcitem-current-harbor-flood-b",
+			SourceID:     "rss:current-harbor-b",
+			FetchID:      "fetch-current-harbor-b",
+			Title:        "Cargo delays continue while harbor flood checks finish",
+			URL:          "https://example.test/current/harbor-b",
+			CanonicalURL: "https://example.test/current/harbor-b",
+			Language:     "en",
+			Body:         "Shipping agents reported delay around the port while inspectors finished flood safety checks at the harbor.",
+			FetchedAt:    now.Add(-7 * time.Minute),
+		},
+	}
+	validGroups := universalWireDeterministicStorySourceGroups(validSources)
+	if len(validGroups) == 0 {
+		t.Fatalf("valid sources produced no deterministic group")
+	}
+	validDoc, validRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+		ClusterID: validGroups[0].ClusterID,
+		Headline:  "Harbor flood inspections keep cargo delays in focus",
+		Sources:   validSources,
+		Now:       now,
+	})
+	if err != nil {
+		t.Fatalf("synthesize current valid article: %v", err)
+	}
+
+	staleSources := []universalWireSynthesisSource{
+		{
+			ItemID:       "srcitem-stale-drone-training-a",
+			SourceID:     "rss:stale-defense-a",
+			FetchID:      "fetch-stale-defense-a",
+			Title:        "South Korea plans to train entire military as drone warriors",
+			URL:          "https://example.test/stale/drone-a",
+			CanonicalURL: "https://example.test/stale/drone-a",
+			Language:     "en",
+			Body:         "Defense officials described drone instruction for soldiers and commanders across combat units.",
+			FetchedAt:    now.Add(-2 * time.Hour),
+		},
+		{
+			ItemID:       "srcitem-stale-drone-training-b",
+			SourceID:     "rss:stale-defense-b",
+			FetchID:      "fetch-stale-defense-b",
+			Title:        "Military expands drone training program",
+			URL:          "https://example.test/stale/drone-b",
+			CanonicalURL: "https://example.test/stale/drone-b",
+			Language:     "en",
+			Body:         "The training plan covers drone tactics and classroom instruction, not a rail corridor or harbor event.",
+			FetchedAt:    now.Add(-119 * time.Minute),
+		},
+	}
+	if groups := universalWireDeterministicStorySourceGroups(staleSources); len(groups) != 0 {
+		t.Fatalf("stale source fixture unexpectedly produced deterministic groups: %+v", groups)
+	}
+	staleDoc, staleRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+		ClusterID: "sourcecycled-live-harbor-transport-rail-corridor",
+		Headline:  "South Korea plans to train entire military as drone warriors",
+		Sources:   staleSources,
+		Now:       now.Add(-90 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("synthesize stale article: %v", err)
+	}
+	seedUniversalWireEditionFixture(t, handler, validDoc.DocID, staleDoc.DocID)
+	if err := handler.rt.recordUniversalWireLiveArrivalStatus(ctx, universalWireLiveArrivalStatus{
+		SchemaVersion:             objectgraph.UniversalWireLiveArrivalStatusSchemaVersion,
+		BoundaryID:                "cycle-post-classifier-ok",
+		CycleID:                   "cycle-post-classifier-ok",
+		ObservedAt:                now.Format(time.RFC3339Nano),
+		Phase:                     "web_captures_graph_written",
+		Status:                    "ok",
+		SourceItemCount:           562,
+		CaptureCount:              562,
+		SourceEntityCount:         562,
+		SynthesisStatus:           "ok",
+		SynthesisDocID:            validDoc.DocID,
+		SynthesisRevisionID:       validRev.RevisionID,
+		SynthesisClusterID:        validGroups[0].ClusterID,
+		SynthesisSourceCount:      65,
+		SynthesisKnownSourceCount: 392,
+		SynthesisCandidateGroups:  326,
+		SynthesisClusterCount:     3,
+		SynthesisEditionRef:       "texture_edition:wire/rev",
+	}, now); err != nil {
+		t.Fatalf("record ok live-arrival status: %v", err)
+	}
+
+	resp := getUniversalWireStoriesForTest(t, handler)
+	if len(resp.Stories) != 1 {
+		t.Fatalf("stories = %+v, want classifier-stale synthesis filtered after ok live-arrival", resp)
+	}
+	if resp.Stories[0].StoryTextureDoc != validDoc.DocID {
+		t.Fatalf("first story = %+v, want valid current synthesis article", resp.Stories[0])
+	}
+	if staleStory := universalWireStoryWithDocForTest(resp.Stories, staleDoc.DocID); staleStory != nil {
+		t.Fatalf("stories = %+v, stale classifier-invalid synthesis should not be public after ok boundary", resp.Stories)
+	}
+	if resp.Edition == nil ||
+		!slices.Contains(resp.Edition.IncludedDocIDs, staleDoc.DocID) ||
+		!slices.Contains(resp.Edition.IncludedDocIDs, validDoc.DocID) {
+		t.Fatalf("edition = %+v, want stale doc retained in edition metadata for audit", resp.Edition)
+	}
+	storedStaleRev, err := handler.rt.Store().GetRevision(ctx, staleRev.RevisionID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load stale revision for audit: %v", err)
+	}
+	if !strings.Contains(string(storedStaleRev.BodyDoc), "source_ref") ||
+		len(wireArticleVisibleStructuredSourceEntities(storedStaleRev)) != 2 {
+		t.Fatalf("stale revision audit payload lost direct Texture/source_ref evidence: body=%s sources=%s", string(storedStaleRev.BodyDoc), string(storedStaleRev.SourceEntities))
+	}
+}
+
 func TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()

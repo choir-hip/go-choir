@@ -384,6 +384,9 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
+		if universalWireSynthesisStoryStaleUnderCurrentClassifier(rev) {
+			continue
+		}
 		if h.universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx, rev) {
 			continue
 		}
@@ -411,6 +414,34 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		stories[i].Prominence = 100 - i
 	}
 	return stories, edition, nil
+}
+
+func universalWireSynthesisStoryStaleUnderCurrentClassifier(rev types.Revision) bool {
+	if !wireRevisionIsUniversalWireSynthesis(rev) {
+		return false
+	}
+	meta := decodeRevisionMetadata(rev.Metadata)
+	clusterID := firstNonEmpty(
+		metadataString(meta, "universal_wire_story_cluster_id"),
+		metadataString(meta, "source_network_cycle_id"),
+		metadataString(meta, "ingestion_handoff_cycle_id"),
+	)
+	if clusterID == "" {
+		return false
+	}
+	if !strings.HasPrefix(clusterID, "sourcecycled-live-") {
+		return false
+	}
+	sources := universalWireSynthesisSourcesFromTextureRevision(rev)
+	if len(sources) < 2 {
+		return false
+	}
+	for _, group := range universalWireDeterministicStorySourceGroups(sources) {
+		if group.ClusterID == clusterID {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *APIHandler) universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx context.Context, rev types.Revision) bool {

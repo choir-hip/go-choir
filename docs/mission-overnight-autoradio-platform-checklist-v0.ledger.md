@@ -14963,3 +14963,67 @@ and deployed acceptance.
 Next move: implement the successful-cycle stale-public filter repair without
 weakening edition/direct Texture audit reads, run focused and broader runtime
 tests, push/deploy, then replay authenticated live-arrival/stories/Texture proof.
+
+## 2026-06-27 - O4 Stale Re-Entry Repair Local Proof
+
+Move: repair the stale public re-entry discovered after successful
+live-arrival synthesis.
+
+Repair summary:
+
+- `universalWireEditionTextureStories` now excludes a synthesis revision from
+  public stories when `universalWireSynthesisStoryStaleUnderCurrentClassifier`
+  determines that the revision's stored sourcecycled-live cluster id cannot be
+  reproduced from its own cited source entities under the current deterministic
+  classifier.
+- The check is intentionally scoped to `sourcecycled-live-*` synthesis cluster
+  ids and requires at least two reconstructable source entities. This preserves
+  legacy/direct synthesis fixtures and avoids filtering documents that cannot be
+  safely reclassified from revision source evidence.
+- Edition metadata remains unchanged, so stale docs remain discoverable for
+  audit/direct Texture reads.
+- Added
+  `TestHandleUniversalWireStoriesFiltersClassifierStaleSynthesisAfterOkLiveArrival`,
+  covering the deployed shape: successful live-arrival status, a valid current
+  synthesis story, and an older South Korea/drone training synthesis whose
+  stored `sourcecycled-live-harbor-transport-rail-corridor` cluster is no longer
+  produced from its cited sources. The stale article is absent from public
+  stories but retained in edition metadata with source_ref/direct Texture
+  evidence.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesFilters(ClassifierStaleSynthesisAfterOkLiveArrival|StaleSynthesisAfterSkippedLiveArrival)|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestUniversalWireSynthesisSanitizesHelperCopyAndReadsStoryTexture|TestHandleInternalSourcecycledWebCaptures(DoesNotTreatTrainVerbAsRailSignal|UsesBodyConceptsWhenTitlesAreOpaque)|TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 5.807s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 15.987s`.
+- `git diff --check -- internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+
+Conjecture verdict: supported locally for sourcecycled-live stale re-entry
+filtering after successful live-arrival cycles.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI, deploy,
+health identity, and authenticated staging replay complete.
+
+Mutation class: orange behavior repair. Protected surfaces: Universal Wire
+public story candidate filtering, deterministic classifier validity, story cap,
+edition audit metadata, direct Texture readability, and source_ref/source_entity
+preservation.
+
+Rollback path: revert the forthcoming stale re-entry repair commit and this
+evidence entry; stale sourcecycled-live synthesis articles can again re-enter the
+public story list after successful synthesis cycles.
+
+Heresy delta: `repaired` locally for stale public re-entry after successful
+synthesis; not yet repaired at deployed/product tier.
+
+Expected Delta V: 1 if deployed replay shows stale doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` absent from public stories after an
+`ok` live-arrival boundary while direct Texture reads and same-doc updates
+remain intact. Actual Delta V: 0 until deployed proof.
+
+Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
+identity, and replay authenticated live-arrival/stories/Texture proof.
