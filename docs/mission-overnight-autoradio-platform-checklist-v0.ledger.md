@@ -10270,3 +10270,36 @@ supersedes commit `880c3ac5`. Actual Delta V: 0 until verifier verdict.
 
 Open edge: create an independent verifier thread for worker commit
 `880c3ac5021e86395a98551123e0f503f9c1a70e` before any root incorporation.
+
+## 2026-06-27 - O4 Semantic Source Verifier Requested
+
+Conjecture statement: a fresh verifier thread can decide whether worker commit
+`880c3ac5021e86395a98551123e0f503f9c1a70e` supports the branch-local
+source-aware clustering and article-quality synthesis slice.
+
+Verdict: testing. The verifier request has been created but has not yet
+materialized as a readable thread id.
+
+Move:
+
+- Created independent verifier request
+  `O4-semantic-source-clustering-article-quality-slice-verifier` using Codex
+  thread tools against project `/Users/wiz/go-choir`.
+- Target environment: fresh worktree from branch
+  `preserve/o0-autoradio-mission-state-2026-06-26`.
+- Pending worktree handle:
+  `local:dd0dbdad-5135-493c-bf12-794f8aefa21a`.
+- Verifier prompt names the exact worker thread, worker worktree, commit SHA,
+  expected changed files, verification duties, suggested commands, non-claims,
+  verdict vocabulary, and callback target.
+- `list_threads` query for
+  `O4-semantic-source-clustering-article-quality-slice-verifier` returned no
+  materialized verifier thread yet.
+
+Expected Delta V: 1 if the verifier accepts, rejects, blocks, or supersedes
+worker commit `880c3ac5`. Actual Delta V: 0 until verifier verdict.
+
+Open edge: reconnect to pending verifier handle
+`local:dd0dbdad-5135-493c-bf12-794f8aefa21a`; if it accepts, decide root
+incorporation. If it returns `revise_before_continue`, `blocked`, or
+`supersede`, record that verdict and choose the next discriminator.
