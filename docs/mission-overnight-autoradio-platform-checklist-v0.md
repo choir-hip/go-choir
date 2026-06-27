@@ -520,13 +520,14 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 1. Last delta: expected Delta V 1 for the semantic
-article-quality worker/verifier branch-local event-frame slice; actual Delta V
-1 at branch-local tier via verifier thread
-`019f0974-1bde-73b1-8cd3-28b38f447fc1`. Remaining driving conjecture: the full
-News/Universal Wire target still needs deployed product proof of coherent
-semantic/world-model article quality, not just deterministic multi-article
-readability, stale-filter hygiene, and branch-local event-frame state.
+statement. Current value: 1. Last delta: expected Delta V 1 for deployed
+semantic event-frame product proof after incorporating the verified slice;
+actual Delta V 1 at deployed substrate tier. Staging now proves post-deploy
+live-arrival status, `semantic_story.event_frame` DTOs, and Universal Wire
+article open/read-owner behavior for platform Texture articles. Remaining
+driving conjecture: the full News/Universal Wire target still needs
+provider/reconciler-quality semantic synthesis and durable live world-model
+behavior, not just deterministic event-frame article substrate.
 
 budget: Solvency is tight. Use one bounded O4 realism-axis worker and verifier;
 if that does not create a credible route to News settlement, hand off with the
@@ -540,8 +541,8 @@ mutation class, protected surfaces, admissible evidence, rollback path,
 conjecture delta, and heresy delta before editing.
 
 mutation class / protected surfaces: Current move is green/yellow
-orchestration plus independent verifier thread creation. The worker slice under
-review is orange branch-local: it touches Universal Wire sourcecycled
+orchestration plus deployed evidence recording and independent verifier request.
+The landed slice is orange: it touches Universal Wire sourcecycled
 materialization, semantic story cluster state, Texture synthesis revision
 creation/source refs, Wire edition linkage, and authenticated
 `/api/universal-wire` DTO observability. It does not claim changes to
@@ -559,12 +560,13 @@ hygiene and Docs Truth Check if pushed.
 
 heresy delta: `repaired` at deployed/product tier for deterministic
 multi-article readability, source opening/read-owner, scaffold copy removal,
-current/stale semantic DTO observability, same-doc source-arrival visibility,
-and subset-stale public filtering. `discovered` remains for production semantic
-cluster selection, provider/model-quality synthesis, source freshness,
-Qdrant/world-model projection, and the fact that current public articles still
-read as deterministic/formulaic artifacts rather than the owner-stated live
-world model.
+current/stale semantic DTO observability, deployed event-frame DTO/readability
+substrate, same-doc source-arrival visibility, and subset-stale public
+filtering. `discovered` remains for production semantic cluster selection,
+provider/model-quality synthesis, source freshness, Qdrant/world-model
+projection, and the fact that current public articles still read as
+deterministic/formulaic artifacts rather than the owner-stated live world
+model.
 
 position / live conjectures / open edges: O0-O3 are accepted from prior ledger
 evidence. O4 is accepted only for deployed deterministic substrate behavior:
@@ -586,14 +588,26 @@ after focused and broader Universal Wire runtime tests passed locally. It
 persists `event_frame` on `choir.universal_wire_story_cluster`, exposes
 `semantic_story.event_frame` in the public Wire DTO, and derives Texture
 summary/tension copy from that frame while preserving source refs and
-same-article source_added behavior. This does not claim deploy/product
-settlement until CI/deploy/staging acceptance completes.
+same-article source_added behavior. Root head
+`4c7c42a197852aa72afa847eb3473aa3dc93be51` is deployed on staging: CI run
+`28292061672`, Docs Truth Check `28292061688`, FlakeHub publish
+`28292061671`, deploy job `83825912482`, and health deployed identity at
+`2026-06-27T14:34:10Z`. Authenticated staging proof at
+`2026-06-27T14:41:35Z` observed `/api/universal-wire/live-arrival` boundary
+`cycle_05a4d8b2152c125752259ac2`, 547 source items, 546 captures, synthesis
+status `ok`, 12 `universal-wire-edition-texture` stories, 12 semantic stories,
+4 `semantic_story.event_frame` stories, and 3 `source_added` stories. A direct
+plain `/api/texture/documents/{id}` probe 404ed for a platform-owned Wire doc,
+but the intended Universal Wire UI open path at `2026-06-27T14:43:32Z` loaded
+the article with no `Get document failed` toast and issued
+`read_owner=universal-wire-platform` document/revision/stream requests; the
+Texture displayed 6 sources and source-ref article text.
 
-next move: push root incorporation commit `1fd26b67` plus this evidence, monitor
-CI/deploy identity, run authenticated staging proof for event-frame article
-quality and source-update behavior, and request independent deployed verifier
-review. Do not claim full News benchmark settlement without deployed product
-proof and independent verifier acceptance.
+next move: request independent deployed verifier review for the
+`4c7c42a1` event-frame landing and staging proof. Do not claim full News
+benchmark settlement without independent verifier acceptance and an explicit
+boundary that this is deterministic event-frame substrate, not provider-quality
+world-model synthesis.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -610,16 +624,19 @@ formulaic prose are only a substrate for a future semantic live world model.
 
 settlement: not settled. O4 is accepted for deployed deterministic
 multi-article readability, source/open Texture paths, source_ref/source_entities
-carry-forward, same-doc source-arrival visibility, and subset-stale filtering.
-The actual News benchmark remains open until authenticated staging evidence
-shows multilingual live ingestion producing coherent English synthesis Texture
-articles over durable semantic source/world-model objects, with later relevant
-sources updating existing articles. O5 has started through prompt-bar/Texture/Super
-request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
-`blocked`, or `superseded` with remaining V and next assignment explicit.
+carry-forward, event-frame DTO/article substrate, same-doc source-arrival
+visibility, and subset-stale filtering after independent verifier review of the
+latest deployed proof. The actual News benchmark remains open until
+authenticated staging evidence shows multilingual live ingestion producing
+coherent English synthesis Texture articles over durable semantic
+source/world-model objects, with later relevant sources updating existing
+articles at provider/reconciler quality. O5 has started through
+prompt-bar/Texture/Super request evidence; O5-O8 remain open. Exit requires
+`settled`, `open_handoff`, `blocked`, or `superseded` with remaining V and next
+assignment explicit.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Branch-local semantic/world-model article-quality event-frame slice is accepted: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1; root incorporation commit 1fd26b67 applied the runtime slice and passed focused plus broader Universal Wire runtime tests locally. The remaining O4 News benchmark gap is deployed product proof and quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: push root incorporation commit 1fd26b67 plus evidence docs, monitor CI/deploy identity, run authenticated staging proof, then request independent deployed verifier. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Semantic/world-model article-quality event-frame slice is now landed and deployed: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1; root commit 1fd26b67 applied the runtime slice; root head 4c7c42a197852aa72afa847eb3473aa3dc93be51 passed CI run 28292061672, Docs Truth Check 28292061688, FlakeHub publish 28292061671, deploy job 83825912482, and staging health identity at 2026-06-27T14:34:10Z. Authenticated staging proof at 2026-06-27T14:41:35Z observed live-arrival cycle_05a4d8b2152c125752259ac2, 547 source items, 546 captures, synthesis ok, 12 Wire Texture stories, 12 semantic stories, 4 event_frame stories, and 3 source_added stories. UI proof at 2026-06-27T14:43:32Z opened the first Wire Texture through read_owner=universal-wire-platform with no Get document failed toast, 6 sources, and article source-ref text. Next move: request independent deployed verifier review for 4c7c42a1 and the staging packets. The remaining O4 News benchmark gap is quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

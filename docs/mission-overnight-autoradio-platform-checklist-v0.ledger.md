@@ -15658,3 +15658,122 @@ this moves the accepted slice into the landing path.
 Next move: push root incorporation and this evidence to `origin/main`, monitor
 CI/deploy, then run authenticated staging proof for event-frame article quality
 and source-update behavior.
+
+## 2026-06-27 - O4 Semantic Event Frame Deployed Product Proof
+
+Move: complete the behavior-changing landing loop for root head
+`4c7c42a197852aa72afa847eb3473aa3dc93be51` and capture authenticated staging
+proof for the semantic event-frame Universal Wire slice.
+
+Landing receipts:
+
+- Root runtime incorporation commit: `1fd26b67` (`Add Wire semantic event
+  frame`).
+- Root evidence/head commit:
+  `4c7c42a197852aa72afa847eb3473aa3dc93be51` (`Record Wire event frame
+  incorporation`).
+- Pushed to `origin/main`.
+- GitHub Actions:
+  - CI run `28292061672`: success.
+  - Docs Truth Check run `28292061688`: success.
+  - FlakeHub publish run `28292061671`: success.
+  - Deploy job `83825912482`: success.
+- Staging health at `2026-06-27T14:34:10Z` reported `status=ok`,
+  `upstream=ok`, and deployed commit
+  `4c7c42a197852aa72afa847eb3473aa3dc93be51`.
+
+Authenticated staging API proof:
+
+- Proof packet: `/tmp/o4-event-frame-staging-proof-1782571285333.json`
+  (temporary local proof output outside the repo).
+- Observed at: `2026-06-27T14:41:35.121Z`.
+- Authentication path: temporary staging user through the normal public
+  passkey registration flow; no internal/test route and no sourcecycled
+  mutation.
+- `GET /api/universal-wire/live-arrival` returned `status=available` with
+  latest boundary `cycle_05a4d8b2152c125752259ac2`, observed/updated at
+  `2026-06-27T14:37:26.598541718Z`.
+- Live-arrival status reported 547 source items, 546 captures, 546 source
+  entities, 546 captured-from edges, 1 skipped item, `synthesis_status=ok`,
+  synthesis doc `4dc864e4-1192-495f-a77b-9eadcc9b5491`, synthesis revision
+  `6c0d9732-c981-4ca1-9bca-6b2ed848cf78`, cluster
+  `sourcecycled-live-energy-transport-flood-rail-corridor`, 5 synthesis
+  sources, 378 known synthesis sources, 310 candidate groups, and 5 synthesis
+  clusters.
+- `GET /api/universal-wire/stories` returned source
+  `universal-wire-edition-texture`, edition doc
+  `5ac77c23-2642-4b74-b557-87d05c87e79f`, edition revision
+  `b9fdadcb-8409-4c7c-9155-46e2dd49de1d`, 12 stories, 12 semantic stories,
+  4 stories with `semantic_story.event_frame`, 12 stories with source manifests,
+  and 3 `source_added` stories.
+- Representative event-frame story:
+  - doc `33463e29-9a74-40c5-b066-ae159bcc11d6`;
+  - headline `GDELT Event: mdjonline.com`;
+  - semantic story `src_12a0cdd8baf840ce`;
+  - change type `story_created`;
+  - signature `health`, `transport`, `flood`;
+  - source count 6;
+  - event frame lead/current-account/latest-development/continuity-question
+    populated in the authenticated product DTO.
+
+Texture/read-owner proof:
+
+- A deliberate plain read probe to
+  `/api/texture/documents/33463e29-9a74-40c5-b066-ae159bcc11d6` returned 404.
+  This is not the product open path for platform-owned Wire articles.
+- The intended platform read path
+  `/api/texture/documents/33463e29-9a74-40c5-b066-ae159bcc11d6?read_owner=universal-wire-platform`
+  returned 200, owner `universal-wire-platform`, title
+  `GDELT Event: mdjonline.com.texture`, and current revision
+  `539e1a72-c4ea-48a0-9b3c-3314e7ea499d`.
+- The corresponding revisions read with
+  `read_owner=universal-wire-platform` returned 1 revision with `body_doc`
+  present and 6 `source_entities`.
+
+Authenticated staging UI proof:
+
+- Proof packet: `/tmp/o4-event-frame-ui-open-proof-1782571394412.json`
+  (temporary local proof output outside the repo).
+- Observed at: `2026-06-27T14:43:32.132Z`.
+- Authentication path: temporary staging user through the normal public passkey
+  registration flow; no internal/test route and no sourcecycled mutation.
+- Universal Wire UI opened the first story doc
+  `33463e29-9a74-40c5-b066-ae159bcc11d6`.
+- Texture window showed no `Get document failed` toast, did not show the
+  `Start typing the document` placeholder, displayed article text, and showed
+  `Sources 6`.
+- Captured UI network requests included:
+  - `GET /api/texture/documents/33463e29-9a74-40c5-b066-ae159bcc11d6?read_owner=universal-wire-platform`;
+  - `GET /api/texture/documents/33463e29-9a74-40c5-b066-ae159bcc11d6/revisions?limit=10000&read_owner=universal-wire-platform`;
+  - `GET /api/texture/documents/33463e29-9a74-40c5-b066-ae159bcc11d6/stream?read_owner=universal-wire-platform`.
+
+Conjecture delta: deployed evidence supports the narrow claim that the
+event-frame substrate is live in the authenticated product path: live-arrival
+status is observable, event-frame semantic DTOs are present for post-deploy
+Wire stories, platform-owned Texture articles open through the intended
+read-owner path, and native source entities/body_doc survive the read path.
+
+Heresy delta: `repaired` at deployed deterministic event-frame substrate tier.
+`discovered` remains for provider/reconciler-quality synthesis, real semantic
+entity/event reconciliation beyond deterministic concept tokens, Qdrant/world
+model projection, and final News benchmark settlement.
+
+Evidence boundary/non-claims: this proof does not trigger a new sourcecycled
+cycle, does not prove provider/model-quality synthesis, does not prove Qdrant
+projection, does not claim run acceptance, promotion/rollback, publication/export
+outside existing Wire edition helpers, or full News benchmark settlement. The
+public articles are still deterministic and formulaic compared with the
+owner-stated Universal Wire target.
+
+Dirty-path classification: temporary proof packets are outside the repo under
+`/tmp`. Root worktree still contains unrelated pre-existing WIP in
+`skills/parallax/SKILL.md` and
+`docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`;
+the current durable evidence edit is limited to this paradoc and ledger.
+
+Expected Delta V: 1 for deployed product proof if independent deployed verifier
+accepts. Actual Delta V: 1 at deployed substrate tier pending verifier review;
+mission V remains 1 because final News benchmark quality remains open.
+
+Next move: request independent deployed verifier review for commit `4c7c42a1`,
+CI/deploy receipts, and the two authenticated staging proof packets.
