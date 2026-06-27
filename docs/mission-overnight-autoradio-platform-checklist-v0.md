@@ -330,12 +330,12 @@ snapshot ready`, with original link `t.me/Metropoles/407020`. Direct raw
 unauthenticated `/api/universal-wire/stories` still returns HTTP 401 as
 expected. Raw `choir.web_capture` projections remain diagnostic substrate.
 
-Current failure evidence: owner screenshots on 2026-06-26 at about 18:30 ET
-showed that the older deployed Universal Wire product still rendered only one
-article, with headline `Universal Wire live synthesis: Telegram Post from
-Metropoles Telegram` and third-person/meta body copy beginning `Universal Wire
-selected 24 graph-backed source captures...`. Clicking the headline opened a
-Texture window for that title, but the editor was blank and reported `Get
+Current failure / repair evidence: owner screenshots on 2026-06-26 at about
+18:30 ET showed that the older deployed Universal Wire product still rendered
+only one article, with headline `Universal Wire live synthesis: Telegram Post
+from Metropoles Telegram` and third-person/meta body copy beginning `Universal
+Wire selected 24 graph-backed source captures...`. Clicking the headline opened
+a Texture window for that title, but the editor was blank and reported `Get
 document failed (404)`. Root incorporated and deployed branch-local repair
 `01b4b7c8` as pushed commit `d15ef3fb53f26b2c80d3641cc181ff67f500e557`; CI run
 `28270291702` and staging deploy job `83766509767` passed, and public
@@ -345,10 +345,27 @@ that deploy showed the headline/body copy repair live (`Multiple reports
 converge on Telegram Post from TASS Telegram`, article-facing body copy), but
 clicking the headline still opened a blank Texture window with `Get document
 failed (404)`. The owner then reported that all Texture documents fail to load,
-which broadens the suspected problem from a Universal Wire story-link bug to a
-deployed Texture document-read regression. Existing frontend tests mock the
-Texture document API and therefore do not prove this deployed authenticated
-Texture read path.
+which broadened the suspected problem from a Universal Wire story-link bug to a
+deployed Texture document-read regression.
+
+Root then documented the regression first (`e7ce51eb`), repaired the frontend
+read-owner leak (`3ea24284`), repaired Universal Wire platform article
+readiness/filtering (`378ab05b`), and repaired the staging direct-platformd
+Texture sync path (`d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c`). CI run
+`28271956295` passed, staging deploy job `83771360465` passed, and public
+health reports proxy and sandbox deployed commit
+`d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c`, deployed at
+`2026-06-27T00:03:32Z`. Authenticated API proof after `3ea24284` showed
+ordinary Texture reads repaired (`GET /api/texture/documents/{ordinary_doc}`
+returned 200). Authenticated API proof after `378ab05b` showed Universal Wire
+correctly stopped advertising unreadable stories (`story_count=0`) instead of
+rendering headline links that 404. Final authenticated replay after `d4bd1c65`
+is still missing: the saved Chrome cookie had expired, macOS keychain access
+hung, and the Chrome extension reported that another extension UI was blocking
+control of the logged-in tab; a clean automation tab was signed out. Therefore
+the state may claim deployed build identity and the intended direct-sync repair,
+but not final product acceptance that the Universal Wire headline opens a
+readable Texture article.
 
 Acceptance: on `https://choir.news`, authenticated Universal Wire returns and
 renders non-empty English synthesis Texture articles from multilingual ingested
@@ -473,10 +490,11 @@ source surface and Web Lens is explicit live/original inspection. Domain ramp:
 checkpoint -> branch tests -> focused local proof -> CI/deploy -> staging
 product acceptance.
 
-variant (ranking function) V: 73 total obligations. Current value: 29 after
-locally repairing the deployed Texture read regression root cause and the
-remaining Universal Wire headline-to-Texture publication gap, with CI/deploy and
-authenticated staging QA still pending for the new head. The deployed
+variant (ranking function) V: 73 total obligations. Current value: 28 after
+deploying the Texture read-owner repair, Universal Wire platform-readiness
+repair, and direct-platformd Texture sync repair through CI/deploy/health
+identity, but before final authenticated product replay of Universal Wire
+headline-to-Texture readability. The deployed
 `d15ef3fb53f26b2c80d3641cc181ff67f500e557` article-surface repair improved copy
 but still returned 404 on Texture document load, apparently across Texture
 documents rather than only Universal Wire headlines. O4 was reopened by +5 after owner
@@ -493,11 +511,15 @@ that tainted ordinary Texture reads, and a Universal Wire synthesis path that
 advertised story Texture doc ids before platformd had a readable synced copy.
 The follow-up direct-platformd refinement syncs Texture document/revision rows
 when the runtime publishes straight to `RUNTIME_PLATFORMD_URL`, matching the
-proxy-mediated publish path's sync behavior.
-Remaining O4 variant is deployed Texture document readability,
-headline-to-Texture readability after platform publish/sync, cross-source/world-model
-clustering, article-quality synthesis, and authenticated product evidence
-that existing synthesis articles update when later relevant information arrives.
+proxy-mediated publish path's sync behavior. CI run `28271956295`, deploy job
+`83771360465`, and health identity at
+`d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c` discharge the landing/deploy
+identity sub-obligation. Remaining O4 variant is final authenticated product
+proof that ordinary Texture document reads still load and Universal Wire
+headline-to-Texture readability succeeds after direct sync, plus
+cross-source/world-model clustering, article-quality synthesis, and
+authenticated product evidence that existing synthesis articles update when
+later relevant information arrives.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -513,8 +535,9 @@ protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing.
 
 mutation class / protected surfaces: Current move is green documentation after
-orange runtime incorporation. The next O4 repair is orange/yellow if it changes
-runtime, frontend, API behavior, or tests. Authorized protected surfaces are
+orange/frontend/runtime repair deployment. The next O4 move is product proof or
+Problem Documentation First if replay still fails; it becomes orange/yellow only
+if it changes runtime, frontend, API behavior, or tests. Authorized protected surfaces are
 Universal Wire story DTOs, runtime synthesis/article materialization, existing
 article revision/upsert semantics, Texture revisions through existing helpers,
 source entity/source_ref projection, Wire edition linkage, and the read-only
@@ -536,11 +559,17 @@ articles, read-time materialization/backfill for existing sourcecycled captures,
 the staging platformd filter that hid runtime-owned synthesis stories,
 branch-local same-article/world-model identity over time for the deterministic
 `sourcecycled-live` cluster, and branch-local headline-to-Texture readability
-plus deterministic article-facing copy for the same slice.
-`discovered` now includes that deployed product replay of commit `d15ef3fb`
-still returns `Get document failed (404)` when opening the repaired Universal
-Wire headline, and owner observation broadens this to "all textures do not load"
-on staging. Treat this as a Texture read-path regression until proven narrower.
+plus deterministic article-facing copy for the same slice. `repaired` is also
+claimed at code/deploy-identity scope for the frontend read-owner leak and the
+runtime/proxy/direct-platformd Texture sync readiness paths, with final product
+acceptance still unproven.
+`discovered` includes that deployed product replay of commit `d15ef3fb`
+returned `Get document failed (404)` when opening the repaired Universal Wire
+headline, and owner observation broadened this to "all textures do not load" on
+staging. Authenticated API proof after `3ea24284` narrowed that broad failure by
+showing ordinary Texture document reads returning 200, but final post-`d4bd1c65`
+Universal Wire headline replay is still missing because Chrome automation was
+blocked by extension state and the clean automation tab was signed out.
 `discovered` remains for semantic production cluster selection, provider
 freshness, live world-model maintenance, and update-existing-article semantics.
 
@@ -571,21 +600,31 @@ confirmed public health identity for proxy and sandbox at `d15ef3fb`. Deployed
 authenticated Chrome/Computer Use QA showed the reader-facing copy repair live,
 but headline click still opens blank Texture with `Get document failed (404)`.
 The owner subsequently reported that all Texture documents now fail to load, so
-the active blocker is no longer just O4 article-surface routing; it is the
-deployed Texture document-read path. O4 remains open because deployed readable
-Texture article proof failed, and semantic multi-story clustering/provider-quality
+root documented the problem first (`e7ce51eb`) before code repair. Root then
+landed and deployed `3ea24284` to isolate Universal Wire read owner state,
+`378ab05b` to publish/filter Universal Wire synthesis articles only after
+platform-readable publication, and `d4bd1c65` to sync Texture document/revision
+rows when staging publishes directly to platformd. CI run `28271956295`, deploy
+job `83771360465`, and health identity at `d4bd1c65` passed. Authenticated API
+proof after `3ea24284` showed ordinary Texture reads returning 200; proof after
+`378ab05b` showed Universal Wire no longer advertised unreadable stories.
+Post-`d4bd1c65` final authenticated product replay did not complete because the
+saved browser cookie expired, keychain extraction hung, Chrome extension control
+was blocked by another extension UI on the logged-in tab, and a clean automation
+tab was signed out. O4 remains open because final deployed readable Texture
+article proof is missing, and semantic multi-story clustering/provider-quality
 synthesis are still future realism axes. O5 product path has started through
-prompt bar/Texture/Super request, but O5 acceptance cannot be trusted while
-Texture document reads fail.
+prompt bar/Texture/Super request, but O5 acceptance should wait for a clean
+Texture read replay or an explicit owner decision to carry O4 as an open edge.
 
-next move: diagnose and repair the deployed Texture document-read regression.
-The first code-changing repair must name whether the root cause is the latest
-Universal Wire read-owner changes, the deployed cross-owner Texture API, the
-frontend document-open path, or a broader auth/computer routing issue. Do not
-claim O4 deployed article-surface acceptance until authenticated staging opens a
-real Texture document without 404. Expected Delta V: 2 if global Texture reads
-are repaired on staging and Universal Wire headline-to-Texture readability is
-accepted; no decrease for article-copy-only proof.
+next move: run a clean authenticated Chrome product replay on `https://choir.news`
+after the extension UI blocker is dismissed: prove an ordinary Texture document
+loads without 404 and the Universal Wire headline opens a readable platform-owned
+Texture article after `d4bd1c65`. If replay passes, create a thread-native
+verifier to review the deployed evidence boundary before decreasing O4 again.
+If replay fails, perform Problem Documentation First for the new staging failure
+before code repair. Expected Delta V: 2 for final authenticated proof plus
+verifier acceptance; no decrease for health/API-only proof.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -607,8 +646,12 @@ synthesis rather than status text about Universal Wire. Worker commit
 `4c467cff`, accepted by verifier thread
 `019f0628-819d-72a0-9328-ab461101a408` and incorporated as `01b4b7c8`, repairs
 that axis locally, but deployed replay at `d15ef3fb` only repaired copy; the
-Texture document read still 404s and may affect all Texture documents. The key
-O5 learning is that prompt bar and Texture
+Texture document read still 404ed and may affect all Texture documents. The
+subsequent root repair sequence shows a second O4 learning: platform-owned
+Texture articles have two publication paths, proxy-mediated and direct
+platformd, and both must sync the document/revision rows consumed by the Texture
+reader before `/api/universal-wire/stories` advertises the story id. The key O5
+learning is that prompt bar and Texture
 materialization work, but Texture-to-Super acceptance still needs authenticated
 staging replay.
 
@@ -617,22 +660,24 @@ capture-projection substrate scope, deployed diagnostic-boundary repair scope,
 verified/deployed first synthesis-route-slice scope, branch-local
 world-model/same-article identity scope, and branch-local article-surface
 readability/copy-repair scope. Deployed `d15ef3fb` proves only the copy half of
-that last scope; it does not prove readable Texture article loading. The actual
-product benchmark remains open until deployed Texture documents load without
-404, the Universal Wire headline opens the readable Texture article, article
-copy is not platform meta-copy, multilingual live ingestion produces/upserts
-English synthesis Texture articles, and authenticated product evidence shows the
-world model/existing articles update. O5 has started through product
+that last scope; deployed `d4bd1c65` proves the repair has passed CI/deploy and
+health identity, but still lacks final authenticated product replay that the
+headline opens a readable Texture article. The actual product benchmark remains
+open until deployed Texture documents load without 404, the Universal Wire
+headline opens the readable Texture article, article copy is not platform
+meta-copy, multilingual live ingestion produces/upserts English synthesis
+Texture articles, and authenticated product evidence shows the world
+model/existing articles update. O5 has started through product
 prompt-bar/Texture/Super-request evidence. The first O5 handoff repair is landed
 and deployed but not product-accepted in this pass. This mission remains
-`working` because deployed Texture document reads are currently blocked, O4
-deployed article-surface repair is incomplete, broader O4 realism axes, O5
-package/blocker/verifier obligations, and O6-O8 remain open. Exit requires
+`working` because O4 deployed article-surface replay is incomplete, broader O4
+realism axes, O5 package/blocker/verifier obligations, and O6-O8 remain open.
+Exit requires
 `settled`, `open_handoff`, `blocked`, or `superseded` with remaining V and next
 assignment explicit.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=30. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. Branch-local commit 8121b4d4ca835d1c334e18144296683098506f59 incorporates verifier-accepted worker commit 1e3e72bed659c7992aa09d4bfd6fcd3a84176d39, proving durable `sourcecycled-live` story-cluster identity and same-article revision when a later relevant source arrives. Owner screenshots on 2026-06-26 revealed that the older deployed product still showed one deterministic meta-copy article and headline click opened blank Texture with `Get document failed (404)`. Verifier thread 019f0628-819d-72a0-9328-ab461101a408 accepted worker commit 4c467cffba108b1eae3ef7e72fd9893539b3dc92, incorporated as root commit 01b4b7c826e881e24b7f63e745f96a0bfbf365e1 and deployed as d15ef3fb53f26b2c80d3641cc181ff67f500e557. Deployed QA at d15ef3fb showed the reader-facing article copy repair live, but headline click still opens blank Texture with `Get document failed (404)`, and the owner reports all Texture documents fail to load. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles, and the current deployed blocker is the authenticated Texture document-read path itself. Next move: diagnose and repair the deployed Texture read regression before any further O4 acceptance claim; then push, monitor CI/deploy, verify choir.news health/build identity, and run authenticated Chrome product proof for both ordinary Texture document loading and Universal Wire headline-to-Texture readability. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=28. O4 News/Universal Wire has a deployed, authenticated narrow slice at commit a2a5a74910be1c189cd9d9f090695169bf729561: one English synthesis Texture article renders in Universal Wire with native source_ref citations and Source Viewer/reader opening. Branch-local commit 8121b4d4ca835d1c334e18144296683098506f59 incorporates verifier-accepted worker commit 1e3e72bed659c7992aa09d4bfd6fcd3a84176d39, proving durable `sourcecycled-live` story-cluster identity and same-article revision when a later relevant source arrives. Owner screenshots on 2026-06-26 revealed one deterministic meta-copy article and headline click opening blank Texture with `Get document failed (404)`. Root documented that deployed Texture read regression first (`e7ce51eb`), then deployed `3ea24284` for frontend read-owner isolation, `378ab05b` for Universal Wire platform article readiness/filtering, and `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c` for direct-platformd Texture document/revision sync. CI run `28271956295`, deploy job `83771360465`, and health identity at `d4bd1c65` passed. Authenticated API proof after `3ea24284` showed ordinary Texture reads returning 200; proof after `378ab05b` showed Universal Wire no longer advertised unreadable stories. Final authenticated replay after `d4bd1c65` is still missing because Chrome automation was blocked by extension state and a clean automation tab was signed out. O4 remains open because the real product target is multilingual ingestion -> graph/Texture processing -> English synthesis Texture articles -> live world model -> updates to existing articles. Next move: get a clean authenticated Chrome replay on https://choir.news proving ordinary Texture document loading and Universal Wire headline-to-Texture readability after `d4bd1c65`; if it passes, create a thread-native verifier for the deployed evidence boundary; if it fails, perform Problem Documentation First before code repair. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

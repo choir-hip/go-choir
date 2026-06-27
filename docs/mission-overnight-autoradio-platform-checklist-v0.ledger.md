@@ -8448,3 +8448,68 @@ Actual Delta V: +1 local. V is now 29. Next move: commit, push to `origin/main`,
 monitor CI and Node B deploy, verify health identity, remove the temporary auth
 header file, then run deployed authenticated product proof for ordinary Texture
 document loading and Universal Wire headline-to-Texture readability.
+
+## 2026-06-27 - O4 Direct Platformd Texture Sync Deployed, Product Replay Still Open
+
+Claim: the O4 Texture-read regression repair sequence is deployed through the
+latest direct-platformd sync commit, but final authenticated Universal Wire
+headline-to-Texture product acceptance remains unproven.
+
+Move: update Parallax State after the landing loop for
+`d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c` and record the proof boundary before
+requesting any verifier or O4 decrease beyond deployment identity.
+
+Evidence:
+
+- Root pushed `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c` to `origin/main`.
+- GitHub Actions run `28271956295` completed successfully for head SHA
+  `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c`.
+- Staging deploy job `83771360465` completed successfully.
+- Public `https://choir.news/health` reports proxy and sandbox
+  `deployed_commit`/`commit` at
+  `d4bd1c65fcddaa459280bcd73ca752d1dfa1f58c`, deployed at
+  `2026-06-27T00:03:32Z`.
+- Prior authenticated API proof after `3ea24284` showed ordinary Texture reads
+  returning 200, narrowing the owner's broad "all Textures" symptom to a
+  repaired read-owner leak rather than an active global Texture outage at that
+  point.
+- Prior authenticated API proof after `378ab05b` showed Universal Wire returned
+  `story_count=0` instead of advertising unreadable stories, narrowing the
+  remaining gap to staging's direct `RUNTIME_PLATFORMD_URL` publication path.
+- Post-`d4bd1c65` authenticated replay did not complete: the saved Chrome cookie
+  had expired; macOS keychain extraction hung; Chrome extension control of the
+  logged-in Choir tab was blocked by another extension UI; and a clean
+  automation tab was signed out.
+- Temporary cookie header files were removed. `git status --short --ignored`
+  shows no tracked or untracked repo changes beyond this docs pass; ignored
+  local harness artifacts remain.
+- `git diff --check`: passed.
+- `scripts/doccheck --report /tmp/choir-parallax-o4-d4bd-doccheck-report.md
+  --json /tmp/choir-parallax-o4-d4bd-doccheck.json`: passed report-only,
+  scanning 268 docs with the existing warning baseline.
+
+Actual Delta V: 1. V is now 28. The deployment identity sub-obligation is
+discharged, but O4 article-surface product acceptance is not. The next pass must
+obtain a clean authenticated Chrome replay on `https://choir.news` proving both
+ordinary Texture document loading and Universal Wire headline-to-Texture
+readability after `d4bd1c65`; if it passes, create a thread-native verifier for
+the deployed evidence boundary. If it fails, use Problem Documentation First
+before any further code repair.
+
+Evidence boundary/non-claims: no claim of final authenticated product
+acceptance, semantic multilingual clustering, provider-quality synthesis, live
+world-model maintenance, update-existing-article product proof, Qdrant,
+promotion/rollback, run acceptance, O5 settlement, or O6-O8 progress.
+
+Mutation class / protected surfaces: this pass is green documentation. It
+records prior orange/frontend/runtime deployment touching Universal Wire story
+readiness, platform publish/sync behavior, platform Texture read-owner handling,
+and frontend read-owner scoping. No new runtime surfaces were changed.
+
+Rollback path: docs rollback is to revert this docs update. Runtime rollback for
+the deployed repairs is to revert `d4bd1c65`, `378ab05b`, and/or `3ea24284`
+individually depending on which deployed replay regresses.
+
+Heresy delta: `repaired` at code/deploy-identity scope for the read-owner leak
+and direct-platformd sync gap; `discovered` remains for missing final
+authenticated product replay and the broader O4 product target.
