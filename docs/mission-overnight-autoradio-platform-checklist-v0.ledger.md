@@ -8617,3 +8617,36 @@ staging/product acceptance, or any runtime repair.
 Next move: monitor the pending worktree/thread until a thread id or final worker
 verdict is available; then create an independent verifier thread before any
 incorporation.
+
+## 2026-06-27 - O4 Zero-Article Worker Thread Materialized
+
+Claim: the previously pending O4 zero-article worker now has a concrete thread
+and worktree handle, so orchestration can reconnect it with thread tools instead
+of relying on the pending worktree id alone.
+
+Move: used `list_threads` and `read_thread` to find and inspect the active
+worker.
+
+Evidence:
+
+- Worker thread:
+  `019f0679-3c97-7860-8765-09e839cf165d` (`Fix Universal Wire article sync`).
+- Worker worktree: `/Users/wiz/.codex/worktrees/1c45/go-choir`.
+- The worker is active and has not yet returned `ready_for_verifier`.
+- Its current investigation is within the assigned boundary: Universal Wire
+  filtered-edition/readiness behavior after direct `RUNTIME_PLATFORMD_URL`,
+  while preserving raw `choir.web_capture` diagnostic-only semantics and
+  requiring real sourcecycled/source provenance for synthesis eligibility.
+
+Actual Delta V: 0. This is an observer/recovery update only; no worker repair,
+verifier acceptance, incorporation, deployment, or product proof exists yet. V
+remains 28.
+
+Evidence boundary/non-claims: this entry records thread-tool reconnection and
+current worker status. It does not validate the worker's in-progress hypothesis
+or edits.
+
+Next move: wait for thread `019f0679-3c97-7860-8765-09e839cf165d` to finish. If
+it returns `ready_for_verifier`, create an independent verifier thread over its
+reported commit and worktree before incorporation. If it returns blocked, record
+the blocker in Parallax State before any alternate repair.
