@@ -156,13 +156,13 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 	engine = nil
 	t.Cleanup(func() { engine = nil })
 
-	runCycle(context.Background(), registry, store)
+	runCycle(context.Background(), registry, store, "")
 
 	graphStore, err := objectgraph.NewSQLiteStore(graphPath)
 	if err != nil {
 		t.Fatalf("open objectgraph store: %v", err)
 	}
-	graph := objectgraph.NewService(objectgraph.Config{SQLite: graphStore})
+	graph := objectgraph.NewService(objectgraph.Config{Durable: graphStore})
 	defer graph.Close()
 	notTombstoned := false
 	captures, err := graph.ListObjects(context.Background(), objectgraph.ListFilter{
@@ -202,6 +202,27 @@ func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
 		SupervisionInterval: time.Hour,
 	}, runtimeStore, events.NewEventBus(), runtimepkg.NewStubProvider(0))
 	handler := runtimepkg.NewAPIHandler(rt)
+	// Project the same items into the runtime's Dolt-backed objectgraph so
+	// the Universal Wire diagnostic substrate reports the capture. The
+	// sourcecycled local SQLite path (tested above) and the runtime Dolt
+	// path are separate stores after Mission 3a; the cycle wrote to the
+	// local SQLite store, so we mirror the items into the runtime here.
+	rtGraph := rt.ObjectGraph()
+	if rtGraph == nil {
+		t.Fatal("runtime objectgraph unavailable")
+	}
+	// Re-fetch items from the test feed and project into the runtime graph.
+	// The cycle already deduped against its own store, so we poll a fresh
+	// engine to get the raw items.
+	freshEngine := cycle.NewEngine(registry)
+	freshPoll := freshEngine.PollAll(context.Background())
+	if _, err := cycle.WriteWebCaptureGraphObjects(context.Background(), rtGraph, freshPoll.Items, cycle.WebCaptureGraphProjectionConfig{
+		OwnerID:    "universal-wire-platform",
+		ComputerID: "computer-universal-wire-platform",
+		Now:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("project items into runtime objectgraph: %v", err)
+	}
 	api := server.NewServer("sourcecycled-wire-proof", "0")
 	runtimepkg.RegisterRoutes(api, handler)
 	req := httptest.NewRequest(http.MethodGet, "/api/universal-wire/stories", nil)
@@ -377,7 +398,7 @@ func TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph(t *testing.T) {
 	engine = nil
 	t.Cleanup(func() { engine = nil })
 
-	runCycle(context.Background(), registry, store)
+	runCycle(context.Background(), registry, store, "")
 	captures := listTestWebCaptures(t, graphPath)
 	if len(captures) != 1 {
 		t.Fatalf("captures after empty-cycle backfill = %d, want 1: %+v", len(captures), captures)
@@ -391,7 +412,7 @@ func TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph(t *testing.T) {
 		t.Fatalf("backfilled capture metadata/body = %+v body=%q", meta, captures[0].Body)
 	}
 
-	runCycle(context.Background(), registry, store)
+	runCycle(context.Background(), registry, store, "")
 	captures = listTestWebCaptures(t, graphPath)
 	if len(captures) != 1 {
 		t.Fatalf("captures after second empty cycle = %d, want existing graph to skip backfill: %+v", len(captures), captures)
@@ -447,7 +468,7 @@ func listTestWebCaptures(t *testing.T, graphPath string) []objectgraph.Object {
 	if err != nil {
 		t.Fatalf("open objectgraph store: %v", err)
 	}
-	graph := objectgraph.NewService(objectgraph.Config{SQLite: graphStore})
+	graph := objectgraph.NewService(objectgraph.Config{Durable: graphStore})
 	defer graph.Close()
 	notTombstoned := false
 	captures, err := graph.ListObjects(context.Background(), objectgraph.ListFilter{
