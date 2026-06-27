@@ -1,8 +1,18 @@
-# Binaries
+# Binaries (compiled at repo root by `go build ./cmd/<name>`)
 /bin/
 *.exe
+/auth
+/desktop
+/doccheck
+/gateway
+/maild
+/maildctl
+/platformd
 /proxy
 /sandbox
+/sourcecycled
+/vmctl
+/zot
 
 # Build
 /dist/
@@ -46,7 +56,6 @@ vmctl.log
 
 # Test results
 test-results/
-sourcecycled
 specs/states/
 
 # Generated docs truth reports
