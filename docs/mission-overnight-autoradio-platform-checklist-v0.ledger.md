@@ -14011,3 +14011,92 @@ Expected Delta V: 0 until deployed oracle replay. Actual Delta V: 0. V remains
 Next move: commit this runtime/evidence repair, push to `origin main`, monitor
 CI/deploy, verify `choir.news` health identity, and rerun authenticated
 live-arrival plus stories proof against staging.
+
+## 2026-06-27 - O4 Live Diagnostics Deployed And Hidden Article Edge Found
+
+Move: complete the landing loop for the live synthesis diagnostics repair and
+use the improved oracle to observe the next boundary.
+
+Pushed head: `336685a082ff31bdba1c89ddfbd9636e6bb770b8`.
+
+Included commits:
+
+- `e796124f Document O4 live synthesis skip diagnostic gap`
+- `336685a0 Expose Wire live synthesis diagnostics`
+
+CI/deploy evidence:
+
+- CI run `28288015026` passed.
+- Deploy job `83815434234` passed.
+- Docs Truth Check run `28288015027` passed.
+- FlakeHub run `28288015024` passed.
+- Staging health reported proxy and sandbox deployed commit
+  `336685a082ff31bdba1c89ddfbd9636e6bb770b8`, deployed at
+  `2026-06-27T11:40:07Z`, with proxy `status: ok`, upstream `ok`, and vmctl
+  routing/status enabled/ok.
+
+Authenticated deployed proof:
+
+- Temporary user for final read: `qa-live-final-1782561297@example.com`.
+- `/auth/session`: `200`, `authenticated: true`.
+- Authenticated `/api/universal-wire/live-arrival`: `200`,
+  `status: available`.
+- Post-deploy boundary:
+  - `boundary_id`: `cycle_490a914358c36f1b5a27e1e5`
+  - `observed_at`: `2026-06-27T11:52:35.826378314Z`
+  - `source_item_count`: 724
+  - `capture_count`: 724
+  - `source_entity_count`: 724
+  - `captured_from_edges`: 724
+  - `skipped_item_count`: 0
+  - `synthesis_status`: `ok`
+  - `synthesis_doc_id`: `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`
+  - `synthesis_revision_id`: `60ccdcb4-322d-4c31-b7f9-d12d026413c9`
+  - `synthesis_cluster_id`: `sourcecycled-live-harbor-transport-rail-corridor`
+  - `synthesis_source_count`: 7
+  - `synthesis_known_source_count`: 15
+  - `synthesis_candidate_groups`: 6
+  - `synthesis_cluster_count`: 1
+  - `synthesis_refreshed_groups`: 1
+- Direct Texture read for doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` with
+  `read_owner=universal-wire-platform`: `200`.
+- Direct Texture revision read for
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9` with
+  `read_owner=universal-wire-platform`: `200`, with 7 source entities and
+  `body_doc` containing native `source_ref` citations.
+- Authenticated `/api/universal-wire/stories`: `200`, source
+  `universal-wire-edition-texture`, 12 stories. The edition response lists 18
+  included doc ids and includes the synthesized doc, but neither the default
+  stories response nor `/api/universal-wire/stories?limit=30` returned a story
+  for `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`.
+
+Conjecture verdict: the diagnostics repair is deployed and supported. It
+proved that live sourcecycled synthesis can create a new cited Texture article
+on staging. It also discovered a new product read edge: the public stories
+feed can hide newly appended live synthesis docs behind older edition
+transclusions.
+
+Code inspection: `HandleUniversalWireStories` calls
+`universalWireEditionTextureStories(..., 12)` and that function iterates
+edition transclusions in stored order, stopping once 12 publishable stories
+are collected. A live article appended after the first 12 included docs can be
+directly readable and edition-linked but absent from the product feed.
+
+Mutation class: green documentation/evidence for this checkpoint.
+
+Protected surfaces touched: none in this checkpoint. The next repair will
+touch Universal Wire public story read ordering/limit semantics.
+
+Rollback path: revert this docs checkpoint; no runtime state changes were made.
+
+Heresy delta: `discovered`. Live synthesis can now succeed, but story read
+ordering hides the fresh article from the default product feed.
+
+Expected Delta V: 0 for documentation only, plus observer evidence that changes
+the next repair. Actual Delta V: 0. V remains 1.
+
+Next move: repair `universalWireEditionTextureStories`/caller semantics so the
+public Wire feed surfaces newest edition Texture articles before older
+transclusions, preserving edition inclusion metadata and source/open behavior;
+then rerun focused tests, push, CI/deploy, health identity, and authenticated
+staging proof.

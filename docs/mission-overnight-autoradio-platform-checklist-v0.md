@@ -874,6 +874,23 @@ oracle reports no deterministic groups on deployed data, the next behavior
 repair is grouping extraction/semantic clustering, not route or Texture read
 repair.
 
+After deployment of the diagnostics repair, a post-deploy sourcecycled cycle
+`cycle_490a914358c36f1b5a27e1e5` at `2026-06-27T11:52:35Z` proved the oracle
+repair and changed the remaining edge. The live status now reports
+`synthesis_status: ok`, `synthesis_doc_id`
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`, revision
+`60ccdcb4-322d-4c31-b7f9-d12d026413c9`, 7 synthesized sources, 15 known-concept
+sources, 6 candidate groups, 1 synthesized cluster, and 1 refreshed group. The
+new Texture doc/revision is directly readable with 7 source entities and native
+`source_ref` body_doc citations. However `/api/universal-wire/stories` still
+returns only 12 stories and does not include that synthesized doc even when
+called with `?limit=30`, while the edition lists the doc among 18 included
+documents. Code inspection shows the route hard-codes a 12-story read and
+iterates edition transclusions in stored order, so newly appended live articles
+can be linked into the edition but hidden behind older docs. Next move:
+document/repair story ordering/limit semantics so newest live synthesized
+Texture articles surface in Universal Wire.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -910,5 +927,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, and authenticated product users can read the platform live-arrival oracle at /api/universal-wire/live-arrival. Latest landed behavior head daeff1ced630210b5ec7b8c943a7e7b2215b19e1 passed CI run 28287504060, deploy job 83814144276, health identity, and authenticated staging proof for the oracle route repair. The remaining C6 edge is not route access; it is live synthesis/update realism. Product resample with qa-live-skip-1782559728@example.com at 2026-06-27T11:29:16Z observed boundary cycle_585b664dfe90c813c24e1ac7 with 585 source items, 585 captures/source entities, 768 synthesis sources, synthesis_status skipped, and the stale skip reason "fewer than two eligible graph-backed source captures." Problem Documentation First checkpoint e796124f recorded this. Local runtime repair adds additive synthesis diagnostics/precise skip reasons for /api/universal-wire/live-arrival and passes focused plus broader Universal Wire runtime selectors; next move is commit/push, CI/deploy, health identity, and authenticated staging proof. Use the improved oracle to decide whether deployed data has no deterministic groups, no known concepts, all-current groups, or another classifier boundary. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, and authenticated product users can read the platform live-arrival oracle at /api/universal-wire/live-arrival. Latest deployed diagnostic repair head 336685a082ff31bdba1c89ddfbd9636e6bb770b8 passed CI run 28288015026, deploy job 83815434234, health identity, and authenticated staging proof. Post-deploy boundary cycle_490a914358c36f1b5a27e1e5 showed synthesis_status ok with synthesized doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c, revision 60ccdcb4-322d-4c31-b7f9-d12d026413c9, 7 sources, 15 known-concept sources, 6 candidate groups, 1 synthesized cluster, and 1 refreshed group; the Texture doc/revision is directly readable with 7 source entities and native source_ref body_doc citations. New discovered edge: /api/universal-wire/stories still returns 12 older stories and does not include the synthesized doc even with ?limit=30, while the edition includes 18 docs. Code inspection shows the route hard-codes 12 and walks edition transclusions in stored order, hiding newly appended live articles behind older docs. Next move: Problem Documentation First is recorded; repair stories ordering/limit semantics so newest live synthesized Texture articles surface, then push/CI/deploy and rerun authenticated staging proof. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
