@@ -1039,6 +1039,20 @@ supported at staging; the remaining Universal Wire realism gap is now empty
 current story production because deterministic clustering finds no valid
 multi-source story groups in the live sourcecycled graph.
 
+Local current-story-production repair addresses a structural extraction miss:
+previously, a source with an opaque title contributed no concepts even when its
+reader/body text contained clear story concepts. `universalWireStoryConceptSet`
+now lets body concepts seed a story when the title has no topic, while preserving
+title-topic constraints when a title is informative. A small negation guard
+prevents opaque-title bodies that explicitly say "no relation to" / "unrelated
+to" a topic from becoming false positives. Focused proof covers two opaque-title
+rail/inspection sources forming one article from body concepts, while an
+unrelated opaque-title culture item is excluded; the noisy deployed-shaped
+split/update tests and broader Universal Wire selector still pass. Next move:
+commit, push, monitor CI/deploy, verify health identity, and replay
+authenticated staging proof to see whether the live sourcecycled graph now
+produces at least one valid public story.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

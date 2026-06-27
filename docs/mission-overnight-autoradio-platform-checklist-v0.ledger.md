@@ -14718,3 +14718,68 @@ Next move: start the next Parallax descent on current story production:
 instrument or repair the deterministic/semantic clustering layer so the live
 sourcecycled graph yields valid multi-source English Texture articles, then
 prove those articles through live-arrival, stories, and direct Texture reads.
+
+## 2026-06-27 - O4 Body-Concept Story Production Local Proof
+
+Move: repair the current-story-production edge where live-arrival reported
+hundreds of synthesis sources but almost no known story concepts. Code
+inspection showed `universalWireStoryConceptSet` ignored body concepts entirely
+when the source title had no known concept.
+
+Repair summary:
+
+- `universalWireStoryConceptSet` no longer returns early when title concepts are
+  empty.
+- If the title has no known topic, body concepts may seed the source's topic
+  and signal concepts.
+- If the title already has a known topic, the existing title-topic constraint is
+  preserved so unrelated body topics do not broaden the source.
+- Opaque-title body fallback is skipped when body text explicitly negates
+  relevance with phrases such as `no relation to`, `not related to`, or
+  `unrelated to`.
+- Added
+  `TestHandleInternalSourcecycledWebCapturesUsesBodyConceptsWhenTitlesAreOpaque`,
+  proving two opaque-title sources with rail/inspection concepts in reader text
+  synthesize one article, while an unrelated opaque-title item is not cited or
+  included.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/sourcecycled_web_captures.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(UsesBodyConceptsWhenTitlesAreOpaque|DoesNotTreatTrainVerbAsRailSignal|TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated)|TestHandleUniversalWireStoriesFiltersStaleSynthesisAfterSkippedLiveArrival' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 5.134s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 15.778s`.
+- `git diff --check -- internal/runtime/sourcecycled_web_captures.go internal/runtime/universal_wire_test.go`
+  passed.
+- Nix emitted a non-fatal FlakeHub cache 401 warning and fetched from
+  `cache.nixos.org`.
+
+Conjecture verdict: supported locally for the title-gate/body-concept repair.
+This does not claim provider-quality semantic clustering or that staging will
+necessarily have enough matching current sources; it only repairs a concrete
+classifier blind spot that can suppress otherwise valid body-grounded source
+groups.
+
+Mutation class: orange behavior repair. Protected surfaces: Universal Wire
+sourcecycled concept extraction, deterministic grouping, synthesis article
+creation/update policy, source entity selection, and public story projection.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming body-concept repair commit plus this
+evidence entry; opaque-title sources again contribute no body concepts.
+
+Heresy delta: `repaired` locally for the title-gate blind spot; not yet repaired
+at staging/product tier.
+
+Expected Delta V: 1 if deployed replay shows live-arrival produces at least one
+valid synthesis article and `/api/universal-wire/stories` returns that article
+with direct Texture/source_ref proof. Actual Delta V: 0 until deployed proof.
+V remains 1.
+
+Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
+identity, refresh auth, and replay authenticated live-arrival/stories/Texture
+proof.

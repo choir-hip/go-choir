@@ -218,6 +218,39 @@ func TestHandleInternalSourcecycledWebCapturesDoesNotTreatTrainVerbAsRailSignal(
 	}
 }
 
+func TestHandleInternalSourcecycledWebCapturesUsesBodyConceptsWhenTitlesAreOpaque(t *testing.T) {
+	_, handler := testAPISetup(t)
+	now := time.Date(2026, 6, 27, 13, 10, 0, 0, time.UTC)
+	projection := postInternalSourcecycledWebCapturesForTest(t, handler, []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-opaque-body-rail-1", "rss:body-rail-a", "fetch-body-rail-1", "Morning briefing from regional desk", "https://example.com/body/rail-1", "en", "Transit officials said the rail corridor reopened after flood inspections, with commuters warned to expect delay while checks continue.", now.Add(-8*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-opaque-body-rail-2", "rss:body-rail-b", "fetch-body-rail-2", "Agency update", "https://example.com/body/rail-2", "en", "Emergency crews reopened railway stations after inspection work along the corridor, but passengers still faced slower service.", now.Add(-7*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-opaque-body-unrelated", "rss:body-culture", "fetch-body-culture", "Local bulletin", "https://example.com/body/culture", "en", "A museum opened a restored theater exhibit with archival material and weekend tours.", now.Add(-6*time.Minute)),
+	}, now)
+	if projection.SynthesisStatus != "ok" ||
+		projection.SynthesisSourceCount != 2 ||
+		projection.SynthesisKnownSourceCount != 2 ||
+		projection.SynthesisCandidateGroups != 1 ||
+		projection.SynthesisClusterCount != 1 {
+		t.Fatalf("projection = %+v, want opaque titles grouped by reader body concepts only", projection)
+	}
+	stories := getUniversalWireStoriesForTest(t, handler)
+	if len(stories.Stories) != 1 {
+		t.Fatalf("stories = %+v, want one body-concept synthesis article", stories)
+	}
+	story := stories.Stories[0]
+	storyJSON, err := json.Marshal(story)
+	if err != nil {
+		t.Fatalf("marshal story: %v", err)
+	}
+	if story.SemanticStory == nil ||
+		!slices.Contains(story.SemanticStory.TopicConcepts, "transport") ||
+		!slices.Contains(story.SemanticStory.SignalConcepts, "inspection") ||
+		len(story.Manifest.Lead) != 2 ||
+		strings.Contains(string(storyJSON), "srcitem-opaque-body-unrelated") {
+		t.Fatalf("story = %+v, want transport/inspection article from body concepts without unrelated source", story)
+	}
+}
+
 func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 22, 5, 0, 0, time.UTC)

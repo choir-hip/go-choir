@@ -789,9 +789,6 @@ func universalWireStoryConceptIsTopic(concept string) bool {
 
 func universalWireStoryConceptSet(source universalWireSynthesisSource) map[string]bool {
 	titleConcepts := universalWireKnownConceptSet(source.Title)
-	if len(titleConcepts) == 0 {
-		return map[string]bool{}
-	}
 	concepts := map[string]bool{}
 	titleTopics := map[string]bool{}
 	titleHasTopic := false
@@ -802,6 +799,9 @@ func universalWireStoryConceptSet(source universalWireSynthesisSource) map[strin
 			titleHasTopic = true
 		}
 	}
+	if len(titleConcepts) == 0 && universalWireBodyNegatesStoryConceptRelevance(source.Body) {
+		return concepts
+	}
 	for concept := range universalWireKnownConceptSet(source.Body) {
 		switch {
 		case universalWireStoryConceptIsSpecific(concept):
@@ -811,6 +811,23 @@ func universalWireStoryConceptSet(source universalWireSynthesisSource) map[strin
 		}
 	}
 	return concepts
+}
+
+func universalWireBodyNegatesStoryConceptRelevance(body string) bool {
+	normalized := strings.Join(universalWireStoryTokens(body), " ")
+	for _, phrase := range []string{
+		"no relation to",
+		"not related to",
+		"unrelated to",
+		"sem relacao com",
+		"sin relacion con",
+		"sans rapport avec",
+	} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func universalWireKnownConceptSet(text string) map[string]bool {
