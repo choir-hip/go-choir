@@ -634,24 +634,29 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 			_, handler := testAPISetup(t)
 			ctx := context.Background()
 			now := time.Date(2026, 6, 26, 23, 5, 0, 0, time.UTC)
-			items := []sources.Item{
-				universalWireSourcecycledTestItem("srcitem-legacy-pt", "rss:pt-wire", "fetch-legacy-pt", "Telegram Post from Metropoles Telegram", "https://example.com/pt/telegram", "pt", "Autoridades locais relataram novas medidas enquanto equipes acompanhavam os efeitos regionais.", now.Add(-20*time.Minute)),
-				universalWireSourcecycledTestItem("srcitem-legacy-en", "rss:en-wire", "fetch-legacy-en", "Regional officials describe the same developing update", "https://example.com/en/update", "en", "Officials described the same developing update and said additional details would follow later in the day.", now.Add(-16*time.Minute)),
-			}
-			projection, err := sourcegraph.WriteWebCaptureGraphObjects(ctx, handler.rt.ObjectGraph(), items, sourcegraph.WebCaptureGraphProjectionConfig{
-				OwnerID:    universalWirePlatformOwnerID(),
-				ComputerID: "computer-universal-wire-platform",
-				Now:        now,
-			})
-			if err != nil {
-				t.Fatalf("seed legacy graph captures: %v", err)
-			}
-			if len(projection.Captures) != 2 {
-				t.Fatalf("projection captures len = %d, want two captures", len(projection.Captures))
-			}
-			sourcesForSynthesis, err := handler.rt.universalWireSynthesisSourcesFromGraphCaptures(ctx, projection.Captures)
-			if err != nil {
-				t.Fatalf("load synthesis sources from seeded captures: %v", err)
+			sourcesForSynthesis := []universalWireSynthesisSource{
+				{
+					ItemID:       "srcitem-legacy-pt",
+					SourceID:     "rss:pt-wire",
+					FetchID:      "fetch-legacy-pt",
+					Title:        "Telegram Post from Metropoles Telegram",
+					URL:          "https://example.com/pt/telegram",
+					CanonicalURL: "https://example.com/pt/telegram",
+					Language:     "pt",
+					Body:         "Autoridades locais relataram novas medidas enquanto equipes acompanhavam os efeitos regionais.",
+					FetchedAt:    now.Add(-20 * time.Minute),
+				},
+				{
+					ItemID:       "srcitem-legacy-en",
+					SourceID:     "rss:en-wire",
+					FetchID:      "fetch-legacy-en",
+					Title:        "Regional officials describe the same developing update",
+					URL:          "https://example.com/en/update",
+					CanonicalURL: "https://example.com/en/update",
+					Language:     "en",
+					Body:         "Officials described the same developing update and said additional details would follow later in the day.",
+					FetchedAt:    now.Add(-16 * time.Minute),
+				},
 			}
 			legacyDoc, legacyRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
 				ClusterID: universalWireLiveSourcecycledClusterID,
@@ -687,6 +692,10 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 			docResp, revsResp := assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
 			if docResp.CurrentRevisionID == legacyRev.RevisionID {
 				t.Fatalf("readable Texture document still points at legacy revision %s", legacyRev.RevisionID)
+			}
+			if strings.Contains(docResp.Title, "Universal Wire live synthesis") ||
+				strings.Contains(docResp.Title, "Multiple reports converge") {
+				t.Fatalf("readable Texture document title was not repaired: %+v", docResp)
 			}
 			if len(revsResp.Revisions) == 0 || revsResp.Revisions[0].RevisionID != docResp.CurrentRevisionID {
 				t.Fatalf("revision list did not expose repaired current revision: doc=%+v revisions=%+v", docResp, revsResp.Revisions)

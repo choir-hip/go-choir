@@ -64,6 +64,17 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
+	if wantTitle := universalWireSynthesisDocumentTitle(headline); wantTitle != "" && doc.Title != wantTitle {
+		doc.Title = wantTitle
+		doc.UpdatedAt = now
+		if err := rt.store.UpdateDocument(ctx, doc); err != nil {
+			return types.Document{}, types.Revision{}, "", fmt.Errorf("update synthesis document title: %w", err)
+		}
+		doc, err = rt.store.GetDocument(ctx, doc.DocID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, "", fmt.Errorf("reload synthesis document title: %w", err)
+		}
+	}
 	storyClusterObjectID := universalWireStoryClusterObjectID(ownerID, clusterID)
 
 	revisionID := uuid.NewString()
@@ -252,7 +263,7 @@ func (rt *Runtime) getOrCreateUniversalWireSynthesisDocument(ctx context.Context
 	doc := types.Document{
 		DocID:     uuid.NewString(),
 		OwnerID:   ownerID,
-		Title:     strings.TrimSpace(firstNonEmpty(headline, "Universal Wire synthesis")) + ".texture",
+		Title:     universalWireSynthesisDocumentTitle(headline),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -263,6 +274,10 @@ func (rt *Runtime) getOrCreateUniversalWireSynthesisDocument(ctx context.Context
 		return types.Document{}, fmt.Errorf("upsert synthesis alias: %w", err)
 	}
 	return doc, nil
+}
+
+func universalWireSynthesisDocumentTitle(headline string) string {
+	return strings.TrimSpace(firstNonEmpty(headline, "Universal Wire synthesis")) + ".texture"
 }
 
 func (rt *Runtime) ensureUniversalWireEditionIncludes(ctx context.Context, doc types.Document, rev types.Revision, now time.Time) (string, error) {
