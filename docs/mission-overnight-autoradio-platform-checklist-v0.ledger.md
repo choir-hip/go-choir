@@ -9061,6 +9061,60 @@ clustering, or Qdrant behavior is claimed.
 Actual Delta V: 0. The remaining O4 acceptance edge is blocked on owner-browser
 state, not on CI/deploy. V remains 27.
 
+## 2026-06-27 - O4 Deployed Headline Opens Blank Texture
+
+Mutation class: green documentation-first checkpoint for a red product-read
+failure in platform-owned Universal Wire Texture article opening.
+
+Problem: deployed `7e8138e64b259f141d1b3e6b53218367122a68e9` makes Universal
+Wire non-empty again, but clicking the Universal Wire headline still opens a
+blank v0 Texture instead of article content.
+
+Evidence:
+
+- Staging health reports proxy and sandbox deployed commit
+  `7e8138e64b259f141d1b3e6b53218367122a68e9`.
+- Computer Use on the signed-in Chrome `choir.news` tab shows ordinary Texture
+  `untitled-texture-b754241a.texture` with real content and `Document loaded`.
+- The same product surface shows the Universal Wire window with `1 article`.
+- The Universal Wire card headline is
+  `Multiple reports converge on Telegram Post from Metropoles Telegram`.
+- The card body is reader-facing article copy rather than the older
+  platform-status copy.
+- Clicking the headline opens a new Texture window titled
+  `Multiple reports converge on Telegram Post from Metropoles Telegram`.
+- The opened Texture window shows `v0`, `Start typing the document...`, and
+  `Blank document ready`.
+
+Conjecture delta: the deployed platform-owned article is now publishable and
+clickable, but the headline-open path still does not select or render the
+synced article revision. The previous `current_revision_id` repair is
+insufficient at product scope.
+
+Protected surfaces: Universal Wire headline open routing, read-only
+platform-owned Texture document/revision reads, Texture editor revision
+selection/rendering, and source_ref/source entity preservation.
+
+Admissible evidence:
+
+- A focused failing test or diagnostic that reproduces platform-owned
+  Universal Wire headline opening into blank v0 despite a synced revision.
+- A narrow repair with focused platform/proxy/frontend/runtime tests covering
+  the real selected-head/render path.
+- Independent verifier acceptance before landing.
+- CI/deploy/health identity plus authenticated product replay showing the
+  headline opens article content, not blank v0.
+
+Rollback path: revert the next headline-open/read repair. The system will keep
+the safer state of showing a publishable card whose Texture open path is blank
+rather than expose incorrect article content.
+
+Heresy delta: discovered. Non-empty Universal Wire and platform current-head
+document reads are not sufficient evidence that the Texture app opens the
+platform-owned article revision.
+
+Actual Delta V: 0. This is documentation-first only; V remains 27.
+
 ## 2026-06-27 - O4 Legacy Graph Capture Synthesis Local Repair
 
 Claim: root commit `c813bff4` repairs the deployed zero-article condition for
