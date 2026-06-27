@@ -648,23 +648,25 @@ acceptance should wait for O4 zero-article repair or an explicit owner decision
 to carry O4 as an open edge. Worker thread
 `019f0679-3c97-7860-8765-09e839cf165d` has now produced a branch-local candidate:
 `e76932c2` documents a direct platformd publication/readiness mismatch, and
-`640e7540` repairs `platformdReadBaseURL()` so direct `RUNTIME_PLATFORMD_URL` /
-`PROXY_PLATFORMD_URL` is used by readiness filtering. Worker evidence says
-focused filtered-edition readiness, raw-capture suppression, broader
-UniversalWire/WireProcessor/WireStory/WirePublication runtime shard, and proxy
-WirePlatform/PlatformTextureRead tests passed; the worker branch is clean.
+Verifier review rejected worker repair `640e7540` before incorporation: it
+accepted direct `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL` values too early
+and would break the existing sibling-service derivation where vmctl packages set
+`RUNTIME_PLATFORMD_URL` to the proxy/wire `:8082` service and runtime rewrites it
+to direct platformd `:8086`. A separate source inspection after the owner's
+"all textures do not load" report found the deployed platform Texture sync path
+also strips structured `body_doc` and `source_entities` before platformd
+persists synced revisions, so platform-owned Universal Wire articles cannot
+survive as native source-backed Texture articles. O4 now needs a revised repair
+that preserves `:8082 -> :8086` derivation, accepts true direct platformd URLs,
+and syncs the full structured Texture revision state.
 
-next move: monitor independent verifier setup for work item
-`O4-zero-wire-direct-readiness-verifier`. Verifier creation has been requested
-with pending worktree handle `local:c6aab640-e61e-47b8-8d5e-412f10655b6c`;
-the verifier should review worker thread
-`019f0679-3c97-7860-8765-09e839cf165d`, worktree
-`/Users/wiz/.codex/worktrees/1c45/go-choir`, docs-first commit `e76932c2`, and
-repair commit `640e7540`. If accepted, incorporate the worker commits into root,
-then push, monitor CI/deploy, verify health identity, and run authenticated
-product replay for non-empty Universal Wire and headline-to-Texture readability.
-Expected Delta V: +1 only after verifier acceptance; another +1 only after root
-deploys and authenticated product replay succeeds.
+next move: repair the revised O4 platform Texture read/write boundary in root:
+documented problem first, then code. The repair should preserve sibling
+platformd URL derivation, accept actual direct platformd endpoints, add
+structured `body_doc` and `source_entities` to platformd Texture sync, and rerun
+focused runtime/proxy/platform tests before any push/deploy. Expected Delta V:
++1 only after local tests and a verifier accept the revised repair; another +1
+only after root deploys and authenticated product replay succeeds.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

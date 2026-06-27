@@ -8739,3 +8739,68 @@ entry.
 
 Next move: monitor pending handle `local:c6aab640-e61e-47b8-8d5e-412f10655b6c`
 until a verifier thread id or verdict is available.
+
+## 2026-06-27 - O4 Direct Readiness Revision And Structured Sync Problem Documented
+
+Mutation class: red. Protected surfaces: Universal Wire staging read selection,
+platform-owned Texture document/revision sync, platformd read store schema, and
+Texture source/citation preservation for platform articles.
+
+Conjecture delta: the zero-article and unreadable-headline failures are not
+fully explained by "use `RUNTIME_PLATFORMD_URL` directly." The read side must
+distinguish true direct platformd endpoints from sibling service endpoints, and
+the write/sync side must preserve the structured Texture revision fields that
+make a Universal Wire article a native source-backed Texture article.
+
+Heresy delta: discovered. No new repair is claimed by this entry.
+
+Problem record:
+
+- Independent verifier callback for work item
+  `O4-zero-wire-direct-readiness-verifier` returned
+  `revise_before_continue`.
+- Verifier accepted the worker's Problem Documentation First ordering, changed
+  file scope, branch-local test hygiene, and focused regression intent.
+- Verifier rejected repair commit `640e7540` because it returned direct
+  `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL` before
+  `rewriteHostServicePort`. Runtime package generation still sets
+  `RUNTIME_PLATFORMD_URL=http://<host>:8082`, guarded by
+  `internal/vmctl/vmctl_test.go`, and the prior implementation rewrote that
+  sibling proxy/wire URL to direct platformd `:8086`.
+- Proxy does not serve `/internal/platform/texture/...` readiness reads on
+  `:8082`, so `640e7540` would make package-generated runtimes probe the wrong
+  service.
+- The owner's new observation says "all textures don't load now." Chrome
+  extension control could list the signed-in `choir.news` tabs, but claiming
+  the tab for API proof was blocked by another extension UI overlay. No
+  authenticated live API claim is made from that blocked probe.
+- Source inspection found another concrete platform Texture defect in the
+  deployed path: `internal/proxy/wire_platform_publish.go` syncs all revisions
+  through `sandboxRevisionEntry`, which omits `body_doc` and
+  `source_entities`; `internal/runtime/wire_platform_publish.go` also omits
+  those fields in its direct sync payload; and `internal/platform/types.go` /
+  `internal/platform/store.go` do not persist those fields in
+  `platform_texture_revisions`.
+
+Admissible evidence for repair:
+
+- A platform sync unit test that proves `body_doc` and `source_entities`
+  survive `SyncTextureDocument`, list, and get.
+- A proxy Wire platform publish test that proves async sync forwards structured
+  revision fields.
+- A runtime Universal Wire/direct platformd test that proves direct sync sends
+  structured revision fields.
+- A runtime readiness test that proves package-generated `:8082` URLs are still
+  rewritten to `:8086`, while true direct `:8086` platformd URLs are accepted.
+- Deployed authenticated product proof remains required after landing.
+
+Rollback path: revert the code repair commit(s) and redeploy the previous known
+staging SHA. If platform schema changes land, rollback must tolerate the added
+nullable platform columns remaining present because they are additive.
+
+Evidence boundary/non-claims: this is documentation first. It does not claim a
+fix, verifier acceptance, push, CI, deploy, staging identity, product proof,
+provider freshness, semantic clustering, Qdrant, run acceptance, or
+promotion/rollback execution.
+
+Actual Delta V: 0. V remains 28.
