@@ -8847,3 +8847,56 @@ claimed.
 
 Next move: create independent verifier thread for root commits `e7ca44a6` and
 `3d2afccb`; if accepted, push/deploy and run product proof.
+
+## 2026-06-27 - O4 Structured Platform Texture Sync Verifier And Handoff Repair
+
+Claim: independent verification accepted the code repair, and root repaired the
+remaining stale Parallax handoff text before landing.
+
+Verifier evidence:
+
+- Thread `019f0695-1794-7b80-8fb9-4bd6ae2eda7a` returned `accept` for
+  `O4-structured-platform-texture-sync-verifier-corrected`.
+- It verified docs-first ordering: `e7ca44a6` documents the structured platform
+  Texture sync problem before repair commit `3d2afccb`, and `dfb39f41` records
+  local repair evidence.
+- It verified that `platformdReadBaseURL()` preserves package-generated
+  sibling derivation from `:8082`, `:8083`, `:8084`, and `:8087` to `:8086`,
+  while accepting true direct `:8086` platformd URLs.
+- It verified that platform sync DTOs/types/store/service, runtime direct sync,
+  and proxy async sync carry `body_doc` and `source_entities`.
+- It verified that raw `choir.web_capture` diagnostic behavior and Universal
+  Wire edition filtering were not loosened.
+
+Commands/results from corrected verifier:
+
+- `git status --short --ignored`: clean output.
+- `git show --check --oneline e7ca44a6`: passed.
+- `git show --check --oneline 3d2afccb`: passed.
+- `git show --check --oneline dfb39f41`: passed.
+- `git diff --check ca5ec83f..HEAD`: passed.
+- `nix develop -c go test ./internal/platform -run 'TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+
+Additional handoff repair:
+
+- Earlier verifier thread `019f0694-1922-7a90-8485-34e8a688f94f` accepted the
+  code repair but returned `revise_before_continue` for one docs/handoff issue:
+  the Suggested Goal String still instructed a resumed runner to monitor the
+  stale `O4-zero-wire-direct-readiness-verifier` handle and incorporate rejected
+  worker repair `640e7540`.
+- Root corrected the active Parallax State and Suggested Goal String so future
+  continuation points at the accepted root repair sequence instead of the
+  rejected branch.
+
+Evidence boundary/non-claims: verifier acceptance is local only. No push, CI,
+deploy, staging health identity, authenticated product proof, run acceptance,
+provider freshness, semantic clustering, Qdrant, or promotion/rollback execution
+is claimed yet.
+
+Actual Delta V: +1 for accepted local repair and stale-handoff cleanup. V moves
+from 28 to 27. Next move: push to `origin/main`, monitor CI/deploy, verify
+health identity, and run authenticated product replay for non-empty Universal
+Wire and headline-to-Texture readability.
