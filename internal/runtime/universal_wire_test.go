@@ -140,7 +140,7 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster(t *testing.T) {
 	_, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 22, 5, 0, 0, time.UTC)
-	wantClusterID := universalWireLiveSourcecycledClusterID + "-transport"
+	wantClusterID := universalWireLiveSourcecycledClusterID + "-transport-delay-flood-inspection"
 	firstBatch := []sources.Item{
 		universalWireSourcecycledTestItem("srcitem-live-pt", "rss:pt-transport", "fetch-live-pt", "Corredor ferroviario reabre parcialmente", "https://example.com/pt/rail", "pt", "Equipes de emergencia informaram que o corredor ferroviario reabriu parcialmente depois das enchentes, com inspecoes ainda em andamento.", now.Add(-18*time.Minute)),
 		universalWireSourcecycledTestItem("srcitem-live-es", "rss:es-commuters", "fetch-live-es", "Autoridades advierten demoras regionales", "https://example.com/es/commuters", "es", "Las autoridades pidieron a los pasajeros prever demoras mientras continuaban las revisiones de seguridad en estaciones afectadas.", now.Add(-12*time.Minute)),
@@ -167,12 +167,12 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if firstStory.StoryTextureDoc != firstProjection.SynthesisDocID ||
 		firstStory.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(firstStory.SourceState, "objectgraph-web-capture") ||
-		!strings.Contains(firstStory.TextureContent, "incoming reports point to the same developing story") ||
-		strings.Contains(firstStory.TextureContent, "Universal Wire selected") ||
+		!strings.Contains(firstStory.TextureContent, "clearest current account") ||
 		!strings.Contains(firstStory.TextureContent, "[1]") ||
 		!strings.Contains(firstStory.TextureContent, "[2]") {
 		t.Fatalf("first story is not the synthesized Texture article: %+v", firstStory)
 	}
+	assertUniversalWireStoryAvoidsHelperCopyForTest(t, firstStory)
 	assertUniversalWireStoryTextureReadableForTest(t, handler, firstStory, firstProjection.SynthesisRevisionID)
 	if len(firstStory.Manifest.Lead) != 2 {
 		t.Fatalf("manifest lead len = %d, want two source_ref-cited source items: %+v", len(firstStory.Manifest.Lead), firstStory.Manifest)
@@ -299,8 +299,8 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 	batch := []sources.Item{
 		universalWireSourcecycledTestItem("srcitem-split-rail-1", "rss:rail", "fetch-rail-1", "Rail corridor reopens after inspections", "https://example.com/rail/reopen", "en", "Emergency crews reopened the rail corridor after flood inspections, and commuters returned to central stations.", now.Add(-35*time.Minute)),
 		universalWireSourcecycledTestItem("srcitem-split-rail-2", "rss:commuters", "fetch-rail-2", "Commuters return to railway stations", "https://example.com/rail/commuters", "en", "Transit officials said passengers should expect slower railway service while station inspections continue.", now.Add(-31*time.Minute)),
-		universalWireSourcecycledTestItem("srcitem-split-harbor-1", "rss:harbor", "fetch-harbor-1", "Harbor pilots reopen the inner channel", "https://example.com/harbor/channel", "en", "Harbor pilots reopened the inner channel after overnight checks, with cargo vessels waiting for the next tide window.", now.Add(-25*time.Minute)),
-		universalWireSourcecycledTestItem("srcitem-split-harbor-2", "rss:port", "fetch-harbor-2", "Port access expands with afternoon tide", "https://example.com/harbor/tide", "en", "Port officials said the afternoon tide would expand vessel access after pilot boats completed channel soundings.", now.Add(-22*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-split-strike-1", "rss:transit-labor", "fetch-strike-1", "Transit strike begins after overnight talks fail", "https://example.com/transit/strike", "en", "Commuters waited for buses after a transit strike began when overnight labor talks failed.", now.Add(-25*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-split-strike-2", "rss:bus-labor", "fetch-strike-2", "Bus drivers extend walkout through afternoon", "https://example.com/transit/walkout", "en", "Bus drivers extended the walkout, and city officials warned passengers to expect reduced service.", now.Add(-22*time.Minute)),
 	}
 	projection := postInternalSourcecycledWebCapturesForTest(t, handler, batch, now)
 	if projection.SynthesisStatus != "ok" ||
@@ -327,6 +327,7 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 			len(story.Manifest.Lead) != 2 {
 			t.Fatalf("story = %+v, want synthesized Texture article with two source-ref leads", story)
 		}
+		assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
 		docIDs[story.StoryTextureDoc] = true
 		assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
 		for _, lead := range story.Manifest.Lead {
@@ -400,10 +401,10 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 			t.Fatalf("cluster %s edges len = %d, want two source captures: %#v", clusterID, len(edges), edges)
 		}
 	}
-	if !clusterIDs[universalWireLiveSourcecycledClusterID+"-transport"] ||
-		!clusterIDs[universalWireLiveSourcecycledClusterID+"-harbor"] ||
+	if !clusterIDs[universalWireLiveSourcecycledClusterID+"-transport-delay-flood-inspection"] ||
+		!clusterIDs[universalWireLiveSourcecycledClusterID+"-transport-strike"] ||
 		len(clusterDocIDs) != 2 {
-		t.Fatalf("clusters = %#v docIDs=%#v, want separate transport and harbor articles", clusterIDs, clusterDocIDs)
+		t.Fatalf("clusters = %#v docIDs=%#v, want separate transport rail-reopening and transport-strike articles", clusterIDs, clusterDocIDs)
 	}
 
 	captureStories, captureDiagnostic, err := handler.universalWireWebCaptureStories(ctx, 12)
@@ -530,11 +531,11 @@ func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures
 	if firstStory.StoryTextureDoc == "" ||
 		firstStory.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(firstStory.SourceState, "objectgraph-web-capture") ||
-		!strings.Contains(firstStory.TextureContent, "incoming reports point to the same developing story") ||
-		strings.Contains(firstStory.TextureContent, "Universal Wire selected") ||
+		!strings.Contains(firstStory.TextureContent, "clearest current account") ||
 		len(firstStory.Manifest.Lead) != 2 {
 		t.Fatalf("first story = %+v, want synthesized Texture article with two source_ref leads", firstStory)
 	}
+	assertUniversalWireStoryAvoidsHelperCopyForTest(t, firstStory)
 	assertUniversalWireStoryTextureReadableForTest(t, handler, firstStory, "")
 	if firstStory.Manifest.Lead[0].OpenSurface != sourcecontract.OpenSurfaceSource ||
 		firstStory.Manifest.Lead[0].ReaderArtifactState != sourcecontract.ReaderArtifactStateReady ||
@@ -648,10 +649,10 @@ func TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture(t *
 		strings.Contains(story.Headline, "Universal Wire live synthesis") ||
 		strings.Contains(story.TextureContent, "Universal Wire selected") ||
 		strings.Contains(story.TextureContent, "graph-backed source captures") ||
-		!strings.Contains(story.Headline, "Multiple reports converge on") ||
-		!strings.Contains(story.TextureContent, "incoming reports point to the same developing story") {
+		!strings.Contains(story.TextureContent, "clearest current account") {
 		t.Fatalf("story was not repaired to article-facing copy: %+v", story)
 	}
+	assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
 	docResp, revsResp := assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
 	if docResp.CurrentRevisionID == legacyRev.RevisionID {
 		t.Fatalf("readable Texture document still points at legacy revision %s", legacyRev.RevisionID)
@@ -713,6 +714,23 @@ func getUniversalWireStoriesForTest(t *testing.T, handler *APIHandler) universal
 		t.Fatalf("decode Universal Wire stories: %v", err)
 	}
 	return stories
+}
+
+func assertUniversalWireStoryAvoidsHelperCopyForTest(t *testing.T, story types.WireStory) {
+	t.Helper()
+	text := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
+	for _, forbidden := range []string{
+		"Universal Wire live synthesis",
+		"Universal Wire selected",
+		"graph-backed source captures",
+		"incoming reports point to the same developing story",
+		"source cluster",
+		"reports read as one developing article",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("story contains helper/meta copy %q: %+v", forbidden, story)
+		}
+	}
 }
 
 func assertUniversalWireStoryTextureReadableForTest(t *testing.T, handler *APIHandler, story types.WireStory, wantRevisionID string) (textureDocumentResponse, textureListRevisionsResponse) {
@@ -1098,12 +1116,13 @@ func TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition(t *testing
 		strings.Contains(story.SourceState, "objectgraph-web-capture") {
 		t.Fatalf("story is not the synthesized Texture article: %+v", story)
 	}
-	if !strings.Contains(story.TextureContent, "one combined article") ||
+	if !strings.Contains(story.TextureContent, "same developing transport disruption") ||
 		strings.Contains(story.TextureContent, "Universal Wire publishes") ||
 		!strings.Contains(story.TextureContent, "[1]") ||
 		!strings.Contains(story.TextureContent, "[2]") {
 		t.Fatalf("story texture content did not carry synthesized cited prose: %q", story.TextureContent)
 	}
+	assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
 	if len(story.Manifest.Lead) != 2 {
 		t.Fatalf("manifest lead len = %d, want two cited source handles: %+v", len(story.Manifest.Lead), story.Manifest)
 	}
@@ -1264,10 +1283,11 @@ func TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceE
 		story.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(story.SourceState, "objectgraph-web-capture") ||
 		strings.Contains(story.TextureContent, "Universal Wire selected") ||
-		!strings.Contains(story.TextureContent, "incoming reports point to the same developing story") ||
+		!strings.Contains(story.TextureContent, "clearest current account") ||
 		len(story.Manifest.Lead) != 2 {
 		t.Fatalf("story = %+v, want synthesized Texture article with two graph-capture cited sources", story)
 	}
+	assertUniversalWireStoryAvoidsHelperCopyForTest(t, story)
 	assertUniversalWireStoryTextureReadableForTest(t, handler, story, "")
 	for _, lead := range story.Manifest.Lead {
 		if lead.OpenSurface != sourcecontract.OpenSurfaceSource ||

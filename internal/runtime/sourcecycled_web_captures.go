@@ -217,8 +217,8 @@ func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesi
 		best := -1
 		bestOverlap := 0
 		for i := range groups {
-			overlap := universalWireStoryConceptOverlap(groups[i].concepts, concepts)
-			if overlap > bestOverlap {
+			overlap, sameTopic, storyOverlap := universalWireStoryConceptOverlap(groups[i].concepts, concepts)
+			if sameTopic && storyOverlap && overlap > bestOverlap {
 				best = i
 				bestOverlap = overlap
 			}
@@ -249,24 +249,41 @@ func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesi
 	return out
 }
 
-func universalWireStoryConceptOverlap(left, right map[string]bool) int {
+func universalWireStoryConceptOverlap(left, right map[string]bool) (int, bool, bool) {
 	overlap := 0
+	sameTopic := false
+	storyOverlap := false
 	for concept := range right {
 		if left[concept] {
 			overlap++
+			switch {
+			case universalWireStoryConceptIsTopic(concept):
+				sameTopic = true
+			case universalWireStoryConceptIsSpecific(concept):
+				storyOverlap = true
+			}
 		}
 	}
-	return overlap
+	return overlap, sameTopic, storyOverlap
 }
 
 func universalWireStoryClusterSlug(concepts map[string]bool) string {
-	tokens := make([]string, 0, len(concepts))
+	topics := []string{}
+	specifics := []string{}
 	for concept := range concepts {
-		tokens = append(tokens, concept)
+		switch {
+		case strings.HasPrefix(concept, "topic:"):
+			topics = append(topics, strings.TrimPrefix(concept, "topic:"))
+		case universalWireStoryConceptIsSpecific(concept):
+			specifics = append(specifics, universalWireSlug(strings.TrimPrefix(concept, "signal:")))
+		}
 	}
-	sort.Strings(tokens)
-	if len(tokens) > 3 {
-		tokens = tokens[:3]
+	sort.Strings(topics)
+	sort.Strings(specifics)
+	tokens := append([]string{}, topics...)
+	tokens = append(tokens, specifics...)
+	if len(tokens) > 4 {
+		tokens = tokens[:4]
 	}
 	if len(tokens) == 0 {
 		return "uncategorized"
@@ -274,13 +291,24 @@ func universalWireStoryClusterSlug(concepts map[string]bool) string {
 	return strings.Join(tokens, "-")
 }
 
+func universalWireStoryConceptIsSpecific(concept string) bool {
+	return strings.HasPrefix(concept, "signal:")
+}
+
+func universalWireStoryConceptIsTopic(concept string) bool {
+	return strings.HasPrefix(concept, "topic:")
+}
+
 func universalWireStoryConceptSet(source universalWireSynthesisSource) map[string]bool {
 	text := strings.Join([]string{source.Title, source.Body, source.CanonicalURL, source.URL}, " ")
 	concepts := map[string]bool{}
 	fallback := map[string]bool{}
 	for _, token := range universalWireStoryTokens(text) {
-		if concept := universalWireStoryConcept(token); concept != "" {
-			concepts[concept] = true
+		tokenConcepts := universalWireStoryConcepts(token)
+		if len(tokenConcepts) > 0 {
+			for _, concept := range tokenConcepts {
+				concepts[concept] = true
+			}
 			continue
 		}
 		if !universalWireStoryTokenStopword(token) && len(token) >= 5 {
@@ -298,7 +326,7 @@ func universalWireSourcesHaveKnownStoryConcept(sources []universalWireSynthesisS
 	for _, source := range sources {
 		text := strings.Join([]string{source.Title, source.Body, source.CanonicalURL, source.URL}, " ")
 		for _, token := range universalWireStoryTokens(text) {
-			if universalWireStoryConcept(token) != "" {
+			if len(universalWireStoryConcepts(token)) > 0 {
 				return true
 			}
 		}
@@ -342,20 +370,34 @@ func universalWireFoldRune(r rune) rune {
 	}
 }
 
-func universalWireStoryConcept(token string) string {
+func universalWireStoryConcepts(token string) []string {
 	switch token {
-	case "rail", "railway", "railroad", "train", "trains", "transport", "transit", "commuter", "commuters", "passenger", "passengers", "pasajeros", "estacion", "estaciones", "station", "stations", "ferroviario", "ferroviaire", "corredor", "corridor":
-		return "transport"
-	case "harbor", "harbour", "port", "porto", "channel", "pilots", "pilot", "tide", "maritime":
-		return "harbor"
+	case "rail", "railway", "railroad", "train", "trains", "ferroviario", "ferroviaire", "corredor", "corridor":
+		return []string{"topic:transport", "signal:rail-corridor"}
+	case "transport", "transit", "commuter", "commuters", "passenger", "passengers", "pasajeros", "estacion", "estaciones", "station", "stations", "bus", "buses", "drivers":
+		return []string{"topic:transport"}
+	case "harbor", "harbour", "port", "porto", "pilots", "pilot", "maritime":
+		return []string{"topic:harbor"}
+	case "channel", "tide", "vessel", "vessels", "cargo", "boats":
+		return []string{"topic:harbor", "signal:harbor-access"}
 	case "river", "gauges", "gauge":
-		return "flood"
+		return []string{"topic:flood"}
 	case "energy", "power", "grid", "electric", "electricity", "substation", "blackout":
-		return "energy"
+		return []string{"topic:energy"}
 	case "health", "hospital", "clinic", "patients", "patient", "vaccine", "disease":
-		return "health"
+		return []string{"topic:health"}
+	case "reopen", "reopens", "reopened", "reopening", "reabre", "reabriu", "reprise", "restait", "partial", "partially", "parcial", "parcialmente", "partielle":
+		return []string{"signal:reopening"}
+	case "inspection", "inspections", "inspecoes", "revisiones", "checks", "soundings":
+		return []string{"signal:inspection"}
+	case "delay", "delays", "delayed", "demora", "demoras", "atrasos", "atrasaram", "slower":
+		return []string{"signal:delay"}
+	case "flood", "flooding", "floods", "enchentes", "chuvas", "rain":
+		return []string{"signal:flood"}
+	case "strike", "strikes", "walkout", "walkouts", "huelga":
+		return []string{"signal:strike"}
 	default:
-		return ""
+		return nil
 	}
 }
 
@@ -370,23 +412,19 @@ func universalWireStoryTokenStopword(token string) bool {
 
 func universalWireLiveSynthesisHeadline(sources []universalWireSynthesisSource) string {
 	if len(sources) == 0 {
-		return "Developing story from incoming reports"
+		return "Developing story"
 	}
-	return "Multiple reports converge on " + truncateRunes(sources[0].Title, 90)
+	return truncateRunes(sources[0].Title, 96)
 }
 
 func universalWireLiveSynthesisSummary(sources []universalWireSynthesisSource) string {
 	if len(sources) == 0 {
-		return "Incoming reports point to a developing story that needs continued source-grounded revision."
+		return "The available sources describe a developing story that needs continued source-grounded revision."
 	}
 	if len(sources) == 1 {
-		return fmt.Sprintf("One incoming report points to a developing story: %s.", sources[0].Title)
+		return fmt.Sprintf("%s gives the clearest current account.", sources[0].Title)
 	}
-	count := "Two"
-	if len(sources) > 2 {
-		count = fmt.Sprintf("%d", len(sources))
-	}
-	return fmt.Sprintf("%s incoming reports point to the same developing story. %s provides the lead signal, while %s adds a second angle for readers.", count, sources[0].Title, sources[1].Title)
+	return fmt.Sprintf("%s gives the clearest current account, while %s adds a second sourced angle.", sources[0].Title, sources[1].Title)
 }
 
 func (rt *Runtime) universalWireSynthesisSourcesFromGraphCaptures(ctx context.Context, captures []objectgraph.Object) ([]universalWireSynthesisSource, error) {

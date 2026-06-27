@@ -406,10 +406,10 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, so
 	firstRef := entities[0].EntityID
 	secondRef := entities[1].EntityID
 	if summary = strings.TrimSpace(summary); summary == "" {
-		summary = fmt.Sprintf("The source cluster points to one developing story: %s and %s describe related moves in the same news event rather than isolated items.", first.Title, second.Title)
+		summary = fmt.Sprintf("%s gives the clearest current account, while %s adds a second sourced angle.", first.Title, second.Title)
 	}
 	if tension = strings.TrimSpace(tension); tension == "" {
-		tension = "The live question is whether later source arrivals reinforce this combined reading or require the article to be revised."
+		tension = "The next update should revise the account if later source arrivals change the timeline, affected people, or official explanation."
 	}
 	var b strings.Builder
 	b.WriteString("# ")
@@ -417,9 +417,9 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, so
 	b.WriteString("\n\n")
 	b.WriteString(summary)
 	b.WriteString(" ")
-	b.WriteString(fmt.Sprintf("[first source](source:%s)", firstRef))
+	b.WriteString(fmt.Sprintf("[lead source](source:%s)", firstRef))
 	b.WriteString("\n\n")
-	b.WriteString("A second source in the cluster adds a separate angle rather than repeating the same capture, so the reports read as one developing article instead of two isolated updates. ")
+	b.WriteString("The second account narrows what readers can trust now: it confirms the same event frame while adding a distinct detail that the lead source does not carry. ")
 	b.WriteString(fmt.Sprintf("[second source](source:%s)", secondRef))
 	b.WriteString("\n\n")
 	b.WriteString(tension)
@@ -432,9 +432,9 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, so
 
 func universalWireSynthesisHeadline(sources []universalWireSynthesisSource) string {
 	if len(sources) == 0 {
-		return "Developing story from incoming reports"
+		return "Developing story"
 	}
-	return "Multiple reports converge on " + truncateRunes(sources[0].Title, 90)
+	return truncateRunes(sources[0].Title, 96)
 }
 
 var universalWireSlugInvalidRE = regexp.MustCompile(`[^a-z0-9]+`)
