@@ -1053,6 +1053,30 @@ commit, push, monitor CI/deploy, verify health identity, and replay
 authenticated staging proof to see whether the live sourcecycled graph now
 produces at least one valid public story.
 
+Body-concept repair deployed at
+`f6dd1294260aec623664e10a090f63e520fedb79`; CI run `28290135800`, Docs Truth
+Check run `28290135796`, FlakeHub run `28290135787`, and Node B deploy job
+`83820886261` passed. Staging health reported proxy/sandbox deployed at
+`f6dd1294` with deployed_at `2026-06-27T13:12:43Z`. Authenticated proof with
+`qa-body-concepts-1782566036@example.com` at `2026-06-27T13:16:24Z` observed
+`/api/universal-wire/stories?limit=30` returning five public
+`universal-wire-edition-texture` stories. The former stale doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` was absent from public stories while
+remaining in edition metadata for audit. Top story
+`0d9eac95-ec18-4a2f-9470-802b8db7aef1` had revision
+`dd541b01-8e77-430c-9e50-9703429bcd68`, three source entities, native
+`source_ref` body_doc, semantic signature
+`[harbor, health, transport, inspection]`, and `source_added` state changed at
+`2026-06-27T13:13:13.937580052Z`. Direct platform Texture document and revision
+reads returned 200. The live-arrival oracle still reported a pre-deploy
+boundary `cycle_737e0f2a6db2c3a9d04b036c` observed at
+`2026-06-27T13:07:22.918065535Z` with skipped synthesis, so this is deployed
+read-time materialization/product story proof, not a post-deploy sourcecycled
+arrival-cycle proof. Next realism axis: wait for or induce a post-deploy
+sourcecycled boundary, bracket it with the live-arrival oracle, and prove that a
+later matching source updates an existing coherent article instead of creating
+or reviving a stale one.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose
@@ -1089,5 +1113,5 @@ assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path, authenticated product users can read the platform live-arrival oracle, and deployed ordering repair head 210cc9bf3731733b80cc95791c5d0d761b4c2543 passed CI run 28288616235, deploy job 83816943646, health identity, and authenticated staging proof. Boundary cycle_490a914358c36f1b5a27e1e5 produced synthesized doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c, revision 60ccdcb4-322d-4c31-b7f9-d12d026413c9, 7 sources, 15 known-concept sources, 6 candidate groups, 1 synthesized cluster, and 1 refreshed group; the Texture doc/revision is directly readable with 7 source entities and native source_ref body_doc citations, and /api/universal-wire/stories now surfaces it at index 0. The remaining C6 edge is semantic correctness: the top article headline is South Korea drone military training while semantic story metadata is harbor/transport/rail-corridor because the concept map treats "train" as rail. Local repair removes bare English train/trains from rail-corridor signals and passes focused plus broader Universal Wire runtime tests. Next move: commit/push the homonym repair, monitor CI/deploy, verify health identity, and rerun authenticated staging proof after a new sourcecycled boundary. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are again deployed and readable through the platform Texture path after body-concept repair head f6dd1294260aec623664e10a090f63e520fedb79 passed CI run 28290135800, deploy job 83820886261, health identity, and authenticated staging proof. At 2026-06-27T13:16:24Z /api/universal-wire/stories?limit=30 returned five universal-wire-edition-texture stories; stale doc 1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c was filtered from public stories but retained in edition metadata; top doc 0d9eac95-ec18-4a2f-9470-802b8db7aef1 revision dd541b01-8e77-430c-9e50-9703429bcd68 was directly readable with three source entities and native source_ref body_doc. Boundary caveat: live-arrival still reported pre-deploy cycle_737e0f2a6db2c3a9d04b036c observed at 2026-06-27T13:07:22.918065535Z with skipped synthesis, so this proves deployed read-time materialization/product story recovery, not a post-deploy sourcecycled arrival update. Next move: wait for or induce a post-deploy sourcecycled boundary, bracket before/after with /api/universal-wire/live-arrival plus /api/universal-wire/stories and direct Texture reads, and prove a later matching source updates an existing coherent English synthesis article. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

@@ -14783,3 +14783,84 @@ V remains 1.
 Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
 identity, refresh auth, and replay authenticated live-arrival/stories/Texture
 proof.
+
+## 2026-06-27 - O4 Body-Concept Repair Deployed Product Proof
+
+Move: land the opaque-title/body-concept repair and replay authenticated staging
+proof against the public Universal Wire and Texture routes.
+
+Commits and deployment:
+
+- Behavior commit:
+  `f6dd1294260aec623664e10a090f63e520fedb79` (`Use Wire source body concepts
+  for opaque titles`).
+- CI run `28290135800` passed.
+- Docs Truth Check run `28290135796` passed.
+- FlakeHub run `28290135787` passed.
+- Node B deploy job `83820886261` passed.
+- `https://choir.news/health` reported proxy and sandbox deployed_commit
+  `f6dd1294260aec623664e10a090f63e520fedb79`, deployed_at
+  `2026-06-27T13:12:43Z`.
+
+Authenticated product proof:
+
+- Auth state:
+  `/tmp/choir-body-concepts-auth-1782566036.json`.
+- Temporary user: `qa-body-concepts-1782566036@example.com`.
+- Observation time: `2026-06-27T13:16:24.392Z`.
+- `GET /api/universal-wire/live-arrival` returned 200 with latest boundary
+  `cycle_737e0f2a6db2c3a9d04b036c`, observed_at
+  `2026-06-27T13:07:22.918065535Z`, `synthesis_status: skipped`,
+  `synthesis_source_count: 768`, `synthesis_known_source_count: 2`,
+  `synthesis_candidate_groups: 2`, and skip reason `no deterministic story
+  group reached two sources with a shared topic and story signal`.
+- `GET /api/universal-wire/stories?limit=30` returned 200, source
+  `universal-wire-edition-texture`, 22 edition included docs, and 5 public
+  stories.
+- Stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` remained present in
+  edition metadata but was absent from public story results (`bad_doc_index:
+  -1`).
+- Top story doc `0d9eac95-ec18-4a2f-9470-802b8db7aef1` had headline
+  `GDELT Event: northerndailyleader.com.au`, `change_type: source_added`,
+  changed_at `2026-06-27T13:13:13.937580052Z`, source_count `3`, semantic
+  signature `[harbor, health, transport, inspection]`, and three manifest lead
+  sources.
+- Direct platform Texture reads for top story returned 200 for document and
+  revision `dd541b01-8e77-430c-9e50-9703429bcd68`; the revision had 3
+  `source_entities` and native `source_ref` body_doc citations.
+
+Conjecture verdict: supported for deployed read-time materialization/product
+story recovery. The body-concept repair converted the previously empty public
+feed into five source-backed platform Texture stories without reviving the known
+stale synthesis article in public results.
+
+Evidence boundary: authenticated staging product proof over public
+`/api/universal-wire/live-arrival`, `/api/universal-wire/stories`, and platform
+Texture reads. This proof does not show a post-deploy sourcecycled arrival
+cycle: the latest live-arrival boundary was observed before the deployed commit.
+It also does not claim provider-quality synthesis, production semantic
+clustering, Qdrant/world-model projection, promotion/rollback execution, or full
+News benchmark settlement.
+
+Mutation class: orange behavior repair deployed to staging. Protected surfaces:
+Universal Wire sourcecycled concept extraction, deterministic grouping,
+synthesis article creation/update policy, source entity selection, public story
+projection, live-arrival interpretation, and platform Texture read proof.
+
+Rollback path: revert `f6dd1294260aec623664e10a090f63e520fedb79` and dependent
+evidence commits; opaque-title body concepts stop seeding story groups and the
+public feed can return to the empty-current-story behavior after stale filtering.
+
+Heresy delta: `repaired` for deployed current public story recovery through
+read-time materialization; `discovered` / still open for post-deploy
+sourcecycled arrival-cycle proof.
+
+Expected Delta V: 1 for story recovery. Actual Delta V: 1 for deployed product
+story recovery, while the broader mission V remains 1 because the next realism
+axis is post-deploy live source arrival update semantics.
+
+Next move: wait for or induce a post-deploy sourcecycled boundary, bracket the
+boundary with `/api/universal-wire/live-arrival`, `/api/universal-wire/stories`,
+and direct Texture document/revision reads, and prove that a later matching
+source updates an existing coherent article instead of creating a duplicate or
+reviving stale synthesis.
