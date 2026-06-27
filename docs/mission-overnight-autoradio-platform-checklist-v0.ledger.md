@@ -10917,3 +10917,87 @@ promotion/rollback, run acceptance, or full News benchmark claim.
 
 Expected Delta V: 0 for verifier creation. Actual Delta V: 0. V remains 3 until
 the verifier returns a verdict.
+
+## 2026-06-27 - O4 Semantic World-Model Update Verifier Accepted And Root Incorporated
+
+Verifier thread: `019f0799-fdfc-7bd0-8c2d-f8782e89a0d8`, titled
+`Verify O4 world-model update`.
+
+Verdict: `accept`.
+
+Conjecture verdict: supported for the narrow branch-local C6/C8 semantic
+story-state slice.
+
+Worker commit accepted:
+`0b1e58b3a5f39ce7df9a050908794af9b6f6e85f`.
+
+Root incorporation commit:
+`f8040f2e1f297b3026715965c80b4c55c6840f8e` (`Add Universal Wire semantic story
+state`).
+
+Verifier findings: no blocking findings. The verifier stated orchestration may
+incorporate commit `0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` within the stated
+boundaries.
+
+Verifier evidence reviewed:
+
+- Worker thread `019f0790-b4aa-74c1-8e2c-f0cbf9232606`.
+- Worker worktree `/Users/wiz/.codex/worktrees/909c/go-choir`.
+- Worker commit exactly
+  `0b1e58b3a5f39ce7df9a050908794af9b6f6e85f`.
+- Diff limited to:
+  - `internal/runtime/sourcecycled_web_captures.go`
+  - `internal/runtime/wire_synthesis.go`
+  - `internal/runtime/universal_wire_test.go`
+
+Verifier substance:
+
+- Durable semantic state is stored in
+  `choir.universal_wire_story_cluster` body/metadata, including story id,
+  signature, topics/signals, source ids, and typed latest change.
+- Texture revision metadata carries semantic story id/change type.
+- Reader-facing article markdown does not append internal ids; tests explicitly
+  reject story id and `World-model` leakage.
+- Tests cover creation, same-identity later update, Texture revision from
+  semantic metadata, unrelated split, source refs/entities, and diagnostic-only
+  raw captures.
+
+Verifier commands/results:
+
+- `git diff --check 0b1e58b3^..0b1e58b3`: passed.
+- `git show --check --oneline 0b1e58b3`: passed.
+- Focused sourcecycled runtime selector: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 4.149s`.
+- Universal Wire selector: passed,
+  `ok github.com/yusefmosiah/go-choir/internal/runtime 10.506s`.
+
+Root incorporation evidence:
+
+- `git cherry-pick 0b1e58b3a5f39ce7df9a050908794af9b6f6e85f` succeeded as root
+  commit `f8040f2e1f297b3026715965c80b4c55c6840f8e`.
+- `git diff --check HEAD^..HEAD`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 3.622s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 10.120s`.
+
+Dirty/generated classification: root had pre-existing unrelated dirty paths
+`skills/parallax/SKILL.md` and untracked
+`docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`;
+neither was staged or incorporated. The root commit itself changes only the
+three intended runtime/test files.
+
+Residual risks/non-claims: this remains deterministic bounded topic/signal
+state, not production semantic clustering, provider/model synthesis, Qdrant,
+staging acceptance, promotion/rollback, run acceptance, or full News benchmark
+settlement. A future concept-changing source may need stronger identity
+semantics than the current signature-derived story id.
+
+Expected Delta V: 0 for branch-local acceptance and root incorporation. Actual
+Delta V: 0 because C6/C8 still require deployed product evidence before they can
+settle. V remains 3.
+
+Next move: push root commit `f8040f2e1f297b3026715965c80b4c55c6840f8e` plus
+this evidence to `origin/main`, monitor CI/deploy, verify staging build
+identity, and run authenticated product acceptance for the narrow semantic
+story-state slice.
