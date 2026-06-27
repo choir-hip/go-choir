@@ -390,6 +390,7 @@ type universalWireSemanticStoryState struct {
 	SignalConcepts    []string                            `json:"signal_concepts"`
 	EventFrame        universalWireSemanticEventFrame     `json:"event_frame,omitempty"`
 	SynthesisFrame    universalWireSemanticSynthesisFrame `json:"synthesis_frame,omitempty"`
+	UpdateDecision    universalWireSemanticUpdateDecision `json:"update_decision,omitempty"`
 	SourceItemIDs     []string                            `json:"source_item_ids"`
 	SourceCaptureIDs  []string                            `json:"source_capture_ids,omitempty"`
 	SourceCount       int                                 `json:"source_count"`
@@ -408,6 +409,17 @@ type universalWireSemanticStoryChange struct {
 	AddedCaptureIDs     []string `json:"added_capture_ids,omitempty"`
 	AddedConcepts       []string `json:"added_concepts,omitempty"`
 	ChangedAt           string   `json:"changed_at"`
+}
+
+type universalWireSemanticUpdateDecision struct {
+	SchemaVersion        string   `json:"schema_version,omitempty"`
+	Decision             string   `json:"decision,omitempty"`
+	Rationale            string   `json:"rationale,omitempty"`
+	ContinuityPredicates []string `json:"continuity_predicates,omitempty"`
+	MatchedSourceItemIDs []string `json:"matched_source_item_ids,omitempty"`
+	AddedSourceItemIDs   []string `json:"added_source_item_ids,omitempty"`
+	SplitPredicates      []string `json:"split_predicates,omitempty"`
+	UnresolvedQuestions  []string `json:"unresolved_questions,omitempty"`
 }
 
 type universalWireSemanticEventFrame struct {
@@ -497,6 +509,7 @@ func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterI
 	}
 	state.EventFrame = universalWireSemanticEventFrameFromSources(sources, state)
 	state.SynthesisFrame = universalWireSemanticSynthesisFrameFromSources(sources, state)
+	state.UpdateDecision = universalWireSemanticUpdateDecisionFromState(state, previousState, hasPreviousState)
 	state.Headline = universalWireSemanticStoryHeadline(sources, state)
 	state.Summary = universalWireSemanticStorySummary(sources, state)
 	state.Tension = universalWireSemanticStoryTension(state)
@@ -683,6 +696,105 @@ func universalWireSemanticSynthesisFrameFromSources(sources []universalWireSynth
 		Reconciliation: reconciliation,
 		SourceAccounts: accounts,
 	}
+}
+
+func universalWireSemanticUpdateDecisionFromState(state universalWireSemanticStoryState, previousState universalWireSemanticStoryState, hasPreviousState bool) universalWireSemanticUpdateDecision {
+	decision := universalWireSemanticUpdateDecision{
+		SchemaVersion:        "choir.universal_wire_story_cluster.update_decision.v1",
+		Decision:             "open_new_story",
+		ContinuityPredicates: universalWireContinuityPredicates(state),
+		MatchedSourceItemIDs: append([]string(nil), previousState.SourceItemIDs...),
+		AddedSourceItemIDs:   append([]string(nil), state.LatestChange.AddedSourceItemIDs...),
+		SplitPredicates:      universalWireSplitPredicates(state),
+		UnresolvedQuestions:  universalWireUnresolvedQuestions(state),
+	}
+	sort.Strings(decision.MatchedSourceItemIDs)
+	sort.Strings(decision.AddedSourceItemIDs)
+	if hasPreviousState && state.LatestChange.ChangeType == "source_added" {
+		decision.Decision = "update_existing_story"
+	}
+	if hasPreviousState && state.LatestChange.ChangeType == "state_refreshed" {
+		decision.Decision = "keep_existing_story"
+	}
+	switch decision.Decision {
+	case "update_existing_story":
+		decision.Rationale = "Later source reporting shares the story topic and continuity signals with the existing semantic story, so Universal Wire revises the current article instead of opening a sibling event."
+	case "keep_existing_story":
+		decision.Rationale = "The observed source set does not add new source items or semantic concepts, so the existing story remains current without a new article revision."
+	default:
+		decision.Rationale = "The source cluster has no prior semantic story state, so Universal Wire opens a new story object and article."
+	}
+	return decision
+}
+
+func universalWireContinuityPredicates(state universalWireSemanticStoryState) []string {
+	predicates := []string{}
+	for _, topic := range state.TopicConcepts {
+		switch topic {
+		case "transport":
+			predicates = append(predicates, "same_transport_disruption")
+		case "harbor":
+			predicates = append(predicates, "same_harbor_access_disruption")
+		case "energy":
+			predicates = append(predicates, "same_grid_or_outage_event")
+		case "health":
+			predicates = append(predicates, "same_health_service_disruption")
+		case "flood":
+			predicates = append(predicates, "same_weather_or_flood_disruption")
+		}
+	}
+	for _, signal := range state.SignalConcepts {
+		switch signal {
+		case "inspection":
+			predicates = append(predicates, "inspection_timeline_continues")
+		case "delay":
+			predicates = append(predicates, "impact_delay_continues")
+		case "reopening":
+			predicates = append(predicates, "reopening_timeline_continues")
+		case "flood":
+			predicates = append(predicates, "flood_cause_continues")
+		case "harbor-access":
+			predicates = append(predicates, "access_restriction_continues")
+		case "strike":
+			predicates = append(predicates, "labor_action_continues")
+		}
+	}
+	return uniqueSortedWireStrings(predicates)
+}
+
+func universalWireSplitPredicates(state universalWireSemanticStoryState) []string {
+	base := []string{"different_location", "different_timeline", "different_affected_population", "different_official_explanation"}
+	switch {
+	case containsWireString(state.TopicConcepts, "transport"):
+		base = append(base, "new_transport_mode_or_corridor")
+	case containsWireString(state.TopicConcepts, "harbor"):
+		base = append(base, "different_port_or_channel")
+	case containsWireString(state.TopicConcepts, "health"):
+		base = append(base, "different_service_site_or_patient_group")
+	case containsWireString(state.TopicConcepts, "energy"):
+		base = append(base, "different_grid_asset_or_customer_area")
+	}
+	return uniqueSortedWireStrings(base)
+}
+
+func universalWireUnresolvedQuestions(state universalWireSemanticStoryState) []string {
+	if state.EventFrame.ContinuityQuestion != "" {
+		return []string{universalWireEnsureSentence(state.EventFrame.ContinuityQuestion)}
+	}
+	return []string{"Watch whether later reporting changes the timeline, affected people, location, or official explanation."}
+}
+
+func uniqueSortedWireStrings(values []string) []string {
+	out := []string{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || containsWireString(out, value) {
+			continue
+		}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func universalWireLanguageListFromSources(sources []universalWireSynthesisSource) string {

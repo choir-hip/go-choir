@@ -45,18 +45,19 @@ type WireSourceManifest struct {
 // WireStorySemanticState is structured product evidence for Wire story state.
 // It is metadata for authenticated product/API proof, not reader-facing copy.
 type WireStorySemanticState struct {
-	SchemaVersion       string               `json:"schema_version,omitempty"`
-	WorldModelKind      string               `json:"world_model_kind,omitempty"`
-	StoryID             string               `json:"story_id,omitempty"`
-	ChangeType          string               `json:"change_type,omitempty"`
-	SemanticSignature   []string             `json:"semantic_signature,omitempty"`
-	TopicConcepts       []string             `json:"topic_concepts,omitempty"`
-	SignalConcepts      []string             `json:"signal_concepts,omitempty"`
-	EventFrame          *WireStoryEventFrame `json:"event_frame,omitempty"`
-	PreviousSourceCount int                  `json:"previous_source_count"`
-	CurrentSourceCount  int                  `json:"current_source_count"`
-	SourceCount         int                  `json:"source_count"`
-	ChangedAt           string               `json:"changed_at,omitempty"`
+	SchemaVersion       string                   `json:"schema_version,omitempty"`
+	WorldModelKind      string                   `json:"world_model_kind,omitempty"`
+	StoryID             string                   `json:"story_id,omitempty"`
+	ChangeType          string                   `json:"change_type,omitempty"`
+	SemanticSignature   []string                 `json:"semantic_signature,omitempty"`
+	TopicConcepts       []string                 `json:"topic_concepts,omitempty"`
+	SignalConcepts      []string                 `json:"signal_concepts,omitempty"`
+	EventFrame          *WireStoryEventFrame     `json:"event_frame,omitempty"`
+	UpdateDecision      *WireStoryUpdateDecision `json:"update_decision,omitempty"`
+	PreviousSourceCount int                      `json:"previous_source_count"`
+	CurrentSourceCount  int                      `json:"current_source_count"`
+	SourceCount         int                      `json:"source_count"`
+	ChangedAt           string                   `json:"changed_at,omitempty"`
 }
 
 // WireStoryEventFrame is the public, structured account of what the semantic
@@ -67,6 +68,20 @@ type WireStoryEventFrame struct {
 	CurrentAccount     string `json:"current_account,omitempty"`
 	LatestDevelopment  string `json:"latest_development,omitempty"`
 	ContinuityQuestion string `json:"continuity_question,omitempty"`
+}
+
+// WireStoryUpdateDecision is product-visible evidence for why Universal Wire
+// updated an existing semantic story or opened a new one. It is an observation
+// contract for future provider/reconciler work, not reader-facing article copy.
+type WireStoryUpdateDecision struct {
+	SchemaVersion        string   `json:"schema_version,omitempty"`
+	Decision             string   `json:"decision,omitempty"`
+	Rationale            string   `json:"rationale,omitempty"`
+	ContinuityPredicates []string `json:"continuity_predicates,omitempty"`
+	MatchedSourceItemIDs []string `json:"matched_source_item_ids,omitempty"`
+	AddedSourceItemIDs   []string `json:"added_source_item_ids,omitempty"`
+	SplitPredicates      []string `json:"split_predicates,omitempty"`
+	UnresolvedQuestions  []string `json:"unresolved_questions,omitempty"`
 }
 
 // WireStory is the Wire app projection of a Texture article head (edition index).

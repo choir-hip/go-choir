@@ -133,6 +133,7 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 		"universal_wire_story_cluster_object_id": storyClusterObjectID,
 		"universal_wire_semantic_story_id":       semanticState.StoryID,
 		"universal_wire_semantic_change_type":    semanticState.LatestChange.ChangeType,
+		"universal_wire_update_decision":         semanticState.UpdateDecision,
 		"universal_wire_article_alias_path":      aliasPath,
 		"synthesis_source_count":                 len(sources),
 		"synthesis_languages":                    languages,
@@ -470,6 +471,10 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, st
 		b.WriteString(universalWireEnsureSentence(latestUpdate))
 		b.WriteString("\n\n")
 	}
+	if decision := universalWireSynthesisUpdateDecisionSentence(state); decision != "" {
+		b.WriteString(decision)
+		b.WriteString("\n\n")
+	}
 	b.WriteString("Source map:\n")
 	for i := 0; i < len(sources) && i < len(entities); i++ {
 		account := universalWireSemanticSourceAccount{}
@@ -485,6 +490,40 @@ func universalWireSynthesisArticleMarkdown(headline, summary, tension string, st
 	b.WriteString("\n")
 	b.WriteString(universalWireEnsureSentence(tension))
 	return b.String()
+}
+
+func universalWireSynthesisUpdateDecisionSentence(state universalWireSemanticStoryState) string {
+	decision := state.UpdateDecision
+	if decision.Decision == "" {
+		return ""
+	}
+	action := "This article opens a new account"
+	switch decision.Decision {
+	case "update_existing_story":
+		action = "This article updates the existing account"
+	case "keep_existing_story":
+		action = "This account remains current"
+	}
+	predicates := universalWireHumanList(universalWireHumanizedPredicates(decision.ContinuityPredicates))
+	if predicates == "" {
+		predicates = "the observed story continuity"
+	}
+	split := universalWireHumanList(universalWireHumanizedPredicates(decision.SplitPredicates))
+	if split == "" {
+		split = "a different timeline, location, affected group, or explanation"
+	}
+	return universalWireEnsureSentence(action + " because later reporting matched " + predicates + "; it should split only on " + split)
+}
+
+func universalWireHumanizedPredicates(predicates []string) []string {
+	out := make([]string, 0, len(predicates))
+	for _, predicate := range predicates {
+		label := strings.ReplaceAll(strings.TrimSpace(predicate), "_", " ")
+		if label != "" {
+			out = append(out, label)
+		}
+	}
+	return out
 }
 
 func universalWireSourceAccountSentence(source universalWireSynthesisSource, account universalWireSemanticSourceAccount) string {

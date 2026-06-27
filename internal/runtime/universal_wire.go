@@ -559,6 +559,19 @@ func wireStorySemanticStateFromClusterState(state universalWireSemanticStoryStat
 			ContinuityQuestion: state.EventFrame.ContinuityQuestion,
 		}
 	}
+	var updateDecision *types.WireStoryUpdateDecision
+	if state.UpdateDecision.Decision != "" || state.UpdateDecision.Rationale != "" {
+		updateDecision = &types.WireStoryUpdateDecision{
+			SchemaVersion:        state.UpdateDecision.SchemaVersion,
+			Decision:             state.UpdateDecision.Decision,
+			Rationale:            state.UpdateDecision.Rationale,
+			ContinuityPredicates: append([]string(nil), state.UpdateDecision.ContinuityPredicates...),
+			MatchedSourceItemIDs: append([]string(nil), state.UpdateDecision.MatchedSourceItemIDs...),
+			AddedSourceItemIDs:   append([]string(nil), state.UpdateDecision.AddedSourceItemIDs...),
+			SplitPredicates:      append([]string(nil), state.UpdateDecision.SplitPredicates...),
+			UnresolvedQuestions:  append([]string(nil), state.UpdateDecision.UnresolvedQuestions...),
+		}
+	}
 	return &types.WireStorySemanticState{
 		SchemaVersion:       state.SchemaVersion,
 		WorldModelKind:      state.WorldModelKind,
@@ -568,6 +581,7 @@ func wireStorySemanticStateFromClusterState(state universalWireSemanticStoryStat
 		TopicConcepts:       append([]string(nil), state.TopicConcepts...),
 		SignalConcepts:      append([]string(nil), state.SignalConcepts...),
 		EventFrame:          frame,
+		UpdateDecision:      updateDecision,
 		PreviousSourceCount: state.LatestChange.PreviousSourceCount,
 		CurrentSourceCount:  state.LatestChange.CurrentSourceCount,
 		SourceCount:         state.SourceCount,

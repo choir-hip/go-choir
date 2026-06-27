@@ -359,6 +359,16 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		!strings.Contains(firstSemanticState.EventFrame.ContinuityQuestion, "passenger impact") {
 		t.Fatalf("first semantic story state = %+v metadata=%#v, want durable created world-model state", firstSemanticState, firstClusterMeta)
 	}
+	if firstSemanticState.UpdateDecision.Decision != "open_new_story" ||
+		!strings.Contains(firstSemanticState.UpdateDecision.Rationale, "opens a new story object") ||
+		!slices.Contains(firstSemanticState.UpdateDecision.ContinuityPredicates, "same_transport_disruption") ||
+		!slices.Contains(firstSemanticState.UpdateDecision.ContinuityPredicates, "inspection_timeline_continues") ||
+		len(firstSemanticState.UpdateDecision.MatchedSourceItemIDs) != 0 ||
+		!slices.Contains(firstSemanticState.UpdateDecision.AddedSourceItemIDs, "srcitem-live-pt") ||
+		!slices.Contains(firstSemanticState.UpdateDecision.SplitPredicates, "different_timeline") ||
+		len(firstSemanticState.UpdateDecision.UnresolvedQuestions) == 0 {
+		t.Fatalf("first update decision = %+v, want durable new-story world-model decision", firstSemanticState.UpdateDecision)
+	}
 	if !strings.Contains(firstSemanticState.SynthesisFrame.SharedAccount, "reports in Portuguese and Spanish") ||
 		!strings.Contains(firstSemanticState.SynthesisFrame.SharedAccount, "disrupted rail corridor") ||
 		!strings.Contains(firstSemanticState.SynthesisFrame.LatestUpdate, "keeps each source distinct") ||
@@ -379,6 +389,7 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if strings.Contains(firstRev.Content, firstSemanticState.StoryID) ||
 		strings.Contains(firstRev.Content, "World-model") ||
+		!strings.Contains(firstRev.Content, "This article opens a new account because later reporting matched") ||
 		!strings.Contains(firstRev.Content, "Source map:") ||
 		!strings.Contains(firstRev.Content, "Portuguese account") ||
 		!strings.Contains(firstRev.Content, "Spanish account") ||
@@ -452,6 +463,17 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		!strings.Contains(secondSemanticState.EventFrame.LatestDevelopment, "same story rather than opening a separate article") {
 		t.Fatalf("updated semantic story state = %+v first=%+v, want typed later-source update on same identity", secondSemanticState, firstSemanticState)
 	}
+	if secondSemanticState.UpdateDecision.Decision != "update_existing_story" ||
+		!strings.Contains(secondSemanticState.UpdateDecision.Rationale, "revises the current article instead of opening a sibling event") ||
+		!slices.Contains(secondSemanticState.UpdateDecision.MatchedSourceItemIDs, "srcitem-live-pt") ||
+		!slices.Contains(secondSemanticState.UpdateDecision.MatchedSourceItemIDs, "srcitem-live-es") ||
+		!slices.Contains(secondSemanticState.UpdateDecision.AddedSourceItemIDs, "srcitem-live-fr") ||
+		!slices.Contains(secondSemanticState.UpdateDecision.ContinuityPredicates, "same_transport_disruption") ||
+		!slices.Contains(secondSemanticState.UpdateDecision.ContinuityPredicates, "reopening_timeline_continues") ||
+		!slices.Contains(secondSemanticState.UpdateDecision.SplitPredicates, "new_transport_mode_or_corridor") ||
+		len(secondSemanticState.UpdateDecision.UnresolvedQuestions) == 0 {
+		t.Fatalf("updated semantic update decision = %+v, want durable same-story update decision", secondSemanticState.UpdateDecision)
+	}
 	secondRev, err := handler.rt.Store().GetRevision(context.Background(), secondProjection.SynthesisRevisionID, universalWirePlatformOwnerID())
 	if err != nil {
 		t.Fatalf("load second synthesis revision: %v", err)
@@ -460,13 +482,17 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if err := json.Unmarshal(secondRev.Metadata, &secondRevMeta); err != nil {
 		t.Fatalf("decode second synthesis revision metadata: %v", err)
 	}
+	secondUpdateDecisionMeta, _ := secondRevMeta["universal_wire_update_decision"].(map[string]any)
 	if metadataString(secondRevMeta, "universal_wire_semantic_story_id") != firstSemanticState.StoryID ||
 		metadataString(secondRevMeta, "universal_wire_semantic_change_type") != "source_added" ||
+		metadataString(secondUpdateDecisionMeta, "decision") != "update_existing_story" ||
 		metadataString(secondRevMeta, "synthesis_frame_kind") != "semantic_world_model_source_map" ||
 		strings.Contains(secondRev.Content, secondSemanticState.StoryID) ||
 		strings.Contains(secondRev.Content, "World-model") ||
 		!strings.Contains(secondRev.Content, "French account") ||
 		!strings.Contains(secondRev.Content, "La reprise reste partielle") ||
+		!strings.Contains(secondRev.Content, "This article updates the existing account because later reporting matched") ||
+		!strings.Contains(secondRev.Content, "it should split only on") ||
 		!strings.Contains(secondRev.Content, "same story rather than opening a separate article") {
 		t.Fatalf("second revision meta/content = %#v / %q, want Texture revision from semantic metadata and article-like public copy", secondRevMeta, secondRev.Content)
 	}
@@ -527,7 +553,10 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if secondStories.Stories[0].SemanticStory.StoryID != firstStory.SemanticStory.StoryID ||
 		secondStories.Stories[0].SemanticStory.ChangeType != "source_added" ||
 		secondStories.Stories[0].SemanticStory.PreviousSourceCount != 2 ||
-		secondStories.Stories[0].SemanticStory.CurrentSourceCount != 3 {
+		secondStories.Stories[0].SemanticStory.CurrentSourceCount != 3 ||
+		secondStories.Stories[0].SemanticStory.UpdateDecision == nil ||
+		secondStories.Stories[0].SemanticStory.UpdateDecision.Decision != "update_existing_story" ||
+		!slices.Contains(secondStories.Stories[0].SemanticStory.UpdateDecision.AddedSourceItemIDs, "srcitem-live-fr") {
 		t.Fatalf("updated product story semantic evidence = %+v, want same story id with typed source_added change", secondStories.Stories[0].SemanticStory)
 	}
 	secondStoriesJSON, err := json.Marshal(secondStories)
@@ -1302,6 +1331,19 @@ func assertWireStorySemanticStateForTest(t *testing.T, story types.WireStory, wa
 			got.EventFrame.LatestDevelopment != want.EventFrame.LatestDevelopment ||
 			got.EventFrame.ContinuityQuestion != want.EventFrame.ContinuityQuestion {
 			t.Fatalf("story event frame = %+v, want %+v", got.EventFrame, want.EventFrame)
+		}
+	}
+	if want.UpdateDecision.Decision != "" {
+		if got.UpdateDecision == nil ||
+			got.UpdateDecision.SchemaVersion != want.UpdateDecision.SchemaVersion ||
+			got.UpdateDecision.Decision != want.UpdateDecision.Decision ||
+			got.UpdateDecision.Rationale != want.UpdateDecision.Rationale ||
+			!slices.Equal(got.UpdateDecision.ContinuityPredicates, want.UpdateDecision.ContinuityPredicates) ||
+			!slices.Equal(got.UpdateDecision.MatchedSourceItemIDs, want.UpdateDecision.MatchedSourceItemIDs) ||
+			!slices.Equal(got.UpdateDecision.AddedSourceItemIDs, want.UpdateDecision.AddedSourceItemIDs) ||
+			!slices.Equal(got.UpdateDecision.SplitPredicates, want.UpdateDecision.SplitPredicates) ||
+			!slices.Equal(got.UpdateDecision.UnresolvedQuestions, want.UpdateDecision.UnresolvedQuestions) {
+			t.Fatalf("story update decision = %+v, want %+v", got.UpdateDecision, want.UpdateDecision)
 		}
 	}
 	readerCopy := strings.Join([]string{story.Headline, story.Dek, story.TextureContent}, "\n")
