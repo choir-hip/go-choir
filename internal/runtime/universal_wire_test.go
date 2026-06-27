@@ -359,6 +359,14 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		!strings.Contains(firstSemanticState.EventFrame.ContinuityQuestion, "passenger impact") {
 		t.Fatalf("first semantic story state = %+v metadata=%#v, want durable created world-model state", firstSemanticState, firstClusterMeta)
 	}
+	if !strings.Contains(firstSemanticState.SynthesisFrame.SharedAccount, "reports in Portuguese and Spanish") ||
+		!strings.Contains(firstSemanticState.SynthesisFrame.SharedAccount, "disrupted rail corridor") ||
+		!strings.Contains(firstSemanticState.SynthesisFrame.LatestUpdate, "keeps each source distinct") ||
+		len(firstSemanticState.SynthesisFrame.SourceAccounts) != 2 ||
+		!universalWireSemanticSourceAccountsContainLanguageForTest(firstSemanticState.SynthesisFrame.SourceAccounts, "Portuguese") ||
+		!universalWireSemanticSourceAccountsContainLanguageForTest(firstSemanticState.SynthesisFrame.SourceAccounts, "Spanish") {
+		t.Fatalf("first synthesis frame = %+v, want multilingual reconciler-quality source map", firstSemanticState.SynthesisFrame)
+	}
 	assertWireStorySemanticStateForTest(t, firstStory, firstSemanticState)
 	firstStoriesJSON, err := json.Marshal(firstStories)
 	if err != nil {
@@ -371,6 +379,9 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if strings.Contains(firstRev.Content, firstSemanticState.StoryID) ||
 		strings.Contains(firstRev.Content, "World-model") ||
+		!strings.Contains(firstRev.Content, "Source map:") ||
+		!strings.Contains(firstRev.Content, "Portuguese account") ||
+		!strings.Contains(firstRev.Content, "Spanish account") ||
 		!strings.Contains(firstRev.Content, "Corredor ferroviario reabre parcialmente") ||
 		!strings.Contains(firstRev.Content, "Watch whether later reports change") {
 		t.Fatalf("first synthesis article content = %q, want article-like semantic-state update without internal ids", firstRev.Content)
@@ -431,6 +442,12 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		secondSemanticState.LatestChange.PreviousSourceCount != 2 ||
 		secondSemanticState.LatestChange.CurrentSourceCount != 3 ||
 		!slices.Contains(secondSemanticState.LatestChange.AddedSourceItemIDs, "srcitem-live-fr") ||
+		!strings.Contains(secondSemanticState.SynthesisFrame.SharedAccount, "French") ||
+		!strings.Contains(secondSemanticState.SynthesisFrame.SharedAccount, "Portuguese") ||
+		!strings.Contains(secondSemanticState.SynthesisFrame.SharedAccount, "Spanish") ||
+		!strings.Contains(secondSemanticState.SynthesisFrame.LatestUpdate, "same story rather than opening a separate article") ||
+		len(secondSemanticState.SynthesisFrame.SourceAccounts) != 3 ||
+		!universalWireSemanticSourceAccountsContainLanguageForTest(secondSemanticState.SynthesisFrame.SourceAccounts, "French") ||
 		!strings.Contains(secondSemanticState.EventFrame.LatestDevelopment, "La reprise reste partielle") ||
 		!strings.Contains(secondSemanticState.EventFrame.LatestDevelopment, "same story rather than opening a separate article") {
 		t.Fatalf("updated semantic story state = %+v first=%+v, want typed later-source update on same identity", secondSemanticState, firstSemanticState)
@@ -445,8 +462,10 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if metadataString(secondRevMeta, "universal_wire_semantic_story_id") != firstSemanticState.StoryID ||
 		metadataString(secondRevMeta, "universal_wire_semantic_change_type") != "source_added" ||
+		metadataString(secondRevMeta, "synthesis_frame_kind") != "semantic_world_model_source_map" ||
 		strings.Contains(secondRev.Content, secondSemanticState.StoryID) ||
 		strings.Contains(secondRev.Content, "World-model") ||
+		!strings.Contains(secondRev.Content, "French account") ||
 		!strings.Contains(secondRev.Content, "La reprise reste partielle") ||
 		!strings.Contains(secondRev.Content, "same story rather than opening a separate article") {
 		t.Fatalf("second revision meta/content = %#v / %q, want Texture revision from semantic metadata and article-like public copy", secondRevMeta, secondRev.Content)
@@ -1291,6 +1310,15 @@ func assertWireStorySemanticStateForTest(t *testing.T, story types.WireStory, wa
 		strings.Contains(readerCopy, "World-model") {
 		t.Fatalf("reader-facing story copy leaked semantic metadata id/state: story=%+v semantic=%+v", story, got)
 	}
+}
+
+func universalWireSemanticSourceAccountsContainLanguageForTest(accounts []universalWireSemanticSourceAccount, language string) bool {
+	for _, account := range accounts {
+		if account.Language == language {
+			return true
+		}
+	}
+	return false
 }
 
 func assertUniversalWireStoryTextureReadableForTest(t *testing.T, handler *APIHandler, story types.WireStory, wantRevisionID string) (textureDocumentResponse, textureListRevisionsResponse) {
@@ -2198,7 +2226,8 @@ func TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceE
 		story.SourceState != "universal-wire-edition-texture" ||
 		strings.Contains(story.SourceState, "objectgraph-web-capture") ||
 		strings.Contains(story.TextureContent, "Universal Wire selected") ||
-		!strings.Contains(story.TextureContent, "belong to one account") ||
+		!strings.Contains(story.TextureContent, "single account") ||
+		!strings.Contains(story.TextureContent, "Source map:") ||
 		story.SemanticStory == nil ||
 		story.SemanticStory.EventFrame == nil ||
 		!strings.Contains(story.SemanticStory.EventFrame.CurrentAccount, "Rail corridor reopens") ||

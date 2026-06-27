@@ -74,6 +74,13 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if clusterID == "" {
 		clusterID = stableSourceEntityID("universal_wire_cluster", headline+"|"+sources[0].ItemID+"|"+sources[1].ItemID)
 	}
+	semanticState := req.SemanticState
+	if semanticState.StoryID == "" {
+		semanticState = rt.universalWireSemanticStoryState(ctx, clusterID, sources, now)
+	}
+	if strings.TrimSpace(req.Headline) == "" || universalWireTextContainsArticleSurfaceHelper(req.Headline) {
+		headline = firstNonEmpty(semanticState.Headline, headline)
+	}
 	aliasPath := "universal-wire/articles/" + universalWireSlug(clusterID) + ".texture"
 	ownerID := universalWirePlatformOwnerID()
 	doc, err := rt.getOrCreateUniversalWireSynthesisDocument(ctx, ownerID, aliasPath, headline, now)
@@ -95,7 +102,7 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 
 	revisionID := uuid.NewString()
 	sourceEntities := universalWireSynthesisSourceEntities(sources, now)
-	content := universalWireSynthesisArticleMarkdown(headline, req.Summary, req.Tension, sources, sourceEntities)
+	content := universalWireSynthesisArticleMarkdown(headline, req.Summary, req.Tension, semanticState, sources, sourceEntities)
 	bodyDoc, sourceEntitiesJSON, projectedContent, err := markdownLineageStructuredRevision(doc.DocID, revisionID, content, sourceEntities, nil)
 	if err != nil {
 		return types.Document{}, types.Revision{}, "", fmt.Errorf("create synthesis body_doc: %w", err)
@@ -124,11 +131,12 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 		"universal_wire_synthesis":               true,
 		"universal_wire_story_cluster_id":        clusterID,
 		"universal_wire_story_cluster_object_id": storyClusterObjectID,
-		"universal_wire_semantic_story_id":       req.SemanticState.StoryID,
-		"universal_wire_semantic_change_type":    req.SemanticState.LatestChange.ChangeType,
+		"universal_wire_semantic_story_id":       semanticState.StoryID,
+		"universal_wire_semantic_change_type":    semanticState.LatestChange.ChangeType,
 		"universal_wire_article_alias_path":      aliasPath,
 		"synthesis_source_count":                 len(sources),
 		"synthesis_languages":                    languages,
+		"synthesis_frame_kind":                   "semantic_world_model_source_map",
 		"source_item_ids":                        sourceItemIDs,
 		"selected_style_sources":                 []map[string]any{{"title": "Style.texture: Universal Wire"}},
 		"selected_style_rationale":               "Bounded local Universal Wire synthesis slice over clustered source captures.",
@@ -166,7 +174,7 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if err := rt.publishUniversalWireSynthesisArticleToPlatform(ctx, doc, rev); err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
-	if err := rt.upsertUniversalWireStoryCluster(ctx, clusterID, aliasPath, doc, rev, editionRef, sources, req.SemanticState, now); err != nil {
+	if err := rt.upsertUniversalWireStoryCluster(ctx, clusterID, aliasPath, doc, rev, editionRef, sources, semanticState, now); err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
 	return doc, rev, editionRef, nil
@@ -439,38 +447,68 @@ func universalWireSynthesisSourceEntities(sources []universalWireSynthesisSource
 	return out
 }
 
-func universalWireSynthesisArticleMarkdown(headline, summary, tension string, sources []universalWireSynthesisSource, entities []textureSourceEntity) string {
-	second := sources[1]
-	firstRef := entities[0].EntityID
-	secondRef := entities[1].EntityID
+func universalWireSynthesisArticleMarkdown(headline, summary, tension string, state universalWireSemanticStoryState, sources []universalWireSynthesisSource, entities []textureSourceEntity) string {
 	summary = strings.TrimSpace(summary)
 	if summary == "" || universalWireTextContainsArticleSurfaceHelper(summary) {
-		summary = universalWireSynthesisSummaryFromSources(sources)
+		summary = firstNonEmpty(state.SynthesisFrame.SharedAccount, universalWireSynthesisSummaryFromSources(sources))
 	}
 	tension = strings.TrimSpace(tension)
 	if tension == "" || universalWireTextContainsArticleSurfaceHelper(tension) {
-		tension = universalWireSynthesisRevisionSentence(sources)
+		tension = firstNonEmpty(state.SynthesisFrame.Reconciliation, universalWireSynthesisRevisionSentence(sources))
+	}
+	latestUpdate := strings.TrimSpace(state.SynthesisFrame.LatestUpdate)
+	if latestUpdate == "" && len(sources) > 1 {
+		latestUpdate = universalWireSourceFactSentence(sources[1], "The second account")
 	}
 	var b strings.Builder
 	b.WriteString("# ")
 	b.WriteString(headline)
 	b.WriteString("\n\n")
 	b.WriteString(universalWireEnsureSentence(summary))
-	b.WriteString(" ")
-	b.WriteString(fmt.Sprintf("[lead report](source:%s)", firstRef))
 	b.WriteString("\n\n")
-	b.WriteString(universalWireSourceFactSentence(second, "The later dispatch"))
-	b.WriteString(" ")
-	b.WriteString(fmt.Sprintf("[supporting report](source:%s)", secondRef))
-	b.WriteString("\n\n")
-	b.WriteString(universalWireEnsureSentence(tension))
-	for i := 2; i < len(sources) && i < len(entities); i++ {
-		b.WriteString(" ")
-		b.WriteString(universalWireSourceFactSentence(sources[i], "A further update"))
-		b.WriteString(" ")
-		b.WriteString(fmt.Sprintf("[additional source](source:%s)", entities[i].EntityID))
+	if latestUpdate != "" {
+		b.WriteString(universalWireEnsureSentence(latestUpdate))
+		b.WriteString("\n\n")
 	}
+	b.WriteString("Source map:\n")
+	for i := 0; i < len(sources) && i < len(entities); i++ {
+		account := universalWireSemanticSourceAccount{}
+		if i < len(state.SynthesisFrame.SourceAccounts) {
+			account = state.SynthesisFrame.SourceAccounts[i]
+		}
+		b.WriteString("- ")
+		b.WriteString(universalWireSourceAccountSentence(sources[i], account))
+		b.WriteString(" ")
+		b.WriteString(fmt.Sprintf("[source](source:%s)", entities[i].EntityID))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(universalWireEnsureSentence(tension))
 	return b.String()
+}
+
+func universalWireSourceAccountSentence(source universalWireSynthesisSource, account universalWireSemanticSourceAccount) string {
+	language := strings.TrimSpace(account.Language)
+	if language == "" {
+		language = universalWireLanguageName(source.Language)
+	}
+	if language == "" {
+		language = "Source"
+	} else {
+		language += " account"
+	}
+	title := strings.TrimSpace(firstNonEmpty(account.Title, source.Title))
+	contribution := strings.TrimSpace(account.Contribution)
+	if contribution == "" {
+		contribution = universalWireHumanList(universalWireArticleSignalPhrases(universalWireKnownConceptSet(strings.Join([]string{source.Title, source.Body}, " "))))
+	}
+	if contribution == "" {
+		contribution = "the developing account"
+	}
+	if title == "" {
+		return universalWireEnsureSentence(language + " contributes " + contribution)
+	}
+	return universalWireEnsureSentence(language + " " + title + " contributes " + contribution)
 }
 
 func universalWireSynthesisSummaryFromSources(sources []universalWireSynthesisSource) string {

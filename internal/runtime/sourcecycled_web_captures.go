@@ -381,22 +381,23 @@ func universalWireLiveSynthesisSkipReason(result universalWireGraphSynthesisResu
 }
 
 type universalWireSemanticStoryState struct {
-	SchemaVersion     string                           `json:"schema_version"`
-	WorldModelKind    string                           `json:"world_model_kind"`
-	StoryID           string                           `json:"story_id"`
-	ClusterID         string                           `json:"cluster_id"`
-	SemanticSignature []string                         `json:"semantic_signature"`
-	TopicConcepts     []string                         `json:"topic_concepts"`
-	SignalConcepts    []string                         `json:"signal_concepts"`
-	EventFrame        universalWireSemanticEventFrame  `json:"event_frame,omitempty"`
-	SourceItemIDs     []string                         `json:"source_item_ids"`
-	SourceCaptureIDs  []string                         `json:"source_capture_ids,omitempty"`
-	SourceCount       int                              `json:"source_count"`
-	Languages         []string                         `json:"languages,omitempty"`
-	Headline          string                           `json:"headline"`
-	Summary           string                           `json:"summary"`
-	Tension           string                           `json:"tension"`
-	LatestChange      universalWireSemanticStoryChange `json:"latest_change"`
+	SchemaVersion     string                              `json:"schema_version"`
+	WorldModelKind    string                              `json:"world_model_kind"`
+	StoryID           string                              `json:"story_id"`
+	ClusterID         string                              `json:"cluster_id"`
+	SemanticSignature []string                            `json:"semantic_signature"`
+	TopicConcepts     []string                            `json:"topic_concepts"`
+	SignalConcepts    []string                            `json:"signal_concepts"`
+	EventFrame        universalWireSemanticEventFrame     `json:"event_frame,omitempty"`
+	SynthesisFrame    universalWireSemanticSynthesisFrame `json:"synthesis_frame,omitempty"`
+	SourceItemIDs     []string                            `json:"source_item_ids"`
+	SourceCaptureIDs  []string                            `json:"source_capture_ids,omitempty"`
+	SourceCount       int                                 `json:"source_count"`
+	Languages         []string                            `json:"languages,omitempty"`
+	Headline          string                              `json:"headline"`
+	Summary           string                              `json:"summary"`
+	Tension           string                              `json:"tension"`
+	LatestChange      universalWireSemanticStoryChange    `json:"latest_change"`
 }
 
 type universalWireSemanticStoryChange struct {
@@ -414,6 +415,20 @@ type universalWireSemanticEventFrame struct {
 	CurrentAccount     string `json:"current_account,omitempty"`
 	LatestDevelopment  string `json:"latest_development,omitempty"`
 	ContinuityQuestion string `json:"continuity_question,omitempty"`
+}
+
+type universalWireSemanticSynthesisFrame struct {
+	SharedAccount  string                               `json:"shared_account,omitempty"`
+	LatestUpdate   string                               `json:"latest_update,omitempty"`
+	Reconciliation string                               `json:"reconciliation,omitempty"`
+	SourceAccounts []universalWireSemanticSourceAccount `json:"source_accounts,omitempty"`
+}
+
+type universalWireSemanticSourceAccount struct {
+	ItemID       string `json:"item_id,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Language     string `json:"language,omitempty"`
+	Contribution string `json:"contribution,omitempty"`
 }
 
 func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterID string, sources []universalWireSynthesisSource, now time.Time) universalWireSemanticStoryState {
@@ -481,6 +496,7 @@ func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterI
 		},
 	}
 	state.EventFrame = universalWireSemanticEventFrameFromSources(sources, state)
+	state.SynthesisFrame = universalWireSemanticSynthesisFrameFromSources(sources, state)
 	state.Headline = universalWireSemanticStoryHeadline(sources, state)
 	state.Summary = universalWireSemanticStorySummary(sources, state)
 	state.Tension = universalWireSemanticStoryTension(state)
@@ -557,6 +573,9 @@ func universalWireSemanticStoryHeadline(sources []universalWireSynthesisSource, 
 }
 
 func universalWireSemanticStorySummary(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) string {
+	if state.SynthesisFrame.SharedAccount != "" {
+		return universalWireEnsureSentence(state.SynthesisFrame.SharedAccount)
+	}
 	frame := state.EventFrame
 	if frame.CurrentAccount != "" {
 		summary := universalWireEnsureSentence(frame.CurrentAccount)
@@ -581,6 +600,9 @@ func universalWireLatestAddedSourceTitle(sources []universalWireSynthesisSource,
 }
 
 func universalWireSemanticStoryTension(state universalWireSemanticStoryState) string {
+	if state.SynthesisFrame.Reconciliation != "" {
+		return state.SynthesisFrame.Reconciliation
+	}
 	if state.EventFrame.ContinuityQuestion != "" {
 		return state.EventFrame.ContinuityQuestion
 	}
@@ -591,6 +613,101 @@ func universalWireSemanticStoryTension(state universalWireSemanticStoryState) st
 		return "Later reporting should update this account if the timeline, affected people, or official explanation changes."
 	default:
 		return "This article remains open to revision as reporting develops."
+	}
+}
+
+func universalWireSemanticSynthesisFrameFromSources(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) universalWireSemanticSynthesisFrame {
+	sources = normalizedUniversalWireSynthesisSources(sources)
+	concepts := universalWireSynthesisConcepts(sources)
+	topic := universalWireArticleTopicPhrase(concepts)
+	signals := universalWireArticleSignalPhrases(concepts)
+	signalText := universalWireHumanList(signals)
+	accounts := make([]universalWireSemanticSourceAccount, 0, len(sources))
+	for _, source := range sources {
+		sourceConcepts := universalWireKnownConceptSet(strings.Join([]string{source.Title, source.Body}, " "))
+		contribution := universalWireHumanList(universalWireArticleSignalPhrases(sourceConcepts))
+		if contribution == "" {
+			contribution = universalWireArticleTopicPhrase(sourceConcepts)
+		}
+		accounts = append(accounts, universalWireSemanticSourceAccount{
+			ItemID:       source.ItemID,
+			Title:        truncateRunes(source.Title, 112),
+			Language:     universalWireLanguageName(source.Language),
+			Contribution: contribution,
+		})
+	}
+	languageText := universalWireLanguageListFromSources(sources)
+	if languageText == "" {
+		languageText = "multiple sources"
+	}
+	shared := "The available reporting describes a single account of " + topic
+	if languageText != "multiple sources" {
+		shared = "The available reporting includes reports in " + languageText + " that describe a single account of " + topic
+	}
+	if signalText != "" {
+		shared += " shaped by " + signalText
+	}
+	switch len(sources) {
+	case 0:
+		shared = "Available reporting describes a developing story"
+	case 1:
+		shared += ", anchored by " + universalWireEventFrameTitle(sources[0].Title)
+	default:
+		shared += ": " + universalWireEventFrameTitle(sources[0].Title) + " establishes the lead account, while " + universalWireEventFrameTitle(sources[1].Title) + " adds a second sourced account"
+	}
+	latest := ""
+	if len(sources) > 0 {
+		latestSource := sources[len(sources)-1]
+		if state.LatestChange.ChangeType == "source_added" && len(state.LatestChange.AddedSourceItemIDs) > 0 {
+			for _, source := range sources {
+				if source.ItemID == state.LatestChange.AddedSourceItemIDs[0] {
+					latestSource = source
+					break
+				}
+			}
+			latest = universalWireEventFrameTitle(latestSource.Title) + " adds later information to the same story rather than opening a separate article"
+		} else if len(sources) > 1 {
+			latest = universalWireEventFrameTitle(latestSource.Title) + " supplies the newest corroborating account while the article keeps each source distinct"
+		}
+	}
+	reconciliation := "Watch whether later reports change the timeline, affected people, location, or official explanation."
+	if state.EventFrame.ContinuityQuestion != "" {
+		reconciliation = universalWireEnsureSentence(state.EventFrame.ContinuityQuestion)
+	}
+	if state.LatestChange.ChangeType == "source_added" {
+		reconciliation += " The durable story object should keep revising here while new sources fit the same timeline, location, affected people, and explanation."
+	}
+	return universalWireSemanticSynthesisFrame{
+		SharedAccount:  shared,
+		LatestUpdate:   latest,
+		Reconciliation: reconciliation,
+		SourceAccounts: accounts,
+	}
+}
+
+func universalWireLanguageListFromSources(sources []universalWireSynthesisSource) string {
+	languages := []string{}
+	for _, source := range sources {
+		label := universalWireLanguageName(source.Language)
+		if label != "" && !containsWireString(languages, label) {
+			languages = append(languages, label)
+		}
+	}
+	return universalWireHumanList(languages)
+}
+
+func universalWireLanguageName(code string) string {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "en":
+		return "English"
+	case "es":
+		return "Spanish"
+	case "fr":
+		return "French"
+	case "pt":
+		return "Portuguese"
+	default:
+		return strings.TrimSpace(code)
 	}
 }
 
