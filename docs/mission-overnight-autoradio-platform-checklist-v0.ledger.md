@@ -10099,3 +10099,90 @@ some staged groupings visibly mix unrelated sources; article language still
 describes the helper mechanism rather than reading like finished journalism;
 deployed same-article update behavior for later relevant live sources remains
 unproven.
+
+## 2026-06-27 - O4 Semantic Source Clustering And Article Quality Gap Documented
+
+Conjecture statement: deployed Universal Wire has crossed the readability
+threshold but still fails the semantic News benchmark because deterministic
+concept grouping and helper prose are not equivalent to source-aware
+story/world-model clustering plus article-quality synthesis.
+
+Verdict: discovered/supported as the next O4 realism gap. The prior deployed
+evidence supports five readable Texture-backed Wire articles, but it also
+weakens the stronger News conjecture because visible cards still describe the
+mechanism and some groups can mix unrelated sources.
+
+Move:
+
+- Re-read the current Parallax State, ledger tail, and updated Parallax skill.
+- Preserved unrelated worktree state: modified `skills/parallax/SKILL.md` and
+  untracked
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- Updated the paradoc before any implementation code to name the next problem:
+  Universal Wire must cluster live ingested sources by shared story/world-model
+  signals and synthesize article-quality English, instead of relying on
+  deterministic keyword buckets and prose that narrates Universal Wire internals.
+
+Next worker conjecture:
+
+`O4-semantic-source-clustering-article-quality-slice-worker` should decide
+whether a narrow in-runtime slice can improve Universal Wire clustering and
+synthesis over existing graph-backed sourcecycled captures while preserving the
+existing Texture/Wire/source invariants.
+
+Mutation class for the next worker: orange/red if it changes runtime story
+selection, objectgraph story-cluster state, Texture document/revision writes,
+public story route semantics, or synthesis policy.
+
+Protected surfaces for the next worker:
+
+- Universal Wire story DTOs and public `/api/universal-wire/stories` route
+  semantics.
+- Runtime synthesis/article materialization and same-document revision/upsert
+  semantics.
+- Objectgraph `choir.universal_wire_story_cluster` state.
+- Existing Texture document/revision helpers, `body_doc`, source entity, and
+  native `source_ref` projection.
+- Wire edition linkage and read-only Texture publication surfaces for
+  platform-owned Wire articles.
+
+Out-of-scope/protected-not-touched:
+
+- Auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
+  Qdrant, promotion/rollback, run acceptance, publication/export outside
+  existing Wire edition helpers, and direct Node B tracked-file mutation.
+
+Admissible branch-local evidence:
+
+- Problem Documentation First already satisfied by this docs-only checkpoint.
+- Focused runtime tests proving at least two unrelated story groups stay split
+  by story/world-model signals rather than broad deterministic keywords.
+- Focused runtime tests proving related later sources revise the same article
+  and cluster identity.
+- Focused runtime tests proving article bodies no longer contain helper/meta
+  phrasing such as "Universal Wire selected" or "incoming reports point to the
+  same developing story" as the primary article frame.
+- Focused runtime tests proving native `source_ref`, `body_doc`,
+  `source_entities`, Source Viewer reader snapshots, and raw
+  `choir.web_capture` diagnostic-only boundaries remain intact.
+- `git diff --check`, clean dirty-path classification, and changed-path scope.
+
+Rollback path: revert the worker commit(s) before incorporation; after
+incorporation, revert the root commit before push or use the normal
+`origin/main` revert/deploy loop if already pushed.
+
+Heresy delta: `discovered` for the gap between deterministic readable cards and
+semantic News/world-model behavior; expected `repaired` only if a later worker
+proves a narrower semantic/source-aware slice without breaking Texture/source
+invariants.
+
+Expected Delta V: 1 for the worker if it supports or falsifies the narrow
+semantic/source-aware slice at branch-local evidence tier. Actual Delta V: 0
+for this docs-first pass; V remains 4 because the implementation conjecture is
+now named but not decided.
+
+Stop condition for the worker: commit branch-local work with clean worktree and
+return `ready_for_verifier` with commit SHA, changed files, commands/results,
+dirty/generated artifact classification, residual risks, non-claims, and
+evidence boundary. No push, deploy, staging, provider/model quality, Qdrant,
+run acceptance, promotion, or rollback claim.
