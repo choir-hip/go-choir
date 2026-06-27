@@ -436,8 +436,23 @@ func universalWireSynthesisStoryStaleUnderCurrentClassifier(rev types.Revision) 
 	if len(sources) < 2 {
 		return false
 	}
+	sourceItemIDs := map[string]bool{}
+	for _, source := range sources {
+		if itemID := strings.TrimSpace(source.ItemID); itemID != "" {
+			sourceItemIDs[itemID] = true
+		}
+	}
 	for _, group := range universalWireDeterministicStorySourceGroups(sources) {
 		if group.ClusterID == clusterID {
+			groupItemIDs := map[string]bool{}
+			for _, source := range group.Sources {
+				if itemID := strings.TrimSpace(source.ItemID); itemID != "" {
+					groupItemIDs[itemID] = true
+				}
+			}
+			if len(groupItemIDs) > 0 && len(groupItemIDs) < len(sourceItemIDs) {
+				return true
+			}
 			return false
 		}
 	}

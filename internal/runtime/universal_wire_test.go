@@ -1817,22 +1817,45 @@ func TestHandleUniversalWireStoriesFiltersClassifierStaleSynthesisAfterOkLiveArr
 			FetchedAt:    now.Add(-2 * time.Hour),
 		},
 		{
-			ItemID:       "srcitem-stale-drone-training-b",
-			SourceID:     "rss:stale-defense-b",
-			FetchID:      "fetch-stale-defense-b",
-			Title:        "Military expands drone training program",
-			URL:          "https://example.test/stale/drone-b",
-			CanonicalURL: "https://example.test/stale/drone-b",
+			ItemID:       "srcitem-stale-port-corridor",
+			SourceID:     "rss:stale-freight-a",
+			FetchID:      "fetch-stale-freight",
+			Title:        "Port launches zero-emission corridor for cargo trucks",
+			URL:          "https://example.test/stale/port-corridor",
+			CanonicalURL: "https://example.test/stale/port-corridor",
 			Language:     "en",
-			Body:         "The training plan covers drone tactics and classroom instruction, not a rail corridor or harbor event.",
+			Body:         "The port corridor links cargo terminals to inland freight routes while harbor operators watch truck delay and emissions rules.",
+			FetchedAt:    now.Add(-118 * time.Minute),
+		},
+		{
+			ItemID:       "srcitem-stale-rail-grant",
+			SourceID:     "rss:stale-freight-b",
+			FetchID:      "fetch-stale-freight",
+			Title:        "Oregon port approves federal rail grant for multimodal project",
+			URL:          "https://example.test/stale/rail-grant",
+			CanonicalURL: "https://example.test/stale/rail-grant",
+			Language:     "en",
+			Body:         "The harbor grant advances ship-to-rail terminal planning and rail corridor access for regional cargo.",
+			FetchedAt:    now.Add(-117 * time.Minute),
+		},
+		{
+			ItemID:       "srcitem-stale-rail-service",
+			SourceID:     "rss:stale-freight-c",
+			FetchID:      "fetch-stale-freight",
+			Title:        "Railroad chief says network must focus on today and tomorrow",
+			URL:          "https://example.test/stale/rail-service",
+			CanonicalURL: "https://example.test/stale/rail-service",
+			Language:     "en",
+			Body:         "Rail service planning remained focused on corridor reliability and intermodal cargo moving through port gateways.",
 			FetchedAt:    now.Add(-119 * time.Minute),
 		},
 	}
-	if groups := universalWireDeterministicStorySourceGroups(staleSources); len(groups) != 0 {
-		t.Fatalf("stale source fixture unexpectedly produced deterministic groups: %+v", groups)
+	staleGroups := universalWireDeterministicStorySourceGroups(staleSources)
+	if len(staleGroups) == 0 || staleGroups[0].ClusterID == "" || len(staleGroups[0].Sources) >= len(staleSources) {
+		t.Fatalf("stale source fixture groups = %+v, want partial cluster excluding unrelated lead source", staleGroups)
 	}
 	staleDoc, staleRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: "sourcecycled-live-harbor-transport-rail-corridor",
+		ClusterID: staleGroups[0].ClusterID,
 		Headline:  "South Korea plans to train entire military as drone warriors",
 		Sources:   staleSources,
 		Now:       now.Add(-90 * time.Minute),
@@ -1884,7 +1907,7 @@ func TestHandleUniversalWireStoriesFiltersClassifierStaleSynthesisAfterOkLiveArr
 		t.Fatalf("load stale revision for audit: %v", err)
 	}
 	if !strings.Contains(string(storedStaleRev.BodyDoc), "source_ref") ||
-		len(wireArticleVisibleStructuredSourceEntities(storedStaleRev)) != 2 {
+		len(wireArticleVisibleStructuredSourceEntities(storedStaleRev)) != len(staleSources) {
 		t.Fatalf("stale revision audit payload lost direct Texture/source_ref evidence: body=%s sources=%s", string(storedStaleRev.BodyDoc), string(storedStaleRev.SourceEntities))
 	}
 }

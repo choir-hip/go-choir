@@ -15106,3 +15106,73 @@ buying stronger observer evidence. Actual Delta V: 0. V remains 1.
 
 Next move: inspect the real stale revision/source entities, build a matching
 regression, and repair the public filter again.
+
+## 2026-06-27 - O4 Stale Re-Entry Subset Filter Local Proof
+
+Move: inspect the real deployed stale revision and repair the second stale
+filter miss.
+
+Inspection result:
+
+- Deployed stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` revision
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9` has metadata
+  `universal_wire_story_cluster_id:
+  sourcecycled-live-harbor-transport-rail-corridor`.
+- The revision has 7 source entities and native `source_ref` body_doc.
+- The first cited source/headline is unrelated:
+  `South Korea plans to train entire military as "drone warriors"`.
+- The remaining FreightWaves rail/port sources still reproduce the stored
+  harbor/transport/rail cluster under the current lexical classifier. This is
+  why the first local repair missed the product shape: the cluster id was still
+  reproducible, but only from a subset of the cited sources.
+
+Repair summary:
+
+- `universalWireSynthesisStoryStaleUnderCurrentClassifier` now treats a
+  `sourcecycled-live-*` synthesis revision as stale when its stored cluster id
+  is reproduced only by a subset of the revision's cited source entities.
+- This preserves the earlier behavior for legacy/direct synthesis fixtures and
+  for valid sourcecycled-live articles whose cited sources all remain members of
+  the stored cluster.
+- The deployed-shaped regression now uses one unrelated drone-training lead
+  source plus freight/rail sources that form the stored cluster. The article is
+  filtered from public stories but retained in edition metadata and direct
+  Texture/source_ref evidence.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesFilters(ClassifierStaleSynthesisAfterOkLiveArrival|StaleSynthesisAfterSkippedLiveArrival)|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestUniversalWireSynthesisSanitizesHelperCopyAndReadsStoryTexture|TestHandleInternalSourcecycledWebCaptures(DoesNotTreatTrainVerbAsRailSignal|UsesBodyConceptsWhenTitlesAreOpaque)|TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 5.855s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 16.120s`.
+- `git diff --check -- internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+
+Conjecture verdict: supported locally for the real deployed stale-revision
+shape.
+
+Evidence boundary: local/root runtime tests plus authenticated public inspection
+of the deployed stale revision. No deployed repair claim until push, CI, deploy,
+health identity, and staging replay pass.
+
+Mutation class: orange behavior repair. Protected surfaces: Universal Wire
+public story filtering, source entity reclassification, story cap, edition audit
+metadata, direct Texture reads, same-doc update visibility, and
+source_ref/source_entities preservation.
+
+Rollback path: revert the forthcoming subset-filter repair commit and dependent
+evidence; the public route returns to the `c7910000` behavior where subset-stale
+sourcecycled-live articles can remain public.
+
+Heresy delta: `repaired` locally for the unmodeled subset-contamination shape;
+not yet repaired at deployed/product tier.
+
+Expected Delta V: 1 if deployed replay shows stale doc
+`1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` absent from public stories while direct
+Texture audit reads and current update stories remain intact. Actual Delta V: 0
+until deployed proof.
+
+Next move: commit, push to `origin main`, monitor CI/deploy, verify staging
+identity, and rerun authenticated staging proof.
