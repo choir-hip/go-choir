@@ -11946,6 +11946,62 @@ Expected Delta V: 0 for opening worker. Actual Delta V: 0. V remains 3.
 Next move: monitor pending worker handle for a `ready_for_verifier` callback,
 then create an independent verifier thread before incorporation.
 
+## 2026-06-27 - O4 Branch-Local Unrelated Cluster Refresh Blocker Documented
+
+Move type: construct probe -> Problem Documentation First checkpoint.
+
+Claim under test: branch-local sourcecycled clustering can prove that later
+matching arrivals update only the matching existing semantic story/article after
+a noisy deployed-shaped batch has already split into multiple coherent articles.
+
+Evidence:
+
+- During construction of
+  `TestHandleInternalSourcecycledWebCapturesKeepsDeployedShapedArrivalsSeparated`,
+  the focused runtime run initially failed because a noisy body-only item could
+  bridge into the rail cluster by mentioning transport/harbor/health terms in
+  unrelated prose.
+- After tightening that observer, the same focused run exposed a second
+  branch-local sub-blocker: a later rail arrival synthesized the rail update but
+  also caused unrelated existing clusters to be rewritten as `state_refreshed`
+  revisions during the same sourcecycled synthesis pass.
+- This is not a new staging claim. It is branch-local evidence that the
+  deployed source-arrival blocker has two mechanical predicates: avoid noisy
+  cross-topic bridging, and synthesize only created/source-added groups rather
+  than refreshing unrelated existing articles.
+
+Problem documented: even if the initial noisy batch is split into coherent
+clusters, the later-arrival path is still wrong unless unchanged clusters are
+left untouched. Otherwise the product cannot honestly claim "later matching
+arrivals update only the existing semantic story/article."
+
+Conjecture delta: C6 branch-local predicate now includes "unrelated existing
+clusters are not rewritten on later matching arrivals" in addition to
+"unrelated source items do not collapse into one broad mega-article."
+
+Mutation class for this checkpoint: green docs/evidence only.
+
+Protected surfaces for the following implementation commit: Universal Wire
+sourcecycled ingestion/materialization, deterministic/semantic clustering, live
+source selection limits, `choir.universal_wire_story_cluster` state, Texture
+synthesis article revision, source_ref/source_entities carry-forward, Wire
+edition linkage, and `/api/universal-wire/stories`.
+
+Rollback path for the following implementation commit: revert the implementation
+commit(s) back to docs checkpoint `98f38396fa08c0f94a26d55e362433b160d06864`
+or this documentation checkpoint, depending on whether the newly documented
+sub-blocker should remain recorded.
+
+Heresy delta: `discovered`. The later-arrival path refreshed unrelated clusters
+instead of leaving them untouched.
+
+Expected Delta V: 0 for documentation-first checkpoint. Actual Delta V: 0. V
+remains 3.
+
+Next move: commit this docs checkpoint, then commit the branch-local runtime
+repair and test proof without pushing, deploying, mutating staging, or claiming
+authenticated product acceptance.
+
 ## 2026-06-27 - O4 Deployed Source Arrival Worker Ready For Verifier
 
 Move type: worker result -> prover shift.

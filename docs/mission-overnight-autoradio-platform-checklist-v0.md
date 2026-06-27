@@ -618,6 +618,13 @@ same story/article/edition identity. Staging evidence now gives the next
 blocker: sourcecycled is live and did deliver new source arrivals, but the Wire
 surface is still not the intended multi-story/update product.
 
+Branch-local worker construction also exposed a sharper sub-blocker inside that
+same problem: a later matching source arrival caused unrelated existing story
+clusters to be rewritten as `state_refreshed` revisions during the same
+sourcecycled synthesis pass. That would make "matching later arrivals update
+only the existing story/article" false even when clustering split the initial
+batch.
+
 Deployed discriminator evidence: Node B sourcecycled is active and its latest
 cycle `cycle_aab51c4b894bba17afea9fb2` ran from `2026-06-27T07:10:21Z` to
 `2026-06-27T07:11:38Z`, fetched 562 new items from 211 configured sources, and
