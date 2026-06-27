@@ -13476,3 +13476,97 @@ debt is intentionally added and documented.
 Expected Delta V: 0 until worker callback, verifier acceptance, and deployed
 product proof. Possible future Delta V: 1 if the oracle lands and enables a
 fresh source-arrival before/after proof. Actual Delta V: 0. V remains 2.
+
+## 2026-06-27 - O4 Live Arrival Product Oracle Worker Ready
+
+Move: record completed branch-local worker slice and queue independent verifier
+review before root incorporation.
+
+Worker:
+
+- Thread: `019f08a0-4ffb-72a3-ba7e-381e77797a96`.
+- Work item: `O4-live-arrival-product-oracle-slice-worker`.
+- Worktree: `/Users/wiz/.codex/worktrees/d585/go-choir`.
+- Commit: `28f2b4ead6eb008e46cc6cad986167ba3204c8d5` (`Expose
+  Universal Wire live arrival oracle`).
+- Changed files: `cmd/sourcecycled/main.go`,
+  `internal/objectgraph/registry.go`, `internal/objectgraph/web_capture.go`,
+  `internal/runtime/api.go`, `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/universal_wire_test.go`, this paradoc, and this ledger.
+
+Worker claim: branch-local authenticated public read-only
+`GET /api/universal-wire/live-arrival` exposes the latest Universal
+Wire/sourcecycled live-arrival boundary. Existing internal sourcecycled
+projection now carries `cycle_id` into runtime, records a redacted
+`choir.universal_wire_live_arrival_status` object after capture projection and
+Wire synthesis, and exposes boundary/timestamp/status/counts/synthesis summary
+without public ingestion triggers, source seeding, or raw source-payload
+exposure.
+
+Worker commands/results:
+
+- `nix develop -c go test ./cmd/sourcecycled -run 'UniversalWire|Sourcecycled|WebCapture|Runtime' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed.
+- `git diff --check` passed.
+- `git diff --check HEAD^..HEAD` passed.
+- Worker reported clean worktree after commit.
+
+Root spot checks before verifier request:
+
+- In the worker worktree, `git rev-parse HEAD` returned
+  `28f2b4ead6eb008e46cc6cad986167ba3204c8d5`.
+- `git show --check --oneline 28f2b4ead6eb008e46cc6cad986167ba3204c8d5`
+  passed.
+- `git diff --name-status 28f2b4ead6eb008e46cc6cad986167ba3204c8d5^..28f2b4ead6eb008e46cc6cad986167ba3204c8d5`
+  showed the expected eight files.
+- Root duplicated focused proof:
+  `nix develop -c go test ./cmd/sourcecycled -run 'TestProjectSourceItems|TestIngestionRuntimeDispatcher' -count=1`
+  passed.
+- Root duplicated focused runtime proof:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireLiveArrival|TestHandleUniversalWireStoriesRequiresAuth|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`
+  passed.
+- Root duplicated broader runtime selector:
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed. Nix emitted a non-fatal FlakeHub 401 cache warning before fetching
+  from cache.nixos.org.
+
+Verifier:
+
+- Pending worktree handle:
+  `local:be1f75f4-9115-4f0e-b31e-600f446fed7d`.
+- Work item: `O4-live-arrival-product-oracle-slice-verifier`.
+- Verifier scope: read-only review of commit `28f2b4e`, route/auth/read-only
+  behavior, cycle id carry-forward, redacted status object behavior,
+  docs/ledger claim boundaries, diff hygiene, focused sourcecycled/runtime
+  tests, and broader runtime selector if practical.
+
+Evidence boundary and non-claims: this is branch-local worker evidence plus
+root spot checks only. No root incorporation, push, CI, deploy, staging health
+identity, authenticated staging acceptance, provider/model synthesis,
+Qdrant/world-model projection, promotion/rollback, run acceptance, or full News
+benchmark settlement is claimed. The oracle enables a later deployed
+before/after source-arrival proof; it does not itself prove that a future
+sourcecycled cycle includes a later matching source or that staging update
+semantics are correct under live load.
+
+Mutation class: orange/red branch-local behavior slice. Protected surfaces:
+authenticated public `/api/universal-wire/*`, internal sourcecycled-to-runtime
+projection metadata, objectgraph status metadata, and focused
+runtime/sourcecycled tests.
+
+Rollback path: revert `28f2b4ead6eb008e46cc6cad986167ba3204c8d5` plus
+dependent evidence commits; the public oracle route and status object
+registration disappear, returning C6 to the documented missing-oracle state.
+
+Heresy delta: `repaired` at branch-local/test tier for the missing
+product/public live-arrival oracle if verifier accepts; no staging/product
+repair claim.
+
+Expected Delta V: 0 until verifier acceptance and deployed landing/product
+proof. Actual Delta V: 0. V remains 2.
+
+Next move: read the independent verifier verdict. If accepted, incorporate
+`28f2b4e`, run the full behavior-changing landing loop, then use the deployed
+oracle to collect a fresh source-arrival before/after product proof.
