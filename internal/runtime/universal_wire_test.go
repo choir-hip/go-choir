@@ -330,6 +330,16 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 		!strings.Contains(secondRev.Content, "updates here instead of starting a separate report") {
 		t.Fatalf("second revision meta/content = %#v / %q, want Texture revision from semantic metadata and article-like public copy", secondRevMeta, secondRev.Content)
 	}
+	secondSourceItemIDs := metadataStringSliceValue(secondRevMeta, "source_item_ids")
+	for _, wantSourceItemID := range []string{"srcitem-live-pt", "srcitem-live-es", "srcitem-live-fr"} {
+		if !slices.Contains(secondSourceItemIDs, wantSourceItemID) ||
+			!strings.Contains(string(secondRev.SourceEntities), wantSourceItemID) {
+			t.Fatalf("second revision source carry-forward missing %q: metadata=%v source_entities=%s", wantSourceItemID, secondSourceItemIDs, string(secondRev.SourceEntities))
+		}
+	}
+	if strings.Count(string(secondRev.BodyDoc), `"source_ref"`) != 3 {
+		t.Fatalf("second revision body_doc = %s, want native source_ref citations for prior and later sources", string(secondRev.BodyDoc))
+	}
 	secondClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
 		FromID: firstCluster.CanonicalID,
 		Kind:   "contains",
