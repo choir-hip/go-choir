@@ -9937,3 +9937,31 @@ Open edge: worker commit `44893c3e` remains untrusted until an independent
 verifier accepts, rejects, blocks, or supersedes it. No root incorporation, CI,
 deploy, staging acceptance, product-quality synthesis, Qdrant, run acceptance,
 promotion, or rollback claim is made.
+
+## 2026-06-27 - O4 Deterministic Clustering Verifier Requested
+
+Conjecture statement: a fresh verifier thread can decide whether worker commit
+`44893c3eab7cedd8d3e41c6c953fd51d32b68ff5` supports the bounded deterministic
+Universal Wire split/update conjecture.
+
+Verdict: testing. The verifier request was created but has not yet materialized
+as a readable thread id.
+
+Move:
+
+- Created independent verifier request
+  `O4-deterministic-story-clustering-slice-verifier` with a prompt naming the
+  exact conjecture, worker thread, worker worktree, commit SHA, protected
+  surfaces, suggested commands, and non-claims.
+- Pending verifier worktree handle:
+  `local:44a50c8c-e2a6-420a-b236-58334442d1ed`.
+- Docs Truth Check for prior conjecture-descent commit `6d88d7f5` passed as run
+  `28277735007`.
+
+Expected Delta V: 1 if the verifier accepts the branch-local worker claim.
+Actual Delta V: 0 until the verifier verdict is available.
+
+Open edge: reconnect to pending handle
+`local:44a50c8c-e2a6-420a-b236-58334442d1ed`, read the verifier verdict, and
+record whether C1/C2 is supported, weakened, falsified, or superseded before any
+root incorporation.
