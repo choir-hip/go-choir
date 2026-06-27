@@ -9003,3 +9003,44 @@ provider/search freshness, Qdrant, run acceptance, or promotion/rollback
 execution is claimed yet.
 
 Actual Delta V: 0 until deployed product proof. V remains 27.
+
+## 2026-06-27 - O4 Legacy Graph Capture Synthesis Verifier Accepted
+
+Claim: independent verifier thread
+`019f06a9-d4d3-7a81-a99b-9d646700c2d3` accepts the local legacy graph-capture
+synthesis repair stack and authorizes orchestration to push/deploy, subject to
+the normal landing loop.
+
+Verifier verdict: accept. Findings: no blocking correctness or doctrine issues.
+
+Evidence reviewed by verifier:
+
+- Problem Documentation First: `c5598c93` is docs-only and records the deployed
+  legacy graph-capture eligibility gap before runtime repair `c813bff4`.
+- `c813bff4` keeps `captured_from` source-entity metadata when available, but
+  falls back to durable web-capture identity, URL/title/body, fetched time, and
+  version id when legacy captures lack that edge.
+- Raw `choir.web_capture` projections remain diagnostic-only when no Texture
+  article is publishable.
+- Two legacy readable graph captures without source edges materialize one
+  `universal-wire-edition-texture` article with reader-backed cited sources.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean.
+- `git show --check --oneline c5598c93`: passed.
+- `git show --check --oneline c813bff4`: passed.
+- `git show --check --oneline d4857328`: passed.
+- `git diff --check 690284db..HEAD`: passed.
+- Focused Universal Wire runtime regression set: passed.
+- Broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime
+  selector: passed.
+
+Evidence boundary/non-claims: verifier acceptance is local only. No push, CI,
+deploy, staging health identity, authenticated staging replay, provider/search
+freshness, Qdrant, semantic clustering, run acceptance, promotion/rollback, or
+production product acceptance is claimed yet.
+
+Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
+the accepted repair stack to `origin/main`, monitor CI/deploy, verify health
+identity, and run authenticated Universal Wire product acceptance.
