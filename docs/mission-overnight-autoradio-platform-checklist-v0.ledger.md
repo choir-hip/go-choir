@@ -9044,3 +9044,71 @@ production product acceptance is claimed yet.
 Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
 the accepted repair stack to `origin/main`, monitor CI/deploy, verify health
 identity, and run authenticated Universal Wire product acceptance.
+
+## 2026-06-27 - O4 Deployed Platformd Texture Sync Envelope Gap
+
+Mutation class: red documentation-first checkpoint for a proxy/platformd
+Texture publication repair.
+
+Problem: deployed `54742969` still returns zero Universal Wire stories even
+after the legacy graph-capture synthesis repair.
+
+Evidence:
+
+- Root pushed `54742969ac411329b3a9c5597f06065f5615c64d` to `origin/main`.
+- CI run `28274395238` passed.
+- Docs Truth Check `28274395266` passed.
+- FlakeHub run `28274395227` passed.
+- Deploy job `83778434211` passed.
+- `https://choir.news/health` reports proxy and sandbox deployed commit
+  `54742969ac411329b3a9c5597f06065f5615c64d`.
+- Authenticated Chrome product replay and direct platform VM diagnostic replay
+  both returned `{"stories":[]}` for `/api/universal-wire/stories`.
+- The response still shows five transcluded Wire Texture candidate docs, twelve
+  graph-capture diagnostic cards, and no source provenance story.
+- Direct platformd checks for all five transcluded doc ids returned 404.
+- Proxy logs show repeated failures:
+  `proxy: sync texture to platformd: fetch revisions for
+  4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf: decode sandbox response:
+  json: cannot unmarshal object into Go value of type []proxy.sandboxRevisionEntry`.
+
+Diagnosis:
+
+- Proxy `syncTextureToPlatformd` fetches
+  `/api/texture/documents/{doc_id}/revisions` from the platform sandbox.
+- That runtime API returns the documented object envelope
+  `{"revisions":[...]}`.
+- Proxy decodes the response as a bare `[]sandboxRevisionEntry`, so the sync
+  fails before posting `/internal/platform/texture/sync`.
+- Platformd never receives the Texture document/revision rows, so
+  `platformdHasPublishedTexture` filters every edition candidate and Universal
+  Wire remains empty.
+
+Conjecture delta: the proxy should accept the runtime Texture revision-list
+envelope when syncing platform-owned Universal Wire Texture docs to platformd.
+This repair should preserve platformd as the public readable Texture store and
+should not bypass the platformd verification gate.
+
+Protected surfaces: proxy internal wire publication path, platformd Texture
+sync, platform-owned Texture reads, Universal Wire route filtering, and
+source_ref/source entity persistence.
+
+Admissible evidence:
+
+- Focused proxy test proving `syncTextureToPlatformd` accepts the
+  `{"revisions":[...]}` runtime response shape and posts the full structured
+  sync payload.
+- Existing proxy platform publish tests still pass.
+- Focused runtime Universal Wire/materialization tests still pass if touched.
+- CI/deploy/health identity and authenticated staging replay showing non-empty
+  Universal Wire plus headline-to-Texture readability.
+
+Rollback path: revert the proxy sync response-shape repair; platformd will
+continue filtering unsynced Wire Texture docs rather than exposing unreadable
+articles.
+
+Heresy delta: discovered. The prior repair preserved structured fields in sync
+payloads, but did not verify that the proxy could decode the runtime revision
+list response envelope on the asynchronous platformd sync path.
+
+Actual Delta V: 0. This is documentation-first only; V remains 27.
