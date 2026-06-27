@@ -108,7 +108,7 @@ func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 		t.Fatalf("researcher selection = %+v", researcher)
 	}
 	processor := policy.Resolve(AgentProfileProcessor)
-	if processor.Provider != "xiaomi" || processor.Model != "mimo-v2.5" || processor.ReasoningEffort != "medium" {
+	if processor.Provider != "chatgpt" || processor.Model != "gpt-5.5" || processor.ReasoningEffort != "low" {
 		t.Fatalf("processor selection = %+v", processor)
 	}
 	vsuper := policy.Resolve(AgentProfileVSuper)
@@ -120,7 +120,7 @@ func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 		t.Fatalf("co-super selection = %+v", cosuper)
 	}
 	reconciler := policy.Resolve(AgentProfileReconciler)
-	if reconciler.Provider != "deepseek" || reconciler.Model != "deepseek-v4-flash" {
+	if reconciler.Provider != "chatgpt" || reconciler.Model != "gpt-5.5" || reconciler.ReasoningEffort != "low" {
 		t.Fatalf("reconciler selection = %+v", reconciler)
 	}
 	verifier := policy.Resolve("verifier")

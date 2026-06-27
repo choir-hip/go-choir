@@ -39,12 +39,16 @@ From `internal/runtime/model_policy.go`:
 
 | Profile | Provider | Model | Reasoning |
 |---------|----------|-------|-----------|
-| processor | xiaomi | mimo-v2.5 | medium |
-| reconciler | deepseek | deepseek-v4-flash | medium |
-| texture | chatgpt | gpt-5.5 | medium |
+| processor | chatgpt | gpt-5.5 | low |
+| reconciler | chatgpt | gpt-5.5 | low |
+| texture | chatgpt | gpt-5.5 | low |
 | conductor | chatgpt | gpt-5.4-mini | medium |
 | super | chatgpt | gpt-5.5 | medium |
 | researcher | chatgpt | gpt-5.4-mini | medium |
+
+All three Wire roles (processor, texture, reconciler) use gpt-5.5 (low)
+for low-cost development. Not ideal to use the same model for everything,
+but it's included in the subscription. Can diversify later.
 
 ### Dispatch (Wired by Mission 1)
 
@@ -210,9 +214,9 @@ If the model refuses or produces poor output, document it and ask the
 owner. Do not build a deterministic workaround.
 
 The models are already configured and paid for:
-- Processor: Xiaomi mimo-v2.5 (decides what's newsworthy)
-- Texture: ChatGPT gpt-5.5 (writes the article)
-- Reconciler: DeepSeek v4-flash (reviews corpus)
+- Processor: ChatGPT gpt-5.5 low (decides what's newsworthy)
+- Texture: ChatGPT gpt-5.5 low (writes the article)
+- Reconciler: ChatGPT gpt-5.5 low (reviews corpus)
 
 ## Checklist
 
@@ -309,5 +313,5 @@ produce news synthesis (document the refusal).
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-universal-wire-agent-pipeline-v1.md. Mission: complete the Universal Wire agent pipeline to produce real LLM-synthesized articles. Mission 1 (heresy deletion) already wired the dispatch: synthesizeUniversalWireSourceClusterTextureArticle submits processor runs with correct metadata and work items. CRITICAL GAP: buildCoagentTextureRevisionPrompt in tools_coagent.go does NOT include source body text — it lists source entity IDs and labels but not the actual article text. The Texture agent (gpt-5.5) cannot synthesize without source text. First move: fix the prompt to include excerpt_text from each source entity. Then verify processor agent routes newsworthy items to Texture via ensureCoagentTextureRevisionRoute. Then deploy to staging and verify one real LLM-synthesized article: event-grade headline, English body, cited sources, openable on choir.news. Do not reintroduce deterministic synthesis. Models: processor=mimo-v2.5, texture=gpt-5.5, reconciler=deepseek-v4-flash. Budget: 3-5 passes. Exit: settled when one real article is on staging produced through the agent pipeline.
+Use Parallax on docs/mission-universal-wire-agent-pipeline-v1.md. Mission: complete the Universal Wire agent pipeline to produce real LLM-synthesized articles. Mission 1 (heresy deletion) already wired the dispatch: synthesizeUniversalWireSourceClusterTextureArticle submits processor runs with correct metadata and work items. CRITICAL GAP: buildCoagentTextureRevisionPrompt in tools_coagent.go does NOT include source body text — it lists source entity IDs and labels but not the actual article text. The Texture agent (gpt-5.5) cannot synthesize without source text. First move: fix the prompt to include excerpt_text from each source entity. Then verify processor agent routes newsworthy items to Texture via ensureCoagentTextureRevisionRoute. Then deploy to staging and verify one real LLM-synthesized article: event-grade headline, English body, cited sources, openable on choir.news. Do not reintroduce deterministic synthesis. Models: processor=gpt-5.5 (low), texture=gpt-5.5 (low), reconciler=gpt-5.5 (low). Budget: 3-5 passes. Exit: settled when one real article is on staging produced through the agent pipeline.
 ```

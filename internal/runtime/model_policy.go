@@ -147,14 +147,14 @@ model = "gpt-5.4-mini"
 reasoning = "medium"
 
 [roles.processor]
-provider = "xiaomi"
-model = "mimo-v2.5"
-reasoning = "medium"
+provider = "chatgpt"
+model = "gpt-5.5"
+reasoning = "low"
 
 [roles.reconciler]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-reasoning = "medium"
+provider = "chatgpt"
+model = "gpt-5.5"
+reasoning = "low"
 
 [roles.verifier]
 provider = "deepseek"
@@ -187,22 +187,10 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 		ReasoningEffort: defaultFlashForegroundReasoning,
 		Source:          "platform_fallback",
 	}
-	chatGPTTexture := LLMSelection{
+	chatGPTWire := LLMSelection{
 		Provider:        defaultChatGPTProvider,
 		Model:           defaultChatGPTForegroundModel,
 		ReasoningEffort: "low",
-		Source:          "platform_fallback",
-	}
-	flashDeepSeek := LLMSelection{
-		Provider:        defaultDeepSeekProvider,
-		Model:           defaultConductorModel,
-		ReasoningEffort: defaultFlashForegroundReasoning,
-		Source:          "platform_fallback",
-	}
-	flashXiaomi := LLMSelection{
-		Provider:        defaultXiaomiProvider,
-		Model:           defaultMimoTextModel,
-		ReasoningEffort: defaultFlashForegroundReasoning,
 		Source:          "platform_fallback",
 	}
 	return ModelPolicy{
@@ -213,9 +201,9 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			AgentProfileResearcher:       chatGPTMini,
-			AgentProfileTexture:          chatGPTTexture,
-			AgentProfileProcessor:        flashXiaomi,
-			AgentProfileReconciler:       flashDeepSeek,
+			AgentProfileTexture:          chatGPTWire,
+			AgentProfileProcessor:        chatGPTWire,
+			AgentProfileReconciler:       chatGPTWire,
 			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
