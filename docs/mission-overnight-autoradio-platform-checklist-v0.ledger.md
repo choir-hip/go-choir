@@ -10676,3 +10676,69 @@ Next move: choose C6/C8 by expected Delta V and document the next problem before
 touching code. The likely next discriminator is whether live source arrivals can
 update existing semantic article/world-model identities rather than only
 producing deterministic source-group cards.
+
+## 2026-06-27 - O4 Semantic World-Model Update Gap Documented
+
+Conjecture statement: the next O4 realism axis is C6/C8, not another article
+copy repair. Universal Wire should maintain a durable semantic story/world-model
+identity that later relevant source arrivals update, and the linked Texture
+article should revise from that semantic state.
+
+Current finding: the deployed and local code does not yet prove that conjecture.
+The runtime currently groups graph-backed captures through bounded token
+concepts (`topic:*` plus `signal:*`) and stable cluster slugs, then creates or
+revises a Texture article and a `choir.universal_wire_story_cluster` object that
+stores article/source metadata. That is a useful substrate, but it is not a live
+world model: there is no durable semantic event/entity identity separate from
+the heuristic cluster slug, no typed state delta describing what changed when a
+later source arrived, no rule distinguishing update-existing-story from
+open-sibling-story at the world-model layer, and no deployed proof that article
+revision is driven by semantic object state instead of source-card regrouping.
+
+Evidence inspected:
+
+- `internal/runtime/sourcecycled_web_captures.go` selects recent platform
+  `choir.web_capture` objects, maps source text to deterministic topic/signal
+  tokens, groups by overlap, and synthesizes articles by
+  `sourcecycled-live-...` cluster id.
+- `internal/runtime/wire_synthesis.go` records
+  `choir.universal_wire_story_cluster` objects and source edges, but their body
+  and metadata primarily mirror article/source IDs and a helper summary.
+- Existing tests prove two-source creation, later related source same-cluster
+  revision, unrelated deterministic split, source refs, and raw capture
+  diagnostic-only boundaries. They do not prove a typed semantic state update or
+  a world-model identity independent of the heuristic grouping key.
+
+Mutation class: green documentation-first checkpoint. The next implementation
+move is orange/red.
+
+Protected surfaces for the next move: Universal Wire sourcecycled ingestion,
+runtime synthesis/update policy, objectgraph story/world-model objects,
+Texture revision creation through existing helpers, source entity/source_ref
+projection, Wire edition linkage, platform Texture sync, and public Wire story
+DTOs.
+
+Admissible evidence for a branch-local slice: focused runtime/objectgraph tests
+showing two sourcecycled captures create a durable semantic story/world-model
+object, a later relevant capture updates that same object with a typed changed
+state, the linked Texture article revises from that object state rather than
+only source regrouping, unrelated captures still split, and raw
+`choir.web_capture` projections remain diagnostic-only. Also require
+`git diff --check`, clean worktree, and clear residual risks/non-claims.
+
+Rollback path: revert the implementation commit(s) to
+`b9ec5f83dc574111410d1bc53dc2b36bc985d3c8` plus dependent docs/evidence
+commits.
+
+Heresy delta: `discovered`. The current deployed product is source-grounded and
+readable enough for the narrow C11 repair claim, but still lacks the semantic
+world-model update contract the owner described for Universal Wire.
+
+Expected Delta V: 0 for this checkpoint; it buys the observer predicate needed
+for the next construct. Actual Delta V: 0. V remains 3.
+
+Next move: create a bounded Codex worker thread
+`O4-semantic-world-model-update-slice-worker` using the repo project worktree.
+Stop condition is branch-local focused proof and clean commit only; no push,
+deploy, staging acceptance, provider/model-quality synthesis, Qdrant,
+promotion/rollback, run acceptance, or full News benchmark claim.
