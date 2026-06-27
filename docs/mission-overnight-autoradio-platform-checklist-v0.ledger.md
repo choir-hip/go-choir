@@ -10031,3 +10031,71 @@ internal projection response still reports singular synthesis doc/cluster for
 the last group plus a count; read-time synthesis only runs when the edition is
 empty or needs article-surface repair, while later live updates rely on the
 internal sourcecycled ingestion trigger path.
+
+## 2026-06-27 - O4 Deterministic Clustering Deployed Product Proof
+
+Conjecture statement: root commit
+`4f8cae7a1f9b5217533c1196fecc69e6bd68257c` preserves Texture/Wire readability
+after CI/deploy and supports the deployed product-scope claim that deterministic
+graph-backed source groups can publish multiple readable Texture-backed
+Universal Wire articles.
+
+Verdict: supported for deployed deterministic multi-article readability;
+weakened for the stronger semantic News/world-model conjecture.
+
+Move:
+
+- Pushed root commit `4f8cae7a1f9b5217533c1196fecc69e6bd68257c` to
+  `origin/main` after incorporating worker commit `44893c3e` as root commit
+  `5efdcd45` and recording verifier acceptance.
+- Monitored GitHub CI run `28278039956` to success. Its staging deploy job
+  `83788697055` succeeded, as did Docs Truth Check job `83788439129` in the
+  same run.
+- Confirmed separate Docs Truth Check run `28278039951` succeeded for the same
+  head SHA. FlakeHub run `28278039978` also succeeded.
+- Confirmed public health reports proxy and sandbox `commit` and
+  `deployed_commit` equal to
+  `4f8cae7a1f9b5217533c1196fecc69e6bd68257c`, deployed at
+  `2026-06-27T04:07:47Z`.
+- Confirmed unauthenticated `/api/universal-wire/stories` still returns 401,
+  so the non-empty product evidence comes from the owner's authenticated Chrome
+  session, not a public bypass.
+- Used Computer Use against the owner's signed-in Google Chrome tab at
+  `https://choir.news/`. The accessibility tree and screenshot showed ordinary
+  Texture still loaded with `Document loaded`; Universal Wire rendered
+  `5 articles`; open Texture article windows showed version controls, source
+  counts such as `Sources 24`, native source buttons, rendered body text, and
+  `Document loaded`.
+
+Strong definitive statements:
+
+- CI/deploy accepted the deterministic clustering landing at
+  `4f8cae7a1f9b5217533c1196fecc69e6bd68257c`.
+- Staging is serving that exact commit through both proxy and sandbox health.
+- The deployed product no longer shows the previous one-article-only proof
+  surface: authenticated Chrome product evidence shows `5 articles`.
+- Headline-to-Texture readability is preserved for the deployed multi-article
+  surface: Texture article windows load and render source-cited body text.
+- The full News benchmark is not satisfied: staged article prose is still
+  helper-like, deterministic clusters can be visibly incoherent, and no deployed
+  evidence yet proves semantic/world-model clustering, provider-quality
+  synthesis, Qdrant/world-model projection, or later source arrivals revising an
+  existing article.
+
+Expected Delta V: 3. Actual Delta V: 2 plus one weakened conjecture. C3 and C4
+are supported; the multi-card staging part of C5 is supported, while the
+semantic/coherent News part of C5 is weakened and split into the remaining
+semantic/world-model conjecture. V moves from 6 to 4.
+
+Evidence boundary/non-claims: product proof is authenticated Chrome/Computer
+Use UI evidence plus public CI/deploy/health identity. It does not claim
+provider/model synthesis quality, semantic clustering, Qdrant, run acceptance,
+promotion/rollback, auth/session repair, vmctl, deployment routing changes,
+gateway/provider credential behavior, publication/export beyond existing Wire
+edition helpers, or full live world-model behavior.
+
+Residual risks: deterministic concept grouping is still a bounded heuristic;
+some staged groupings visibly mix unrelated sources; article language still
+describes the helper mechanism rather than reading like finished journalism;
+deployed same-article update behavior for later relevant live sources remains
+unproven.
