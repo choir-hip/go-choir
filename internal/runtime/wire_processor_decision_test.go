@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -410,4 +411,100 @@ func seedPublishedCoverageDoc(t *testing.T, s interface {
 		t.Fatalf("create published coverage revision: %v", err)
 	}
 	return docID
+}
+
+func TestBuildCoagentTextureRevisionPromptIncludesSourceBodyText(t *testing.T) {
+	parentRec := &types.RunRecord{
+		RunID:        "run-test-prompt",
+		OwnerID:      "user-alice",
+		AgentProfile: AgentProfileProcessor,
+	}
+	req := coagentTextureRouteRequest{
+		CallerProfile: AgentProfileProcessor,
+		Role:          AgentProfileTexture,
+		Profile:       AgentProfileTexture,
+		Objective:     "Draft the article about the event.",
+		Title:         "Wire Story",
+	}
+	doc := types.Document{
+		DocID: "doc-test-prompt",
+		Title: "Wire Story.texture",
+	}
+	entities := []textureSourceEntity{
+		{
+			EntityID: "src-entity-1",
+			Kind:     "content_item",
+			Label:    "Source One",
+			ReaderSnapshot: map[string]any{
+				"excerpt_text": "The central bank announced a rate cut of 50 basis points, citing easing inflation pressure.",
+				"text_content": "Full article text about the rate cut.",
+				"source_url":   "https://example.test/rates",
+			},
+		},
+		{
+			EntityID: "src-entity-2",
+			Kind:     "content_item",
+			Label:    "Source Two",
+			ReaderSnapshot: map[string]any{
+				"excerpt_text": "",
+				"text_content": "Markets rallied after the policy announcement, with the S&P 500 gaining 2.3 percent.",
+			},
+		},
+		{
+			EntityID: "src-entity-3",
+			Kind:     "content_item",
+			Label:    "Source Three",
+			Selectors: []textureSourceEntitySelector{
+				{SelectorKind: "text_quote", TextQuote: "Treasury yields fell sharply on the news."},
+			},
+		},
+	}
+
+	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, true, entities)
+
+	for _, want := range []string{
+		"Source briefs (excerpt text for synthesis):",
+		"[src-entity-1] Source One:",
+		"The central bank announced a rate cut of 50 basis points, citing easing inflation pressure.",
+		"[src-entity-2] Source Two:",
+		"Markets rallied after the policy announcement, with the S&P 500 gaining 2.3 percent.",
+		"[src-entity-3] Source Three:",
+		"Treasury yields fell sharply on the news.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing %q\n--- prompt ---\n%s", want, prompt)
+		}
+	}
+}
+
+func TestBuildCoagentTextureRevisionPromptNotesMissingSourceText(t *testing.T) {
+	parentRec := &types.RunRecord{
+		RunID:        "run-test-prompt-empty",
+		OwnerID:      "user-alice",
+		AgentProfile: AgentProfileProcessor,
+	}
+	req := coagentTextureRouteRequest{
+		CallerProfile: AgentProfileProcessor,
+		Role:          AgentProfileTexture,
+		Profile:       AgentProfileTexture,
+		Objective:     "Draft the article.",
+		Title:         "Wire Story",
+	}
+	doc := types.Document{
+		DocID: "doc-test-prompt-empty",
+		Title: "Wire Story.texture",
+	}
+	entities := []textureSourceEntity{
+		{
+			EntityID: "src-entity-no-text",
+			Kind:     "content_item",
+			Label:    "Source No Text",
+		},
+	}
+
+	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, true, entities)
+
+	if !strings.Contains(prompt, "(no reader text available for this source)") {
+		t.Fatalf("prompt should note missing source text\n--- prompt ---\n%s", prompt)
+	}
 }

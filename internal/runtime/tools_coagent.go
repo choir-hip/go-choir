@@ -435,6 +435,21 @@ func coagentTextureSeedContent(parentRec *types.RunRecord, req coagentTextureRou
 	return b.String()
 }
 
+func sourceEntityExcerptText(entity textureSourceEntity) string {
+	if excerpt := strings.TrimSpace(metadataString(entity.ReaderSnapshot, "excerpt_text")); excerpt != "" {
+		return excerpt
+	}
+	if text := strings.TrimSpace(metadataString(entity.ReaderSnapshot, "text_content")); text != "" {
+		return truncateRunes(text, 2000)
+	}
+	for _, sel := range entity.Selectors {
+		if quote := strings.TrimSpace(sel.TextQuote); quote != "" {
+			return quote
+		}
+	}
+	return ""
+}
+
 func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTextureRouteRequest, doc types.Document, created bool, sourceEntities []textureSourceEntity) string {
 	var b strings.Builder
 	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
@@ -495,6 +510,27 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 			b.WriteString("y")
 		}
 		b.WriteString(" in reader-facing article prose through structured patch_texture insert_source_ref operations placed after the supported sentence or clause. Use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, use mark_source_unused with a short rationale. Every material source must appear as a source_ref in the body; no source is silently ignored.")
+		b.WriteString("\n\nSource briefs (excerpt text for synthesis):\n")
+		for _, entity := range sourceEntities {
+			if strings.TrimSpace(entity.EntityID) == "" {
+				continue
+			}
+			excerpt := sourceEntityExcerptText(entity)
+			label := firstNonEmpty(entity.Label, entity.Kind, "Source")
+			b.WriteString("\n[")
+			b.WriteString(entity.EntityID)
+			b.WriteString("] ")
+			b.WriteString(label)
+			b.WriteString(":\n")
+			if excerpt != "" {
+				b.WriteString(excerpt)
+				if !strings.HasSuffix(excerpt, "\n") {
+					b.WriteString("\n")
+				}
+			} else {
+				b.WriteString("(no reader text available for this source)\n")
+			}
+		}
 	}
 	b.WriteString("\n\nHard requirements:")
 	b.WriteString("\n- Use patch_texture to write the canonical Texture revision; do not leave the article only in the run result.")
