@@ -11637,3 +11637,96 @@ Next move: resolve and monitor verifier pending handle
 whether to incorporate `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`; if
 incorporated, run the required root tests and landing loop before claiming any
 deployed product evidence.
+
+## 2026-06-27 - O4 Source Arrival Update Worker Accepted And Incorporated
+
+Verifier thread: `019f07de-0a66-7781-af66-781a8369f728` (`Review
+source-arrival update`).
+
+Verifier verdict: `accept`.
+
+Verifier findings: none.
+
+Verifier conclusion: orchestration may incorporate worker commit
+`3af1c3a5ca41e02b01829eb0af03004f1f0045b9` within the branch-local/test-only
+boundary.
+
+Verifier evidence summary:
+
+- Worker checkout HEAD was exactly
+  `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`.
+- Worker diff was exactly one test file:
+  `internal/runtime/universal_wire_test.go`.
+- The added assertions require the second Texture revision to carry prior and
+  new `source_item_ids`, preserve `SourceEntities`, and contain three native
+  `source_ref` citations in `BodyDoc`.
+- The surrounding test already covers same synthesis document/current revision,
+  same semantic story id, updated `choir.universal_wire_story_cluster` state,
+  source count/change evidence, single edition transclusion,
+  `/api/universal-wire/stories` semantic DTO evidence, diagnostic-only raw
+  captures, and no internal semantic id/helper-copy leak.
+
+Verifier commands/results:
+
+- `git status --short --ignored`: clean.
+- `git rev-parse HEAD`:
+  `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`.
+- `git show --check --oneline 3af1c3a5ca41e02b01829eb0af03004f1f0045b9`:
+  passed.
+- `git diff --check 3af1c3a5ca41e02b01829eb0af03004f1f0045b9^..3af1c3a5ca41e02b01829eb0af03004f1f0045b9`:
+  passed.
+- `git diff --name-status 3af1c3a5ca41e02b01829eb0af03004f1f0045b9^..3af1c3a5ca41e02b01829eb0af03004f1f0045b9`:
+  only `M internal/runtime/universal_wire_test.go`.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`:
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed.
+
+Root incorporation:
+
+- Root cherry-picked worker commit
+  `3af1c3a5ca41e02b01829eb0af03004f1f0045b9` as
+  `a4eb00b3f3f2c754c3e0562dc6b6407e0efe4d23` (`Prove Wire source arrival
+  carries citations`).
+- Root retained the same test-only mutation shape:
+  `internal/runtime/universal_wire_test.go`, 10 inserted lines.
+
+Root commands/results after incorporation:
+
+- `git show --check --oneline HEAD`: passed for
+  `a4eb00b3 Prove Wire source arrival carries citations`.
+- `git diff --check HEAD^..HEAD`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 4.055s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 11.988s`;
+  Nix emitted an ignored eval-cache SQLite busy warning before success.
+
+Dirty/generated classification:
+
+- Root still has pre-existing unrelated tracked
+  `skills/parallax/SKILL.md`.
+- Root still has pre-existing unrelated untracked
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- Intentional source/test incorporation:
+  `internal/runtime/universal_wire_test.go`.
+- Durable evidence documentation:
+  `docs/mission-overnight-autoradio-platform-checklist-v0.md` and this ledger.
+- No temporary proof output or generated artifact was created by this
+  incorporation pass.
+
+Evidence boundary/non-claims: this remains branch-local runtime/API test
+evidence plus root incorporation. It does not claim deployed source-provider
+arrival, provider/model-quality synthesis, production semantic clustering,
+Qdrant/world-model projection, auth/session/vmctl/gateway behavior,
+promotion/rollback/run acceptance, publication/export beyond existing Wire
+edition helpers, or full News benchmark settlement.
+
+Expected Delta V: 0. Actual Delta V: 0. V remains 3 because the test-only
+incorporation strengthens local source/citation carry-forward evidence but does
+not settle deployed source-arrival update behavior.
+
+Next move: push root incorporation and this evidence update to `origin/main`,
+monitor GitHub checks, then record the landing result. Do not claim deployed
+product source-arrival update behavior unless a subsequent staging/product
+proof exercises real or product-path source arrival into an existing article.
