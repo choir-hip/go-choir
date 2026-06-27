@@ -13418,3 +13418,61 @@ Expected Delta V: 0. Actual Delta V: 0. V remains 2.
 
 Next move: implement or expose the narrow public authenticated live-arrival
 oracle before attempting another C6 fresh-arrival update proof.
+
+## 2026-06-27 - O4 Live Arrival Product Oracle Worker Requested
+
+Move: construct/observer shift from documented missing oracle to a bounded
+branch-local implementation worker.
+
+Worker:
+
+- Pending worktree handle:
+  `local:7860cd76-3494-482d-9052-f64653c2e46e`.
+- Work item: `O4-live-arrival-product-oracle-slice-worker`.
+- Starting state requested: `main` in a fresh worktree.
+
+Conjecture to decide: a narrow branch-local runtime/API slice can expose an
+authenticated product/public live-arrival oracle for Universal Wire/sourcecycled
+ingestion, without public source seeding or internal route leakage, such that a
+later deployed acceptance run can identify a sourcecycled cycle boundary and
+then compare `/api/universal-wire/stories` plus Texture revision/source state
+before and after.
+
+Mutation class: orange/red branch-local behavior slice. The worker may touch
+authenticated public API surface near `/api/universal-wire/*`, read-only
+sourcecycled cycle/status metadata, Universal Wire sourcecycled
+ingestion/materialization metadata, semantic story cluster state only if needed
+for boundary correlation, and tests around route/auth/status behavior.
+
+Protected surfaces / exclusions: the oracle must be authenticated and read-only;
+it must not trigger sourcecycled ingestion, seed source items, write raw events,
+expose internal source-service secrets, alter provider/gateway credentials,
+change auth/session renewal, vmctl, deployment routing, Qdrant,
+promotion/rollback, run acceptance, or publication/export outside existing Wire
+edition helpers.
+
+Problem Documentation First: already satisfied by docs checkpoint
+`88ade5258cc254de6133618418d7b5950c420116` and verifier thread
+`019f0897-8fa3-7460-819a-ff17b95ae173`. If the worker discovers a materially
+different behavior problem, it must add a new docs-only checkpoint before code.
+
+Admissible evidence: focused tests proving unauthenticated requests are 401,
+authenticated product callers can read the oracle, the oracle exposes the latest
+sourcecycled boundary after an internal `HandleInternalSourcecycledWebCaptures`
+call without triggering another ingestion, and the boundary can be correlated
+with Universal Wire story/Texture state. If runtime code changes, run a focused
+selector plus the broader
+`nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`,
+then `git diff --check` and clean worktree classification.
+
+Rollback path: revert worker commit(s) back to starting `main` SHA plus any
+dependent evidence commits; public oracle disappears and C6 returns to the
+missing-oracle state.
+
+Heresy delta: expected `repaired` at branch-local/test tier if the oracle is
+exposed; `discovered` only for a distinct blocker; `introduced` only if scoped
+debt is intentionally added and documented.
+
+Expected Delta V: 0 until worker callback, verifier acceptance, and deployed
+product proof. Possible future Delta V: 1 if the oracle lands and enables a
+fresh source-arrival before/after proof. Actual Delta V: 0. V remains 2.
