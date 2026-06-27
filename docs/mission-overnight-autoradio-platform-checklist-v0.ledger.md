@@ -9965,3 +9965,69 @@ Open edge: reconnect to pending handle
 `local:44a50c8c-e2a6-420a-b236-58334442d1ed`, read the verifier verdict, and
 record whether C1/C2 is supported, weakened, falsified, or superseded before any
 root incorporation.
+
+## 2026-06-27 - O4 Deterministic Clustering Slice Accepted And Incorporated
+
+Conjecture statement: worker commit
+`44893c3eab7cedd8d3e41c6c953fd51d32b68ff5` supports the branch-local
+deterministic Universal Wire split/update slice, and root can incorporate it
+without local runtime regression.
+
+Verdict: supported at branch-local/root-local evidence tier.
+
+Move:
+
+- Received independent verifier verdict from thread
+  `019f0733-283d-7be3-abc4-61e1f33fbdf9`: `accept`, no blocking findings.
+- Verifier reviewed `AGENTS.md`, Parallax State, ledger tail, worker final
+  report, worker diff, and line-level code/test evidence in
+  `/Users/wiz/.codex/worktrees/1fe8/go-choir`.
+- Verifier accepted the no-known-concept `sourcecycled-live` fallback as a
+  compatibility boundary, not production semantic clustering.
+- Cherry-picked worker commit `44893c3e` into root as
+  `5efdcd45` (`Add deterministic Universal Wire story clustering slice`).
+
+Strong definitive statements:
+
+- `internal/runtime/sourcecycled_web_captures.go` now selects deterministic
+  source groups before synthesis rather than seeding fake articles.
+- The branch-local tests prove transport vs harbor groups create two durable
+  story clusters, two Texture article docs, and two Wire edition transclusions.
+- The branch-local tests prove a later related transport source revises the
+  matching existing article/cluster instead of duplicating it.
+- Raw `choir.web_capture` remains diagnostic-only, and native `source_ref`,
+  `body_doc`, `source_entities`, and Source Viewer reader provenance remain
+  covered by focused tests.
+
+Receipts:
+
+- Verifier command receipts: clean worker status; `git show --check` and
+  `git diff --check` for `44893c3e` passed; focused runtime selector passed in
+  `4.906s`; broader `UniversalWire|WireProcessor|WireStory|WirePublication`
+  selector passed in `13.155s`.
+- Root incorporation receipts: `git diff --check 5efdcd45^..5efdcd45` passed;
+  `git show --check --oneline 5efdcd45` passed; changed files are exactly
+  `internal/runtime/sourcecycled_web_captures.go` and
+  `internal/runtime/universal_wire_test.go`.
+- Root focused runtime selector passed:
+  `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters)|TestHandleUniversalWireStories(MaterializesExistingSourcecycledGraphCaptures|DoesNotPublishGraphBackedWebCapturesAsArticles)' -count=1`
+  returned `ok github.com/yusefmosiah/go-choir/internal/runtime 5.393s`.
+- Root broader runtime selector passed:
+  `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  returned `ok github.com/yusefmosiah/go-choir/internal/runtime 11.386s`.
+
+Expected Delta V: 2. Actual Delta V: 2. C1 and C2 are supported. V moves from
+8 to 6. C3/C4 now decide whether CI/deploy/staging preserve the local claim and
+Texture/Wire readability.
+
+Evidence boundary/non-claims: no CI, deploy, staging/product acceptance,
+production semantic clustering, provider/model synthesis quality, Qdrant,
+promotion/rollback, run acceptance, auth/session, vmctl, deployment routing,
+gateway/provider credential, publication/export, or full live world-model claim
+is made by this pass.
+
+Residual risks: the concept map is a bounded deterministic heuristic; the
+internal projection response still reports singular synthesis doc/cluster for
+the last group plus a count; read-time synthesis only runs when the edition is
+empty or needs article-surface repair, while later live updates rely on the
+internal sourcecycled ingestion trigger path.

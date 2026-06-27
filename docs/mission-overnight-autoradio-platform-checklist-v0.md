@@ -472,18 +472,21 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 8. Last decided conjecture: deployed
+statement. Current value: 6. Last decided conjecture: verifier verdict from
+thread `019f0733-283d-7be3-abc4-61e1f33fbdf9` supports worker commit
+`44893c3e` for the branch-local deterministic split/update slice, and root
+incorporated it as `5efdcd45` with the same focused runtime selectors passing.
+Prior decided conjecture:
 `cb79fa39284ad11ad2da211f500b11ecf3747dd0` supports the scoped claim that
 Universal Wire can render and open one platform-owned synthesis Texture article
-without breaking ordinary Texture reads. Current live conjectures are: C1
-worker commit `44893c3e` supports the branch-local deterministic split/update
-slice; C2 independent verifier accepts or refutes C1; C3 the accepted slice can
-be incorporated without regression; C4 CI/deploy/staging preserve Texture and
-Wire readability; C5 staging can show multiple coherent English synthesis
-Texture articles from live ingestion rather than one broad deterministic card;
-C6 later relevant sources update existing articles/world-model identities; C7
-synthesis quality becomes article-like English, not helper prose; C8 O5-O8 still
-embed the Autoradio benchmark into durable Choir product paths.
+without breaking ordinary Texture reads. Current live conjectures are: C3 CI
+accepts root commit `5efdcd45` plus docs without regression; C4 deploy/staging
+preserve ordinary Texture and Wire readability; C5 staging can show multiple
+coherent English synthesis Texture articles from live ingestion rather than one
+broad deterministic card; C6 later relevant sources update existing
+articles/world-model identities; C7 synthesis quality becomes article-like
+English, not helper prose; C8 O5-O8 still embed the Autoradio benchmark into
+durable Choir product paths.
 
 budget: Solvency is tight. Use bounded O4 follow-through plus explicit handoff
 for broader O5-O8 unless the owner grants a new long run.
@@ -551,17 +554,18 @@ The pending worktree handle
 `/Users/wiz/.codex/worktrees/1fe8/go-choir`. The worker returned
 `ready_for_verifier` for commit
 `44893c3eab7cedd8d3e41c6c953fd51d32b68ff5`, claiming deterministic
-pre-synthesis story grouping over graph-backed captures: clear transport vs
-harbor groups produce two durable story clusters, two platform-owned Texture
-docs, and two Wire edition transclusions; a later transport source revises the
-matching article; raw `choir.web_capture` remains diagnostic-only.
+pre-synthesis story grouping over graph-backed captures. Independent verifier
+thread `019f0733-283d-7be3-abc4-61e1f33fbdf9` accepted that branch-local claim:
+real grouping before synthesis, two unrelated groups -> two clusters/docs/Wire
+transclusions, later related source -> same article revised, raw captures remain
+diagnostic-only, and source invariants preserved. Root incorporated the worker
+commit as `5efdcd45` and reran the focused and broader runtime selectors
+successfully.
 
-next move: reconnect to verifier request
-`local:44a50c8c-e2a6-420a-b236-58334442d1ed` when it materializes, then read
-its verdict on C1/C2: whether worker commit `44893c3e` actually supports the
-branch-local deterministic split/update conjecture within its stated evidence
-boundary. Expected Delta V: 1 if accepted, discovery/supersession if revised
-before continue.
+next move: push `5efdcd45` plus this evidence update to `origin/main`, monitor
+CI/deploy, verify staging identity, and run authenticated product proof. This
+will decide C3/C4 and either support or weaken the staging/product conjecture
+for the deterministic split/update slice.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -575,11 +579,11 @@ must produce a strong, clear, definitive statement or buy observer evidence. The
 main O4 learning is that local route tests repeatedly missed staging product
 edges: publication eligibility, platformd synchronization, current-head reads,
 revision-list envelope shape, and supplied-revision fallback all had to be
-proven through deployed product replay. The latest accepted product lesson is
-that a readable single article is still not Universal Wire's intended product:
-the next realism axis is semantic story clustering plus same-article/world-model
-updates over time. The current verifier should decide the bounded deterministic
-split/update conjecture, not grade the whole News benchmark.
+proven through deployed product replay. The latest branch-local learning is
+that a bounded deterministic concept-grouping layer can decide the first
+split/update conjecture without inventing a parallel article path, but staging
+must still decide whether this survives real ingestion/deploy data and whether
+unknown-concept fallback remains too broad.
 
 settlement: not settled. O4 is accepted for deployed readable article
 materialization after the zero-article regression at `cb79fa39`: staging health,
@@ -595,5 +599,5 @@ remaining V and next assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=8 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0`; CI run `28276917439`, Docs Truth Check run `28276917427`, FlakeHub run `28276917425`, deploy job `83785540377`, public health identity, and direct platformd health passed. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved ordinary Texture still loads, Universal Wire renders `1 article`, and the headline opens a nonblank Texture article with `v60`, `Sources 24`, source-ref buttons, expanded source content, and `Document loaded`. Node B diagnostics show platformd has Texture doc `d3661377-4731-4617-a351-63236b08597d` under owner `universal-wire-platform` with current revision `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`, nonempty content, `body_doc`, and 24 source entities. This supports only the scoped conjecture that deployed Universal Wire can render/open one readable platform-owned synthesis Texture article. The live O4 conjecture is that worker commit `44893c3eab7cedd8d3e41c6c953fd51d32b68ff5` supports a branch-local deterministic split/update slice: unrelated graph-backed source groups produce separate durable story clusters/articles/edition transclusions, while later related sources revise the matching article and raw web captures remain diagnostic-only. Verifier request `O4-deterministic-story-clustering-slice-verifier` is pending as worktree handle `local:44a50c8c-e2a6-420a-b236-58334442d1ed`. Next move: reconnect to that verifier, read the verdict, and only then decide incorporation. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=6 conjectures, not obligation count. Each pass must decide a conjecture with a strong definitive statement or buy observer evidence. Root deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0`; CI run `28276917439`, Docs Truth Check run `28276917427`, FlakeHub run `28276917425`, deploy job `83785540377`, public health identity, and direct platformd health passed. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved ordinary Texture still loads, Universal Wire renders `1 article`, and the headline opens a nonblank Texture article with `v60`, `Sources 24`, source-ref buttons, expanded source content, and `Document loaded`. Node B diagnostics show platformd has Texture doc `d3661377-4731-4617-a351-63236b08597d` under owner `universal-wire-platform` with current revision `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`, nonempty content, `body_doc`, and 24 source entities. This supports only the scoped conjecture that deployed Universal Wire can render/open one readable platform-owned synthesis Texture article. Independent verifier thread `019f0733-283d-7be3-abc4-61e1f33fbdf9` accepted worker commit `44893c3eab7cedd8d3e41c6c953fd51d32b68ff5` for the branch-local deterministic split/update slice; root incorporated it as `5efdcd45` and root focused/broader runtime selectors passed. Next move: push to `origin/main`, monitor CI/deploy, verify staging identity, and run authenticated product proof to decide whether the split/update slice survives staging and preserves Texture/Wire readability. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name the conjecture it will decide, mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
