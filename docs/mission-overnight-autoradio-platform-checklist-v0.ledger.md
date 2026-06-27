@@ -11442,3 +11442,76 @@ semantic story/article through the product path rather than producing only
 stale DTO evidence or a separate card. A separate stronger conjecture remains
 needed for semantic/world-model clustering beyond the bounded deterministic
 topic/signal map.
+
+## 2026-06-27 - O4 Source Arrival Update Conjecture Documented
+
+Conjecture statement: if a later sourcecycled source arrives for an
+already-materialized Universal Wire semantic story, the product path should
+revise the same semantic story object and linked Texture article instead of
+creating a duplicate card, losing prior citations, or requiring manual
+reseeding.
+
+Why this is the next O4 realism axis: the deployed product now shows multiple
+Texture-backed Universal Wire articles and exposes `semantic_story` DTO evidence
+for current/stale synthesized articles. That proves observability, not live
+maintenance. The owner's intended Universal Wire requires a live updating world
+model where new relevant information updates existing English synthesis
+articles. A branch-local source-arrival proof is the next cheap observer before
+any staging/source-provider run.
+
+Mutation class: green documentation-first checkpoint. The next worker slice is
+orange/red branch-local behavior because it may touch Universal Wire
+sourcecycled ingestion/materialization, `/api/universal-wire/stories`, semantic
+story cluster state, Texture revision creation/revision, Wire edition linkage,
+source entity/source_ref carry-forward, platform Texture sync/read paths, and
+product acceptance probes.
+
+Protected surfaces for the worker: Universal Wire sourcecycled ingestion,
+runtime synthesis/update policy, `choir.universal_wire_story_cluster` object
+body/metadata, Texture revision metadata, source_ref/source_entities,
+`/api/universal-wire/stories` DTOs, Wire edition transclusion, platform Texture
+sync/read paths, and raw `choir.web_capture` diagnostic-only behavior.
+
+Protected surfaces out of scope unless separately documented: auth/session
+renewal, vmctl, deployment routing, gateway/provider credentials, Qdrant,
+promotion/rollback, run acceptance, provider/model-quality synthesis, and
+publication/export outside existing Wire edition helpers.
+
+Admissible branch-local evidence:
+
+- Focused runtime/API tests that create an initial platform-owned sourcecycled
+  source cluster and materialize exactly one Universal Wire Texture article and
+  semantic story object.
+- A later relevant sourcecycled source arrival updates the same semantic story
+  identity and same linked Texture article/document rather than creating a
+  duplicate public story.
+- The later revision carries incremented source/change evidence through
+  semantic story state and WireStory DTO metadata.
+- Native `source_ref` body_doc citations, source_entities, reader/source
+  provenance, and Source Viewer/source opening surfaces remain intact.
+- Raw `choir.web_capture` projections remain diagnostic-only substrate and do
+  not become public articles.
+- Reader-facing headline/dek/article copy does not expose internal semantic ids,
+  helper-world-model labels, or test scaffolding.
+- `git diff --check`, focused runtime selectors, broader
+  `UniversalWire|WireProcessor|WireStory|WirePublication` selector if touched,
+  clean committed worker worktree, dirty/generated classification, residual
+  risks, and non-claims.
+
+Rollback path: revert the worker implementation commit(s) back to root
+checkpoint `7e87b74208b19f9d97f125fb904c3ab1e7031c5c` plus dependent evidence
+commits. If later incorporated and deployed, revert the root repair commit(s)
+and redeploy the prior known-good head.
+
+Heresy delta: `discovered`. The product has semantic DTO evidence, but the live
+same-article update behavior is still unproven at product scope.
+
+Expected Delta V: 0 for this checkpoint. Actual Delta V: 0. V remains 3.
+
+Next move: create worker thread
+`O4-deployed-source-arrival-update-slice-worker` with branch-local stop
+condition only. The worker must return `ready_for_verifier` with commit SHA,
+commands/results, dirty classification, residual risks, non-claims, and the
+callback target. No push, deploy, staging acceptance, Qdrant, provider/model
+synthesis, run acceptance, or full News benchmark settlement may be claimed by
+the worker.
