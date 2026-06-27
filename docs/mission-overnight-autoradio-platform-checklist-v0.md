@@ -581,19 +581,19 @@ article-quality checkpoint (`436d732a`), branch-local event-frame repair
 (`3e3b3de0`), and handoff doc commit
 (`b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa`). Verifier thread
 `019f0974-1bde-73b1-8cd3-28b38f447fc1` accepted the slice at branch-local
-tier. It persists `event_frame` on `choir.universal_wire_story_cluster`,
-exposes `semantic_story.event_frame` in the public Wire DTO, and derives
-Texture summary/tension copy from that frame while preserving source refs and
+tier. Root incorporation commit `1fd26b67` applies the verified runtime slice
+after focused and broader Universal Wire runtime tests passed locally. It
+persists `event_frame` on `choir.universal_wire_story_cluster`, exposes
+`semantic_story.event_frame` in the public Wire DTO, and derives Texture
+summary/tension copy from that frame while preserving source refs and
 same-article source_added behavior. This does not claim deploy/product
-settlement.
+settlement until CI/deploy/staging acceptance completes.
 
-next move: incorporate the accepted branch-local commits into root or a landing
-branch, then run the behavior-changing landing loop if the incorporation diff
-is accepted: commit, push to `origin/main`, monitor CI/deploy identity, run
-authenticated staging proof for event-frame article quality and source-update
-behavior, and request independent deployed verifier review. Do not claim full
-News benchmark settlement without deployed product proof and independent
-verifier acceptance.
+next move: push root incorporation commit `1fd26b67` plus this evidence, monitor
+CI/deploy identity, run authenticated staging proof for event-frame article
+quality and source-update behavior, and request independent deployed verifier
+review. Do not claim full News benchmark settlement without deployed product
+proof and independent verifier acceptance.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -621,5 +621,5 @@ request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Branch-local semantic/world-model article-quality event-frame slice is accepted: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1. The remaining O4 News benchmark gap is deployed product proof and quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: incorporate the accepted branch-local event-frame commits into root or a landing branch, run diff hygiene and appropriate tests, then land through commit -> push origin/main -> CI/deploy identity -> authenticated staging proof -> independent deployed verifier. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Branch-local semantic/world-model article-quality event-frame slice is accepted: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1; root incorporation commit 1fd26b67 applied the runtime slice and passed focused plus broader Universal Wire runtime tests locally. The remaining O4 News benchmark gap is deployed product proof and quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: push root incorporation commit 1fd26b67 plus evidence docs, monitor CI/deploy identity, run authenticated staging proof, then request independent deployed verifier. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

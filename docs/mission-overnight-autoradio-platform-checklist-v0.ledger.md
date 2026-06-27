@@ -15604,3 +15604,57 @@ product-quality proof and final News benchmark settlement remain open.
 Next move: incorporate the accepted actual local commits into root or a landing
 branch, run diff hygiene and tests, then perform the behavior-changing landing
 loop before claiming deployed product acceptance.
+
+## 2026-06-27 - O4 Semantic Event Frame Runtime Slice Incorporated In Root
+
+Move: incorporate accepted branch-local runtime commit
+`3e3b3de0c0f1229a443e234228efc8b22457d0fb` into the root orchestration
+checkout.
+
+Root incorporation:
+
+- Commit: `1fd26b67` (`Add Wire semantic event frame`).
+- Files changed: `internal/types/wire.go`,
+  `internal/runtime/sourcecycled_web_captures.go`,
+  `internal/runtime/universal_wire.go`,
+  `internal/runtime/wire_synthesis.go`,
+  `internal/runtime/universal_wire_test.go`.
+- Scope matches the accepted worker runtime slice: 168 insertions, 30
+  deletions across five Universal Wire runtime/types/test files.
+- Unrelated WIP remained unstaged and untouched:
+  `skills/parallax/SKILL.md` and
+  `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+
+Commands/results:
+
+- `git cherry-pick --no-commit 3e3b3de0c0f1229a443e234228efc8b22457d0fb`
+  applied cleanly.
+- `git diff --cached --check` passed.
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster'
+  -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime
+  3.063s`.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle'
+  -count=1` passed: `ok github.com/yusefmosiah/go-choir/internal/runtime
+  16.055s`.
+
+Mutation class: orange behavior incorporation. Protected surfaces touched:
+Universal Wire sourcecycled materialization, semantic story cluster state,
+Texture synthesis revision creation/source refs, Wire edition linkage, and
+authenticated `/api/universal-wire` DTO observability. Not touched:
+auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
+Qdrant, promotion/rollback, run acceptance, direct Node B tracked-file edits,
+or publication/export outside existing Wire edition helpers.
+
+Evidence boundary: local root tests and accepted branch-local verifier only.
+No push, CI, deploy identity, authenticated staging proof, provider/model
+quality, Qdrant/world-model projection, promotion/rollback, run acceptance, or
+full News benchmark settlement claimed yet.
+
+Expected Delta V: 0 for root incorporation before deploy. Actual Delta V: 0;
+this moves the accepted slice into the landing path.
+
+Next move: push root incorporation and this evidence to `origin/main`, monitor
+CI/deploy, then run authenticated staging proof for event-frame article quality
+and source-update behavior.
