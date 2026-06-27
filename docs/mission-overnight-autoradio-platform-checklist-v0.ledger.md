@@ -16068,3 +16068,98 @@ CI/Docs Truth/FlakeHub/deploy, confirm staging health identity, and run
 authenticated staging acceptance for Universal Wire source-map synthesis and
 source/open preservation. Do not claim provider/model quality, Qdrant/world-model
 projection, run acceptance, or full News benchmark settlement.
+
+## 2026-06-27 - O4 Source-Map Synthesis Deployed Product Proof
+
+Move: complete the landing loop for root head `fe13c3d5` and capture an
+authenticated staging proof for the source-map synthesis slice.
+
+Pushed commit:
+
+- Root head pushed to `origin/main`:
+  `fe13c3d5e3ec787c75d2ae8e82580091e7bc00d4`.
+- Runtime incorporation commit included in the pushed history:
+  `4de0a874` (`Add Wire semantic source-map synthesis`).
+- Evidence commit included in the pushed history:
+  `fe13c3d5` (`Record Wire source-map incorporation`).
+
+CI/deploy receipts:
+
+- CI run `28293268846`: success.
+- Docs Truth Check run `28293268830`: success.
+- FlakeHub publish run `28293268843`: success.
+- Deploy job `83829030818`: success.
+- Staging health `https://choir.news/health` reported proxy and sandbox both at
+  deployed commit `fe13c3d5e3ec787c75d2ae8e82580091e7bc00d4`, deployed at
+  `2026-06-27T15:23:43Z`.
+
+Authenticated staging API proof:
+
+- Temporary auth state outside repo:
+  `/tmp/o4-source-map-auth-state.json`.
+- Temporary QA user:
+  `qa-1782573962683-4815kf@example.com`.
+- Proof packet:
+  `/tmp/o4-source-map-staging-proof-1782573998882.json`.
+- Observed story source: `universal-wire-edition-texture`.
+- Observed story count: 12.
+- Semantic story count: 12.
+- `source_added` story count: 3.
+- Event-frame story count: 5.
+- Public DTO `synthesis_frame` count: 0; source-map evidence is in the Texture
+  revision/read path, not currently exposed as a public Wire DTO field.
+- Target story: `source-network-texture-d7fd814c-cd50-419b-a7d8-53f7a709d1bd`,
+  headline `GDELT Event: postbulletin.com`, doc
+  `d7fd814c-cd50-419b-a7d8-53f7a709d1bd`, semantic story
+  `src_bcad87d784fa036b`, change type `source_added`, current source count 44.
+- Platform-owned Texture read-owner revision:
+  `705478ad-1a7f-438d-bfed-3fb3f6822987`.
+- Revision evidence: `body_doc` present, `source_ref` nodes present, 44 source
+  entities, `synthesis_source_count` 44, `universal_wire_synthesis` true,
+  semantic story id `src_bcad87d784fa036b`, story cluster
+  `sourcecycled-live-energy-harbor-health-transport`, and source-map article
+  text including source-referenced paragraphs.
+
+Authenticated UI proof:
+
+- Proof packet:
+  `/tmp/o4-source-map-ui-open-proof-1782574036832.json`.
+- Screenshot:
+  `/tmp/o4-source-map-ui-open-1782574047124.png`.
+- Universal Wire UI opened target doc
+  `d7fd814c-cd50-419b-a7d8-53f7a709d1bd` through the platform Texture path.
+- Network requests returned 200 for:
+  - `/api/texture/documents/d7fd814c-cd50-419b-a7d8-53f7a709d1bd?read_owner=universal-wire-platform`.
+  - `/api/texture/documents/d7fd814c-cd50-419b-a7d8-53f7a709d1bd/revisions?limit=10000&read_owner=universal-wire-platform`.
+  - `/api/texture/revisions/705478ad-1a7f-438d-bfed-3fb3f6822987?read_owner=universal-wire-platform`.
+  - `/api/texture/documents/d7fd814c-cd50-419b-a7d8-53f7a709d1bd/stream?read_owner=universal-wire-platform`.
+- UI proof observed no `Get document failed` / 404 toast and no empty typing
+  placeholder after open.
+- UI proof observed source-ref text in the opened article.
+
+Evidence boundary/non-claims:
+
+- This is deployed product-path evidence for deterministic source-map synthesis,
+  source refs/entities preservation, and platform-owned Wire Texture opening.
+- This does not prove provider/model-quality synthesis, Qdrant/world-model
+  projection, run acceptance, promotion/rollback, or full News benchmark
+  settlement.
+- The public Wire DTO does not yet expose `synthesis_frame`; proof uses the
+  platform Texture revision read-owner path and revision metadata/body_doc.
+
+Dirty/generated artifact classification:
+
+- Temporary auth/proof/screenshot artifacts are under `/tmp`, outside the repo.
+- Root repo still has pre-existing unrelated WIP in `skills/parallax/SKILL.md`
+  and untracked `docs/mission-overnight-autoradio-platform-checklist-v0-report-2026-06-26.md`.
+- No generated proof output was left in tracked repo paths.
+
+Expected Delta V: 1 for deployed source-map synthesis proof. Actual Delta V: 1
+at deterministic source-map synthesis tier; mission V remains 1 because the
+remaining News benchmark requires provider/reconciler-quality semantic synthesis
+and durable world-model behavior beyond this deterministic local slice.
+
+Next move: open an independent verifier thread over this deployed proof. The
+verifier should review the CI/deploy receipts, health identity, temporary proof
+packets, and source-map/source-ref boundary before orchestration treats the
+deployed slice as accepted.
