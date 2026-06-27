@@ -9066,6 +9066,42 @@ can publish with payload data while that later full-history re-read misses.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
 
+## 2026-06-27 - O4 Proxy Supplied Revision Platform Sync Local Repair
+
+Claim: root repaired the proxy-mediated Universal Wire publication sync path
+that dropped runtime-owned synthesis Texture articles when full-history sandbox
+revision fetch returned 404.
+
+Repair scope:
+
+- `internal/proxy/wire_platform_publish.go` still prefers the full Texture
+  revision history from the resolved platform sandbox.
+- When that history fetch fails and the already-authorized publish request
+  carries a current revision with content, proxy now syncs that supplied current
+  revision to platformd instead of abandoning the sync.
+- The fallback carries `body_doc`, enriched `source_entities`, citations, and
+  metadata, preserving native `source_ref` article structure.
+- The repair does not bypass the platformd verification gate and does not turn
+  raw `choir.web_capture` graph objects into public article cards.
+
+Commands/results:
+
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistoryMisses|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/platform -run 'TestInternalListTextureRevisionsUsesTextureEnvelope|TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed. Nix emitted an ignored eval-cache SQLite busy warning.
+- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
+- `git diff --check`: passed.
+
+Evidence boundary/non-claims: local repair only. No independent verifier yet,
+no push, CI, deploy, health identity, authenticated product replay, platformd
+row verification on staging, run acceptance, provider/search freshness,
+semantic clustering, Qdrant, or promotion/rollback execution is claimed.
+
+Actual Delta V: 0 until verifier and deployed product proof. V remains 27.
+Next move: request independent verifier for docs-first commit `7c9db378` and
+the proxy fallback repair, then push/deploy and replay authenticated Universal
+Wire if accepted.
+
 ## 2026-06-27 - O4 Platform Texture Revision List Envelope Repair
 
 Mutation class: red platform Texture read repair after the documented

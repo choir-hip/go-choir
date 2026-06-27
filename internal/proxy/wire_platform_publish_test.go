@@ -139,6 +139,111 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	}
 }
 
+func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistoryMisses(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	platformOwner := wirepublish.PlatformOwnerID()
+	meta, _ := json.Marshal(map[string]any{
+		"source":                     "edit_texture",
+		"revision_role":              wirepublish.RevisionRoleCanonical,
+		"ingestion_handoff_cycle_id": "cycle-proxy-fallback",
+		"platformd_route_path":       "/pub/texture/proxy-fallback",
+	})
+	bodyDoc := json.RawMessage(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Fallback story "},{"type":"source_ref","attrs":{"source_entity_id":"src-fallback"}}]}]}}`)
+	sourceEntities := json.RawMessage(`[{"source_entity_id":"src-fallback","target":{"kind":"url","uri":"https://example.com/fallback"},"display":{"mode":"numbered_ref","title":"Fallback source"},"evidence":{"state":"available","open_surface":"source"}}]`)
+	syncSeen := make(chan platform.SyncTextureDocumentRequest, 1)
+
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/texture/documents/doc-wire-fallback/revisions" {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(errorResponse{Error: "document not found"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer sandbox.Close()
+
+	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal/platform/publications/texture":
+			var req platform.PublishTextureRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode platform request: %v", err)
+			}
+			if req.OwnerID != platformOwner || req.SourceDocID != "doc-wire-fallback" || req.SourceRevisionID != "rev-wire-fallback" {
+				t.Fatalf("platform request = %+v", req)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{
+				PublicationID: "pub-fallback",
+				RoutePath:     "/pub/texture/proxy-fallback",
+			})
+		case "/internal/platform/texture/sync":
+			var req platform.SyncTextureDocumentRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode sync request: %v", err)
+			}
+			syncSeen <- req
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": req.DocID, "revision_count": len(req.Revisions)})
+		default:
+			t.Fatalf("platformd path = %s", r.URL.Path)
+		}
+	}))
+	defer platformd.Close()
+
+	h, err := NewHandler(&Config{
+		Port:              "0",
+		SandboxURL:        sandbox.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		PlatformdURL:      platformd.URL,
+	}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"doc_id":          "doc-wire-fallback",
+		"revision_id":     "rev-wire-fallback",
+		"title":           "Proxy fallback story.texture",
+		"content":         "# Proxy fallback story\n\nThe supplied revision should sync when sandbox history misses.",
+		"body_doc":        bodyDoc,
+		"source_entities": sourceEntities,
+		"metadata":        json.RawMessage(meta),
+		"run_id":          "run-proxy-fallback",
+		"request_intent":  "universal_wire_processor_article_revision",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/wire/platform/publications/texture", bytes.NewReader(body))
+	req.Header.Set("X-Internal-Caller", "true")
+	req.Header.Set("X-Authenticated-User", platformOwner)
+	w := httptest.NewRecorder()
+	h.HandleInternalWirePlatformPublish(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+
+	select {
+	case syncReq := <-syncSeen:
+		if syncReq.DocID != "doc-wire-fallback" || syncReq.OwnerID != platformOwner || syncReq.Title != "Proxy fallback story.texture" {
+			t.Fatalf("sync request identity = %+v", syncReq)
+		}
+		if len(syncReq.Revisions) != 1 {
+			t.Fatalf("sync revisions = %d, want supplied current revision", len(syncReq.Revisions))
+		}
+		rev := syncReq.Revisions[0]
+		if rev.RevisionID != "rev-wire-fallback" ||
+			!strings.Contains(rev.Content, "supplied revision should sync") ||
+			!strings.Contains(string(rev.BodyDoc), `"source_ref"`) ||
+			!strings.Contains(string(rev.SourceEntities), `"src-fallback"`) {
+			t.Fatalf("fallback synced revision = %+v", rev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for fallback platform texture sync")
+	}
+}
+
 func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t *testing.T) {
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {

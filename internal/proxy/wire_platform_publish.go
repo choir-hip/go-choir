@@ -139,6 +139,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to prepare publication source metadata"})
 		return
 	}
+	rev.SourceEntities = enrichedSourceEntities
 	revType.SourceEntities = enrichedSourceEntities
 
 	wireReq := wirepublish.BuildAutonomousPublishRequest(docType, revType, rec, rev.Metadata)
@@ -171,7 +172,17 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 
 	// Sync the full Texture (all revisions) to platformd so published articles
 	// carry their complete revision history.
-	go h.syncTextureToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title)
+	go h.syncTextureToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title, []sandboxRevisionEntry{{
+		RevisionID:       rev.RevisionID,
+		ParentRevisionID: rev.ParentRevisionID,
+		AuthorKind:       rev.AuthorKind,
+		AuthorLabel:      rev.AuthorLabel,
+		Content:          rev.Content,
+		BodyDoc:          rev.BodyDoc,
+		SourceEntities:   rev.SourceEntities,
+		Citations:        rev.Citations,
+		Metadata:         rev.Metadata,
+	}})
 
 	writeJSON(w, status, platformResp)
 }
@@ -205,14 +216,18 @@ type sandboxTextureRevisionListResponse struct {
 // platform sandbox and syncs them to platformd's DoltDB. This runs
 // asynchronously after a successful publication so the publish response is
 // not delayed.
-func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string) {
+func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string, fallbackRevisions []sandboxRevisionEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var list sandboxTextureRevisionListResponse
 	if err := h.fetchSandboxJSONWithContext(ctx, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &list); err != nil {
-		log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v", docID, err)
-		return
+		if len(fallbackRevisions) == 0 || !sandboxRevisionEntriesHaveContent(fallbackRevisions) {
+			log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v", docID, err)
+			return
+		}
+		log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v; syncing supplied current revision", docID, err)
+		list.Revisions = fallbackRevisions
 	}
 	revisions := list.Revisions
 	if len(revisions) == 0 {
@@ -268,4 +283,13 @@ func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, d
 		return
 	}
 	log.Printf("proxy: synced %d revisions for doc %s to platformd", len(revisions), docID)
+}
+
+func sandboxRevisionEntriesHaveContent(revisions []sandboxRevisionEntry) bool {
+	for _, rev := range revisions {
+		if strings.TrimSpace(rev.RevisionID) != "" && strings.TrimSpace(rev.Content) != "" {
+			return true
+		}
+	}
+	return false
 }
