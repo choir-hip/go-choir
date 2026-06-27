@@ -15495,7 +15495,7 @@ Worker callback:
 - Runtime repair commit:
   `3e3b3de0c0f1229a443e234228efc8b22457d0fb` (`Add Wire semantic event frame`).
 - Worker handoff doc commit:
-  `b128d0359b7a5c8a3b1f4812b1f191c5e04e6019` (`Record Wire event frame worker
+  `b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa` (`Record Wire event frame worker
   handoff`).
 
 Worker claim:
@@ -15550,3 +15550,57 @@ Delta V: 0 until verifier verdict.
 
 Next move: read the verifier thread when it materializes; incorporate accept or
 route revision based on findings.
+
+## 2026-06-27 - O4 Semantic Event Frame Verifier Accepted
+
+Move: incorporate independent verifier callback for
+`O4-semantic-world-model-article-quality-next-axis-verifier`.
+
+Verifier callback:
+
+- Thread: `019f0974-1bde-73b1-8cd3-28b38f447fc1`.
+- Verdict: `accept`.
+- Finding: no blocking code findings.
+- Important correction: the previous handoff prompt's full SHA
+  `b128d0359b7a5c8a3b1f4812b1f191c5e04e6019` was not an object in the worker
+  repo. The actual local handoff commit is
+  `b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa`. This ledger now uses the actual
+  durable ref.
+
+Verifier evidence:
+
+- Problem Documentation First ordering holds:
+  `436d732a50d4e23b329e98873d8e7a3c46ad5dee` is docs/ledger only, followed by
+  runtime commit `3e3b3de0c0f1229a443e234228efc8b22457d0fb`, followed by
+  handoff commit `b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa`.
+- `git show --check --oneline` passed for `436d732a`, `3e3b3de0`, and actual
+  `b128d0352d1d`.
+- `git diff --check 1b0ff4aa..b128d0352d1d` passed.
+- Focused runtime test passed: `ok ./internal/runtime 3.976s`.
+- Broader Universal Wire selector passed: `ok ./internal/runtime 17.610s`.
+- `git status --short --ignored` in the worker worktree was clean.
+- Diff is limited to docs plus Universal Wire runtime/types/tests.
+
+Verifier reasoning:
+
+The runtime slice persists `event_frame` in
+`choir.universal_wire_story_cluster`, maps it to `semantic_story.event_frame`,
+and tests same-article source arrival, native `source_ref`, source_entities
+carry-forward, source-open/read provenance, and stale selector coverage.
+
+Evidence boundary: accepted at branch-local tier only. No push, CI, deploy,
+staging identity, provider/model quality, Qdrant/world-model projection,
+promotion/rollback, run acceptance, auth/session renewal, vmctl, gateway
+credentials, direct Node B edits, or full News benchmark settlement is claimed.
+
+Conjecture verdict: supported at branch-local event-frame substrate tier. This
+materially improves the semantic/world-model article-quality path without
+weakening the source and update invariants the verifier checked.
+
+Expected Delta V: 1 for independent branch-local verifier acceptance. Actual
+Delta V: 1 at branch-local tier. Mission V remains 1 because deployed
+product-quality proof and final News benchmark settlement remain open.
+
+Next move: incorporate the accepted actual local commits into root or a landing
+branch, run diff hygiene and tests, then perform the behavior-changing landing
+loop before claiming deployed product acceptance.

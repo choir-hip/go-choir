@@ -521,12 +521,12 @@ product acceptance.
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
 statement. Current value: 1. Last delta: expected Delta V 1 for the semantic
-article-quality worker to either produce a branch-local repair slice or a
-stronger blocker; actual Delta V 0 so far because worker commits
-`436d732a`/`3e3b3de0`/`b128d035` are ready for verifier but not independently
-accepted. Remaining driving conjecture: the full News/Universal Wire target
-still needs a coherent semantic/world-model article surface, not just
-deterministic multi-article readability and stale-filter hygiene.
+article-quality worker/verifier branch-local event-frame slice; actual Delta V
+1 at branch-local tier via verifier thread
+`019f0974-1bde-73b1-8cd3-28b38f447fc1`. Remaining driving conjecture: the full
+News/Universal Wire target still needs deployed product proof of coherent
+semantic/world-model article quality, not just deterministic multi-article
+readability, stale-filter hygiene, and branch-local event-frame state.
 
 budget: Solvency is tight. Use one bounded O4 realism-axis worker and verifier;
 if that does not create a credible route to News settlement, hand off with the
@@ -578,21 +578,22 @@ identity `2026-06-27T13:50:35Z`, authenticated proof at
 `019f095d-5901-79c1-9feb-4bc2c77ba83a`. Worker thread
 `019f096a-02b0-7911-a64b-bcf2c1bc890f` produced a docs-first semantic
 article-quality checkpoint (`436d732a`), branch-local event-frame repair
-(`3e3b3de0`), and handoff doc commit (`b128d035`). The slice persists
-`event_frame` on `choir.universal_wire_story_cluster`, exposes
-`semantic_story.event_frame` in the public Wire DTO, and derives Texture
-summary/tension copy from that frame while preserving source refs and
-same-article source_added behavior. This is not yet independently accepted and
-does not claim deploy/product settlement.
+(`3e3b3de0`), and handoff doc commit
+(`b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa`). Verifier thread
+`019f0974-1bde-73b1-8cd3-28b38f447fc1` accepted the slice at branch-local
+tier. It persists `event_frame` on `choir.universal_wire_story_cluster`,
+exposes `semantic_story.event_frame` in the public Wire DTO, and derives
+Texture summary/tension copy from that frame while preserving source refs and
+same-article source_added behavior. This does not claim deploy/product
+settlement.
 
-next move: wait for independent verifier thread
-`O4-semantic-world-model-article-quality-next-axis-verifier`, pending worktree
-handle `local:637534d1-d785-4ce5-8972-364f1ec4101a`, to review worker commits
-`436d732a..b128d035`. If accepted, incorporate the branch-local slice and then
-decide whether to land/deploy for authenticated staging proof. If revision is
-required, update this paradoc with the finding and send the worker back to the
-smallest repair. Do not claim full News benchmark settlement without deployed
-product proof and independent verifier acceptance.
+next move: incorporate the accepted branch-local commits into root or a landing
+branch, then run the behavior-changing landing loop if the incorporation diff
+is accepted: commit, push to `origin/main`, monitor CI/deploy identity, run
+authenticated staging proof for event-frame article quality and source-update
+behavior, and request independent deployed verifier review. Do not claim full
+News benchmark settlement without deployed product proof and independent
+verifier acceptance.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -620,5 +621,5 @@ request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. The remaining O4 News benchmark gap is semantic/world-model quality: the product still needs many multilingual ingested stories to cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Current worker request: O4-semantic-world-model-article-quality-next-axis-worker, pending worktree handle local:06752ddb-72c9-4ca1-92ab-acbafdbacc57. Next move: reconnect with list_threads/read_thread when the worker materializes, incorporate its ready_for_verifier callback or revise based on findings, and then open an independent verifier if it produces a branch-local slice. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. Branch-local semantic/world-model article-quality event-frame slice is accepted: worker commits 436d732a, 3e3b3de0, and b128d0352d1d3cd3adc19ea7e32fdff7f45b56fa were accepted by verifier thread 019f0974-1bde-73b1-8cd3-28b38f447fc1. The remaining O4 News benchmark gap is deployed product proof and quality beyond deterministic event-frame substrate: many multilingual ingested stories should cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: incorporate the accepted branch-local event-frame commits into root or a landing branch, run diff hygiene and appropriate tests, then land through commit -> push origin/main -> CI/deploy identity -> authenticated staging proof -> independent deployed verifier. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
