@@ -15301,3 +15301,84 @@ Expected Delta V: 1 if verifier accepts the deployed acceptance. Actual Delta V:
 Next move: reconnect with `list_threads` / `read_thread` once the pending
 worktree materializes, incorporate or revise based on verifier verdict, then
 choose the next O4 realism axis.
+
+## 2026-06-27 - O4 Subset Stale Filter Verifier Accepted
+
+Move: reconnect the thread-native verifier and incorporate the accepted
+deployed acceptance verdict.
+
+Thread-tool evidence:
+
+- `codex_app.list_threads` found materialized verifier thread
+  `019f095d-5901-79c1-9feb-4bc2c77ba83a`, title `Verify stale wire filter`,
+  worktree `/Users/wiz/.codex/worktrees/a4dc/go-choir`.
+- `codex_app.read_thread` returned final verifier verdict `accept` for work
+  item `O4-subset-stale-wire-synthesis-filter-deployed-verifier`.
+- The original pending worktree handle was
+  `local:a89e265a-2bd9-423d-841b-1761e73ef82a`.
+
+Verifier findings: no blocking findings. Orchestration may rely on the deployed
+acceptance for the narrow O4 stale subset-contamination filter claim.
+
+Verifier staging evidence:
+
+- `https://choir.news/health` returned proxy and sandbox deployed_commit
+  `8b53b967926fb8ba591e96c207022c49db9f72e5`, deployed_at
+  `2026-06-27T13:50:35Z`.
+- Temporary verifier auth state:
+  `/tmp/choir-auth/verifier-8b53-1782568608.json`, user
+  `qa-1782568609084-ynhoaz@example.com`.
+- `/auth/session` returned 200 and `authenticated: true`.
+- `/api/universal-wire/live-arrival` returned 200 with latest boundary
+  `cycle_e46363cf8600f1f56509047b` and `synthesis_status: ok`.
+- `/api/universal-wire/stories?limit=30` returned 200 with 7 public
+  `universal-wire-edition-texture` stories.
+- Stale doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c` had public index `-1` while
+  still present in edition metadata.
+- Direct Texture audit for stale doc/revision
+  `60ccdcb4-322d-4c31-b7f9-d12d026413c9` returned 200, owner
+  `universal-wire-platform`, 7 source entities, and native `source_ref`.
+- Current visible `source_added` story remained doc
+  `0d9eac95-ec18-4a2f-9470-802b8db7aef1`, with previous/current source counts
+  3/4, current revision `a4f73c76-7702-4634-b748-36cac8d75067` returned 200,
+  4 source entities, and native `source_ref`.
+
+Verifier local/diff evidence:
+
+- `git show --check --oneline 8b53b967` passed.
+- `git show --check --oneline e327dc96` passed.
+- `git diff --check c7910000^..8b53b967` passed.
+- Changed scope around `8b53b967`: mission doc/ledger plus
+  `internal/runtime/universal_wire.go` and
+  `internal/runtime/universal_wire_test.go`.
+- Focused runtime selector passed:
+  `nix develop -c go test ./internal/runtime -run
+  'TestHandleUniversalWireStoriesFilters(ClassifierStaleSynthesisAfterOkLiveArrival|StaleSynthesisAfterSkippedLiveArrival)|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestUniversalWireSynthesisSanitizesHelperCopyAndReadsStoryTexture|TestHandleInternalSourcecycledWebCaptures(DoesNotTreatTrainVerbAsRailSignal|UsesBodyConceptsWhenTitlesAreOpaque)|TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit'
+  -count=1`.
+- Broader runtime selector passed:
+  `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle'
+  -count=1`.
+
+Dirty/generated artifact classification from verifier: tracked/untracked
+worktree clean. `frontend/node_modules/` existed from verifier `npm ci` and is
+ignored/generated; temporary auth files were under `/tmp/choir-auth`, outside
+the repo.
+
+Evidence boundary: authenticated staging product APIs and focused runtime tests
+only. No provider/model synthesis quality, production semantic clustering beyond
+deterministic topic/signal grouping, Qdrant/world-model projection,
+promotion/rollback execution, full News benchmark settlement, or claim that the
+latest live-arrival synthesis doc is itself public.
+
+Conjecture verdict: supported at deployed verifier tier for the stale
+subset-contamination filter. The broader mission V remains 1 because the owner
+Universal Wire target still requires coherent English synthesis from
+multilingual ingestion over durable semantic/world-model objects, with later
+relevant sources updating existing articles and no legacy projection noise.
+
+Expected Delta V: 1 for independent verifier incorporation. Actual Delta V: 1
+for this verifier edge; broader mission V remains 1.
+
+Next move: choose the next O4 realism axis. Do not claim full News benchmark
+settlement.
