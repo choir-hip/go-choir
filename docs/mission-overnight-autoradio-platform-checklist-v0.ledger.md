@@ -9018,6 +9018,49 @@ move: push the accepted stack to `origin/main`, monitor CI/deploy, verify
 health identity, and replay authenticated Universal Wire headline-to-Texture
 readability.
 
+## 2026-06-27 - O4 Current-Head Repair Deployed, Browser Replay Blocked
+
+Root pushed `7e8138e64b259f141d1b3e6b53218367122a68e9` to `origin/main`.
+
+Landing loop evidence:
+
+- CI run `28275421927`: passed.
+- Docs Truth Check `28275421953`: passed.
+- FlakeHub run `28275421923`: passed.
+- Deploy job `83781323493` (`Deploy to Staging (Node B)`): passed.
+- `https://choir.news/health` reports proxy and sandbox deployed commit
+  `7e8138e64b259f141d1b3e6b53218367122a68e9`.
+
+Public guard checks:
+
+- Unauthenticated `https://choir.news/api/universal-wire/stories` returns 401.
+- Unauthenticated
+  `https://choir.news/api/texture/documents/4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf?read_owner=universal-wire-platform`
+  returns 401.
+- Public edge access to
+  `https://choir.news/internal/platform/texture/documents/4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`
+  returns 403.
+
+Authenticated browser replay status:
+
+- Chrome extension control connected and listed existing `choir.news` tabs
+  `550` and `549`.
+- Claiming either existing `choir.news` tab failed with Chrome's blocker:
+  another extension UI is open on the page and must be completed or dismissed.
+- Computer Use sent click, Escape, and the Chrome side-panel shortcut, but the
+  blocker persisted.
+- A fresh Chrome tab opened `https://choir.news/` but landed in signed-out
+  preview, so it cannot serve as owner-authenticated product evidence.
+
+Evidence boundary/non-claims: deployed health identity and public guard checks
+are proven. Authenticated Universal Wire article count and headline-to-Texture
+content loading are not proven after this deploy. No product acceptance, run
+acceptance, promotion/rollback execution, provider freshness, semantic
+clustering, or Qdrant behavior is claimed.
+
+Actual Delta V: 0. The remaining O4 acceptance edge is blocked on owner-browser
+state, not on CI/deploy. V remains 27.
+
 ## 2026-06-27 - O4 Legacy Graph Capture Synthesis Local Repair
 
 Claim: root commit `c813bff4` repairs the deployed zero-article condition for
