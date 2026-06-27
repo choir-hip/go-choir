@@ -220,10 +220,31 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	if firstCluster.ObjectKind != objectgraph.UniversalWireStoryClusterObjectKind ||
 		metadataString(firstClusterMeta, "schema_version") != objectgraph.UniversalWireStoryClusterSchemaVersion ||
 		metadataString(firstClusterMeta, "cluster_id") != wantClusterID ||
+		metadataString(firstClusterMeta, "world_model_kind") != "universal_wire_semantic_story" ||
+		metadataString(firstClusterMeta, "semantic_story_id") == "" ||
 		metadataString(firstClusterMeta, "article_doc_id") != firstProjection.SynthesisDocID ||
 		metadataString(firstClusterMeta, "article_revision_id") != firstProjection.SynthesisRevisionID ||
 		int(firstClusterMeta["source_count"].(float64)) != 2 {
 		t.Fatalf("first story cluster = %+v metadata=%#v, want durable two-source cluster for article", firstCluster, firstClusterMeta)
+	}
+	var firstSemanticState universalWireSemanticStoryState
+	if err := json.Unmarshal(firstCluster.Body, &firstSemanticState); err != nil {
+		t.Fatalf("decode first semantic story state: %v body=%s", err, string(firstCluster.Body))
+	}
+	if firstSemanticState.WorldModelKind != "universal_wire_semantic_story" ||
+		firstSemanticState.StoryID != metadataString(firstClusterMeta, "semantic_story_id") ||
+		firstSemanticState.LatestChange.ChangeType != "story_created" ||
+		firstSemanticState.LatestChange.PreviousSourceCount != 0 ||
+		firstSemanticState.LatestChange.CurrentSourceCount != 2 ||
+		len(firstSemanticState.LatestChange.AddedSourceItemIDs) != 2 ||
+		!slices.Contains(firstSemanticState.TopicConcepts, "transport") ||
+		!slices.Contains(firstSemanticState.SignalConcepts, "inspection") {
+		t.Fatalf("first semantic story state = %+v metadata=%#v, want durable created world-model state", firstSemanticState, firstClusterMeta)
+	}
+	if strings.Contains(firstRev.Content, firstSemanticState.StoryID) ||
+		strings.Contains(firstRev.Content, "World-model") ||
+		!strings.Contains(firstRev.Content, "same developing event") {
+		t.Fatalf("first synthesis article content = %q, want article-like semantic-state update without internal ids", firstRev.Content)
 	}
 	firstClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
 		FromID: firstCluster.CanonicalID,
@@ -268,8 +289,35 @@ func TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdates
 	}
 	if metadataString(secondClusterMeta, "article_doc_id") != firstProjection.SynthesisDocID ||
 		metadataString(secondClusterMeta, "article_revision_id") != secondProjection.SynthesisRevisionID ||
+		metadataString(secondClusterMeta, "semantic_story_id") != firstSemanticState.StoryID ||
 		int(secondClusterMeta["source_count"].(float64)) != 3 {
 		t.Fatalf("updated story cluster metadata = %#v, want same article updated to three sources", secondClusterMeta)
+	}
+	var secondSemanticState universalWireSemanticStoryState
+	if err := json.Unmarshal(secondCluster.Body, &secondSemanticState); err != nil {
+		t.Fatalf("decode updated semantic story state: %v body=%s", err, string(secondCluster.Body))
+	}
+	if secondSemanticState.StoryID != firstSemanticState.StoryID ||
+		secondSemanticState.LatestChange.ChangeType != "source_added" ||
+		secondSemanticState.LatestChange.PreviousSourceCount != 2 ||
+		secondSemanticState.LatestChange.CurrentSourceCount != 3 ||
+		!slices.Contains(secondSemanticState.LatestChange.AddedSourceItemIDs, "srcitem-live-fr") {
+		t.Fatalf("updated semantic story state = %+v first=%+v, want typed later-source update on same identity", secondSemanticState, firstSemanticState)
+	}
+	secondRev, err := handler.rt.Store().GetRevision(context.Background(), secondProjection.SynthesisRevisionID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load second synthesis revision: %v", err)
+	}
+	var secondRevMeta map[string]any
+	if err := json.Unmarshal(secondRev.Metadata, &secondRevMeta); err != nil {
+		t.Fatalf("decode second synthesis revision metadata: %v", err)
+	}
+	if metadataString(secondRevMeta, "universal_wire_semantic_story_id") != firstSemanticState.StoryID ||
+		metadataString(secondRevMeta, "universal_wire_semantic_change_type") != "source_added" ||
+		strings.Contains(secondRev.Content, secondSemanticState.StoryID) ||
+		strings.Contains(secondRev.Content, "World-model") ||
+		!strings.Contains(secondRev.Content, "updates here instead of starting a separate report") {
+		t.Fatalf("second revision meta/content = %#v / %q, want Texture revision from semantic metadata and article-like public copy", secondRevMeta, secondRev.Content)
 	}
 	secondClusterEdges, err := handler.rt.ObjectGraph().ListEdges(context.Background(), objectgraph.EdgeFilter{
 		FromID: firstCluster.CanonicalID,

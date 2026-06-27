@@ -22,6 +22,7 @@ type universalWireSynthesisClusterRequest struct {
 	Tension           string
 	PlatformRoutePath string
 	Sources           []universalWireSynthesisSource
+	SemanticState     universalWireSemanticStoryState
 	Now               time.Time
 }
 
@@ -108,6 +109,8 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 		"universal_wire_synthesis":               true,
 		"universal_wire_story_cluster_id":        clusterID,
 		"universal_wire_story_cluster_object_id": storyClusterObjectID,
+		"universal_wire_semantic_story_id":       req.SemanticState.StoryID,
+		"universal_wire_semantic_change_type":    req.SemanticState.LatestChange.ChangeType,
 		"universal_wire_article_alias_path":      aliasPath,
 		"synthesis_source_count":                 len(sources),
 		"synthesis_languages":                    languages,
@@ -148,7 +151,7 @@ func (rt *Runtime) synthesizeUniversalWireSourceClusterTextureArticle(ctx contex
 	if err := rt.publishUniversalWireSynthesisArticleToPlatform(ctx, doc, rev); err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
-	if err := rt.upsertUniversalWireStoryCluster(ctx, clusterID, aliasPath, doc, rev, editionRef, sources, now); err != nil {
+	if err := rt.upsertUniversalWireStoryCluster(ctx, clusterID, aliasPath, doc, rev, editionRef, sources, req.SemanticState, now); err != nil {
 		return types.Document{}, types.Revision{}, "", err
 	}
 	return doc, rev, editionRef, nil
@@ -184,7 +187,7 @@ func (rt *Runtime) publishUniversalWireSynthesisArticleToPlatform(ctx context.Co
 	return nil
 }
 
-func (rt *Runtime) upsertUniversalWireStoryCluster(ctx context.Context, clusterID, aliasPath string, doc types.Document, rev types.Revision, editionRef string, sources []universalWireSynthesisSource, now time.Time) error {
+func (rt *Runtime) upsertUniversalWireStoryCluster(ctx context.Context, clusterID, aliasPath string, doc types.Document, rev types.Revision, editionRef string, sources []universalWireSynthesisSource, semanticState universalWireSemanticStoryState, now time.Time) error {
 	if rt == nil || rt.ObjectGraph() == nil {
 		return nil
 	}
@@ -206,10 +209,10 @@ func (rt *Runtime) upsertUniversalWireStoryCluster(ctx context.Context, clusterI
 			languages = append(languages, source.Language)
 		}
 	}
-	body, _ := json.Marshal(map[string]any{
-		"headline": strings.TrimSuffix(doc.Title, ".texture"),
-		"summary":  fmt.Sprintf("Universal Wire story cluster %s currently synthesizes %d source captures into one Texture article.", clusterID, len(sources)),
-	})
+	if semanticState.StoryID == "" {
+		semanticState = rt.universalWireSemanticStoryState(ctx, clusterID, sources, now)
+	}
+	body, _ := json.Marshal(semanticState)
 	cluster, err := rt.ObjectGraph().CreateObject(ctx, objectgraph.CreateObjectRequest{
 		Kind:        objectgraph.UniversalWireStoryClusterObjectKind,
 		OwnerID:     universalWirePlatformOwnerID(),
@@ -219,6 +222,12 @@ func (rt *Runtime) upsertUniversalWireStoryCluster(ctx context.Context, clusterI
 			"schema_version":      objectgraph.UniversalWireStoryClusterSchemaVersion,
 			"cluster_id":          clusterID,
 			"cluster_kind":        "live_sourcecycled_story",
+			"world_model_kind":    semanticState.WorldModelKind,
+			"semantic_story_id":   semanticState.StoryID,
+			"semantic_signature":  semanticState.SemanticSignature,
+			"semantic_topics":     semanticState.TopicConcepts,
+			"semantic_signals":    semanticState.SignalConcepts,
+			"semantic_change":     semanticState.LatestChange,
 			"article_doc_id":      doc.DocID,
 			"article_revision_id": rev.RevisionID,
 			"article_alias_path":  aliasPath,

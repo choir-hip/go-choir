@@ -150,13 +150,15 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	groups := universalWireDeterministicStorySourceGroups(sources)
 	if len(groups) == 0 {
 		if len(sources) >= 2 && !universalWireSourcesHaveKnownStoryConcept(sources) {
+			semanticState := rt.universalWireSemanticStoryState(ctx, universalWireLiveSourcecycledClusterID, sources, now)
 			doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-				ClusterID: universalWireLiveSourcecycledClusterID,
-				Headline:  universalWireLiveSynthesisHeadline(sources),
-				Summary:   universalWireLiveSynthesisSummary(sources),
-				Tension:   "Further reporting should revise this article if the timeline, affected people, or official account changes.",
-				Sources:   sources,
-				Now:       now,
+				ClusterID:     universalWireLiveSourcecycledClusterID,
+				Headline:      semanticState.Headline,
+				Summary:       semanticState.Summary,
+				Tension:       semanticState.Tension,
+				Sources:       sources,
+				SemanticState: semanticState,
+				Now:           now,
 			})
 			if err != nil {
 				return universalWireGraphSynthesisResult{}, err
@@ -176,13 +178,15 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	}
 	var out universalWireGraphSynthesisResult
 	for _, group := range groups {
+		semanticState := rt.universalWireSemanticStoryState(ctx, group.ClusterID, group.Sources, now)
 		doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-			ClusterID: group.ClusterID,
-			Headline:  universalWireLiveSynthesisHeadline(group.Sources),
-			Summary:   universalWireLiveSynthesisSummary(group.Sources),
-			Tension:   "Further reporting should revise this article if the timeline, affected people, or official account changes.",
-			Sources:   group.Sources,
-			Now:       now,
+			ClusterID:     group.ClusterID,
+			Headline:      semanticState.Headline,
+			Summary:       semanticState.Summary,
+			Tension:       semanticState.Tension,
+			Sources:       group.Sources,
+			SemanticState: semanticState,
+			Now:           now,
 		})
 		if err != nil {
 			return universalWireGraphSynthesisResult{}, err
@@ -199,6 +203,205 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 		}
 	}
 	return out, nil
+}
+
+type universalWireSemanticStoryState struct {
+	SchemaVersion     string                           `json:"schema_version"`
+	WorldModelKind    string                           `json:"world_model_kind"`
+	StoryID           string                           `json:"story_id"`
+	ClusterID         string                           `json:"cluster_id"`
+	SemanticSignature []string                         `json:"semantic_signature"`
+	TopicConcepts     []string                         `json:"topic_concepts"`
+	SignalConcepts    []string                         `json:"signal_concepts"`
+	SourceItemIDs     []string                         `json:"source_item_ids"`
+	SourceCaptureIDs  []string                         `json:"source_capture_ids,omitempty"`
+	SourceCount       int                              `json:"source_count"`
+	Languages         []string                         `json:"languages,omitempty"`
+	Headline          string                           `json:"headline"`
+	Summary           string                           `json:"summary"`
+	Tension           string                           `json:"tension"`
+	LatestChange      universalWireSemanticStoryChange `json:"latest_change"`
+}
+
+type universalWireSemanticStoryChange struct {
+	ChangeType          string   `json:"change_type"`
+	PreviousSourceCount int      `json:"previous_source_count"`
+	CurrentSourceCount  int      `json:"current_source_count"`
+	AddedSourceItemIDs  []string `json:"added_source_item_ids,omitempty"`
+	AddedCaptureIDs     []string `json:"added_capture_ids,omitempty"`
+	AddedConcepts       []string `json:"added_concepts,omitempty"`
+	ChangedAt           string   `json:"changed_at"`
+}
+
+func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterID string, sources []universalWireSynthesisSource, now time.Time) universalWireSemanticStoryState {
+	sources = normalizedUniversalWireSynthesisSources(sources)
+	signature, topics, signals := universalWireSemanticSignature(sources)
+	sourceItemIDs := make([]string, 0, len(sources))
+	sourceCaptureIDs := make([]string, 0, len(sources))
+	languages := []string{}
+	for _, source := range sources {
+		if source.ItemID != "" && !containsWireString(sourceItemIDs, source.ItemID) {
+			sourceItemIDs = append(sourceItemIDs, source.ItemID)
+		}
+		if source.CaptureObjectID != "" && !containsWireString(sourceCaptureIDs, source.CaptureObjectID) {
+			sourceCaptureIDs = append(sourceCaptureIDs, source.CaptureObjectID)
+		}
+		if source.Language != "" && !containsWireString(languages, source.Language) {
+			languages = append(languages, source.Language)
+		}
+	}
+	sort.Strings(sourceItemIDs)
+	sort.Strings(sourceCaptureIDs)
+	sort.Strings(languages)
+
+	previousSources, previousCaptures, previousConcepts := rt.universalWirePreviousSemanticStoryState(ctx, clusterID)
+	addedSources := missingWireStrings(sourceItemIDs, previousSources)
+	addedCaptures := missingWireStrings(sourceCaptureIDs, previousCaptures)
+	addedConcepts := missingWireStrings(signature, previousConcepts)
+	changeType := "story_created"
+	if len(previousSources) > 0 {
+		changeType = "state_refreshed"
+		if len(addedSources) > 0 || len(addedConcepts) > 0 {
+			changeType = "source_added"
+		}
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	state := universalWireSemanticStoryState{
+		SchemaVersion:     "choir.universal_wire_story_cluster.semantic.v1",
+		WorldModelKind:    "universal_wire_semantic_story",
+		StoryID:           stableSourceEntityID("universal_wire_semantic_story", strings.Join(signature, "|")),
+		ClusterID:         strings.TrimSpace(clusterID),
+		SemanticSignature: signature,
+		TopicConcepts:     topics,
+		SignalConcepts:    signals,
+		SourceItemIDs:     sourceItemIDs,
+		SourceCaptureIDs:  sourceCaptureIDs,
+		SourceCount:       len(sourceItemIDs),
+		Languages:         languages,
+		LatestChange: universalWireSemanticStoryChange{
+			ChangeType:          changeType,
+			PreviousSourceCount: len(previousSources),
+			CurrentSourceCount:  len(sourceItemIDs),
+			AddedSourceItemIDs:  addedSources,
+			AddedCaptureIDs:     addedCaptures,
+			AddedConcepts:       addedConcepts,
+			ChangedAt:           now.UTC().Format(time.RFC3339Nano),
+		},
+	}
+	state.Headline = universalWireSemanticStoryHeadline(sources, state)
+	state.Summary = universalWireSemanticStorySummary(sources, state)
+	state.Tension = universalWireSemanticStoryTension(state)
+	return state
+}
+
+func (rt *Runtime) universalWirePreviousSemanticStoryState(ctx context.Context, clusterID string) ([]string, []string, []string) {
+	if rt == nil || rt.ObjectGraph() == nil || strings.TrimSpace(clusterID) == "" {
+		return nil, nil, nil
+	}
+	obj, err := rt.ObjectGraph().GetObject(ctx, universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), clusterID))
+	if err != nil {
+		return nil, nil, nil
+	}
+	var state universalWireSemanticStoryState
+	if err := json.Unmarshal(obj.Body, &state); err == nil && state.SchemaVersion != "" {
+		return append([]string(nil), state.SourceItemIDs...), append([]string(nil), state.SourceCaptureIDs...), append([]string(nil), state.SemanticSignature...)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+		return nil, nil, nil
+	}
+	return metadataStringSlice(meta["source_item_ids"]), metadataStringSlice(meta["source_capture_ids"]), metadataStringSlice(meta["semantic_signature"])
+}
+
+func universalWireSemanticSignature(sources []universalWireSynthesisSource) ([]string, []string, []string) {
+	concepts := map[string]bool{}
+	for _, source := range sources {
+		for concept := range universalWireStoryConceptSet(source) {
+			concepts[concept] = true
+		}
+	}
+	topics := []string{}
+	signals := []string{}
+	for concept := range concepts {
+		switch {
+		case universalWireStoryConceptIsTopic(concept):
+			topics = append(topics, strings.TrimPrefix(concept, "topic:"))
+		case universalWireStoryConceptIsSpecific(concept):
+			signals = append(signals, strings.TrimPrefix(concept, "signal:"))
+		default:
+			signals = append(signals, concept)
+		}
+	}
+	sort.Strings(topics)
+	sort.Strings(signals)
+	signature := append([]string{}, topics...)
+	signature = append(signature, signals...)
+	return signature, topics, signals
+}
+
+func universalWireSemanticStoryHeadline(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) string {
+	if len(sources) == 0 {
+		return "Developing story"
+	}
+	return truncateRunes(sources[0].Title, 96)
+}
+
+func universalWireSemanticStorySummary(sources []universalWireSynthesisSource, state universalWireSemanticStoryState) string {
+	if len(sources) == 0 {
+		return "A developing story needs continued source-grounded revision."
+	}
+	if len(sources) == 1 {
+		return fmt.Sprintf("%s gives the clearest current account.", sources[0].Title)
+	}
+	second := sources[1].Title
+	if state.LatestChange.ChangeType == "source_added" && len(state.LatestChange.AddedSourceItemIDs) > 0 {
+		second = universalWireLatestAddedSourceTitle(sources, state.LatestChange.AddedSourceItemIDs[0])
+	}
+	return fmt.Sprintf("%s gives the clearest current account, while %s changes what the live account should track next.", sources[0].Title, second)
+}
+
+func universalWireLatestAddedSourceTitle(sources []universalWireSynthesisSource, itemID string) string {
+	for _, source := range sources {
+		if source.ItemID == itemID && strings.TrimSpace(source.Title) != "" {
+			return source.Title
+		}
+	}
+	if len(sources) > 0 {
+		return sources[len(sources)-1].Title
+	}
+	return "a later source"
+}
+
+func universalWireSemanticStoryTension(state universalWireSemanticStoryState) string {
+	switch state.LatestChange.ChangeType {
+	case "source_added":
+		return "The latest source keeps the account on the same developing event: it adds a later angle without changing the core frame, so this article updates here instead of starting a separate report."
+	case "story_created":
+		return "The available sources describe the same developing event; later reporting should update this account if the timeline, affected people, or official explanation changes."
+	default:
+		return "The latest source check does not change the core account, but this article remains open to revision as reporting develops."
+	}
+}
+
+func missingWireStrings(current, previous []string) []string {
+	seen := map[string]bool{}
+	for _, value := range previous {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			seen[value] = true
+		}
+	}
+	out := []string{}
+	for _, value := range current {
+		value = strings.TrimSpace(value)
+		if value != "" && !seen[value] {
+			out = append(out, value)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 type universalWireDeterministicStorySourceGroup struct {
