@@ -518,6 +518,127 @@ func TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters(t *te
 	}
 }
 
+func TestHandleInternalSourcecycledWebCapturesKeepsDeployedShapedArrivalsSeparated(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 27, 8, 0, 0, 0, time.UTC)
+	firstBatch := []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-noisy-rail-1", "rss:rail-a", "fetch-noisy-rail-1", "Rail corridor reopens after flood inspections", "https://example.com/noisy/rail-1", "en", "Emergency officials said the rail corridor reopened after flood inspections, while commuters returned to central stations. This source also mentions unrelated butcher video commentary and ai criticism as background noise.", now.Add(-50*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-rail-2", "rss:rail-b", "fetch-noisy-rail-2", "Commuters warned about rail delays after inspections", "https://example.com/noisy/rail-2", "en", "Transit officials warned passengers about delays while railway inspection crews finished checks along the same corridor.", now.Add(-48*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-harbor-1", "rss:harbor-a", "fetch-noisy-harbor-1", "Harbor pilots reopen cargo channel", "https://example.com/noisy/harbor-1", "en", "Port pilots reopened the cargo channel after soundings, and vessels waited for tide clearance outside the harbor.", now.Add(-44*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-harbor-2", "rss:harbor-b", "fetch-noisy-harbor-2", "Cargo vessels face delays at harbor channel", "https://example.com/noisy/harbor-2", "en", "Maritime officials said cargo vessels faced delay while pilots checked channel soundings near the port.", now.Add(-42*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-health-1", "rss:health-a", "fetch-noisy-health-1", "Clinic vaccine inspection delays patients", "https://example.com/noisy/health-1", "en", "Hospital patients waited after clinic vaccine inspections delayed appointments during a regional health review.", now.Add(-38*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-ai", "rss:ai", "fetch-noisy-ai", "Cory Doctorow criticizes AI industry arguments", "https://example.com/noisy/ai", "en", "The essay criticized ai firms and copyright claims, with no relation to transport, harbor access, hospital inspections, or vaccine logistics.", now.Add(-35*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-energy", "rss:energy", "fetch-noisy-energy", "Grid substation crews review blackout plan", "https://example.com/noisy/energy", "en", "Energy officials reviewed power grid blackout plans after a substation alarm, but reported no transport or harbor delays.", now.Add(-33*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-school", "rss:school", "fetch-noisy-school", "School board delays budget vote", "https://example.com/noisy/school", "en", "A school board delayed its budget vote after members requested more public comment.", now.Add(-31*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-farm", "rss:farm", "fetch-noisy-farm", "Farm market adjusts weekend hours", "https://example.com/noisy/farm", "en", "A farm market adjusted weekend hours after vendors changed delivery windows.", now.Add(-29*time.Minute)),
+		universalWireSourcecycledTestItem("srcitem-noisy-culture", "rss:culture", "fetch-noisy-culture", "Museum opens a restored theater exhibit", "https://example.com/noisy/culture", "en", "The museum opened a restored theater exhibit with local archival material.", now.Add(-27*time.Minute)),
+	}
+	firstProjection := postInternalSourcecycledWebCapturesForTest(t, handler, firstBatch, now)
+	if firstProjection.SynthesisStatus != "ok" || firstProjection.SynthesisClusterCount != 2 {
+		t.Fatalf("first projection synthesis = %+v, want two coherent story clusters from noisy batch", firstProjection)
+	}
+	firstStories := getUniversalWireStoriesForTest(t, handler)
+	if firstStories.Source != "universal-wire-edition-texture" ||
+		firstStories.Diagnostics != nil ||
+		firstStories.Edition == nil ||
+		len(firstStories.Stories) != 2 ||
+		len(firstStories.Edition.IncludedDocIDs) != 2 {
+		t.Fatalf("first stories = %+v, want two synthesized articles and no mega-article", firstStories)
+	}
+	railStory := universalWireStoryWithSourceTitleForTest(firstStories.Stories, "Rail corridor reopens")
+	harborStory := universalWireStoryWithSourceTitleForTest(firstStories.Stories, "Harbor pilots reopen")
+	if railStory == nil || harborStory == nil || railStory.StoryTextureDoc == harborStory.StoryTextureDoc {
+		t.Fatalf("stories = %+v, want separate rail and harbor articles", firstStories.Stories)
+	}
+	if railStory.SemanticStory == nil ||
+		railStory.SemanticStory.CurrentSourceCount != 2 ||
+		!slices.Contains(railStory.SemanticStory.TopicConcepts, "transport") ||
+		!slices.Contains(railStory.SemanticStory.SignalConcepts, "inspection") ||
+		slices.Contains(railStory.SemanticStory.SignalConcepts, "doctorow") ||
+		len(railStory.SemanticStory.SignalConcepts) > universalWireSemanticSignatureMaxSignals {
+		t.Fatalf("rail semantic story = %+v, want capped story concepts without noisy raw tokens", railStory.SemanticStory)
+	}
+	if harborStory.SemanticStory == nil ||
+		harborStory.SemanticStory.CurrentSourceCount != 2 ||
+		!slices.Contains(harborStory.SemanticStory.TopicConcepts, "harbor") ||
+		!slices.Contains(harborStory.SemanticStory.SignalConcepts, "harbor-access") {
+		t.Fatalf("harbor semantic story = %+v, want separate harbor identity", harborStory.SemanticStory)
+	}
+	railDocID := railStory.StoryTextureDoc
+	railStoryID := railStory.SemanticStory.StoryID
+	harborDocID := harborStory.StoryTextureDoc
+	harborStoryID := harborStory.SemanticStory.StoryID
+	assertUniversalWireStoryTextureReadableForTest(t, handler, *railStory, "")
+	assertUniversalWireStoryTextureReadableForTest(t, handler, *harborStory, "")
+
+	secondProjection := postInternalSourcecycledWebCapturesForTest(t, handler, []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-noisy-rail-3", "rss:rail-c", "fetch-noisy-rail-3", "Rail inspections extend after evening flood checks", "https://example.com/noisy/rail-3", "en", "Railway crews extended evening flood inspections along the corridor, keeping some commuter delays in place.", now.Add(5*time.Minute)),
+	}, now.Add(6*time.Minute))
+	if secondProjection.SynthesisStatus != "ok" ||
+		secondProjection.SynthesisClusterCount != 1 ||
+		secondProjection.SynthesisSourceCount != 3 {
+		t.Fatalf("second projection = %+v, want matching rail arrival to update only the rail article", secondProjection)
+	}
+	secondStories := getUniversalWireStoriesForTest(t, handler)
+	if len(secondStories.Stories) != 2 ||
+		countStrings(secondStories.Edition.IncludedDocIDs, railDocID) != 1 ||
+		countStrings(secondStories.Edition.IncludedDocIDs, harborDocID) != 1 {
+		t.Fatalf("second stories = %+v, want same two edition articles with no duplicate rail transclusion", secondStories)
+	}
+	updatedRail := universalWireStoryWithSourceTitleForTest(secondStories.Stories, "Rail inspections extend")
+	unchangedHarbor := universalWireStoryWithDocForTest(secondStories.Stories, harborDocID)
+	if updatedRail == nil ||
+		updatedRail.StoryTextureDoc != railDocID ||
+		updatedRail.SemanticStory == nil ||
+		updatedRail.SemanticStory.StoryID != railStoryID ||
+		updatedRail.SemanticStory.ChangeType != "source_added" ||
+		updatedRail.SemanticStory.PreviousSourceCount != 2 ||
+		updatedRail.SemanticStory.CurrentSourceCount != 3 {
+		t.Fatalf("updated rail story = %+v, want same semantic story/article revised to three sources", updatedRail)
+	}
+	if unchangedHarbor == nil ||
+		unchangedHarbor.SemanticStory == nil ||
+		unchangedHarbor.SemanticStory.StoryID != harborStoryID ||
+		unchangedHarbor.SemanticStory.ChangeType != "story_created" ||
+		unchangedHarbor.SemanticStory.CurrentSourceCount != 2 {
+		t.Fatalf("harbor story after rail update = %+v, want separate story not absorbed by rail update", unchangedHarbor)
+	}
+	updatedRailRev, err := handler.rt.Store().GetRevision(ctx, secondProjection.SynthesisRevisionID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load updated rail revision: %v", err)
+	}
+	if strings.Count(string(updatedRailRev.BodyDoc), `"source_ref"`) != 3 ||
+		!strings.Contains(string(updatedRailRev.SourceEntities), "srcitem-noisy-rail-1") ||
+		!strings.Contains(string(updatedRailRev.SourceEntities), "srcitem-noisy-rail-3") {
+		t.Fatalf("updated rail revision body/source_entities = %s / %s, want prior and new native source refs", string(updatedRailRev.BodyDoc), string(updatedRailRev.SourceEntities))
+	}
+
+	thirdProjection := postInternalSourcecycledWebCapturesForTest(t, handler, []sources.Item{
+		universalWireSourcecycledTestItem("srcitem-noisy-health-2", "rss:health-b", "fetch-noisy-health-2", "Hospital vaccine inspections delay clinic appointments", "https://example.com/noisy/health-2", "en", "Hospital clinic managers said vaccine inspections delayed patient appointments while health officials reviewed storage records.", now.Add(12*time.Minute)),
+	}, now.Add(13*time.Minute))
+	if thirdProjection.SynthesisStatus != "ok" ||
+		thirdProjection.SynthesisClusterCount != 1 ||
+		thirdProjection.SynthesisSourceCount != 2 ||
+		thirdProjection.SynthesisDocID == railDocID ||
+		thirdProjection.SynthesisDocID == harborDocID {
+		t.Fatalf("third projection = %+v, want unrelated health arrival to create a separate article", thirdProjection)
+	}
+	thirdStories := getUniversalWireStoriesForTest(t, handler)
+	healthStory := universalWireStoryWithSourceTitleForTest(thirdStories.Stories, "Hospital vaccine inspections")
+	if len(thirdStories.Stories) != 3 ||
+		healthStory == nil ||
+		healthStory.SemanticStory == nil ||
+		healthStory.SemanticStory.StoryID == railStoryID ||
+		healthStory.SemanticStory.StoryID == harborStoryID ||
+		healthStory.SemanticStory.ChangeType != "story_created" ||
+		healthStory.SemanticStory.CurrentSourceCount != 2 ||
+		len(thirdStories.Edition.IncludedDocIDs) != 3 {
+		t.Fatalf("third stories = %+v health=%+v, want separate health article alongside rail and harbor", thirdStories, healthStory)
+	}
+	assertUniversalWireStoryTextureReadableForTest(t, handler, *healthStory, thirdProjection.SynthesisRevisionID)
+}
+
 func TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
@@ -992,6 +1113,26 @@ func countStrings(values []string, needle string) int {
 		}
 	}
 	return count
+}
+
+func universalWireStoryWithSourceTitleForTest(stories []types.WireStory, titlePart string) *types.WireStory {
+	for i := range stories {
+		for _, source := range stories[i].Manifest.Lead {
+			if strings.Contains(source.Title, titlePart) {
+				return &stories[i]
+			}
+		}
+	}
+	return nil
+}
+
+func universalWireStoryWithDocForTest(stories []types.WireStory, docID string) *types.WireStory {
+	for i := range stories {
+		if stories[i].StoryTextureDoc == docID {
+			return &stories[i]
+		}
+	}
+	return nil
 }
 
 func universalWireDiagnosticForSubstrate(diag *universalWireFeedDiagnostics, substrate string) universalWireFeedSubstrateDiagnostic {

@@ -12002,6 +12002,77 @@ Next move: commit this docs checkpoint, then commit the branch-local runtime
 repair and test proof without pushing, deploying, mutating staging, or claiming
 authenticated product acceptance.
 
+## 2026-06-27 - O4 Branch-Local Source Arrival Clustering Repair
+
+Move type: construct + probe.
+
+Claim under test: within branch-local runtime evidence, a deployed-shaped noisy
+sourcecycled batch with many unrelated items yields multiple coherent Wire
+Texture articles, a later matching arrival updates only the existing matching
+semantic story/article, and a later unrelated arrival remains separate.
+
+Implementation:
+
+- Removed the no-concept catch-all synthesis fallback that could materialize one
+  broad `sourcecycled-live` mega-article from unrelated captures.
+- Reused existing `choir.universal_wire_story_cluster` IDs when current grouped
+  sources overlap prior source item IDs, preserving semantic story and article
+  identity across matching arrivals.
+- Skipped synthesis for groups whose semantic state is only
+  `state_refreshed`, so unrelated existing clusters are not rewritten on later
+  source arrivals elsewhere.
+- Limited semantic signatures to typed topic/signal concepts, capped topics and
+  signals, and stopped body-only unrelated concepts from bridging into story
+  identity unless the source title already establishes the topic/signal frame.
+- Added
+  `TestHandleInternalSourcecycledWebCapturesKeepsDeployedShapedArrivalsSeparated`
+  to exercise a noisy deployed-shaped batch, matching rail update, unrelated
+  health article creation, native `source_ref`/`source_entities` carry-forward,
+  and Wire edition transclusion uniqueness through `/api/universal-wire/stories`.
+
+Receipts:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated|MaterializesExistingSourcecycledGraphCaptures)' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed.
+- `git diff --check` passed.
+
+Evidence class: branch-local runtime tests only. No push, deploy, staging
+mutation, authenticated Chrome replay, product acceptance, provider/model
+synthesis-quality claim, Qdrant/world-model projection claim, or full News
+benchmark settlement.
+
+Conjecture delta: C6 is supported at branch-local worker scope for the
+deployed-shaped deterministic clustering/update predicate. It remains open at
+staging/product scope until deployed evidence shows live sourcecycled arrivals
+produce coherent multi-story updates through authenticated product paths.
+
+Mutation class: orange/red branch-local runtime behavior slice.
+
+Protected surfaces touched: Universal Wire sourcecycled materialization,
+deterministic/semantic clustering, live source selection limits,
+`choir.universal_wire_story_cluster` state, Texture synthesis article revision,
+source_ref/source_entities carry-forward, Wire edition linkage, and
+`/api/universal-wire/stories` test proof. Auth/session, vmctl, deployment
+routing, gateway/provider credentials, Qdrant, promotion/rollback, run
+acceptance, and staging were not touched.
+
+Rollback path: revert the branch-local implementation commit, or reset this
+worker branch back to documentation checkpoint `cad191e3` while preserving the
+Problem Documentation First record.
+
+Heresy delta: `repaired` at branch-local worker scope for noisy arrival
+collapse and unrelated-cluster refresh; `discovered` remains for deployed
+product proof and provider/model-quality synthesis.
+
+Expected Delta V: 0 against the root mission's deployed/staging V, because this
+does not settle product scope. Actual Delta V: 0. V remains 3, but the worker is
+ready for verifier review.
+
+Next move: return `ready_for_verifier` with commit SHA, receipts, dirty-path
+classification, residual risks, non-claims, and rollback path.
+
 ## 2026-06-27 - O4 Deployed Source Arrival Worker Ready For Verifier
 
 Move type: worker result -> prover shift.

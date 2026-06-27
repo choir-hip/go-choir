@@ -128,6 +128,8 @@ type universalWireGraphSynthesisResult struct {
 }
 
 const universalWireLiveSourcecycledClusterID = "sourcecycled-live"
+const universalWireSemanticSignatureMaxTopics = 4
+const universalWireSemanticSignatureMaxSignals = 12
 
 func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(ctx context.Context, now time.Time) (universalWireGraphSynthesisResult, error) {
 	if rt == nil || rt.ObjectGraph() == nil {
@@ -149,36 +151,16 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	}
 	groups := universalWireDeterministicStorySourceGroups(sources)
 	if len(groups) == 0 {
-		if len(sources) >= 2 && !universalWireSourcesHaveKnownStoryConcept(sources) {
-			semanticState := rt.universalWireSemanticStoryState(ctx, universalWireLiveSourcecycledClusterID, sources, now)
-			doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-				ClusterID:     universalWireLiveSourcecycledClusterID,
-				Headline:      semanticState.Headline,
-				Summary:       semanticState.Summary,
-				Tension:       semanticState.Tension,
-				Sources:       sources,
-				SemanticState: semanticState,
-				Now:           now,
-			})
-			if err != nil {
-				return universalWireGraphSynthesisResult{}, err
-			}
-			return universalWireGraphSynthesisResult{
-				Triggered:       true,
-				Doc:             doc,
-				Revision:        rev,
-				EditionRef:      editionRef,
-				ClusterID:       universalWireLiveSourcecycledClusterID,
-				ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), universalWireLiveSourcecycledClusterID),
-				SourceCount:     len(sources),
-				ClusterCount:    1,
-			}, nil
-		}
 		return universalWireGraphSynthesisResult{SourceCount: len(sources)}, nil
 	}
 	var out universalWireGraphSynthesisResult
+	synthesizedClusterCount := 0
 	for _, group := range groups {
+		group.ClusterID = rt.resolveUniversalWireStoryClusterID(ctx, group)
 		semanticState := rt.universalWireSemanticStoryState(ctx, group.ClusterID, group.Sources, now)
+		if semanticState.LatestChange.ChangeType == "state_refreshed" {
+			continue
+		}
 		doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
 			ClusterID:     group.ClusterID,
 			Headline:      semanticState.Headline,
@@ -191,6 +173,7 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 		if err != nil {
 			return universalWireGraphSynthesisResult{}, err
 		}
+		synthesizedClusterCount++
 		out = universalWireGraphSynthesisResult{
 			Triggered:       true,
 			Doc:             doc,
@@ -199,7 +182,7 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 			ClusterID:       group.ClusterID,
 			ClusterObjectID: universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), group.ClusterID),
 			SourceCount:     len(group.Sources),
-			ClusterCount:    out.ClusterCount + 1,
+			ClusterCount:    synthesizedClusterCount,
 		}
 	}
 	return out, nil
@@ -254,7 +237,10 @@ func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterI
 	sort.Strings(sourceCaptureIDs)
 	sort.Strings(languages)
 
-	previousSources, previousCaptures, previousConcepts := rt.universalWirePreviousSemanticStoryState(ctx, clusterID)
+	previousState, hasPreviousState := rt.universalWirePreviousSemanticStorySnapshot(ctx, clusterID)
+	previousSources := previousState.SourceItemIDs
+	previousCaptures := previousState.SourceCaptureIDs
+	previousConcepts := previousState.SemanticSignature
 	addedSources := missingWireStrings(sourceItemIDs, previousSources)
 	addedCaptures := missingWireStrings(sourceCaptureIDs, previousCaptures)
 	addedConcepts := missingWireStrings(signature, previousConcepts)
@@ -268,10 +254,14 @@ func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterI
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
+	storyID := stableSourceEntityID("universal_wire_semantic_story", strings.Join(signature, "|"))
+	if hasPreviousState && strings.TrimSpace(previousState.StoryID) != "" {
+		storyID = previousState.StoryID
+	}
 	state := universalWireSemanticStoryState{
 		SchemaVersion:     "choir.universal_wire_story_cluster.semantic.v1",
 		WorldModelKind:    "universal_wire_semantic_story",
-		StoryID:           stableSourceEntityID("universal_wire_semantic_story", strings.Join(signature, "|")),
+		StoryID:           storyID,
 		ClusterID:         strings.TrimSpace(clusterID),
 		SemanticSignature: signature,
 		TopicConcepts:     topics,
@@ -297,22 +287,35 @@ func (rt *Runtime) universalWireSemanticStoryState(ctx context.Context, clusterI
 }
 
 func (rt *Runtime) universalWirePreviousSemanticStoryState(ctx context.Context, clusterID string) ([]string, []string, []string) {
-	if rt == nil || rt.ObjectGraph() == nil || strings.TrimSpace(clusterID) == "" {
+	state, ok := rt.universalWirePreviousSemanticStorySnapshot(ctx, clusterID)
+	if !ok {
 		return nil, nil, nil
+	}
+	return append([]string(nil), state.SourceItemIDs...), append([]string(nil), state.SourceCaptureIDs...), append([]string(nil), state.SemanticSignature...)
+}
+
+func (rt *Runtime) universalWirePreviousSemanticStorySnapshot(ctx context.Context, clusterID string) (universalWireSemanticStoryState, bool) {
+	if rt == nil || rt.ObjectGraph() == nil || strings.TrimSpace(clusterID) == "" {
+		return universalWireSemanticStoryState{}, false
 	}
 	obj, err := rt.ObjectGraph().GetObject(ctx, universalWireStoryClusterObjectID(universalWirePlatformOwnerID(), clusterID))
 	if err != nil {
-		return nil, nil, nil
+		return universalWireSemanticStoryState{}, false
 	}
 	var state universalWireSemanticStoryState
 	if err := json.Unmarshal(obj.Body, &state); err == nil && state.SchemaVersion != "" {
-		return append([]string(nil), state.SourceItemIDs...), append([]string(nil), state.SourceCaptureIDs...), append([]string(nil), state.SemanticSignature...)
+		return state, true
 	}
 	var meta map[string]any
 	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
-		return nil, nil, nil
+		return universalWireSemanticStoryState{}, false
 	}
-	return metadataStringSlice(meta["source_item_ids"]), metadataStringSlice(meta["source_capture_ids"]), metadataStringSlice(meta["semantic_signature"])
+	return universalWireSemanticStoryState{
+		StoryID:           metadataString(meta, "semantic_story_id"),
+		SourceItemIDs:     metadataStringSlice(meta["source_item_ids"]),
+		SourceCaptureIDs:  metadataStringSlice(meta["source_capture_ids"]),
+		SemanticSignature: metadataStringSlice(meta["semantic_signature"]),
+	}, true
 }
 
 func universalWireSemanticSignature(sources []universalWireSynthesisSource) ([]string, []string, []string) {
@@ -330,12 +333,16 @@ func universalWireSemanticSignature(sources []universalWireSynthesisSource) ([]s
 			topics = append(topics, strings.TrimPrefix(concept, "topic:"))
 		case universalWireStoryConceptIsSpecific(concept):
 			signals = append(signals, strings.TrimPrefix(concept, "signal:"))
-		default:
-			signals = append(signals, concept)
 		}
 	}
 	sort.Strings(topics)
 	sort.Strings(signals)
+	if len(topics) > universalWireSemanticSignatureMaxTopics {
+		topics = topics[:universalWireSemanticSignatureMaxTopics]
+	}
+	if len(signals) > universalWireSemanticSignatureMaxSignals {
+		signals = signals[:universalWireSemanticSignatureMaxSignals]
+	}
 	signature := append([]string{}, topics...)
 	signature = append(signature, signals...)
 	return signature, topics, signals
@@ -452,6 +459,79 @@ func universalWireDeterministicStorySourceGroups(sources []universalWireSynthesi
 	return out
 }
 
+func (rt *Runtime) resolveUniversalWireStoryClusterID(ctx context.Context, group universalWireDeterministicStorySourceGroup) string {
+	fallback := strings.TrimSpace(group.ClusterID)
+	if rt == nil || rt.ObjectGraph() == nil {
+		return fallback
+	}
+	currentSourceIDs := universalWireSourceItemIDSet(group.Sources)
+	if len(currentSourceIDs) == 0 {
+		return fallback
+	}
+	notTombstoned := false
+	clusters, err := rt.ObjectGraph().ListObjects(ctx, objectgraph.ListFilter{
+		Kind:      objectgraph.UniversalWireStoryClusterObjectKind,
+		OwnerID:   universalWirePlatformOwnerID(),
+		Limit:     64,
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		return fallback
+	}
+	bestClusterID := ""
+	bestOverlap := 0
+	for _, cluster := range clusters {
+		state, ok := universalWireSemanticStoryStateFromObject(cluster)
+		if !ok {
+			continue
+		}
+		overlap := 0
+		for _, sourceID := range state.SourceItemIDs {
+			if currentSourceIDs[sourceID] {
+				overlap++
+			}
+		}
+		if overlap > bestOverlap {
+			bestOverlap = overlap
+			bestClusterID = strings.TrimSpace(state.ClusterID)
+		}
+	}
+	if bestOverlap > 0 && bestClusterID != "" {
+		return bestClusterID
+	}
+	return fallback
+}
+
+func universalWireSourceItemIDSet(sources []universalWireSynthesisSource) map[string]bool {
+	out := map[string]bool{}
+	for _, source := range normalizedUniversalWireSynthesisSources(sources) {
+		if source.ItemID != "" {
+			out[source.ItemID] = true
+		}
+	}
+	return out
+}
+
+func universalWireSemanticStoryStateFromObject(obj objectgraph.Object) (universalWireSemanticStoryState, bool) {
+	var state universalWireSemanticStoryState
+	if err := json.Unmarshal(obj.Body, &state); err == nil && strings.TrimSpace(state.ClusterID) != "" {
+		return state, true
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+		return universalWireSemanticStoryState{}, false
+	}
+	clusterID := metadataString(meta, "cluster_id")
+	if clusterID == "" {
+		return universalWireSemanticStoryState{}, false
+	}
+	return universalWireSemanticStoryState{
+		StoryID:       metadataString(meta, "semantic_story_id"),
+		ClusterID:     clusterID,
+		SourceItemIDs: metadataStringSlice(meta["source_item_ids"]),
+	}, true
+}
+
 func universalWireStoryConceptOverlap(left, right map[string]bool) (int, bool, bool) {
 	overlap := 0
 	sameTopic := false
@@ -503,35 +583,46 @@ func universalWireStoryConceptIsTopic(concept string) bool {
 }
 
 func universalWireStoryConceptSet(source universalWireSynthesisSource) map[string]bool {
-	text := strings.Join([]string{source.Title, source.Body, source.CanonicalURL, source.URL}, " ")
+	titleConcepts := universalWireKnownConceptSet(source.Title)
+	if len(titleConcepts) == 0 {
+		return map[string]bool{}
+	}
 	concepts := map[string]bool{}
-	fallback := map[string]bool{}
+	titleTopics := map[string]bool{}
+	titleHasTopic := false
+	for concept := range titleConcepts {
+		concepts[concept] = true
+		if universalWireStoryConceptIsTopic(concept) {
+			titleTopics[concept] = true
+			titleHasTopic = true
+		}
+	}
+	for concept := range universalWireKnownConceptSet(source.Body) {
+		switch {
+		case universalWireStoryConceptIsSpecific(concept):
+			concepts[concept] = true
+		case titleTopics[concept], !titleHasTopic:
+			concepts[concept] = true
+		}
+	}
+	return concepts
+}
+
+func universalWireKnownConceptSet(text string) map[string]bool {
+	concepts := map[string]bool{}
 	for _, token := range universalWireStoryTokens(text) {
 		tokenConcepts := universalWireStoryConcepts(token)
-		if len(tokenConcepts) > 0 {
-			for _, concept := range tokenConcepts {
-				concepts[concept] = true
-			}
-			continue
-		}
-		if !universalWireStoryTokenStopword(token) && len(token) >= 5 {
-			fallback[token] = true
+		for _, concept := range tokenConcepts {
+			concepts[concept] = true
 		}
 	}
-	if len(concepts) > 0 {
-		return concepts
-	}
-	concepts = fallback
 	return concepts
 }
 
 func universalWireSourcesHaveKnownStoryConcept(sources []universalWireSynthesisSource) bool {
 	for _, source := range sources {
-		text := strings.Join([]string{source.Title, source.Body, source.CanonicalURL, source.URL}, " ")
-		for _, token := range universalWireStoryTokens(text) {
-			if len(universalWireStoryConcepts(token)) > 0 {
-				return true
-			}
+		if len(universalWireKnownConceptSet(strings.Join([]string{source.Title, source.Body}, " "))) > 0 {
+			return true
 		}
 	}
 	return false

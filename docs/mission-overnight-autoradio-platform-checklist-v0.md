@@ -579,7 +579,13 @@ worker proof may stop at focused tests, `git diff --check`, commit SHA, dirty
 classification, residual risks, and non-claims. Docs-only moves need diff
 hygiene and Docs Truth Check if pushed.
 
-heresy delta: `repaired` at deployed product API tier for the narrow C6/C8
+heresy delta: `repaired` at branch-local tier for the O4 deployed-shaped
+source-arrival clustering/update predicate: noisy unrelated sourcecycled
+arrivals no longer fall back into one broad `sourcecycled-live` mega-article,
+semantic signatures exclude raw body-token residue and cap topic/signal lists,
+matching later arrivals reuse the existing story/article identity, and
+unchanged unrelated clusters are left untouched. `repaired` at deployed product
+API tier for the narrow C6/C8
 semantic story DTO observability gap: current/stale synthesized Wire Texture
 articles now return `semantic_story` evidence through authenticated
 `/api/universal-wire/stories` without exposing internal semantic ids in
@@ -624,6 +630,16 @@ clusters to be rewritten as `state_refreshed` revisions during the same
 sourcecycled synthesis pass. That would make "matching later arrivals update
 only the existing story/article" false even when clustering split the initial
 batch.
+
+Branch-local implementation evidence now supports the worker-scope predicate:
+`TestHandleInternalSourcecycledWebCapturesKeepsDeployedShapedArrivalsSeparated`
+simulates a noisy deployed-shaped batch, proves two coherent Wire Texture
+articles instead of a mega-article, proves a later rail arrival updates only the
+existing rail article/story while preserving prior/new native `source_ref`
+citations and `source_entities`, and proves a later unrelated health arrival
+creates a third separate article. The requested selector
+`nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+passed, as did `git diff --check`. This is branch-local evidence only.
 
 Deployed discriminator evidence: Node B sourcecycled is active and its latest
 cycle `cycle_aab51c4b894bba17afea9fb2` ran from `2026-06-27T07:10:21Z` to
