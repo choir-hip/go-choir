@@ -11158,3 +11158,81 @@ Next move: create bounded worker thread
 branch-local focused proof and clean commit only; no push, deploy,
 staging/product acceptance, provider/model-quality synthesis, Qdrant,
 promotion/rollback, run acceptance, or full News benchmark claim.
+
+## 2026-06-27 - O4 Semantic Story Product Observability Worker Ready
+
+Worker thread: `019f07b2-e6d9-7593-9f23-5e93410ceb94`
+(`O4-semantic-story-state-product-observability-slice-worker`).
+
+Thread handle lineage: root created pending worktree handle
+`local:f9f7c2ad-9da7-47dc-b1ea-1a5fb6b7f55c`, which resolved to worker
+thread `019f07b2-e6d9-7593-9f23-5e93410ceb94` in worktree
+`/Users/wiz/.codex/worktrees/b79a/go-choir`.
+
+Worker result: `ready_for_verifier`.
+
+Worker commit:
+`8007d00c2803c65b7b32323debe340bef95fd87e` (`Expose Universal Wire semantic
+story evidence`).
+
+Reported changed files:
+
+- `internal/types/wire.go`
+- `internal/runtime/universal_wire.go`
+- `internal/runtime/universal_wire_test.go`
+
+Reported behavior: add an additive structured `semantic_story` field to the
+authenticated `/api/universal-wire/stories` WireStory DTO for synthesized
+Universal Wire Texture articles. The field is populated from
+`choir.universal_wire_story_cluster` state with revision metadata fallback.
+Worker reports that tests prove product-route observation of semantic story
+identity/change/source counts, same-story later-source update, unrelated-group
+splits, raw `choir.web_capture` diagnostic-only behavior, and no leakage of
+internal semantic ids into reader-facing headline/dek/article copy.
+
+Worker-reported commands:
+
+- `git diff --check HEAD^..HEAD`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster|TestHandleInternalSourcecycledWebCapturesSplitsUnrelatedStoryClusters|TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 3.503s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed, `ok github.com/yusefmosiah/go-choir/internal/runtime 10.081s`.
+
+Worker hygiene: final worker `git status --short` reported clean. No temporary
+or generated artifacts were reported.
+
+Independent verifier request: created pending verifier worktree handle
+`local:2f3daeb6-8c46-45de-987d-b729b51a5819` for
+`O4-semantic-story-state-product-observability-slice-verifier`. The verifier is
+asked to inspect worker commit `8007d00c2803c65b7b32323debe340bef95fd87e`,
+run diff hygiene and focused runtime selectors, and decide whether root may
+incorporate the branch-local product-observability slice.
+
+Mutation class: orange/red branch-local runtime/product API behavior under
+review. Root has not incorporated the worker commit.
+
+Protected surfaces under review: `/api/universal-wire/stories` and Wire story
+DTO contracts, Universal Wire sourcecycled materialization tests,
+`choir.universal_wire_story_cluster` state projection, Texture revision
+metadata fallback projection, source entity/source_ref invariants, Source Viewer
+provenance, and raw `choir.web_capture` diagnostic-only behavior.
+
+Evidence boundary: worker-local report plus thread inspection only. No root
+incorporation, no push of worker code, no CI/deploy, no staging identity, and no
+authenticated deployed product proof is claimed for `8007d00c`.
+
+Non-claims: no provider/model-quality synthesis, production semantic
+clustering, Qdrant, promotion/rollback, run acceptance, publication/export
+beyond existing Wire edition helpers, or full News benchmark settlement.
+
+Heresy delta: pending. If verifier accepts and root incorporates successfully,
+this can repair the branch-local product-observable semantic story predicate.
+Until then it remains an unaccepted construct.
+
+Expected Delta V: 0 until verifier acceptance and root incorporation. Actual
+Delta V: 0. V remains 3.
+
+Next move: resolve and monitor verifier pending handle
+`local:2f3daeb6-8c46-45de-987d-b729b51a5819`. If accepted, incorporate
+`8007d00c2803c65b7b32323debe340bef95fd87e` and run the full behavior landing
+loop before claiming deployed product acceptance.
