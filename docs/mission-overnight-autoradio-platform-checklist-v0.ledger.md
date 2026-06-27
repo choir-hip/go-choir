@@ -13033,3 +13033,57 @@ is claimed.
 Expected Delta V: 0. Actual Delta V: 0. V remains 3, but the next discriminator
 is narrower: prove or repair high-volume later-arrival update semantics while
 preserving unrelated articles.
+
+## 2026-06-27 - O4 Deployed Live Arrival Window Repaired Branch-Locally
+
+Move: bounded orange construct/probe after the docs-only problem checkpoint.
+
+Conjecture delta: current code could not satisfy the deployed live-arrival
+predicate for high-volume cycles because synthesis grouped only the latest 24
+captures. The repair raises the live sourcecycled synthesis capture window to a
+deployed-sized cycle limit and proves the existing story/article update still
+works when the later matching arrival is separated from the prior story sources
+by more than 24 newer unrelated captures.
+
+Implementation:
+
+- `internal/runtime/sourcecycled_web_captures.go` introduces
+  `universalWireLiveSourcecycledCaptureSynthesisLimit = 768` and uses it for
+  live sourcecycled graph capture synthesis.
+- `internal/runtime/universal_wire_test.go` adds
+  `TestHandleInternalSourcecycledWebCapturesUpdatesExistingStoryAcrossDeployedSizedCycle`.
+  The test creates initial rail and harbor stories, posts a later rail source
+  plus 32 unrelated newer captures, and asserts the rail story/article updates
+  in place with three source refs while the harbor article remains unchanged.
+
+Receipts:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesUpdatesExistingStoryAcrossDeployedSizedCycle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.000s`.
+  Nix warned about uncommitted changes and FlakeHub cache auth before fetching
+  from cache.nixos.org.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 10.802s`.
+
+Mutation class: orange runtime behavior plus yellow regression test and green
+mission evidence. Protected surfaces touched: Universal Wire sourcecycled
+ingestion/materialization and downstream semantic story/Texture article update
+selection. No auth/session renewal, vmctl, deployment routing,
+provider/gateway credentials, Qdrant, promotion/rollback, run acceptance,
+provider/model calls, or staging state was touched.
+
+Rollback path: revert this worker repair commit plus documentation checkpoint
+`b0e89b21` back to starting SHA
+`1b354ba2b973cd04ae5c02dfafebcab75918275a`.
+
+Heresy delta: `repaired` at branch-local tier for the sharpened C6
+deployed-cycle window gap; the prior docs checkpoint recorded `discovered`.
+
+Evidence boundary and non-claims: branch-local runtime tests only. No push,
+deploy, staging acceptance, authenticated product proof, provider/model-quality
+synthesis, Qdrant/world-model projection, promotion/rollback, run acceptance,
+or full News benchmark settlement is claimed.
+
+Expected Delta V: 0 for branch-local worker evidence. Actual Delta V: 0. V
+remains 3 pending independent verifier acceptance and any root incorporation or
+deployed product proof.

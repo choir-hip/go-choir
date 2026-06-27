@@ -657,7 +657,11 @@ the 24 most recently updated `choir.web_capture` objects before grouping. A
 later matching arrival can therefore be separated from the prior sources for its
 existing story by cycle volume/order before clustering or cluster-id resolution
 can update the existing Texture article. This is a newly sharpened product
-behavior problem inside C6, not a deployed acceptance claim.
+behavior problem inside C6, not a deployed acceptance claim. Branch-local worker
+evidence now repairs this at test tier by raising the synthesis capture window
+to a deployed-sized cycle limit and proving a later matching source still
+updates the same story/article while 32 newer unrelated captures separate it
+from the prior story sources.
 
 Branch-local worker construction also exposed a sharper sub-blocker inside that
 same problem: a later matching source arrival caused unrelated existing story
@@ -674,7 +678,10 @@ existing rail article/story while preserving prior/new native `source_ref`
 citations and `source_entities`, and proves a later unrelated health arrival
 creates a third separate article. The requested selector
 `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
-passed, as did `git diff --check`. This is branch-local evidence only.
+passed, as did `git diff --check`. The follow-up worker slice adds
+`TestHandleInternalSourcecycledWebCapturesUpdatesExistingStoryAcrossDeployedSizedCycle`,
+which models the deployed-cycle window gap directly. This is branch-local
+evidence only.
 
 Deployed discriminator evidence: Node B sourcecycled is active and its latest
 cycle `cycle_aab51c4b894bba17afea9fb2` ran from `2026-06-27T07:10:21Z` to
@@ -751,18 +758,16 @@ previous/current source counts are both 2. This supports the need for the
 worker's DTO carry-forward proof and keeps deployed live-arrival update
 settlement open.
 
-next move: incorporate the accepted branch-local deployed-cycle window repair
-from worker thread `019f085c-cd49-7630-8e4a-31a22e26c8a9`, then run root
-evidence and the staging landing loop. Worker evidence discovered and
-branch-locally repaired a deployed-cycle window gap: deployed sourcecycled can
-write hundreds of captures while live synthesis previously grouped only the
-latest 24, so later matching arrivals could miss prior story sources before
-cluster update. The accepted repair raises the live synthesis capture limit to
-768 and adds a high-volume regression. The API/UI mismatch and headline-open 404
-are
-repaired on staging for the tested product path, and the branch/root DTO
-carry-forward regression is accepted and CI-clean, but this is not full
-Universal Wire settlement.
+next move: run root evidence and the staging landing loop for the accepted
+deployed-cycle window repair. Worker evidence discovered and branch-locally
+repaired a deployed-cycle window gap: deployed sourcecycled can write hundreds
+of captures while live synthesis previously grouped only the latest 24, so
+later matching arrivals could miss prior story sources before cluster update.
+The accepted repair raises the live synthesis capture limit to 768 and adds a
+high-volume regression. The API/UI mismatch and headline-open 404 are repaired
+on staging for the tested product path, and the branch/root DTO carry-forward
+regression is accepted and CI-clean, but this is not full Universal Wire
+settlement.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

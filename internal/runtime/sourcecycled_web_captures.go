@@ -128,6 +128,7 @@ type universalWireGraphSynthesisResult struct {
 }
 
 const universalWireLiveSourcecycledClusterID = "sourcecycled-live"
+const universalWireLiveSourcecycledCaptureSynthesisLimit = 768
 const universalWireSemanticSignatureMaxTopics = 4
 const universalWireSemanticSignatureMaxSignals = 12
 
@@ -139,7 +140,7 @@ func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptur
 	objects, err := rt.ObjectGraph().ListObjects(ctx, objectgraph.ListFilter{
 		Kind:      objectgraph.WebCaptureObjectKind,
 		OwnerID:   universalWirePlatformOwnerID(),
-		Limit:     24,
+		Limit:     universalWireLiveSourcecycledCaptureSynthesisLimit,
 		Tombstone: &notTombstoned,
 	})
 	if err != nil {
