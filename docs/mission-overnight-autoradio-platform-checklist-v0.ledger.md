@@ -8709,3 +8709,33 @@ worker's docs checkpoint.
 Next move: create independent verifier thread
 `O4-zero-wire-direct-readiness-verifier` over worker commits `e76932c2` and
 `640e7540`.
+
+## 2026-06-27 - O4 Direct Readiness Verifier Requested
+
+Claim: the branch-local direct platformd readiness worker candidate now has an
+independent verifier request queued through Codex thread tools.
+
+Move: created a project worktree verifier thread from branch `main` with a
+read-only prompt covering worker thread `019f0679-3c97-7860-8765-09e839cf165d`,
+worktree `/Users/wiz/.codex/worktrees/1c45/go-choir`, docs-first commit
+`e76932c2`, and repair commit `640e7540`.
+
+Evidence:
+
+- `create_thread` returned pending worktree handle
+  `local:c6aab640-e61e-47b8-8d5e-412f10655b6c`.
+- No concrete verifier thread id was available in `list_threads` at the time of
+  this entry.
+- The verifier prompt asks for findings-first read-only review, exact
+  commands/results, dirty/generated artifact classification, evidence
+  boundary/non-claims, residual risks, and verdict `accept`,
+  `revise_before_continue`, `blocked`, or `supersede`.
+
+Actual Delta V: 0. Verifier work is queued but not complete. V remains 28.
+
+Evidence boundary/non-claims: no verifier verdict, incorporation, deployment,
+staging/product acceptance, or runtime repair is claimed by this orchestration
+entry.
+
+Next move: monitor pending handle `local:c6aab640-e61e-47b8-8d5e-412f10655b6c`
+until a verifier thread id or verdict is available.
