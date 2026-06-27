@@ -9183,3 +9183,75 @@ Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
 the accepted repair stack to `origin/main`, monitor CI/deploy, verify health
 identity, verify platformd document presence, and run authenticated Universal
 Wire product acceptance.
+
+## 2026-06-27 - O4 Deployed Platform Texture Current-Head Gap
+
+Mutation class: red documentation-first checkpoint for a platform Texture read
+repair.
+
+Problem: deployed `432ecd5a` makes Universal Wire non-empty and syncs the lead
+story document into platformd, but the visible headline-to-Texture path still
+opens a blank v0 Texture instead of the article content.
+
+Evidence:
+
+- Root pushed `432ecd5ae2f30b63f0bcabe9baf487cc62d03570` to `origin/main`.
+- CI run `28274928679` passed.
+- Docs Truth Check `28274928701` passed.
+- FlakeHub run `28274928683` passed.
+- Deploy job `83779941433` passed.
+- `https://choir.news/health` reports proxy and sandbox deployed commit
+  `432ecd5ae2f30b63f0bcabe9baf487cc62d03570`.
+- Authenticated Chrome reload of `/api/universal-wire/stories` now returns one
+  `universal-wire-edition-texture` story:
+  `source-network-texture-4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`.
+- The visible Universal Wire app renders `1 article` with reader-facing card
+  text rather than zero stories or raw capture cards.
+- Direct platformd diagnostic returns 200 for lead story doc
+  `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`.
+- Clicking the headline opens a Texture window titled
+  `Multiple reports converge on Meloni and Trump: A very public fall-out that
+  is proving very hard to fix`, but the editor shows `v0`,
+  `Start typing the document...`, and `Blank document ready`.
+- Direct platformd document read returns only `doc_id`, `owner_id`, and
+  `title`.
+- Direct platformd revision list for the same doc contains revision content,
+  `body_doc`, and source entities.
+
+Diagnosis:
+
+- The Texture editor reads `/api/texture/documents/{doc_id}` first and stores
+  `current_revision_id` from that document DTO before refreshing revisions.
+- Platformd's `PlatformTextureDocument` currently has no current-head field, so
+  platform-owned document reads cannot expose `current_revision_id`.
+- The editor therefore treats the platform-owned article as a document with no
+  selected head and initializes as blank v0 even though platformd has revision
+  rows.
+
+Conjecture delta: platform-owned Texture document reads should expose the
+latest synced revision as `current_revision_id` so the existing Texture editor
+can load the article through the same public read path.
+
+Protected surfaces: platformd Texture document DTO/store/service, proxy
+read-only platform Texture pass-through, Universal Wire headline-to-Texture
+readability, and source_ref/source entity preservation.
+
+Admissible evidence:
+
+- Focused platform tests proving synced platform Texture documents report the
+  latest revision as `current_revision_id`.
+- Proxy platform Texture read tests proving document reads forward the field.
+- Focused Universal Wire runtime tests proving platform-readable stories still
+  filter through platformd.
+- Staging deploy and authenticated product replay showing headline click loads
+  article content instead of blank v0.
+
+Rollback path: revert the current-head platform read repair; platformd will
+continue to avoid exposing malformed current-head data but Universal Wire
+headline Texture windows will remain blank.
+
+Heresy delta: discovered. The prior envelope repair restored platformd row sync
+and non-empty stories, but did not prove that platformd's document DTO had the
+head pointer required by the Texture editor.
+
+Actual Delta V: 0. This is documentation-first only; V remains 27.
