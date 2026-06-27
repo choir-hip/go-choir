@@ -494,13 +494,14 @@ for a non-empty product result. Behavior-changing work must name mutation class,
 protected surfaces, admissible evidence, rollback path, conjecture delta, and
 heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green docs settlement
-after deployed product proof. The next O4 implementation move is orange/yellow
-if it changes runtime, frontend, API behavior, tests, or synthesis policy.
-Authorized protected surfaces remain Universal Wire story DTOs, runtime
-synthesis/article materialization, existing article revision/upsert semantics,
-Texture revisions through existing helpers, source entity/source_ref projection,
-Wire edition linkage, and read-only Texture publication surfaces for
+mutation class / protected surfaces: Current move is green documentation-first
+checkpoint for the next O4 realism gap. The next O4 implementation move is
+orange/red if it changes Universal Wire runtime story selection, objectgraph
+cluster state, Texture document/revision writes, public story route semantics,
+or synthesis policy. Authorized protected surfaces are Universal Wire story
+DTOs, runtime synthesis/article materialization, existing article revision/upsert
+semantics, Texture revisions through existing helpers, source entity/source_ref
+projection, Wire edition linkage, and read-only Texture publication surfaces for
 platform-owned Wire articles. It must not touch auth/session renewal, vmctl,
 deployment routing, provider/gateway credentials, Qdrant, promotion/rollback,
 run acceptance, or publication/export outside existing Wire edition helpers.
@@ -533,19 +534,19 @@ SHA to `origin/main`, monitored CI/deploy/health to success, and ran
 authenticated Chrome/Computer Use product replay. The replay proved ordinary
 Texture loading, one Universal Wire article, headline-to-Texture rendering,
 source affordances, and platformd rows for document
-`d3661377-4731-4617-a351-63236b08597d`. This narrows O4 to the owner's product
-target: many multilingual ingested stories should become multiple coherent
-English synthesis Texture articles over durable source clusters/world-model
-objects, and later relevant sources should update existing articles instead of
-only producing one broad deterministic article.
+`d3661377-4731-4617-a351-63236b08597d`. Root then documented the next O4
+realism gap at the ledger tail: current code still routes eligible captures
+through the single stable `sourcecycled-live` cluster, so deployed proof of one
+readable article is not proof of multiple semantically clustered English
+synthesis articles or same-article updates for later relevant sources.
 
-next move: docs-only settlement commit/push for the current deployed acceptance,
-then document and plan the next O4 realism gap before any behavior change:
-semantic clustering and article/world-model update behavior. Expected Delta V:
-0 for the docs-only push because the deployed product proof already moved V from
-27 to 26 in the ledger; future implementation can reduce V only after a new
-docs-first checkpoint, verifier evidence, landing loop, and authenticated
-product proof for the next realism axis.
+next move: create a bounded worker thread for the first deterministic
+story-clustering slice. The worker should prove two clearly unrelated source
+groups produce two durable story clusters, two platform-owned Texture article
+docs, and two Wire edition transclusions, while a later related source revises
+the matching existing article. Expected Delta V: 0 until worker proof,
+independent verifier acceptance, incorporation, landing loop, and authenticated
+product proof.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -560,7 +561,8 @@ revision-list envelope shape, and supplied-revision fallback all had to be
 proven through deployed product replay. The latest accepted lesson is that a
 readable single article is still not Universal Wire's intended product: the next
 realism axis is semantic story clustering plus same-article/world-model updates
-over time.
+over time. The first bounded slice should use deterministic local clustering
+fixtures, not provider/model quality claims.
 
 settlement: not settled. O4 is accepted for deployed readable article
 materialization after the zero-article regression at `cb79fa39`: staging health,
@@ -576,5 +578,5 @@ remaining V and next assignment explicit.
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=26. Root deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0`; CI run `28276917439`, Docs Truth Check run `28276917427`, FlakeHub run `28276917425`, deploy job `83785540377`, public health identity, and direct platformd health passed. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved ordinary Texture still loads, Universal Wire renders `1 article`, and the headline opens a nonblank Texture article with `v60`, `Sources 24`, source-ref buttons, expanded source content, and `Document loaded`. Node B diagnostics show platformd has Texture doc `d3661377-4731-4617-a351-63236b08597d` under owner `universal-wire-platform` with current revision `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`, nonempty content, `body_doc`, and 24 source entities. This accepts the immediate zero-article/readable-headline regression only. Next move: document and plan the next O4 realism gap before behavior changes: Universal Wire still produces one broad deterministic article rather than multiple semantically clustered English synthesis articles with ongoing same-article/world-model updates. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md. Treat it as the source program for the thread-native mission. Current status is working with V=26. Root deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0`; CI run `28276917439`, Docs Truth Check run `28276917427`, FlakeHub run `28276917425`, deploy job `83785540377`, public health identity, and direct platformd health passed. Authenticated Computer Use replay in the owner's signed-in Chrome tab proved ordinary Texture still loads, Universal Wire renders `1 article`, and the headline opens a nonblank Texture article with `v60`, `Sources 24`, source-ref buttons, expanded source content, and `Document loaded`. Node B diagnostics show platformd has Texture doc `d3661377-4731-4617-a351-63236b08597d` under owner `universal-wire-platform` with current revision `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`, nonempty content, `body_doc`, and 24 source entities. This accepts the immediate zero-article/readable-headline regression only. The next O4 problem is documented at the ledger tail: Universal Wire still routes eligible captures through one broad deterministic `sourcecycled-live` cluster rather than multiple story/world-model clusters. Next move: create a bounded worker thread for a deterministic story-clustering slice proving two unrelated source groups produce two durable story clusters/two Texture articles/two Wire edition transclusions, while a later related source revises the matching existing article. Use Codex app thread tools when exposed: list_projects/create_thread for bounded workers/verifiers, read_thread/list_threads to reconnect verdicts, send_message_to_thread for follow-ups/callbacks, handoff_thread/get_handoff_status only for ownership transfer, and set_thread_title/set_thread_pinned/set_thread_archived for hygiene. Each worker/verifier assignment must name mutation class, protected surfaces, admissible evidence, rollback path, heresy delta, callback target, and stop condition. Follow AGENTS.md and Problem Documentation First. Behavior-changing landings require commit, push, CI, deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```

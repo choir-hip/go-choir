@@ -9740,3 +9740,91 @@ and non-empty stories, but did not prove that platformd's document DTO had the
 head pointer required by the Texture editor.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
+
+## 2026-06-27 - O4 Semantic Story Clustering Gap Documented At Current Tail
+
+Mutation class: green documentation-first checkpoint for the next O4 behavior
+problem. A future repair is orange/red if it changes Universal Wire runtime
+synthesis, Texture canonical writes, objectgraph cluster state, or edition
+linkage.
+
+Problem: deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0` repairs the
+immediate zero-article and headline-to-Texture readability regressions, but it
+still does not satisfy the owner's Universal Wire product target. Universal Wire
+currently exposes one broad deterministic synthesis article over a live capture
+cluster instead of multiple coherent English synthesis articles over separate
+story/world-model clusters, and there is no deployed proof that later relevant
+sources update the correct existing article while unrelated sources form a
+separate article.
+
+Evidence:
+
+- Authenticated product replay for `cb79fa39` showed Universal Wire rendering
+  `1 article`, opening a nonblank Texture article with `v60`, `Sources 24`,
+  source buttons, expanded source content, and `Document loaded`.
+- Node B diagnostics showed that the article is doc
+  `d3661377-4731-4617-a351-63236b08597d` under owner
+  `universal-wire-platform`, with current revision
+  `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`, nonempty content, `body_doc`, and 24
+  source entities.
+- `internal/runtime/sourcecycled_web_captures.go` still uses the single stable
+  live cluster id `sourcecycled-live`, selects recent platform
+  `choir.web_capture` objects, and sends them through one synthesis request.
+- `internal/runtime/universal_wire_test.go` proves that later source arrivals
+  revise the same deterministic live cluster article, but it does not prove that
+  unrelated source groups split into separate story clusters/articles.
+- The owner's product target requires many multilingual ingested stories to be
+  processed into the object graph through Texture, yielding English synthesis
+  articles that are not copies of individual articles and are updated when new
+  relevant information arrives.
+
+Diagnosis:
+
+- The current deployed article-readability proof is a real substrate win, but
+  the clustering predicate is still too coarse: one hardcoded live cluster can
+  conflate unrelated source captures.
+- The next useful slice should introduce a bounded, deterministic story-cluster
+  selection layer before synthesis. It should be strong enough to split clearly
+  unrelated test fixtures into separate clusters/articles and to update an
+  existing cluster/article when a later fixture matches that cluster.
+- This slice should not claim production semantic clustering, provider/model
+  quality, Qdrant projection, or full live world-model intelligence.
+
+Conjecture delta: if Universal Wire groups eligible graph-backed source captures
+into durable story-cluster identities before synthesis, then the product can
+advance from "one broad deterministic article" toward the intended News
+benchmark without re-exposing raw capture cards or weakening Texture/source-ref
+invariants.
+
+Protected surfaces for the next worker: Universal Wire runtime story selection,
+objectgraph `choir.universal_wire_story_cluster` state, Texture document/revision
+creation through existing helpers, source entity/source_ref projection, Wire
+edition linkage, and public `/api/universal-wire/stories` route semantics. Do
+not touch auth/session renewal, vmctl, deployment routing, gateway/provider
+credentials, Qdrant, promotion/rollback, run acceptance, or publication/export
+outside existing Wire edition helpers.
+
+Admissible first-slice evidence:
+
+- Focused runtime tests proving two clearly unrelated source groups produce two
+  durable story-cluster objects, two platform-owned Texture article docs, and
+  two Wire edition transclusions.
+- Focused runtime tests proving a later related source revises the existing
+  cluster's article rather than duplicating the article.
+- Tests must keep raw `choir.web_capture` projections diagnostic-only and must
+  preserve native `source_ref` citations, `body_doc`, source entities, and
+  Source Viewer reader provenance.
+- The broader `UniversalWire|WireProcessor|WireStory|WirePublication` runtime
+  selector should pass before verifier review.
+
+Rollback path: revert the story-cluster selection repair; Universal Wire returns
+to the single deterministic `sourcecycled-live` article behavior while retaining
+the deployed readability repair.
+
+Heresy delta: discovered. The deployed product can render and open one readable
+Universal Wire Texture article, but that article is not yet evidence of the
+multi-story, live-updating world model the owner asked for.
+
+Actual Delta V: 0. This is documentation-first only; V remains 26. Next move:
+create a bounded worker thread for the first deterministic story-clustering and
+same-article update slice.
