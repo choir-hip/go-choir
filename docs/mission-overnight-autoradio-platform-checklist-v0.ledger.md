@@ -15412,3 +15412,69 @@ stale-state routing error.
 
 Next move: create a bounded implementation/probe worker for the next O4 realism
 axis.
+
+## 2026-06-27 - O4 Semantic World-Model Axis Worker Requested
+
+Move: create a bounded thread-native worker for the next O4 realism axis after
+state compaction.
+
+Thread-tool action:
+
+- Used `codex_app.list_projects`; project `/Users/wiz/go-choir` was available.
+- Used `codex_app.create_thread` with project `/Users/wiz/go-choir`, worktree
+  environment from branch `main`, and work item
+  `O4-semantic-world-model-article-quality-next-axis-worker`.
+- Pending worktree handle returned:
+  `local:06752ddb-72c9-4ca1-92ab-acbafdbacc57`.
+
+Worker conjecture:
+
+The next O4 realism axis is semantic/world-model article quality, not another
+stale-filter or DTO proof. The owner target is many multilingual ingested
+stories clustered into cross-source story/world-model objects, routed through
+Texture/processor/reconciler workflows as coherent English synthesis articles,
+with later relevant sources updating existing articles/world-model entries. The
+worker should determine the smallest branch-local slice that materially moves
+Universal Wire from deterministic/formulaic cards toward that target, or
+document why the current architecture blocks it.
+
+Worker contract:
+
+- Read `AGENTS.md` and this paradoc before acting.
+- Start as yellow/probe.
+- If a runtime/API behavior problem is discovered, commit a docs-only Problem
+  Documentation First checkpoint before code.
+- Authorized protected surfaces after docs-first checkpoint: Universal Wire
+  sourcecycled ingestion/materialization and story grouping; semantic
+  story/world-model cluster state; Texture revision creation and
+  `source_ref`/`source_entities` carry-forward; Wire edition linkage and
+  platform Texture sync/read paths; authenticated public `/api/universal-wire/*`
+  DTOs only if needed; focused runtime/sourcecycled/frontend tests.
+- Not authorized unless documented as unavoidable: auth/session renewal, vmctl,
+  deployment routing, provider/gateway credentials, Qdrant,
+  promotion/rollback, run acceptance, publication/export outside existing Wire
+  edition helpers, or direct Node B tracked-file edits.
+- Admissible evidence: deployed product/public authenticated observation if
+  feasible, branch-local focused tests for changed behavior, broader runtime
+  selector for runtime changes, package-specific tests for other touched
+  packages, `git diff --check`, and clean worktree.
+- Rollback path: revert worker commit(s) back to starting `main` SHA plus
+  dependent evidence commits.
+- Heresy delta: `discovered` if current architecture blocks the target;
+  `repaired` only for a branch-local behavior slice that improves semantic
+  article/world-model quality without weakening citations, same-article updates,
+  or stale filtering.
+- Stop condition: `ready_for_verifier` callback with commit SHA(s), changed
+  files, exact commands/results, dirty-path classification, mutation class,
+  protected surfaces touched, evidence boundary, residual risks, non-claims,
+  rollback path, and branch-local conjecture verdict. No push, deploy, staging
+  mutation, or full News settlement claim.
+
+Evidence boundary: worker request only. No worker verdict exists yet.
+
+Expected Delta V: 1 if the worker returns a concrete branch-local repair slice
+or a stronger blocker that narrows the final O4 News conjecture. Actual Delta V:
+0 until callback.
+
+Next move: reconnect with `list_threads` / `read_thread` once the pending
+worktree materializes, then incorporate or revise based on worker output.

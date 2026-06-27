@@ -580,16 +580,18 @@ and update existing articles/world-model entries when relevant new information
 arrives. Prior evidence supports parts of this locally and at staging, but not
 as a final semantic/world-model product claim.
 
-next move: create a bounded implementation/probe worker for the next O4 realism
-axis: inspect the current deployed Universal Wire story set and implement or
-document the smallest slice that moves from deterministic/formulaic story cards
-toward coherent semantic/world-model articles. The worker must start from
-Problem Documentation First if it finds a new behavior gap, and must return a
-ready_for_verifier callback with exact commits, tests, dirty-path classification,
-evidence boundary, residual risks, and non-claims. Expected Delta V: observer
-evidence or one repair slice toward the final O4 News conjecture; do not claim
-full News benchmark settlement without deployed product proof and independent
-verifier acceptance.
+next move: reconnect worker
+`O4-semantic-world-model-article-quality-next-axis-worker`, pending worktree
+handle `local:06752ddb-72c9-4ca1-92ab-acbafdbacc57`, once it materializes.
+The worker is assigned to inspect the current deployed Universal Wire story set
+and implement or document the smallest slice that moves from
+deterministic/formulaic story cards toward coherent semantic/world-model
+articles. It must start from Problem Documentation First if it finds a new
+behavior gap, and must return a `ready_for_verifier` callback with exact
+commits, tests, dirty-path classification, evidence boundary, residual risks,
+and non-claims. Expected Delta V: observer evidence or one repair slice toward
+the final O4 News conjecture; do not claim full News benchmark settlement
+without deployed product proof and independent verifier acceptance.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
@@ -617,5 +619,5 @@ request evidence; O5-O8 remain open. Exit requires `settled`, `open_handoff`,
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. The remaining O4 News benchmark gap is semantic/world-model quality: the product still needs many multilingual ingested stories to cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Next move: create a bounded implementation/probe worker for this O4 realism axis. The worker must inspect the current deployed Universal Wire story set, document any new behavior gap before code, and implement or report the smallest slice that moves from deterministic/formulaic story cards toward coherent semantic/world-model articles. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
+Use Parallax on docs/mission-overnight-autoradio-platform-checklist-v0.md and treat it as the source program. Current status: working, V=1. Public Universal Wire articles are deployed and readable through the platform Texture path. Same-article source-arrival visibility and subset-stale public filtering are supported at staging: repair head 8b53b967926fb8ba591e96c207022c49db9f72e5 passed CI run 28291043478, Docs Truth Check 28291043484, FlakeHub 28291043480, deploy identity at 2026-06-27T13:50:35Z, authenticated proof at 2026-06-27T13:52:21Z, and independent verifier thread 019f095d-5901-79c1-9feb-4bc2c77ba83a accepted the deployed acceptance. The remaining O4 News benchmark gap is semantic/world-model quality: the product still needs many multilingual ingested stories to cluster into cross-source story/world-model objects, route through Texture/processor/reconciler workflows as coherent English synthesis articles, and update existing articles/world-model entries when relevant new information arrives. Current worker request: O4-semantic-world-model-article-quality-next-axis-worker, pending worktree handle local:06752ddb-72c9-4ca1-92ab-acbafdbacc57. Next move: reconnect with list_threads/read_thread when the worker materializes, incorporate its ready_for_verifier callback or revise based on findings, and then open an independent verifier if it produces a branch-local slice. Do not claim full News benchmark settlement yet. Follow AGENTS.md. Behavior-changing work must name mutation class, protected surfaces, admissible evidence, rollback path, conjecture delta, and heresy delta before editing; land through commit, push, CI/deploy identity, staging acceptance, verifier evidence, rollback refs, and residual risks. Update Parallax State in place and append to docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md after each material pass. Exit only as settled, open_handoff, blocked, or superseded with remaining V and next assignment explicit.
 ```
