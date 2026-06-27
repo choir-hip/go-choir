@@ -11571,3 +11571,69 @@ Next move: monitor pending handle
 `local:1d9581f4-ff75-427b-8224-dcaa1e14fcc3` if it resolves in the thread list, or
 otherwise wait for a worker callback. If the worker returns `ready_for_verifier`,
 create a separate read-only verifier thread before any root incorporation.
+
+## 2026-06-27 - O4 Source Arrival Update Worker Ready For Verifier
+
+Worker thread: `019f07d9-bfd2-7353-8ac8-81201f0cd55f` (`O4 source arrival
+update worker`).
+
+Thread handle lineage: root created pending worktree handle
+`local:1d9581f4-ff75-427b-8224-dcaa1e14fcc3`, which resolved to worker thread
+`019f07d9-bfd2-7353-8ac8-81201f0cd55f` in worktree
+`/Users/wiz/.codex/worktrees/992a/go-choir`.
+
+Worker result: `ready_for_verifier`.
+
+Worker commit:
+`3af1c3a5ca41e02b01829eb0af03004f1f0045b9`.
+
+Changed file:
+
+- `internal/runtime/universal_wire_test.go`
+
+Worker-reported behavior: the existing branch-local same-article update test
+already passed at root checkpoint `09158883`. The worker added a narrow
+test-only regression proof requiring the later/second Texture revision to carry
+prior and new `source_item_ids`, preserve `SourceEntities`, and contain exactly
+three native `source_ref` citations in `BodyDoc`.
+
+Worker-reported commands:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`:
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`:
+  passed.
+- `git diff --check`: passed.
+- `git status --short`: clean after commit.
+
+Dirty/generated classification from worker: intentional committed source/test
+change only in `internal/runtime/universal_wire_test.go`; no temporary proof
+output, generated artifacts, or unrelated WIP observed in the worker worktree.
+
+Evidence boundary: branch-local runtime/API test evidence only. The worker does
+not claim deployed source-provider arrival, provider/model-quality synthesis,
+staging behavior, Qdrant/world-model projection, publication/export beyond
+existing Wire edition helpers, promotion/rollback, or run acceptance.
+
+Residual risk: this is a proof-tightening test-only worker. Because no runtime
+behavior changed, verifier should decide whether the surrounding existing test
+plus new assertions are sufficient for the bounded branch-local C6
+source-arrival update predicate, or whether the conjecture requires a runtime
+construct rather than stronger assertions.
+
+Independent verifier request: root created pending verifier worktree handle
+`local:ebe4ec28-5be0-4b69-819e-e991e6507154` for
+`O4-deployed-source-arrival-update-slice-verifier`. The verifier is asked to
+review worker commit `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`, inspect the
+worker worktree `/Users/wiz/.codex/worktrees/992a/go-choir`, rerun focused
+tests if feasible, and decide whether root may incorporate the test-only
+branch-local proof.
+
+Expected Delta V: 0 until verifier acceptance and any root incorporation.
+Actual Delta V: 0. V remains 3.
+
+Next move: resolve and monitor verifier pending handle
+`local:ebe4ec28-5be0-4b69-819e-e991e6507154`. If verifier accepts, decide
+whether to incorporate `3af1c3a5ca41e02b01829eb0af03004f1f0045b9`; if
+incorporated, run the required root tests and landing loop before claiming any
+deployed product evidence.
