@@ -353,7 +353,11 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		IncludedDocIDs: includedDocIDs,
 		UpdatedAt:      editionDoc.UpdatedAt.Format(time.RFC3339Nano),
 	}
-	stories := make([]types.WireStory, 0, len(includedDocIDs))
+	type editionStoryCandidate struct {
+		story             types.WireStory
+		staleAfterArrival bool
+	}
+	candidates := make([]editionStoryCandidate, 0, len(includedDocIDs))
 	for _, docID := range includedDocIDs {
 		doc, err := h.rt.Store().GetDocument(ctx, docID, platformOwner)
 		if err != nil {
@@ -382,16 +386,26 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 			continue
 		}
 		story.SourceState = "universal-wire-edition-texture"
-		stories = append(stories, story)
+		candidates = append(candidates, editionStoryCandidate{
+			story:             story,
+			staleAfterArrival: h.universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx, rev),
+		})
 	}
-	sort.SliceStable(stories, func(i, j int) bool {
-		left := stories[i].UpdatedAt
-		right := stories[j].UpdatedAt
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].staleAfterArrival != candidates[j].staleAfterArrival {
+			return !candidates[i].staleAfterArrival
+		}
+		left := candidates[i].story.UpdatedAt
+		right := candidates[j].story.UpdatedAt
 		if left.Equal(right) {
-			return stories[i].StoryTextureDoc < stories[j].StoryTextureDoc
+			return candidates[i].story.StoryTextureDoc < candidates[j].story.StoryTextureDoc
 		}
 		return left.After(right)
 	})
+	stories := make([]types.WireStory, 0, len(candidates))
+	for _, candidate := range candidates {
+		stories = append(stories, candidate.story)
+	}
 	if limit > 0 && len(stories) > limit {
 		stories = stories[:limit]
 	}
@@ -399,6 +413,28 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		stories[i].Prominence = 100 - i
 	}
 	return stories, edition, nil
+}
+
+func (h *APIHandler) universalWireSynthesisStoryStaleAfterLatestLiveArrival(ctx context.Context, rev types.Revision) bool {
+	if h == nil || h.rt == nil || !wireRevisionIsUniversalWireSynthesis(rev) {
+		return false
+	}
+	status, ok, err := h.rt.latestUniversalWireLiveArrivalStatus(ctx)
+	if err != nil || !ok || status.SynthesisStatus != "skipped" {
+		return false
+	}
+	observedAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(status.ObservedAt))
+	if err != nil || !observedAt.After(rev.CreatedAt) {
+		return false
+	}
+	switch strings.TrimSpace(status.SynthesisSkipReason) {
+	case "no graph-backed synthesis sources matched known story concepts",
+		"no deterministic story group reached two sources with a shared topic and story signal",
+		"no deterministic story group produced a new or updated Texture article":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *APIHandler) universalWireStorySemanticState(ctx context.Context, rev types.Revision) *types.WireStorySemanticState {

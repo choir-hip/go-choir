@@ -953,6 +953,20 @@ articles whose current semantic signature can no longer be reproduced from the
 latest sourcecycled graph are retired, revised, or de-ranked before the public
 feed ranks them above fresh valid stories.
 
+Local stale-synthesis repair now de-ranks, rather than deletes, Universal Wire
+synthesis articles when a later live-arrival boundary reports a classifier or
+grouping skip that means the current sourcecycled graph did not produce a valid
+synthesis group. The article remains in the edition for audit/source review,
+but it sorts behind still-current edition stories before the 12-story cap and
+prominence assignment. Focused proof covers the deployed shape: a newer stale
+synthesis article plus an older valid story, followed by a later skipped
+live-arrival boundary, returns the older valid story first while retaining the
+stale article below it. Broader Universal Wire runtime selector passed locally.
+Next move: commit, push, monitor CI/deploy, verify health identity, and rerun
+authenticated staging proof that doc `1ae2a9cb-937a-4c5e-87a2-b0e66c895b7c`
+no longer wins the public feed after boundary
+`cycle_f8195609729672a6fd7a6798`.
+
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 
 version / lineage: v0 created after email-freeze landing. It supersedes loose

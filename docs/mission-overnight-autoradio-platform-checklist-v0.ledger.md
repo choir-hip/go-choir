@@ -14349,3 +14349,62 @@ Next move: document/repair the stale-synthesis lifecycle path so articles whose
 semantic signature can no longer be reproduced from current sourcecycled graph
 state are retired, revised, or de-ranked before `/api/universal-wire/stories`
 surfaces them as live top stories.
+
+## 2026-06-27 - O4 Stale Synthesis Feed De-Rank Local Proof
+
+Move: repair the narrow public-feed symptom discovered by the post-homonym
+staging proof: a previously synthesized bad article remained first even after a
+later sourcecycled boundary could not reproduce a valid synthesis group.
+
+Repair summary:
+
+- `internal/runtime/universal_wire.go` now evaluates each edition Texture story
+  against the latest Universal Wire live-arrival status while building the
+  public story projection.
+- A Universal Wire synthesis revision is treated as stale for feed ordering
+  when a later live-arrival boundary reports `synthesis_status: skipped` with a
+  classifier/grouping skip reason that means the current graph did not produce
+  a valid article group.
+- Stale synthesis stories are retained in the edition response for audit, but
+  they sort behind still-current edition stories before the 12-story product
+  cap and prominence assignment.
+- Canonical Texture documents, revisions, source refs, source entities, edition
+  inclusion metadata, and objectgraph cluster state are not deleted or
+  tombstoned by this slice.
+
+Commands/results:
+
+- `gofmt -w internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories(DeRanksStaleSynthesisAfterSkippedLiveArrival|SurfacesNewestEditionTexturesBeforeLimit)|TestHandleInternalSourcecycledWebCapturesDoesNotTreatTrainVerbAsRailSignal' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 3.923s`.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle' -count=1`
+  passed: `ok github.com/yusefmosiah/go-choir/internal/runtime 15.314s`.
+- `git diff --check -- internal/runtime/universal_wire.go internal/runtime/universal_wire_test.go`
+  passed.
+
+Conjecture verdict: supported locally for the narrow stale-feed ranking slice.
+This does not claim full cluster invalidation, article tombstoning, semantic
+world-model reconciliation, or provider-quality synthesis.
+
+Mutation class: orange behavior repair. Protected surfaces: authenticated
+Universal Wire story projection, live-arrival status interpretation, synthesized
+Texture article feed ordering, and story prominence assignment.
+
+Evidence boundary: local/root runtime tests only until commit, push, CI,
+deploy, health identity, and authenticated staging replay complete.
+
+Rollback path: revert the forthcoming stale-synthesis de-rank commit plus this
+evidence entry; stale synthesis stories again rank purely by article UpdatedAt.
+
+Heresy delta: `repaired` locally for stale synthesized articles winning the
+public live feed after a later classifier skip; not yet repaired at staging.
+
+Expected Delta V: 0 until deployed proof shows the bad South Korea/train article
+no longer appears first after the latest skipped boundary. Actual Delta V: 0.
+V remains 1.
+
+Next move: commit the stale-synthesis feed de-rank repair, push to `origin
+main`, monitor CI/deploy, verify staging identity, and rerun authenticated
+`/api/universal-wire/stories` proof against the existing post-repair skipped
+boundary.

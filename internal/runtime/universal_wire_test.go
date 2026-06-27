@@ -1644,6 +1644,87 @@ func TestHandleUniversalWireStoriesSurfacesNewestEditionTexturesBeforeLimit(t *t
 	}
 }
 
+func TestHandleUniversalWireStoriesDeRanksStaleSynthesisAfterSkippedLiveArrival(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 27, 12, 30, 0, 0, time.UTC)
+	valid := seedPlatformSourceNetworkTextureFixtureAt(t, handler, "doc-wire-valid-current", "Valid current Wire article", now.Add(-2*time.Hour))
+	validRev, err := handler.rt.Store().GetRevision(ctx, "rev-"+valid.DocID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load valid revision: %v", err)
+	}
+	staleDoc, staleRev, _, err := handler.rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
+		ClusterID: "sourcecycled-live-harbor-transport-rail-corridor",
+		Headline:  "South Korea plans to train entire military as drone warriors",
+		Summary:   "Two reports were previously treated as one transport story.",
+		Tension:   "This stale article should no longer win the live feed after the latest classifier boundary skips synthesis.",
+		Sources: []universalWireSynthesisSource{
+			{
+				ItemID:       "srcitem-stale-harbor",
+				SourceID:     "rss:harbor",
+				FetchID:      "fetch-stale-harbor",
+				Title:        "Harbor pilots reopen cargo channel",
+				URL:          "https://example.test/stale/harbor",
+				CanonicalURL: "https://example.test/stale/harbor",
+				Language:     "en",
+				Body:         "Port pilots reopened the cargo channel after tide soundings near the harbor.",
+				FetchedAt:    now.Add(-10 * time.Minute),
+			},
+			{
+				ItemID:       "srcitem-stale-train-verb",
+				SourceID:     "rss:defense",
+				FetchID:      "fetch-stale-train-verb",
+				Title:        "South Korea plans to train entire military as drone warriors",
+				URL:          "https://example.test/stale/defense",
+				CanonicalURL: "https://example.test/stale/defense",
+				Language:     "en",
+				Body:         "Defense officials described drone instruction for soldiers and commanders.",
+				FetchedAt:    now.Add(-9 * time.Minute),
+			},
+		},
+		Now: now,
+	})
+	if err != nil {
+		t.Fatalf("synthesize stale article fixture: %v", err)
+	}
+	if _, err := handler.rt.ensureUniversalWireEditionIncludes(ctx, valid, validRev, now.Add(time.Minute)); err != nil {
+		t.Fatalf("include valid article in edition: %v", err)
+	}
+	if err := handler.rt.recordUniversalWireLiveArrivalStatus(ctx, universalWireLiveArrivalStatus{
+		SchemaVersion:        objectgraph.UniversalWireLiveArrivalStatusSchemaVersion,
+		BoundaryID:           "cycle-post-classifier-skip",
+		CycleID:              "cycle-post-classifier-skip",
+		ObservedAt:           now.Add(30 * time.Minute).Format(time.RFC3339Nano),
+		Phase:                "web_captures_graph_written",
+		Status:               "ok",
+		SourceItemCount:      544,
+		CaptureCount:         542,
+		SourceEntityCount:    542,
+		SynthesisStatus:      "skipped",
+		SynthesisSourceCount: 768,
+		SynthesisSkipReason:  "no graph-backed synthesis sources matched known story concepts",
+	}, now.Add(30*time.Minute)); err != nil {
+		t.Fatalf("record skipped live-arrival status: %v", err)
+	}
+
+	resp := getUniversalWireStoriesForTest(t, handler)
+	if len(resp.Stories) < 2 {
+		t.Fatalf("stories = %+v, want valid and stale edition articles", resp)
+	}
+	if resp.Stories[0].StoryTextureDoc != valid.DocID {
+		t.Fatalf("first story = %+v, want older valid article ahead of stale synthesis doc %s", resp.Stories[0], staleDoc.DocID)
+	}
+	staleStory := universalWireStoryWithDocForTest(resp.Stories, staleDoc.DocID)
+	if staleStory == nil {
+		t.Fatalf("stories = %+v, want stale synthesis retained for audit below current article", resp.Stories)
+	}
+	if staleStory.Prominence >= resp.Stories[0].Prominence ||
+		staleStory.UpdatedAt.Before(staleRev.CreatedAt) ||
+		!strings.Contains(staleStory.Headline, "South Korea plans to train") {
+		t.Fatalf("stale story = %+v, first = %+v, stale rev = %+v", staleStory, resp.Stories[0], staleRev)
+	}
+}
+
 func TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
