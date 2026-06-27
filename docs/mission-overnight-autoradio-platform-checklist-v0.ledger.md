@@ -12351,3 +12351,61 @@ Actual Delta V: 0. V remains 3.
 
 Next move: await worker readiness, then create/read an independent verifier
 thread before any incorporation.
+
+## 2026-06-27 - O4 Article Quality Worker Ready For Verifier
+
+Move type: worker result -> verifier setup.
+
+Worker thread: `019f0817-a5df-7d40-9c70-8bacaacbb5b2`.
+
+Worker worktree: `/Users/wiz/.codex/worktrees/c6e6/go-choir`.
+
+Worker commit: `569caa443decab24e77640c620ddc83f6145ae40`.
+
+Worker status: `ready_for_verifier`.
+
+Worker claimed changes:
+
+- Deterministic Universal Wire article-quality renderer sanitizes
+  helper/provenance headlines, summaries, and tension text.
+- New generated article body derives English paragraphs from source/story
+  concepts instead of pairwise helper phrases.
+- Existing markdown lineage remains the path for source links, so `body_doc`
+  keeps native `source_ref` citations.
+- Helper phrase detector is reused for legacy article-surface repair decisions.
+
+Changed files reported:
+
+- `internal/runtime/wire_synthesis.go`
+- `internal/runtime/sourcecycled_web_captures.go`
+- `internal/runtime/universal_wire.go`
+- `internal/runtime/universal_wire_test.go`
+
+Worker reported commands:
+
+- `nix develop -c go test ./internal/runtime -run 'TestHandleInternalSourcecycledWebCaptures(ExposeGraphCapturesAsDiagnostics|TriggersTextureSynthesisAndUpdatesCluster|SplitsUnrelatedStoryClusters|KeepsDeployedShapedArrivalsSeparated|MaterializesExistingSourcecycledGraphCaptures)|TestUniversalWireSynthesisSanitizesHelperCopyAndReadsStoryTexture|TestHandleUniversalWireStoriesBackfillsSemanticStoryForLegacySynthesisRevision|TestUniversalWireSynthesisClusterCreatesTextureArticleAndEdition|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges' -count=1`
+  passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`
+  passed.
+- `git diff --check` passed.
+- `git status --short --branch` clean, with detached `HEAD`.
+
+Worker dirty-path classification: clean after commit; intentional committed
+source/test changes only in the four files above; no temporary proof output,
+generated artifacts, or unrelated WIP left in the worker worktree.
+
+Worker residual risks: deterministic concept-table renderer improves article
+shape but is not provider/model-quality synthesis; legacy articles without
+recoverable source_entities cannot be source-groundedly repaired from metadata
+alone; evidence is branch-local focused runtime coverage, not staging
+acceptance.
+
+Worker non-claims: no push, deploy, staging/product acceptance, authenticated
+Chrome proof, provider/model-quality synthesis, or full News benchmark
+settlement.
+
+Expected Delta V: 0 until independent verifier acceptance and root
+incorporation. Actual Delta V: 0. V remains 3.
+
+Next move: create/read an independent verifier thread for worker commit
+`569caa443decab24e77640c620ddc83f6145ae40`; incorporate only on `accept`.
