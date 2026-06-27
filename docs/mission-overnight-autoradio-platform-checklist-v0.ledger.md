@@ -9901,3 +9901,39 @@ Actual Delta V: 0. V remains 26. Next move: monitor worker thread
 `019f0728-81cb-7193-9f0d-e65f3263768f`; if it returns `ready_for_verifier`,
 create an independent verifier thread for the branch-local deterministic
 story-clustering slice before any root incorporation.
+
+## 2026-06-27 - Parallax Variant Recast As Conjecture Descent
+
+Conjecture statement: the mission should track strong decidable conjectures,
+not a residual obligation count; the next useful pass is an independent prover
+deciding whether worker commit `44893c3e` supports the bounded deterministic
+Universal Wire split/update conjecture.
+
+Verdict: discovered/supported for operating state. The updated Parallax skill
+now defines V as undecided or under-evidenced conjectures and requires each pass
+to produce a strong, clear, definitive statement or observer evidence.
+
+Move:
+
+- Read the updated Parallax skill body.
+- Preserved the already dirty repo skill update in `skills/parallax/SKILL.md`
+  as user-owned WIP.
+- Rewrote the active Parallax State from `V=26` obligation framing to `V=8`
+  driving conjectures.
+- Recorded worker thread `019f0728-81cb-7193-9f0d-e65f3263768f` as
+  `ready_for_verifier` for commit
+  `44893c3eab7cedd8d3e41c6c953fd51d32b68ff5`.
+
+Expected Delta V: 1 for the next independent verifier if it decides the
+branch-local deterministic split/update conjecture. Actual Delta V: 0 for this
+reframing pass; it changes the mission measure and next discriminator but does
+not itself verify or incorporate the worker commit.
+
+Receipt: Parallax State and Suggested Goal String in
+`docs/mission-overnight-autoradio-platform-checklist-v0.md` now name
+conjecture descent and the exact next conjecture to verify.
+
+Open edge: worker commit `44893c3e` remains untrusted until an independent
+verifier accepts, rejects, blocks, or supersedes it. No root incorporation, CI,
+deploy, staging acceptance, product-quality synthesis, Qdrant, run acceptance,
+promotion, or rollback claim is made.
