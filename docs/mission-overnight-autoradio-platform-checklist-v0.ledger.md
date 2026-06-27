@@ -8970,3 +8970,36 @@ with source-entity edges, but staging's existing captures are older/legacy graph
 captures without those edges.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
+
+## 2026-06-27 - O4 Legacy Graph Capture Synthesis Local Repair
+
+Claim: root commit `c813bff4` repairs the deployed zero-article condition for
+legacy graph captures by allowing readable `choir.web_capture` objects without
+`captured_from` source-entity edges to become cited sources in a Texture
+synthesis article.
+
+Repair scope:
+
+- `internal/runtime/sourcecycled_web_captures.go` keeps richer source-service
+  metadata when a `captured_from` source entity exists.
+- When that edge is absent, synthesis now falls back to the durable web-capture
+  object identity, URL/title/body, version id, and reader snapshot rather than
+  rejecting the capture as ineligible.
+- Raw `choir.web_capture` projections remain diagnostic-only when there are
+  fewer than two synthesis-eligible captures.
+- Two legacy readable graph captures now materialize one
+  `universal-wire-edition-texture` story with native Texture source refs and
+  Source Viewer reader provenance.
+
+Commands/results:
+
+- `git diff --check`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed. Nix emitted an ignored eval-cache SQLite busy warning.
+
+Evidence boundary/non-claims: local repair only. No push, CI, deploy, staging
+health identity, authenticated product replay, semantic clustering,
+provider/search freshness, Qdrant, run acceptance, or promotion/rollback
+execution is claimed yet.
+
+Actual Delta V: 0 until deployed product proof. V remains 27.
