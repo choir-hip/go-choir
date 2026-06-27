@@ -10742,3 +10742,45 @@ Next move: create a bounded Codex worker thread
 Stop condition is branch-local focused proof and clean commit only; no push,
 deploy, staging acceptance, provider/model-quality synthesis, Qdrant,
 promotion/rollback, run acceptance, or full News benchmark claim.
+
+## 2026-06-27 - O4 Semantic World-Model Update Worker Requested
+
+Worker: `O4-semantic-world-model-update-slice-worker`.
+
+Pending worktree handle: `local:e0a6b59a-9d8f-4b0e-8c1d-1b944c752fe7`.
+
+Starting state: project `/Users/wiz/go-choir`, new worktree from branch
+`preserve/o0-autoradio-mission-state-2026-06-26` after docs-first checkpoint
+`5e0d3578ec51702bcc45e7d256c509003240595f`.
+
+Assignment contract:
+
+- Read `AGENTS.md`, the paradoc Parallax State, and the latest ledger entry.
+- Decide the conjecture that a narrow branch-local Universal Wire slice can
+  record a durable semantic story/world-model identity from sourcecycled
+  captures, update that same identity when a later relevant source arrives, and
+  revise the linked Texture article from that object state.
+- Mutation class: orange/red.
+- Protected surfaces: Universal Wire sourcecycled ingestion, runtime
+  synthesis/update policy, objectgraph story/world-model objects, Texture
+  revision creation through existing helpers, source entity/source_ref
+  projection, Wire edition linkage, platform Texture sync, and public Wire story
+  DTOs.
+- Out of scope: auth/session renewal, vmctl, deployment routing,
+  gateway/provider credentials, Qdrant, promotion/rollback, run acceptance,
+  provider/model-quality synthesis, staging deploy, and publication/export
+  outside existing Wire edition helpers.
+- Admissible evidence: focused runtime/objectgraph tests proving create/update
+  of a durable semantic story/world-model object, same-object typed changed
+  state on later relevant source arrival, linked Texture article revision from
+  that object state, unrelated capture split behavior, and raw
+  `choir.web_capture` diagnostic-only behavior; plus `git diff --check`, clean
+  committed worktree, residual risks, and non-claims.
+- Rollback path: revert worker implementation commit(s) to
+  `5e0d3578ec51702bcc45e7d256c509003240595f` plus dependent docs/evidence
+  commits.
+- Stop condition: commit branch-local implementation and evidence, then report
+  `ready_for_verifier`; no push, no deploy, no staging/product acceptance claim.
+
+Expected Delta V: 0 for worker creation. Actual Delta V: 0. V remains 3 until
+the worker/verifier pair decides C6/C8 at branch-local tier.
