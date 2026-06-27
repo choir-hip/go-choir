@@ -520,12 +520,13 @@ product acceptance.
 
 variant (conjecture descent) V: count driving conjectures still undecided,
 under-evidenced for their settlement tier, or lacking a strong definitive
-statement. Current value: 1. Last delta: expected Delta V 1 for independent
-verifier incorporation of the deployed subset-stale public-filter acceptance;
-actual Delta V 1 via verifier thread `019f095d-5901-79c1-9feb-4bc2c77ba83a`.
-Remaining driving conjecture: the full News/Universal Wire target still needs a
-coherent semantic/world-model article surface, not just deterministic
-multi-article readability and stale-filter hygiene.
+statement. Current value: 1. Last delta: expected Delta V 1 for the semantic
+article-quality worker to either produce a branch-local repair slice or a
+stronger blocker; actual Delta V 0 so far because worker commits
+`436d732a`/`3e3b3de0`/`b128d035` are ready for verifier but not independently
+accepted. Remaining driving conjecture: the full News/Universal Wire target
+still needs a coherent semantic/world-model article surface, not just
+deterministic multi-article readability and stale-filter hygiene.
 
 budget: Solvency is tight. Use one bounded O4 realism-axis worker and verifier;
 if that does not create a credible route to News settlement, hand off with the
@@ -538,14 +539,15 @@ authenticated Chrome QA on `choir.news`. Behavior-changing work must name
 mutation class, protected surfaces, admissible evidence, rollback path,
 conjecture delta, and heresy delta before editing.
 
-mutation class / protected surfaces: Current move is green/yellow planning plus
-thread creation. The next likely construct is orange/red because it may touch
-Universal Wire sourcecycled ingestion/materialization, semantic story cluster
-state, Texture revision creation/source_ref/source_entities carry-forward, Wire
-edition linkage, platform Texture sync/read paths, and `/api/universal-wire/*`.
-It must not touch auth/session renewal, vmctl, deployment routing,
-provider/gateway credentials, Qdrant, promotion/rollback, run acceptance, or
-publication/export unless a docs-first checkpoint names why that is unavoidable.
+mutation class / protected surfaces: Current move is green/yellow
+orchestration plus independent verifier thread creation. The worker slice under
+review is orange branch-local: it touches Universal Wire sourcecycled
+materialization, semantic story cluster state, Texture synthesis revision
+creation/source refs, Wire edition linkage, and authenticated
+`/api/universal-wire` DTO observability. It does not claim changes to
+auth/session renewal, vmctl, deployment routing, provider/gateway credentials,
+Qdrant, promotion/rollback, run acceptance, direct Node B tracked-file edits, or
+publication/export outside existing Wire edition helpers.
 
 evidence packet: Behavior-changing settlement needs pushed commit SHA, CI run,
 deploy status, staging health/build identity, deployed acceptance, verifier
@@ -569,29 +571,28 @@ evidence. O4 is accepted only for deployed deterministic substrate behavior:
 Universal Wire renders platform-owned Texture articles, opens Texture/source
 surfaces, preserves source_ref/source_entities, shows same-doc source_added
 updates, and filters the known subset-stale public article after successful live
-arrival. The latest accepted repair is `8b53b967926fb8ba591e96c207022c49db9f72e5`,
-with CI `28291043478`, deploy identity `2026-06-27T13:50:35Z`, authenticated
-proof at `2026-06-27T13:52:21Z`, and independent verifier acceptance in thread
-`019f095d-5901-79c1-9feb-4bc2c77ba83a`. The actual News benchmark remains open:
-unchecked O4 checklist items still require many multilingual ingested stories to
-cluster into cross-source story/world-model objects, route through
-Texture/processor/reconciler workflows as coherent English synthesis articles,
-and update existing articles/world-model entries when relevant new information
-arrives. Prior evidence supports parts of this locally and at staging, but not
-as a final semantic/world-model product claim.
+arrival. The latest deployed accepted repair is
+`8b53b967926fb8ba591e96c207022c49db9f72e5`, with CI `28291043478`, deploy
+identity `2026-06-27T13:50:35Z`, authenticated proof at
+`2026-06-27T13:52:21Z`, and independent verifier acceptance in thread
+`019f095d-5901-79c1-9feb-4bc2c77ba83a`. Worker thread
+`019f096a-02b0-7911-a64b-bcf2c1bc890f` produced a docs-first semantic
+article-quality checkpoint (`436d732a`), branch-local event-frame repair
+(`3e3b3de0`), and handoff doc commit (`b128d035`). The slice persists
+`event_frame` on `choir.universal_wire_story_cluster`, exposes
+`semantic_story.event_frame` in the public Wire DTO, and derives Texture
+summary/tension copy from that frame while preserving source refs and
+same-article source_added behavior. This is not yet independently accepted and
+does not claim deploy/product settlement.
 
-next move: reconnect worker
-`O4-semantic-world-model-article-quality-next-axis-worker`, pending worktree
-handle `local:06752ddb-72c9-4ca1-92ab-acbafdbacc57`, once it materializes.
-The worker is assigned to inspect the current deployed Universal Wire story set
-and implement or document the smallest slice that moves from
-deterministic/formulaic story cards toward coherent semantic/world-model
-articles. It must start from Problem Documentation First if it finds a new
-behavior gap, and must return a `ready_for_verifier` callback with exact
-commits, tests, dirty-path classification, evidence boundary, residual risks,
-and non-claims. Expected Delta V: observer evidence or one repair slice toward
-the final O4 News conjecture; do not claim full News benchmark settlement
-without deployed product proof and independent verifier acceptance.
+next move: wait for independent verifier thread
+`O4-semantic-world-model-article-quality-next-axis-verifier`, pending worktree
+handle `local:637534d1-d785-4ce5-8972-364f1ec4101a`, to review worker commits
+`436d732a..b128d035`. If accepted, incorporate the branch-local slice and then
+decide whether to land/deploy for authenticated staging proof. If revision is
+required, update this paradoc with the finding and send the worker back to the
+smallest repair. Do not claim full News benchmark settlement without deployed
+product proof and independent verifier acceptance.
 
 ledger file: `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
 

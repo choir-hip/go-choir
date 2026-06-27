@@ -15478,3 +15478,75 @@ or a stronger blocker that narrows the final O4 News conjecture. Actual Delta V:
 
 Next move: reconnect with `list_threads` / `read_thread` once the pending
 worktree materializes, then incorporate or revise based on worker output.
+
+## 2026-06-27 - O4 Semantic Event Frame Worker Ready And Verifier Requested
+
+Move: incorporate worker callback from thread
+`019f096a-02b0-7911-a64b-bcf2c1bc890f` and open an independent verifier thread
+for the branch-local semantic/world-model article-quality slice.
+
+Worker callback:
+
+- Work item: `O4-semantic-world-model-article-quality-next-axis-worker`.
+- Worker worktree: `/Users/wiz/.codex/worktrees/3b86/go-choir`.
+- Docs-first checkpoint commit:
+  `436d732a50d4e23b329e98873d8e7a3c46ad5dee` (`Document Wire semantic article
+  quality gap`).
+- Runtime repair commit:
+  `3e3b3de0c0f1229a443e234228efc8b22457d0fb` (`Add Wire semantic event frame`).
+- Worker handoff doc commit:
+  `b128d0359b7a5c8a3b1f4812b1f191c5e04e6019` (`Record Wire event frame worker
+  handoff`).
+
+Worker claim:
+
+The current Universal Wire branch-local route had cluster identity and
+`source_added` state, but reader-facing article generation still leaned on
+fixed concept phrases and source order. The repair persists `event_frame` on
+`choir.universal_wire_story_cluster`, exposes `semantic_story.event_frame` in
+the public Wire DTO, and derives synthesized Texture summary/tension copy from
+that frame while preserving native `source_ref` / `source_entities` and
+same-article source-added behavior.
+
+Worker evidence:
+
+- `nix develop -c go test ./internal/runtime -run
+  'TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster'
+  -count=1` passed.
+- `nix develop -c go test ./internal/runtime -run
+  'UniversalWire|WireProcessor|WireStory|WirePublication|Sourcecycled|LiveArrival|Oracle'
+  -count=1` passed.
+- `git diff --check HEAD~3..HEAD` passed.
+- Worker worktree clean; intentional source/runtime commits plus durable
+  docs/evidence only.
+
+Verifier request:
+
+- Used `codex_app.list_projects`; project `/Users/wiz/go-choir` was available.
+- Used `codex_app.create_thread` with project `/Users/wiz/go-choir`, worktree
+  environment from branch `main`, and work item
+  `O4-semantic-world-model-article-quality-next-axis-verifier`.
+- Pending worktree handle returned:
+  `local:637534d1-d785-4ce5-8972-364f1ec4101a`.
+- Verifier prompt asks whether `436d732a..b128d035` materially improves
+  branch-local semantic/world-model article quality without weakening native
+  source refs, same-article updates, source-open/read paths, or stale filtering.
+
+Evidence boundary: worker evidence is branch-local Go/runtime tests and docs
+state only. No push, CI, deploy, staging identity, authenticated deployed
+payload inspection, provider/model synthesis, Qdrant/world-model projection,
+promotion/rollback, run acceptance, or full News benchmark settlement is
+claimed.
+
+Heresy delta: `repaired` only at the branch-local event-frame substrate tier if
+the verifier accepts. `discovered` remains for deployed article quality,
+provider/reconciler semantic synthesis, durable entity/event resolution beyond
+deterministic concept tokens, Qdrant/world-model projection, and production
+proof.
+
+Expected Delta V: 1 if independent verifier accepts the branch-local slice or
+returns a stronger blocker that narrows the final O4 News conjecture. Actual
+Delta V: 0 until verifier verdict.
+
+Next move: read the verifier thread when it materializes; incorporate accept or
+route revision based on findings.
