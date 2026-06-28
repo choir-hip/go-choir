@@ -1,6 +1,6 @@
 # Mission 3: Universal Wire Ingestion Rebuild
 
-**Status:** in progress — 3a settled, 3b next  
+**Status:** in progress — 3a settled, 3b settled, 3c next  
 **Date:** 2026-06-27  
 **Spikes:** `docs/mission-3-spikes-2026-06-27.md` (all 6 complete, evidence gathered)  
 **Predecessor:** `docs/mission-heresy-deletion-v1.md` (settled — deterministic scaffold deleted, processor dispatch wired)  
@@ -83,19 +83,27 @@ Completed:
 - Added `CreatePayloadIndex` to `API` interface (removed type assertion hack)
 - Verified source body text reaches Texture agent — all tests pass
 
-### 3b: New Ingestion Path (E2E)
+### 3b: New Ingestion Path (E2E) ✅ Settled
 
-**Paradoc:** `docs/mission-3b-ingestion-path-v0.md`  
+**Paradoc:** `docs/mission-3b-ingestion-path-v0.md` (settled, V=0)  
+**Deploy commit:** `a0776488`  
 **Confidence:** Medium — real captures, dynamic threshold, synthesis quality, cadence change  
 **Risk:** Medium — E2E flow may reveal integration issues, staging deploy required  
 
-Build the new ingestion path end-to-end on a single VM:
-- Per-source-type polling cadences (GDELT 15-min, RSS/Telegram configurable, env vars)
-- Qdrant semantic dedup in runtime before processor dispatch (embed + search + threshold)
-- Configurable routing threshold (env: `QDRANT_DEDUP_THRESHOLD`, default 0.7862, logged)
-- Verify sourcecycled writes web captures to runtime's Dolt-backed objectgraph
-- Call `EnsureProductionCollection` on staging startup
-- Acceptance: real source capture produces a source-grounded article on staging within minutes
+Completed:
+- Per-source-type polling cadences (RSS 5m, Telegram 5m, GDELT 15m, env-configurable)
+- Qdrant semantic dedup wired in runtime before processor dispatch (best-effort pass-through)
+- Configurable threshold (env: `QDRANT_DEDUP_THRESHOLD`, default 0.7862, 0=disabled)
+- sourcecycled writes web captures to runtime's Dolt-backed objectgraph via HTTP API
+- Staging E2E: real article produced with source citations (rss:hn_newest, telegram:metropoles)
+- Semantic dedup inert (Ollama not deployed on node-b — W6 follow-up)
+- Fixed flake.nix internalDirs (missing internal/qdrant, internal/wire/processorkey)
+- Fixed stale sourcecycled tests (3a Durable rename + 3b runCycle signature)
+
+Follow-up items (not blocking):
+- W6: Deploy Ollama on node-b to activate semantic dedup
+- W7: Add explicit QDRANT_URL/QDRANT_DEDUP_THRESHOLD env vars to sandbox service config
+- W8: Improve sandbox runtime logging for processor runs and dedup activity
 
 ### 3c: Distribution
 
