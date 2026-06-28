@@ -275,6 +275,7 @@
             "internal/objectgraph"
             "internal/persistentdisk"
             "internal/provider"
+            "internal/qdrant"
             "internal/runtime"
             "internal/sandbox"
             "internal/server"
@@ -287,6 +288,7 @@
             "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
+            "internal/wire/processorkey"
             "internal/wirepublish"
           ];
         };
@@ -316,6 +318,7 @@
             "internal/objectgraph"
             "internal/persistentdisk"
             "internal/provider"
+            "internal/qdrant"
             "internal/runtime"
             "internal/sandbox"
             "internal/server"
@@ -328,6 +331,7 @@
             "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
+            "internal/wire/processorkey"
             "internal/wirepublish"
           ];
         };
@@ -343,6 +347,7 @@
             "internal/modelcatalog"
             "internal/objectgraph"
             "internal/persistentdisk"
+            "internal/qdrant"
             "internal/runtime"
             "internal/sandbox"
             "internal/server"
@@ -355,6 +360,7 @@
             "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
+            "internal/wire/processorkey"
             "internal/wirepublish"
             "internal/zot"
           ];
