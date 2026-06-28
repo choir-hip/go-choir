@@ -217,6 +217,8 @@ CREATE TABLE IF NOT EXISTS app_change_packages (
 	verifier_contracts_json       LONGTEXT NOT NULL DEFAULT '[]',
 	provenance_refs_json          LONGTEXT NOT NULL DEFAULT '[]',
 	trace_id                      VARCHAR(255) NOT NULL DEFAULT '',
+	subject_id                    VARCHAR(255) NOT NULL DEFAULT '',
+	subject_auth_method           VARCHAR(64) NOT NULL DEFAULT '',
 	created_at                    DATETIME NOT NULL,
 	updated_at                    DATETIME NOT NULL
 );
@@ -243,6 +245,8 @@ CREATE TABLE IF NOT EXISTS app_adoptions (
 	route_profile                            LONGTEXT NOT NULL DEFAULT '',
 	default_base_profile                     LONGTEXT NOT NULL DEFAULT '',
 	trace_id                                 VARCHAR(255) NOT NULL DEFAULT '',
+	subject_id                               VARCHAR(255) NOT NULL DEFAULT '',
+	subject_auth_method                      VARCHAR(64) NOT NULL DEFAULT '',
 	error                                    LONGTEXT NOT NULL DEFAULT '',
 	created_at                              DATETIME NOT NULL,
 	updated_at                              DATETIME NOT NULL
@@ -637,6 +641,10 @@ func (s *Store) bootstrap() error {
 		{"worker_updates", "packet_json", "LONGTEXT NOT NULL DEFAULT '{}'"},
 		{"worker_updates", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"worker_updates", "delivered_at", "DATETIME"},
+		{"app_change_packages", "subject_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"app_change_packages", "subject_auth_method", "VARCHAR(64) NOT NULL DEFAULT ''"},
+		{"app_adoptions", "subject_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"app_adoptions", "subject_auth_method", "VARCHAR(64) NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err

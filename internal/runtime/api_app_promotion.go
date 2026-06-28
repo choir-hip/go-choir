@@ -106,6 +106,8 @@ func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Reques
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid app adoption request"})
 			return
 		}
+		req.SubjectID = ownerID
+		req.SubjectAuthMethod = authenticatedAuthMethod(r)
 		rec, err := h.rt.CreateAppAdoption(r.Context(), ownerID, computerID, req)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
@@ -141,6 +143,8 @@ func (h *APIHandler) HandleAppChangePackagesRoot(w http.ResponseWriter, r *http.
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid app change package request"})
 			return
 		}
+		req.SubjectID = ownerID
+		req.SubjectAuthMethod = authenticatedAuthMethod(r)
 		rec, err := h.rt.PublishAppChangePackage(r.Context(), ownerID, req)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
@@ -354,12 +358,13 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 				return
 			}
 		}
+		subject := subjectContext{SubjectID: ownerID, SubjectAuthMethod: authenticatedAuthMethod(r)}
 		var rec types.AppAdoptionRecord
 		var err error
 		if req.Async {
-			rec, err = h.rt.StartVerifyAppAdoptionAsync(r.Context(), ownerID, adoptionID, req)
+			rec, err = h.rt.StartVerifyAppAdoptionAsync(r.Context(), ownerID, adoptionID, req, subject)
 		} else {
-			rec, err = h.rt.VerifyAppAdoption(r.Context(), ownerID, adoptionID, req)
+			rec, err = h.rt.VerifyAppAdoption(r.Context(), ownerID, adoptionID, req, subject)
 		}
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
@@ -380,7 +385,8 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 				return
 			}
 		}
-		rec, err := h.rt.ApproveAppAdoption(r.Context(), ownerID, adoptionID)
+		subject := subjectContext{SubjectID: ownerID, SubjectAuthMethod: authenticatedAuthMethod(r)}
+		rec, err := h.rt.ApproveAppAdoption(r.Context(), ownerID, adoptionID, subject)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
@@ -396,14 +402,16 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 				return
 			}
 		}
-		rec, err := h.rt.PromoteAppAdoption(r.Context(), ownerID, adoptionID)
+		subject := subjectContext{SubjectID: ownerID, SubjectAuthMethod: authenticatedAuthMethod(r)}
+		rec, err := h.rt.PromoteAppAdoption(r.Context(), ownerID, adoptionID, subject)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, rec)
 	case "rollback":
-		rec, err := h.rt.RollbackAppAdoption(r.Context(), ownerID, adoptionID)
+		subject := subjectContext{SubjectID: ownerID, SubjectAuthMethod: authenticatedAuthMethod(r)}
+		rec, err := h.rt.RollbackAppAdoption(r.Context(), ownerID, adoptionID, subject)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
@@ -419,7 +427,8 @@ func (h *APIHandler) HandleAppAdoptionDetail(w http.ResponseWriter, r *http.Requ
 				return
 			}
 		}
-		rec, err := h.rt.RollForwardAppAdoption(r.Context(), ownerID, adoptionID)
+		subject := subjectContext{SubjectID: ownerID, SubjectAuthMethod: authenticatedAuthMethod(r)}
+		rec, err := h.rt.RollForwardAppAdoption(r.Context(), ownerID, adoptionID, subject)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return

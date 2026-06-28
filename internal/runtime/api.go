@@ -304,6 +304,20 @@ func requireInternalRuntimeCaller(r *http.Request) error {
 	return nil
 }
 
+// authenticatedAuthMethod extracts the auth method from the
+// X-Authenticated-Auth-Method header injected by the proxy. It returns
+// "cookie" as a conservative default when the header is absent (legacy proxy
+// paths and test harnesses that only set X-Authenticated-User). This supports
+// the M9 author-identity hardening: every mutation transaction records the
+// SubjectID and how they authenticated.
+func authenticatedAuthMethod(r *http.Request) string {
+	value := strings.TrimSpace(r.Header.Get("X-Authenticated-Auth-Method"))
+	if value == "" {
+		return "cookie"
+	}
+	return value
+}
+
 // writeJSON writes a JSON response with the given status code.
 func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
