@@ -208,16 +208,19 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p sboms
-          sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths)
+          sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths 2>/dev/null)
           failed=0
           for pkg in auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend obscura zot; do
             echo "==> Building SBOM for ${pkg}"
-            store_path=$(nix build .#${pkg} --no-link --print-out-paths 2>&1) || {
+            err_log=$(mktemp)
+            store_path=$(nix build .#${pkg} --no-link --print-out-paths 2>"$err_log") || {
               echo "    SKIP: package build failed for ${pkg}"
-              echo "${store_path}" | sed 's/^/      /'
+              head -5 "$err_log" | sed 's/^/      /'
               failed=$((failed + 1))
+              rm -f "$err_log"
               continue
             }
+            rm -f "$err_log"
             mkdir -p "sboms/${pkg}"
             if "$sbomnix_bin/bin/sbomnix" --cdx "sboms/${pkg}/sbom.json" "$store_path" 2>&1; then
               echo "    OK: sboms/${pkg}/sbom.json"
