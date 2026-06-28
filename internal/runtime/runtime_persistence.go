@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -20,7 +21,12 @@ type runSubmissionStore interface {
 	AppendEvent(context.Context, *types.EventRecord) error
 }
 
-func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events.EventBus, agentRec types.AgentRecord, rec *types.RunRecord, promptLen int) error {
+// persistSubmittedRun persists the agent, run, agent mutation, and the
+// EventRunSubmitted event, then publishes the event on the bus. When traceStore
+// is non-nil, the submitted event is also projected into the canonical trace
+// observability schema (additive; failures are logged and swallowed so a Dolt
+// outage degrades gracefully).
+func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events.EventBus, agentRec types.AgentRecord, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
 	if st == nil {
 		return fmt.Errorf("runtime store is required")
 	}
@@ -53,6 +59,12 @@ func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events
 	}
 	if err := st.AppendEvent(ctx, evRec); err != nil {
 		return fmt.Errorf("persist submitted event: %w", err)
+	}
+	if traceStore != nil {
+		tev := trace.FromEventRecord(evRec)
+		if err := traceStore.Append(ctx, &tev); err != nil {
+			log.Printf("runtime: trace store append submitted %s: %v", evRec.EventID, err)
+		}
 	}
 	if bus != nil {
 		bus.Publish(events.RuntimeEvent{

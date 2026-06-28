@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
@@ -109,6 +110,21 @@ func main() {
 
 	// Build runtime options based on configuration.
 	var rtOpts []actorruntime.RuntimeOption
+
+	// Mount the Dolt-backed trace observability store when enabled. The store
+	// wraps the same embedded Dolt *sql.DB that owns runtime/Texture state, so
+	// no extra connection is opened. A schema-application or append failure
+	// degrades gracefully: the runtime logs and continues without persistence
+	// (existing event recording and bus publishing are unchanged).
+	if rtCfg.TracePersistenceEnabled {
+		traceStore, err := trace.NewDoltStore(db.DB())
+		if err != nil {
+			log.Printf("sandbox: trace persistence disabled (dolt store init failed, continuing without): %v", err)
+		} else {
+			rtOpts = append(rtOpts, actorruntime.WithTraceStore(traceStore))
+			log.Printf("sandbox: trace persistence enabled (dolt-backed observability store mounted)")
+		}
+	}
 
 	rt := actorruntime.New(rtCfg, db, bus, rtProvider, rtOpts...)
 
@@ -229,6 +245,7 @@ func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRo
 		AppPromotionUIBuildCommand:      rtRuntimeCfg.AppPromotionUIBuildCommand,
 		AppPromotionUIArtifactPath:      rtRuntimeCfg.AppPromotionUIArtifactPath,
 		AppPromotionBuildTimeout:        rtRuntimeCfg.AppPromotionBuildTimeout,
+		TracePersistenceEnabled:         rtRuntimeCfg.TracePersistenceEnabled,
 	}
 	if rtCfg.StorePath == "" {
 		rtCfg.StorePath = runtime.DefaultStorePath

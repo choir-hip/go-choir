@@ -32,12 +32,23 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/trace"
 )
 
 // RuntimeOption configures optional adapter components.
 // This mirrors runtime.RuntimeOption so cmd/sandbox/main.go can use the same
 // option pattern.
 type RuntimeOption func(*Adapter)
+
+// WithTraceStore mounts a Dolt-backed trace observability store into the
+// embedded runtime so trace events are persisted alongside existing event
+// recording. This is a passthrough to runtime.WithTraceStore; the adapter does
+// not own the store connection (the caller manages the *sql.DB lifecycle).
+func WithTraceStore(s trace.Store) RuntimeOption {
+	return func(a *Adapter) {
+		runtime.WithTraceStore(s)(a.Runtime)
+	}
+}
 
 // Adapter wraps an actor.Runtime to provide the same surface as the old
 // runtime.Runtime. It embeds *runtime.Runtime for business logic access and
