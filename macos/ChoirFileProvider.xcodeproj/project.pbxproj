@@ -1,0 +1,175 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+/* Begin PBXBuildFile section */
+		E1000001 /* ChoirFileProviderExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000001 /* ChoirFileProviderExtension.swift */; };
+		E1000002 /* ChoirFileProviderBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000002 /* ChoirFileProviderBridge.swift */; };
+		E1000003 /* UnixSocketTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000003 /* UnixSocketTransport.swift */; };
+		E1000004 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E2000004 /* Info.plist */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E2000001 /* ChoirFileProviderExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoirFileProviderExtension.swift; sourceTree = "<group>"; };
+		E2000002 /* ChoirFileProviderBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoirFileProviderBridge.swift; sourceTree = "<group>"; };
+		E2000003 /* UnixSocketTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixSocketTransport.swift; sourceTree = "<group>"; };
+		E2000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E2000005 /* ChoirFileProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ChoirFileProvider.entitlements; sourceTree = "<group>"; };
+		E2000006 /* ChoirFileProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChoirFileProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		E3000001 = {
+			isa = PBXGroup;
+			children = (
+				E3000002 /* ChoirFileProvider */,
+				E3000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E3000002 /* ChoirFileProvider */ = {
+			isa = PBXGroup;
+			children = (
+				E2000001 /* ChoirFileProviderExtension.swift */,
+				E2000002 /* ChoirFileProviderBridge.swift */,
+				E2000003 /* UnixSocketTransport.swift */,
+				E2000004 /* Info.plist */,
+				E2000005 /* ChoirFileProvider.entitlements */,
+			);
+			path = ChoirFileProvider;
+			sourceTree = "<group>";
+		};
+		E3000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E2000006 /* ChoirFileProvider.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E4000001 /* ChoirFileProvider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E5000003 /* Build configuration list for PBXNativeTarget "ChoirFileProvider" */;
+			buildPhases = (
+				E4000002 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ChoirFileProvider;
+			productName = ChoirFileProvider;
+			productReference = E2000006 /* ChoirFileProvider.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E6000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = E5000001 /* Build configuration list for PBXProject */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = ("en", "Base");
+			mainGroup = E3000001;
+			productRefGroup = E3000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E4000001 /* ChoirFileProvider */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E4000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000001 /* ChoirFileProviderExtension.swift in Sources */,
+				E1000002 /* ChoirFileProviderBridge.swift in Sources */,
+				E1000003 /* UnixSocketTransport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E5000002 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E5000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ChoirFileProvider/ChoirFileProvider.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChoirFileProvider/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "news.choir.fileprovider";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E5000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ChoirFileProvider/ChoirFileProvider.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ChoirFileProvider/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "news.choir.fileprovider";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E5000001 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E5000002 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E5000003 /* Build configuration list for PBXNativeTarget "ChoirFileProvider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E5000004 /* Debug */,
+				E5000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E6000001 /* Project object */;
+}
