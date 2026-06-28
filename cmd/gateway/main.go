@@ -77,15 +77,52 @@ func main() {
 	}
 
 	handler.SetBreakers(breakers)
+
+	// M22b / C20: wire per-service health checkers so GET /health/{service}
+	// can probe backend dependencies (sourcecycled, runtime, qdrant, dolt,
+	// ollama) from outside the gateway. The checkers are lightweight HTTP
+	// probes with a 2s timeout; they expose no secrets. The same checkers
+	// feed the /health/ready aggregator so overall readiness reflects
+	// backend dependency health, not just gateway liveness.
+	serviceCheckers := buildServiceCheckers(cfg.ServiceHealthURLs)
+	handler.SetServiceCheckers(serviceCheckers)
+
 	gateway.RegisterRoutes(s, handler)
 
-	// Readiness endpoint: reports gateway dependency health. With no
-	// external deps wired here (providers are resolved lazily), this is a
-	// lightweight liveness-style readiness. Operators can extend the
-	// aggregator with HTTP probes for upstream provider APIs.
-	s.HandleFunc("/health/ready", health.ReadinessHandler("gateway", health.NewAggregator("gateway", 5*time.Second)))
+	// Readiness endpoint: reports gateway dependency health by aggregating
+	// the per-service checkers. A cold cache runs the probes synchronously;
+	// subsequent calls within the 5s TTL are served from cache so the
+	// endpoint stays lightweight. Degraded (some deps down) returns 200;
+	// only fully unhealthy returns 503.
+	readyCheckers := make([]health.Checker, 0, len(serviceCheckers))
+	for _, c := range serviceCheckers {
+		readyCheckers = append(readyCheckers, c)
+	}
+	s.HandleFunc("/health/ready", health.ReadinessHandler("gateway", health.NewAggregator("gateway", 5*time.Second, readyCheckers...)))
 
 	s.Start()
+}
+
+// buildServiceCheckers constructs the per-service health.Checker map used by
+// GET /health/{service} and the /health/ready aggregator. Each entry is an
+// HTTPChecker with a 2s timeout pointing at the configured probe URL for the
+// service. Services with an empty URL are skipped (the endpoint reports
+// "not configured" for them). The checkers expose no secrets: they only
+// verify reachability via a 2xx response (M22b / C20).
+func buildServiceCheckers(urls map[string]string) map[string]health.Checker {
+	out := make(map[string]health.Checker, len(urls))
+	for name, raw := range urls {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		out[name] = health.HTTPChecker{
+			NameStr: name,
+			URL:     raw,
+			Timeout: 2 * time.Second,
+		}
+	}
+	return out
 }
 
 // loadProviderConfig builds a ProviderConfig from environment variables.

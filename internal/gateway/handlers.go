@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -109,6 +110,12 @@ type Handler struct {
 	rateLimiter  *PerSandboxRateLimiter  // per-sandbox rate limiter (may be nil)
 	searchClient *SearchClient           // web search client with rotation (may be nil)
 	breakers     *BreakerRegistry        // per-provider circuit breakers (may be nil)
+	// serviceCheckers maps a dependency service name to its health probe.
+	// Used by GET /health/{service} so operators can observe backend
+	// dependency health (sourcecycled, runtime, qdrant, dolt, ollama) from
+	// outside the gateway without auth (M22b / C20). May be nil; in that
+	// case /health/{service} reports "not configured".
+	serviceCheckers map[string]health.Checker
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -173,6 +180,16 @@ func (h *Handler) SetBreakers(r *BreakerRegistry) {
 	h.breakers = r
 }
 
+// SetServiceCheckers attaches the per-service health probes used by
+// GET /health/{service}. The map keys are service names (e.g. "qdrant",
+// "ollama"); the values are health.Checker implementations. This is
+// optional; when nil or missing a service, /health/{service} reports
+// "not configured" for that service. The checkers must be cheap and
+// side-effect free (M22b / C20).
+func (h *Handler) SetServiceCheckers(checkers map[string]health.Checker) {
+	h.serviceCheckers = checkers
+}
+
 // HandleHealth handles GET /health for the gateway service.
 // It reports the active provider(s), identity count, and rate limiter config.
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +229,102 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeGatewayJSON(w, http.StatusOK, resp)
+}
+
+// serviceHealthResponse is the JSON body returned by GET /health/{service}.
+// It exposes only coarse status and a truncated error message — never
+// credentials, internal URLs, or upstream response bodies (M22b / C20:
+// health endpoints are public but expose no secrets).
+type serviceHealthResponse struct {
+	Status    string    `json:"status"`
+	Service   string    `json:"service"`
+	LatencyMs float64   `json:"latency_ms,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Breaker   *string   `json:"breaker,omitempty"`
+}
+
+// HandleServiceHealth handles GET /health/{service} for the gateway. It probes
+// a single named backend dependency (sourcecycled, runtime, qdrant, dolt, or
+// ollama) and reports its coarse status. The endpoint is public (no auth) and
+// exposes no secrets: the response contains only the service name, a status of
+// "ok"/"unhealthy"/"not configured", a truncated error message, and — when a
+// circuit breaker is registered for the service — the breaker state.
+//
+// This makes backend dependency health observable from outside the gateway
+// without disrupting existing request routing (M22b / C20).
+func (h *Handler) HandleServiceHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	// Extract the service name from the path. The route is registered as
+	// "/health/{service}" so r.PathValue("service") is the segment. Fall
+	// back to trimming the "/health/" prefix for older mux registrations.
+	service := r.PathValue("service")
+	if service == "" {
+		service = strings.TrimPrefix(r.URL.Path, "/health/")
+	}
+	service = strings.TrimSpace(service)
+	if service == "" {
+		writeGatewayJSON(w, http.StatusNotFound, ErrorResponse{Error: "service not specified"})
+		return
+	}
+
+	if h.serviceCheckers == nil {
+		writeGatewayJSON(w, http.StatusOK, serviceHealthResponse{
+			Status:  "not configured",
+			Service: service,
+		})
+		return
+	}
+
+	checker, ok := h.serviceCheckers[service]
+	if !ok {
+		writeGatewayJSON(w, http.StatusOK, serviceHealthResponse{
+			Status:  "not configured",
+			Service: service,
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	err := checker.Check(ctx)
+	latency := float64(time.Since(start).Microseconds()) / 1000.0
+
+	resp := serviceHealthResponse{
+		Service:   service,
+		LatencyMs: latency,
+	}
+	if err != nil {
+		resp.Status = string(health.StatusUnhealthy)
+		msg := err.Error()
+		if len(msg) > 200 {
+			msg = msg[:200] + "..."
+		}
+		resp.Error = msg
+	} else {
+		resp.Status = string(health.StatusOK)
+	}
+
+	// Surface the circuit breaker state for this service when one is
+	// registered (e.g. qdrant, ollama). This is a single word ("closed",
+	// "open", "half-open") and carries no secret material.
+	if h.breakers != nil {
+		if b := h.breakers.breakerFor(service); b != nil {
+			state := b.State().String()
+			resp.Breaker = &state
+		}
+	}
+
+	code := http.StatusOK
+	if err != nil {
+		code = http.StatusServiceUnavailable
+	}
+	writeGatewayJSON(w, code, resp)
 }
 
 // HandleInference handles POST /provider/v1/inference.
@@ -948,6 +1061,9 @@ func (h *Handler) HandleProviderBreakerReset(w http.ResponseWriter, r *http.Requ
 // RegisterRoutes registers all gateway routes on the given server.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
+	// M22b / C20: per-service health endpoint. Public (no auth), exposes
+	// only coarse status — never credentials or upstream bodies.
+	s.HandleFunc("/health/{service}", h.HandleServiceHealth)
 	s.HandleFunc("/provider/v1/inference", h.HandleInference)
 	s.HandleFunc("/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions)
 	s.HandleFunc("/provider/openai/v1/models", h.HandleOpenAIModels)

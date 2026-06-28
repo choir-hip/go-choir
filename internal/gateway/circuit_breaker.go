@@ -140,3 +140,17 @@ func (r *BreakerRegistry) Names() []string {
 	}
 	return names
 }
+
+// breakerFor returns the circuit breaker registered for the named provider, or
+// nil when no breaker is registered. It is used by the per-service health
+// endpoint to surface the breaker state alongside the dependency probe
+// (M22b / C20). The lookup is case-sensitive; provider names are registered
+// by the gateway entry point.
+func (r *BreakerRegistry) breakerFor(name string) *health.CircuitBreaker {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.breakers[name]
+}
