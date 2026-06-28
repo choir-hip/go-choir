@@ -1036,30 +1036,11 @@ not through Runtime methods.
 **Postcondition:** `internal/agentcore/` compiles. No references to
 `internal/runtime/`. `go build ./...` passes. `go test -race ./...` passes.
 
-### Step 2: Extract Browser (easiest)
+### Step 2: Extract Texture (first app, hardest, most entangled)
 
-Browser is the most self-contained: own state (sessions, CDP), own mutexes
-(`browserOpMu`, `browserCDPMu`), minimal interaction with other apps.
-
-Move: `browser.go` → `internal/browser/`. Browser tools become methods on
-`browser.Handler`. Mutexes become handler state (or unnecessary if operations
-are serialized through the actor mailbox).
-
-**Postcondition:** `internal/browser/` compiles. Browser tools registered by
-browser handler. `go build ./...` passes.
-
-### Step 3: Extract Wire
-
-Wire has own state (debouncer), own mutex (`wirePublishDebounceMu`),
-interacts with Texture and store.
-
-Move: `wire_*.go`, `tools_wire_processor.go` → `internal/wire/`. Wire tools
-become methods on `wire.Handler`. Debouncer becomes handler state.
-
-**Postcondition:** `internal/wire/` compiles. Wire tools registered by wire
-handler. `go build ./...` passes.
-
-### Step 4: Extract Texture (hardest, most entangled)
+Texture is extracted first because Wire depends on it — Wire publishes to
+Texture documents. Texture must exist as its own package before Wire can
+be extracted.
 
 15+ files, interacts with Wire, Conductor, Super, Researcher.
 
@@ -1069,6 +1050,36 @@ becomes unnecessary (wakes via `actor.Send`).
 
 **Postcondition:** `internal/texture/` compiles. Texture tools registered by
 texture handler. `go build ./...` passes.
+
+### Step 3: Extract Wire (verifier of the refactor)
+
+Wire is the first verifier of the new architecture. It's a real production
+feature with real complexity (synthesis, publication, trajectory
+bookkeeping, debouncer) and it depends on Texture — which is now extracted.
+If Wire works end-to-end on the new architecture, the refactor is proven.
+
+Wire has own state (debouncer), own mutex (`wirePublishDebounceMu`),
+interacts with Texture and store.
+
+Move: `wire_*.go`, `tools_wire_processor.go` → `internal/wire/`. Wire tools
+become methods on `wire.Handler`. Debouncer becomes handler state.
+
+**Postcondition:** `internal/wire/` compiles. Wire tools registered by wire
+handler. Wire publishes to Texture through `actor.Send`, not through
+`*Runtime` methods. `go build ./...` passes. End-to-end wire pipeline
+works: source intake → synthesis → publication.
+
+### Step 4: Extract Browser
+
+Browser is self-contained: own state (sessions, CDP), own mutexes
+(`browserOpMu`, `browserCDPMu`), minimal interaction with other apps.
+
+Move: `browser.go` → `internal/browser/`. Browser tools become methods on
+`browser.Handler`. Mutexes become handler state (or unnecessary if operations
+are serialized through the actor mailbox).
+
+**Postcondition:** `internal/browser/` compiles. Browser tools registered by
+browser handler. `go build ./...` passes.
 
 ### Step 5: Extract remaining apps
 

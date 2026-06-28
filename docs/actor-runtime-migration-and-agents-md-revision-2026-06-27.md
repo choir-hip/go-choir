@@ -276,7 +276,7 @@ State 6: Migrate wire pipeline
           with old runtime types. Extract the logic, adapt to actor runtime's
           Handler interface and Update message type.
   Postcondition: wire pipeline runs through actor runtime
-  Verification: sourcecycled → processor → VText → publish → edition → /api/universal-wire/stories
+  Verification: sourcecycled → processor → Texture → publish → edition → /api/universal-wire/stories
                 returns non-empty after a cycle
 
 State 7: Delete old concurrency code
@@ -293,7 +293,7 @@ State 8: Verify wire works end-to-end
   Action: run the deployed acceptance test from the root cause doc:
           - sourcecycled dispatches
           - platform sandbox accepts runs via actor runtime
-          - processor creates VText article revisions
+          - processor creates Texture article revisions
           - autonomous publish to platformd
           - edition transclusion
           - /api/universal-wire/stories returns non-empty
@@ -332,7 +332,7 @@ State 6 is the highest-risk, highest-value state. It's where the wire bugs get f
 ### 2.5 What to do if State 6 reveals wire logic bugs (not substrate bugs)
 
 After the substrate is replaced, some wire bugs may persist — these would be genuine logic bugs in the wire pipeline, not substrate symptoms. The root cause doc listed candidates:
-- VText edits created but ineligible for autonomous publish (metadata gates)
+- Texture edits created but ineligible for autonomous publish (metadata gates)
 - Edition transclusion failures
 - Platformd sync failures
 

@@ -415,7 +415,7 @@ passes on actor + actorruntime packages.
 Push to main, monitor CI, verify staging:
 - sourcecycled dispatches
 - sandbox accepts runs via actor runtime
-- processor creates VText article revisions
+- processor creates Texture article revisions
 - autonomous publish to platformd
 - `/api/universal-wire/stories` returns non-empty
 - Article cards visible on staging
@@ -472,7 +472,7 @@ Push to main, monitor CI, verify staging:
 - APIHandler stays in `internal/runtime/` — will be split by domain during app extraction
 - `go build ./...` passes
 - `go test -race ./internal/actor/... + ./internal/actorruntime/...` passes
-- Staging: sourcecycled → processor → VText → publish → article cards visible
+- Staging: sourcecycled → processor → Texture → publish → article cards visible
 - No 200ms polling — actor mailbox delivers updates instantly
 
 ## Parallax State
@@ -589,7 +589,7 @@ position / live conjectures / open edges:
 
 next move: Phase 3 — push to main, staging E2E. The critical question: does
 the wire pipeline work end-to-end on the actor runtime? Sourcecycled →
-processor → VText → publish → article cards visible. That's the settlement
+processor → Texture → publish → article cards visible. That's the settlement
 gate.
 
 ledger file: docs/mission-3c_2-actor-runtime-migration-real-v0.ledger.md
