@@ -276,4 +276,12 @@ type Config struct {
 	// baseline (0.7862); tune via QDRANT_DEDUP_THRESHOLD. A threshold of 0
 	// disables semantic dedup.
 	QdrantDedupThreshold float32
+
+	// TracePersistenceEnabled mounts the Dolt-backed trace observability store
+	// (internal/trace) into the runtime router so trace events are persisted
+	// alongside the existing event recording. This is additive: existing
+	// request handling and event bus publishing are unchanged. When false (the
+	// default), no trace store is mounted and events are not projected into the
+	// observability schema. Enabled via RUNTIME_TRACE_PERSISTENCE_ENABLED.
+	TracePersistenceEnabled bool
 }

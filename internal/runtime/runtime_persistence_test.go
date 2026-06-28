@@ -74,7 +74,7 @@ func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
 
-	if err := persistSubmittedRun(context.Background(), fake, bus, agent, rec, len(rec.Prompt)); err != nil {
+	if err := persistSubmittedRun(context.Background(), fake, bus, agent, rec, len(rec.Prompt), nil); err != nil {
 		t.Fatalf("persistSubmittedRun: %v", err)
 	}
 	if len(fake.agents) != 1 || fake.agents[0].AgentID != agent.AgentID {

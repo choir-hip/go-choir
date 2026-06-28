@@ -64,6 +64,18 @@ type Store struct {
 	jsonPatchMu   sync.Mutex
 }
 
+// DB returns the primary embedded Dolt *sql.DB connection used by this store.
+// It is exposed so additive observability layers (e.g. the trace store from
+// internal/trace) can wrap the same workspace without opening a second
+// connection. The caller must not close the returned handle; the Store retains
+// ownership and closes it on Store.Close.
+func (s *Store) DB() *sql.DB {
+	if s == nil {
+		return nil
+	}
+	return s.db
+}
+
 // schemaDDL creates the runtime tables if they do not already exist.
 const schemaDDL = `
 CREATE TABLE IF NOT EXISTS agents (

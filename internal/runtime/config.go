@@ -171,6 +171,7 @@ func LoadConfig() Config {
 		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
 		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
 		QdrantDedupThreshold: float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
+		TracePersistenceEnabled: boolOr("RUNTIME_TRACE_PERSISTENCE_ENABLED", false),
 	})
 }
 
