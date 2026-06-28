@@ -132,12 +132,17 @@ but produce open edges that inform the next cycle.
 **Granted:** one session (overnight, ~8+ hours of wall-clock)
 **Spent:** 0
 **Remaining:** full session
-**Solvency:** 10 missions, but not all are parallel. Wave 1: 6 parallel
-independent missions (M1, M2, M11, M12, M13, M14). Wave 2: review/eval
-missions (M15/PR7, M18, M19) after Wave 1 lands. Wave 3: M20 if budget
-remains. Each wave: ~30-90 min subagent work + ~15-30 min verification.
-Total: ~3-6 hours for all three waves. Budget is sufficient. Blocked
-missions produce open edges, not budget exhaustion.
+**Ambition level:** EVERYTHING. All 24 missions. Partial credit for
+partial completion. Blocked missions produce open edges, not stops —
+move to the next mission immediately. Confident work goes to main;
+uncertain work goes to PRs. The goal is maximum conjecture descent, not
+minimum risk.
+
+**Solvency:** Wave 1: 6 parallel independent missions. Wave 2: 3
+review/eval missions. Wave 3: M20 + any Wave 1 missions that need
+retry. Wave 4: dependent missions (M3, M7, M22) if prerequisites land.
+Wave 5: critical path (M8) if confident. Each wave: ~30-90 min subagent
+work + ~15-30 min verification. Blocked = move on, not stop.
 
 ## Authority / Bounds
 
@@ -257,25 +262,40 @@ Expected ΔV: -6 (all six conjectures decided)
 Risk: some may return falsified or weakened. Both are progress.
 
 After Wave 1 returns, verify each at the orchestrator level, then land
-verified work in separate commits. Update checkpoint report.
+verified work: confident work to main, uncertain work to PRs. Update
+checkpoint report. Move immediately to Wave 2.
 
 **Pass 2: Launch Wave 2 — review/eval missions.**
 
-Wave 2 (after Wave 1 lands, or in parallel if no file conflicts):
+Wave 2 (can overlap with Wave 1 if no file conflicts):
 - M15/PR7 (docs cleanup) — deep review of PR #7, improve if needed
 - M18 (worktree triage) — evaluate 4 worktrees
 - M19 (mission graph triage) — triage 27 open_handoff missions
 
 Expected ΔV: -3
 
-**Pass 3: Launch Wave 3 if budget remains.**
+**Pass 3: Launch Wave 3.**
 
 - M20 (trace observability) — persist trace events to Dolt
+- M22 (health checks) — health endpoints + circuit breakers
+- M21 (PII retraction) — SLM redaction pipeline (may be too complex for
+  one pass; partial credit for design + scaffolding)
 
-Expected ΔV: -1
+Expected ΔV: -3
+
+**Pass 4: Dependent missions (if prerequisites landed).**
+
+- M3 (Base journal) — if M2 landed
+- M7 (auth recovery) — if M1 landed
+- M23 (bounded inbox) — if M8 not needed (may be independent enough)
+
+**Pass 5: Critical path (if confident).**
+
+- M8 (runtime refactor) — only if confident and budget remains. This is
+  red mutation class — PR, not main.
 
 **Throughout:** update checkpoint report after each wave, save MD to docs/
-and PDF to iCloud.
+and PDF to iCloud. Blocked = move on. Partial credit. Maximum descent.
 
 ## Ledger File
 
