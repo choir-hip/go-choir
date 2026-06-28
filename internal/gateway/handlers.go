@@ -108,6 +108,7 @@ type Handler struct {
 	providers    *provider.MultiProvider // multi-provider mode (may be nil)
 	rateLimiter  *PerSandboxRateLimiter  // per-sandbox rate limiter (may be nil)
 	searchClient *SearchClient           // web search client with rotation (may be nil)
+	breakers     *BreakerRegistry        // per-provider circuit breakers (may be nil)
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -163,6 +164,13 @@ func NewMultiHandlerWithRateLimit(registry *IdentityRegistry, mp *provider.Multi
 		rateLimiter:  rl,
 		searchClient: NewSearchClient(),
 	}
+}
+
+// SetBreakers attaches a per-provider circuit breaker registry so the gateway
+// can expose breaker state and reset them via ops endpoints. This is optional;
+// when nil, breaker-related endpoints report "not configured".
+func (h *Handler) SetBreakers(r *BreakerRegistry) {
+	h.breakers = r
 }
 
 // HandleHealth handles GET /health for the gateway service.
@@ -893,6 +901,50 @@ func rateLimitBucketKey(sandboxID, scope string) string {
 	return sandboxID + ":" + scope
 }
 
+// HandleProviderBreakers handles GET /provider/v1/breakers. It reports the
+// circuit breaker state for each wrapped LLM provider so operators can see
+// which upstreams are open/half-open/closed.
+func (h *Handler) HandleProviderBreakers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if h.breakers == nil {
+		writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": map[string]any{}})
+		return
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": h.breakers.Snapshot()})
+}
+
+// HandleProviderBreakerReset handles POST /provider/v1/breakers/reset. It
+// forces a named provider's circuit breaker back to closed. The provider name
+// is supplied as JSON {"provider":"<name>"}.
+func (h *Handler) HandleProviderBreakerReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if h.breakers == nil {
+		writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "circuit breakers not configured"})
+		return
+	}
+	var req searchHealthResetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+		return
+	}
+	req.Provider = strings.TrimSpace(req.Provider)
+	if req.Provider == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "provider is required"})
+		return
+	}
+	if !h.breakers.Reset(req.Provider) {
+		writeGatewayJSON(w, http.StatusNotFound, ErrorResponse{Error: "unknown provider breaker"})
+		return
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]string{"status": "reset", "provider": req.Provider})
+}
+
 // RegisterRoutes registers all gateway routes on the given server.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
@@ -906,4 +958,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/credentials/revoke", h.HandleRevokeCredential)
 	s.HandleFunc("/provider/v1/credentials/rotate", h.HandleRotateCredential)
 	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
+	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)
+	s.HandleFunc("/provider/v1/breakers/reset", h.HandleProviderBreakerReset)
 }
