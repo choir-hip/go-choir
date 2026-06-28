@@ -227,7 +227,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-5HMFsj1+qk+vm3ZbbkXoUGJgYnZrEU+frWfRsWHXsao=";
           internalDirs = [
             "internal/auth"
             "internal/buildinfo"
