@@ -112,9 +112,9 @@ platform base P0
       -> candidate computer C1
 ```
 
-Platform releases, platform computers, and user computers are different levels.
+Platform versions, platform computers, and user computers are different levels.
 
-- A platform release is the official Choir baseline: source, services, runtime
+- A platform version is the official Choir baseline: source, services, runtime
   invariants, default apps, default prompts, and upgrade machinery.
 - A platform computer is a persistent cloud-owned computer for cloud-level
   agents, cloud-owned artifacts, publication/source systems, and shared indexes.

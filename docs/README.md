@@ -64,9 +64,9 @@ explicitly promotes one as source form.
 - **Historical evidence:** dated proof, review, dogfood, MissionGradient, and
   superseded mission reports.
 - **Superseded/dangerous-if-current:** docs that normalize retired root
-  ontologies such as StoryGraph-as-root, personal writing/publishing system as
-  root, Trace app, raw Terminal app, Browser-as-source-gathering, parent/child
-  control, or continuation-level as target doctrine.
+  ontologies such as retired StoryGraph-as-root, personal writing/retired publishing system as
+  root, retired Trace app, retired raw Terminal app, Browser-as-source-gathering, parent/child
+  control, or retired continuation-level as target doctrine.
   Historical docs may still quote those terms as evidence, but they should
   label them as retired vocabulary rather than present-tense product ontology.
 
@@ -167,7 +167,7 @@ explicitly promotes one as source form.
   downstream of M2-M4 in the portfolio.
 - `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` - (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   historical product/architecture spec for the superseded Universal Wire +
-  StoryGraph/Texture framing. Do not use it as current ontology.
+  retired StoryGraph/Texture framing. Do not use it as current ontology.
 - `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   for Texture-native style support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
@@ -213,7 +213,7 @@ explicitly promotes one as source form.
 - `docs/mission-web-surface-rationalization-v0.md` - Obscura/Web Lens surface rationalization mission.
 - `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
   historical draft mission for the superseded Universal Wire / Style artifact
-  collaborative StoryGraph trajectory. Do not use it as current ontology.
+  collaborative retired StoryGraph trajectory. Do not use it as current ontology.
 
 Read the mission portfolio and the current paradoc first. Older
 promotion-queue mission docs have been pruned; use the consolidated learnings

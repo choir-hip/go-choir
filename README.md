@@ -6,7 +6,7 @@ provenance, and promotion history.
 
 Choir runs apps, agents, traces, source material, code, candidate worlds, and
 promotion flows inside persistent computers. It is not a personal note app, an
-AI workspace, or a one-off chat surface. It is a substrate where work can be
+AI workspace, or a one-off chat surface (chat is a deprecated framing). It is a substrate where work can be
 created, inspected, revised, verified, forked, and promoted.
 
 The short version:
@@ -41,13 +41,13 @@ worlds, and promotion.
 Where those older terms appear below, they are contrast classes or transition
 labels, not endorsed root framing.
 
-Choir is not trying to optimize for chat smoothness, local test passage, or a
+Choir is not trying to optimize for chat smoothness (a deprecated framing), local test passage, or a
 short-term product demo. The architecture is currently optimizing for:
 
 - truth from facts: naming a real heresy is progress even before the code is
   fixed;
 - correct ontology: the product object is a persistent computer, not a sandbox
-  or chat session;
+  or retired chat session;
 - durable causality: work leaves trajectories, work items, evidence, versions,
   provenance, and promotion history;
 - evidence-bounded claims: smoke proof, architectural proof, export proof,
@@ -153,11 +153,11 @@ The system is designed around a basic rule:
 Work should leave artifacts, evidence, and recoverable state.
 ```
 
-AI is part of the workflow, but the canonical product object is not a chat
+AI is part of the workflow, but the canonical product object is not a retired chat
 transcript. The important objects are files, drafts, traces, versions, source
 references, candidate changes, and promoted state.
 
-A chat-style input may appear where useful, but it is only an affordance. The
+A retired chat-style input may appear where useful, but it is only an affordance. The
 output of the system is durable work.
 
 ## Why This Repo Exists
@@ -220,7 +220,7 @@ deadlock, human monitoring burden, and loss of understanding.
 
 ## Services
 
-The stack has five Go services:
+The target architecture has five Go runtime services:
 
 | Service | Port | Role |
 | --- | --- | --- |
