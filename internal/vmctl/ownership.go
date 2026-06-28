@@ -1794,10 +1794,22 @@ func (r *OwnershipRegistry) GetOwnership(userID string) *VMOwnership {
 
 // GetOwnershipForDesktop returns the current ownership for a specific
 // user/desktop pair, or nil if none exists.
+//
+// It returns a snapshot copy of the ownership taken under the read lock.
+// Returning the live map pointer would let callers read mutable fields (e.g.
+// State) outside the lock while another goroutine mutates them under r.mu
+// (such as the idle sweeper calling hibernateVMForDesktopWithReason), which
+// is a data race. The copy is safe because VMOwnership holds only value
+// fields, and no caller mutates the returned pointer.
 func (r *OwnershipRegistry) GetOwnershipForDesktop(userID, desktopID string) *VMOwnership {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.ownerships[ownershipKey(userID, desktopID)]
+	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	if !ok || own == nil {
+		return nil
+	}
+	snap := *own
+	return &snap
 }
 
 // LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
@@ -1822,23 +1834,36 @@ func (r *OwnershipRegistry) LiveSandboxURL(userID, desktopID string) (string, er
 }
 
 // GetOwnershipByVMID returns the ownership for a specific VM ID, or nil.
+//
+// It returns a snapshot copy taken under the read lock for the same
+// concurrency-safety reason as GetOwnershipForDesktop (see its comment).
 func (r *OwnershipRegistry) GetOwnershipByVMID(vmID string) *VMOwnership {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.vmByID[vmID]
+	own, ok := r.vmByID[vmID]
+	if !ok || own == nil {
+		return nil
+	}
+	snap := *own
+	return &snap
 }
 
 // ListOwnerships returns all current ownerships.
+//
+// It returns snapshot copies taken under the read lock for the same
+// concurrency-safety reason as GetOwnershipForDesktop (see its comment).
 func (r *OwnershipRegistry) ListOwnerships() []*VMOwnership {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	result := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
 	for _, own := range r.ownerships {
-		result = append(result, own)
+		snap := *own
+		result = append(result, &snap)
 	}
 	for _, own := range r.workerVMs {
-		result = append(result, own)
+		snap := *own
+		result = append(result, &snap)
 	}
 	return result
 }
