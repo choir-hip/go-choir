@@ -177,6 +177,12 @@ nodes:
   ledger: docs/mission-texture-product-loop-recovery-v0.ledger.md
   status: open_handoff
   kind: spine
+  # Triage 2026-06-28: ACTIVE. The V-name ontology cutover portion is
+  # absorbed by the runtime refactor (M8 Texture extraction); the product-
+  # loop repair (prompt -> conductor -> Texture -> researcher/super -> V2+)
+  # remains a real open loop. Absorbs texture-hard-cutover-v0 and
+  # vtext-live-cadence-repair-v3. Track in mission suite as the Texture
+  # product-loop mission; sequence after M8 Texture extraction.
   depends_on:
   - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   enables:
@@ -251,8 +257,13 @@ nodes:
   title: Texture Hard Cutover v0
   path: docs/mission-texture-hard-cutover-v0.md
   ledger: docs/mission-texture-hard-cutover-v0.ledger.md
-  status: open_handoff
-  kind: spine
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: consolidated into texture-product-loop-recovery-v0
+  # (the broader parent covering the same V-name/Texture ontology cutover).
+  # The cutover itself is absorbed by the runtime refactor (M8 Texture
+  # extraction), which produces a clean Texture package and deletes the
+  # retired V-name residue as part of extraction.
   depends_on:
   - texture-product-loop-recovery-v0
   enables:
@@ -317,6 +328,11 @@ nodes:
   ledger: docs/mission-wire-on-settlement-v0.ledger.md
   status: open_handoff
   kind: spine
+  # Triage 2026-06-28: ACTIVE (deferred). The M5 route-switch evidence gate
+  # (maxProc > 1, parallel processors, zero accounting leaks) is blocked by
+  # the runtime refactor (M8 durable actors). Absorbs wire-settlement-
+  # substrate-v0 (M5a). Track in mission suite as the M5 wire-settlement
+  # mission; sequence after M8/M9/M10.
   depends_on:
   - m4-continuation-deletion
   enables: []
@@ -373,8 +389,13 @@ nodes:
   title: Doc Truth, Drift CI, And Context Packet v0
   path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
   ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
-  status: open_handoff
-  kind: docs_truth
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by docs-truth-system-v1 (settled), which is
+  # the durable docs truth-maintenance system this mission specified. The
+  # doc-authority-manifest expansion is tracked under M15 (docs checker
+  # cleanup merge). Remaining context-packet work, if any, is a follow-up to
+  # docs-truth-system-v1, not a separate open loop.
   depends_on:
   - doc-heresy-checker-v0
   enables:
@@ -468,8 +489,13 @@ nodes:
   title: 'MissionGradient: Choir Grand Deformation v0'
   path: docs/mission-choir-grand-deformation-v0.md
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by the mission suite (M8 runtime refactor ->
+  # M9 mutation hardening -> M10 choir-in-choir). The grand deformation vision
+  # (Choir developing Choir inside Choir) is now decomposed into the sequenced
+  # critical path in docs/road-ahead-2026-06-27.md and
+  # docs/mission-suite-2026-06-28.md, not a single 8-24h mission.
   depends_on: []
   enables: []
   sources:
@@ -490,6 +516,11 @@ nodes:
   ledger: ''
   status: open_handoff
   kind: side
+  # Triage 2026-06-28: ACTIVE. System Monitor app + recovery substrate. The
+  # observability substrate overlaps with M20 (trace as primary observability)
+  # and M22 (health checks + circuit breakers); the System Monitor app UI is
+  # a distinct product surface. Track in mission suite; sequence after
+  # choir-in-choir (road-ahead §5 UI/UX).
   depends_on: []
   enables: []
   sources:
@@ -500,6 +531,13 @@ nodes:
   ledger: docs/mission-conductor-url-source-routing-h029-v0.ledger.md
   status: open_handoff
   kind: side
+  # Triage 2026-06-28: ACTIVE. Source intake into Texture (YouTube, podcast,
+  # PDF URLs -> source artifacts -> transclusion) and the H029 conductor
+  # prompt-default fix are real product needs. The H029 surface-ontology
+  # piece overlaps with surface-ontology-cleanup-h027-h029-v0; the source
+  # intake piece overlaps with source-system-loop8-simplify-v0 and the
+  # ingestion rebuild (mission-3). Track in mission suite as a source-intake
+  # mission after the runtime refactor.
   depends_on: []
   enables: []
   sources:
@@ -508,8 +546,13 @@ nodes:
   title: 'Mission: Demo Stability Foundations v0'
   path: docs/mission-demo-stability-foundations-v0.md
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: STALE. The specific 2026-05-29 bugs (stale ?app=email,
+  # window geometry, opacity) are likely fixed by later desktop/restore work.
+  # The general stability concern is tracked under UI/UX improvements in
+  # road-ahead 2026-06-27 §5, sequenced after choir-in-choir. Re-verify the
+  # specific bugs if they recur; do not revive this mission as-is.
   depends_on: []
   enables: []
   sources:
@@ -520,6 +563,10 @@ nodes:
   ledger: ''
   status: open_handoff
   kind: side
+  # Triage 2026-06-28: ACTIVE (partially complete). Frontend-only and
+  # service-pointer deploys landed; remaining work is host-service split and
+  # cache evaluation. Not on the critical path; low-priority dev-infra.
+  # Track in mission suite as a dev-infra mission.
   depends_on: []
   enables: []
   sources:
@@ -539,8 +586,11 @@ nodes:
   title: Doctrine Conformance Update Report — 2026-06-13
   path: docs/mission-doctrine-conformance-findings-2026-06-13.md
   ledger: ''
-  status: open_handoff
+  status: settled
   kind: evidence
+  # Triage 2026-06-28: SETTLED. The doctrine conformance pass is complete;
+  # this is historical evidence. The durable docs truth system is
+  # docs-truth-system-v1 (settled).
   depends_on: []
   enables: []
   sources:
@@ -559,8 +609,13 @@ nodes:
   title: Choir Mission Geometry
   path: docs/mission-geometry.md
   ledger: ''
-  status: open_handoff
-  kind: evidence
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: SUPERSEDED. The mission-geometry vision (Choir as
+  # learner, the automatic-computer -> newspaper -> radio -> capital vector)
+  # is now operationalized in docs/road-ahead-2026-06-27.md (living sequencing
+  # doc) and docs/mission-suite-2026-06-28.md (delegatable mission suite).
+  # This is historical vision evidence, not an open loop.
   depends_on: []
   enables: []
   sources:
@@ -589,8 +644,13 @@ nodes:
   title: 'Mission: Global Wire Living Texture Newsroom'
   path: docs/mission-global-wire-living-vtext-newsroom-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by the Universal Wire ingestion rebuild
+  # (mission-3-universal-wire-ingestion-rebuild-v0, 3c-distribution). The
+  # living-newsroom surface is the publication/view layer that the active
+  # ingestion pipeline produces; the Global Wire app as a collection surface
+  # is a downstream view of that pipeline, not a separate mission.
   depends_on: []
   enables: []
   sources:
@@ -671,6 +731,10 @@ nodes:
   ledger: docs/mission-node-b-storage-retention-v0.ledger.md
   status: open_handoff
   kind: side
+  # Triage 2026-06-28: ACTIVE. The nix-store retention piece is settled
+  # (node-b-nix-store-retention-v0); the vm-state retention and recovery-
+  # snapshot budget piece remains open. Low-priority ops; not on critical
+  # path. Track in mission suite as an ops mission.
   depends_on: []
   enables: []
   sources:
@@ -679,8 +743,13 @@ nodes:
   title: 'MissionGradient Campaign v1: Platform Source Service, Texture Sources, And Publication'
   path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by the Universal Wire ingestion rebuild
+  # (mission-3-universal-wire-ingestion-rebuild-v0) for the source-service
+  # pipeline, and by source-system-loop8-simplify-v0 for the VText/source/
+  # publication quality piece. The source-service boundary this campaign
+  # specified is now implemented through the active ingestion pipeline.
   depends_on: []
   enables: []
   sources:
@@ -719,8 +788,10 @@ nodes:
   title: 'Mission Report: Universal Wire Production Recovery — 2026-06-10'
   path: docs/mission-report-universal-wire-production-recovery-2026-06-10.md
   ledger: ''
-  status: open_handoff
+  status: settled
   kind: evidence
+  # Triage 2026-06-28: SETTLED. The 2026-06-10 incident is resolved; the
+  # backpressure fix shipped (commit 27f4eaf8). Historical evidence.
   depends_on: []
   enables: []
   sources:
@@ -749,8 +820,11 @@ nodes:
   title: 'MissionGradient: Choir Run Memory v0'
   path: docs/mission-run-memory-v0.md
   ledger: ''
-  status: open_handoff
+  status: settled
   kind: side
+  # Triage 2026-06-28: SETTLED. The paradoc self-declares "completed in repo";
+  # lessons were mined into old-docs-review and mid-age-docs-review. Later
+  # promotion work replaced the patchset direction with AppChangePackage.
   depends_on: []
   enables: []
   sources:
@@ -799,8 +873,12 @@ nodes:
   title: Source System Mission Hard Review
   path: docs/mission-source-system-hard-review-2026-06-06.md
   ledger: ''
-  status: open_handoff
-  kind: evidence
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by source-system-loop8-simplify-v0, the
+  # successor quality loop that carries forward the incomplete findings from
+  # this hard review. The source-service pipeline piece is also covered by
+  # the active ingestion rebuild (mission-3).
   depends_on: []
   enables: []
   sources:
@@ -811,6 +889,12 @@ nodes:
   ledger: ''
   status: open_handoff
   kind: side
+  # Triage 2026-06-28: ACTIVE. The source/VText/publication quality mission
+  # (stabilize UI bugs, professional exports, remove dead paths, smaller
+  # contracts). Absorbs vtext-client-ready-source-transclusion-pretext-v0,
+  # platform-source-service-vtext-publication-campaign-v1, and
+  # source-system-hard-review. Modularization depends on the runtime refactor
+  # (M8). Track in mission suite as a source/VText quality mission.
   depends_on: []
   enables: []
   sources:
@@ -841,6 +925,10 @@ nodes:
   ledger: ''
   status: open_handoff
   kind: side
+  # Triage 2026-06-28: ACTIVE. Start a real zot process inside each user
+  # computer (CHOIR_ZOT_PATH) and fix terminal color contrast. Concrete,
+  # scoped fix. Absorbs super-console-source-mount-promotion-v0 (the zot
+  # repair-loop piece). Track in mission suite as a Super Console mission.
   depends_on: []
   enables: []
   sources:
@@ -849,8 +937,13 @@ nodes:
   title: 'MissionGradient: Super Console Source Mount And Promotion v0'
   path: docs/mission-super-console-source-mount-promotion-v0.md
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by super-console-real-zot-cutover-v0 (the
+  # zot repair-loop and source-mount piece) and M9 (mutation transaction
+  # hardening) for the promotion/classification piece. The candidate-patch
+  # promotion path is now the hardened mutation transaction system, not a
+  # Super Console-specific promotion flow.
   depends_on: []
   enables: []
   sources:
@@ -861,6 +954,12 @@ nodes:
   ledger: ''
   status: open_handoff
   kind: docs_truth
+  # Triage 2026-06-28: ACTIVE. H027-H029 cleanup (stop presenting Trace, raw
+  # Terminal, and Browser as normal user apps). The trace-backend deletion
+  # overlaps with the runtime refactor (M8 runtime cleanup deletes ~3-4K
+  # lines including trace backend); the H029 browser piece overlaps with
+  # conductor-url-source-routing-h029-v0 and road-ahead §5b (Web Lens).
+  # Track in mission suite; sequence after M8 trace deletion.
   depends_on: []
   enables: []
   sources:
@@ -870,8 +969,11 @@ nodes:
   title: 'MissionGradient v0: Client-Ready Texture Source Transclusion And Proposal Cleanup'
   path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by source-system-loop8-simplify-v0, which
+  # carries forward the client-ready source transclusion and proposal-cleanup
+  # scope as part of the active source/VText quality loop.
   depends_on: []
   enables: []
   sources:
@@ -891,8 +993,12 @@ nodes:
   title: 'MissionGradient: Texture Live Cadence Repair v3'
   path: docs/mission-vtext-live-cadence-repair-v3.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by texture-product-loop-recovery-v0. Both
+  # address the same Texture product-loop cadence defect (prompt -> V1 ->
+  # researcher/super evidence -> V2+). The product-loop-recovery mission is
+  # the broader parent and the canonical home for the cadence-repair scope.
   depends_on: []
   enables: []
   sources:
@@ -901,8 +1007,13 @@ nodes:
   title: 'Mission Campaign: Texture Source Entities, Multimedia Review, And Transclusion v0'
   path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by conductor-url-source-routing-h029-v0
+  # (source intake: YouTube, podcast, web -> Texture source artifacts) and
+  # source-system-loop8-simplify-v0 (transclusion/publication quality). The
+  # multimedia source-entity substrate is now split across those two active
+  # missions rather than a single campaign.
   depends_on: []
   enables: []
   sources:
@@ -931,8 +1042,14 @@ nodes:
   title: 'MissionGradient: Web Surface Rationalization v0'
   path: docs/mission-web-surface-rationalization-v0.md
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by road-ahead-2026-06-27 §5b (Browser / Web
+  # Lens rethinking) and M8 (browser extraction). The current rethinking
+  # reframes Web Lens as explicit live/original inspection, not a general
+  # browser; the substrate decision and extraction happen after the runtime
+  # refactor. The "Open original" fix is a small concrete wedge tracked in
+  # road-ahead §5b.
   depends_on: []
   enables: []
   sources:
@@ -941,8 +1058,11 @@ nodes:
   title: 'Mission Archive: Wire Autonomous Ingestion (v1)'
   path: docs/mission-wire-autonomous-ingestion-v1.md
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: superseded by mission-3-universal-wire-ingestion-rebuild
+  # (the active Wire pipeline). The paradoc self-declares "archived — not an
+  # active mission" and redirects to wire-community-news-v1 / mission-3.
   depends_on: []
   enables: []
   sources:
@@ -971,8 +1091,12 @@ nodes:
   title: Mission M5a — Wire Settlement Substrate (split from M5 evidence gate) — v0
   path: docs/mission-wire-settlement-substrate-v0.md
   ledger: ''
-  status: open_handoff
-  kind: side
+  status: superseded
+  kind: superseded
+  # Triage 2026-06-28: consolidated back into m5-wire-on-settlement-v0 (M5).
+  # The substrate split (M5a) was a prerequisite of M5's evidence gate; both
+  # are deferred until the runtime refactor (M8) completes durable actors.
+  # Track as a single M5 wire-settlement mission, not two.
   depends_on: []
   enables: []
   sources:
