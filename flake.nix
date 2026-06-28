@@ -267,14 +267,17 @@
           subPackage = "cmd/gateway";
           vendorHash = "sha256-5UKbNQEWnW0LeTQY4CkLxb7E0SXGuNnFXd+G29DztRc=";
           internalDirs = [
+            "internal/agentprofile"
             "internal/buildinfo"
             "internal/events"
             "internal/gateway"
+            "internal/gatewayruntime"
             "internal/markdownstructure"
             "internal/modelcatalog"
             "internal/objectgraph"
             "internal/persistentdisk"
             "internal/provider"
+            "internal/provideriface"
             "internal/qdrant"
             "internal/runtime"
             "internal/sandbox"
@@ -286,6 +289,7 @@
             "internal/sources"
             "internal/store"
             "internal/texturedoc"
+            "internal/toolregistry"
             "internal/types"
             "internal/vmctl"
             "internal/wire/processorkey"
@@ -310,14 +314,17 @@
           subPackage = "cmd/sourcecycled";
           vendorHash = "sha256-5UKbNQEWnW0LeTQY4CkLxb7E0SXGuNnFXd+G29DztRc=";
           internalDirs = [
+            "internal/agentprofile"
             "internal/buildinfo"
             "internal/cycle"
             "internal/events"
+            "internal/gatewayruntime"
             "internal/markdownstructure"
             "internal/modelcatalog"
             "internal/objectgraph"
             "internal/persistentdisk"
             "internal/provider"
+            "internal/provideriface"
             "internal/qdrant"
             "internal/runtime"
             "internal/sandbox"
@@ -329,6 +336,7 @@
             "internal/sources"
             "internal/store"
             "internal/texturedoc"
+            "internal/toolregistry"
             "internal/types"
             "internal/vmctl"
             "internal/wire/processorkey"
@@ -340,6 +348,9 @@
           subPackage = "cmd/sandbox";
           vendorHash = "sha256-5UKbNQEWnW0LeTQY4CkLxb7E0SXGuNnFXd+G29DztRc=";
           internalDirs = [
+            "internal/actor"
+            "internal/actorruntime"
+            "internal/agentprofile"
             "internal/buildinfo"
             "internal/events"
             "internal/gatewayruntime"
@@ -347,6 +358,7 @@
             "internal/modelcatalog"
             "internal/objectgraph"
             "internal/persistentdisk"
+            "internal/provideriface"
             "internal/qdrant"
             "internal/runtime"
             "internal/sandbox"
@@ -358,6 +370,7 @@
             "internal/sources"
             "internal/store"
             "internal/texturedoc"
+            "internal/toolregistry"
             "internal/types"
             "internal/vmctl"
             "internal/wire/processorkey"
