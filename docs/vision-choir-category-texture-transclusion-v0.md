@@ -131,6 +131,34 @@ articles. Different topics surface. Different sources get cited. Different
 claims get interrogated. The styleguide shapes the entire generative pipeline,
 from source selection through synthesis to final article.
 
+### Style Is Who You Center
+
+Magazines differ not primarily in how they style their language but in how they
+style people — who they choose to cover and not cover. Rolling Stone and The
+Economist might cover the same trade summit, but one profiles the labor
+activists outside and the other analyzes the tariff schedules inside. The
+"style" is who you point your camera at. What you choose to cover IS who you
+choose to center, and who you center IS your editorial identity.
+
+The language style is downstream. You write differently because you've decided
+different people matter. The styleguide is therefore not a prose style guide
+at all — it is an editorial attention allocation policy:
+
+- Who gets centered (which people, which voices, which protagonists)
+- What gets covered (which topics, which events, which angles)
+- What gets ignored (which stories are deemed unimportant)
+- Who gets quoted (which sources are treated as authoritative)
+- Who gets scrutinized (which entities are investigated, which are given
+  benefit of the doubt)
+
+This means the styleguide and the algorithm texture are not separable
+concerns. The algorithm determines what sources you pull from; the styleguide
+determines how you weight and center them. But they are the same thing viewed
+from different angles. The algorithm is the styleguide's sourcing strategy made
+explicit. The styleguide is the algorithm's editorial worldview made explicit.
+In practice they may be one texture or two — but they are facets of a single
+editorial stance, not independent configuration.
+
 ### Faithful Transclusion
 
 When a story is particularly poignant — a major event, a breaking story that
