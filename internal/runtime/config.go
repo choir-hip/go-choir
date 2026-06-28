@@ -34,10 +34,6 @@ const (
 	// DefaultProviderTimeout is how long the stub provider simulates work.
 	DefaultProviderTimeout = 2 * time.Second
 
-	// DefaultSupervisionInterval is a legacy reserved setting kept only to avoid
-	// churning tests and config plumbing during the runtime cleanup.
-	DefaultSupervisionInterval = 5 * time.Second
-
 	// DefaultResearcherCount is the default number of researcher workers
 	// the microVM topology should assume when none is configured.
 	DefaultResearcherCount = 3
@@ -112,7 +108,7 @@ func LoadConfig() Config {
 		PromptRoot:          envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
 		SkillsRoot:          envOr("RUNTIME_SKILLS_ROOT", defaultSkillsRoot()),
 		ProviderTimeout:     durationOr("RUNTIME_PROVIDER_TIMEOUT", DefaultProviderTimeout),
-		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", DefaultSupervisionInterval),
+		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", 5*time.Second),
 		ResearcherCount:     intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearcherCount),
 		TextureWakeDebounce: durationOr("RUNTIME_TEXTURE_WAKE_DEBOUNCE", DefaultTextureWakeDebounce),
 		TextureActorParkIdle: durationOr(

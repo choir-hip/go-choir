@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -893,7 +895,7 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 // messageCapturingProvider is a mock ToolLoopProvider that captures all
 // messages sent to CallWithTools for verification.
 type messageCapturingProvider struct {
-	Provider
+	provideriface.Provider
 	responses        []*ToolLoopResponse
 	capturedMessages *[]json.RawMessage
 	callIdx          int

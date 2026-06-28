@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	runtimestore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -29,7 +31,7 @@ type runMemoryManager struct {
 	store                     *runtimestore.Store
 	rec                       *types.RunRecord
 	cfg                       Config
-	emit                      EventEmitFunc
+	emit                      provideriface.EventEmitFunc
 	provider                  ToolLoopProvider
 	llmConfig                 LLMSelection
 	promptOverheadTokens      int
@@ -37,7 +39,7 @@ type runMemoryManager struct {
 	compactionInProgress      bool
 }
 
-func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg Config, emit EventEmitFunc) *runMemoryManager {
+func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg Config, emit provideriface.EventEmitFunc) *runMemoryManager {
 	return &runMemoryManager{
 		store: store,
 		rec:   rec,

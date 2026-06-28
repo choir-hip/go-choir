@@ -24,19 +24,14 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 	if rt == nil || !wireCanonicalRevisionEligibleForPublication(doc, rev, rec) {
 		return
 	}
-	// Runs without trajectory metadata are a legacy soft path: they still
-	// publish, they just cannot carry work-item or settlement bookkeeping.
-	trackTrajectory := rec != nil && strings.TrimSpace(trajectoryIDForRun(rec)) != ""
-	publicationItemID := ""
-	if trackTrajectory {
-		var err error
-		publicationItemID, err = rt.beginWirePublicationWorkItem(ctx, doc, rev, rec)
-		if err != nil {
-			log.Printf("runtime: wire publication work item doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
-			return
-		}
-	} else {
-		log.Printf("runtime: wire publication doc=%s rev=%s: run without trajectory_id, publishing without trajectory bookkeeping", doc.DocID, rev.RevisionID)
+	if rec == nil || strings.TrimSpace(trajectoryIDForRun(rec)) == "" {
+		log.Printf("runtime: wire publication doc=%s rev=%s: run without trajectory_id, skipping publication", doc.DocID, rev.RevisionID)
+		return
+	}
+	publicationItemID, err := rt.beginWirePublicationWorkItem(ctx, doc, rev, rec)
+	if err != nil {
+		log.Printf("runtime: wire publication work item doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		return
 	}
 	platformResp, err := rt.publishWireArticleToPlatform(ctx, doc, rev, rec)
 	if err != nil {
@@ -47,42 +42,38 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 		log.Printf("runtime: wire publication ref doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
 		return
 	}
-	if trackTrajectory {
-		if err := rt.recordWirePublicationTrajectoryRef(ctx, rec, "publish_ref", wirePublicationTrajectoryRef(platformResp)); err != nil {
-			log.Printf("runtime: wire publication trajectory ref doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
-			return
-		}
+	if err := rt.recordWirePublicationTrajectoryRef(ctx, rec, "publish_ref", wirePublicationTrajectoryRef(platformResp)); err != nil {
+		log.Printf("runtime: wire publication trajectory ref doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		return
 	}
 	editionRef, err := rt.autonomousPublishWireArticleToEdition(ctx, doc, rev)
 	if err != nil {
 		log.Printf("runtime: wire edition publish doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
 		return
 	}
-	if trackTrajectory {
-		if editionRef == "" {
-			// Owner mismatch or missing edition alias: the platform publish
-			// stands, but the settlement rule requires edition_ref, so the
-			// publication work item honestly stays open.
-			log.Printf("runtime: wire publication doc=%s rev=%s: edition ref unavailable, publication work item %s left open pending edition linkage", doc.DocID, rev.RevisionID, publicationItemID)
-			rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID)
-			return
-		}
-		if err := rt.recordWirePublicationTrajectoryRef(ctx, rec, "edition_ref", editionRef); err != nil {
-			log.Printf("runtime: wire edition trajectory ref doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
-			return
-		}
-		if err := rt.completeWirePublicationWorkItem(ctx, rec, publicationItemID); err != nil {
-			log.Printf("runtime: wire publication work item complete doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
-			return
-		}
-		if err := rt.completeWireStoryResolutionWorkItem(ctx, rec, doc.DocID); err != nil {
-			log.Printf("runtime: wire story resolution work item complete doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
-			return
-		}
-		if err := rt.settleWirePublicationTrajectoryIfReady(ctx, rec); err != nil {
-			log.Printf("runtime: wire publication settle doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
-			return
-		}
+	if editionRef == "" {
+		// Owner mismatch or missing edition alias: the platform publish
+		// stands, but the settlement rule requires edition_ref, so the
+		// publication work item honestly stays open.
+		log.Printf("runtime: wire publication doc=%s rev=%s: edition ref unavailable, publication work item %s left open pending edition linkage", doc.DocID, rev.RevisionID, publicationItemID)
+		rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID)
+		return
+	}
+	if err := rt.recordWirePublicationTrajectoryRef(ctx, rec, "edition_ref", editionRef); err != nil {
+		log.Printf("runtime: wire edition trajectory ref doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		return
+	}
+	if err := rt.completeWirePublicationWorkItem(ctx, rec, publicationItemID); err != nil {
+		log.Printf("runtime: wire publication work item complete doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		return
+	}
+	if err := rt.completeWireStoryResolutionWorkItem(ctx, rec, doc.DocID); err != nil {
+		log.Printf("runtime: wire story resolution work item complete doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		return
+	}
+	if err := rt.settleWirePublicationTrajectoryIfReady(ctx, rec); err != nil {
+		log.Printf("runtime: wire publication settle doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		return
 	}
 	rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID)
 }

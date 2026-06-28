@@ -9,14 +9,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Re-exported from internal/provideriface for backward compatibility.
-// New code should import internal/provideriface directly.
-type (
-	EventEmitFunc   = provideriface.EventEmitFunc
-	ProviderPolicy  = provideriface.ProviderPolicy
-	Provider        = provideriface.Provider
-)
-
 // StubProvider simulates task execution with a configurable delay and optional
 // failure. It emits progress events during the simulated work and returns a
 // canned result or error.
@@ -46,8 +38,8 @@ func (p *StubProvider) ProviderName() string { return "stub" }
 
 // RuntimeProviderPolicy returns the effective provider/model policy for the
 // stub provider.
-func (p *StubProvider) RuntimeProviderPolicy() ProviderPolicy {
-	return ProviderPolicy{
+func (p *StubProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
+	return provideriface.ProviderPolicy{
 		ActiveProvider:              "stub",
 		ModelSelection:              "No real upstream model is configured. The sandbox is returning stub responses.",
 		SupportsPerRunModelOverride: false,
@@ -59,7 +51,7 @@ func (p *StubProvider) RuntimeProviderPolicy() ProviderPolicy {
 
 // Execute simulates task execution by sleeping for the configured delay,
 // emitting progress events, and returning the configured result or error.
-func (p *StubProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *StubProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	// Emit a progress event at the start.
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"stub"}`))
 
@@ -111,15 +103,17 @@ done:
 	return nil
 }
 
-func providerPolicyForRuntime(provider Provider) ProviderPolicy {
+func providerPolicyForRuntime(provider provideriface.Provider) provideriface.ProviderPolicy {
 	if provider == nil {
-		return ProviderPolicy{
+		return provideriface.ProviderPolicy{
 			ActiveProvider:              "none",
 			ModelSelection:              "No provider is configured.",
 			SupportsPerRunModelOverride: false,
 		}
 	}
-	if reporter, ok := provider.(interface{ RuntimeProviderPolicy() ProviderPolicy }); ok {
+	if reporter, ok := provider.(interface {
+		RuntimeProviderPolicy() provideriface.ProviderPolicy
+	}); ok {
 		policy := reporter.RuntimeProviderPolicy()
 		if policy.ActiveProvider == "" {
 			policy.ActiveProvider = provider.ProviderName()
@@ -129,7 +123,7 @@ func providerPolicyForRuntime(provider Provider) ProviderPolicy {
 		}
 		return policy
 	}
-	return ProviderPolicy{
+	return provideriface.ProviderPolicy{
 		ActiveProvider:              provider.ProviderName(),
 		ModelSelection:              "Provider chooses its default model unless a run explicitly requests a model override.",
 		SupportsPerRunModelOverride: true,

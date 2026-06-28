@@ -277,9 +277,6 @@ func newImportDocumentContentTool(rt *Runtime) Tool {
 			if (urlValue == "") == (filePath == "") {
 				return "", fmt.Errorf("provide exactly one of url or file_path")
 			}
-			if urlValue != "" && liveSourceAcquisitionDisabled(ctx) {
-				return "", fmt.Errorf("live URL imports are disabled for this frozen-corpus eval run")
-			}
 			var item types.ContentItem
 			var err error
 			if urlValue != "" {
@@ -328,9 +325,6 @@ func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode source_search args: %w", err)
 			}
-			if liveSourceAcquisitionDisabled(ctx) {
-				return "", fmt.Errorf("source_search is disabled for this frozen-corpus eval run")
-			}
 			if sourceClient == nil {
 				return "", fmt.Errorf("source search client not configured")
 			}
@@ -369,9 +363,6 @@ func newImportURLContentTool(rt *Runtime) Tool {
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if rt == nil {
 				return "", fmt.Errorf("runtime not configured")
-			}
-			if liveSourceAcquisitionDisabled(ctx) {
-				return "", fmt.Errorf("URL imports are disabled for this frozen-corpus eval run")
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
@@ -644,18 +635,6 @@ func boundedContentSegments(value any, maxSegments int) ([]any, int, bool) {
 	return raw[:maxSegments], len(raw), true
 }
 
-func liveSourceAcquisitionDisabled(ctx context.Context) bool {
-	runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
-	if runRec == nil || runRec.Metadata == nil {
-		return false
-	}
-	if metadataBoolValue(runRec.Metadata, compactionRecallLiveSearchFlag) {
-		return true
-	}
-	return metadataStringValue(runRec.Metadata, "eval_kind") == compactionRecallEvalKind &&
-		metadataBoolValue(runRec.Metadata, "scored_phase")
-}
-
 // webSearchAgentResultFloor is the minimum number of results every web_search
 // requests, so agent retrieval gets a broad candidate set even when the model
 // self-caps max_results at a human-page size. It matches the search-plane merge
@@ -678,9 +657,6 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode web_search args: %w", err)
-			}
-			if liveSourceAcquisitionDisabled(ctx) {
-				return "", fmt.Errorf("web_search is disabled for this frozen-corpus eval run")
 			}
 			if searchClient == nil {
 				return "", fmt.Errorf("search client not configured")
@@ -816,9 +792,6 @@ func newFetchURLTool(httpClient *http.Client, rt *Runtime) Tool {
 			target := strings.TrimSpace(in.URL)
 			if target == "" {
 				return "", fmt.Errorf("url must not be empty")
-			}
-			if liveSourceAcquisitionDisabled(ctx) {
-				return "", fmt.Errorf("fetch_url is disabled for this frozen-corpus eval run")
 			}
 			client := httpClient
 			if client == nil {

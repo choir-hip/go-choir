@@ -53,7 +53,7 @@ func TestHandlePromptListReturnsEffectivePrompts(t *testing.T) {
 		if len(prompt.Tools) == 0 {
 			t.Fatalf("prompt %s missing tool metadata", prompt.Role)
 		}
-		if strings.TrimSpace(prompt.ProviderPolicy.ActiveProvider) == "" {
+		if strings.TrimSpace(prompt.provideriface.ProviderPolicy.ActiveProvider) == "" {
 			t.Fatalf("prompt %s missing provider policy", prompt.Role)
 		}
 	}

@@ -6,18 +6,20 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type promptDescriptorResponse struct {
-	Role                  string                   `json:"role"`
-	Content               string                   `json:"content"`
-	Source                string                   `json:"source"`
-	SourceLabel           string                   `json:"source_label,omitempty"`
-	EffectiveSystemPrompt string                   `json:"effective_system_prompt,omitempty"`
-	Tools                 []toolDescriptorResponse `json:"tools,omitempty"`
-	RolePolicy            rolePolicyResponse       `json:"role_policy"`
-	ProviderPolicy        ProviderPolicy           `json:"provider_policy"`
+	Role                  string                       `json:"role"`
+	Content               string                       `json:"content"`
+	Source                string                       `json:"source"`
+	SourceLabel           string                       `json:"source_label,omitempty"`
+	EffectiveSystemPrompt string                       `json:"effective_system_prompt,omitempty"`
+	Tools                 []toolDescriptorResponse     `json:"tools,omitempty"`
+	RolePolicy            rolePolicyResponse           `json:"role_policy"`
+	ProviderPolicy        provideriface.ProviderPolicy `json:"provider_policy"`
 }
 
 type promptListResponse struct {
@@ -134,14 +136,14 @@ func (h *APIHandler) promptResponse(ownerID string, prompt PromptDescriptor) (pr
 			"This role cannot spawn child agents, so it cannot request model overrides through spawn_agent.")
 	}
 	return promptDescriptorResponse{
-		Role:                  prompt.Role,
-		Content:               prompt.Content,
-		Source:                prompt.Source,
-		SourceLabel:           promptSourceLabel(prompt.Source),
-		EffectiveSystemPrompt: effective,
-		Tools:                 toolResponsesForRegistry(registry),
-		RolePolicy:            rolePolicy,
-		ProviderPolicy:        providerPolicy,
+		Role:                         prompt.Role,
+		Content:                      prompt.Content,
+		Source:                       prompt.Source,
+		SourceLabel:                  promptSourceLabel(prompt.Source),
+		EffectiveSystemPrompt:        effective,
+		Tools:                        toolResponsesForRegistry(registry),
+		RolePolicy:                   rolePolicy,
+		ProviderPolicy:               providerPolicy,
 	}, nil
 }
 

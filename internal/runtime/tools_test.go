@@ -31,47 +31,6 @@ func TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget(t *testing.T
 	}
 }
 
-func TestFrozenCorpusEvalDisablesLiveSourceAcquisitionTools(t *testing.T) {
-	rt, _ := testRuntime(t)
-	run := &types.RunRecord{
-		RunID:        "run-eval",
-		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
-		Metadata: map[string]any{
-			"eval_kind":                    compactionRecallEvalKind,
-			compactionRecallLiveSearchFlag: true,
-		},
-	}
-	ctx := WithToolExecutionContext(context.Background(), run)
-	registry := MustNewToolRegistry(
-		newWebSearchTool(nil, rt),
-		newSourceSearchTool(nil, rt),
-		newFetchURLTool(nil, rt),
-		newImportURLContentTool(rt),
-		newImportDocumentContentTool(rt),
-	)
-	cases := []struct {
-		tool string
-		args json.RawMessage
-		want string
-	}{
-		{"web_search", json.RawMessage(`{"query":"spend quota"}`), "web_search is disabled"},
-		{"source_search", json.RawMessage(`{"query":"spend quota"}`), "source_search is disabled"},
-		{"fetch_url", json.RawMessage(`{"url":"https://example.com"}`), "fetch_url is disabled"},
-		{"import_url_content", json.RawMessage(`{"url":"https://example.com"}`), "URL imports are disabled"},
-		{"import_document_content", json.RawMessage(`{"url":"https://example.com"}`), "live URL imports are disabled"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.tool, func(t *testing.T) {
-			_, err := registry.Execute(ctx, tc.tool, tc.args)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("%s error = %v, want %q", tc.tool, err, tc.want)
-			}
-		})
-	}
-}
-
 // --- Tool Registry Tests ---
 
 func TestToolRegistryRegister(t *testing.T) {

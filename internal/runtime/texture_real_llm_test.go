@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -94,7 +96,7 @@ func (c *anthropicClient) ProviderName() string { return c.name }
 // Execute implements the runtime.Provider interface. It makes a real HTTP call
 // to the Anthropic-compatible API with streaming enabled, emitting delta events
 // for each SSE chunk.
-func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(
 		`{"status":"started","provider":"`+c.name+`","real":"true"}`))
 
@@ -222,7 +224,7 @@ func errProviderCall(statusCode int, status string, body []byte) *providerError 
 // resolveRealProvider creates a real LLM runtime.Provider from environment
 // credentials. It returns the provider and display name, or skips the test
 // if no credentials are available.
-func resolveRealProvider(t *testing.T) (Provider, string) {
+func resolveRealProvider(t *testing.T) (provideriface.Provider, string) {
 	t.Helper()
 
 	// Try Z.AI first.
@@ -340,8 +342,6 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	initialContent := "Hey there! This is a simple test document. It has some informal language and could use improvement."
 	revReq := textureCreateRevisionRequest{
 		Content:     initialContent,
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -497,8 +497,6 @@ func TestTextureAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 	// Create initial revision.
 	revReq := textureCreateRevisionRequest{
 		Content:     "I need a Python function to calculate fibonacci numbers.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "dev",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -576,8 +574,6 @@ func TestTextureAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 
 	revReq := textureCreateRevisionRequest{
 		Content:     "Some content to revise.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -670,8 +666,6 @@ func TestTextureAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 
 	revReq := textureCreateRevisionRequest{
 		Content:     "Content for idempotency test.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -749,8 +743,6 @@ func TestTextureAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 
 	revReq := textureCreateRevisionRequest{
 		Content:     "Short text.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -815,8 +807,6 @@ func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 
 	revReq := textureCreateRevisionRequest{
 		Content:     "Some text for metadata test.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -881,8 +871,6 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 	// User edit 1.
 	revReq := textureCreateRevisionRequest{
 		Content:     "First draft by user.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -906,8 +894,6 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 	// User edit 2.
 	revReq = textureCreateRevisionRequest{
 		Content:     "User adds more content after agent revision.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)

@@ -1171,13 +1171,6 @@ func normalizeWireStoryPresentation(story types.WireStory) types.WireStory {
 	return story
 }
 
-// normalizeWireArticleRevisionForRead exists for the cross-owner Universal Wire
-// read path. Source refs are no longer repaired from markdown/source-token
-// syntax here; visible source identity must come from structured body_doc nodes.
-func normalizeWireArticleRevisionForRead(rev types.Revision) types.Revision {
-	return rev
-}
-
 func wireRevisionSourceIsTextureEdit(meta map[string]any) bool {
 	switch metadataString(meta, "source") {
 	case "patch_texture", "rewrite_texture", "edit_texture":

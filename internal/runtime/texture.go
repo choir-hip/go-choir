@@ -122,25 +122,6 @@ type textureMarkdownLineageImportResponse struct {
 	ExistingDocID      string                    `json:"existing_doc_id,omitempty"`
 }
 
-type textureSourceGapRepairRequest struct {
-	BaseRevisionID      string                            `json:"base_revision_id,omitempty"`
-	SourceEntities      []textureSourceEntity             `json:"source_entities,omitempty"`
-	CitationResolutions []textureCitationMarkerResolution `json:"citation_resolutions,omitempty"`
-	AuthorLabel         string                            `json:"author_label,omitempty"`
-}
-
-type textureSourceArtifactAttachmentRequest struct {
-	BaseRevisionID string                            `json:"base_revision_id,omitempty"`
-	Attachments    []textureSourceArtifactAttachment `json:"attachments,omitempty"`
-	AuthorLabel    string                            `json:"author_label,omitempty"`
-}
-
-type textureSourceArtifactAttachment struct {
-	EntityID  string `json:"entity_id"`
-	ContentID string `json:"content_id"`
-	TextQuote string `json:"text_quote,omitempty"`
-}
-
 type textureEnsureManifestResponse struct {
 	DocID      string `json:"doc_id"`
 	SourcePath string `json:"source_path"`
@@ -198,18 +179,15 @@ type textureListDocsResponse struct {
 
 // textureCreateRevisionRequest is the public JSON payload for
 // POST /api/texture/documents/{id}/revisions. The public route always creates
-// user-authored revisions; author_kind/author_label are accepted only for
-// older clients and are not authority-bearing.
+// user-authored revisions.
 type textureCreateRevisionRequest struct {
-	Content          string           `json:"content"`
-	BodyDoc          json.RawMessage  `json:"body_doc,omitempty"`
-	SourceEntities   json.RawMessage  `json:"source_entities,omitempty"`
-	AuthorKind       types.AuthorKind `json:"author_kind"`
-	AuthorLabel      string           `json:"author_label"`
-	Citations        json.RawMessage  `json:"citations,omitempty"`
-	Metadata         json.RawMessage  `json:"metadata,omitempty"`
-	ParentRevisionID string           `json:"parent_revision_id,omitempty"`
-	AllowRebase      bool             `json:"allow_rebase,omitempty"`
+	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	AllowRebase      bool            `json:"allow_rebase,omitempty"`
 }
 
 // textureRevisionResponse is the JSON response for revision-related endpoints.
@@ -1611,9 +1589,6 @@ func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.R
 
 	responseRevs := make([]types.Revision, 0, len(revs))
 	for _, rev := range revs {
-		if readOwnerID != ownerID {
-			rev = normalizeWireArticleRevisionForRead(rev)
-		}
 		responseRevs = append(responseRevs, rev)
 	}
 	resp := textureListRevisionsResponse{
@@ -1659,10 +1634,6 @@ func (h *APIHandler) HandleTextureRevision(w http.ResponseWriter, r *http.Reques
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
 			return
 		}
-	}
-
-	if readOwnerID, resolveErr := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, rev.DocID); resolveErr == nil && readOwnerID != ownerID {
-		rev = normalizeWireArticleRevisionForRead(rev)
 	}
 	writeAPIJSON(w, http.StatusOK, h.revisionResponseFromRecord(r.Context(), rev))
 }

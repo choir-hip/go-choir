@@ -23,23 +23,23 @@ type internalSourcecycledWebCapturesRequest struct {
 }
 
 type internalSourcecycledWebCapturesResponse struct {
-	Status                   string `json:"status"`
-	CaptureCount             int    `json:"capture_count"`
-	SourceEntityCount        int    `json:"source_entity_count"`
-	CapturedFromEdges        int    `json:"captured_from_edges"`
-	SkippedItemCount         int    `json:"skipped_item_count"`
-	DedupDroppedCount        int    `json:"dedup_dropped_count,omitempty"`
-	DedupSkipped             bool   `json:"dedup_skipped,omitempty"`
-	DedupSkipReason          string `json:"dedup_skip_reason,omitempty"`
+	Status                   string  `json:"status"`
+	CaptureCount             int     `json:"capture_count"`
+	SourceEntityCount        int     `json:"source_entity_count"`
+	CapturedFromEdges        int     `json:"captured_from_edges"`
+	SkippedItemCount         int     `json:"skipped_item_count"`
+	DedupDroppedCount        int     `json:"dedup_dropped_count,omitempty"`
+	DedupSkipped             bool    `json:"dedup_skipped,omitempty"`
+	DedupSkipReason          string  `json:"dedup_skip_reason,omitempty"`
 	DedupThreshold           float32 `json:"dedup_threshold,omitempty"`
-	SynthesisStatus          string `json:"synthesis_status,omitempty"`
-	SynthesisDocID           string `json:"synthesis_doc_id,omitempty"`
-	SynthesisRevisionID      string `json:"synthesis_revision_id,omitempty"`
-	SynthesisClusterID       string `json:"synthesis_cluster_id,omitempty"`
-	SynthesisClusterObjectID string `json:"synthesis_cluster_object_id,omitempty"`
-	SynthesisSourceCount     int    `json:"synthesis_source_count,omitempty"`
-	SynthesisEditionRef      string `json:"synthesis_edition_ref,omitempty"`
-	SynthesisSkipReason      string `json:"synthesis_skip_reason,omitempty"`
+	SynthesisStatus          string  `json:"synthesis_status,omitempty"`
+	SynthesisDocID           string  `json:"synthesis_doc_id,omitempty"`
+	SynthesisRevisionID      string  `json:"synthesis_revision_id,omitempty"`
+	SynthesisClusterID       string  `json:"synthesis_cluster_id,omitempty"`
+	SynthesisClusterObjectID string  `json:"synthesis_cluster_object_id,omitempty"`
+	SynthesisSourceCount     int     `json:"synthesis_source_count,omitempty"`
+	SynthesisEditionRef      string  `json:"synthesis_edition_ref,omitempty"`
+	SynthesisSkipReason      string  `json:"synthesis_skip_reason,omitempty"`
 }
 
 // HandleInternalSourcecycledWebCaptures projects source-service items into this

@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -25,7 +27,7 @@ import (
 // stop reasons and tool calls.
 type mockToolLoopProvider struct {
 	// Provider is the base Provider interface (for ProviderName etc).
-	Provider
+	provideriface.Provider
 
 	// responses is a sequence of responses to return from CallWithTools.
 	// Each response is consumed in order; if exhausted, the last response
@@ -62,7 +64,7 @@ func newMockToolLoopProvider(responses ...*ToolLoopResponse) *mockToolLoopProvid
 }
 
 type capturingToolChoiceProvider struct {
-	Provider
+	provideriface.Provider
 	responses []*ToolLoopResponse
 	choices   *[]string
 	maxTokens *[]int
@@ -1499,7 +1501,7 @@ func TestRunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer(t *test
 }
 
 type requiredToolTimeoutProvider struct {
-	Provider
+	provideriface.Provider
 	calls   int32
 	choices *[]string
 }
@@ -1567,7 +1569,7 @@ func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
 }
 
 type overflowThenSuccessProvider struct {
-	Provider
+	provideriface.Provider
 	calls int32
 }
 
@@ -1626,7 +1628,7 @@ func TestRunToolLoopMemoryHookCanRetryProviderOverflow(t *testing.T) {
 }
 
 type rateLimitThenSuccessProvider struct {
-	Provider
+	provideriface.Provider
 	calls int32
 }
 
@@ -1644,7 +1646,7 @@ func (p *rateLimitThenSuccessProvider) CallWithTools(ctx context.Context, req To
 }
 
 type exactToolChoicePreconditionThenToolProvider struct {
-	Provider
+	provideriface.Provider
 	calls    int32
 	choices  []string
 	requests []ToolLoopRequest
@@ -1670,7 +1672,7 @@ func (p *exactToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.
 }
 
 type providerPreconditionThenToolProvider struct {
-	Provider
+	provideriface.Provider
 	failuresBeforeSuccess int32
 	calls                 int32
 	requests              []ToolLoopRequest
@@ -1695,7 +1697,7 @@ func (p *providerPreconditionThenToolProvider) CallWithTools(ctx context.Context
 }
 
 type providerErrorsThenToolProvider struct {
-	Provider
+	provideriface.Provider
 	errors   []error
 	calls    int32
 	requests []ToolLoopRequest
@@ -1797,7 +1799,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 }
 
 type deepSeekToolChoicePreconditionThenToolProvider struct {
-	Provider
+	provideriface.Provider
 	choices []string
 	calls   int32
 }
@@ -2851,7 +2853,7 @@ func TestRunToolLoopContextCancelled(t *testing.T) {
 // contextBlockingProvider is a ToolLoopProvider that blocks until context
 // cancellation, used for testing context-aware cancellation in the tool loop.
 type contextBlockingProvider struct {
-	Provider // embed nil stub; ProviderName not used in this test
+	provideriface.Provider // embed nil stub; ProviderName not used in this test
 }
 
 func (p *contextBlockingProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
@@ -3133,7 +3135,7 @@ func TestBuildToolResultContent(t *testing.T) {
 
 // --- testRuntimeWithProviderAndRegistry ---
 
-func testRuntimeWithProviderAndRegistry(t *testing.T, provider Provider, registry *ToolRegistry) (*Runtime, *store.Store) {
+func testRuntimeWithProviderAndRegistry(t *testing.T, provider provideriface.Provider, registry *ToolRegistry) (*Runtime, *store.Store) {
 	t.Helper()
 
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-toolloop-test")

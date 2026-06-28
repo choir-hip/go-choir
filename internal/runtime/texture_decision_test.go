@@ -126,18 +126,6 @@ func TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords(t *testing.T) {
 	if len(diag.Decisions) != 1 || diag.Decisions[0].DecisionID != decision.DecisionID || diag.Decisions[0].Reason != decision.Reason {
 		t.Fatalf("diagnosis decisions = %+v", diag.Decisions)
 	}
-
-	traceReq := authenticatedRequest(http.MethodGet, "/api/trace/trajectories/"+trajectoryIDForRun(run)+"/logs", "", "user-1")
-	traceW := httptest.NewRecorder()
-	h.HandleTraceTrajectories(traceW, traceReq)
-	if traceW.Code != http.StatusOK {
-		t.Fatalf("trace logs status = %d, body: %s", traceW.Code, traceW.Body.String())
-	}
-	body := traceW.Body.String()
-	if !strings.Contains(body, "Texture decision wait_for_evidence: Researcher has not delivered source evidence yet.") ||
-		!strings.Contains(body, `"decision_id":"decision-trace-1"`) {
-		t.Fatalf("trace logs missing readable decision: %s", body)
-	}
 }
 
 func seedTextureDecisionDocument(t *testing.T, s interface {

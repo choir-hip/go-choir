@@ -60,7 +60,7 @@ func buildSystemPromptWithTools(basePrompt string, registry *ToolRegistry) strin
 // back into the LLM conversation. Adapted from Cogent's executeTools but
 // simplified for go-choir: no steer draining, no consecutive-error tracking,
 // and no tool activation (all tools are always available).
-func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit EventEmitFunc) []types.ToolResult {
+func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit provideriface.EventEmitFunc) []types.ToolResult {
 	results := make([]types.ToolResult, len(calls))
 	skipped := plannedToolSkips(ctx, calls)
 
@@ -97,7 +97,7 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 	return results
 }
 
-func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, skipReason string, emit EventEmitFunc) types.ToolResult {
+func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, skipReason string, emit provideriface.EventEmitFunc) types.ToolResult {
 	// Emit full tool inputs: Trace is owner-scoped and is the proof surface
 	// for workflow tests, so summaries are not enough.
 	args := json.RawMessage(strings.TrimSpace(string(call.Arguments)))
@@ -205,7 +205,7 @@ func toolRequiresSequentialTurnExecution(name string) bool {
 // concurrent observation. Worker delegation is now explicit and asynchronous:
 // request_worker_vm leases, start_worker_delegation starts, and observe/finish
 // collect evidence. This hook intentionally does no worker handoff.
-func executeRequiredToolTransitions(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, results []types.ToolResult, emit EventEmitFunc) {
+func executeRequiredToolTransitions(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, results []types.ToolResult, emit provideriface.EventEmitFunc) {
 	return
 }
 

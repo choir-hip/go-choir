@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -38,7 +40,7 @@ import (
 
 // failureIsolationSetup creates a fresh Runtime with a configurable provider
 // for testing failure scenarios.
-func failureIsolationSetup(t *testing.T, provider Provider) (*Runtime, *APIHandler, string) {
+func failureIsolationSetup(t *testing.T, provider provideriface.Provider) (*Runtime, *APIHandler, string) {
 	t.Helper()
 
 	dir := t.TempDir()

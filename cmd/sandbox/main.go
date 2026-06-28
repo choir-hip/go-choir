@@ -13,6 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -86,7 +87,7 @@ func main() {
 	// gateway so provider credentials and upstream adapter code stay out of
 	// the guest image. A missing gateway falls back to the stub provider for
 	// local diagnostics only.
-	var rtProvider runtime.Provider
+	var rtProvider provideriface.Provider
 	gatewayURL := os.Getenv("RUNTIME_GATEWAY_URL")
 	if gatewayURL == "" {
 		// Fallback: also check PROXY_VMCTL_URL which signals VM mode.

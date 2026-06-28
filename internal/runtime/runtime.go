@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -32,7 +34,7 @@ type Runtime struct {
 	cfg         Config
 	store       *store.Store
 	bus         *events.EventBus
-	provider    Provider
+	provider    provideriface.Provider
 	promptStore *PromptStore
 
 	// traceStore is the optional Dolt-backed observability store. When set,
@@ -86,20 +88,20 @@ type textureWakeTimer interface {
 // provider. The runtime is idle until Start is called.
 // If a tool registry is provided, the runtime will use the tool-calling
 // loop for run execution instead of the simple provider bridge path.
-func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, opts ...RuntimeOption) *Runtime {
+func New(cfg Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Runtime {
 	cfg = normalizeConfig(cfg)
 	rt := &Runtime{
-		cfg:                cfg,
-		store:              s,
-		bus:                bus,
-		provider:           provider,
-		health:             types.HealthReady,
-		running:            make(map[string]context.CancelFunc),
-		promptStore:        NewPromptStore(cfg.PromptRoot),
-		textureWakeAfter:   func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
-		browserOps:         make(map[string]*sync.Mutex),
-		browserCDP:         make(map[string]*browserCDPSession),
-		modelPolicies:      make(map[string]ModelPolicy),
+		cfg:              cfg,
+		store:            s,
+		bus:              bus,
+		provider:         provider,
+		health:           types.HealthReady,
+		running:          make(map[string]context.CancelFunc),
+		promptStore:      NewPromptStore(cfg.PromptRoot),
+		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
+		browserOps:       make(map[string]*sync.Mutex),
+		browserCDP:       make(map[string]*browserCDPSession),
+		modelPolicies:    make(map[string]ModelPolicy),
 	}
 	for _, opt := range opts {
 		opt(rt)
@@ -780,7 +782,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		return nil, releaseCoSuperSlotClaim(err)
 	}
 
-	// Dispatch via actor runtime (or legacy goroutine if no bridge).
+	// Dispatch via actor runtime.
 	rt.activate(rec)
 
 	log.Printf("runtime: started coagent run %s requested by %s (owner=%s)", rec.RunID, requesterRunID, ownerID)
@@ -1611,7 +1613,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 // executeWithToolLoop runs the run through the real tool-calling loop.
 // This is the primary execution path when a tool registry is configured,
 // enabling the LLM to invoke registered Go function-call tools.
-func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *ToolRegistry, emit EventEmitFunc) {
+func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *ToolRegistry, emit provideriface.EventEmitFunc) {
 	tlp := asToolLoopProvider(rt.provider)
 
 	// Build the initial conversation from the run prompt.
@@ -1708,17 +1710,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithToolLoopBudget(textureActorToolLoopBudget(rec)))
-		// A parked Texture actor stays resident after semantic delegation so later
-		// researcher/super packets enter the same run-memory thread. When parking is
-		// disabled, retain the legacy terminal handoff behavior used by tests and
-		// explicit diagnostic runs.
-		if !metadataBoolValue(rec.Metadata, "actor_park_on_idle") {
-			toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses(
-				"spawn_agent",
-				"request_super_execution",
-				"request_email_draft",
-			))
-		}
 	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
@@ -1786,8 +1777,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
-
-	rt.maybeStartConfiguredContinuation(persistCtx, rec)
 }
 
 func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage TokenUsage, passivationErr error) {
@@ -1922,7 +1911,7 @@ func (rt *Runtime) CompactRunMemory(ctx context.Context, runID, ownerID, reason 
 // executeWithProvider runs the run through the simple Provider.Execute path.
 // This is the legacy execution path used when no tool registry is configured
 // (stub provider or bridge provider without tool-calling support).
-func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord, emit EventEmitFunc) {
+func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc) {
 	// Execute through the provider. The provider may set rec.Result
 	// directly (e.g., BridgeProvider sets it from the LLM response text).
 	execRec := *rec
@@ -1976,8 +1965,6 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
-
-	rt.maybeStartConfiguredContinuation(persistCtx, rec)
 
 }
 

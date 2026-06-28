@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -6700,11 +6702,11 @@ func newBlockingExecuteProvider() *blockingExecuteProvider {
 
 func (p *blockingExecuteProvider) ProviderName() string { return "blocking-test" }
 
-func (p *blockingExecuteProvider) RuntimeProviderPolicy() ProviderPolicy {
-	return ProviderPolicy{ActiveProvider: "blocking-test"}
+func (p *blockingExecuteProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
+	return provideriface.ProviderPolicy{ActiveProvider: "blocking-test"}
 }
 
-func (p *blockingExecuteProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *blockingExecuteProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"blocking-test"}`))
 	if !strings.Contains(task.Prompt, "Process the pending update_coagent records addressed to you as the user's persistent super actor.") {
 		task.Result = "non-super test run completed"
