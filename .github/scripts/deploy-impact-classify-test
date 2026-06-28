@@ -84,6 +84,22 @@ assert_not_contains "$node_b_storage_tooling_output" "unknown deployed path"
 assert_not_contains "$node_b_storage_tooling_output" "ordinary_guest=true"
 assert_not_contains "$node_b_storage_tooling_output" "playwright_guest=true"
 
+node_a_tooling_output="$(
+  run_classifier \
+    "scripts/node-a-backup-pull" \
+    "scripts/node-a-restore-rehearsal" \
+    "nix/node-a.nix" \
+    "nix/node-a-hardware.nix" \
+    "nix/node-a-rehearsal-report-template.json"
+)"
+assert_contains "$node_a_tooling_output" "deploy_needed=false"
+assert_contains "$node_a_tooling_output" "scripts/node-a-backup-pull -> ignored (Node A offsite replica tooling; not deployed to Node B host or guest closures)"
+assert_contains "$node_a_tooling_output" "nix/node-a.nix -> ignored (Node A offsite replica tooling; not deployed to Node B host or guest closures)"
+assert_contains "$node_a_tooling_output" "nix/node-a-hardware.nix -> ignored (Node A offsite replica tooling; not deployed to Node B host or guest closures)"
+assert_not_contains "$node_a_tooling_output" "unknown deployed path"
+assert_not_contains "$node_a_tooling_output" "ordinary_guest=true"
+assert_not_contains "$node_a_tooling_output" "playwright_guest=true"
+
 proxy_runtime_output="$(run_classifier "cmd/proxy/main.go")"
 assert_contains "$proxy_runtime_output" "deploy_needed=true"
 assert_contains "$proxy_runtime_output" "host_services=proxy"
