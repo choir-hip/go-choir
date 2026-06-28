@@ -204,7 +204,7 @@ func (rt *Runtime) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	if err := rt.store.UpdateRun(ctx, rec); err != nil {
 		return nil, false, fmt.Errorf("reactivate passivated Texture run: %w", err)
 	}
-	rt.startRunAsync(&rec)
+	rt.activate(&rec)
 	return &rec, true, nil
 }
 

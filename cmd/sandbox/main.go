@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
@@ -106,9 +107,9 @@ func main() {
 	}
 
 	// Build runtime options based on configuration.
-	var rtOpts []runtime.RuntimeOption
+	var rtOpts []actorruntime.RuntimeOption
 
-	rt := runtime.New(rtCfg, db, bus, rtProvider, rtOpts...)
+	rt := actorruntime.New(rtCfg, db, bus, rtProvider, rtOpts...)
 
 	// Initialize the file browser handler with sandbox files root. File
 	// mutations publish owner-scoped product events after the filesystem write
@@ -160,7 +161,7 @@ func main() {
 	}
 
 	// Register runtime API routes (overrides default /health).
-	apiHandler := runtime.NewAPIHandler(rt)
+	apiHandler := runtime.NewAPIHandler(rt.Runtime)
 	runtime.RegisterRoutes(s, apiHandler)
 
 	// Start the runtime engine and supervisor.

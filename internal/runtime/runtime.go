@@ -73,10 +73,28 @@ type Runtime struct {
 	qdrantPipelineMu      sync.Mutex
 	qdrantPipeline        *qdrant.Pipeline
 	qdrantPipelineInitErr error
+
+	// actorBridge, when set, routes run activations and coagent wakes
+	// through the actor runtime. nil = legacy goroutine/channel mode.
+	actorBridge ActorBridge
 }
 
 type textureWakeTimer interface {
 	Stop() bool
+}
+
+// ActorBridge is the interface that the actor runtime adapter implements to
+// receive activation/wake signals from the business-logic runtime. When set
+// (via SetActorBridge), the runtime routes run activations and coagent wakes
+// through the actor runtime instead of the legacy goroutine/channel path.
+// This is the seam that lets internal/runtime call business logic directly
+// while the actor runtime owns the concurrency substrate.
+type ActorBridge interface {
+	// Send delivers an actor update to the target agent. The kind is
+	// "initial_dispatch" (start a run), "coagent_result" (resume a parked
+	// run with a coagent update), or "cancel". content carries the run ID
+	// (for initial_dispatch) or the coagent update ID (for coagent_result).
+	Send(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 }
 
 // New creates a new Runtime with the given config, store, event bus, and
@@ -107,6 +125,58 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		opt(rt)
 	}
 	return rt
+}
+
+// SetActorBridge wires the actor runtime as the concurrency substrate. When
+// set, run activations go through actor.Send (which triggers the actor
+// handler to call ExecuteActivationSync) instead of startRunAsync, and
+// coagent wakes go through actor.Send instead of channel signals.
+func (rt *Runtime) SetActorBridge(b ActorBridge) {
+	rt.mu.Lock()
+	rt.actorBridge = b
+	rt.mu.Unlock()
+}
+
+// ActorBridgeActive reports whether the actor runtime is wired as the
+// concurrency substrate.
+func (rt *Runtime) ActorBridgeActive() bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.actorBridge != nil
+}
+
+// activate starts execution of a run. When the actor bridge is set, it sends
+// an "initial_dispatch" actor message to the run's agent; the actor handler
+// will call ExecuteActivationSync in the actor goroutine. Otherwise it falls
+// back to the legacy startRunAsync (spawns a goroutine).
+func (rt *Runtime) activate(rec *types.RunRecord) {
+	rt.mu.Lock()
+	bridge := rt.actorBridge
+	rt.mu.Unlock()
+	if bridge != nil && strings.TrimSpace(rec.AgentID) != "" {
+		trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
+		_ = bridge.Send(context.Background(), rec.AgentID, "initial_dispatch", rec.RunID, trajectoryID, "")
+		return
+	}
+	rt.startRunAsync(rec)
+}
+
+// ExecuteActivationSync runs executeActivation in the caller's goroutine. It
+// is the actor-handler entry point: the caller's goroutine (the actor
+// goroutine) IS the run goroutine. The rec is updated in place to reflect
+// the final run state (RunCompleted, RunFailed, or RunPassivated).
+//
+// This is the synchronous replacement for startRunAsync: no goroutine is
+// spawned, no channel is waited on. The actor runtime manages the goroutine
+// lifecycle.
+func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunRecord) {
+	runRec := *rec
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	rt.registerRunActivation(rec, cancel)
+	rt.wg.Add(1)
+	rt.executeActivation(runCtx, &runRec)
+	*rec = runRec
 }
 
 func cloneMetadata(metadata map[string]any) map[string]any {
@@ -431,7 +501,7 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 		rt.handleExecutionError(ctx, rec, err)
 		return nil, err
 	}
-	rt.startRunAsync(rec)
+	rt.activate(rec)
 	return rec, nil
 }
 
@@ -1467,7 +1537,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 	if err != nil {
 		return nil, err
 	}
-	rt.startRunAsync(rec)
+	rt.activate(rec)
 	return rec, nil
 }
 

@@ -94,7 +94,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 	if err != nil {
 		return nil, err
 	}
-	rt.startRunAsync(rec)
+	rt.activate(rec)
 	return rec, nil
 }
 
@@ -405,7 +405,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if err != nil {
 		return nil, err
 	}
-	rt.startRunAsync(rec)
+	rt.activate(rec)
 	return rec, nil
 }
 
@@ -595,6 +595,7 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 		return nil
 	}
 	maxWait := time.Duration(metadataIntValue(rec.Metadata, "actor_park_idle_seconds")) * time.Second
+	actorMode := rt.ActorBridgeActive()
 	return func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error) {
 		ready := func() (bool, error) {
 			updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
@@ -618,6 +619,20 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 				}
 			}
 			return false, nil
+		}
+		// In actor mode, do not block on a channel: if there are no
+		// pending updates, passivate immediately. The actor will
+		// re-activate when a new coagent update arrives via actor.Send,
+		// and the handler will resume the tool loop from the park point.
+		if actorMode {
+			ok, err := ready()
+			if err != nil {
+				return ToolLoopParkResult{}, err
+			}
+			if ok {
+				return ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
+			}
+			return ToolLoopParkResult{Continue: false, Passivate: true, Reason: "idle_actor_passivate"}, nil
 		}
 		ok, err := rt.waitForAgentSignal(ctx, ownerID, agentID, maxWait, ready)
 		if err != nil {
@@ -710,12 +725,40 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	return len(coagentUpdateIDsForRun(rec)) > 0
 }
 
+// ReconcileCoagentWake is the actor-mode entry point for creating a new run
+// when a coagent update arrives for an agent with no parked run. It is called
+// by the actor handler (handleCoagentResult) when the actor's memory snapshot
+// has no resume pointer. The reconcile logic creates a new run (if appropriate
+// for the agent type — Texture, persistent super, or generic coagent) and
+// calls rt.activate(rec), which sends an initial_dispatch actor message.
+func (rt *Runtime) ReconcileCoagentWake(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	if ownerID == "" || agentID == "" {
+		return nil, nil
+	}
+	if agentID == persistentSuperAgentID(ownerID) {
+		return rt.reconcilePersistentSuperActor(ctx, ownerID, agentID)
+	}
+	return rt.reconcileUpdatedCoagentActor(ctx, ownerID, agentID)
+}
+
 func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentSourcePacket) {
 	if rt == nil || rt.store == nil {
 		return
 	}
 	target := strings.TrimSpace(update.TargetAgentID)
 	if target == "" {
+		return
+	}
+	// Actor mode: the coagent update is already in the store mailbox. Send
+	// an actor message to wake the target agent — the handler will resume
+	// the parked run (or start a new one) and inject the update via
+	// injectUserTurns. No channel signal, no reconcile-new-run.
+	if rt.ActorBridgeActive() {
+		if err := rt.actorBridge.Send(context.Background(), target, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
+			log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
+		}
 		return
 	}
 	rt.notifyAgentSignal(update.OwnerID, target)
