@@ -36,3 +36,27 @@ but doesn't state the conjecture verdict has not advanced V."
 gradient alignment mechanism. The subagent's incentive is to produce work
 good enough to mainline. The orchestrator's incentive is to only mainline
 quality work. This creates a cooperative game with aligned gradients."
+
+## Pass 1 — Launch Wave 1 (6 agents) + Wave 2 (3 agents) + Wave 3 (3 agents)
+
+**Move:** construct (launch 12 parallel background subagents)
+**Conjectures being tested:** C1-C12 (all 12)
+**Expected ΔV:** -12 (if all settle as supported)
+**Actual ΔV:** 0 (pending returns)
+
+**Agents launched:**
+- M1 API Auth (6ac43bf9) — worktree m1-api-auth — C1
+- M2 Base Kernel (7f6fa35a) — worktree m2-base-kernel — C2
+- M11 Race Detector (95dbb43a) — worktree m11-race-detector — C3
+- M12 Flaky Test (d01fed70) — worktree m12-flaky-test — C4
+- M13 Privacy Policy (1d3e0b4b) — worktree m13-privacy-policy — C5
+- M14 LLM Cost (7fd23c07) — worktree m14-llm-cost — C6
+- M15 PR7 Review (c75b8372) — worktree m15-pr7-review — C7
+- M18 Worktree Triage (350775de) — worktree m18-worktree-triage — C8
+- M19 Mission Graph (82293e98) — worktree m19-mission-graph-triage — C9
+- M20 Trace Observability (19e0f2cc) — worktree m20-trace-observability — C10
+- M22 Health Checks (67d4c6cc) — worktree m22-health-checks — C11
+- M21 PII Retraction (0c4ee3f5) — worktree m21-pii-retraction — C12
+
+**Strong definitive statement:** "12 conjectures are now under test in
+parallel. The orchestrator's job shifts from launching to verifying."
