@@ -56,5 +56,19 @@ func main() {
 	s.HandleFunc("/auth/desktop/exchange-redirect", handler.HandleDesktopExchangeRedirect)
 	s.HandleFunc("/auth/desktop/redeem", handler.HandleDesktopRedeem)
 
+	// M1: API key management (headless auth).
+	s.HandleFunc("POST /auth/api-keys", handler.HandleCreateAPIKey)
+	s.HandleFunc("GET /auth/api-keys", handler.HandleListAPIKeys)
+	s.HandleFunc("DELETE /auth/api-keys/{id}", handler.HandleRevokeAPIKey)
+
+	// M7: Account recovery, multi-device passkey management, session management.
+	s.HandleFunc("POST /auth/recovery/request", handler.HandleRecoveryRequest)
+	s.HandleFunc("POST /auth/recovery/verify", handler.HandleRecoveryVerify)
+	s.HandleFunc("GET /auth/credentials", handler.HandleListCredentials)
+	s.HandleFunc("POST /auth/credentials/rename", handler.HandleRenameCredential)
+	s.HandleFunc("DELETE /auth/credentials/{id}", handler.HandleDeleteCredential)
+	s.HandleFunc("GET /auth/sessions", handler.HandleListSessions)
+	s.HandleFunc("DELETE /auth/sessions/{id}", handler.HandleRevokeSession)
+
 	s.Start()
 }

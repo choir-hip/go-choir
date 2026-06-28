@@ -1569,7 +1569,7 @@ func TestIssueSessionSetsCookiesAndMintsJWT(t *testing.T) {
 	// We'll simulate this by directly calling the internal helpers
 	// through a recorder.
 	rec := httptest.NewRecorder()
-	userInfo, err := h.issueSession(rec, user)
+	userInfo, err := h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -1665,7 +1665,7 @@ func TestAuthenticatedSessionWithValidCookies(t *testing.T) {
 
 	// Issue a session and capture the cookies.
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, user)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -1804,7 +1804,7 @@ func TestRefreshRotationRenewsAccessJWT(t *testing.T) {
 
 	// Issue a session.
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -1964,7 +1964,7 @@ func TestReplayedOldRefreshTokenFailsAfterRotation(t *testing.T) {
 
 	// Issue a session.
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -2160,7 +2160,7 @@ func TestAuthCookiesAreSecureWhenConfigured(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, user)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -2348,7 +2348,7 @@ func TestLogoutInvalidatesAuthenticatedSession(t *testing.T) {
 	}
 
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -2540,7 +2540,7 @@ func TestLogoutThenSessionReportsSignedOut(t *testing.T) {
 	}
 
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -2656,7 +2656,7 @@ func TestDeployedCookieContractOnSessionIssuance(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, user)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -2708,7 +2708,7 @@ func TestDeployedCookieContractOnRefreshRotation(t *testing.T) {
 
 	// Issue initial session.
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -2805,7 +2805,7 @@ func TestDeployedCookieContractOnLogout(t *testing.T) {
 
 	// Issue a session.
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issueSession: %v", err)
 	}
@@ -3461,7 +3461,7 @@ func TestLogoutThenReLoginFlow(t *testing.T) {
 	}
 
 	issueRec := httptest.NewRecorder()
-	_, err = h.issueSession(issueRec, user)
+	_, err = h.issueSession(issueRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
@@ -3539,7 +3539,7 @@ func TestLogoutThenReLoginFlow(t *testing.T) {
 
 	// Step 5: Simulate re-login by issuing a new session.
 	reLoginRec := httptest.NewRecorder()
-	_, err = h.issueSession(reLoginRec, user)
+	_, err = h.issueSession(reLoginRec, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("re-login issue session: %v", err)
 	}
@@ -3582,14 +3582,14 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 
 	// Issue session 1 (simulating first browser).
 	rec1 := httptest.NewRecorder()
-	_, err = h.issueSession(rec1, user)
+	_, err = h.issueSession(rec1, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issue session 1: %v", err)
 	}
 
 	// Issue session 2 (simulating second browser).
 	rec2 := httptest.NewRecorder()
-	_, err = h.issueSession(rec2, user)
+	_, err = h.issueSession(rec2, httptest.NewRequest(http.MethodGet, "/", nil), user)
 	if err != nil {
 		t.Fatalf("issue session 2: %v", err)
 	}

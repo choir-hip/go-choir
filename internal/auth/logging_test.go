@@ -343,7 +343,7 @@ func TestSessionRefreshLogsOperation(t *testing.T) {
 	}
 
 	// Issue a refresh token.
-	refreshToken, err := h.generateRefreshToken(user)
+	refreshToken, err := h.generateRefreshToken(user, "test-agent")
 	if err != nil {
 		t.Fatalf("generate refresh token: %v", err)
 	}
