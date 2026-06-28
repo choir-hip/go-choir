@@ -2,21 +2,29 @@ package actorruntime
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// TestAdapterStartRunExecutesViaActorHandler verifies that a run started via
-// the Adapter executes through the actor handler (not startRunAsync) and
-// completes. This is the Phase 1 existential test: the actor handler IS the
-// execution boundary.
-func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
+// adapterTestEnv holds the common test infrastructure.
+type adapterTestEnv struct {
+	t       *testing.T
+	adapter *Adapter
+	store   *store.Store
+	ctx     context.Context
+	cancel  context.CancelFunc
+}
+
+func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
+	t.Helper()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	promptRoot := filepath.Join(dir, "prompts")
@@ -42,13 +50,43 @@ func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	adapter.Start(ctx)
 
-	// Start a run. In actor mode, activate() sends an initial_dispatch
-	// actor message. The handler picks it up and calls
-	// ExecuteActivationSync synchronously in the actor goroutine.
-	rec, err := adapter.StartRun(ctx, "Test prompt for actor handler", "test-owner")
+	return &adapterTestEnv{t: t, adapter: adapter, store: s, ctx: ctx, cancel: cancel}
+}
+
+// waitForRunState polls the store until the run reaches the target state or
+// times out.
+func waitForRunState(t *testing.T, s *store.Store, ctx context.Context, runID string, target types.RunState, timeout time.Duration) types.RunRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		rec, err := s.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatalf("GetRun %s: %v", runID, err)
+		}
+		if rec.State == target {
+			return rec
+		}
+		if rec.State.Terminal() && target != rec.State {
+			t.Fatalf("run %s reached terminal state %s, want %s", runID, rec.State, target)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	rec, _ := s.GetRun(ctx, runID)
+	t.Fatalf("run %s did not reach %s within %s (state=%s)", runID, target, timeout, rec.State)
+	return types.RunRecord{}
+}
+
+// TestAdapterStartRunExecutesViaActorHandler verifies that a run started via
+// the Adapter executes through the actor handler (not startRunAsync) and
+// completes. This is the Phase 1 existential test: the actor handler IS the
+// execution boundary.
+func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	rec, err := env.adapter.StartRun(env.ctx, "Test prompt for actor handler", "test-owner")
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
@@ -56,58 +94,247 @@ func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 		t.Fatal("StartRun returned empty run ID")
 	}
 
-	// Wait for the run to complete. The stub provider returns immediately.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		loaded, err := s.GetRun(ctx, rec.RunID)
-		if err != nil {
-			t.Fatalf("GetRun: %v", err)
-		}
-		if loaded.State.Terminal() {
-			if loaded.State != types.RunCompleted {
-				t.Fatalf("run state = %s, want RunCompleted", loaded.State)
-			}
-			if loaded.Result == "" {
-				t.Fatal("run completed but result is empty")
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	final := waitForRunState(t, env.store, env.ctx, rec.RunID, types.RunCompleted, 5*time.Second)
+	if final.Result == "" {
+		t.Fatal("run completed but result is empty")
 	}
-	t.Fatalf("run %s did not complete within 5s (state=%s)", rec.RunID, rec.State)
 }
 
 // TestAdapterDispatchActorActive verifies that the Adapter wires the
 // dispatch function on the embedded runtime.
 func TestAdapterDispatchActorActive(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "test.db")
-	promptRoot := filepath.Join(dir, "prompts")
+	env := newAdapterTestEnv(t)
 
-	s, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-
-	cfg := runtime.Config{
-		SandboxID:           "sandbox-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
-	}
-
-	adapter := New(cfg, s, events.NewEventBus(), runtime.NewStubProvider(0))
-	t.Cleanup(func() {
-		adapter.Stop()
-		adapter.cleanupLog()
-	})
-
-	if !adapter.Runtime.DispatchActorActive() {
+	if !env.adapter.Runtime.DispatchActorActive() {
 		t.Fatal("DispatchActorActive() = false, want true (adapter should wire dispatch)")
 	}
-	if adapter.ActorRuntime() == nil {
+	if env.adapter.ActorRuntime() == nil {
 		t.Fatal("ActorRuntime() = nil, want non-nil")
+	}
+}
+
+// TestHandlerColdStartCoagentResult tests the cold-start path: a coagent_result
+// arrives with nil memory (no parked run). The handler should call
+// ReconcileCoagentWake to create a new run.
+func TestHandlerColdStartCoagentResult(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	// Create an agent record so ownerForAgent can look it up.
+	agentID := "agent-test-cold-start"
+	ownerID := "user-cold-start"
+	err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   "test-profile",
+	})
+	if err != nil {
+		t.Fatalf("UpsertAgent: %v", err)
+	}
+
+	// Send a coagent_result with nil memory — simulates cold start.
+	handler := newActorHandler(env.adapter.Runtime)
+	u := actorUpdate("coagent_result", agentID, "coagent-result-content")
+	memory, err := handler.HandleUpdate(env.ctx, agentID, u, nil)
+	if err != nil {
+		t.Fatalf("HandleUpdate cold start: %v", err)
+	}
+
+	// Cold start returns nil memory (the new run will be started by
+	// the initial_dispatch message from ReconcileCoagentWake).
+	if memory != nil {
+		t.Errorf("cold start memory = %v, want nil (new run started via initial_dispatch)", memory)
+	}
+}
+
+// TestHandlerCancelPassivatedRun tests that a cancel message for a passivated
+// run transitions it to RunFailed.
+func TestHandlerCancelPassivatedRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	// Create a run and manually set it to RunPassivated.
+	rec := types.RunRecord{
+		RunID:    "run-cancel-test",
+		OwnerID:  "user-cancel",
+		AgentID:  "agent-cancel-test",
+		Prompt:   "test cancel",
+		State:    types.RunPassivated,
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	// Encode memory with the run ID.
+	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
+
+	// Send cancel.
+	handler := newActorHandler(env.adapter.Runtime)
+	u := actorUpdate("cancel", "agent-cancel-test", "")
+	_, err := handler.HandleUpdate(env.ctx, "agent-cancel-test", u, mem)
+	if err != nil {
+		t.Fatalf("HandleUpdate cancel: %v", err)
+	}
+
+	// Verify the run was cancelled (state = RunFailed).
+	updated, err := env.store.GetRun(env.ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if updated.State != types.RunFailed {
+		t.Errorf("run state = %s, want RunFailed (cancelled)", updated.State)
+	}
+	if updated.Error == "" {
+		t.Error("run error is empty, want cancel message")
+	}
+}
+
+// TestHandlerCancelMissingRun tests that cancelling a non-existent run is a
+// no-op (no error).
+func TestHandlerCancelMissingRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	mem, _ := json.Marshal(resumeState{RunID: "nonexistent-run", Phase: "parked"})
+	handler := newActorHandler(env.adapter.Runtime)
+	u := actorUpdate("cancel", "agent-missing", "")
+	_, err := handler.HandleUpdate(env.ctx, "agent-missing", u, mem)
+	if err != nil {
+		t.Errorf("HandleUpdate cancel missing run: error = %v, want nil (no-op)", err)
+	}
+}
+
+// TestHandlerCoagentResultForCompletedRun tests that a coagent_result for a
+// terminal (completed) run triggers ReconcileCoagentWake to create a new run.
+func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	agentID := "agent-completed-test"
+	ownerID := "user-completed"
+	err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   "test-profile",
+	})
+	if err != nil {
+		t.Fatalf("UpsertAgent: %v", err)
+	}
+
+	// Create a completed run.
+	rec := types.RunRecord{
+		RunID:    "run-completed-test",
+		OwnerID:  ownerID,
+		AgentID:  agentID,
+		Prompt:   "test completed",
+		State:    types.RunCompleted,
+		Result:   "done",
+	}
+	now := time.Now().UTC()
+	rec.FinishedAt = &now
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	// Send coagent_result with memory pointing to the completed run.
+	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
+	handler := newActorHandler(env.adapter.Runtime)
+	u := actorUpdate("coagent_result", agentID, "new-result")
+	_, err = handler.HandleUpdate(env.ctx, agentID, u, mem)
+	if err != nil {
+		t.Fatalf("HandleUpdate coagent_result for completed run: %v", err)
+	}
+
+	// The handler should have called ReconcileCoagentWake, which creates
+	// a new run and sends an initial_dispatch. The new run should eventually
+	// complete (stub provider returns immediately).
+	// We can't easily wait for the new run here, but the absence of an
+	// error means ReconcileCoagentWake succeeded.
+}
+
+// TestHandlerCoagentResultForBlockedRun tests the bug fix: a coagent_result
+// for a blocked run should reactivate it, NOT silently drop the message and
+// clear memory. Before the fix, this would orphan the blocked run.
+func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	agentID := "agent-blocked-test"
+	ownerID := "user-blocked"
+	err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SandboxID: "sandbox-test",
+		Profile:   "test-profile",
+	})
+	if err != nil {
+		t.Fatalf("UpsertAgent: %v", err)
+	}
+
+	// Create a blocked run.
+	rec := types.RunRecord{
+		RunID:    "run-blocked-test",
+		OwnerID:  ownerID,
+		AgentID:  agentID,
+		Prompt:   "test blocked",
+		State:    types.RunBlocked,
+		Error:    "provider rate limit",
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	// Send coagent_result with memory pointing to the blocked run.
+	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
+	handler := newActorHandler(env.adapter.Runtime)
+	u := actorUpdate("coagent_result", agentID, "unblocking-result")
+	resultMem, err := handler.HandleUpdate(env.ctx, agentID, u, mem)
+	if err != nil {
+		t.Fatalf("HandleUpdate coagent_result for blocked run: %v", err)
+	}
+
+	// The handler should have reactivated the run (set to RunPending,
+	// called ExecuteActivationSync). The stub provider should complete it.
+	// Memory should NOT be nil (the run was reactivated, not dropped).
+	_ = resultMem // memory may be nil if the run completed immediately
+
+	// Verify the run was reactivated (no longer RunBlocked).
+	updated, err := env.store.GetRun(env.ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if updated.State == types.RunBlocked {
+		t.Error("run is still RunBlocked — the bug: coagent_result was silently dropped instead of reactivating")
+	}
+	// The run should have been reactivated and completed (stub provider).
+	if updated.State != types.RunCompleted {
+		// Give it a moment to complete.
+		updated = waitForRunState(t, env.store, env.ctx, rec.RunID, types.RunCompleted, 3*time.Second)
+	}
+}
+
+// TestHandlerUnknownUpdateKind tests that an unknown update kind is handled
+// gracefully (memory unchanged, no error).
+func TestHandlerUnknownUpdateKind(t *testing.T) {
+	env := newAdapterTestEnv(t)
+
+	handler := newActorHandler(env.adapter.Runtime)
+	u := actorUpdate("unknown_kind", "agent-test", "content")
+	existingMem := []byte(`{"run_id":"run-x","phase":"parked"}`)
+	resultMem, err := handler.HandleUpdate(env.ctx, "agent-test", u, existingMem)
+	if err != nil {
+		t.Errorf("HandleUpdate unknown kind: error = %v, want nil", err)
+	}
+	// Memory should be unchanged.
+	if string(resultMem) != string(existingMem) {
+		t.Errorf("memory changed: got %q, want %q (unchanged for unknown kind)", resultMem, existingMem)
+	}
+}
+
+// actorUpdate creates an actor.Update for testing.
+func actorUpdate(kind, toAgentID, content string) actor.Update {
+	return actor.Update{
+		UpdateID:    "test-update-id",
+		ToAgentID:   toAgentID,
+		Kind:        kind,
+		Content:     content,
+		CreatedAt:   time.Now().UTC(),
 	}
 }

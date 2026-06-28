@@ -112,44 +112,56 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load parked run %s: %w", rs.RunID, err)
 	}
-	if rec.State != types.RunPassivated {
-		// The run is not parked (completed, failed, or already running).
-		// The coagent update may have already been processed by
-		// injectUserTurns during the run's execution. Create a new run
-		// only if the run is not active.
+	if rec.State == types.RunPassivated || rec.State.Active() {
+		// Reactivate the run. The coagent update is in the store
+		// mailbox; injectUserTurns will pick it up on re-entry.
+		//
+		// Active() covers RunPending, RunRunning, and RunBlocked:
+		// - RunPassivated: normal park-resume (tool loop parked waiting
+		//   for a coagent response).
+		// - RunBlocked: the run hit a provider error and is blocked.
+		//   The coagent update may provide new context that unblocks it.
+		// - RunRunning (stale): after a process restart, runs that were
+		//   RunRunning are stale — no goroutine is executing them. The
+		//   actor handler is single-threaded; if we're processing this
+		//   message, the previous HandleUpdate has returned and no one
+		//   is executing the run. Reactivate.
+		// - RunPending: the run was created but not yet started. The
+		//   coagent update will be picked up when the tool loop runs.
 		if rec.State.Active() {
-			// Run is still active — the update will be (or was)
-			// injected by injectUserTurns. Drop the actor message.
-			return h.memoryFromRunState(&rec)
+			log.Printf("actorruntime: reactivating run %s in state %s (not passivated) for coagent_result", rs.RunID, rec.State)
 		}
-		// Run completed/failed — create a new run for the update.
-		ownerID, err := h.ownerForAgent(ctx, u.ToAgentID)
-		if err != nil {
-			return nil, fmt.Errorf("actorruntime: lookup owner for coagent_result: %w", err)
+		// Mark the run for reactivation: load persisted conversation,
+		// inject the new coagent update via injectUserTurns, resume the
+		// tool loop.
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]any)
 		}
-		if _, err := h.rt.ReconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
-			return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
+		rec.Metadata["actor_reactivate_existing_memory"] = true
+		rec.Metadata["actor_reactivated_from_passivated"] = true
+		rec.Metadata["request_source"] = "update_coagent"
+		rec.State = types.RunPending
+		rec.Error = ""
+		rec.Result = ""
+		rec.FinishedAt = nil
+		rec.UpdatedAt = time.Now().UTC()
+		if err := h.rt.Store().UpdateRun(ctx, rec); err != nil {
+			return nil, fmt.Errorf("actorruntime: reactivate run %s: %w", rs.RunID, err)
 		}
-		return nil, nil
+		h.rt.ExecuteActivationSync(ctx, &rec)
+		return h.memoryFromRunState(&rec)
 	}
-	// Mark the run for reactivation: load persisted conversation, inject
-	// the new coagent update via injectUserTurns, resume the tool loop.
-	if rec.Metadata == nil {
-		rec.Metadata = make(map[string]any)
+
+	// Run is terminal (completed/failed/cancelled) — create a new run
+	// for the coagent update via the reconcile path.
+	ownerID, err := h.ownerForAgent(ctx, u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: lookup owner for coagent_result: %w", err)
 	}
-	rec.Metadata["actor_reactivate_existing_memory"] = true
-	rec.Metadata["actor_reactivated_from_passivated"] = true
-	rec.Metadata["request_source"] = "update_coagent"
-	rec.State = types.RunPending
-	rec.Error = ""
-	rec.Result = ""
-	rec.FinishedAt = nil
-	rec.UpdatedAt = time.Now().UTC()
-	if err := h.rt.Store().UpdateRun(ctx, rec); err != nil {
-		return nil, fmt.Errorf("actorruntime: reactivate run %s: %w", rs.RunID, err)
+	if _, err := h.rt.ReconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
+		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 	}
-	h.rt.ExecuteActivationSync(ctx, &rec)
-	return h.memoryFromRunState(&rec)
+	return nil, nil
 }
 
 // handleCancel aborts a parked run.

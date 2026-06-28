@@ -214,3 +214,53 @@ default `go test` runs.
 
 **Mutation class:** yellow (test-only changes, no runtime behavior change).
 **Edge class:** closed (independent review found the issue, fix verified).
+
+---
+
+## Handler Silent-Drop Bug Fix (2026-06-28)
+
+**Discovery:** Code review found that `handleCoagentResult` in
+`internal/actorruntime/handler.go` silently dropped coagent_result messages
+for runs in `Active()` states (RunPending, RunRunning, RunBlocked) and
+cleared the actor memory. This orphaned blocked/stale runs:
+
+1. Coagent_result arrives for a RunBlocked run
+2. Handler sees `rec.State.Active() == true`
+3. Handler returns `memoryFromRunState(&rec)` → returns `nil` (not Passivated)
+4. Actor passivates with nil memory
+5. Next coagent_result gets `rs.RunID == ""` → creates a NEW run via
+   ReconcileCoagentWake
+6. Original blocked run is orphaned forever, coagent update is lost
+
+**Root cause:** The `Active()` check assumed the run was genuinely executing
+and `injectUserTurns` would handle the update. But in the actor model, if
+the handler is processing a message, the previous HandleUpdate has returned —
+no one is executing the run. RunBlocked runs are not executing. Stale
+RunRunning runs (after process restart) are not executing.
+
+**Fix applied:**
+- Replaced the `if rec.State != types.RunPassivated` + `if rec.State.Active()`
+  drop with a unified reactivation path: `if rec.State == types.RunPassivated
+  || rec.State.Active()` → reactivate the run (set to RunPending, call
+  ExecuteActivationSync)
+- Added logging for non-passivated reactivations
+- Terminal states (RunCompleted/RunFailed/RunCancelled) still fall through
+  to ReconcileCoagentWake to create a new run
+
+**Tests added (6 new tests):**
+- `TestHandlerColdStartCoagentResult` — nil memory → ReconcileCoagentWake
+- `TestHandlerCancelPassivatedRun` — cancel transitions passivated → failed
+- `TestHandlerCancelMissingRun` — cancel for non-existent run is no-op
+- `TestHandlerCoagentResultForCompletedRun` — terminal state → new run
+- `TestHandlerCoagentResultForBlockedRun` — **the bug test**: blocked run
+  is reactivated, not orphaned
+- `TestHandlerUnknownUpdateKind` — unknown kind is no-op, memory unchanged
+
+**Verification:**
+- All 8 actorruntime tests pass (2 existing + 6 new)
+- All 8 actor tests pass
+- `go build ./internal/actorruntime/` — clean
+
+**Mutation class:** orange (runtime behavior change — handler now reactivates
+blocked/stale runs instead of dropping them).
+**Edge class:** closed (code review found the bug, fix verified with tests).
