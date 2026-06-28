@@ -156,8 +156,17 @@ concerns. The algorithm determines what sources you pull from; the styleguide
 determines how you weight and center them. But they are the same thing viewed
 from different angles. The algorithm is the styleguide's sourcing strategy made
 explicit. The styleguide is the algorithm's editorial worldview made explicit.
-In practice they may be one texture or two — but they are facets of a single
-editorial stance, not independent configuration.
+
+"One texture or two" is a false choice — that's transclusion. The editorial
+stance is a texture that transcludes sub-textures, each addressing a facet:
+who to center, what to cover, how to source, what to ignore, how to write.
+Those sub-textures can themselves transclude others. There is no fixed
+granularity. The structure is a graph, not a choice between monolith and split.
+The autopaper transcludes its editorial stance, which transcludes its sourcing
+policy, which transcludes its entity preferences, which transcludes its
+language register. Each node is a texture. Each edge is a transclusion. The
+agent pipeline follows the graph and pulls whatever it finds into generation
+context.
 
 ### Faithful Transclusion
 
