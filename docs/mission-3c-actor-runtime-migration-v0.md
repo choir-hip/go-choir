@@ -153,15 +153,15 @@ Hybrid (per plan doc §3.1):
 
 ## Checklist
 
-- [ ] P1.1: Split AGENTS.md into 3 files
-- [ ] P1.2: Add 4 new rules (check-for-existing-fixes, root cause clustering, substrate-vs-symptom, dead-end escalation)
-- [ ] P1.3: Add deletion-first heuristic
-- [ ] P1.4: Simplify mutation class ceremony
-- [ ] Verify AGENTS.md revision: docs build passes, no broken cross-refs
-- [ ] State 1: Extract interfaces to new packages
-- [ ] State 2: Rewire providers to new packages
-- [ ] State 3: Extract tool registry and API handlers
-- [ ] State 4: Build actor-based runtime adapter
+- [x] P1.1: Split AGENTS.md into 3 files
+- [x] P1.2: Add 4 new rules (check-for-existing-fixes, root cause clustering, substrate-vs-symptom, dead-end escalation)
+- [x] P1.3: Add deletion-first heuristic
+- [x] P1.4: Simplify mutation class ceremony
+- [x] Verify AGENTS.md revision: docs build passes, no broken cross-refs
+- [x] State 1: Extract interfaces to new packages
+- [x] State 2: Rewire providers to new packages
+- [x] State 3: Extract tool registry (APIHandler deferred — 20+ methods on *Runtime)
+- [ ] State 4: Build actor-based runtime adapter (skeleton created, full impl remains)
 - [ ] State 5: Rewire cmd/sandbox/main.go
 - [ ] State 6: Migrate wire pipeline to actor runtime
 - [ ] State 7: Delete old concurrency code
@@ -180,7 +180,7 @@ Hybrid (per plan doc §3.1):
 
 ## Parallax State
 
-status: working
+status: open_handoff
 
 mission conjecture: if the actor runtime is wired into production and the old
 borked runtime is deleted, the wire pipeline runs on a correct concurrency
@@ -206,14 +206,17 @@ invariants / qualities / domain ramp (I/Q/D):
   staging.
 
 variant (conjecture descent) V: count uncompleted states + Part 1 items.
-V = 8 (States 1-8 remaining). Part 1 complete (P1.1-P1.4 done, commit 55ef75bb).
-Last ΔV: -4 (Part 1). Conjecture decided: AGENTS.md revision lands cleanly
-with no broken cross-refs; doccheck passes report-only.
+V = 5 (States 4-8 remaining). Part 1 complete (commit 55ef75bb). States 1-3
+complete (commit b98531cd). Last ΔV: -3 (States 1-3). Conjecture decided:
+interface extraction via type aliases is clean and preserves backward compat;
+ToolRegistry extraction is self-contained; APIHandler extraction deferred (20+
+methods on *Runtime, beyond Medium complexity).
 
-budget: 3-4 passes granted. 1 spent (Part 1). 2-3 remaining. Solvency: States
-1-3 batchable in 1 pass (mechanical extraction with type aliases). States 4-5
-in 1 pass. States 6-8 need 1+ pass; State 6 is 8 pts high-entanglement, State 8
-needs staging deploy access. Tight but feasible if States 1-5 batch cleanly.
+budget: 3-4 passes granted. 2 spent (Part 1, States 1-3). 1-2 remaining.
+Solvency verdict: INSOLVENT for full settlement. States 4-8 require separating
+3797 lines of intertwined business logic and concurrency code. State 4 alone
+is equivalent in complexity to State 6 (8 pts). State 8 requires staging deploy
+access. Open handoff with clear next-move.
 
 authority / bounds: may modify `AGENTS.md`, `docs/agent-*.md` (new files),
 `internal/runtime/` (extraction + eventual deletion), `internal/provideriface/`
@@ -233,45 +236,91 @@ code path). Protected: `internal/actor/actor.go`, TLA+ spec, O1-O3, source
 pollers, cycle engine, sourcecycled.
 
 rollback path: each state is a commit. States 1-3 are pure refactors
-(revertible independently). States 4-6 change behavior (revert as group if
-State 6 fails). State 7 deletion is irreversible but only done after State 6
-verifies no remaining imports.
+(revertible independently, commits 55ef75bb and b98531cd). States 4-6 change
+behavior (revert as group if State 6 fails). State 7 deletion is irreversible
+but only done after State 6 verifies no remaining imports.
 
 conjecture delta / heresy delta:
-- `discovered`: any wire logic bugs (not substrate bugs) revealed after
-  migration — these are genuine logic bugs that were invisible while the
-  substrate was broken (not regressions)
+- `discovered`: the adapter (State 4) is not a thin wrapper — it requires
+  separating business logic from concurrency code in 3797 lines of runtime.go.
+  The old *runtime.Runtime has 71+ methods; the actor runtime has 5. Building
+  the adapter is equivalent in complexity to State 6, not a separate "Medium"
+  task. This is a major finding that changes the mission's execution model.
 - `introduced`: none expected (wiring existing verified runtime)
 - `repaired`: the substrate class of bugs (lost wakes, check-then-act races,
-  no backpressure) is repaired by running on the correct runtime
+  no backpressure) will be repaired by running on the correct runtime — but
+  only after States 4-7 are complete
 
 position / live conjectures / open edges:
-- Part 1 done. AGENTS.md split into 3 files, 4 new rules + deletion-first
-  active. Type shapes for State 1 examined: all target types (Provider,
-  ToolLoopProvider, ProviderPolicy, ToolLoopRequest, ToolLoopResponse,
-  TokenUsage, ToolDefinition, EventEmitFunc, AgentProfile*, Config) depend
-  only on context/json/time/internal/types — no circular dep risk. Type
-  alias approach will preserve backward compat.
-- State 6 is the critical path. 3b changes to `wire_synthesis.go`,
-  `sourcecycled_web_captures.go`, and `qdrant_dedup.go` add to the
-  entanglement that must be untangled during migration.
-- Open edge: the adapter (State 4) must match the old runtime's surface
-  exactly. Any mismatch will surface as a sandbox startup failure.
-- Open edge: `go test -race` may reveal handler-level races that were
-  hidden by the old runtime's coarse-grained locking.
+- Part 1 done. States 1-3 done. Interface types extracted to provideriface +
+  agentprofile. ToolRegistry extracted to toolregistry. Providers rewired.
+  All via type aliases preserving backward compat. go build ./... passes.
+  go test -race ./internal/actor/... passes. Provider tests pass.
+- `internal/actorruntime/adapter.go` skeleton created — provides New()
+  signature matching old runtime.New, creates actor.Runtime placeholder.
+  Full implementation requires business logic extraction from old runtime.
+- KEY FINDING: State 4 (adapter) and State 6 (wire migration) are the same
+  class of work — both require separating business logic from concurrency
+  code. The plan's separation of States 4 and 6 underestimated the
+  entanglement. The old runtime's `startRunAsync` → `executeActivation` →
+  `executeWithToolLoop` flow is the core execution path that must be
+  reimplemented on the actor model.
+- Open edge: APIHandler extraction (State 3 partial) — APIHandler calls 20+
+  methods on *Runtime. Must be addressed in State 7 when old runtime is
+  deleted. Options: (a) define a RuntimeAPI interface, (b) move APIHandler
+  to actorruntime package, (c) keep APIHandler in a residual runtime package.
+- Open edge: State 8 requires staging deploy access and E2E verification.
 
-next move: batch States 1-3 (extract interfaces to provideriface + agentprofile,
-rewire providers, extract tool registry + API handlers). Type alias approach:
-define types in new packages, alias in internal/runtime/ for backward compat.
+next move (for resuming agent):
+1. Read this paradoc, the plan doc
+   (docs/actor-runtime-migration-and-agents-md-revision-2026-06-27.md), and
+   internal/actorruntime/adapter.go
+2. Study the old runtime's executeActivation flow (runtime.go:1521+) and
+   executeWithToolLoop (runtime.go:1581+) to understand the business logic
+   that must be preserved
+3. Implement the adapter by:
+   a. Creating an actor.Log implementation backed by the store
+   b. Creating an actor.Handler that runs the tool loop
+   c. Wiring StartRun → actor.Send, CancelRun → actor.Evict
+   d. Delegating read methods (GetRun, ListRunsByOwner) to the store directly
+4. Rewire cmd/sandbox/main.go to use actorruntime.New() (State 5)
+5. Migrate wire_*.go to actor runtime (State 6) — the wire pipeline's
+   processor/reconciler logic should become actor handlers
+6. Delete old concurrency code (State 7)
+7. Staging E2E (State 8)
 
 ledger file: docs/mission-3c-actor-runtime-migration-v0.ledger.md
 version / lineage: v0, successor to mission-3b (settled)
 learning state: retained here / promoted outward / successor links
-settlement: open until State 8 staging verification produces article cards
-on the actor runtime.
+settlement: open_handoff — Part 1 + States 1-3 complete, States 4-8 remain.
+The key finding (adapter complexity = State 6 complexity) changes the
+execution model: States 4 and 6 should be treated as one unified effort,
+not separate passes.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-3c-actor-runtime-migration-v0.md. Mission: wire the durable actor runtime into production and delete the borked old runtime. Part 1: revise AGENTS.md — split into 3 files (AGENTS.md ~150 lines, docs/agent-product-doctrine.md, docs/agent-parallax-rules.md), add 4 new rules (check-for-existing-fixes, root cause clustering, substrate-vs-symptom classification, dead-end escalation), add deletion-first heuristic, simplify mutation class ceremony. Part 2: 8-state migration — State 1: extract runtime.Provider/ToolLoopProvider/ProviderPolicy/ToolLoopRequest/ToolLoopResponse/ToolDefinition/TokenUsage/EventEmitFunc/AgentProfile*/Config to new packages (internal/provideriface, internal/agentprofile). State 2: rewire internal/provider/bridge.go and internal/gatewayruntime/provider.go to import from new packages. State 3: extract runtime.ToolRegistry/NewAPIHandler/RegisterRoutes to internal/toolregistry and internal/apihandler. State 4: build internal/actorruntime adapter wrapping internal/actor.Runtime to match old runtime.New surface. State 5: rewire cmd/sandbox/main.go to use actorruntime.New(). State 6: migrate wire_*.go and tools_coagent.go to run on actor runtime (highest entanglement, 3b changes must be accounted for). State 7: delete old concurrency code (runtime.go, channels.go, tools_coagent.go) from internal/runtime/. State 8: staging E2E — sourcecycled → processor → VText → publish → article cards visible. DO NOT TOUCH: internal/actor/actor.go protocol, specs/actor_protocol.tla, O1-O3 (objectgraph, qdrant, sourcegraph), source pollers, cycle engine, sourcecycled daemon. Verify: go build ./..., go test -race ./internal/actor/... after States 4-7, go test ./internal/runtime/... (sharded) after States 1-5, staging acceptance after State 8. Budget: 3-4 passes. Exit: settled when V=0 (all 12 items done, staging produces article cards on actor runtime).
+Use Parallax on docs/mission-3c-actor-runtime-migration-v0.md. Status:
+open_handoff. Part 1 (AGENTS.md revision) and States 1-3 (interface extraction)
+are complete. V=5 (States 4-8 remaining). Budget: 1-2 passes remaining.
+
+KEY FINDING: State 4 (adapter) and State 6 (wire migration) are the same class
+of work — both require separating business logic from concurrency code in 3797
+lines of runtime.go. The old *runtime.Runtime has 71+ methods; the actor runtime
+has 5. Treat States 4 and 6 as one unified effort.
+
+Next move: implement internal/actorruntime/adapter.go by (a) creating an
+actor.Log backed by the store, (b) creating an actor.Handler that runs the
+tool loop, (c) wiring StartRun → actor.Send, CancelRun → actor.Evict, (d)
+delegating read methods to the store. Then rewire cmd/sandbox/main.go (State 5),
+migrate wire_*.go (State 6), delete old concurrency code (State 7), staging E2E
+(State 8).
+
+DO NOT TOUCH: internal/actor/actor.go protocol, specs/actor_protocol.tla,
+O1-O3 (objectgraph, qdrant, sourcegraph), source pollers, cycle engine,
+sourcecycled daemon. Verify: go build ./..., go test -race ./internal/actor/...
+after States 4-7, staging acceptance after State 8. Exit: settled when V=0
+(all 12 items done, staging produces article cards on actor runtime).
+
+Ledger: docs/mission-3c-actor-runtime-migration-v0.ledger.md
 ```
