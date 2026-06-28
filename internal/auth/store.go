@@ -1,10 +1,17 @@
 package auth
 
 import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -71,6 +78,21 @@ CREATE TABLE IF NOT EXISTS desktop_exchange_codes (
 	expires_at  DATETIME NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_desktop_exchange_expires_at ON desktop_exchange_codes(expires_at);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+	id           TEXT PRIMARY KEY,
+	user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	key_hash     TEXT    NOT NULL,
+	label        TEXT    NOT NULL,
+	scopes       TEXT    NOT NULL DEFAULT '[]',
+	created_at   DATETIME NOT NULL,
+	expires_at   DATETIME,
+	last_used_at DATETIME,
+	revoked_at   DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_expires_at ON api_keys(expires_at);
 `
 
 // schemaMigrations contains DDL statements that add columns to existing tables
@@ -609,4 +631,190 @@ func (s *Store) CleanExpiredDesktopExchangeCodes() (int64, error) {
 		return 0, fmt.Errorf("clean expired desktop exchange codes: %w", err)
 	}
 	return res.RowsAffected()
+}
+
+// --- API Keys ---
+
+// APIKey represents a row in the api_keys table. The secret (choir_sk_...) is
+// only returned once at creation time and is never stored; only the SHA-256
+// hash (key_hash) is persisted.
+type APIKey struct {
+	ID         string
+	UserID     string
+	Label      string
+	Scopes     []string
+	CreatedAt  time.Time
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
+// APIKeyPrefix is the prefix for all API key secrets.
+const APIKeyPrefix = "choir_sk_"
+
+// generateAPIKeySecret generates a new opaque API key secret of the form
+// choir_sk_<32 bytes base64url>. It returns the raw secret (returned once to
+// the caller) and its SHA-256 hex hash (stored in the database).
+func generateAPIKeySecret() (secret, keyHash string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", fmt.Errorf("generate api key secret: %w", err)
+	}
+	secret = APIKeyPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	h := sha256.Sum256([]byte(secret))
+	keyHash = fmt.Sprintf("%x", h)
+	return secret, keyHash, nil
+}
+
+// CreateAPIKey generates a new API key for the given user, stores only the
+// SHA-256 hash of the secret, and returns the public key ID and the raw secret.
+// The secret is only returned once at creation time and is never stored in
+// plaintext.
+func (s *Store) CreateAPIKey(ctx context.Context, userID, label string, scopes []string, expiresAt *time.Time) (id, secret string, err error) {
+	if userID == "" {
+		return "", "", errors.New("create api key: user_id is required")
+	}
+	if label == "" {
+		return "", "", errors.New("create api key: label is required")
+	}
+
+	secret, keyHash, err := generateAPIKeySecret()
+	if err != nil {
+		return "", "", err
+	}
+
+	// Ensure scopes is a non-nil slice so json.Marshal produces "[]" not "null".
+	if scopes == nil {
+		scopes = []string{}
+	}
+	scopesJSON, err := json.Marshal(scopes)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal scopes: %w", err)
+	}
+
+	id = "ak_" + uuid.NewString()
+	now := time.Now().UTC()
+
+	_, err = s.db.ExecContext(ctx,
+		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		id, userID, keyHash, label, string(scopesJSON), now, expiresAt,
+	)
+	if err != nil {
+		return "", "", fmt.Errorf("create api key: %w", err)
+	}
+
+	return id, secret, nil
+}
+
+// GetAPIKeyByHash looks up an API key by its SHA-256 hash. It excludes revoked
+// keys (revoked_at IS NOT NULL) and returns sql.ErrNoRows if no active key
+// matches. The caller is responsible for checking expiry.
+func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
+	var (
+		ak         APIKey
+		scopesJSON string
+		expiresAt  sql.NullTime
+		lastUsedAt sql.NullTime
+		revokedAt  sql.NullTime
+	)
+	err := s.db.QueryRowContext(ctx,
+		"SELECT id, user_id, label, scopes, created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+		keyHash,
+	).Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(scopesJSON), &ak.Scopes); err != nil {
+		return nil, fmt.Errorf("parse api key scopes: %w", err)
+	}
+	if expiresAt.Valid {
+		ak.ExpiresAt = &expiresAt.Time
+	}
+	if lastUsedAt.Valid {
+		ak.LastUsedAt = &lastUsedAt.Time
+	}
+	if revokedAt.Valid {
+		ak.RevokedAt = &revokedAt.Time
+	}
+
+	return &ak, nil
+}
+
+// ListAPIKeys returns all API keys for the given user, ordered by created_at
+// descending. Revoked keys are included (with revoked_at set) so the user can
+// see their full key history. Secrets are never returned.
+func (s *Store) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT id, user_id, label, scopes, created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var keys []APIKey
+	for rows.Next() {
+		var (
+			ak         APIKey
+			scopesJSON string
+			expiresAt  sql.NullTime
+			lastUsedAt sql.NullTime
+			revokedAt  sql.NullTime
+		)
+		if err := rows.Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(scopesJSON), &ak.Scopes); err != nil {
+			return nil, fmt.Errorf("parse api key scopes: %w", err)
+		}
+		if expiresAt.Valid {
+			ak.ExpiresAt = &expiresAt.Time
+		}
+		if lastUsedAt.Valid {
+			ak.LastUsedAt = &lastUsedAt.Time
+		}
+		if revokedAt.Valid {
+			ak.RevokedAt = &revokedAt.Time
+		}
+		keys = append(keys, ak)
+	}
+	return keys, rows.Err()
+}
+
+// RevokeAPIKey soft-deletes an API key by setting revoked_at to now. It only
+// revokes keys belonging to the given user (ownership check) and returns
+// sql.ErrNoRows if no matching active key is found.
+func (s *Store) RevokeAPIKey(ctx context.Context, userID, keyID string) error {
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE api_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
+		now, keyID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("revoke api key: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("revoke api key: rows affected: %w", err)
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// TouchAPIKeyLastUsed updates the last_used_at timestamp for the given key ID.
+// This is called on each successful API key validation. Errors are non-fatal
+// (the caller may choose to ignore them).
+func (s *Store) TouchAPIKeyLastUsed(ctx context.Context, keyID string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE api_keys SET last_used_at = ? WHERE id = ?",
+		time.Now().UTC(), keyID,
+	)
+	if err != nil {
+		return fmt.Errorf("touch api key last_used: %w", err)
+	}
+	return nil
 }

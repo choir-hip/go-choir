@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -4162,5 +4163,369 @@ func TestDuplicateRegistrationNoChallengeCreated(t *testing.T) {
 	}
 	if challengeCount != 0 {
 		t.Errorf("challenge count: got %d, want 0 (no challenge for duplicate)", challengeCount)
+	}
+}
+
+// --- API Key Handler Tests ---
+
+// issueTestAccessJWTForHandler creates a signed Ed25519 access JWT for the
+// given user ID, suitable for use as the choir_access cookie value in handler
+// tests.
+func issueTestAccessJWTForHandler(priv ed25519.PrivateKey, userID string) string {
+	claims := jwt.MapClaims{
+		"sub":   userID,
+		"email": "test@example.com",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(5 * time.Minute).Unix(),
+		"scope": "access",
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	signed, err := token.SignedString(priv)
+	if err != nil {
+		panic(fmt.Sprintf("sign test JWT: %v", err))
+	}
+	return signed
+}
+
+// authedAPIKeyReq creates an authenticated request with the choir_access cookie
+// set for the given user.
+func authedAPIKeyReq(method, path string, body io.Reader, priv ed25519.PrivateKey, userID string) *http.Request {
+	req := httptest.NewRequest(method, path, body)
+	req.AddCookie(&http.Cookie{
+		Name:  AccessTokenCookieName,
+		Value: issueTestAccessJWTForHandler(priv, userID),
+	})
+	return req
+}
+
+func TestCreateAPIKeyRejectsUnauthenticated(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+
+	body := `{"label":"test","scopes":["read:base"]}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestCreateAPIKeyRejectsInvalidJWT(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+
+	body := `{"label":"test","scopes":["read:base"]}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body))
+	req.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: "bogus-token"})
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestCreateAPIKeyRejectsNonPost(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-method-user", "akmethod@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	req := authedAPIKeyReq(http.MethodGet, "/auth/api-keys", nil, priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestCreateAPIKeyRejectsEmptyLabel(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-nolabel-user", "aknolabel@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	body := `{"label":"","scopes":["read:base"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d; body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestCreateAPIKeyRejectsInvalidScope(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-badscope-user", "akbadscope@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	body := `{"label":"test","scopes":["bogus:scope"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d; body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestCreateAPIKeyReturnsSecretOnce(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-create-user", "akcreate@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	body := `{"label":"Desktop sync","scopes":["read:base","write:base"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var resp createAPIKeyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.ID == "" {
+		t.Error("id should be non-empty")
+	}
+	if resp.Label != "Desktop sync" {
+		t.Errorf("label: got %q, want %q", resp.Label, "Desktop sync")
+	}
+	if len(resp.Scopes) != 2 {
+		t.Fatalf("scopes: got %v, want 2", resp.Scopes)
+	}
+	if !strings.HasPrefix(resp.Secret, APIKeyPrefix) {
+		t.Errorf("secret: got %q, want prefix %q", resp.Secret, APIKeyPrefix)
+	}
+
+	// Verify the secret is not stored in plaintext — only the hash.
+	var hashCount int
+	err = h.store.DB().QueryRow(
+		"SELECT COUNT(*) FROM api_keys WHERE key_hash = ?", hashAPIKeySecret(resp.Secret),
+	).Scan(&hashCount)
+	if err != nil {
+		t.Fatalf("query hash: %v", err)
+	}
+	if hashCount != 1 {
+		t.Errorf("expected 1 row with matching hash, got %d", hashCount)
+	}
+
+	// Verify the raw secret is not stored anywhere.
+	var secretInDB int
+	err = h.store.DB().QueryRow(
+		"SELECT COUNT(*) FROM api_keys WHERE key_hash = ?", resp.Secret,
+	).Scan(&secretInDB)
+	if err != nil {
+		t.Fatalf("query secret: %v", err)
+	}
+	if secretInDB != 0 {
+		t.Error("raw secret should not be stored as the hash")
+	}
+}
+
+func TestListAPIKeysReturnsKeysWithoutSecret(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-list-user", "aklist@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	// Create two keys.
+	for _, label := range []string{"key-one", "key-two"} {
+		body := fmt.Sprintf(`{"label":%q,"scopes":["read:base"]}`, label)
+		req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+		rec := httptest.NewRecorder()
+		h.HandleCreateAPIKey(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create key %q: got %d, body: %s", label, rec.Code, rec.Body.String())
+		}
+	}
+
+	// List keys.
+	req := authedAPIKeyReq(http.MethodGet, "/auth/api-keys", nil, priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleListAPIKeys(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp listAPIKeysResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Keys) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(resp.Keys))
+	}
+
+	// Verify no secret field in any key.
+	bodyStr := rec.Body.String()
+	if strings.Contains(bodyStr, "secret") {
+		t.Errorf("list response should not contain secret: %s", bodyStr)
+	}
+}
+
+func TestListAPIKeysRejectsUnauthenticated(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/api-keys", nil)
+	rec := httptest.NewRecorder()
+	h.HandleListAPIKeys(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRevokeAPIKeySoftDeletes(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-revoke-user", "akrevoke@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	// Create a key.
+	body := `{"label":"to-revoke","scopes":["read:base"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create key: got %d, body: %s", rec.Code, rec.Body.String())
+	}
+	var created createAPIKeyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Revoke it.
+	delReq := authedAPIKeyReq(http.MethodDelete, "/auth/api-keys/"+created.ID, nil, priv, user.ID)
+	delRec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(delRec, delReq)
+
+	if delRec.Code != http.StatusNoContent {
+		t.Errorf("status: got %d, want %d", delRec.Code, http.StatusNoContent)
+	}
+
+	// Verify the key is revoked in the store (still listed but with revoked_at).
+	listReq := authedAPIKeyReq(http.MethodGet, "/auth/api-keys", nil, priv, user.ID)
+	listRec := httptest.NewRecorder()
+	h.HandleListAPIKeys(listRec, listReq)
+
+	var listResp listAPIKeysResponse
+	if err := json.NewDecoder(listRec.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	var found bool
+	for _, k := range listResp.Keys {
+		if k.ID == created.ID {
+			found = true
+			if k.RevokedAt == nil {
+				t.Error("revoked_at should be set after revoke")
+			}
+		}
+	}
+	if !found {
+		t.Error("revoked key should still appear in list")
+	}
+}
+
+func TestHandleRevokeAPIKeyRejectsNonOwner(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	owner, err := h.store.CreateUser("apikey-owner", "akowner@example.com")
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	other, err := h.store.CreateUser("apikey-other", "akother@example.com")
+	if err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	// Owner creates a key.
+	body := `{"label":"owner-key","scopes":["read:base"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, owner.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create key: got %d", rec.Code)
+	}
+	var created createAPIKeyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Other user tries to revoke.
+	delReq := authedAPIKeyReq(http.MethodDelete, "/auth/api-keys/"+created.ID, nil, priv, other.ID)
+	delRec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(delRec, delReq)
+
+	if delRec.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d (non-owner revoke)", delRec.Code, http.StatusNotFound)
+	}
+}
+
+func TestRevokeAPIKeyRejectsUnauthenticated(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/ak_123", nil)
+	rec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleCreateAPIKeyWithExpiry(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-expiry-user", "akexpiry@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	exp := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"label":"expiring","scopes":["admin"],"expires_at":%q}`, exp)
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var resp createAPIKeyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.ExpiresAt == nil {
+		t.Fatal("expires_at should be set")
+	}
+}
+
+func TestCreateAPIKeyRejectsPastExpiry(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("apikey-past-user", "akpast@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	exp := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"label":"past","scopes":["admin"],"expires_at":%q}`, exp)
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d; body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }

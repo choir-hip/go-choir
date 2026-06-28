@@ -46,6 +46,12 @@ type Config struct {
 	// MaildURL is the internal mail service URL. The proxy uses it for
 	// authenticated mailbox APIs and proxy-owned mail source handoff.
 	MaildURL string
+
+	// AuthDBPath is the filesystem path to the auth SQLite database. When
+	// set, the proxy opens the auth store and can validate API keys (Bearer
+	// tokens) as a fallback to cookie-based JWT auth. When empty, API key
+	// auth is disabled and only cookie auth is used.
+	AuthDBPath string
 }
 
 const (
@@ -85,6 +91,7 @@ func LoadConfig() (*Config, error) {
 		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
 		PlatformdURL:      envOr("PROXY_PLATFORMD_URL", DefaultPlatformdURL),
 		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
+		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
 	}
 
 	if err := cfg.validate(); err != nil {
