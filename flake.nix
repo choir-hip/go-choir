@@ -276,7 +276,7 @@
         gateway = mkGoService {
           pname = "gateway";
           subPackage = "cmd/gateway";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-VUW7NBzR+8n4MphMKpzTNy4E4BgbQHzRiE0PhEFX6zk=";
           internalDirs = [
             "internal/agentprofile"
             "internal/buildinfo"
@@ -327,7 +327,7 @@
         sourcecycled = mkGoService {
           pname = "sourcecycled";
           subPackage = "cmd/sourcecycled";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-VUW7NBzR+8n4MphMKpzTNy4E4BgbQHzRiE0PhEFX6zk=";
           internalDirs = [
             "internal/agentprofile"
             "internal/buildinfo"
@@ -365,7 +365,7 @@
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-VUW7NBzR+8n4MphMKpzTNy4E4BgbQHzRiE0PhEFX6zk=";
           internalDirs = [
             "internal/actor"
             "internal/actorruntime"
