@@ -218,7 +218,7 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-j+hA1nduZyYxUDXJYjZjjkkZBf43SEwbE/ltHNCtq8M=";
           internalDirs = [
             "internal/auth"
             "internal/server"
