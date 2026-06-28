@@ -866,6 +866,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()
@@ -1027,6 +1028,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	bus2 := events.NewEventBus()
 	provider2 := NewStubProvider(50 * time.Millisecond)
 	rt2 := New(cfg, s2, bus2, provider2)
+	setTestDispatch(rt2, s2)
 
 	t.Cleanup(func() {
 		rt2.Stop()
@@ -1101,6 +1103,7 @@ func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 	}
 	provider := NewStubProvider(50 * time.Millisecond)
 	rt := New(cfg, s2, bus, provider)
+	setTestDispatch(rt, s2)
 
 	t.Cleanup(func() {
 		rt.Stop()
@@ -1167,6 +1170,7 @@ func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
 	}
 
 	rt := New(Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), NewStubProvider(0))
+	setTestDispatch(rt, s)
 	rt.passivateInterruptedActivations(ctx)
 
 	for _, state := range states {
@@ -1439,6 +1443,7 @@ func testRuntimeWithBridge(t *testing.T, bridge Provider) (*Runtime, *store.Stor
 	}
 
 	rt := New(cfg, s, bus, bridge)
+	setTestDispatch(rt, s)
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s.Close()

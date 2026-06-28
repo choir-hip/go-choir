@@ -2748,40 +2748,6 @@ func TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn(t *tes
 	}
 }
 
-func TestRuntimeAgentSignalWakesParkWaiter(t *testing.T) {
-	rt := New(Config{SandboxID: "sandbox-test"}, nil, nil, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	var readyFlag int32
-	done := make(chan struct {
-		ok  bool
-		err error
-	}, 1)
-	go func() {
-		ok, err := rt.waitForAgentSignal(ctx, "user-alice", "texture:doc-signal", time.Second, func() (bool, error) {
-			return atomic.LoadInt32(&readyFlag) == 1, nil
-		})
-		done <- struct {
-			ok  bool
-			err error
-		}{ok: ok, err: err}
-	}()
-	time.Sleep(20 * time.Millisecond)
-	atomic.StoreInt32(&readyFlag, 1)
-	rt.notifyAgentSignal("user-alice", "texture:doc-signal")
-	select {
-	case result := <-done:
-		if result.err != nil {
-			t.Fatalf("wait signal: %v", result.err)
-		}
-		if !result.ok {
-			t.Fatal("wait signal returned ready=false after notification")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for signal")
-	}
-}
-
 func TestRunToolLoopContinuesAfterMaxTokensPartialText(t *testing.T) {
 	provider := newMockToolLoopProvider(
 		&ToolLoopResponse{
@@ -3191,6 +3157,7 @@ func testRuntimeWithProviderAndRegistry(t *testing.T, provider Provider, registr
 	}
 
 	rt := New(cfg, s, bus, provider, WithToolRegistry(registry))
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()

@@ -53,6 +53,7 @@ func testConcurrentSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {
@@ -722,6 +723,7 @@ func TestConcurrentWorkers_TasksActuallyRunConcurrently(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()
@@ -872,6 +874,7 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()
@@ -1141,6 +1144,7 @@ func TestConcurrentWorkers_SpawnWithSlowProvider_HighConcurrency(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()
@@ -1278,6 +1282,7 @@ func TestConcurrentWorkers_MixedPassFailWorkers(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()

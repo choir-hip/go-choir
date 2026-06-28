@@ -876,7 +876,7 @@ func newCancelAgentTool(rt *Runtime) Tool {
 				targetFromCallerSlot = true
 			}
 			if !targetFromCallerSlot {
-				if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+				if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 					return "", fmt.Errorf("lookup resident agent run: %w", err)
 				} else if found {
 					target = resident

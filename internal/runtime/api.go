@@ -1567,7 +1567,7 @@ func (h *APIHandler) HandleTopology(w http.ResponseWriter, r *http.Request) {
 		SandboxID:       h.rt.cfg.SandboxID,
 		ResearcherCount: h.rt.cfg.ResearcherCount,
 		RunningRuns:     h.rt.RunningCount(),
-		ChannelCount:    len(h.rt.ChannelManager().ListChannels()),
+		ChannelCount:    0, // in-memory channels deleted; actor mailbox replaces them
 		RuntimeHealth:   string(h.rt.HealthState()),
 		ActiveProvider:  h.rt.provider.ProviderName(),
 	})

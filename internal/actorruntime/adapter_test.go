@@ -77,9 +77,9 @@ func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 	t.Fatalf("run %s did not complete within 5s (state=%s)", rec.RunID, rec.State)
 }
 
-// TestAdapterActorBridgeActive verifies that the Adapter wires the actor
-// bridge on the embedded runtime.
-func TestAdapterActorBridgeActive(t *testing.T) {
+// TestAdapterDispatchActorActive verifies that the Adapter wires the
+// dispatch function on the embedded runtime.
+func TestAdapterDispatchActorActive(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	promptRoot := filepath.Join(dir, "prompts")
@@ -104,8 +104,8 @@ func TestAdapterActorBridgeActive(t *testing.T) {
 		adapter.cleanupLog()
 	})
 
-	if !adapter.Runtime.ActorBridgeActive() {
-		t.Fatal("ActorBridgeActive() = false, want true (adapter should wire the bridge)")
+	if !adapter.Runtime.DispatchActorActive() {
+		t.Fatal("DispatchActorActive() = false, want true (adapter should wire dispatch)")
 	}
 	if adapter.ActorRuntime() == nil {
 		t.Fatal("ActorRuntime() = nil, want non-nil")

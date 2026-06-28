@@ -89,6 +89,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 
 	rt.Stop()
 	rt2 := New(rt.cfg, s, events.NewEventBus(), NewStubProvider(0))
+	setTestDispatch(rt2, s)
 	t.Cleanup(rt2.Stop)
 	run, err := rt2.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
 	if err != nil {
@@ -317,6 +318,7 @@ func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), NewStubProvider(2*time.Second))
+	setTestDispatch(rt, s2)
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s2.Close()
@@ -481,6 +483,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), NewStubProvider(2*time.Second))
+	setTestDispatch(rt, s2)
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s2.Close()
@@ -663,6 +666,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), NewStubProvider(2*time.Second))
+	setTestDispatch(rt, s2)
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s2.Close()
@@ -873,6 +877,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), NewStubProvider(2*time.Second))
+	setTestDispatch(rt, s2)
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s2.Close()
@@ -1206,6 +1211,7 @@ func runM3RestartStartProcess(t *testing.T) {
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+	setTestDispatch(rt, s)
 
 	seedM3RestartBacklog(t, ctx, s)
 	now := time.Now().UTC()
@@ -1233,7 +1239,7 @@ func runM3RestartStartProcess(t *testing.T) {
 	if err := s.CreateRun(ctx, *interrupted); err != nil {
 		t.Fatalf("create interrupted activation: %v", err)
 	}
-	rt.startRunAsync(interrupted)
+	rt.activate(interrupted)
 	waitForStoredRunState(t, s, interrupted.RunID, types.RunRunning, 10*time.Second)
 	if err := writeJSONFile(readyPath, m3RestartProof{InterruptedRunID: interrupted.RunID}); err != nil {
 		t.Fatalf("write ready marker: %v", err)
@@ -1257,6 +1263,7 @@ func runM3SpawnRestartStartProcess(t *testing.T) {
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+	setTestDispatch(rt, s)
 
 	seedSpawnedChildParent(t, ctx, s, m3SpawnRestartOwnerID, m3SpawnRestartTrajectory, m3SpawnRestartParentID, m3SpawnRestartChannelID)
 	child, err := rt.StartCoagentRun(ctx, m3SpawnRestartParentID, "research restart-resilient spawned work", m3SpawnRestartOwnerID, map[string]any{
@@ -1309,6 +1316,7 @@ func runM3SpawnRestartRecoverProcess(t *testing.T) {
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+	setTestDispatch(rt, s)
 	defer rt.Stop()
 
 	rt.Start(ctx)
@@ -1402,6 +1410,7 @@ func runM3RestartRecoverProcess(t *testing.T) {
 		ProviderTimeout:     5 * time.Minute,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(5*time.Minute))
+	setTestDispatch(rt, s)
 	defer rt.Stop()
 
 	rt.Start(ctx)
@@ -1625,7 +1634,7 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start resident run: %v", err)
 	}
-	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		t.Fatalf("resident lookup: %v", err)
 	} else if !found || resident.RunID != active.RunID {
 		t.Fatalf("resident lookup = (%+v, %v), want %s", resident, found, active.RunID)

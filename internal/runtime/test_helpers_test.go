@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -84,6 +85,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(0))
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {
@@ -185,6 +187,8 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(0))
 
+	setTestDispatch(rt, s)
+
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s.Close()
@@ -193,6 +197,40 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	})
 
 	return rt, s
+}
+
+// setTestDispatch sets a test dispatch function that executes runs
+// asynchronously. Production uses the actor runtime (actorruntime.New);
+// tests use this minimal dispatch that calls ExecuteActivationSync in a
+// goroutine. This is test infrastructure, not production code.
+func setTestDispatch(rt *Runtime, s *store.Store) {
+	rt.SetDispatchActor(func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+		switch kind {
+		case "initial_dispatch":
+			runID := strings.TrimSpace(content)
+			if runID == "" {
+				return nil
+			}
+			go func() {
+				rec, err := s.GetRun(ctx, runID)
+				if err != nil {
+					return
+				}
+				rt.ExecuteActivationSync(ctx, &rec)
+			}()
+		case "coagent_result":
+			// Synchronous: the boot sweep needs the reconcile to
+			// complete before the test checks the result.
+			agent, err := s.GetAgent(ctx, toAgentID)
+			if err != nil {
+				return nil // agent not found — nothing to wake
+			}
+			if _, err := rt.ReconcileCoagentWake(ctx, agent.OwnerID, toAgentID); err != nil {
+				log.Printf("test dispatch: reconcile coagent wake for %s: %v", toAgentID, err)
+			}
+		}
+		return nil
+	})
 }
 
 func testPromptRuntime(t *testing.T) *Runtime {

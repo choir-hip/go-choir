@@ -207,29 +207,11 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			client := vmctl.NewClient(rt.cfg.VmctlURL)
 			requestedMachineClass := strings.TrimSpace(in.MachineClass)
 			machineClass := normalizeRuntimeWorkerMachineClass(requestedMachineClass)
-			cacheKey := workerVMRequestCacheKey(ownerID, desktopID, parentAgentID, parentRunID, machineClass)
 			forceFreshWorker := false
-			if !in.AllowParallel && cacheKey != "" {
-				rt.workerRequestMu.Lock()
-				if cached := strings.TrimSpace(rt.workerRequests[cacheKey]); cached != "" {
-					invalidated, err := rt.workerVMRequestInvalidatedByRunEvents(ctx, parentRunID, cached)
-					if err != nil {
-						rt.workerRequestMu.Unlock()
-						return "", err
-					}
-					if !invalidated {
-						rt.workerRequestMu.Unlock()
-						return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
-					}
-					delete(rt.workerRequests, cacheKey)
-					forceFreshWorker = true
-				}
+			if !in.AllowParallel {
 				if cached, ok, invalidated, err := rt.findExistingWorkerVMRequest(ctx, parentRunID, machineClass); err != nil {
-					rt.workerRequestMu.Unlock()
 					return "", err
 				} else if ok {
-					rt.workerRequests[cacheKey] = cached
-					rt.workerRequestMu.Unlock()
 					return markToolResultDeduped(cached, "super_run_already_requested_worker_vm")
 				} else if invalidated {
 					forceFreshWorker = true
@@ -244,7 +226,6 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 					AllowParallel: forceFreshWorker,
 				})
 				if err != nil {
-					rt.workerRequestMu.Unlock()
 					return "", err
 				}
 				result := workerVMRequestResult(handle)
@@ -256,10 +237,6 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 					result["machine_class"] = handle.MachineClass
 				}
 				out, err := toolResultJSON(result)
-				if err == nil {
-					rt.workerRequests[cacheKey] = out
-				}
-				rt.workerRequestMu.Unlock()
 				return out, err
 			}
 			handle, err := client.RequestWorker(vmctl.WorkerRequest{
@@ -617,30 +594,8 @@ func (rt *Runtime) invalidateWorkerVMRequestCacheForDelegateResult(ctx context.C
 	if rt == nil || !shouldInvalidateWorkerVMRequestFromDelegateResult(result) {
 		return result
 	}
-	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
-	desktopID := strings.TrimSpace(stringFromToolContext(ctx, toolCtxDesktopID))
-	if desktopID == "" {
-		desktopID = types.PrimaryDesktopID
-	}
-	parentAgentID := stringFromToolContext(ctx, toolCtxAgentID)
-	parentRunID := stringFromToolContext(ctx, toolCtxRunID)
-	cachePrefix := workerVMRequestCachePrefix(ownerID, desktopID, parentAgentID, parentRunID)
-	if cachePrefix == "" {
-		return result
-	}
-	rt.workerRequestMu.Lock()
-	invalidated := false
-	for key := range rt.workerRequests {
-		if strings.HasPrefix(key, cachePrefix) {
-			delete(rt.workerRequests, key)
-			invalidated = true
-		}
-	}
-	if invalidated {
-		result["worker_request_cache_invalidated"] = true
-		result["worker_request_cache_invalidation_reason"] = "worker_runtime_unreachable"
-	}
-	rt.workerRequestMu.Unlock()
+	// In-memory worker request cache deleted (workerRequestMu eliminated).
+	// Dedup is store-backed via findExistingWorkerVMRequest.
 	return result
 }
 

@@ -26,12 +26,16 @@ func TestHandleInternalRuntimeRefreshRequiresInternalCaller(t *testing.T) {
 func TestHandleInternalRuntimeRefreshSchedulesServiceRestart(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "restart-called")
+	runtimeRestartCommandMu.Lock()
 	previous := runtimeRestartCommand
 	runtimeRestartCommand = func(ctx context.Context) *exec.Cmd {
 		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf called > \"$1\"", "sh", marker)
 	}
+	runtimeRestartCommandMu.Unlock()
 	t.Cleanup(func() {
+		runtimeRestartCommandMu.Lock()
 		runtimeRestartCommand = previous
+		runtimeRestartCommandMu.Unlock()
 	})
 
 	handler := &APIHandler{}

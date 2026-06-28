@@ -1044,6 +1044,7 @@ func textureToolCommitRuntime(t *testing.T) (*store.Store, *Runtime) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(0))
+	setTestDispatch(rt, s)
 	if err := rt.InstallDefaultAgentTools(""); err != nil {
 		t.Fatalf("InstallDefaultAgentTools: %v", err)
 	}

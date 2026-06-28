@@ -58,6 +58,7 @@ func failureIsolationSetup(t *testing.T, provider Provider) (*Runtime, *APIHandl
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {
@@ -1026,6 +1027,7 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 	}
 	provider := NewStubProvider(50 * time.Millisecond)
 	rt2 := New(cfg, s2, bus2, provider)
+	setTestDispatch(rt2, s2)
 	rt2.Start(context.Background())
 
 	t.Cleanup(func() {
@@ -1108,6 +1110,7 @@ func TestRecovery_RecoveredTasksEmitPassivatedEvents(t *testing.T) {
 	}
 	provider := NewStubProvider(50 * time.Millisecond)
 	rt2 := New(cfg, s2, bus2, provider)
+	setTestDispatch(rt2, s2)
 
 	// Subscribe before starting to capture recovery events.
 	ch := bus2.SubscribeWithBuffer(128)
@@ -1182,6 +1185,7 @@ func TestRecovery_RuntimeAcceptsNewTasksAfterRecovery(t *testing.T) {
 		SupervisionInterval: 1 * time.Hour,
 	}
 	rt2 := New(cfg, s2, bus2, fastProvider)
+	setTestDispatch(rt2, s2)
 	rt2.Start(context.Background())
 
 	t.Cleanup(func() {

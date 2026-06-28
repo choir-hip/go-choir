@@ -5,9 +5,11 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"sync"
 	"time"
 )
 
+var runtimeRestartCommandMu sync.Mutex
 var runtimeRestartCommand = func(ctx context.Context) *exec.Cmd {
 	return exec.CommandContext(ctx, "systemctl", "restart", "--no-block", "go-choir-sandbox.service")
 }
@@ -41,7 +43,10 @@ func (h *APIHandler) HandleInternalRuntimeRefresh(w http.ResponseWriter, r *http
 		time.Sleep(100 * time.Millisecond)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := runtimeRestartCommand(ctx).Run(); err != nil {
+		runtimeRestartCommandMu.Lock()
+		cmd := runtimeRestartCommand(ctx)
+		runtimeRestartCommandMu.Unlock()
+		if err := cmd.Run(); err != nil {
 			log.Printf("runtime: schedule sandbox service restart: %v", err)
 		}
 	}()

@@ -91,6 +91,7 @@ func testStreamingRuntime(t *testing.T, provider Provider) (*Runtime, *store.Sto
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 	t.Cleanup(func() {
 		rt.Stop()
 		_ = s.Close()

@@ -12,61 +12,22 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-type pendingTextureWake struct {
-	ownerID string
-	docID   string
-	timer   textureWakeTimer
-}
-
-func textureWakeKey(ownerID, docID string) string {
-	return strings.TrimSpace(ownerID) + "::" + strings.TrimSpace(docID)
-}
-
+// scheduleTextureWorkerWake sends an actor message to the Texture agent for
+// the given doc. The actor mailbox replaces the old debounce timer system —
+// the handler processes the message when the actor activates, and the tool
+// loop's park-resume handles coalescing naturally.
 func (rt *Runtime) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {
 		return
 	}
-	key := textureWakeKey(ownerID, docID)
-	debounce := rt.cfg.TextureWakeDebounce
-	rt.textureWakeMu.Lock()
-	// Leading + max-interval coalescing. If a wake is already scheduled for this
-	// doc, let it fire on its existing schedule instead of pushing it back. A
-	// resetting-trailing timer (Stop + reschedule on every packet) defers the
-	// first revision until worker updates go quiet, which is exactly the
-	// slow-first-paint / batch-everything-into-one-revision failure recorded in
-	// docs/mission-texture-product-loop-recovery-v0.md. Keeping the in-flight
-	// timer means the first packet schedules a prompt flush and later packets in
-	// the same window ride that flush, giving a steady revision cadence instead
-	// of one terminal revision after all research completes.
-	if pending, ok := rt.textureWakePending[key]; ok && pending.timer != nil {
-		rt.textureWakeMu.Unlock()
+	textureAgentID := currentTextureAgentID(docID)
+	if rt.dispatchActor == nil {
 		return
 	}
-	timer := rt.textureWakeAfter(debounce, func() {
-		rt.flushTextureWorkerWake(key)
-	})
-	rt.textureWakePending[key] = pendingTextureWake{
-		ownerID: ownerID,
-		docID:   docID,
-		timer:   timer,
-	}
-	rt.textureWakeMu.Unlock()
-}
-
-func (rt *Runtime) flushTextureWorkerWake(key string) {
-	rt.textureWakeMu.Lock()
-	pending, ok := rt.textureWakePending[key]
-	if ok {
-		delete(rt.textureWakePending, key)
-	}
-	rt.textureWakeMu.Unlock()
-	if !ok {
-		return
-	}
-	if _, err := rt.reconcileTextureAgentWake(context.Background(), pending.ownerID, pending.docID); err != nil {
-		log.Printf("runtime: reconcile texture wake failed for doc %s: %v", pending.docID, err)
+	if err := rt.dispatchActor(context.Background(), textureAgentID, "coagent_result", "", "", ""); err != nil {
+		log.Printf("runtime: schedule texture wake for doc %s: %v", docID, err)
 	}
 }
 
@@ -101,7 +62,7 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 		return nil, nil
 	}
 	textureAgentID := currentTextureAgentID(docID)
-	if _, found, err := rt.residentRunByAgent(ctx, ownerID, textureAgentID); err != nil {
+	if _, found, err := rt.activeRunByAgent(ctx, ownerID, textureAgentID); err != nil {
 		return nil, fmt.Errorf("check resident Texture loop: %w", err)
 	} else if found {
 		return nil, nil

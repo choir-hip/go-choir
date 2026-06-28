@@ -3600,6 +3600,7 @@ func TestHandleRunStatusFailedOutcome(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {
@@ -3812,6 +3813,7 @@ func TestHandleRunStatusByIDFailedOutcome(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {
@@ -4528,6 +4530,7 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, failProvider)
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {
@@ -4657,6 +4660,7 @@ func TestHandleHealthReportsBridgeProvider(t *testing.T) {
 	}
 
 	rt := New(cfg, s, bus, bridge)
+	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
 	t.Cleanup(func() {

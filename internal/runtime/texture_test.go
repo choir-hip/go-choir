@@ -60,6 +60,7 @@ func textureAPISetup(t *testing.T) (*APIHandler, *store.Store) {
 	bus := events.NewEventBus()
 	provider := NewStubProvider(2 * time.Second)
 	rt := New(cfg, s, bus, provider)
+	setTestDispatch(rt, s)
 
 	return NewAPIHandler(rt), s
 }
@@ -1567,6 +1568,7 @@ func textureAPISetupWithProviderAndOptions(t *testing.T, provider Provider, inst
 
 	bus := events.NewEventBus()
 	rt := New(cfg, s, bus, provider, opts...)
+	setTestDispatch(rt, s)
 	if installTools {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -5421,6 +5423,7 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 		SupervisionInterval: 5 * time.Second,
 		TextureWakeDebounce: 50 * time.Millisecond,
 	}, s2, events.NewEventBus(), provider)
+	setTestDispatch(rt, s2)
 	if err := rt.InstallDefaultAgentTools(""); err != nil {
 		t.Fatalf("install default agent tools after restart: %v", err)
 	}

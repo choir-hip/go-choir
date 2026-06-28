@@ -767,6 +767,7 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), provider)
+	setTestDispatch(rt, s)
 	t.Cleanup(func() {
 		provider.releaseAll()
 		rt.Stop()
@@ -6673,6 +6674,7 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
 	}, s, events.NewEventBus(), NewStubProvider(10*time.Millisecond))
+	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {
 		rt.Stop()

@@ -34,33 +34,22 @@ type Runtime struct {
 	provider    Provider
 	promptStore *PromptStore
 
-	mu      sync.Mutex
-	health  types.RuntimeHealthState
-	running map[string]context.CancelFunc // loop_id → cancel function
-	// residentAgents is the volatile actor-residency index for this process.
-	// Durable run rows remain evidence; warm/cold decisions use this map.
-	residentAgents map[string]string // owner_id + NUL + agent_id → loop_id
-	agentWaiters   map[string]map[chan struct{}]struct{}
+	runningMu sync.Mutex
+	running   map[string]context.CancelFunc // loop_id → cancel function
+	healthMu  sync.Mutex
+	health    types.RuntimeHealthState
 
 	wg           sync.WaitGroup
 	toolRegistry *ToolRegistry
 	toolProfiles map[string]*ToolRegistry
-	channelMgr   *ChannelManager
 
-	textureWakeMu      sync.Mutex
-	textureWakePending map[string]pendingTextureWake
-	textureWakeAfter   func(time.Duration, func()) textureWakeTimer
+	textureWakeAfter func(time.Duration, func()) textureWakeTimer
 
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
 	wirePublishTimer      textureWakeTimer
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
-	superRequestMu        sync.Mutex
-	coagentSpawnMu        sync.Mutex
-	workerRequestMu       sync.Mutex
-	workerRequests        map[string]string
-	conductorRouteMu      sync.Mutex
 	browserOpMu           sync.Mutex
 	browserOps            map[string]*sync.Mutex
 	browserCDPMu          sync.Mutex
@@ -74,27 +63,15 @@ type Runtime struct {
 	qdrantPipeline        *qdrant.Pipeline
 	qdrantPipelineInitErr error
 
-	// actorBridge, when set, routes run activations and coagent wakes
-	// through the actor runtime. nil = legacy goroutine/channel mode.
-	actorBridge ActorBridge
+	// dispatchActor is the function hook that the actor runtime adapter
+	// sets. When the business logic needs to start a run or wake an agent,
+	// it calls this function. If nil, activate() panics — there is no
+	// fallback path. The actor runtime is the only execution substrate.
+	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 }
 
 type textureWakeTimer interface {
 	Stop() bool
-}
-
-// ActorBridge is the interface that the actor runtime adapter implements to
-// receive activation/wake signals from the business-logic runtime. When set
-// (via SetActorBridge), the runtime routes run activations and coagent wakes
-// through the actor runtime instead of the legacy goroutine/channel path.
-// This is the seam that lets internal/runtime call business logic directly
-// while the actor runtime owns the concurrency substrate.
-type ActorBridge interface {
-	// Send delivers an actor update to the target agent. The kind is
-	// "initial_dispatch" (start a run), "coagent_result" (resume a parked
-	// run with a coagent update), or "cancel". content carries the run ID
-	// (for initial_dispatch) or the coagent update ID (for coagent_result).
-	Send(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 }
 
 // New creates a new Runtime with the given config, store, event bus, and
@@ -110,13 +87,8 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 		provider:           provider,
 		health:             types.HealthReady,
 		running:            make(map[string]context.CancelFunc),
-		residentAgents:     make(map[string]string),
-		agentWaiters:       make(map[string]map[chan struct{}]struct{}),
-		channelMgr:         NewChannelManager(),
 		promptStore:        NewPromptStore(cfg.PromptRoot),
-		textureWakePending: make(map[string]pendingTextureWake),
 		textureWakeAfter:   func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
-		workerRequests:     make(map[string]string),
 		browserOps:         make(map[string]*sync.Mutex),
 		browserCDP:         make(map[string]*browserCDPSession),
 		modelPolicies:      make(map[string]ModelPolicy),
@@ -127,38 +99,35 @@ func New(cfg Config, s *store.Store, bus *events.EventBus, provider Provider, op
 	return rt
 }
 
-// SetActorBridge wires the actor runtime as the concurrency substrate. When
-// set, run activations go through actor.Send (which triggers the actor
-// handler to call ExecuteActivationSync) instead of startRunAsync, and
-// coagent wakes go through actor.Send instead of channel signals.
-func (rt *Runtime) SetActorBridge(b ActorBridge) {
-	rt.mu.Lock()
-	rt.actorBridge = b
-	rt.mu.Unlock()
+// SetDispatchActor sets the function hook that dispatches actor messages.
+// The actor runtime adapter calls this during construction. When set,
+// activate() sends actor messages through this function. If not set,
+// activate() panics — there is no fallback path.
+func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
+	rt.dispatchActor = fn
 }
 
-// ActorBridgeActive reports whether the actor runtime is wired as the
-// concurrency substrate.
-func (rt *Runtime) ActorBridgeActive() bool {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	return rt.actorBridge != nil
+// DispatchActorActive reports whether the actor dispatch hook is set.
+func (rt *Runtime) DispatchActorActive() bool {
+	return rt.dispatchActor != nil
 }
 
-// activate starts execution of a run. When the actor bridge is set, it sends
-// an "initial_dispatch" actor message to the run's agent; the actor handler
-// will call ExecuteActivationSync in the actor goroutine. Otherwise it falls
-// back to the legacy startRunAsync (spawns a goroutine).
+// activate starts execution of a run by dispatching an "initial_dispatch"
+// actor message to the run's agent. The actor handler will call
+// ExecuteActivationSync in the actor goroutine. There is no fallback —
+// if dispatchActor is nil, activate panics.
 func (rt *Runtime) activate(rec *types.RunRecord) {
-	rt.mu.Lock()
-	bridge := rt.actorBridge
-	rt.mu.Unlock()
-	if bridge != nil && strings.TrimSpace(rec.AgentID) != "" {
-		trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
-		_ = bridge.Send(context.Background(), rec.AgentID, "initial_dispatch", rec.RunID, trajectoryID, "")
-		return
+	if rt.dispatchActor == nil {
+		panic("runtime: activate called without dispatchActor set — actor runtime is required")
 	}
-	rt.startRunAsync(rec)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if agentID == "" {
+		panic("runtime: activate called with empty AgentID")
+	}
+	trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
+	if err := rt.dispatchActor(context.Background(), agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
+		log.Printf("runtime: activate dispatch for run %s: %v", rec.RunID, err)
+	}
 }
 
 // ExecuteActivationSync runs executeActivation in the caller's goroutine. It
@@ -173,7 +142,9 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 	runRec := *rec
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	rt.registerRunActivation(rec, cancel)
+	rt.runningMu.Lock()
+	rt.running[rec.RunID] = cancel
+	rt.runningMu.Unlock()
 	rt.wg.Add(1)
 	rt.executeActivation(runCtx, &runRec)
 	*rec = runRec
@@ -394,14 +365,6 @@ func WithToolRegistry(registry *ToolRegistry) RuntimeOption {
 	}
 }
 
-// WithChannelManager sets a custom channel manager for the runtime.
-// If not called, a default empty channel manager is created.
-func WithChannelManager(mgr *ChannelManager) RuntimeOption {
-	return func(rt *Runtime) {
-		rt.channelMgr = mgr
-	}
-}
-
 func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
 	return func(rt *Runtime) {
 		if after != nil {
@@ -451,12 +414,12 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 func (rt *Runtime) Stop() {
 	rt.closeAllBrowserCDPSessions()
 	rt.closeObjectGraph()
-	rt.mu.Lock()
+	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
-		rt.removeRunningLocked(runID)
+		delete(rt.running, runID)
 	}
-	rt.mu.Unlock()
+	rt.runningMu.Unlock()
 
 	rt.wg.Wait()
 	log.Printf("runtime: stopped")
@@ -548,18 +511,6 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		log.Printf("runtime: submitted %s", wireLifecycleSummary(rec))
 	}
 	return rec, nil
-}
-
-func (rt *Runtime) startRunAsync(rec *types.RunRecord) {
-	// Begin execution in a goroutine. Use a copy of the record to avoid
-	// racing with the caller (the returned rec must retain RunPending).
-	runRec := *rec
-
-	runCtx, cancel := context.WithCancel(context.Background())
-	rt.registerRunActivation(rec, cancel)
-
-	rt.wg.Add(1)
-	go rt.executeActivation(runCtx, &runRec)
 }
 
 // completePromptBarDecisionRun records a server-owned conductor decision that
@@ -685,8 +636,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		if coagentProfile == AgentProfileCoSuper && slot == "" {
 			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
 		}
-		rt.coagentSpawnMu.Lock()
-		defer rt.coagentSpawnMu.Unlock()
 		if slot != "" && coagentProfile == AgentProfileCoSuper {
 			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
@@ -709,9 +658,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	}
 
 	now := time.Now().UTC()
-	if err := rt.channelMgr.ensureCoagentChannels(requesterRunID, runID); err != nil {
-		return nil, err
-	}
 	metadata = ensureDesktopID(metadata, &requesterRec, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = inheritTextureRequesterMetadata(metadata, &requesterRec)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &requesterRec)
@@ -798,26 +744,10 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		return nil, releaseCoSuperSlotClaim(err)
 	}
 
-	// Begin execution in a goroutine. Use a copy of the record to avoid
-	// racing with the caller (the returned rec must retain RunPending).
-	runRec := *rec
-
-	runCtx, cancel := context.WithCancel(context.Background())
-	rt.registerRunActivation(rec, cancel)
-
-	rt.wg.Add(1)
-	go rt.executeActivation(runCtx, &runRec)
+	// Dispatch via actor runtime (or legacy goroutine if no bridge).
+	rt.activate(rec)
 
 	log.Printf("runtime: started coagent run %s requested by %s (owner=%s)", rec.RunID, requesterRunID, ownerID)
-
-	if _, err := rt.channelMgr.Channel(requesterRec.ChannelID); err != nil {
-		log.Printf("runtime: ensure requester channel %s: %v", requesterRec.ChannelID, err)
-	}
-	if rec.ChannelID != "" && rec.ChannelID != requesterRec.ChannelID {
-		if _, err := rt.channelMgr.Channel(rec.ChannelID); err != nil {
-			log.Printf("runtime: ensure coagent channel %s: %v", rec.ChannelID, err)
-		}
-	}
 
 	return rec, nil
 }
@@ -1109,13 +1039,13 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 	}
 
 	// Cancel the run's execution context.
-	rt.mu.Lock()
+	rt.runningMu.Lock()
 	cancel, ok := rt.running[runID]
 	if ok {
 		cancel()
-		rt.removeRunningLocked(runID)
+		delete(rt.running, runID)
 	}
-	rt.mu.Unlock()
+	rt.runningMu.Unlock()
 
 	if !ok {
 		// Run was not running in this process (e.g., pending or recovered).
@@ -1138,7 +1068,7 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 
 // CancelAgent cancels the most recent non-terminal run owned by the given agent.
 func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) error {
-	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return fmt.Errorf("lookup resident agent run: %w", err)
 	} else if found {
 		return rt.CancelRun(ctx, resident.RunID, ownerID)
@@ -1228,8 +1158,8 @@ func (rt *Runtime) ListRunsByOwner(ctx context.Context, ownerID string, limit in
 
 // HealthState returns the current runtime health state.
 func (rt *Runtime) HealthState() types.RuntimeHealthState {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+	rt.healthMu.Lock()
+	defer rt.healthMu.Unlock()
 	return rt.health
 }
 
@@ -1237,10 +1167,10 @@ func (rt *Runtime) HealthState() types.RuntimeHealthState {
 // a health or degraded event to make the transition externally visible
 // (VAL-RUNTIME-001, VAL-RUNTIME-009).
 func (rt *Runtime) SetHealth(state types.RuntimeHealthState) {
-	rt.mu.Lock()
+	rt.healthMu.Lock()
 	prev := rt.health
 	rt.health = state
-	rt.mu.Unlock()
+	rt.healthMu.Unlock()
 
 	if prev == state {
 		return
@@ -1289,8 +1219,8 @@ func (rt *Runtime) Store() *store.Store {
 
 // RunningCount returns the number of currently executing runs.
 func (rt *Runtime) RunningCount() int {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+	rt.runningMu.Lock()
+	defer rt.runningMu.Unlock()
 	return len(rt.running)
 }
 
@@ -1344,11 +1274,6 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 // ToolRegistry returns the runtime's tool registry, or nil if none is configured.
 func (rt *Runtime) ToolRegistry() *ToolRegistry {
 	return rt.toolRegistry
-}
-
-// ChannelManager returns the runtime's channel manager.
-func (rt *Runtime) ChannelManager() *ChannelManager {
-	return rt.channelMgr
 }
 
 // passivateInterruptedActivations releases runs that were active in a previous
@@ -1497,7 +1422,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 	if ownerID == "" || agentID == "" || trajectoryID == "" {
 		return nil, nil
 	}
-	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident assigned work-item actor: %w", err)
 	} else if found {
 		return &resident, nil
@@ -1591,7 +1516,9 @@ func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
 func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) {
 	defer rt.wg.Done()
 	defer func() {
-		rt.removeRunning(rec.RunID)
+		rt.runningMu.Lock()
+		delete(rt.running, rec.RunID)
+		rt.runningMu.Unlock()
 		if rec.State == types.RunCompleted && !metadataBoolValue(rec.Metadata, "texture_revision_failed_no_write") {
 			rt.reconcileCompletedTextureRun(rec)
 		}
@@ -2281,8 +2208,6 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 	if rec == nil || agentProfileForRun(rec) != AgentProfileConductor {
 		return conductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
 	}
-	rt.conductorRouteMu.Lock()
-	defer rt.conductorRouteMu.Unlock()
 
 	if current, err := rt.store.GetRun(ctx, rec.RunID); err == nil {
 		mergeStoredConductorRoute(rec, current)
@@ -3713,155 +3638,30 @@ func (rt *Runtime) persistEvent(ctx context.Context, rec *types.RunRecord, kind 
 	return rt.store.AppendEvent(ctx, evRec)
 }
 
-func agentResidencyKey(ownerID, agentID string) string {
-	return strings.TrimSpace(ownerID) + "\x00" + strings.TrimSpace(agentID)
-}
-
-func (rt *Runtime) notifyAgentSignal(ownerID, agentID string) {
-	if rt == nil {
-		return
-	}
-	key := agentResidencyKey(ownerID, agentID)
-	if key == "\x00" {
-		return
-	}
-	rt.mu.Lock()
-	waiters := rt.agentWaiters[key]
-	delete(rt.agentWaiters, key)
-	rt.mu.Unlock()
-	for waiter := range waiters {
-		close(waiter)
-	}
-}
-
-func (rt *Runtime) waitForAgentSignal(ctx context.Context, ownerID, agentID string, maxWait time.Duration, ready func() (bool, error)) (bool, error) {
-	if rt == nil {
-		return false, nil
-	}
-	if ready != nil {
-		ok, err := ready()
-		if err != nil || ok {
-			return ok, err
-		}
-	}
-	key := agentResidencyKey(ownerID, agentID)
-	if key == "\x00" {
-		return false, nil
-	}
-	waiter := make(chan struct{})
-	rt.mu.Lock()
-	if rt.agentWaiters == nil {
-		rt.agentWaiters = make(map[string]map[chan struct{}]struct{})
-	}
-	if rt.agentWaiters[key] == nil {
-		rt.agentWaiters[key] = map[chan struct{}]struct{}{}
-	}
-	rt.agentWaiters[key][waiter] = struct{}{}
-	rt.mu.Unlock()
-	removeWaiter := func() {
-		rt.mu.Lock()
-		if waiters := rt.agentWaiters[key]; waiters != nil {
-			delete(waiters, waiter)
-			if len(waiters) == 0 {
-				delete(rt.agentWaiters, key)
-			}
-		}
-		rt.mu.Unlock()
-	}
-	if ready != nil {
-		ok, err := ready()
-		if err != nil || ok {
-			removeWaiter()
-			return ok, err
-		}
-	}
-	if maxWait <= 0 {
-		select {
-		case <-ctx.Done():
-			removeWaiter()
-			return false, ctx.Err()
-		case <-waiter:
-		}
-	} else {
-		timer := time.NewTimer(maxWait)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			removeWaiter()
-			return false, ctx.Err()
-		case <-timer.C:
-			removeWaiter()
-			return false, nil
-		case <-waiter:
-		}
-	}
-	if ready != nil {
-		return ready()
-	}
-	return true, nil
-}
-
-func (rt *Runtime) registerRunActivation(rec *types.RunRecord, cancel context.CancelFunc) {
-	if rt == nil || rec == nil {
-		return
-	}
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.running[rec.RunID] = cancel
-	if key := agentResidencyKey(rec.OwnerID, rec.AgentID); key != "\x00" {
-		rt.residentAgents[key] = rec.RunID
-	}
-}
-
-func (rt *Runtime) removeRunningLocked(runID string) {
-	delete(rt.running, runID)
-	for key, residentRunID := range rt.residentAgents {
-		if residentRunID == runID {
-			delete(rt.residentAgents, key)
-			if waiters := rt.agentWaiters[key]; len(waiters) > 0 {
-				for waiter := range waiters {
-					close(waiter)
-				}
-				delete(rt.agentWaiters, key)
-			}
-		}
-	}
-}
-
-func (rt *Runtime) residentRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, bool, error) {
+// activeRunByAgent is the store-backed replacement for the old in-memory
+// residentRunByAgent. It queries the store for the latest executing run
+// (pending or running, NOT blocked) for an agent. Blocked runs are excluded
+// because they are not actively executing and should be replaced, not reused.
+func (rt *Runtime) activeRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, bool, error) {
 	if rt == nil || rt.store == nil {
 		return types.RunRecord{}, false, nil
 	}
-	key := agentResidencyKey(ownerID, agentID)
-	if key == "\x00" {
+	ownerID = strings.TrimSpace(ownerID)
+	agentID = strings.TrimSpace(agentID)
+	if ownerID == "" || agentID == "" {
 		return types.RunRecord{}, false, nil
 	}
-	rt.mu.Lock()
-	runID := rt.residentAgents[key]
-	rt.mu.Unlock()
-	if strings.TrimSpace(runID) == "" {
-		return types.RunRecord{}, false, nil
-	}
-	rec, err := rt.store.GetRun(ctx, runID)
+	rec, err := rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			rt.removeRunning(runID)
 			return types.RunRecord{}, false, nil
 		}
 		return types.RunRecord{}, false, err
 	}
-	if strings.TrimSpace(rec.OwnerID) != strings.TrimSpace(ownerID) ||
-		strings.TrimSpace(rec.AgentID) != strings.TrimSpace(agentID) ||
-		!rec.State.Active() {
-		rt.removeRunning(runID)
+	// Exclude blocked runs — they are not actively executing and should
+	// be replaced by a fresh activation, not reused.
+	if rec.State == types.RunBlocked {
 		return types.RunRecord{}, false, nil
 	}
 	return rec, true, nil
-}
-
-// removeRunning removes a run from the running and resident-agent maps.
-func (rt *Runtime) removeRunning(runID string) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.removeRunningLocked(runID)
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -29,7 +28,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		agentID = persistentSuperAgentID(ownerID)
 	}
 	var blockedActive *types.RunRecord
-	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
 		return &resident, nil
@@ -345,7 +344,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	if isTextureAgentID(agentID) {
 		return rt.reconcileTextureAgentWake(ctx, ownerID, docIDFromTextureAgentID(agentID))
 	}
-	if resident, found, err := rt.residentRunByAgent(ctx, ownerID, agentID); err != nil {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident coagent run: %w", err)
 	} else if found {
 		return &resident, nil
@@ -594,8 +593,6 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 	if ownerID == "" || agentID == "" {
 		return nil
 	}
-	maxWait := time.Duration(metadataIntValue(rec.Metadata, "actor_park_idle_seconds")) * time.Second
-	actorMode := rt.ActorBridgeActive()
 	return func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error) {
 		ready := func() (bool, error) {
 			updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
@@ -620,28 +617,18 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 			}
 			return false, nil
 		}
-		// In actor mode, do not block on a channel: if there are no
+		// Actor mode: do not block on a channel. If there are no
 		// pending updates, passivate immediately. The actor will
 		// re-activate when a new coagent update arrives via actor.Send,
 		// and the handler will resume the tool loop from the park point.
-		if actorMode {
-			ok, err := ready()
-			if err != nil {
-				return ToolLoopParkResult{}, err
-			}
-			if ok {
-				return ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
-			}
-			return ToolLoopParkResult{Continue: false, Passivate: true, Reason: "idle_actor_passivate"}, nil
-		}
-		ok, err := rt.waitForAgentSignal(ctx, ownerID, agentID, maxWait, ready)
+		ok, err := ready()
 		if err != nil {
 			return ToolLoopParkResult{}, err
 		}
 		if ok {
 			return ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
 		}
-		return ToolLoopParkResult{Continue: false, Passivate: agentProfileForRun(rec) == AgentProfileTexture, Reason: "idle_deadline"}, nil
+		return ToolLoopParkResult{Continue: false, Passivate: true, Reason: "idle_actor_passivate"}, nil
 	}
 }
 
@@ -751,24 +738,14 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if target == "" {
 		return
 	}
-	// Actor mode: the coagent update is already in the store mailbox. Send
-	// an actor message to wake the target agent — the handler will resume
-	// the parked run (or start a new one) and inject the update via
+	// The coagent update is already in the store mailbox. Send an actor
+	// message to wake the target agent — the handler will resume the
+	// parked run (or start a new one) and inject the update via
 	// injectUserTurns. No channel signal, no reconcile-new-run.
-	if rt.ActorBridgeActive() {
-		if err := rt.actorBridge.Send(context.Background(), target, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
-			log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
-		}
-		return
+	if rt.dispatchActor == nil {
+		panic("runtime: wakeUpdatedCoagent called without dispatchActor set — actor runtime is required")
 	}
-	rt.notifyAgentSignal(update.OwnerID, target)
-	if target == persistentSuperAgentID(update.OwnerID) {
-		if _, err := rt.reconcilePersistentSuperActor(context.Background(), update.OwnerID, target); err != nil {
-			log.Printf("runtime: wake persistent super for update %s: %v", update.UpdateID, err)
-		}
-		return
-	}
-	if _, err := rt.reconcileUpdatedCoagentActor(context.Background(), update.OwnerID, target); err != nil {
-		log.Printf("runtime: wake coagent for update %s: %v", update.UpdateID, err)
+	if err := rt.dispatchActor(context.Background(), target, "coagent_result", update.UpdateID, update.TrajectoryID, update.AgentID); err != nil {
+		log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
 	}
 }

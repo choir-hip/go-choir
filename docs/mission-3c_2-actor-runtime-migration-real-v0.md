@@ -268,36 +268,120 @@ park for coagent updates and resume with the results.
 **Postcondition:** `cmd/sandbox/main.go` uses `actorruntime.New()`. Runs
 execute inside actor goroutines. No `startRunAsync`. Build passes, tests pass.
 
-### Phase 2: Delete old concurrency (replaces States 6-7)
+### Phase 2: Delete old concurrency — full mutex elimination (replaces States 6-7)
 
-Delete from `internal/runtime/`:
-- `startRunAsync` — replaced by actor activation
-- `notifyAgentSignal` / `waitForAgentSignal` — already deleted in 3c attempt
-- `residentAgents` / `agentWaiters` — already deleted in 3c attempt
-- `channels.go` — the old channel system, replaced by actor mailbox
-- The 15 mutexes that managed concurrency (keep only those for non-actor
-  state like lazy-init guards)
+The `internal/runtime/` package is 101,749 lines across ~100 files. It is
+not a concurrency substrate — it is the entire business logic of the system.
+The concurrency code is ~2,000 lines of that. The rest is tool loops, texture
+revisions, wire pipeline, coagent coordination, browser sessions, run
+lifecycle, HTTP API, content processing, model routing, promotion/rollback,
+and ~50 more categories of business logic.
 
-Move wire pipeline files (`wire_synthesis.go`, `wire_publication.go`,
-`wire_reconciler_debounce.go`, `wire_platform_publish.go`,
-`tools_wire_processor.go`, `tools_coagent.go`) to run as actor handlers or
-business logic called by actor handlers. The wire logic stays — the
-concurrency wrapper around it changes.
+Phase 2 detangles the concurrency substrate from the business logic. The
+business logic stays. The concurrency code is deleted. Every mutex is
+eliminated — not "mostly," not "the business-logic ones can stay." All 15.
 
-**APIHandler decision: move to `internal/actorruntime/`.** The 3c mission
-noted that APIHandler calls 20+ methods on `*runtime.Runtime` and deferred
-its extraction. Phase 2 must resolve this. The APIHandler is a thin HTTP
-layer over runtime methods — move it to `internal/actorruntime/` and rewire
-its method calls to the adapter. This is the cleanest cut: no new interface
-abstraction, no residual package. The adapter owns the methods that APIHandler
-calls. If some methods are pure business logic (no concurrency), they can
-stay in a residual `internal/runtime/` package as free functions or a
-business-logic struct with no mutexes.
+#### The 15 mutexes and their fate
 
-**Postcondition:** `internal/runtime/` contains only business logic (run
-creation, tool loop execution, wire synthesis, texture reconciliation). No
-concurrency management. APIHandler lives in `internal/actorruntime/`.
-`go build ./...` passes, `go test -race ./...` passes.
+**Group A: Concurrency substrate — DELETE (6 mutexes)**
+
+These guard the old concurrency model. The actor runtime replaces them
+entirely. Delete the mutex, the state it guards, and all code that mutates
+that state.
+
+| Mutex | Guards | Why it's substrate |
+|---|---|---|
+| `mu` | `residentAgents`, `agentWaiters`, `actorBridge`, `health`, `running` | `residentAgents` is the volatile actor-residency index. `agentWaiters` is the channel-based wake system (lines 3723-3753). These ARE the old concurrency substrate. |
+| `textureWakeMu` | `textureWakePending` map | Wakes go through `actor.Send` now. |
+| `superRequestMu` | super request state | Super requests are actor messages. |
+| `coagentSpawnMu` | coagent spawn state | Spawning a coagent is `actor.Send` to a new agent. |
+| `workerRequestMu` | `workerRequests` map | Worker requests are actor messages. |
+| `conductorRouteMu` | conductor routing state | Conductor routing is actor message dispatch. |
+
+Also delete: `startRunAsync` (or its inlined body in `activate()` — no
+fallback path), `notifyAgentSignal`, `waitForAgentSignal`,
+`registerRunActivation`, `removeRunning`, `removeRunningLocked`,
+`residentRunByAgent`, `channels.go` (434 lines), `ActorBridge` interface,
+`SetActorBridge`, `ActorBridgeActive`. The actor runtime tracks residency.
+The actor mailbox delivers wakes. There is no fallback to the old path.
+
+**Group B: Lazy init — ELIMINATE by moving to construction time (3 mutexes)**
+
+These guard lazy initialization of shared resources. The resources are known
+at startup. Initialize them in `New()` (or `actorruntime.New()`). No lazy
+init, no mutex.
+
+| Mutex | Guards | Replacement |
+|---|---|---|
+| `objectGraphMu` | `objectGraph`, `objectGraphInitErr` | Init in constructor |
+| `qdrantPipelineMu` | `qdrantPipeline`, `qdrantPipelineInitErr` | Init in constructor |
+| `modelPolicyMu` | `modelPolicies` map | Init in constructor |
+
+**Group C: Shared mutable state — ELIMINATE by converting to actor state (4 mutexes)**
+
+These guard shared mutable state accessed by multiple actor goroutines. In
+the actor model, shared mutable state becomes actor state — one goroutine,
+state in actor memory, access via messages. No mutex.
+
+| Mutex | Guards | Actor model replacement |
+|---|---|---|
+| `wirePublishDebounceMu` | debouncer batch state (doc IDs, revision IDs, timers) | Wire publish debouncer actor: receives "record" messages, tracks batch in actor state, emits "publish batch" when threshold/timer fires |
+| `textureEditMu` | texture edit serialization | Texture is an appagent with its own actor goroutine. Edits go through the Texture actor's mailbox as messages. The actor serializes by definition. |
+| `browserOpMu` | `browserOps` session map | Browser manager actor: owns session map, handles requests via messages |
+| `browserCDPMu` | `browserCDP` session map | Browser manager actor: owns CDP sessions, handles requests via messages |
+
+#### Phase 2 scope: what to do now, what to defer
+
+**Do now (Phase 2):**
+- Delete Group A (6 concurrency-substrate mutexes) + all associated code
+- Eliminate Group B (3 lazy-init mutexes) by moving init to construction
+- Delete `channels.go`, `startRunAsync`/fallback, `ActorBridge` interface
+- Move APIHandler to `internal/actorruntime/`
+- Verify: `go build ./...` passes, `go test -race ./...` passes
+
+This eliminates 9 of 15 mutexes and all of the old concurrency substrate.
+After this, `internal/runtime/` contains business logic + 4 shared-state
+mutexes (Group C). The actor runtime is the execution substrate. No
+fallback path exists.
+
+**Defer to Phase 2.5 (follow-up mission or 3c_2 extension):**
+- Convert wire publish debouncer to an actor (eliminates `wirePublishDebounceMu`)
+- Route texture edits through the Texture actor's mailbox (eliminates `textureEditMu`)
+- Create browser manager actor for session/CDP management (eliminates `browserOpMu`, `browserCDPMu`)
+
+These are real actor design work — each needs a new actor type, message
+protocol, and migration of callers. They're not blocking the substrate
+replacement. They're the next step toward the end state: zero mutexes in
+`internal/runtime/`, all shared state owned by actors.
+
+#### The end state
+
+The end state is: `internal/runtime/` (or whatever the business-logic package
+is renamed to) contains zero mutexes. All shared mutable state is owned by
+actors. The only concurrency primitive in the system is the actor runtime's
+single mutex in `internal/actor/actor.go`. Business logic functions are
+called by actor handlers, operate on actor-owned state or the store, and
+never touch a mutex.
+
+Phase 2 gets us to 4 remaining mutexes (Group C). Phase 2.5 gets us to zero.
+The mission settles at Phase 3 (staging E2E) with 4 mutexes remaining and a
+clear plan for Phase 2.5. Phase 2.5 itself may be a separate mission.
+
+#### APIHandler decision
+
+Move APIHandler to `internal/actorruntime/` and rewire its method calls to
+the adapter. The APIHandler is a thin HTTP layer over runtime methods. No
+new interface abstraction. If some methods are pure business logic (no
+concurrency, no shared state), they stay in `internal/runtime/` as free
+functions or methods on a business-logic struct with no mutexes.
+
+**Postcondition:** `internal/runtime/` contains only business logic. 6
+concurrency-substrate mutexes deleted. 3 lazy-init mutexes eliminated by
+construction-time init. 4 shared-state mutexes remain (Group C, deferred to
+Phase 2.5). `channels.go` deleted. `startRunAsync` deleted (no fallback).
+`ActorBridge` interface deleted. APIHandler lives in
+`internal/actorruntime/`. `go build ./...` passes, `go test -race ./...`
+passes.
 
 ### Phase 3: Staging E2E (State 8)
 
@@ -332,11 +416,16 @@ Push to main, monitor CI, verify staging:
 - [ ] Phase 1: go build ./... passes
 - [ ] Phase 1: go test -race ./internal/actor/... passes
 - [ ] Phase 1: go test ./internal/runtime/... passes (sharded)
-- [ ] Phase 2: Delete startRunAsync, channels.go, old concurrency mutexes
-- [ ] Phase 2: Wire pipeline runs through actor handlers
-- [ ] Phase 2: APIHandler moved to internal/actorruntime/
+- [ ] Phase 2: Delete Group A — 6 concurrency-substrate mutexes + all associated code
+- [ ] Phase 2: Delete startRunAsync fallback in activate() — no legacy path
+- [ ] Phase 2: Delete ActorBridge interface, SetActorBridge, ActorBridgeActive
+- [ ] Phase 2: Delete channels.go (434 lines)
+- [ ] Phase 2: Delete notifyAgentSignal, waitForAgentSignal, registerRunActivation, removeRunning, residentRunByAgent
+- [ ] Phase 2: Eliminate Group B — 3 lazy-init mutexes by moving init to construction
+- [ ] Phase 2: Move APIHandler to internal/actorruntime/
 - [ ] Phase 2: go build ./... passes
 - [ ] Phase 2: go test -race ./... passes
+- [ ] Phase 2: Verify 4 remaining mutexes are only Group C (shared state, deferred to Phase 2.5)
 - [ ] Phase 3: Push to main, monitor CI
 - [ ] Phase 3: Staging E2E — article cards visible
 - [ ] Update this document with evidence
@@ -344,9 +433,12 @@ Push to main, monitor CI, verify staging:
 ## Acceptance
 
 - `internal/actor/` is the execution substrate (not just wake layer)
-- `startRunAsync` is deleted — runs execute inside actor goroutines
+- `startRunAsync` is deleted — no fallback path, no legacy goroutine spawning
 - `channels.go` is deleted
-- Old concurrency mutexes removed (only lazy-init guards remain)
+- `ActorBridge` interface is deleted — handler calls business logic directly
+- Group A: 6 concurrency-substrate mutexes deleted + all associated state/code
+- Group B: 3 lazy-init mutexes eliminated by construction-time init
+- Group C: 4 shared-state mutexes remain, documented for Phase 2.5
 - Park-resume works: tool loop state persists across passivation via memory snapshot
 - APIHandler lives in `internal/actorruntime/`, not `internal/runtime/`
 - `go build ./...` passes
@@ -409,12 +501,21 @@ conjecture delta / heresy delta:
   The conversation history lives in the store (`runMemoryManager`), not in
   process memory. The actor's `memory` parameter only needs a tiny resume
   pointer (`{runID, phase}`). This generalized cleanly to the actor handler.
-- `introduced`: `ActorBridge` interface — the seam between `internal/runtime`
-  and `internal/actorruntime`. Avoids circular imports. The adapter implements
-  it; the runtime calls it for activation and wake.
+- `discovered`: `internal/runtime/` is 101,749 lines across ~100 files. It is
+  the entire business logic of the system, not a concurrency substrate. The
+  concurrency code is ~2,000 lines. Phase 2 detangles the ~2,000 lines of
+  concurrency from the ~100,000 lines of business logic.
+- `discovered`: all 15 mutexes can be eliminated. 6 are concurrency substrate
+  (delete). 3 are lazy init (move to construction). 4 are shared mutable state
+  (convert to actor state — deferred to Phase 2.5). The end state is zero
+  mutexes in `internal/runtime/`, all shared state owned by actors.
+- `introduced`: `ActorBridge` interface — this is `AgentSubstrate` renamed.
+  It is the 3c failure pattern recurring. Phase 2 deletes it. The handler
+  calls business logic directly.
 - `repaired`: the substrate class of bugs (lost wakes, check-then-act races,
   no backpressure, 15 mutexes) is repaired by making the actor runtime the
-  execution substrate (Phase 2 completes this)
+  execution substrate (Phase 2 completes this for 9 of 15 mutexes; Phase 2.5
+  completes the remaining 4)
 
 position / live conjectures / open edges:
 - Phase 1 complete: actor handler is the execution boundary.
@@ -426,13 +527,13 @@ position / live conjectures / open edges:
   `actorruntime.New()`. `go build ./...` + `go test -race ./internal/actor/...`
   + `go test -race ./internal/actorruntime/...` pass. Legacy runtime tests
   still pass (startRunAsync fallback when ActorBridge is nil).
-- Open edge: `startRunAsync` kept as legacy fallback for tests. Phase 2
-  deletes it and fixes tests to use the actor path.
-- Open edge: the 15 mutexes in `*runtime.Runtime` — some guard non-actor
-  state (e.g., `objectGraphMu` for lazy init, `qdrantPipelineMu` for lazy
-  init). These can stay. Others guard concurrency that the actor runtime now
-  manages (e.g., `coagentSpawnMu`, `workerRequestMu`). These must be removed
-  in Phase 2.
+- Open edge: `ActorBridge` interface is `AgentSubstrate` renamed. Phase 2
+  deletes it. Handler calls business logic directly.
+- Open edge: `startRunAsync` kept as legacy fallback in `activate()`. Phase 2
+  deletes the fallback — no legacy path.
+- Open edge: 15 mutexes classified into Groups A/B/C. Phase 2 deletes Group A
+  (6), eliminates Group B (3) via construction-time init, documents Group C
+  (4) for Phase 2.5.
 - Open edge: APIHandler calls 20+ methods on `*runtime.Runtime`. Phase 2
   moves APIHandler to `internal/actorruntime/` and rewires to the adapter.
 - Open edge: `channels.go` (434 lines) still exists. Phase 2 deletes it.
@@ -441,9 +542,12 @@ position / live conjectures / open edges:
   `injectUserTurns`). Not a correctness issue (idempotent), but an
   inefficiency. Phase 2 can optimize.
 
-next move: Phase 2 — delete `startRunAsync`, `channels.go`, old concurrency
-mutexes. Wire pipeline runs through actor handlers. Move APIHandler to
-`internal/actorruntime/`. `go build ./...` + `go test -race ./...` pass.
+next move: Phase 2 — delete Group A (6 concurrency mutexes + associated
+code), eliminate Group B (3 lazy-init mutexes via construction-time init),
+delete `startRunAsync` fallback, delete `ActorBridge` interface, delete
+`channels.go`, move APIHandler to `internal/actorruntime/`. Document Group C
+(4 shared-state mutexes) for Phase 2.5. `go build ./...` + `go test -race
+./...` pass.
 
 ledger file: docs/mission-3c_2-actor-runtime-migration-real-v0.ledger.md
 version / lineage: v0, successor to mission-3c (Part 1 + States 1-3 done,
@@ -489,10 +593,24 @@ polling — updates are delivered instantly via actor.Send.
 
 Phase 1: Actor handler runs executeActivation synchronously with park-resume
 via memory snapshot. Delete startRunAsync. Rewire cmd/sandbox/main.go to
-actorruntime.New(). Build + race tests pass.
-Phase 2: Delete channels.go, old concurrency mutexes. Wire pipeline runs
-through actor handlers. Move APIHandler to internal/actorruntime/. Build +
-race tests pass.
+actorruntime.New(). Build + race tests pass. [DONE — commit 32d809c5]
+Phase 2: Delete old concurrency — full mutex elimination.
+  - Group A (6 mutexes): delete mu, textureWakeMu, superRequestMu,
+    coagentSpawnMu, workerRequestMu, conductorRouteMu + all associated state
+    (residentAgents, agentWaiters, etc.) and code (startRunAsync fallback,
+    notifyAgentSignal, waitForAgentSignal, registerRunActivation, channels.go,
+    ActorBridge interface).
+  - Group B (3 mutexes): eliminate objectGraphMu, qdrantPipelineMu,
+    modelPolicyMu by moving lazy init to construction time.
+  - Group C (4 mutexes): DEFER to Phase 2.5 — wirePublishDebounceMu,
+    textureEditMu, browserOpMu, browserCDPMu. These need actor design
+    (debouncer actor, Texture actor owns edits, browser manager actor).
+    Document for follow-up. Do not rationalize keeping them — document the
+    Phase 2.5 plan.
+  - Move APIHandler to internal/actorruntime/.
+  - Build + race tests pass.
+Phase 2.5 (future): Convert Group C mutexes to actor state. Zero mutexes in
+internal/runtime/. May be a separate mission.
 Phase 3: Push to main, staging E2E — article cards visible.
 
 DO NOT TOUCH: internal/actor/actor.go protocol, specs/actor_protocol.tla,

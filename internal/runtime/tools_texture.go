@@ -455,8 +455,6 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 	requesterAgentID = strings.TrimSpace(requesterAgentID)
 	requesterRunID = strings.TrimSpace(requesterRunID)
 
-	rt.superRequestMu.Lock()
-	defer rt.superRequestMu.Unlock()
 	if existing, ok, err := rt.findExistingSuperExecutionRequest(ctx, ownerID, channelID, superAgent.AgentID, requesterRunID, requesterAgentID); err != nil {
 		return nil, err
 	} else if ok {

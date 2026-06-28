@@ -275,6 +275,7 @@ func textureRealLLMSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, str
 	}
 
 	rt := New(cfg, s, bus, realProvider)
+	setTestDispatch(rt, s)
 	ctx := context.Background()
 	rt.Start(ctx)
 	t.Cleanup(func() { rt.Stop() })

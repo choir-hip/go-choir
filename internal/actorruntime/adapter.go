@@ -43,9 +43,9 @@ type RuntimeOption func(*Adapter)
 // runtime.Runtime. It embeds *runtime.Runtime for business logic access and
 // replaces the concurrency substrate with the actor runtime.
 //
-// The Adapter implements runtime.ActorBridge: when the business logic calls
-// rt.activate(rec) or rt.wakeUpdatedCoagent(...), the Adapter routes those
-// through actor.Send instead of the legacy goroutine/channel path.
+// The Adapter sets a dispatch function on the embedded runtime: when the
+// business logic calls rt.activate(rec) or rt.wakeUpdatedCoagent(...), the
+// dispatch function sends actor messages through actor.Send.
 type Adapter struct {
 	*runtime.Runtime // embedded for business logic (promoted methods)
 
@@ -110,22 +110,20 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		HandlerRetryBackoff: 100 * time.Millisecond,
 	})
 
-	// Wire the adapter as the runtime's ActorBridge. From this point,
-	// rt.activate(rec) sends an actor message (instead of startRunAsync)
-	// and rt.wakeUpdatedCoagent(...) sends an actor message (instead of
-	// notifyAgentSignal + reconcile).
-	rt.SetActorBridge(a)
+	// Wire the dispatch function. From this point, rt.activate(rec)
+	// sends an actor message and rt.wakeUpdatedCoagent(...) sends an
+	// actor message. No fallback path exists.
+	rt.SetDispatchActor(a.dispatch)
 
 	return a
 }
 
-// Send implements runtime.ActorBridge. It delivers an actor update to the
-// target agent. The actor runtime activates the agent if cold, or steers it
-// if warm. The handler will call ExecuteActivationSync in the actor goroutine.
-func (a *Adapter) Send(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+// dispatch is the function hook that the embedded runtime calls to send
+// actor messages. It is set via rt.SetDispatchActor(a.dispatch).
+func (a *Adapter) dispatch(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 	toAgentID = strings.TrimSpace(toAgentID)
 	if toAgentID == "" {
-		return fmt.Errorf("actorruntime: Send: empty toAgentID")
+		return fmt.Errorf("actorruntime: dispatch: empty toAgentID")
 	}
 	u := actor.Update{
 		UpdateID:     uuid.New().String(),
@@ -197,6 +195,3 @@ func (a *Adapter) cleanupLog() {
 		_ = os.Remove(a.logPath)
 	}
 }
-
-// Compile-time assertion that Adapter implements runtime.ActorBridge.
-var _ runtime.ActorBridge = (*Adapter)(nil)
