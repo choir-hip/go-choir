@@ -552,14 +552,18 @@ EOF
       };
 
       # ── Node A host configuration ─────────────────────────────────────
-      # Offsite replica, restore rehearsal target, shadow compute node.
-      # Does NOT serve live traffic. Pulls backups from Node B and runs
-      # restore rehearsal on a daily timer. See
-      # docs/mission-node-a-deployment-restore-rehearsal-v0.md
+      # Full Choir mirror serving choir-ip.com. Imports node-b.nix for the
+      # complete service stack, overrides hostname and Caddy virtualHosts.
       nixosConfigurations.go-choir-a = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          goChoirPackages = goChoirPackages;
+          inherit buildCommit sourceRepoRemote;
+          guestRunner = self.nixosConfigurations.go-choir-sandbox-vm.config.microvm.runner.firecracker;
+        };
         modules = [
           ./nix/node-a-hardware.nix
+          ./nix/node-a-disks.nix
           ./nix/node-a.nix
         ];
       };

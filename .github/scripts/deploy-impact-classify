@@ -126,8 +126,8 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
       continue
       ;;
-    scripts/node-a-*|nix/node-a.nix|nix/node-a-hardware.nix|nix/node-a-rehearsal-report-template.json)
-      add_explanation "$path -> ignored (Node A offsite replica tooling; not deployed to Node B host or guest closures)"
+    scripts/node-a-*|nix/node-a.nix|nix/node-a-hardware.nix|nix/node-a-disks.nix)
+      add_explanation "$path -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
       continue
       ;;
     start-services.sh)
