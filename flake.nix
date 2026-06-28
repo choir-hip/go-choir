@@ -102,7 +102,7 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = pkgs.lib.fakeHash;
+        vendorHash = pkgs.lib.fakeHash; # default, not used by any service directly
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
         ldflags = [
@@ -245,7 +245,7 @@
         maild = mkGoService {
           pname = "maild";
           subPackage = "cmd/maild";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-3Cg5v2dG873OLkjbV2OI3gRQ6M5JSBS4aqNl8RgBWVc=";
           internalDirs = [
             "internal/buildinfo"
             "internal/maild"
@@ -255,7 +255,7 @@
         maildctl = mkGoService {
           pname = "maildctl";
           subPackage = "cmd/maildctl";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-3Cg5v2dG873OLkjbV2OI3gRQ6M5JSBS4aqNl8RgBWVc=";
           internalDirs = [
             "internal/maild"
             "internal/server"
@@ -264,7 +264,7 @@
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-3Cg5v2dG873OLkjbV2OI3gRQ6M5JSBS4aqNl8RgBWVc=";
           internalDirs = [
             "internal/buildinfo"
             "internal/server"
@@ -309,7 +309,7 @@
         platformd = mkGoService {
           pname = "platformd";
           subPackage = "cmd/platformd";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = "sha256-SkFulx4Hco5jk94EQ9np+LCqCyCnOTFNanFlY80TeLE=";
           internalDirs = [
             "internal/buildinfo"
             "internal/markdownstructure"
