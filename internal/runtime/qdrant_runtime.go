@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
 )
 
@@ -10,11 +12,24 @@ import (
 // capture indexing and semantic routing.
 const ProductionQdrantCollection = "wire_captures"
 
+// qdrantBreakerCfg is the circuit breaker configuration for Qdrant and Ollama
+// calls. Repeated failures open the breaker so the semantic-dedup path
+// short-circuits to content-hash dedup instead of stalling on timeouts. This
+// degrades gracefully: ingestion continues, only semantic dedup is skipped
+// (production-readiness checklist: Qdrant/Ollama failure modes).
+var qdrantBreakerCfg = health.BreakerConfig{
+	FailureThreshold:  5,
+	OpenTimeout:       30 * time.Second,
+	HalfOpenMaxProbes: 1,
+}
+
 // QdrantPipeline returns a Qdrant indexing pipeline configured with the
 // OllamaEmbedder pointing at the configured Ollama instance and the Qdrant
 // client pointing at the configured Qdrant instance (node-b by default).
 // The pipeline is initialized lazily so tests and lightweight runtimes that
-// never touch Qdrant do not open a connection.
+// never touch Qdrant do not open a connection. Both the Qdrant client and the
+// Ollama embedder are wrapped with circuit breakers so repeated failures
+// degrade to content-hash dedup without blocking ingestion.
 func (rt *Runtime) QdrantPipeline() *qdrant.Pipeline {
 	if rt == nil {
 		return nil
@@ -27,8 +42,8 @@ func (rt *Runtime) QdrantPipeline() *qdrant.Pipeline {
 	if rt.qdrantPipelineInitErr != nil {
 		return nil
 	}
-	client := qdrant.NewClient(rt.cfg.QdrantURL)
-	embedder := qdrant.NewOllamaEmbedder(rt.cfg.OllamaURL, rt.cfg.OllamaEmbeddingModel)
+	client := qdrant.NewCircuitBreakingAPI(qdrant.NewClient(rt.cfg.QdrantURL), qdrantBreakerCfg)
+	embedder := qdrant.NewCircuitBreakingEmbedder(qdrant.NewOllamaEmbedder(rt.cfg.OllamaURL, rt.cfg.OllamaEmbeddingModel), qdrantBreakerCfg)
 	pipeline := qdrant.NewPipeline(client, embedder)
 	rt.qdrantPipeline = pipeline
 	return pipeline

@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
+	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -163,6 +164,18 @@ func main() {
 	// Register runtime API routes (overrides default /health).
 	apiHandler := runtime.NewAPIHandler(rt.Runtime)
 	runtime.RegisterRoutes(s, apiHandler)
+
+	// Readiness endpoint: probes Qdrant and Ollama, the two external
+	// dependencies of the semantic-dedup path. Both degrade gracefully via
+	// circuit breakers, so an unhealthy dependency reports "degraded" (200)
+	// rather than "unhealthy" (503) — the sandbox can still serve requests
+	// with content-hash dedup only. The result is cached for 5s to keep the
+	// endpoint lightweight.
+	readyAgg := health.NewAggregator("sandbox", 5*time.Second,
+		health.HTTPChecker{NameStr: "qdrant", URL: strings.TrimRight(rtCfg.QdrantURL, "/") + "/healthz", Timeout: 2 * time.Second},
+		health.HTTPChecker{NameStr: "ollama", URL: strings.TrimRight(rtCfg.OllamaURL, "/") + "/api/tags", Timeout: 2 * time.Second},
+	)
+	s.HandleFunc("/health/ready", health.ReadinessHandler("sandbox", readyAgg))
 
 	// Start the runtime engine and supervisor.
 	ctx, cancel := context.WithCancel(context.Background())

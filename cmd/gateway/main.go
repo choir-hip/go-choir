@@ -4,8 +4,10 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/gateway"
+	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -34,17 +36,37 @@ func main() {
 	mp := provider.ResolveAll(providerCfg)
 	providerNames := mp.Names()
 
+	// Circuit breaker config for LLM provider calls. Repeated upstream
+	// failures open the breaker so the gateway stops forwarding into a
+	// failing provider instead of retrying endlessly (production-readiness
+	// checklist: "LLM provider failures circuit-break").
+	breakerCfg := health.BreakerConfig{
+		FailureThreshold:   5,
+		OpenTimeout:        30 * time.Second,
+		HalfOpenMaxProbes:  1,
+	}
+	breakers := gateway.NewBreakerRegistry()
+
 	var handler *gateway.Handler
 
 	if len(providerNames) > 0 {
 		log.Printf("gateway: resolved %d provider(s): %v", len(providerNames), providerNames)
+
+		// Wrap each resolved provider with a circuit breaker.
+		wrapped := gateway.WrapMultiProvider(mp, breakerCfg)
+		for _, name := range wrapped.Names() {
+			if cbp, ok := wrapped.Get(name).(*gateway.CircuitBreakingProvider); ok {
+				breakers.Register(name, cbp.Breaker())
+			}
+		}
+		log.Printf("gateway: circuit breakers enabled for %d provider(s)", len(breakers.Names()))
 
 		// Initialize per-sandbox rate limiting (VAL-GATEWAY-005).
 		rlCfg := gateway.LoadRateLimiterConfig()
 		rl := gateway.NewPerSandboxRateLimiter(rlCfg.MaxRequests, rlCfg.WindowSize)
 		log.Printf("gateway: rate limiter enabled: %s", rl)
 
-		handler = gateway.NewMultiHandlerWithRateLimit(registry, mp, rl)
+		handler = gateway.NewMultiHandlerWithRateLimit(registry, wrapped, rl)
 	} else {
 		log.Printf("gateway: no real provider configured; inference requests will fail")
 
@@ -54,7 +76,14 @@ func main() {
 		handler = gateway.NewHandlerWithRateLimit(registry, nil, rl)
 	}
 
+	handler.SetBreakers(breakers)
 	gateway.RegisterRoutes(s, handler)
+
+	// Readiness endpoint: reports gateway dependency health. With no
+	// external deps wired here (providers are resolved lazily), this is a
+	// lightweight liveness-style readiness. Operators can extend the
+	// aggregator with HTTP probes for upstream provider APIs.
+	s.HandleFunc("/health/ready", health.ReadinessHandler("gateway", health.NewAggregator("gateway", 5*time.Second)))
 
 	s.Start()
 }

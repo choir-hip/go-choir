@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
@@ -560,6 +561,12 @@ func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Serv
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
 	mux.HandleFunc("/internal/source-service/ingestion-handoff/latest", handleSourceServiceIngestionHandoffLatest(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
+	// Top-level liveness and readiness endpoints. Liveness is a cheap
+	// process-alive check; readiness reports the source-service ledger as
+	// its dependency surface. These are additive and do not alter the
+	// existing /internal/source-service/* routes.
+	mux.HandleFunc("/health", health.LivenessHandler("sourcecycled"))
+	mux.HandleFunc("/health/ready", health.ReadinessHandler("sourcecycled", health.NewAggregator("sourcecycled", 5*time.Second)))
 	server := &http.Server{
 		Addr:              sourceServiceAddr(),
 		Handler:           mux,
