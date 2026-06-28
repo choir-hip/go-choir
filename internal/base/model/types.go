@@ -205,16 +205,17 @@ func (b Blob) Valid() bool {
 type EventType string
 
 const (
-	EventCreate EventType = "create"
-	EventUpdate EventType = "update"
-	EventDelete EventType = "delete"
-	EventMove   EventType = "move"
+	EventCreate     EventType = "create"
+	EventUpdate     EventType = "update"
+	EventDelete     EventType = "delete"
+	EventMove       EventType = "move"
+	EventBlobUpload EventType = "blob_upload"
 )
 
 // Valid reports whether the EventType is one of the defined constants.
 func (e EventType) Valid() bool {
 	switch e {
-	case EventCreate, EventUpdate, EventDelete, EventMove:
+	case EventCreate, EventUpdate, EventDelete, EventMove, EventBlobUpload:
 		return true
 	}
 	return false
@@ -231,9 +232,11 @@ type Event struct {
 	DeviceID      string
 	SubjectID     string // user ID or API key ID (the author)
 	EventType     EventType
-	ParentEventID EventID // previous event for this item (Merkle chain)
-	CursorSeq     int64   // monotonic sequence number
-	PayloadJSON   string  // version ref, new name, new parent, etc.
+	Kind          ItemKind  // file or folder (ItemType in the spec)
+	BlobRef       BlobRef   // content-addressed blob for blob_upload events
+	ParentEventID EventID   // previous event for this item (hash chain)
+	CursorSeq     int64     // monotonic sequence number
+	PayloadJSON   string    // version ref, new name, new parent, etc.
 	CreatedAt     time.Time
 }
 
