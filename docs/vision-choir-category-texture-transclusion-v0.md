@@ -430,3 +430,179 @@ with its own mission doc, parallax state, and landing loop. The order matters:
 8. Renderer execution (frontend bootstrap)
 
 Each step is independently valuable and deploys on its own.
+
+## The Audited Computer
+
+The vision above describes textures as the type system for publications. But
+the assertion is deeper: **textures are the type system for everything,
+including the computer itself.** This is the artifact program doctrine (see
+`docs/memo-artifact-program-doctrine-2026-06-28.md`).
+
+### The Equation
+
+```
+computer = choir_code(artifact_program)
+```
+
+- `choir_code` is the choir source at a specific version — inventoried by an
+  SBOM (CycloneDX, via sbomnix now, FlakeBOM when we adopt Determinate Nix)
+- `artifact_program` is the mutation transaction history — textures, the
+  paragraphs that compute the computer's state
+- The output is a running computer, deterministically
+
+The current `data.img` is an opaque cache of this computation. The artifact
+program is the source of truth.
+
+### Textures Are Programs
+
+A texture is not a static document. It is a program step — a transaction that
+reads current state, applies a transformation, and writes the next state. Each
+texture revision is a paragraph in the program. The program is the narrative
+of the computer's evolution, written in the language of mutation transactions,
+executed by the choir runtime.
+
+This is why the category-theoretic framing matters: textures are objects,
+transclusions are morphisms, and the program is the composition of morphisms
+over time. The computer is the fixpoint of the program — the current state
+that the program computes.
+
+### What an Audited Computer Is
+
+An audited computer is a computer where:
+
+1. **Every state change is a typed transaction** — file writes, database
+   mutations, config changes, promotions. Each transaction has an author, a
+   timestamp, a type, inputs, and outputs. The tape IS the program.
+
+2. **The interpreter is inventoried** — the choir code version that executes
+   the program is recorded alongside every transaction. The SBOM lists every
+   dependency, every version, every license. You know exactly what code ran
+   to produce this state.
+
+3. **The state is reproducible** — given the program version and the code
+   version, you can compute the same computer anywhere. Replication is
+   replicating inputs, not outputs. Migration is recomputation, not copying.
+
+4. **The history is tamper-evident** — each transaction references the content
+   hash of the previous transaction. Each blob is content-addressed. The choir
+   code version is a git commit hash. Modifying any historical transaction
+   changes all downstream hashes. This is a Merkle chain, like Git and Nix,
+   extended to user state.
+
+5. **Provenance is complete** — for any state at any point in time, you can
+   answer: what changed, who changed it, what code executed the change, what
+   was the previous state, what inputs were read, what outputs were written.
+   Compliance questions become program queries.
+
+### Why This Is a New Level of Information Technology
+
+Current information technology treats computers as opaque state machines:
+- You back up their disks (copying opaque state)
+- You migrate them by copying disks (moving opaque blobs)
+- You audit them by snapshotting and diffing (comparing accidents)
+- You secure them by monitoring access (watching the outside)
+- State is an accident of execution
+
+Audited computers treat computers as deterministic computations over
+audited programs:
+- You replicate the program (inputs, not outputs)
+- You migrate by recomputing (deterministic, verifiable)
+- You audit by reading the tape (intentional, not accidental)
+- You secure by typing and validating transactions (structural integrity)
+- State is intentional — every byte has a reason
+
+This is the same leap that Nix made for package management: from opaque
+installed software to deterministic build outputs with complete dependency
+graphs. We are extending that leap from the OS layer to the data layer, from
+the package to the computer, from the build to the state.
+
+### The Convergence
+
+The same texture system that powers publications powers computers:
+
+- An autopaper is a texture that transcludes an algorithm, styleguide,
+  schedule, and renderer. The agent pipeline reads these transclusions and
+  produces articles.
+- A computer is a texture that transcludes a file manifest, a Dolt state
+  snapshot, and a configuration. The choir runtime reads these transclusions
+  and produces a running VM.
+- A desktop file view is a texture that transcludes the same file manifest.
+  The FileProvider extension reads it and produces a Finder folder.
+- A mobile file view is the same texture, projected through iOS Files or
+  Android DocumentsProvider.
+
+One program, many projections. The texture graph is the single source of
+truth. Every surface is a functor from the texture category to a display
+category. Replication, distribution, and consensus operate on the graph,
+not on projections.
+
+### Success Definition
+
+The vision succeeds when:
+
+1. **A user's computer is a texture.** The file manifest, the Dolt state,
+   the configuration — all textures, all transcluded, all versioned. The
+   `data.img` is a derivation output, not a source of truth. You can
+   reconstruct the computer from the texture graph alone.
+
+2. **Every state change is a mutation transaction.** When the user writes a
+   file, runs a job, or promotes a candidate, the state change is a typed
+   transaction in the texture graph. The transaction has provenance: author,
+   timestamp, code version, inputs, outputs. No state change happens outside
+   the transaction system.
+
+3. **The computer is portable.** Given the texture graph and the choir code
+   version, you can compute the same computer on any node. Deployment is
+   recomputation. Migration is recomputation. Desktop sync is a projection.
+   Mobile access is a projection. No opaque blobs to copy.
+
+4. **The computer is auditable.** For any state at any point in time, you can
+   query the tape and the SBOM to answer: what is this state, how
+   did it get here, who authorized each change, what code executed it, what
+   dependencies were involved. Compliance is a query, not an investigation.
+
+5. **The computer is verifiable.** Build the same texture graph on two nodes.
+   Compare the content hashes of the computed `data.img`. If they match, the
+   computation is deterministic and the decomposition is lossless. If they
+   don't, the diff reveals the gap. Shadow replication validates this in
+   production.
+
+6. **The same system serves publications and computers.** The texture graph,
+   the transclusion morphisms, the mutation transactions, the SBOM inventory
+   — one system, two applications. The news platform and the personal
+   computer are the same category, different functors. The infrastructure
+   for one serves both.
+
+When all six hold, Choir is not a news platform that happens to run user VMs.
+Choir is an audited computer system that happens to publish news as its first
+application. The audited computer is the product; the news platform is the
+proof.
+
+### The Deeper Goal
+
+The deeper goal is not better deploys or faster sync or easier compliance,
+though all of those follow. The deeper goal is a new relationship between
+people and their computers.
+
+Today, your computer is an opaque box. You don't know what state it's in. You
+can't audit it. You can't reproduce it. You can't move it without copying
+opaque blobs. You trust the box because you have no alternative.
+
+In the audited computer, your computer is a program. You can read it. You can
+audit it. You can reproduce it. You can move it by sending the program. You
+trust it because you can verify it.
+
+And because the tape is both the computation history and the learning history,
+the computer is not just a program — it is a self-authoring program. It writes
+itself through mutation transactions. Each transaction is a conjecture tested
+by execution. The computer learns what it should be by acting on what it
+believes, observing the results, and revising its beliefs. The tape is the
+medium of learning.
+
+This is the meaning of "promote typed artifacts, not opaque machine accidents."
+Every byte of your computer's state has a reason — a transaction that wrote
+it, an author who authorized it, a code version that executed it. The
+computer is not an accident of execution. It is an intentional, audited,
+reproducible, self-learning computation.
+
+That is the new level of information technology.

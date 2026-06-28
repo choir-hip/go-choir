@@ -1,9 +1,9 @@
 # Daily Work Report — 2026-06-27 / 2026-06-28
 
-**Span:** 2026-06-26 23:46 → 2026-06-28 01:15 (~25.5 hours)
-**Commits:** 158
-**Files touched:** 111 unique (42 created, 2 deleted)
-**Lines:** +26,831 / -10,426 (net +16,405)
+**Span:** 2026-06-26 23:46 → 2026-06-28 01:22 (~25.6 hours)
+**Commits:** 160
+**Files touched:** 113 unique (43 created, 2 deleted)
+**Lines:** +27,431 / -10,506 (net +16,925)
 
 ## Git Analytics
 
@@ -161,6 +161,19 @@ mailboxes — the third occurrence of this heresy. The loop called
 `pending []Update` → `mailbox chan Update`, loop `select`s on channel with
 idle timer, log queried only on cold-start replay. Deep review found 3
 broken tests behind `//go:build comprehensive` tag — all fixed.
+
+### Phase 5: Handler Silent-Drop Bug Fix (01:15–01:22, 1 commit)
+
+Code review of the H030 repair found a second bug in the actor handler:
+`handleCoagentResult` silently dropped coagent_result messages for runs in
+`Active()` states (RunBlocked, stale RunRunning, RunPending) and cleared
+actor memory. This orphaned blocked/stale runs — the coagent update was
+lost and the run could never resume.
+
+Fix: replaced the drop with a unified reactivation path. Both RunPassivated
+and Active() states now reactivate the run. Added 6 new tests covering
+cold start, cancel, completed-run, blocked-run reactivation, missing run,
+and unknown update kind.
 
 ## New Docs Created (25)
 
