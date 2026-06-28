@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/health"
 )
@@ -50,7 +51,7 @@ func (e *stubEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]floa
 
 func TestCircuitBreakingAPI_ForwardsWhenClosed(t *testing.T) {
 	api := &stubAPI{}
-	c := NewCircuitBreakingAPI(api, health.BreakerConfig{FailureThreshold: 3, OpenTimeout: 3600})
+	c := NewCircuitBreakingAPI(api, health.BreakerConfig{FailureThreshold: 3, OpenTimeout: time.Hour})
 	if _, err := c.Search(context.Background(), "col", []float32{1}, 1); err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestCircuitBreakingAPI_OpensOnFailures(t *testing.T) {
 	api := &stubAPI{searchFn: func(ctx context.Context, collectionOrAlias string, vector []float32, limit int) ([]ScoredPoint, error) {
 		return nil, errors.New("qdrant unreachable")
 	}}
-	c := NewCircuitBreakingAPI(api, health.BreakerConfig{FailureThreshold: 2, OpenTimeout: 3600})
+	c := NewCircuitBreakingAPI(api, health.BreakerConfig{FailureThreshold: 2, OpenTimeout: time.Hour})
 	_, _ = c.Search(context.Background(), "col", []float32{1}, 1)
 	_, _ = c.Search(context.Background(), "col", []float32{1}, 1)
 	if c.Breaker().State() != health.StateOpen {
@@ -77,7 +78,7 @@ func TestCircuitBreakingAPI_OpensOnFailures(t *testing.T) {
 
 func TestCircuitBreakingEmbedder_ForwardsWhenClosed(t *testing.T) {
 	e := &stubEmbedder{}
-	ce := NewCircuitBreakingEmbedder(e, health.BreakerConfig{FailureThreshold: 3, OpenTimeout: 3600})
+	ce := NewCircuitBreakingEmbedder(e, health.BreakerConfig{FailureThreshold: 3, OpenTimeout: time.Hour})
 	if _, err := ce.EmbedTexts(context.Background(), []string{"a"}); err != nil {
 		t.Fatalf("EmbedTexts error: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestCircuitBreakingEmbedder_OpensOnFailures(t *testing.T) {
 	e := &stubEmbedder{embedFn: func(ctx context.Context, texts []string) ([][]float32, error) {
 		return nil, errors.New("ollama unreachable")
 	}}
-	ce := NewCircuitBreakingEmbedder(e, health.BreakerConfig{FailureThreshold: 2, OpenTimeout: 3600})
+	ce := NewCircuitBreakingEmbedder(e, health.BreakerConfig{FailureThreshold: 2, OpenTimeout: time.Hour})
 	_, _ = ce.EmbedTexts(context.Background(), []string{"a"})
 	_, _ = ce.EmbedTexts(context.Background(), []string{"a"})
 	if ce.Breaker().State() != health.StateOpen {
