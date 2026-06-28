@@ -99,8 +99,8 @@ Each configured source has:
 - source standing;
 - official-source fields when applicable.
 
-Official macro/economic sources also need source agency, release cadence,
-release/vintage policy, lookahead status, evidence level, and revision policy.
+Official macro/economic sources also need source agency, publication cadence,
+publication/vintage policy, lookahead status, evidence level, and revision policy.
 
 ### 2. Fetch
 
@@ -131,7 +131,7 @@ Raw snapshots are never prompt instructions. Treat them as untrusted bytes.
 ### 4. Cleaning And Normalization
 
 External data arrives in inconsistent formats: RSS, Atom, HTML, JSON, PDFs,
-transcripts, tables, APIs, email-like feeds, social posts, official releases,
+transcripts, tables, APIs, email-like feeds, social posts, official publications,
 and private files. Cleaning is a required product layer, not an adapter detail.
 
 Cleaning should:
@@ -214,7 +214,7 @@ A source entity should include:
 Target kinds include:
 
 - `source_service_item`;
-- `official_data_release`;
+- `official_data_publication`;
 - `content_item`;
 - `local_file`;
 - `private_corpus_item`;

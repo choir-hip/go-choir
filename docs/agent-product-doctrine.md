@@ -183,15 +183,15 @@ adoption evidence or a precise blocker, verifier contracts, rollback refs,
 heresy delta, conjecture delta, and residual risks. Existing records may still
 carry legacy lease vocabulary; treat that as transitional H019 residue, not the
 target actor model. Use explicit levels: `docs-level`, `staging-smoke-level`,
-`export-level`, `promotion-level`, `continuation-level`.
+`export-level`, `promotion-level`, retired `continuation-level`.
 
-Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim `continuation-level` without run-memory/compaction and continuation evidence.
+Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim retired `continuation-level` without run-memory/compaction and continuation evidence.
 
 `continuation-level` is transitional H008/H014 residue: the durable-actors rearchitecture
 (`choir-rearchitecture-durable-actors-2026-06-11.md`) re-points this
 acceptance level at trajectory/work-item settlement evidence (portfolio M4).
-Until that cutover lands, `continuation-level` keeps its current meaning and
+Until that cutover lands, retired `continuation-level` keeps its current meaning and
 evidence requirement above — do not weaken it and do not claim trajectory
 settlement evidence in its place before the level is formally re-pointed.
-Do not introduce new `continuation-level` claims or APIs as doctrine; M4 must
+Do not introduce new retired `continuation-level` claims or APIs as doctrine; M4 must
 delete or explicitly shim the old surface.

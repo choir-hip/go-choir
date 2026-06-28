@@ -47,7 +47,7 @@ model and cutover program), `choir-role-free-actor-protocol-2026-06-11.md`
 runtime protocols are model-checked in `specs/` (TLC runs in CI).
 
 **Transitional honesty:** the code has NOT fully cut over. Parent/child runs,
-RunContinuations, and DB-polled channel messages still run today; the
+RunContinuations, and DB-polled channel messages still run today; the transitional
 portfolio (`mission-portfolio-2026-06-11.md`) sequences their replacement.
 This section states the target vocabulary so new work stops accreting on the
 retired ontology.
@@ -55,12 +55,12 @@ retired ontology.
 | Term | Meaning |
 |---|---|
 | **actor** | an agent as a durable actor: goroutine + mailbox while resident; idempotent update log + compacted memory snapshot while passivated. Actors never "complete" — they passivate and re-warm. |
-| **activation** | one residency: wake → work (possibly hours, many compactions) → passivate. Bounded by budgets and eviction, not leases (no lease concept in v1). |
+| **activation** | one residency: wake → work (possibly hours, many compactions) → passivate. Bounded by budgets and eviction, not retired leases (no lease concept in v1). |
 | **update** | the one agent-to-agent message primitive (`update_coagent`): typed, idempotent by update_id, durably logged before delivery. The only wake source. |
 | **mailbox** | the in-memory delivery vehicle for a resident actor. Never the truth — always rebuildable from the log. |
 | **sweep** | the recovery rule: any non-resident agent with unprocessed backlog is activation-eligible. Covers boot, crash windows, post-eviction re-wake. |
 | **trajectory** | the causality object: durable record with kind, subject refs, and an explicit settlement rule (data, not code). Replaces parent/child trees as the control model. |
-| **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. Replaces RunContinuation. |
+| **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. Replaces retired RunContinuation. |
 | **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
 | **authority envelope** | what a bounded profile (super/vsuper/co-super/researcher/texture/...) may do — code-enforced capability boundary. Profiles are envelopes, not personas. |
@@ -105,7 +105,7 @@ The product object is a persistent user **computer**, not a disposable sandbox.
 The current work is not to invent the product from scratch. The current work is
 to stabilize the deployed system around the right causal model.
 
-Choir is not chat and not a generic coding-agent runner. The visible product is
+Choir is not retired chat and not a generic coding-agent runner. The visible product is
 a web desktop with apps. Some apps grow into appagents; most apps can remain
 plain display/control surfaces. The hidden product machinery is a dark factory
 of researchers, supers, cosupers, background computers, evidence, artifacts, document
@@ -353,7 +353,7 @@ citations + compute accounting -> CHIPS economics
 ## Texture Contract
 
 `texture` is the first appagent and the version-native control plane. It replaces
-chat as the main surface for multiagent work.
+retired chat as the main surface for multiagent work.
 
 The target shape of `texture` is hypermedia, not flat text. A `texture` should be
 able to become a computational essay or owner-readable campaign/report packet:
@@ -407,7 +407,7 @@ UI. Likely sequence: `texture` first, then source/Web Lens ownership if it needs
 durable domain agency, then mail, then calendar.
 Trace is no longer a product app direction. Trace remains evidence: structured
 events, unified logs, run bundles, acceptance records, and diagnosis artifacts.
-Humans should not be expected to browse a Trace app to debug Choir.
+Humans should not be expected to browse a retired Trace app to debug Choir.
 
 A `texture` version is a canonical document state:
 
@@ -816,7 +816,7 @@ Reasonable sequence:
 4. Add editions: later local versions can become later public versions.
 5. Add collaboration submissions where an author approves or denies proposed
    changes.
-6. Add paywalls, delayed release windows, subscriptions, or author-gated access.
+6. Add paywalls, delayed retired release windows, subscriptions, or author-gated access.
 7. Add CHIPS-mediated incentives and citation economics.
 
 This preserves the purity option of publishing every version without forcing it
@@ -871,7 +871,7 @@ a blocker for the current verification work.
 
 Future coding agents should not simplify Choir into:
 
-- chat plus a task runner
+- retired chat plus a task runner
 - one global agent with tools
 - one active computer that mutable workers freely edit
 - workers patching `texture` text directly

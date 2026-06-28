@@ -116,11 +116,11 @@ ordinary ingress target for user or source prompts.
    settle honestly.
 
    Durable metadata forcing is an explicit violation: persisted flags such as
-   `explicit_researcher_request`, base-revision content scans, or carried
+   retired `explicit_researcher_request`, base-revision content scans, or carried
    request-intent fields must not re-derive a required researcher/super
    delegation across turns. Prompt-pipeline forcing is also a violation:
    prompts and revision builders may describe obligations and affordances, but
-   must not mandate "call spawn_agent now" or similar semantic role sequences.
+   must not mandate retired "call spawn_agent now" or similar semantic role sequences.
 
 8. **Trace and Texture have different jobs.** Trace is the causal ledger for tool
    calls, LLM content, events, and agent messages. Texture is the owner-readable
@@ -296,7 +296,7 @@ Root cause (logic, model-independent):
    model that ends the first turn with prose can complete the run before the
    findings ever enter context.
 
-2. **No "must act" constraint on integrate.** `initialTextureToolChoice` returns
+2. **No "must act" constraint on integrate.** `initial`+`TextureToolChoice` returns
    `required` only when `scheduled_message_seq == 0`; integrate wakes
    (`scheduled_message_seq > 0`) get no initial tool-choice constraint, so a
    grounded integrate turn may legally end with prose and produce no durable
@@ -322,7 +322,7 @@ doc is re-woken rather than silently dropping the findings.
 ### Required tests for this fix
 
 - integrate wake run carries cold-prepend eligibility so turn 1 sees findings;
-- `initialTextureToolChoice` requires a durable action on grounded integrate
+- `initial`+`TextureToolChoice` requires a durable action on grounded integrate
   wakes;
 - a no-write integrate still leaves worker updates pending for re-wake.
 
@@ -375,7 +375,7 @@ Style.texture (`styles/default.style.texture`). See Choir Doctrine I15 and I16.
 During M3, the deployed restart proof required Trace to show conductor, Texture,
 researcher, and super before vmctl refresh. When researcher did not appear, the
 mission drifted from durable-actor lifecycle proof into trying to force Texture to
-spawn researcher. The final shape returned `next_required_tool=spawn_agent` from
+spawn researcher. The final shape returned retired `next_required_tool=spawn_agent` from
 `edit_texture` and relied on the generic tool loop to enforce exact `spawn_agent`.
 
 That was a regression. It made a probe precondition the runtime semantics.
@@ -399,7 +399,7 @@ Any behavior-changing Texture coordination change should include tests proving:
   to that prompt;
 - direct user-authored Texture documents can receive work-state revisions without
   a forced trivial cleanup patch;
-- `edit_texture` does not emit semantic `next_required_tool` values;
+- `edit_texture` does not emit semantic retired `next_required_tool` values;
 - prompts mentioning researcher or super do not force a delegation;
 - Texture still has access to researcher/super affordances and can choose them;
 - owner-visible Texture state names active background work when delegation,
@@ -412,7 +412,7 @@ Any behavior-changing Texture coordination change should include tests proving:
 
 Tests to invert or delete when M3.1 repairs H010/H024/H026:
 
-- tests that expect `edit_texture` to emit `next_required_tool=spawn_agent`;
+- tests that expect `edit_texture` to emit retired `next_required_tool=spawn_agent`;
 - tests that preserve researcher intent through durable revision metadata as a
   forced follow-up;
 - tests that treat base-revision content mentioning researcher as a required
@@ -434,7 +434,7 @@ heresy delta (`discovered`, `introduced`, `repaired`).
 
 ## Short Rule For Agents
 
-If a proposed Texture change makes the sentence "Texture must call X next" true for
+If a proposed Texture change makes the sentence "Texture is required to call X next" true for
 a semantic agent role, stop. You are probably turning the multi-agent system
 into a workflow. Document the problem, shift the observer, and protect Texture's
 agency before writing code.
