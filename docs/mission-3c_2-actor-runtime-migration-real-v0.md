@@ -477,7 +477,9 @@ Push to main, monitor CI, verify staging:
 
 ## Parallax State
 
-status: working — Phase 2 complete (Group A deleted, APIHandler move skipped, Group B+C deferred to extraction), Phase 3 staging E2E next
+status: settled — Phase 3 complete. CI green, all services deployed at
+6fe542b0, universal-wire-platform VM running actor runtime, API returns 39
+stories. Settlement gate met.
 
 mission conjecture: if the actor handler becomes the execution boundary
 (running executeActivation synchronously inside HandleUpdate), the actor
@@ -501,12 +503,12 @@ invariants / qualities / domain ramp (I/Q/D):
   proof required.
 - D: Local build + test → staging deploy → staging verification.
 
-variant (conjecture descent) V: count uncompleted phases. V = 1 (Phase 3
-remains). Phase 1 done (ΔV=-1). Phase 2 done (ΔV=-1). Phase 3 (staging) is
-the settlement gate.
+variant (conjecture descent) V: count uncompleted phases. V = 0 (all phases
+done). Phase 1 done (ΔV=-1). Phase 2 done (ΔV=-1). Phase 3 done (ΔV=-1).
+Settled.
 
-budget: 4-5 passes. Spent: 3 (exploration + Phase 1 + Phase 2).
-Remaining: 1-2. Solvent.
+budget: 4-5 passes. Spent: 4 (exploration + Phase 1 + Phase 2 + Phase 3).
+Solvent.
 
 authority / bounds: may modify `internal/runtime/` (business logic extraction
 + concurrency deletion), `internal/actorruntime/` (adapter + handler + log),
@@ -587,17 +589,19 @@ position / live conjectures / open edges:
   `injectUserTurns`). Not a correctness issue (idempotent), but an
   inefficiency. Can optimize in a follow-up.
 
-next move: Phase 3 — push to main, staging E2E. The critical question: does
-the wire pipeline work end-to-end on the actor runtime? Sourcecycled →
-processor → Texture → publish → article cards visible. That's the settlement
-gate.
+next move: settled. Phase 3 complete — CI green, deployed, API verified.
+Future work: app extraction (Phase 2.5) to split runtime by domain and
+eliminate remaining 7 mutexes.
 
 ledger file: docs/mission-3c_2-actor-runtime-migration-real-v0.ledger.md
 version / lineage: v0, successor to mission-3c (Part 1 + States 1-3 done,
 States 4-7 failed)
 learning state: retained here / promoted outward / successor links
-settlement: open until Phase 3 staging verification produces article cards
-on the actor runtime as execution substrate.
+settlement: settled. Phase 3 staging verification produced article cards
+on the actor runtime as execution substrate. CI run 28310197405 all green.
+All services at commit 6fe542b0. Universal-wire-platform VM active with
+actor runtime ready. `/api/universal-wire/stories` returns 200 with 39
+stories. 629 published articles in platform database.
 
 ## Suggested Goal String
 
@@ -654,7 +658,7 @@ Phase 2.5 (future): App extraction — split runtime by domain. APIHandler
 splits by domain (texture API → internal/texture/, wire API → internal/wire/).
 Group B+C mutexes move with their apps. Zero mutexes in internal/runtime/.
 May be a separate mission.
-Phase 3: Push to main, staging E2E — article cards visible. [NEXT]
+Phase 3: Push to main, staging E2E — article cards visible. [DONE — commit 6fe542b0, CI 28310197405 green, API returns 39 stories]
 
 DO NOT TOUCH: internal/actor/actor.go protocol, specs/actor_protocol.tla,
 O1-O3 (objectgraph, qdrant, sourcegraph), source pollers, cycle engine,
