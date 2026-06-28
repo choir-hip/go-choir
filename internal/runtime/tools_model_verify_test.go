@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -15,7 +17,7 @@ type capturingModelVerifyProvider struct {
 	calls int
 }
 
-func (p *capturingModelVerifyProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *capturingModelVerifyProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	task.Result = "execute path unused"
 	return nil
 }

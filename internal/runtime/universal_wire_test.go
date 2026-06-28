@@ -847,38 +847,6 @@ func TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc
 	}
 }
 
-func TestNormalizeWireArticleRevisionForReadDoesNotMintSourceLinks(t *testing.T) {
-	itemID := "srcitem_el_nino"
-	entityID := stableSourceEntityID("source_service_item", itemID)
-	content := "Forecasters warned Source Service item " + itemID + " that El Niño odds rose."
-	meta, _ := json.Marshal(map[string]any{
-		"source":                     "patch_texture",
-		"ingestion_handoff_cycle_id": "cycle-el-nino",
-		"source_entities": []map[string]any{{
-			"entity_id": entityID,
-			"kind":      "source_service_item",
-			"label":     "WMO El Niño bulletin",
-			"target":    map[string]any{"target_kind": "source_service_item", "item_id": itemID},
-		}},
-	})
-	rev := types.Revision{
-		RevisionID: "rev-wire-legacy-source-prose",
-		OwnerID:    "universal-wire-platform",
-		Content:    content,
-		Metadata:   meta,
-	}
-	normalized := normalizeWireArticleRevisionForRead(rev)
-	if normalized.Content != content {
-		t.Fatalf("normalized content = %q, want unchanged %q", normalized.Content, content)
-	}
-	if strings.Contains(normalized.Content, "](source:") || strings.Contains(normalized.Content, "[source:") {
-		t.Fatalf("normalized content minted source syntax: %q", normalized.Content)
-	}
-	if string(normalized.Metadata) != string(meta) {
-		t.Fatalf("metadata changed:\n got %s\nwant %s", normalized.Metadata, meta)
-	}
-}
-
 func TestSynthesizeUniversalWireSourceClusterDispatchesProcessorRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()

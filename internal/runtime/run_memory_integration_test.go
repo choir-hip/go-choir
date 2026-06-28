@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -267,7 +269,7 @@ func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
 }
 
 type runMemoryOverflowRetrievalProvider struct {
-	Provider
+	provideriface.Provider
 	sentinel   string
 	calls      int32
 	agentCalls int32
@@ -377,7 +379,7 @@ func runMemoryCheckpointJSONForTest(objective string, completed, next []string) 
 }
 
 type runtimeOverflowProvider struct {
-	Provider
+	provideriface.Provider
 	failuresBeforeSuccess int32
 	calls                 int32
 	agentCalls            int32

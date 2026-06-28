@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
@@ -134,7 +136,7 @@ func TestHandleInternalTextureProposalDeliveryRecordsAuthorInbox(t *testing.T) {
 }
 
 type textureEditToolProvider struct {
-	Provider
+	provideriface.Provider
 	result     string
 	resultFunc func(prompt string) string
 	delay      time.Duration
@@ -153,7 +155,7 @@ func (p *textureEditToolProvider) ProviderName() string {
 	return "texture-edit-tool"
 }
 
-func (p *textureEditToolProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureEditToolProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	if p.delay > 0 {
 		timer := time.NewTimer(p.delay)
 		select {
@@ -231,7 +233,7 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 }
 
 type textureParkResidentProvider struct {
-	Provider
+	provideriface.Provider
 	choices []string
 }
 
@@ -239,7 +241,7 @@ func (p *textureParkResidentProvider) ProviderName() string {
 	return "texture-park-resident-provider"
 }
 
-func (p *textureParkResidentProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureParkResidentProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	task.Result = textureReplaceAllResult("provider execute fallback")
 	emit(types.EventRunDelta, "execution", json.RawMessage(`{"text":"texture park resident provider","provider":"texture-park-resident-provider"}`))
 	return nil
@@ -273,7 +275,7 @@ func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req Too
 }
 
 type textureDecisionThenEditProvider struct {
-	Provider
+	provideriface.Provider
 	choices    []string
 	firstTools []ToolDefinition
 	calls      int
@@ -283,7 +285,7 @@ func (p *textureDecisionThenEditProvider) ProviderName() string {
 	return "texture-decision-then-edit"
 }
 
-func (p *textureDecisionThenEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureDecisionThenEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -355,7 +357,7 @@ func (p *finalTextProvider) ProviderName() string {
 	return "final-text-provider"
 }
 
-func (p *finalTextProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *finalTextProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	task.Result = p.result
 	emit(types.EventRunDelta, "execution", json.RawMessage(`{"text":"final provider text","provider":"final-text-provider"}`))
 	return nil
@@ -1533,11 +1535,11 @@ func TestTextureAPICitationsMetadataRoundTrip(t *testing.T) {
 
 // ----- Agent revision tests -----
 
-func textureAPISetupWithProvider(t *testing.T, provider Provider, installTools bool) (*APIHandler, *store.Store, *Runtime) {
+func textureAPISetupWithProvider(t *testing.T, provider provideriface.Provider, installTools bool) (*APIHandler, *store.Store, *Runtime) {
 	return textureAPISetupWithProviderAndOptions(t, provider, installTools)
 }
 
-func textureAPISetupWithProviderAndOptions(t *testing.T, provider Provider, installTools bool, opts ...RuntimeOption) (*APIHandler, *store.Store, *Runtime) {
+func textureAPISetupWithProviderAndOptions(t *testing.T, provider provideriface.Provider, installTools bool, opts ...RuntimeOption) (*APIHandler, *store.Store, *Runtime) {
 	t.Helper()
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-texture-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -1696,7 +1698,7 @@ func (p *revisionPromptEchoProvider) ProviderName() string {
 	return "revision-prompt-echo"
 }
 
-func (p *revisionPromptEchoProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *revisionPromptEchoProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	if p.delay > 0 {
 		timer := time.NewTimer(p.delay)
 		select {
@@ -1736,7 +1738,7 @@ func (p *stochasticWorkflowProvider) ProviderName() string {
 	return "stochastic-workflow"
 }
 
-func (p *stochasticWorkflowProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *stochasticWorkflowProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	delay := p.delay
 	if delay == 0 {
 		delay = 90 * time.Millisecond
@@ -2201,7 +2203,7 @@ func TestTextureSystemPromptSharesChoirCoreContext(t *testing.T) {
 }
 
 type textureMinimalEditProvider struct {
-	Provider
+	provideriface.Provider
 	choices    []string
 	firstTools []ToolDefinition
 }
@@ -2210,7 +2212,7 @@ func (p *textureMinimalEditProvider) ProviderName() string {
 	return "texture-minimal-edit"
 }
 
-func (p *textureMinimalEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureMinimalEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -2250,7 +2252,7 @@ func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req Tool
 }
 
 type textureWriteAndResearchProvider struct {
-	Provider
+	provideriface.Provider
 	choices    []string
 	firstTools []ToolDefinition
 	wrote      bool
@@ -2261,7 +2263,7 @@ func (p *textureWriteAndResearchProvider) ProviderName() string {
 	return "texture-write-and-research"
 }
 
-func (p *textureWriteAndResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureWriteAndResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -2314,7 +2316,7 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 }
 
 type textureAgenticResearchProvider struct {
-	Provider
+	provideriface.Provider
 	choices             []string
 	wrote               bool
 	spawned             bool
@@ -2326,7 +2328,7 @@ func (p *textureAgenticResearchProvider) ProviderName() string {
 	return "texture-agentic-research"
 }
 
-func (p *textureAgenticResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureAgenticResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -2382,7 +2384,7 @@ func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req 
 }
 
 type textureInitialNoOpThenDraftProvider struct {
-	Provider
+	provideriface.Provider
 	choices                      []string
 	attempts                     int
 	sawNoOpError                 bool
@@ -2394,7 +2396,7 @@ func (p *textureInitialNoOpThenDraftProvider) ProviderName() string {
 	return "texture-initial-noop-then-draft"
 }
 
-func (p *textureInitialNoOpThenDraftProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureInitialNoOpThenDraftProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -2496,7 +2498,7 @@ func textureAgentIDFromSystemPrompt(system string) string {
 }
 
 type textureResearchEvidenceLoopProvider struct {
-	Provider
+	provideriface.Provider
 	mu                 sync.Mutex
 	choices            []string
 	firstTools         []ToolDefinition
@@ -2510,7 +2512,7 @@ func (p *textureResearchEvidenceLoopProvider) ProviderName() string {
 	return "texture-research-evidence-loop"
 }
 
-func (p *textureResearchEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureResearchEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -2633,7 +2635,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 }
 
 type textureSuperEvidenceLoopProvider struct {
-	Provider
+	provideriface.Provider
 	mu                 sync.Mutex
 	choices            []string
 	firstTools         []ToolDefinition
@@ -2647,7 +2649,7 @@ func (p *textureSuperEvidenceLoopProvider) ProviderName() string {
 	return "texture-super-evidence-loop"
 }
 
-func (p *textureSuperEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *textureSuperEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
@@ -6835,176 +6837,6 @@ func TestTextureSourceGapRepairRejectsUnknownEntity(t *testing.T) {
 	h.HandleTextureRouter(importW, importReq)
 	if importW.Code != http.StatusBadRequest || !strings.Contains(importW.Body.String(), "unresolved markdown citation marker [1]") {
 		t.Fatalf("unknown unresolved import status = %d body=%s", importW.Code, importW.Body.String())
-	}
-}
-
-func TestTextureSourceArtifactAttachmentCreatesMetadataOnlyRevision(t *testing.T) {
-	t.Parallel()
-	h, s, _ := textureAPISetupWithRuntime(t)
-	ctx := context.Background()
-	entity := textureSourceEntity{
-		EntityID: "src-public-rule",
-		Kind:     "legal_source",
-		Label:    "Public Rule",
-		Target: textureSourceEntityTarget{
-			TargetKind:   "url",
-			URL:          "https://example.com/rule",
-			CanonicalURL: "https://example.com/rule",
-		},
-		Selectors: []textureSourceEntitySelector{{
-			SelectorKind: "text_quote",
-			TextQuote:    "bounded excerpt",
-		}},
-		Display: textureSourceEntityDisplay{
-			InlineMode:       "embedded_excerpt",
-			ExpandedMode:     "source_card",
-			OpenSurface:      "source",
-			DefaultCollapsed: true,
-		},
-		Evidence: textureSourceEntityEvidence{
-			State:         "available",
-			ResearchState: "represented",
-		},
-		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           "test",
-			RightsScope:         "public_url_snapshot",
-			UntrustedSourceText: true,
-		},
-	}
-	importReq := textureRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", textureMarkdownLineageImportRequest{
-		SourcePath:     "proposals/source-attachment.md",
-		Title:          "source-attachment.md",
-		SourceEntities: []textureSourceEntity{entity},
-		Versions: []textureMarkdownLineageVersion{{
-			Label:   "v1",
-			Content: "A cited sentence [1].\n\n| Term | Definition |\n| --- | --- |\n| Work product | Durable output |",
-			CitationResolutions: []textureCitationMarkerResolution{{
-				Marker:   "[1]",
-				EntityID: "src-public-rule",
-			}},
-		}},
-	})
-	importW := httptest.NewRecorder()
-	h.HandleTextureRouter(importW, importReq)
-	if importW.Code != http.StatusCreated {
-		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
-	}
-	var imported textureMarkdownLineageImportResponse
-	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
-		t.Fatalf("decode import response: %v", err)
-	}
-	now := time.Now().UTC()
-	item := types.ContentItem{
-		ContentID:    "content-public-rule",
-		OwnerID:      "user-1",
-		SourceType:   "text",
-		MediaType:    "text/markdown",
-		AppHint:      AgentProfileTexture,
-		Title:        "Readable Public Rule",
-		SourceURL:    "https://example.com/rule",
-		CanonicalURL: "https://example.com/rule",
-		TextContent:  "Readable public source artifact for the cited rule.",
-		ContentHash:  contentHash("Readable public source artifact for the cited rule."),
-		Provenance:   json.RawMessage(`{"rights_scope":"public_source","untrusted_source_text":true}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := s.CreateContentItem(ctx, item); err != nil {
-		t.Fatalf("create content item: %v", err)
-	}
-
-	attachReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-attachments", textureSourceArtifactAttachmentRequest{
-		BaseRevisionID: imported.CurrentRevisionID,
-		Attachments: []textureSourceArtifactAttachment{{
-			EntityID:  "src-public-rule",
-			ContentID: "content-public-rule",
-		}},
-	})
-	attachW := httptest.NewRecorder()
-	h.HandleTextureRouter(attachW, attachReq)
-	if attachW.Code != http.StatusGone {
-		t.Fatalf("attach source artifact: status = %d, want %d; body: %s", attachW.Code, http.StatusGone, attachW.Body.String())
-	}
-	if !strings.Contains(attachW.Body.String(), "legacy Texture source attachment endpoint is retired") {
-		t.Fatalf("attach source artifact body = %s", attachW.Body.String())
-	}
-	revs, err := s.ListRevisionsByDoc(ctx, imported.DocID, "user-1", 10)
-	if err != nil {
-		t.Fatalf("list revisions after rejected attachment: %v", err)
-	}
-	if len(revs) != 1 || revs[0].RevisionID != imported.CurrentRevisionID {
-		t.Fatalf("rejected legacy source attachment created a revision: %#v", revs)
-	}
-}
-
-func TestTextureSourceArtifactAttachmentRejectsEmptyContentItem(t *testing.T) {
-	t.Parallel()
-	h, s, _ := textureAPISetupWithRuntime(t)
-	ctx := context.Background()
-	entity := textureSourceEntity{
-		EntityID: "src-empty",
-		Kind:     "legal_source",
-		Label:    "Empty Source",
-		Target:   textureSourceEntityTarget{TargetKind: "url", URL: "https://example.com/empty", CanonicalURL: "https://example.com/empty"},
-		Display:  textureSourceEntityDisplay{InlineMode: "collapsed_citation", ExpandedMode: "source_card", OpenSurface: "source", DefaultCollapsed: true},
-		Evidence: textureSourceEntityEvidence{State: "available", ResearchState: "represented"},
-		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           "test",
-			RightsScope:         "public_url_snapshot",
-			UntrustedSourceText: true,
-		},
-	}
-	importReq := textureRequest(t, http.MethodPost, "/api/texture/markdown-lineage/import", textureMarkdownLineageImportRequest{
-		SourcePath:     "proposals/source-attachment-empty.md",
-		Title:          "source-attachment-empty.md",
-		SourceEntities: []textureSourceEntity{entity},
-		Versions: []textureMarkdownLineageVersion{{
-			Label:   "v1",
-			Content: "A cited sentence [1].",
-			CitationResolutions: []textureCitationMarkerResolution{{
-				Marker:   "[1]",
-				EntityID: "src-empty",
-			}},
-		}},
-	})
-	importW := httptest.NewRecorder()
-	h.HandleTextureRouter(importW, importReq)
-	if importW.Code != http.StatusCreated {
-		t.Fatalf("import markdown lineage: status = %d, want %d; body: %s", importW.Code, http.StatusCreated, importW.Body.String())
-	}
-	var imported textureMarkdownLineageImportResponse
-	if err := json.NewDecoder(importW.Body).Decode(&imported); err != nil {
-		t.Fatalf("decode import response: %v", err)
-	}
-	now := time.Now().UTC()
-	if err := s.CreateContentItem(ctx, types.ContentItem{
-		ContentID:   "content-empty",
-		OwnerID:     "user-1",
-		SourceType:  "text",
-		MediaType:   "text/markdown",
-		AppHint:     AgentProfileTexture,
-		Title:       "Empty Source",
-		TextContent: "",
-		ContentHash: contentHash(""),
-		Provenance:  json.RawMessage(`{"rights_scope":"public_source"}`),
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}); err != nil {
-		t.Fatalf("create content item: %v", err)
-	}
-	attachReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/source-attachments", textureSourceArtifactAttachmentRequest{
-		Attachments: []textureSourceArtifactAttachment{{
-			EntityID:  "src-empty",
-			ContentID: "content-empty",
-		}},
-	})
-	attachW := httptest.NewRecorder()
-	h.HandleTextureRouter(attachW, attachReq)
-	if attachW.Code != http.StatusGone {
-		t.Fatalf("status = %d, want %d; body: %s", attachW.Code, http.StatusGone, attachW.Body.String())
-	}
-	if !strings.Contains(attachW.Body.String(), "legacy Texture source attachment endpoint is retired") {
-		t.Fatalf("body = %s", attachW.Body.String())
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -1398,7 +1400,7 @@ type mockBridgeProvider struct {
 	taskResult string // captures the result set by Execute on the RunRecord
 }
 
-func (m *mockBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (m *mockBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	m.mu.Lock()
 	m.called = true
 	m.mu.Unlock()
@@ -1419,7 +1421,7 @@ func (m *mockBridgeProvider) Execute(ctx context.Context, task *types.RunRecord,
 
 func (m *mockBridgeProvider) ProviderName() string { return m.name }
 
-func testRuntimeWithBridge(t *testing.T, bridge Provider) (*Runtime, *store.Store) {
+func testRuntimeWithBridge(t *testing.T, bridge provideriface.Provider) (*Runtime, *store.Store) {
 	t.Helper()
 
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-bridge-test")

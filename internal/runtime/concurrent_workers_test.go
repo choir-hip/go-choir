@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -1359,7 +1361,7 @@ type conditionalFailProvider struct {
 
 func (p *conditionalFailProvider) ProviderName() string { return "conditional-fail" }
 
-func (p *conditionalFailProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *conditionalFailProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started"}`))
 
 	select {

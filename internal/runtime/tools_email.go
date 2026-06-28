@@ -240,7 +240,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		runMetadataAgentID:       agentID,
 		runMetadataChannelID:     agentID,
 		runMetadataDesktopID:     desktopIDForRun(parent),
-		"requested_by":              parent.RunID,
+		"requested_by":           parent.RunID,
 		"source_agent_profile":   AgentProfileTexture,
 		"email_action":           "draft_request",
 		"email_draft_id":         draftID,
@@ -258,21 +258,21 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		return nil, fmt.Errorf("marshal email appagent result: %w", err)
 	}
 	run := &types.RunRecord{
-		RunID:        runID,
-		AgentID:      agentID,
-		ChannelID:    agentID,
-		RequestedByRunID:  parent.RunID,
-		AgentProfile: AgentProfileEmail,
-		AgentRole:    AgentProfileEmail,
-		OwnerID:      ownerID,
-		SandboxID:    rt.cfg.SandboxID,
-		State:        types.RunCompleted,
-		Prompt:       "Create an Email appagent draft request from Texture artifact " + revisionID,
-		Result:       string(resultBytes),
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		FinishedAt:   &now,
-		Metadata:     metadata,
+		RunID:            runID,
+		AgentID:          agentID,
+		ChannelID:        agentID,
+		RequestedByRunID: parent.RunID,
+		AgentProfile:     AgentProfileEmail,
+		AgentRole:        AgentProfileEmail,
+		OwnerID:          ownerID,
+		SandboxID:        rt.cfg.SandboxID,
+		State:            types.RunCompleted,
+		Prompt:           "Create an Email appagent draft request from Texture artifact " + revisionID,
+		Result:           string(resultBytes),
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		FinishedAt:       &now,
+		Metadata:         metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, run)
 	if err := rt.store.CreateRun(ctx, *run); err != nil {
@@ -280,7 +280,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	}
 	rt.emitEvent(ctx, run, types.EventRunSubmitted, events.CauseTaskLifecycle, emailEventJSON(map[string]any{
 		"prompt_length": len(run.Prompt),
-		"requested_by":     parent.RunID,
+		"requested_by":  parent.RunID,
 	}))
 	rt.emitEvent(ctx, run, types.EventRunStarted, events.CauseTaskLifecycle, emailEventJSON(map[string]any{
 		"authority": "email_appagent",

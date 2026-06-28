@@ -241,7 +241,7 @@ var providerRateLimitRetryDelays = []time.Duration{
 //   - Tool execution emits observable events through the event bus.
 //
 // Returns the final text result, total token usage, and any error.
-func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolRegistry, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, TokenUsage, error) {
+func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolRegistry, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit provideriface.EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, TokenUsage, error) {
 	var totalUsage TokenUsage
 	options := toolLoopOptions{}
 	for _, opt := range opts {
@@ -969,7 +969,7 @@ func checkToolLoopBudgetAfterProvider(budget ToolLoopBudget, usage TokenUsage) e
 	return nil
 }
 
-func emitToolLoopBudgetExhausted(emit EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage, cause error) {
+func emitToolLoopBudgetExhausted(emit provideriface.EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage, cause error) {
 	if emit == nil {
 		return
 	}
@@ -985,7 +985,7 @@ func emitToolLoopBudgetExhausted(emit EventEmitFunc, budget ToolLoopBudget, prov
 	emit(types.EventRunProgress, "tool_loop_budget", payload)
 }
 
-func emitToolLoopBudgetUsage(emit EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage) {
+func emitToolLoopBudgetUsage(emit provideriface.EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage) {
 	if emit == nil || !budget.active() {
 		return
 	}
@@ -1282,7 +1282,7 @@ func requiredInitialToolChoiceReminderText(requiredName, reason string) string {
 	return fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
 }
 
-func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvider, req ToolLoopRequest, emit EventEmitFunc) (*ToolLoopResponse, error) {
+func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvider, req ToolLoopRequest, emit provideriface.EventEmitFunc) (*ToolLoopResponse, error) {
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		resp, err := provider.CallWithTools(ctx, req)
@@ -1425,7 +1425,7 @@ func buildToolResultContent(results []types.ToolResult) []any {
 // only be used when the runtime wants the executeTask path without the
 // tool-calling loop.
 type toolLoopAdapter struct {
-	Provider
+	provideriface.Provider
 }
 
 // CallWithTools implements ToolLoopProvider by delegating to the underlying
@@ -1515,7 +1515,7 @@ func extractTextFromContent(content any) string {
 // provider already implements ToolLoopProvider, it is returned directly.
 // Otherwise, it is wrapped in a toolLoopAdapter that converts tool-loop
 // calls into simple provider calls.
-func asToolLoopProvider(p Provider) ToolLoopProvider {
+func asToolLoopProvider(p provideriface.Provider) ToolLoopProvider {
 	if tlp, ok := p.(ToolLoopProvider); ok {
 		return tlp
 	}

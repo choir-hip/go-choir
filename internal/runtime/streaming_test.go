@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -29,7 +31,7 @@ type streamingProvider struct {
 	called  bool
 }
 
-func (p *streamingProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *streamingProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	p.mu.Lock()
 	p.called = true
 	p.mu.Unlock()
@@ -67,7 +69,7 @@ func (p *streamingProvider) ProviderName() string { return p.name }
 // --- Test Helpers ---
 
 // testStreamingRuntime creates a fresh Runtime for streaming tests.
-func testStreamingRuntime(t *testing.T, provider Provider) (*Runtime, *store.Store) {
+func testStreamingRuntime(t *testing.T, provider provideriface.Provider) (*Runtime, *store.Store) {
 	t.Helper()
 
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-streaming-test")

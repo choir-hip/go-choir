@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -25,7 +27,7 @@ type semanticMergeTestProvider struct {
 
 func (p *semanticMergeTestProvider) ProviderName() string { return "semantic-merge-test" }
 
-func (p *semanticMergeTestProvider) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (p *semanticMergeTestProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	task.Result = p.response
 	return nil
 }

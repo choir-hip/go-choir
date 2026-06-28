@@ -14,12 +14,12 @@ import (
 // estimates derived from trace event payloads and the hardcoded pricing table;
 // they are not provider invoices.
 type costsResponse struct {
-	Estimate bool                 `json:"estimate"`
-	Window   string               `json:"window,omitempty"`
-	From     string               `json:"from,omitempty"`
-	To       string               `json:"to,omitempty"`
-	Summary  llmcost.CostSummary  `json:"summary"`
-	Entries  []llmcost.CostEntry  `json:"entries,omitempty"`
+	Estimate    bool                   `json:"estimate"`
+	Window      string                 `json:"window,omitempty"`
+	From        string                 `json:"from,omitempty"`
+	To          string                 `json:"to,omitempty"`
+	Summary     llmcost.CostSummary    `json:"summary"`
+	Entries     []llmcost.CostEntry    `json:"entries,omitempty"`
 	KnownModels []llmcost.ModelPricing `json:"known_models,omitempty"`
 }
 

@@ -16,10 +16,10 @@ import (
 // processor dispatch; dropped items are logged with their nearest-neighbor
 // score for threshold calibration.
 type qdrantDedupResult struct {
-	Kept      []sources.Item
-	Dropped   []sources.Item
-	Threshold float32
-	Skipped   bool
+	Kept       []sources.Item
+	Dropped    []sources.Item
+	Threshold  float32
+	Skipped    bool
 	SkipReason string
 }
 

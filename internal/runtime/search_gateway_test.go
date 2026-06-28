@@ -22,10 +22,10 @@ func TestGatewaySearchClientParsesSearchOutage(t *testing.T) {
 			"provider_health": map[string]any{
 				"tavily": map[string]any{
 					"state":              "cooling_down",
-					"cooldown_until":       "2026-06-18T05:00:00Z",
-					"strike_count":         1,
-					"last_failure_class":   "rate_limited",
-					"last_error_summary":   "429 too many requests",
+					"cooldown_until":     "2026-06-18T05:00:00Z",
+					"strike_count":       1,
+					"last_failure_class": "rate_limited",
+					"last_error_summary": "429 too many requests",
 				},
 				"brave": map[string]any{
 					"state": "active",

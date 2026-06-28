@@ -12,13 +12,14 @@ import (
 	"strings"
 	"time"
 
+	"os"
+
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"os"
 )
 
 // apiError is a JSON error envelope for API responses.
@@ -94,19 +95,6 @@ type promptBarSubmissionStatusResponse struct {
 	Error        string             `json:"error,omitempty"`
 }
 
-type runContinuationListResponse struct {
-	Continuations []types.RunContinuationRecord `json:"continuations"`
-}
-
-type runContinuationSelectRequest struct {
-	SourceRunID      string `json:"source_loop_id"`
-	Objective        string `json:"objective"`
-	Reason           string `json:"reason,omitempty"`
-	AuthorityProfile string `json:"authority_profile,omitempty"`
-	LeaseSeconds     int    `json:"lease_seconds,omitempty"`
-	Start            bool   `json:"start,omitempty"`
-}
-
 type runAcceptanceSynthesizeRequest struct {
 	TargetMissionID       string `json:"target_mission_id"`
 	SourcePromptObjective string `json:"source_prompt_or_objective,omitempty"`
@@ -119,49 +107,6 @@ type runAcceptanceSynthesizeRequest struct {
 
 type runAcceptanceListResponse struct {
 	Acceptances []types.RunAcceptanceRecord `json:"acceptances"`
-}
-
-type compactionRecallEvalStartRequest struct {
-	Title                string   `json:"title,omitempty"`
-	ModelPolicyOverlayID string   `json:"model_policy_overlay_id"`
-	ContentItemIDs       []string `json:"content_item_ids"`
-	RecallQuestions      []string `json:"recall_questions,omitempty"`
-	ReadPolicy           string   `json:"read_policy,omitempty"`
-	MinimumSelectorReads int      `json:"minimum_selector_reads,omitempty"`
-}
-
-type compactionRecallEvalStartResponse struct {
-	RunID                string         `json:"loop_id"`
-	AgentID              string         `json:"agent_id"`
-	ChannelID            string         `json:"channel_id,omitempty"`
-	State                types.RunState `json:"state"`
-	OwnerID              string         `json:"owner_id"`
-	ModelPolicyOverlayID string         `json:"model_policy_overlay_id"`
-	Provider             string         `json:"provider,omitempty"`
-	Model                string         `json:"model,omitempty"`
-	ReasoningEffort      string         `json:"reasoning_effort,omitempty"`
-	ContentItemIDs       []string       `json:"content_item_ids"`
-	StatusURL            string         `json:"status_url"`
-	Metadata             map[string]any `json:"metadata,omitempty"`
-	CreatedAt            string         `json:"created_at"`
-}
-
-type compactionRecallEvalRunStatusResponse struct {
-	runStatusResponse
-	Assessment   compactionRecallEvalAssessment `json:"assessment,omitempty"`
-	Continuation *types.RunContinuationRecord   `json:"continuation,omitempty"`
-}
-
-type compactionRecallEvalAssessment struct {
-	Applicable           bool     `json:"applicable"`
-	Valid                bool     `json:"valid"`
-	Reasons              []string `json:"reasons,omitempty"`
-	ActualSelectorReads  int      `json:"actual_selector_reads,omitempty"`
-	MinimumSelectorReads int      `json:"minimum_selector_reads,omitempty"`
-	AvailableSelectors   int      `json:"available_selector_count,omitempty"`
-	SearchAttempts       int      `json:"search_attempts,omitempty"`
-	CompactionStarted    int      `json:"compaction_started,omitempty"`
-	CompactionCompleted  int      `json:"compaction_completed,omitempty"`
 }
 
 // spawnRequest is the JSON payload for POST /api/agent/spawn.
@@ -646,114 +591,6 @@ func (h *APIHandler) HandleModelPolicyRouter(w http.ResponseWriter, r *http.Requ
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "model policy route not found"})
 	}
-}
-
-func (h *APIHandler) HandleRunContinuationsRoot(w http.ResponseWriter, r *http.Request) {
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		sourceRunID := strings.TrimSpace(r.URL.Query().Get("source_loop_id"))
-		if sourceRunID == "" {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_loop_id is required"})
-			return
-		}
-		if _, err := h.rt.GetRun(r.Context(), sourceRunID, ownerID); err != nil {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "source run not found"})
-			return
-		}
-		continuations, err := h.rt.store.ListRunContinuationsBySource(r.Context(), ownerID, sourceRunID)
-		if err != nil {
-			log.Printf("runtime api: list continuations: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list continuations"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, runContinuationListResponse{Continuations: continuations})
-	case http.MethodPost:
-		var req runContinuationSelectRequest
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&req); err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid continuation request"})
-			return
-		}
-		sourceRunID := strings.TrimSpace(req.SourceRunID)
-		if sourceRunID == "" {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_loop_id is required"})
-			return
-		}
-		if strings.TrimSpace(req.Objective) == "" {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "objective is required: continuation synthesis was removed; the caller decides the next objective"})
-			return
-		}
-		rec, err := h.rt.SelectRunContinuation(r.Context(), sourceRunID, ownerID, ContinuationProposal{
-			Objective:        req.Objective,
-			Reason:           req.Reason,
-			AuthorityProfile: req.AuthorityProfile,
-			LeaseSeconds:     req.LeaseSeconds,
-			Details:          map[string]any{"selection_source": "api_explicit_objective"},
-		})
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		if req.Start {
-			rec, err = h.rt.StartRunContinuation(r.Context(), ownerID, rec.ContinuationID)
-			if err != nil {
-				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-				return
-			}
-		}
-		writeAPIJSON(w, http.StatusAccepted, rec)
-	default:
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-	}
-}
-
-func (h *APIHandler) HandleRunContinuationDetail(w http.ResponseWriter, r *http.Request) {
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	const prefix = "/api/continuations/"
-	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation not found"})
-		return
-	}
-	continuationID := strings.TrimSpace(parts[0])
-	if len(parts) == 1 {
-		if r.Method != http.MethodGet {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		rec, err := h.rt.store.GetRunContinuation(r.Context(), ownerID, continuationID)
-		if err != nil {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation not found"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
-		return
-	}
-	if len(parts) == 2 && parts[1] == "start" {
-		if r.Method != http.MethodPost {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		rec, err := h.rt.StartRunContinuation(r.Context(), ownerID, continuationID)
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusAccepted, rec)
-		return
-	}
-	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "continuation action not found"})
 }
 
 func (h *APIHandler) HandleRunAcceptancesRoot(w http.ResponseWriter, r *http.Request) {
@@ -1401,66 +1238,6 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
-// HandleEventList handles GET /api/agent/events.
-// When loop_id is present, it returns historical events for that specific
-// loop after verifying owner access. Otherwise it returns recent owner-scoped
-// events across loops. This legacy handler is not browser-public; Trace uses
-// /api/trace/* projections.
-func (h *APIHandler) HandleEventList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	limit := 200
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 1000 {
-			limit = n
-		}
-	}
-
-	runID := strings.TrimSpace(r.URL.Query().Get("loop_id"))
-	if runID != "" {
-		if _, err := h.rt.GetRun(r.Context(), runID, ownerID); err != nil {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-			return
-		}
-		events, err := h.rt.Store().ListEvents(r.Context(), runID, limit)
-		if err != nil {
-			log.Printf("runtime api: list run events: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list run events"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, eventListResponse{Events: events})
-		return
-	}
-	channelID := strings.TrimSpace(r.URL.Query().Get("channel_id"))
-	if channelID != "" {
-		events, err := h.rt.Store().ListEventsByChannel(r.Context(), ownerID, channelID, limit)
-		if err != nil {
-			log.Printf("runtime api: list channel events: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list channel events"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, eventListResponse{Events: events})
-		return
-	}
-
-	events, err := h.rt.Store().ListEventsByOwner(r.Context(), ownerID, limit)
-	if err != nil {
-		log.Printf("runtime api: list owner events: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list events"})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, eventListResponse{Events: events})
-}
-
 // HandleChannelMessageList handles GET /api/agent/channel-messages.
 // It returns persisted message bodies for a specific owner-scoped coordination channel.
 func (h *APIHandler) HandleChannelMessageList(w http.ResponseWriter, r *http.Request) {
@@ -1573,99 +1350,6 @@ func (h *APIHandler) HandleTopology(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleEvents is the legacy raw owner event stream handler. It is intentionally
-// not registered on the browser-public route table; Trace uses trajectory-scoped
-// /api/trace/* projections instead.
-func (h *APIHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	// Set SSE headers.
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering
-
-	// Flush headers.
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-
-	// Parse optional after_seq for catch-up.
-	afterSeq := int64(0)
-	if v := r.URL.Query().Get("after_seq"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			afterSeq = n
-		}
-	}
-
-	// Send historical events for catch-up if requested.
-	if afterSeq > 0 {
-		h.sendHistoricalEvents(r.Context(), w, ownerID, afterSeq)
-	}
-
-	// Subscribe to live events.
-	bus := h.rt.EventBus()
-	ch := bus.SubscribeWithBuffer(128)
-	defer bus.Unsubscribe(ch)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case ev, ok := <-ch:
-			if !ok {
-				return
-			}
-			// Filter by owner (caller scoping, VAL-RUNTIME-006).
-			if ev.Record.OwnerID != ownerID && ev.Record.OwnerID != "" {
-				continue
-			}
-			// Write SSE event.
-			data, err := json.Marshal(ev.Record)
-			if err != nil {
-				log.Printf("runtime api: marshal event: %v", err)
-				continue
-			}
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-		}
-	}
-}
-
-// sendHistoricalEvents fetches and writes historical events from the store
-// for the given owner with sequence > afterSeq. This supports SSE catch-up
-// after reconnection.
-func (h *APIHandler) sendHistoricalEvents(ctx context.Context, w http.ResponseWriter, ownerID string, afterSeq int64) {
-	events, err := h.rt.Store().ListEventsByOwnerAfter(ctx, ownerID, afterSeq, 200)
-	if err != nil {
-		log.Printf("runtime api: fetch historical events: %v", err)
-		return
-	}
-	for _, ev := range events {
-		data, err := json.Marshal(ev)
-		if err != nil {
-			continue
-		}
-		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-	}
-	if len(events) > 0 {
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
-	}
-}
-
 // HandleHealth handles GET /health for the runtime service.
 // It reports runtime readiness for real run handling, and surfaces degraded
 // state rather than hiding it behind a generic healthy response
@@ -1716,8 +1400,6 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
-	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
-	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/costs", h.HandleCosts)
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
 	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
@@ -1740,14 +1422,10 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/adoptions/", h.HandleAppAdoptionDetail)
 	s.HandleFunc("/api/trajectories", h.HandleTrajectoriesRoot)
 	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)
-	s.HandleFunc("/api/continuations", h.HandleRunContinuationsRoot)
-	s.HandleFunc("/api/continuations/", h.HandleRunContinuationDetail)
 	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
 	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
 	s.HandleFunc("/api/evals/texture-prompt", h.HandleTexturePromptEval)
-	s.HandleFunc("/api/evals/compaction-recall", h.HandleCompactionRecallEvalRoot)
-	s.HandleFunc("/api/evals/compaction-recall/runs/", h.HandleCompactionRecallEvalDetail)
 	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
 	s.HandleFunc("/internal/runtime/app-change-packages/", h.HandleInternalAppChangePackageDetail)
 	s.HandleFunc("/internal/runtime/channel-casts", h.HandleInternalChannelCast)
@@ -1821,8 +1499,6 @@ const (
 //	GET    /api/texture/documents/{id}/compare   → semantic compare
 //	POST   /api/texture/documents/{id}/merge-preview → preview concept merge
 //	POST   /api/texture/documents/{id}/accept-merge → accept merge preview
-//	POST   /api/texture/documents/{id}/source-repairs → retired source-gap repair tombstone
-//	POST   /api/texture/documents/{id}/source-attachments → retired source-attachment tombstone
 //	POST   /api/texture/documents/{id}/restore   → restore historical revision as latest
 //	GET    /api/texture/documents/{id}/diagnosis → owner-scoped diagnosis bundle
 //	GET    /api/texture/documents/{id}/export    → export current Texture revision
@@ -1899,14 +1575,6 @@ func (h *APIHandler) HandleTextureRouter(w http.ResponseWriter, r *http.Request)
 		}
 		if strings.HasSuffix(rest, "/accept-merge") {
 			h.HandleTextureAcceptMerge(w, r)
-			return
-		}
-		if strings.HasSuffix(rest, "/source-repairs") {
-			h.HandleTextureSourceGapRepair(w, r)
-			return
-		}
-		if strings.HasSuffix(rest, "/source-attachments") {
-			h.HandleTextureSourceArtifactAttachment(w, r)
 			return
 		}
 		if strings.HasSuffix(rest, "/restore") {

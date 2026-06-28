@@ -36,11 +36,6 @@ const (
 	runMetadataAgentID             = "agent_id"
 	runMetadataModel               = "model"
 	runMetadataDesktopID           = "desktop_id"
-	runMetadataContObjective       = "continuation_objective"
-	runMetadataContReason          = "continuation_reason"
-	runMetadataContAuthority       = "continuation_authority_profile"
-	runMetadataContLeaseSeconds    = "continuation_lease_seconds"
-	runMetadataContAutoStart       = "continuation_auto_start"
 	runMetadataToolCWD             = "tool_cwd"
 	runMetadataOwnerEmail          = "owner_email"
 	runMetadataWorkerIsolation     = "worker_isolation"
@@ -175,9 +170,6 @@ func channelIDForRun(rec *types.RunRecord) string {
 	if rec.Metadata != nil {
 		if channelID, _ := rec.Metadata[runMetadataChannelID].(string); strings.TrimSpace(channelID) != "" {
 			return strings.TrimSpace(channelID)
-		}
-		if legacyWorkID, _ := rec.Metadata["work_id"].(string); strings.TrimSpace(legacyWorkID) != "" {
-			return strings.TrimSpace(legacyWorkID)
 		}
 	}
 	if strings.TrimSpace(rec.AgentID) != "" {

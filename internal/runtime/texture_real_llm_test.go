@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -94,7 +96,7 @@ func (c *anthropicClient) ProviderName() string { return c.name }
 // Execute implements the runtime.Provider interface. It makes a real HTTP call
 // to the Anthropic-compatible API with streaming enabled, emitting delta events
 // for each SSE chunk.
-func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error {
+func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(
 		`{"status":"started","provider":"`+c.name+`","real":"true"}`))
 
@@ -222,7 +224,7 @@ func errProviderCall(statusCode int, status string, body []byte) *providerError 
 // resolveRealProvider creates a real LLM runtime.Provider from environment
 // credentials. It returns the provider and display name, or skips the test
 // if no credentials are available.
-func resolveRealProvider(t *testing.T) (Provider, string) {
+func resolveRealProvider(t *testing.T) (provideriface.Provider, string) {
 	t.Helper()
 
 	// Try Z.AI first.

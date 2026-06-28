@@ -293,6 +293,7 @@ func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 		Metadata: map[string]any{
 			"type":           "texture_agent_revision",
 			"request_intent": "universal_wire_processor_article_revision",
+			"trajectory_id":  "traj-publish-skip",
 		},
 	}
 	handler.rt.maybeAutonomousPublishWireArticle(ctx, doc, rev, rec)
