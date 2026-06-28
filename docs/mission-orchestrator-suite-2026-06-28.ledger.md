@@ -474,7 +474,7 @@ packages, staging deploy succeeded.
 SUPPORTED, mainlined M6 (macOS File Provider) and M8 (runtime deletion),
 and created PR #18 for M9 (mutation hardening). The vendorHash fix
 exposed and repaired pre-existing source filter gaps in flake.nix.
-22 of 26 missions are now mainlined. The critical path (M8 → M9 → M10)
+24 of 26 missions are now mainlined. The critical path (M8 → M9 → M10)
 is unblocked: M8 merged, M9 in review, M10 ready to launch once M9
 merges. V=1: only C15 (frontend auth staging verification) remains
 undecided, requiring a user-triggered staging deploy."

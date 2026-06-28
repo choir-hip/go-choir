@@ -25,7 +25,7 @@
 | C16 | M25 Fix Data Races | SUPPORTED | proxy+server races fixed, -race clean | **Mainlined** |
 | C16b | M25b vmctl Race | SUPPORTED | vmctl ownership race fixed, -race clean | **Mainlined** |
 | C16c | M25c Gateway Race | SUPPORTED | mockProvider.lastReq mutex fix, -race clean | **Mainlined** |
-| C17 | M8 Runtime Deletion | SUPPORTED | ~4,576 net lines deleted, all tests pass | **PR #16** (red class, rebased, review) |
+| C17 | M8 Runtime Deletion | SUPPORTED | ~4,576 net lines deleted, all tests pass | **Mainlined** (PR #16 merged in Pass 5) |
 | C18 | M20b Wire Trace | SUPPORTED | 7 wiring tests, graceful degradation | **Mainlined** |
 | C19 | M21b Wire PII | SUPPORTED | 10 redaction tests, RedactingStore middleware | **Mainlined** |
 | C20 | M22b Wire Health | SUPPORTED | 10 service health tests, circuit breakers verified | **Mainlined** |
@@ -38,18 +38,18 @@
 ## Mission Summary
 
 - **Total missions delegated:** 26 (M1-M22 from Pass 2, M3/M7/M8/M20b/M21b/M22b/M25/M25b from Pass 3, M4/M5/M6/M23/M25c from Pass 4, M9 from Pass 5)
-- **Mainlined:** 22 (M1, M2, M3, M4, M5, M6, M7, M8, M11, M12, M13, M14, M15, M19, M20, M20b, M21, M21b, M22, M22b, M23, M25, M25b, M25c)
+- **Mainlined:** 24 (M1, M2, M3, M4, M5, M6, M7, M8, M11, M12, M13, M14, M15, M19, M20, M20b, M21, M21b, M22, M22b, M23, M25, M25b, M25c)
 - **PR'd:** 1 (PR #18 M9 mutation hardening — red class, review)
 - **Open edges:** 3 (M18 triage report not committed; M24 staging verification needs user trigger; M14 pricing table static)
 
 ## Strong Definitive Statements
 
 1. "The race detector found real bugs — this is the conjecture succeeding, not failing. C3 predicted the race detector would find bugs, and it found four: proxy WebSocket concurrent writes, server listener race, vmctl ownership aliasing, and gateway mockProvider concurrent field access. All four fixed (M25/M25b/M25c). PR #10 merged."
-2. "The reward condition (mainlining) works as gradient alignment: 20 of 24 missions produced work good enough to mainline. The 1 PR'd mission (M8) needs red-class review, not quality concerns."
+2. "The reward condition (mainlining) works as gradient alignment: 24 of 26 missions produced work good enough to mainline. The 1 PR'd mission (M9) needs red-class review, not quality concerns."
 3. "The wiring missions (M20b, M21b, M22b) demonstrate that open edges from Pass 2 are closing: trace persistence, PII redaction, and health endpoints are now wired into the runtime, trace ingestion, and gateway respectively."
 4. "M8 Phase 1 deleted ~4,576 lines of dead code from the runtime without breaking any tests, confirming the deletion-first heuristic: the runtime accumulated significant dead weight from prior refactors."
 5. "Pass 4 unblocked the Base sync stack: M4 (blob store + REST API) → M5 (desktop sync with Wails) mainlined in sequence. M23 (bounded inbox) cherry-picked independently from M8's branch, proving the conjecture that backpressure can be opt-in without changing the existing actor runtime API."
-6. "M23's cherry-pick from M8's branch demonstrates a clean separation of concerns: the bounded inbox feature doesn't depend on M8's dead code deletion, so it can land independently while M8 awaits red-class review."
+6. "M23's cherry-pick from M8's branch demonstrated a clean separation of concerns: the bounded inbox feature didn't depend on M8's dead code deletion, so it landed independently while M8 awaited red-class review (M8 has since merged in Pass 5)."
 
 ## Heresy Delta
 
