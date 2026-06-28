@@ -1,64 +1,43 @@
 # Choir Agent Operating Contract
 
-This file is the repo-level contract for coding agents working on Choir.
+This file is the repo-level contract for coding agents working on Choir, loaded
+every session. It inherits [Choir Doctrine](docs/choir-doctrine.md) and must not
+become a competing doctrine source. When they conflict, follow Choir Doctrine
+unless this file is carrying a newer explicitly promoted operating update.
 
-[docs/choir-doctrine.md](docs/choir-doctrine.md) is the apex architecture and
-doctrine document. `AGENTS.md` is the operating contract for agents; it inherits
-Choir Doctrine and must not become a competing doctrine source. When they
-conflict, follow Choir Doctrine unless this file is carrying a newer explicitly
-promoted operating update.
+Product architecture rules live in [docs/agent-product-doctrine.md](docs/agent-product-doctrine.md)
+(authority boundaries, harness minimalism, Texture control plane, runtime
+configuration, product-path verification, run acceptance). Long-running mission
+rules live in [docs/agent-parallax-rules.md](docs/agent-parallax-rules.md)
+(Parallax, Texture narrative, independent review threads). Load those on demand.
 
 ## Default Environment
 
-Staging is the acceptance environment: `https://choir.news`.
+Staging is the acceptance environment: `https://choir.news`. Use local
+development only for fast frontend visual iteration, focused unit shaping, or
+reproducing a staging failure after staging evidence identifies the failed
+transition. Do not claim local proof for vmctl, live worker/candidate computers,
+gateway credentials, model/search calls, auth/session renewal, platform
+promotion, rollback, or Choir-in-Choir behavior.
 
-Use local development only for fast frontend visual iteration, focused unit shaping, or reproducing a staging failure after staging evidence identifies the transition that failed. Do not claim local proof for vmctl, live worker/candidate computers, gateway credentials, model/search calls, auth/session renewal, platform promotion, rollback, or Choir-in-Choir behavior.
+Use the repo dev shell for Go/Dolt work: `nix develop -c go test ...`. The
+runtime package is broad and CI shards it; for local coverage prefer
+`nix develop -c scripts/go-test-runtime-shards` or focused
+`go test ./internal/runtime -run TestName` while shaping one transition. Do not
+hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
+— the durable fix is entering the dev shell.
 
-Use the repo dev shell for Go, Dolt, and other native-dependency work:
+Browser proof is specialized; do not assume every worker VM should carry
+Playwright/Chromium. For source-opening doctrine, default durable web-derived
+reading to Source Viewer/reader artifacts and use Web Lens only for explicit
+live/original inspection.
 
-```text
-nix develop -c go test ...
-nix develop -c go test ./internal/runtime ...
-nix develop -c go build ./cmd/sandbox
-```
+Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM,
+sandbox, candidate-world, promotion, package, or persistent-state behavior. The
+product object is a persistent user computer; `sandbox` is an implementation
+service name, not the product ontology.
 
-The runtime package is intentionally broad and CI shards it. For local runtime
-coverage, prefer the same sharded path instead of a full serial package run:
-
-```text
-nix develop -c scripts/go-test-runtime-shards
-nix develop -c env SHARD_INDEX=0 TOTAL_SHARDS=4 scripts/go-test-runtime-shards
-nix develop -c scripts/go-test-local
-```
-
-Use focused `go test ./internal/runtime -run TestName` while shaping one
-transition. Avoid unbounded full serial `go test ./internal/runtime` runs unless
-you are deliberately profiling the whole package. Local all-shard runs are
-sequential by default because concurrent embedded-Dolt runtime shards contend on
-developer machines; use `PARALLEL_SHARDS=1` only when you are deliberately
-checking local shard concurrency.
-
-Do not hand-enter local `CGO_CFLAGS`, `CGO_CXXFLAGS`, or `CGO_LDFLAGS` for the
-Dolt ICU dependency except as a short diagnostic to confirm a missing-dev-shell
-failure. The durable fix is that Codex, workers, candidate computers, and CI
-enter the repo dev shell or an equivalent declared Nix environment before
-running Go/Dolt tests and builds. If a worker/candidate environment cannot run
-the dev shell, treat that as harness/runtime configuration debt to fix or
-document precisely; do not normalize ad hoc host-specific include paths.
-
-Browser proof is a specialized capability. Do not assume every worker or
-candidate VM should carry Playwright/Chromium; that is a resource-heavy worker
-class. Use it when product-path proof requires interactive screenshots, video,
-or DOM metrics. Obscura-style extraction can be used for lightweight browsing
-and scraping only after its auth, action, screenshot, video, and extraction
-capabilities are explicitly verified for the task at hand.
-
-For source-opening doctrine, default durable web-derived reading to Source
-Viewer/reader artifacts and use Web Lens only for explicit live/original
-inspection. Do not reintroduce Browser-as-source-gathering framing in docs,
-prompts, or tests.
-
-Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM, sandbox, candidate-world, promotion, package, or persistent-state behavior. The product object is a persistent user computer. `sandbox` is an implementation/service name, not the product ontology.
+## Mutation Classes
 
 Classify every mission/change by mutation class before editing:
 
@@ -73,44 +52,84 @@ Classify every mission/change by mutation class before editing:
   gateway/provider calls, run acceptance, and deployment routing;
 - `black`: irreversible or production-destructive work.
 
-Before touching an orange or red protected surface, name the conjecture delta,
-protected surfaces, admissible evidence class, rollback path, and heresy delta
-(`discovered`, `introduced`, `repaired`). Do not count newly discovered heresies
-as regressions, and do not count discovery alone as repair.
+**Ceremony by class:**
 
-## Worktree Hygiene
+- **Green/yellow:** name the class, proceed.
+- **Orange:** name the class and the rollback path. Full ceremony optional
+  unless touching provider routing or VM lifecycle.
+- **Red/black:** full ceremony required — conjecture delta, protected surfaces,
+  admissible evidence class, rollback path, and heresy delta (`discovered`,
+  `introduced`, `repaired`).
 
-Before handing off or stopping a mission, run `git status --short` and classify
-every dirty path as intentional source, durable documentation/evidence,
-temporary proof output, generated artifact, or unrelated WIP.
+Do not count newly discovered heresies as regressions, and do not count
+discovery alone as repair.
 
-Do not leave untracked scratch files in the repo. Temporary Playwright probes
-may use `*.tmp.spec.js` while investigating, but before stopping they must be
-deleted, moved outside the repo, or promoted to a normal tracked `*.spec.js`
-with a clear regression purpose. Do not let scratch tests become a parallel
-test suite.
+## Check for Existing Fixes
 
-If unrelated WIP is already present, preserve it explicitly instead of mixing it
-into the current mission commit. Use a named stash or a separate branch/commit,
-and report the recovery handle.
+Before debugging a bug in subsystem X, search for replacement or alternative
+implementations of X in the codebase. If one exists:
 
-## Independent Review Threads
+- Is it wired in?
+- If not, is the bug you're debugging a symptom of the old implementation that
+  the new one would fix?
+- Is connecting the existing fix cheaper than patching the old code?
 
-For second-opinion review, independent prover, or handoff-tier verification,
-prefer Codex thread tools over in-thread subagents when the user authorizes a
-separate thread. Use `list_projects` and `create_thread` to start a fresh
-project-scoped verifier thread with a narrow review prompt, and ask that thread
-to return a verdict with evidence rather than implementation. Keep the verifier
-thread read-only unless it discovers a problem that must be documented under
-Problem Documentation First.
+If a replacement exists and is not wired in, document the connection opportunity
+before patching the old code. Connecting an existing fix is preferred over
+patching code that is already superseded.
 
-When thread inspection or wakeup tools are available, use them to reconnect the
-review to the spawning thread: `read_thread`/`list_threads` for the verifier
-result, `send_message_to_thread` or the app's wakeup/follow-up mechanism when
-the spawned reviewer needs to notify or continue the spawning thread, and
-`handoff_thread` only when ownership of a checkout/worktree should move. If the
-thread tools are unavailable, record the fallback used and do not treat a
-same-context reread as an independent prover.
+## Root Cause Clustering
+
+When you document 3+ bugs in the same subsystem within one week, stop patching.
+Write a root cause clustering assessment before the next fix:
+
+- Do these bugs share a common cause?
+- Is there existing code that addresses the root cause but isn't wired in?
+- Is the substrate itself broken, and are you patching symptoms on top of it?
+
+Apply the substrate-vs-symptom classification (below) to each bug in the
+cluster. If 3+ symptoms trace to the same substrate, the next action is
+substrate-level, not symptom-level.
+
+## Substrate vs Symptom Classification
+
+When documenting a problem, classify it:
+
+- **Substrate:** the bug is in a foundational layer (concurrency model,
+  message delivery, data persistence, runtime engine, provider interface,
+  VM lifecycle, event bus).
+- **Symptom:** the bug is in code that runs on top of a substrate.
+
+If you document 3+ symptom bugs traced to the same substrate, apply Root Cause
+Clustering before patching the next symptom. The substrate fix may already exist
+and just need wiring.
+
+## Dead-End Escalation
+
+If you've been working on the same problem for 3+ iterations or 2+ days without
+convergence, stop patching. Write a structural assessment:
+
+- What's the dependency graph around the problem?
+- Is there a substrate-level fix that would eliminate the problem class?
+- Are you debugging symptoms because the substrate is broken?
+- Does a replacement implementation exist that isn't wired in?
+
+Escalate to the human with the assessment. Do not attempt another incremental
+patch without explicit direction. Continuing to patch after non-convergence is a
+known failure mode, not persistence.
+
+## Deletion-First Heuristic
+
+Before adding code to fix a bug, ask:
+
+- Is the code being patched already superseded by a replacement?
+- Would deleting the code being patched and connecting the replacement be safer
+  than patching?
+- What can be removed instead of added?
+
+Prefer connecting an existing replacement over patching superseded code. Prefer
+deletion over addition when both resolve the bug. Patching superseded code
+extends the life of code that should be removed.
 
 ## Problem Documentation First
 
@@ -124,17 +143,10 @@ the problem, records the evidence, and updates the belief state and remaining
 error field — without any code fix. The fix commit(s) come second, referencing
 the prior documentation.
 
-This ensures that:
-
-- Problems can be reviewed independently of any particular solution.
-- Alternative solutions can be considered before committing to an approach.
-- Refactoring and re-evaluation can happen after mission pressure passes.
-- Other agents and humans can examine the problem record to form their own
-  judgment about the right fix.
-
-Context-dependent fixes authored during a mission ("get past this blocker") are
-especially susceptible to narrowing the solution space prematurely. A separate
-documentation step creates a natural review gate.
+This ensures that problems can be reviewed independently of any particular
+solution, alternative solutions can be considered before committing to an
+approach, and other agents and humans can examine the problem record to form
+their own judgment.
 
 Exceptions require explicit justification in the commit message, naming why the
 problem could not be documented before being fixed.
@@ -153,238 +165,30 @@ commit -> push origin main -> monitor CI -> monitor staging deploy
 
 Do not stop at local tests or an unpushed commit when platform behavior changed.
 
-Personal-computer changes are different. Choir should eventually allow a user to
-fork their own computer, build or install local apps/runtime changes, and promote
-that candidate into their own active computer without a global platform deploy.
-That path still needs lineage, typed deltas, verifier evidence, route rollback,
-and no lost foreground updates.
-
 Docs-only commits are different. The full CI/deploy workflow intentionally
 ignores `docs/**` and top-level `*.md`; do not weaken those filters to force a
 full CI or staging deploy path for docs-only changes. Docs-only pushes and pull
-requests should run the report-only docs truth checker workflow instead. If
-documentation needs validation beyond that checker, run the specific check
-directly or use a manual workflow dispatch when one exists.
+requests should run the report-only docs truth checker workflow instead.
 
-## Parallax
+## Worktree Hygiene
 
-For multi-hour, overnight, staging, self-development, or broad architectural
-work, use Parallax. A Parallax mission document is a **paradoc**: it states the
-mission conjecture, deeper goal, witness/spec, invariants and qualities,
-domain ramp, variant, budget, authority bounds, live conjectures/open edges,
-next move, ledger, lineage, learning state, and settlement requirement.
+Before handing off or stopping a mission, run `git status --short` and classify
+every dirty path as intentional source, durable documentation/evidence,
+temporary proof output, generated artifact, or unrelated WIP.
 
-Read [docs/parallax-design-2026-06-11.md](docs/parallax-design-2026-06-11.md)
-and the available Parallax skill before authoring or executing broad missions.
-When a legacy MissionGradient document is still the best source form, compile
-it in place into a Parallax State section instead of starting a disconnected
-control file. Preserve historical MissionGradient reports as evidence; do not
-treat them as current operating doctrine unless a newer paradoc promotes the
-claim.
+Do not leave untracked scratch files in the repo. Temporary Playwright probes
+may use `*.tmp.spec.js` while investigating, but before stopping they must be
+deleted, moved outside the repo, or promoted to a normal tracked `*.spec.js`
+with a clear regression purpose.
 
-Do not turn Parallax into a brittle checklist. Treat the bridge from artifact
-completion to deeper-goal progress as suspect until evidence supports it.
-Select moves by expected variant decrease per budget, force observer shifts
-when probes stop changing decisions, and exit only as settled, open_handoff,
-blocked, or superseded.
-
-For long-running Choir-in-Choir missions, maintain an owner-readable Texture
-narrative. Each substantive change in plan, evidence, blocker, or result should
-produce a concise revision that explains the whole run state so far in plain
-language: objective, past work, current work, what changed, evidence, learnings,
-risks, and next step. Do not make Texture a Trace-like topology/status table, and
-do not dump low-level events into Texture. Trace is the causal ledger for dense
-tool calls, LLM content, and agent-to-agent messages; feature-specific live
-surfaces such as Chyron may show granular activity streams; Texture is the human
-supervision narrative.
-
-Read [docs/texture-agentic-invariants-2026-06-13.md](docs/texture-agentic-invariants-2026-06-13.md)
-before changing Texture tools, prompts, routing, revision creation, coagent wake
-behavior, Trace/Texture projection, run acceptance involving Texture, or missions
-that use Texture as their owner-readable narrative. Texture is the canonical
-document/versioning core and must remain an agentic participant in a multi-agent
-system, not a workflow runner. Runtime may expose affordances and durable
-obligations, but it must not force Texture to call researcher, super, verifier, or
-any semantic appagent merely because prompt text, revision metadata, or an
-acceptance probe mentions that role.
-
-Texture is also Choir's artifact control plane. Conductor routes exogenous
-user/app/source input into Texture-owned artifact state: prompt-bar requests,
-sourcecycled/news ingestion, article creation, mission work, and most user
-prompts should open or create Texture/context first. Super is not the direct
-ingress target for ordinary user or source prompts. Texture may later call
-`request_super_execution` when the Texture-controlled artifact needs execution,
-coding-agent trees, generated artifacts, verification, candidate work, or other
-privileged action, and downstream researcher/super evidence must attach back to
-the Texture/artifact context.
-
-## Authority Boundaries
-
-- `conductor` routes exogenous user/app/connector input into Texture/artifact state. It is not the semantic babysitter and not a direct-super router for ordinary prompts.
-- Appagents own durable app artifacts. `texture` owns canonical document versions.
-- `researcher` writes structured findings/evidence, not canonical text or code.
-- `super` is the foreground orchestration root. It can request workers and candidate worlds.
-- `vsuper` owns a background/candidate computer or candidate world.
-- `cosuper` is subordinate to the super/vsuper that requested or assigned it.
-- Verification is a contract over evidence, not a separate privileged caste.
-
-Foreground/canonical state stays stable. Background/candidate computers mutate. Canonical state changes only by promotion.
-
-Texture delegation is agentic. Texture may write, ask researcher, ask super, ask
-both, ask neither, wait for more evidence, or report a blocker within its
-authority envelope. `edit_texture` stores a canonical revision; it must not become
-a semantic workflow gate that requires a subsequent researcher/super/verifier
-tool call. Exact required-tool continuation is reserved for narrow mechanical
-tool protocols, not appagent policy.
-
-Prompt bar, source ingestion, and article/news creation should show conductor
-entry followed by Texture artifact materialization. `super` before Texture is a
-route invariant failure. `super` after Texture is valid only when Texture requested
-execution through an explicit affordance such as `request_super_execution`.
-
-Prefer asynchronous supervision. A delegation, worker VM run, candidate preview,
-or verification job should leave durable status/evidence and return a handle
-rather than blocking the foreground supervisor until completion. If a required
-tool is blocking, treat that as runtime debt to repair or document precisely.
-
-Avoid skip-level authority confusion. If `super` needs to address a `cosuper`,
-the owning `vsuper` must receive the same instruction or remain the forwarding
-authority. A subordinate should not have to reconcile competing directives from
-two supervisors.
-
-Verifier agents may be read-only with respect to product/canonical state, but
-they are not necessarily computation-only observers. They may run commands,
-write temporary scripts, or create tests inside an authorized scratch or
-candidate environment when that is required to verify behavior.
-
-## Harness Minimalism
-
-Keep the agent harness small and programmatically uniform across roles by
-default. The core tool loop, provider call semantics, run-memory plumbing,
-event emission, cancellation, retry, compaction, and continuation mechanics
-should behave identically for conductor, Texture, researcher, super, vsuper,
-co-super, verifier, and future agent roles unless there is a proven invariant
-that requires divergence.
-
-Prefer prompts, tool descriptions, capability policy, and product-visible
-state over role-specific harness branches. (Prompt content itself is moving
-from persona framing toward obligation/authority-envelope framing — see
-`docs/choir-role-free-actor-protocol-2026-06-11.md` — but the structural point
-here, prompt/policy over code branches, holds either way.) If a proposed fix
-requires
-programmatic divergence in the core loop for one role, document the evidence,
-the invariant being protected, the simpler alternatives rejected, and obtain
-explicit human approval before landing it. Divergence is acceptable only when it
-protects correctness, security, authority boundaries, or resource isolation in a
-way that cannot be represented cleanly as policy or prompt contract.
-
-## Prompt Control-Flow Antipattern
-
-Prompts provide data and invariants, not boolean branches that switch behavior.
-A prompt should name the style texture, the available sources, the run context,
-and the invariants (cite sources, no model priors as grounded, canonical
-revisions via tools). It must not branch on runtime metadata to switch behavior
-(`{{if .WireTexture}}`, first-owner-prompt special cases, worker-finding gates).
-Unconditional invariant text is not control flow. Decisions that used to live in
-prompt branches belong in the style texture, the run context, or tool
-availability. See `docs/prompt-revisions-needed-2026-06-23.md` for the
-flattening plan and `docs/choir-doctrine.md` invariant I16.
-
-Source citation is tri-state and citation shape is a display mode, not a
-separate node type (Choir Doctrine I15). Every source entity is cited
-(`source_ref` in the body), toolbar-only (a Style.texture style source), or
-marked-unused (`mark_source_unused` with a rationale). The former
-`source_embed` block node is removed; all citations are `source_ref` with
-`display_mode` (`numbered_ref` | `expanded_ref`).
-
-## Runtime Configuration
-
-Provider secrets and platform model catalogs are platform-owned. Per-computer
-model policy is computer-owned durable state and should be editable through the
-product path, including by `super` in response to an owner prompt. Do not patch
-Node B environment variables or tracked server files as a substitute for a
-runtime policy path unless the mission is explicitly a platform config deploy.
-
-Role defaults are policy defaults, not architecture. Any configured model may
-serve any agent role when its declared capabilities match the current turn:
-conductor, Texture, researcher, super, vsuper, co-super, verifier, or future
-roles. Text-only models are valid for orchestration, research, coding, writing,
-and verification that does not need media input. Multimodal models are required
-only when the turn needs screenshots, images, video frames, files, or other
-media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
-that as the active computer's effective policy, not a hard-coded role boundary.
-Capability is evaluated for the next turn, not permanently for the role.
-Do not add new role-specific provider assumptions such as "conductor must be
-ChatGPT", "super must be ChatGPT", "Texture must be Fireworks", or "verifier must
-be multimodal" unless the current turn's capability requirements actually imply
-that. The long-term target is dynamic, agentically editable per-computer model
-policy: an owner prompt may ask `super` to edit the computer's model policy,
-and subsequent runs should use that policy without a platform deploy or Node B
-environment edit. The platform catalog records model capabilities and provider
-request semantics; per-computer policy selects among those capabilities.
-
-Provider request schemas must preserve modality. If a task needs screenshots,
-videos, files, or other media evidence, route through a model/provider path that
-declares that modality and record the blocker precisely when the adapter cannot
-resolve the artifact.
-
-## Product-Path Verification
-
-Browser or Playwright acceptance may use public authenticated product APIs such as:
-
-- `/api/prompt-bar`
-- `/api/prompt-bar/submissions/{id}`
-- `/api/texture/*`
-- `/api/trace/*`
-- `/api/app-change-packages/*`
-- `/api/computers/*/source-lineage`
-- `/api/computers/*/adoptions`
-- `/api/adoptions/*`
-- `/api/continuations/*` (transitional H007/H008 residue; prefer
-  trajectory/work-item product evidence when available and do not add new
-  continuation-shaped acceptance)
-- `/api/run-acceptances/*`
-
-Do not use browser-public internal or test-only routes to bypass the product path:
-
-- `/api/agent/*`
-- `/api/prompts`
-- `/api/test/*`
-- `/internal/*`
-- raw event mutation endpoints
-
-The verifier must observe product/control evidence. It must not manually seed success records.
-
-## Run Acceptance Records
-
-For long-running self-development proof, synthesize a durable `RunAcceptanceRecord` from existing evidence:
-
-```text
-POST /api/run-acceptances/synthesize
-```
-
-Required evidence should include trajectory/run ids, authority profile,
-build/deploy identity, worker/candidate handle evidence, AppChangePackage/
-adoption evidence or a precise blocker, verifier contracts, rollback refs,
-heresy delta, conjecture delta, and residual risks. Existing records may still
-carry legacy lease vocabulary; treat that as transitional H019 residue, not the
-target actor model. Use explicit levels: `docs-level`, `staging-smoke-level`,
-`export-level`, `promotion-level`, `continuation-level`.
-
-Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim `continuation-level` without run-memory/compaction and continuation evidence.
-
-`continuation-level` is transitional H008/H014 residue: the durable-actors rearchitecture
-(`docs/choir-rearchitecture-durable-actors-2026-06-11.md`) re-points this
-acceptance level at trajectory/work-item settlement evidence (portfolio M4).
-Until that cutover lands, `continuation-level` keeps its current meaning and
-evidence requirement above — do not weaken it and do not claim trajectory
-settlement evidence in its place before the level is formally re-pointed.
-Do not introduce new `continuation-level` claims or APIs as doctrine; M4 must
-delete or explicitly shim the old surface.
+If unrelated WIP is already present, preserve it explicitly instead of mixing it
+into the current mission commit. Use a named stash or a separate branch/commit,
+and report the recovery handle.
 
 ## Git And Staging
 
-GitHub `origin/main` is the source of truth for tracked deployed files. Do not edit tracked files directly on Node B as a source/config shortcut.
+GitHub `origin/main` is the source of truth for tracked deployed files. Do not
+edit tracked files directly on Node B as a source/config shortcut.
 
 If a behavior-changing commit is pushed:
 
@@ -395,9 +199,12 @@ If a behavior-changing commit is pushed:
 
 ## Safety
 
-Assume the worktree may contain user or other-agent changes. Do not revert unrelated changes. Avoid destructive commands unless the user explicitly asked for them.
+Assume the worktree may contain user or other-agent changes. Do not revert
+unrelated changes. Avoid destructive commands unless the user explicitly asked
+for them.
 
-Use background/candidate computers or candidate worlds for risky mutation. Failed candidates should leave diagnostics, rollback refs, and next safe probes.
+Use background/candidate computers or candidate worlds for risky mutation. Failed
+candidates should leave diagnostics, rollback refs, and next safe probes.
 
 ## Final Evidence
 
