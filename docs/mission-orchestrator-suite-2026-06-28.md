@@ -93,7 +93,7 @@ V = driving conjectures still undecided across all delegated missions
   + conjectures with no strong definitive statement yet recorded
 ```
 
-**Initial conjectures (one per mission):**
+**Initial conjectures:**
 
 - C1 (M1): "An API key system with Bearer token auth, scoped access, and
   SHA-256 hashed storage can be added to the existing auth service without
@@ -105,24 +105,39 @@ V = driving conjectures still undecided across all delegated missions
   detector finds bugs that must be fixed before enabling." — undecided
 - C4 (M12): "The flaky Dolt test can be quarantined without losing
   coverage of the behavior it tests." — undecided
+- C5 (M13): "Privacy policy and ToS can be drafted that accurately reflect
+  Choir's actual data flows (source captures, LLM processing, trace events,
+  Dolt storage) without overclaiming or underdisclosing." — undecided
+- C6 (M14): "Per-cycle, per-article LLM API cost can be tracked through
+  trace events and aggregated without adding a separate billing system." — undecided
+- C7 (M15): "PR #7 (docs checker cleanup) can be reviewed, improved if
+  needed, and merged without introducing retired vocabulary or breaking
+  existing tests." — undecided
+- C8 (M18): "The four worktrees from ~2026-06-23 can be triaged
+  (merge/hold/discard) with clear recommendations." — undecided
+- C9 (M19): "The 27 open_handoff missions in the mission graph can be
+  triaged and consolidated." — undecided
+- C10 (M20): "Trace events can be persisted to Dolt as the primary
+  observability store without SaaS export." — undecided
 
-**V = 4** (all undecided)
+**V = 10** (all undecided)
 
 Each mission that settles with a typed verdict reduces V by 1. A mission
 that discovers a new conjecture increases V but advances the cognitive
-state (discovery, not zero progress).
+state (discovery, not zero progress). Blocked missions don't reduce V
+but produce open edges that inform the next cycle.
 
 ## Budget
 
-**Granted:** one session (tonight, ~4-8 hours of wall-clock)
+**Granted:** one session (overnight, ~8+ hours of wall-clock)
 **Spent:** 0
 **Remaining:** full session
-**Solvency:** 4 parallel missions at ~30-60 min each for subagent work,
-plus ~15-30 min each for orchestrator verification. Total: ~2-4 hours if
-all succeed on first pass. Budget is sufficient for one full cycle of
-delegation + verification + landing. If a mission fails verification, one
-retry is within budget. Two retries on the same mission = re-plan or
-handoff.
+**Solvency:** 10 missions, but not all are parallel. Wave 1: 6 parallel
+independent missions (M1, M2, M11, M12, M13, M14). Wave 2: review/eval
+missions (M15/PR7, M18, M19) after Wave 1 lands. Wave 3: M20 if budget
+remains. Each wave: ~30-90 min subagent work + ~15-30 min verification.
+Total: ~3-6 hours for all three waves. Budget is sufficient. Blocked
+missions produce open edges, not budget exhaustion.
 
 ## Authority / Bounds
 
@@ -130,8 +145,10 @@ handoff.
 - Delegate missions to background subagents
 - Verify subagent returns
 - Commit and push verified work
+- Create PRs for work that needs review
 - Run local tests and builds
-- Update mission suite and paradoc state
+- Update mission suite, paradoc state, and checkpoint report
+- Generate checkpoint reports (MD to docs/, PDF to iCloud)
 
 **Orchestrator does NOT:**
 - Deploy to staging (requires user trigger)
@@ -139,6 +156,8 @@ handoff.
 - Force-push or rewrite history
 - Start missions on the critical path (M8-M10) without user approval
 - Approve orange+ mutations for production — only for local verification
+- Merge PRs without deep review — PR #7 and any PRs created tonight need
+  review, not rubber-stamping
 
 **Subagent authority:**
 - Create and modify files within the mission scope
@@ -217,22 +236,46 @@ missions delegated yet, no evidence collected, V=4.
 
 ## Next Move
 
-**Pass 1: Launch four parallel background subagents.**
+**Pass 1: Launch Wave 1 — six parallel background subagents.**
+
+Wave 1 (independent, no dependencies):
+- M1 (API auth) — implement API key system
+- M2 (Choir Base kernel) — implement pure planner + model + testkit
+- M11 (race detector) — add -race to CI runtime shards
+- M12 (flaky test) — quarantine flaky Dolt test
+- M13 (privacy policy) — draft privacy policy + ToS
+- M14 (LLM cost tracking) — implement cost tracking via trace events
 
 Each subagent receives:
-1. The mission spec (design doc reference)
-2. The conjecture to decide
-3. The files to create/modify
-4. The acceptance criterion
+1. The conjecture to decide (strong, clear, definitive statement)
+2. The spec/design doc reference
+3. The files to create or modify
+4. The acceptance criterion (what evidence proves the conjecture)
 5. The authority bounds
 
-Expected ΔV: -4 (all four conjectures decided as supported)
-Risk: one or more may return falsified (conjecture wrong) or weakened
-(evidence narrows the claim). Both are still progress — a falsified
-conjecture is a decided conjecture.
+Expected ΔV: -6 (all six conjectures decided)
+Risk: some may return falsified or weakened. Both are progress.
 
-After all four return, verify each at the orchestrator level, then land
-verified work in separate commits.
+After Wave 1 returns, verify each at the orchestrator level, then land
+verified work in separate commits. Update checkpoint report.
+
+**Pass 2: Launch Wave 2 — review/eval missions.**
+
+Wave 2 (after Wave 1 lands, or in parallel if no file conflicts):
+- M15/PR7 (docs cleanup) — deep review of PR #7, improve if needed
+- M18 (worktree triage) — evaluate 4 worktrees
+- M19 (mission graph triage) — triage 27 open_handoff missions
+
+Expected ΔV: -3
+
+**Pass 3: Launch Wave 3 if budget remains.**
+
+- M20 (trace observability) — persist trace events to Dolt
+
+Expected ΔV: -1
+
+**Throughout:** update checkpoint report after each wave, save MD to docs/
+and PDF to iCloud.
 
 ## Ledger File
 
@@ -264,29 +307,49 @@ verified work in separate commits.
 ## Settlement
 
 The mission settles when:
-- All four delegated missions have returned with a typed conjecture
+- All delegated missions have returned with a typed conjecture
   verdict (supported/weakened/falsified/superseded)
 - Each verdict has admissible evidence (tests, build output, code diffs)
-- Verified work is committed and pushed
+- Verified work is committed and pushed, or PRs created for review
 - CI passes (or failures are diagnosed and documented)
 - The paradoc state is updated with final V and conjecture verdicts
 - The ledger records every pass
+- The checkpoint report is updated after each wave (MD + PDF)
 
-If budget runs out before all four settle: handoff with current state,
-remaining conjectures, and next-move instructions.
+If budget runs out before all settle: handoff with current state,
+remaining conjectures, open edges, and next-move instructions. Blocked
+missions are recorded as open edges, not failures.
+
+## Checkpoint Report
+
+After each wave, update `docs/orchestrator-checkpoint-report-2026-06-28.md`
+and generate a PDF copy to iCloud (`~/Library/Mobile Documents/com~apple~CloudDocs/Choir Reports/orchestrator-checkpoint-report-2026-06-28.pdf`).
+
+Report format:
+- Current V and conjecture verdicts
+- Missions delegated, returned, verified, landed
+- Missions blocked with open edges
+- Next wave plan
+- Strong definitive statements produced
+- Heresy delta
+- Budget spent / remaining
 
 ## Suggested Goal String
 
 ```text
 /goal Run docs/mission-orchestrator-suite-2026-06-28.md as the orchestrator
-of the mission suite. Delegate M1 (API auth), M2 (Choir Base kernel), M11
-(race detector), M12 (flaky test quarantine) to background subagents as
-conjectures to decide, not tasks to complete. Each subagent receives the
-conjecture, spec, files, acceptance criterion, and authority bounds. Verify
-each return at the orchestrator level: conjecture decided? evidence
-admissible? invariants preserved? Land verified work in separate commits.
-Variant V=4 (four undecided conjectures). Budget: one session. Settlement:
-all four conjectures decided with typed verdicts and admissible evidence,
-verified work committed and pushed, CI passes. Ledger:
+of the mission suite. Delegate missions to background subagents as
+conjectures to decide, not tasks to complete. Wave 1: M1 (API auth), M2
+(Choir Base kernel), M11 (race detector), M12 (flaky test), M13 (privacy
+policy), M14 (LLM cost tracking). Wave 2: M15 (PR7 review), M18 (worktree
+triage), M19 (mission graph triage). Wave 3: M20 (trace observability).
+Each subagent receives the conjecture, spec, files, acceptance criterion,
+and authority bounds. Verify each return at the orchestrator level:
+conjecture decided? evidence admissible? invariants preserved? Land
+verified work in separate commits or PRs. Update checkpoint report after
+each wave (MD to docs/, PDF to iCloud). Variant V=10. Budget: overnight
+session. Settlement: all conjectures decided with typed verdicts and
+admissible evidence, verified work committed or PR'd, CI passes or
+failures diagnosed, checkpoint report final. Ledger:
 docs/mission-orchestrator-suite-2026-06-28.ledger.md.
 ```
