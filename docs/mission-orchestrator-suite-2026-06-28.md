@@ -7,61 +7,54 @@
 
 ## Mission Conjecture
 
-If the orchestrator delegates missions to subagents as **conjectures to
-decide** (not tasks to complete) with evidence-bounded acceptance criteria,
-under the invariants of no silent conflict resolution and no fake-island
-domain, over tonight's four independent missions (M1 API auth, M2 Base
-kernel, M11 race detector, M12 flaky test quarantine), then the audited
-computer vision is materially advanced because each mission decides a
-conjecture that unblocks downstream work and produces admissible evidence
-the orchestrator can verify.
+If the orchestrator delegates all 24 missions to subagents — each in its
+own worktree, each with a conjecture to decide and a parallax doc, each
+working toward the reward of being mainlined — then the audited computer
+vision is materially advanced because the mission suite IS the artifact
+program building itself: each mission is a typed transaction with an
+author, a conjecture, evidence, and a verdict, and the set of mainlined
+missions becomes the tape.
 
-The load-bearing bridge is: **delegating conjectures (not tasks) to
-subagents produces evidence that advances the cognitive state of the
-system.** If subagents produce code that passes tests but doesn't decide
-the conjecture, the bridge is falsified — motion without descent.
+The load-bearing bridge: **delegating conjectures (not tasks) to
+subagents in isolated worktrees, with mainlining as the reward condition,
+produces evidence that advances the cognitive state of the system.** The
+reward condition aligns the subagent's gradient with the orchestrator's:
+quality work lands on main; uncertain work stays on a branch.
 
 ## Deeper Goal (G)
 
 The audited computer: `computer = choir_code(artifact_program)`, where
 the tape is the program, the program is self-authoring, and every state
-change is a typed transaction with provenance. Tonight's missions are the
-first concrete implementation steps:
+change is a typed transaction with provenance.
 
-- M1 (API auth) enables machines to author tape entries — without headless
-  auth, only humans in browsers can mutate state, and the self-authoring
-  program cannot exist.
-- M2 (Base kernel) implements the three-tree reconciliation that IS tape
-  consensus for file mutations — without the planner, file mutations are
-  opaque accidents, not typed transactions.
-- M11 (race detector) defends the execution substrate against the bug class
-  that borked the port — without race safety, the tape can be corrupted by
-  concurrent access.
-- M12 (flaky test quarantine) removes noise from the verification signal —
-  without trustworthy CI, conjecture verdicts are unreliable.
+The mission suite IS the first self-authoring cycle: the orchestrator
+delegates conjectures, subagents produce evidence, the orchestrator
+verifies and mainlines, and the mainlined work becomes the substrate for
+the next cycle. This is the tape writing itself through the missions.
 
-The deeper goal is not "four missions completed." The deeper goal is "four
-conjectures decided with evidence, unblocking the next layer of the
-audited computer."
+## Operating Model
 
-## Witness / Spec (A/S)
+Each mission gets:
+1. **Its own worktree** — isolated branch, no contention with other missions
+2. **A parallax doc** — the conjecture, spec, invariants, acceptance
+   criteria, authority bounds. Pipelined: written just-in-time before
+   delegation, not all upfront.
+3. **A subagent** — background, works autonomously in the worktree
+4. **A reward condition** — if the work is quality, it gets mainlined
+   (merged to main and pushed). If uncertain, it stays on a branch or
+   becomes a PR. The subagent's gradient is aligned: produce work good
+   enough to mainline.
 
-**A:** Four background subagents, each delegated a mission with:
-- The conjecture to decide (strong, clear, definitive statement)
-- The spec/design doc reference
-- The files to create or modify
-- The acceptance criterion (what evidence proves the conjecture)
-- The authority bounds (what the subagent can and cannot do)
-
-**S:** Each subagent returns:
-- The conjecture verdict (supported / weakened / falsified / superseded)
-- The evidence (tests, build output, code diffs)
-- The strong definitive statement about the system
-- Residual risks and open edges
-
-The orchestrator verifies each return at its own observer level:
-conjecture decided? evidence admissible? invariants preserved? Then lands
-the verified work (commit, push, CI).
+The orchestrator:
+- Pipelines parallax docs as missions come up
+- Launches subagents in waves, but reorchestrates in real time — doesn't
+  wait for a full wave to complete before launching the next
+- Verifies each return: conjecture decided? evidence admissible?
+  invariants preserved? quality sufficient for main?
+- Mainlines confident work, PRs uncertain work, records blocked work as
+  open edges
+- Updates the checkpoint report after each mission settles
+- Keeps moving when blocked — blocked missions produce open edges, not stops
 
 ## Invariants / Qualities / Domain Ramp (I/Q/D)
 
@@ -72,17 +65,19 @@ the verified work (commit, push, CI).
   WebAuthn)
 - No production deploy without staging verification (orange+ mutations)
 - Problem Documentation First for any new bug discovered
+- Each mission works in its own worktree — no cross-mission file contention
 
 **Qualities:**
 - Each delegation prompt states the conjecture, not just the task
 - Each verification checks the conjecture verdict, not just test passage
 - Each commit references the mission and conjecture
 - The ledger records every pass with ΔV against prediction
+- Work that lands on main must pass CI
 
 **Domain ramp:**
-- Tonight: 4 independent missions, no dependencies between them
-- Next: M3 (Base journal) depends on M2, M7 (auth recovery) depends on M1
-- Later: M8 (runtime refactor) is serial critical path
+- Wave 1: independent missions (M1, M2, M11, M12, M13, M14)
+- Pipeline: as Wave 1 missions settle, launch dependent and review missions
+- Critical path: M8 (runtime refactor) is red — PR only, needs deep review
 - Target: M10 (choir-in-choir) activates the force multiplier
 
 ## Variant (Conjecture Descent) V
@@ -106,196 +101,125 @@ V = driving conjectures still undecided across all delegated missions
 - C4 (M12): "The flaky Dolt test can be quarantined without losing
   coverage of the behavior it tests." — undecided
 - C5 (M13): "Privacy policy and ToS can be drafted that accurately reflect
-  Choir's actual data flows (source captures, LLM processing, trace events,
-  Dolt storage) without overclaiming or underdisclosing." — undecided
+  Choir's actual data flows without overclaiming or underdisclosing." — undecided
 - C6 (M14): "Per-cycle, per-article LLM API cost can be tracked through
-  trace events and aggregated without adding a separate billing system." — undecided
-- C7 (M15): "PR #7 (docs checker cleanup) can be reviewed, improved if
-  needed, and merged without introducing retired vocabulary or breaking
-  existing tests." — undecided
-- C8 (M18): "The four worktrees from ~2026-06-23 can be triaged
-  (merge/hold/discard) with clear recommendations." — undecided
-- C9 (M19): "The 27 open_handoff missions in the mission graph can be
-  triaged and consolidated." — undecided
+  trace events and aggregated without a separate billing system." — undecided
+- C7 (M15): "PR #7 (docs checker cleanup) can be reviewed, improved, and
+  merged without introducing retired vocabulary or breaking tests." — undecided
+- C8 (M18): "The four worktrees from ~2026-06-23 can be triaged with clear
+  recommendations." — undecided
+- C9 (M19): "The 27 open_handoff missions can be triaged and consolidated." — undecided
 - C10 (M20): "Trace events can be persisted to Dolt as the primary
   observability store without SaaS export." — undecided
+- C11 (M22): "Health endpoints and circuit breakers can be added without
+  disrupting existing service behavior." — undecided
+- C12 (M21): "PII can be redacted from trace events at ingestion by a local
+  SLM actor before persistence." — undecided
 
-**V = 10** (all undecided)
+**V = 12** (all undecided)
 
-Each mission that settles with a typed verdict reduces V by 1. A mission
-that discovers a new conjecture increases V but advances the cognitive
-state (discovery, not zero progress). Blocked missions don't reduce V
-but produce open edges that inform the next cycle.
+Each mission that settles with a typed verdict reduces V by 1. Discovery
+of a new conjecture increases V but advances the cognitive state.
 
 ## Budget
 
-**Granted:** one session (overnight, ~8+ hours of wall-clock)
+**Granted:** open-ended (12-24+ hours)
 **Spent:** 0
-**Remaining:** full session
-**Ambition level:** EVERYTHING. All 24 missions. Partial credit for
-partial completion. Blocked missions produce open edges, not stops —
-move to the next mission immediately. Confident work goes to main;
-uncertain work goes to PRs. The goal is maximum conjecture descent, not
-minimum risk.
-
-**Solvency:** Wave 1: 6 parallel independent missions. Wave 2: 3
-review/eval missions. Wave 3: M20 + any Wave 1 missions that need
-retry. Wave 4: dependent missions (M3, M7, M22) if prerequisites land.
-Wave 5: critical path (M8) if confident. Each wave: ~30-90 min subagent
-work + ~15-30 min verification. Blocked = move on, not stop.
+**Remaining:** full
+**Solvency:** not estimated — the orchestrator pipelines work and keeps
+moving. Blocked missions produce open edges. The session runs as long as
+it's producing conjecture descent.
 
 ## Authority / Bounds
 
-**Orchator authority:**
-- Delegate missions to background subagents
+**Orchestrator authority:**
+- Delegate missions to background subagents in worktrees
 - Verify subagent returns
-- Commit and push verified work
-- Create PRs for work that needs review
+- Merge worktree branches to main and push (for confident work)
+- Create PRs (for uncertain work or work needing review)
 - Run local tests and builds
-- Update mission suite, paradoc state, and checkpoint report
+- Update mission suite, paradoc state, checkpoint report
 - Generate checkpoint reports (MD to docs/, PDF to iCloud)
+- Reorchestrate in real time — launch new missions as prerequisites settle
 
 **Orchestrator does NOT:**
 - Deploy to staging (requires user trigger)
-- Modify production routes
 - Force-push or rewrite history
-- Start missions on the critical path (M8-M10) without user approval
-- Approve orange+ mutations for production — only for local verification
-- Merge PRs without deep review — PR #7 and any PRs created tonight need
-  review, not rubber-stamping
+- Merge PRs without deep review — PR #7 and any PRs need review
+- Rubber-stamp subagent work — verify before mainlining
 
 **Subagent authority:**
-- Create and modify files within the mission scope
+- Create and modify files within the mission's worktree
 - Run tests and builds locally
 - Create new packages and test files
 - Return evidence and conjecture verdicts
 
 **Subagents do NOT:**
-- Commit or push (orchestrator does this after verification)
+- Merge to main or push to main (orchestrator does this after verification)
 - Deploy to staging or production
-- Modify files outside their mission scope
-- Touch protected surfaces (auth WebAuthn flows, proxy existing routes,
-  runtime execution substrate) beyond what the mission spec allows
+- Modify files outside their worktree
+- Touch protected surfaces beyond what the mission spec allows
 
 ## Mutation Class / Protected Surfaces
 
-- M1 (API auth): **orange** — new DB tables, new endpoints, proxy
-  validation change. Protected: existing WebAuthn flows, existing cookie
-  auth, existing proxy routes. Rollback: remove `api_keys` table and
-  revert proxy changes.
-- M2 (Base kernel): **yellow** — new packages, tests only. No protected
-  surfaces. Rollback: remove `internal/base/` directory.
-- M11 (race detector): **yellow** — CI config change. Protected: existing
-  test shard balance. Rollback: remove `-race` flag.
-- M12 (flaky test): **yellow** — test infrastructure. Protected: the
-  behavior the flaky test covers. Rollback: un-quarantine the test.
+- M1 (API auth): **orange** — new DB tables, endpoints, proxy validation
+- M2 (Base kernel): **yellow** — new packages, tests only
+- M11 (race detector): **yellow** — CI config change
+- M12 (flaky test): **yellow** — test infrastructure
+- M13 (privacy policy): **green** — docs only
+- M14 (LLM cost tracking): **orange** — trace event schema, provider calls
+- M15 (PR7 review): **green/yellow** — docs + test fixes
+- M18 (worktree triage): **green** — evaluation only
+- M19 (mission graph triage): **green** — docs work
+- M20 (trace observability): **orange** — observability infrastructure
+- M22 (health checks): **orange** — reliability infrastructure
+- M21 (PII retraction): **orange** — privacy infrastructure
 
-## Evidence Packet
+## Worktree Allocation
 
-For each mission, the evidence packet contains:
-- Mutation class and protected surfaces touched
-- Conjecture verdict (supported/weakened/falsified/superseded)
-- Tests/probes run and results
-- Code diff summary
-- Rollback ref or blocker
-- Heresy delta (discovered/introduced/repaired)
-- Residual risks
-- Strong definitive statement about the system
+```
+/Users/wiz/.windsurf/worktrees/go-choir/
+  m1-api-auth        branch: orchestrator/m1-api-auth
+  m2-base-kernel     branch: orchestrator/m2-base-kernel
+  m11-race-detector  branch: orchestrator/m11-race-detector
+  m12-flaky-test     branch: orchestrator/m12-flaky-test
+  m13-privacy-policy branch: orchestrator/m13-privacy-policy
+  m14-llm-cost       branch: orchestrator/m14-llm-cost
+```
 
-## Heresy Delta
-
-- **Discovered:** any new heresy found during implementation (e.g., "the
-  proxy auth validation has an edge case where..." is a discovery)
-- **Introduced:** any heresy the implementation creates (e.g., "the API
-  key validation doesn't check scope on first pass" is an introduction)
-- **Repaired:** any heresy the implementation fixes (e.g., "the flaky
-  test was flaky because of X, now fixed" is a repair)
-
-Discovery counts as epistemic progress, not regression. Introduction counts
-as regression. Repair counts as progress.
+Additional worktrees created as needed for Wave 2+ missions.
 
 ## Position / Live Conjectures / Open Edges
 
-**Position:** All four missions are ready to delegate. Design docs and
-specs are complete. The orchestrator is at the starting position — no
-missions delegated yet, no evidence collected, V=4.
+**Position:** All worktrees created for Wave 1. Parallax docs being
+pipelined. No subagents launched yet — user will trigger.
 
-**Live conjectures:** C1, C2, C3, C4 (all undecided, see Variant section).
+**Live conjectures:** C1-C12 (all undecided, see Variant section).
 
 **Open edges:**
-- **Independence edge:** M1 and M2 are independent but both touch the auth
-  proxy conceptually (M1 modifies proxy auth, M2 doesn't touch proxy but
-  its future API will use M1's auth). No conflict tonight, but the
-  dependency will matter for M4.
-- **Resource edge:** running 4 background subagents in parallel may
-  contend on the same files (flake.lock, go.mod). M2 and M11/M12 are
-  unlikely to conflict. M1 touches auth/proxy, M2 touches internal/base/,
-  M11 touches .github/workflows, M12 touches test files. No file
-  conflicts expected.
+- **Independence edge:** M1 and M2 are independent but both conceptually
+  touch auth (M1 modifies proxy auth, M2's future API will use M1's auth).
+  No conflict tonight — separate worktrees.
+- **Resource edge:** parallel subagents may contend on nix store / go
+  build cache. Separate worktrees prevent file conflicts.
 - **Frame-lock edge:** the orchestrator must not confuse "subagent
-  returned code" with "conjecture decided." A subagent that writes
-  500 lines of passing tests but doesn't state the conjecture verdict
-  has not advanced V. The forcing rule applies: if verification produces
-  no conjecture verdict, the next move is a shift (re-examine the
-  delegation prompt, not re-run the subagent).
+  returned code" with "conjecture decided." Verification checks the
+  conjecture verdict, not just test passage.
 
 ## Next Move
 
-**Pass 1: Launch Wave 1 — six parallel background subagents.**
+**Pass 1: Pipeline parallax docs for Wave 1 missions, then launch.**
 
-Wave 1 (independent, no dependencies):
-- M1 (API auth) — implement API key system
-- M2 (Choir Base kernel) — implement pure planner + model + testkit
-- M11 (race detector) — add -race to CI runtime shards
-- M12 (flaky test) — quarantine flaky Dolt test
-- M13 (privacy policy) — draft privacy policy + ToS
-- M14 (LLM cost tracking) — implement cost tracking via trace events
+Wave 1 worktrees are ready. Write parallax docs for each mission
+(pipelined — not all upfront), then launch subagents.
 
-Each subagent receives:
-1. The conjecture to decide (strong, clear, definitive statement)
-2. The spec/design doc reference
-3. The files to create or modify
-4. The acceptance criterion (what evidence proves the conjecture)
-5. The authority bounds
-
-Expected ΔV: -6 (all six conjectures decided)
-Risk: some may return falsified or weakened. Both are progress.
-
-After Wave 1 returns, verify each at the orchestrator level, then land
-verified work: confident work to main, uncertain work to PRs. Update
-checkpoint report. Move immediately to Wave 2.
-
-**Pass 2: Launch Wave 2 — review/eval missions.**
-
-Wave 2 (can overlap with Wave 1 if no file conflicts):
-- M15/PR7 (docs cleanup) — deep review of PR #7, improve if needed
-- M18 (worktree triage) — evaluate 4 worktrees
-- M19 (mission graph triage) — triage 27 open_handoff missions
-
-Expected ΔV: -3
-
-**Pass 3: Launch Wave 3.**
-
-- M20 (trace observability) — persist trace events to Dolt
-- M22 (health checks) — health endpoints + circuit breakers
-- M21 (PII retraction) — SLM redaction pipeline (may be too complex for
-  one pass; partial credit for design + scaffolding)
-
-Expected ΔV: -3
-
-**Pass 4: Dependent missions (if prerequisites landed).**
-
-- M3 (Base journal) — if M2 landed
-- M7 (auth recovery) — if M1 landed
-- M23 (bounded inbox) — if M8 not needed (may be independent enough)
-
-**Pass 5: Critical path (if confident).**
-
-- M8 (runtime refactor) — only if confident and budget remains. This is
-  red mutation class — PR, not main.
-
-**Throughout:** update checkpoint report after each wave, save MD to docs/
-and PDF to iCloud. Blocked = move on. Partial credit. Maximum descent.
+The user triggers the launch. The orchestrator stands ready to:
+- Verify returns as they come in
+- Mainline confident work
+- PR uncertain work
+- Launch Wave 2 as Wave 1 settles
+- Update checkpoint report after each settlement
+- Reorchestrate in real time
 
 ## Ledger File
 
@@ -303,73 +227,66 @@ and PDF to iCloud. Blocked = move on. Partial credit. Maximum descent.
 
 ## Version / Lineage
 
-- v1: initial paradoc, 2026-06-28
-- Source: `docs/mission-suite-2026-06-28.md` (24 missions compiled)
+- v1: initial paradoc, 4 missions
+- v2: expanded to 10 missions, 3 waves
+- v3: expanded to all 24 missions, worktree-per-mission, reward condition,
+  pipelined docs, real-time reorchestration, no estimates
+- Source: `docs/mission-suite-2026-06-28.md`
 - Design docs: `docs/memo-headless-auth-choir-base-artifact-program-2026-06-28.md`,
   `docs/memo-artifact-program-doctrine-2026-06-28.md`
-- Predecessor: `docs/mission-choir-base-reconciliation-kernel-v0.md` (Base
-  mission doc, now activated as M2)
 
 ## Learning State
 
 - Cognitive transforms applied: Depth Extraction (delegate conjectures not
-  tasks), Principal-agent (information asymmetry between orchestrator and
-  subagents), Observer hierarchy (verify at orchestrator level, not
-  subagent level), Feedback loop (delay between delegation and
-  verification is budget risk), Fixed point (orchestrator improves its
-  own infrastructure through missions).
-- Key learning: the variant is system-wide conjecture descent, not
-  per-mission completion. A mission that passes all tests but doesn't
-  decide its conjecture has not advanced V.
-- Promoted outward: the "delegate conjectures not tasks" principle is
-  generalizable to any multi-agent orchestration, not just tonight.
+  tasks), Principal-agent (reward condition aligns gradients), Observer
+  hierarchy (verify at orchestrator level), Feedback loop (pipeline don't
+  batch), Fixed point (orchestrator improves its own infrastructure).
+- Key learning: the reward condition (mainlining) is the gradient
+  alignment mechanism. The subagent's incentive is to produce work good
+  enough to mainline. The orchestrator's incentive is to only mainline
+  quality work. This creates a cooperative game with aligned gradients.
+- The worktree-per-mission model eliminates file contention and allows
+  real-time reorchestration without coordination overhead.
 
 ## Settlement
 
 The mission settles when:
-- All delegated missions have returned with a typed conjecture
-  verdict (supported/weakened/falsified/superseded)
-- Each verdict has admissible evidence (tests, build output, code diffs)
-- Verified work is committed and pushed, or PRs created for review
-- CI passes (or failures are diagnosed and documented)
+- All delegated missions have returned with a typed conjecture verdict
+- Each verdict has admissible evidence
+- Confident work is mainlined; uncertain work is PR'd; blocked work is
+  recorded as open edges
+- CI passes on mainlined work (or failures are diagnosed)
 - The paradoc state is updated with final V and conjecture verdicts
 - The ledger records every pass
-- The checkpoint report is updated after each wave (MD + PDF)
-
-If budget runs out before all settle: handoff with current state,
-remaining conjectures, open edges, and next-move instructions. Blocked
-missions are recorded as open edges, not failures.
+- The checkpoint report is final (MD + PDF to iCloud)
 
 ## Checkpoint Report
 
-After each wave, update `docs/orchestrator-checkpoint-report-2026-06-28.md`
-and generate a PDF copy to iCloud (`~/Library/Mobile Documents/com~apple~CloudDocs/Choir Reports/orchestrator-checkpoint-report-2026-06-28.pdf`).
+After each mission settles, update
+`docs/orchestrator-checkpoint-report-2026-06-28.md` and generate a PDF
+copy to `~/Library/Mobile Documents/com~apple~CloudDocs/Choir Reports/orchestrator-checkpoint-report-2026-06-28.pdf`.
 
 Report format:
 - Current V and conjecture verdicts
-- Missions delegated, returned, verified, landed
-- Missions blocked with open edges
-- Next wave plan
+- Missions delegated, returned, verified, mainlined, PR'd, blocked
 - Strong definitive statements produced
 - Heresy delta
-- Budget spent / remaining
+- Next missions to launch
 
 ## Suggested Goal String
 
 ```text
 /goal Run docs/mission-orchestrator-suite-2026-06-28.md as the orchestrator
-of the mission suite. Delegate missions to background subagents as
-conjectures to decide, not tasks to complete. Wave 1: M1 (API auth), M2
-(Choir Base kernel), M11 (race detector), M12 (flaky test), M13 (privacy
-policy), M14 (LLM cost tracking). Wave 2: M15 (PR7 review), M18 (worktree
-triage), M19 (mission graph triage). Wave 3: M20 (trace observability).
-Each subagent receives the conjecture, spec, files, acceptance criterion,
-and authority bounds. Verify each return at the orchestrator level:
-conjecture decided? evidence admissible? invariants preserved? Land
-verified work in separate commits or PRs. Update checkpoint report after
-each wave (MD to docs/, PDF to iCloud). Variant V=10. Budget: overnight
-session. Settlement: all conjectures decided with typed verdicts and
-admissible evidence, verified work committed or PR'd, CI passes or
-failures diagnosed, checkpoint report final. Ledger:
+of the mission suite. Each mission gets its own worktree at
+/Users/wiz/.windsurf/worktrees/go-choir/<mission-name>. Write parallax docs
+pipelined (just-in-time before delegation). Launch subagents as background
+agents. Verify each return: conjecture decided? evidence admissible?
+invariants preserved? quality sufficient for main? Mainline confident work
+(merge to main + push). PR uncertain work. Record blocked work as open
+edges and move to the next mission. Reorchestrate in real time — launch
+new missions as prerequisites settle. Update checkpoint report after each
+mission settles (MD to docs/, PDF to iCloud). Variant V=12. Budget:
+open-ended (12-24+ hours). Settlement: all conjectures decided, verified
+work mainlined or PR'd, checkpoint report final. Ledger:
 docs/mission-orchestrator-suite-2026-06-28.ledger.md.
 ```
