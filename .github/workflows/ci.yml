@@ -208,9 +208,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p sboms
+          sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths)
           for pkg in auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend obscura zot; do
             echo "==> Building SBOM for ${pkg}"
-            nix build .#sbom.x86_64-linux.${pkg} -o "sboms/${pkg}" --print-out-paths
+            store_path=$(nix build .#${pkg} --no-link --print-out-paths)
+            mkdir -p "sboms/${pkg}"
+            "$sbomnix_bin/bin/sbomnix" --cdx "sboms/${pkg}/sbom.json" "$store_path"
           done
 
       - name: Upload SBOM artifacts
