@@ -122,3 +122,95 @@ to `actorruntime.New()`.
 **Open edges:** startRunAsync legacy fallback, 15 mutexes, channels.go,
 APIHandler move — all Phase 2.
 **Receipt:** `go build ./...`, `go test -race` outputs above.
+
+---
+
+## Post-Phase 1 Repair: H030 — Actor Runtime Database Polling (2026-06-27)
+
+**Discovery:** During worktree cleanup audit, found that the actor runtime
+implementation (`internal/actor/actor.go`) was database-polling instead of
+using Go-channel mailboxes. The loop called `log.Unprocessed` every iteration
+with zero `chan` declarations. A vestigial `pending []Update` slice existed
+but was cleared and ignored. This contradicted the design doc ("The database
+remembers. Go delivers.") and was the third occurrence of this heresy (H030).
+
+**Impact on Phase 1:** Phase 1's "done" status was conditional on this
+repair. The handler (`internal/actorruntime/handler.go`) was correct — it
+checks run state before acting (idempotent) — but the delivery substrate
+underneath it was wrong. The handler worked despite the broken substrate
+because it is idempotent and the database-polling eventually delivered every
+message. But the performance characteristics were wrong (DB query per loop
+iteration instead of instant channel delivery) and the architecture was wrong
+(database as delivery mechanism, not Go channels).
+
+**Repair applied:**
+- `residentActor.pending []Update` → `residentActor.mailbox chan Update`
+  (buffered Go channel, default capacity 256)
+- `Send` does non-blocking channel send when warm (select with default for
+  overflow)
+- `loop` restructured: cold-start log replay → channel drain → warm select
+  with idle timer → post-drain overflow catch → passivation
+- Skip set prevents double processing (messages in both channel and log)
+- `processOne` checks skip before processing (found by critical review)
+- Skip set persists for activation lifetime (found by critical review)
+- Snapshot saved under lock during passivation
+- Added `MailboxCapacity` and `IdleTimeout` to `Options`
+- Adapter sets `MailboxCapacity: 256`, `IdleTimeout: 30s`
+
+**Verification:**
+- All 8 actor tests pass (`go test ./internal/actor/ -v -count=1`)
+- Both adapter tests pass (`go test ./internal/actorruntime/ -v -count=1`)
+- Full build compiles (`go build ./...`)
+- Two independent reviews: first found skip-set race (fixed), second found
+  processOne missing skip check (fixed), third verified SHIP
+
+**Heresy delta:** discovered 2026-06-27, introduced original 3c_2
+implementation, repaired 2026-06-27.
+**Evidence:** [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md),
+H030 in [docs/choir-doctrine.md](./choir-doctrine.md).
+
+---
+
+## Post-H030 Comprehensive Test Repair (2026-06-28)
+
+**Discovery:** Deep review subagent found that the H030 repair and the broader
+Phase 1/2 deletions (old timer-based wake system, in-memory ChannelManager)
+left three tests in `internal/runtime/` referencing deleted symbols. These
+tests are behind the `//go:build comprehensive` tag and were not caught by
+default `go test` runs.
+
+**Broken tests found:**
+1. `TestScheduleTextureWorkerWakeLeadingCoalesce` (texture_test.go:1652) —
+   referenced deleted `textureWakeKey`, `rt.textureWakeMu`,
+   `rt.textureWakePending[key].timer`. The old timer-based debounce system
+   was replaced by `scheduleTextureWorkerWake` sending an actor message via
+   `dispatchActor`. Coalescing is now natural via actor mailbox + park-resume.
+2. `TestHandleTopologyReportsOrchestrationShape` (api_test.go:4375) —
+   referenced deleted `rt.ChannelManager().Channel()`. The topology handler
+   already returns `ChannelCount: 0` with a comment noting in-memory channels
+   are deleted.
+3. `TestConcurrentWorkers_IndependentChannels` (concurrent_workers_test.go:242)
+   — referenced deleted `rt.ChannelManager().Channel(id)` for channel existence
+   check. The core assertion (message independence via `ChannelPost`/
+   `ChannelRead`) is still valid and store-backed.
+
+**Repair applied:**
+- Deleted `TestScheduleTextureWorkerWakeLeadingCoalesce` (replaced with a
+  comment explaining why the test no longer exists).
+- Removed `ChannelManager().Channel()` calls from
+  `TestHandleTopologyReportsOrchestrationShape`; updated expected
+  `ChannelCount` from 2 to 0.
+- Removed `ChannelManager().Channel()` existence check from
+  `TestConcurrentWorkers_IndependentChannels`; kept the `ChannelPost`/
+  `ChannelRead` verification that proves message independence.
+
+**Verification:**
+- `go test -tags comprehensive ./internal/runtime/ -run "^$" -count=1` —
+  compiles clean (no undefined symbols).
+- `go test -tags comprehensive ./internal/runtime/ -run "TestHandleTopologyReportsOrchestrationShape|TestConcurrentWorkers_IndependentChannels" -v` —
+  both PASS.
+- `go test ./internal/actor/ ./internal/actorruntime/ -v` — all 10 tests PASS.
+- `go vet ./internal/runtime/` — clean.
+
+**Mutation class:** yellow (test-only changes, no runtime behavior change).
+**Edge class:** closed (independent review found the issue, fix verified).

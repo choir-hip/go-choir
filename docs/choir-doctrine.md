@@ -1085,6 +1085,43 @@ Source Viewer/reader artifacts, explicit live/original opens use Web Lens, and
 user-facing docs/tests/copy no longer call this a Browser app or source
 gathering workflow.
 
+#### H030 - Actor Runtime Database Polling
+
+`bad pattern:` the actor runtime polls the durable log as the delivery
+mechanism instead of using Go channels. The loop queries `log.Unprocessed`
+every iteration. There are zero `chan` declarations in the actor package. A
+vestigial `pending []Update` slice exists but is cleared and ignored. The
+database is both the memory AND the delivery mechanism, contradicting the
+design principle "The database remembers. Go delivers."
+
+`detectors:` `log.Unprocessed` called inside the actor loop body (not just
+cold-start replay), `pending []Update` instead of `mailbox chan Update`, no
+`chan` declarations in `internal/actor/actor.go`, comments saying "re-query"
+or "steers are already in the log" inside the warm loop.
+
+`evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md),
+[docs/choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)
+(section 2.2, "Go delivers, the database remembers"),
+[docs/mission-3c_2-actor-runtime-migration-real-v0.md](./mission-3c_2-actor-runtime-migration-real-v0.md).
+
+`why it violates the spec:` the design specifies Go-channel mailboxes for
+warm delivery with the durable log only for crash recovery and cold-start
+replay. Polling the database every iteration reintroduces the old
+database-as-message-bus model under a new name. This heresy recurred three
+times: the original `channels.go` message bus, the actor runtime design that
+replaced it, and the actor runtime implementation that regressed to polling.
+
+`successor pattern:` `residentActor.mailbox chan Update` (buffered Go channel).
+`Send` does a non-blocking channel send when warm. The `loop` selects on the
+channel with an idle timer. The log is queried once on cold-start activation
+to replay backlog, once after channel drain to catch overflow, and by Sweep
+for boot recovery — never as a polling delivery mechanism.
+
+`deletion gate:` the actor runtime must contain `chan` declarations. The warm
+loop must `select` on the channel, not call `log.Unprocessed` in a polling
+pattern. The test: if there are no `chan` declarations in
+`internal/actor/actor.go`, the heresy is present regardless of comments.
+
 ## Banned Patterns
 
 Agents must not introduce:
@@ -1108,7 +1145,11 @@ Agents must not introduce:
 12. new Trace desktop/app/dashboard surfaces;
 13. new raw Terminal app affordances outside Super Console implementation
     internals;
-14. new Browser-as-source-gathering or URL-means-Web-Lens defaults.
+14. new Browser-as-source-gathering or URL-means-Web-Lens defaults;
+15. new actor runtime loops that poll the durable log as a delivery mechanism
+    instead of using Go channels — the test is whether `internal/actor/actor.go`
+    contains `chan` declarations and the warm loop `select`s on the channel
+    rather than calling `log.Unprocessed` in a polling pattern.
 
 ## Active Cutover Order
 

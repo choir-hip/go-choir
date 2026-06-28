@@ -75,7 +75,7 @@ func TestSendActivatesColdActorAndProcesses(t *testing.T) {
 	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
 		handled.Add(1)
 		return append(memory, []byte(u.Content+";")...), nil
-	}), Options{})
+	}), Options{IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	if err := rt.Send(context.Background(), Update{UpdateID: "u1", ToAgentID: "a1", Content: "wake"}); err != nil {
@@ -104,7 +104,7 @@ func TestWarmSteerDuringActivation(t *testing.T) {
 			<-release // hold the activation warm
 		}
 		return memory, nil
-	}), Options{})
+	}), Options{IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	if err := rt.Send(context.Background(), Update{UpdateID: "u1", ToAgentID: "a1", Content: "first"}); err != nil {
@@ -129,7 +129,7 @@ func TestNoLostWakeUnderConcurrentSendsAndPassivations(t *testing.T) {
 	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
 		handled.Add(1)
 		return memory, nil
-	}), Options{})
+	}), Options{IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	const senders, perSender = 8, 25
@@ -162,7 +162,7 @@ func TestPassivationThenRewake(t *testing.T) {
 	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
 		handled.Add(1)
 		return append(memory, 'x'), nil
-	}), Options{})
+	}), Options{IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	ctx := context.Background()
@@ -194,7 +194,7 @@ func TestBootSweepRecoversCrashWindowBacklog(t *testing.T) {
 	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
 		handled.Add(1)
 		return memory, nil
-	}), Options{})
+	}), Options{IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	if err := rt.Sweep(ctx); err != nil {
@@ -222,7 +222,7 @@ func TestEvictionIsCrashEquivalentAndSweepRewakes(t *testing.T) {
 		}
 		handled.Add(1)
 		return memory, nil
-	}), Options{})
+	}), Options{IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	ctx := context.Background()
@@ -252,7 +252,7 @@ func TestHandlerErrorRetriesWithoutLoss(t *testing.T) {
 			return memory, fmt.Errorf("transient failure")
 		}
 		return memory, nil
-	}), Options{HandlerRetryBackoff: 10 * time.Millisecond})
+	}), Options{HandlerRetryBackoff: 10 * time.Millisecond, IdleTimeout: 100 * time.Millisecond})
 	defer rt.Stop()
 
 	if err := rt.Send(context.Background(), Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {

@@ -254,16 +254,9 @@ func TestConcurrentWorkers_IndependentChannels(t *testing.T) {
 		childIDs[i] = rec.RunID
 	}
 
-	// Each child should have its own channel.
-	for i, id := range childIDs {
-		ch, err := rt.ChannelManager().Channel(id)
-		if err != nil {
-			t.Fatalf("child %d channel: %v", i, err)
-		}
-		if ch == nil {
-			t.Fatalf("child %d: channel should not be nil", i)
-		}
-	}
+	// Each child posts to the parent via the store-backed channel surface.
+	// The old in-memory ChannelManager was deleted; actor mailbox replaces it.
+	// Message independence is verified by ChannelPost/ChannelRead attribution.
 
 	// Post messages from each child to the parent channel.
 	for i, id := range childIDs {

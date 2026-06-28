@@ -108,6 +108,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	a.actorRT = actor.NewRuntime(actorLog, handler, actor.Options{
 		MaxResident:         0, // unlimited for now
 		HandlerRetryBackoff: 100 * time.Millisecond,
+		MailboxCapacity:     256,
+		IdleTimeout:         30 * time.Second,
 	})
 
 	// Wire the dispatch function. From this point, rt.activate(rec)

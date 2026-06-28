@@ -1644,45 +1644,11 @@ func (t *fakeTextureWakeTimer) fire() {
 	fn()
 }
 
-// TestScheduleTextureWorkerWakeLeadingCoalesce asserts the wake is leading +
-// max-interval, not resetting-trailing: a burst of packets for one doc rides a
-// single in-flight timer instead of pushing the flush back on every packet. The
-// resetting behavior was the slow-first-paint / batch-everything failure in
-// docs/mission-texture-product-loop-recovery-v0.md.
-func TestScheduleTextureWorkerWakeLeadingCoalesce(t *testing.T) {
-	provider := newTextureEditToolProvider(textureReplaceAllResult("noop"))
-	clock := &fakeTextureWakeClock{}
-	_, _, rt := textureAPISetupWithProviderAndOptions(t, provider, true, withTextureWakeAfterFuncForTest(clock.afterFunc))
-
-	key := textureWakeKey("user-1", "doc-cadence")
-	rt.scheduleTextureWorkerWake("user-1", "doc-cadence", "")
-	rt.textureWakeMu.Lock()
-	first := rt.textureWakePending[key].timer
-	rt.textureWakeMu.Unlock()
-	if first == nil {
-		t.Fatalf("first packet should schedule a wake timer")
-	}
-	for i := 0; i < 4; i++ {
-		rt.scheduleTextureWorkerWake("user-1", "doc-cadence", "")
-	}
-	rt.textureWakeMu.Lock()
-	again := rt.textureWakePending[key].timer
-	rt.textureWakeMu.Unlock()
-	if first != again {
-		t.Fatalf("leading+max-interval wake must not reset the in-flight timer on later packets")
-	}
-
-	// After the flush fires and clears the pending entry, the next packet is free
-	// to schedule a fresh timer so the cadence keeps going.
-	clock.fireAll()
-	rt.scheduleTextureWorkerWake("user-1", "doc-cadence", "")
-	rt.textureWakeMu.Lock()
-	next := rt.textureWakePending[key].timer
-	rt.textureWakeMu.Unlock()
-	if next == nil || next == first {
-		t.Fatalf("a packet after the flush should schedule a new timer")
-	}
-}
+// TestScheduleTextureWorkerWakeLeadingCoalesce was deleted: the old timer-based
+// debounce system (textureWakeKey, textureWakeMu, textureWakePending) was removed
+// when scheduleTextureWorkerWake was rewritten to send an actor message via
+// dispatchActor. The actor mailbox + park-resume semantics handle coalescing
+// naturally; the leading+max-interval timer behavior no longer exists.
 
 // TestCoagentUpdateTurnInjectorSupportsTexture asserts Texture uses the same
 // warm-injection path as other durable actors so one logical Texture activation

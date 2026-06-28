@@ -26,13 +26,14 @@ Choir is a category. The structure is:
 - **Functors:**
   - `Embed: Choir → Vec` (Qdrant) — maps each texture to a vector, preserves
     proximity. This is semantic search.
-  - `Publish: Choir → Corpus` (platformd) — faithful functor, preserves
+  - `Publish: Choir → Corpus` (corpusd) — faithful functor, preserves
     transclusion structure. This is the publication store of record.
   - `Generate: Autopaper × Sources → Choir` — maps an autopaper (with its
     transcluded algorithm, styleguide, and context textures) plus source
-    items to new article textures. This is the agent pipeline. Personalization
-    is generative, not projective — the styleguide shapes what gets written,
-    not how it gets reformatted.
+    items to new article textures. This is the agent pipeline, executing
+    inside actor handler activations (the execution substrate from
+    mission-3c_2). Personalization is generative, not projective — the
+    styleguide shapes what gets written, not how it gets reformatted.
 
 - **Natural transformations:** The wire API. `η: PublishedChoir → UserView` —
   transforms "all published textures" into "what this user sees on this
@@ -57,9 +58,16 @@ Cycles are the fundamental tick of the Choir clock. Each cycle:
 1. Sourcecycled fetches new source items
 2. Processor agents decide whether to synthesize articles
 3. Texture agents write article revisions via LLM
-4. Published articles get embedded into Qdrant and synced to platformd
+4. Published articles get embedded into Qdrant and synced to corpusd
 5. A wire editor agent creates a new edition texture transcluding this cycle's
    published articles
+
+Each step is an actor activation — the agent pipeline runs inside actor
+handler invocations on the execution substrate from mission-3c_2. A cycle is
+not a timer event; it is a cascade of actor messages: sourcecycled sends to
+processor, processor sends to texture agent, texture agent sends to wire
+editor. The actor mailbox delivers each step instantly; the durable log
+ensures no step is lost across crashes.
 
 Editions accumulate. No data loss. Each edition is an immutable block in the
 editorial chain. The full history of editions is the blockchain of editorial
@@ -329,11 +337,16 @@ types. Just objects and arrows.
 
 - Texture documents, revisions, transclusion links ✓
 - Object graph with entity nodes and edges ✓
-- Platformd publication store ✓
+- Corpusd publication store (currently `platformd` — rename pending per
+  `docs/naming-rectification-2026-06-27.md`) ✓
 - Cycle infrastructure (sourcecycled) ✓
 - Qdrant vector DB (standing up) ✓
 - User VM with Texture store ✓
 - Texture write tools (agent-authored canonical revisions) ✓
+- Actor runtime as execution substrate ✓ (mission-3c_2 settled — actor
+  handlers run `executeActivation` synchronously, Go-channel mailboxes
+  deliver updates, park-resume via memory snapshots. H030 database-polling
+  heresy repaired. See `docs/mission-3c_2-actor-runtime-migration-real-v0.md`)
 
 ### Needed
 
@@ -385,13 +398,18 @@ autopapers.
 ## Lineage
 
 This vision emerged from mission-3c_2 (actor runtime migration), which
-completed the actor runtime as the execution substrate. The next layer is the
-product substrate: textures as universal objects, transclusions as morphisms,
-autopapers as the product unit, and the wire API as graph traversal.
+completed the actor runtime as the execution substrate. The H030 heresy
+(database-polling instead of Go-channel mailboxes) was discovered and
+repaired post-settlement, confirming that the substrate uses Go channels
+for delivery and the durable log only for recovery. The next layer is the
+product substrate: textures as universal objects, transclusions as
+morphisms, autopapers as the product unit, and the wire API as graph
+traversal.
 
 The naming rectification plan (`docs/naming-rectification-2026-06-27.md`)
 already identifies "cycle" as the canonical term for the fundamental tick.
-Editions map directly to cycles.
+Editions map directly to cycles. The plan also aligns `platformd → corpusd`
+and `sandbox → computer` with the vision's functors and ontology.
 
 ## Not an Implementation Plan
 

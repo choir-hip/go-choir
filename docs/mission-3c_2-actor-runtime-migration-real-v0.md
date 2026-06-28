@@ -1,11 +1,14 @@
 # Mission 3c_2: Actor Runtime Migration (Real)
 
-**Status:** ready for execution  
-**Date:** 2026-06-27  
+**Status:** Phase 3 settled. H030 repaired post-settlement. Phase 2.5 (app extraction) pending.
+**Date:** 2026-06-27
 **Umbrella:** `docs/mission-3-universal-wire-ingestion-rebuild-v0.md`  
 **Predecessor:** `docs/mission-3c-actor-runtime-migration-v0.md` (Part 1 + States 1-3 done, States 4-8 failed)  
 **Plan doc:** `docs/actor-runtime-migration-and-agents-md-revision-2026-06-27.md`  
-**Successor:** `docs/mission-3d-distribution-v0.md` (to be drafted after 3c_2)
+**Successor:** `docs/mission-3d-distribution-v0.md` (to be drafted after 3c_2);
+**Vision:** `docs/vision-choir-category-texture-transclusion-v0.md` — the actor
+runtime is the execution substrate that enables the texture/transclusion product
+substrate described in the vision.
 
 ## What Went Wrong in 3c
 
@@ -57,9 +60,22 @@ substrate was still the execution engine. The migration was not done.
 ## Objective
 
 Complete the actor runtime migration. The actor runtime
-(`internal/actor/actor.go`, 326 lines, 1 mutex) must become the execution
+(`internal/actor/actor.go`, 1 mutex) must become the execution
 substrate, not just a wake layer. The old runtime's concurrency code must be
 deleted. The wire pipeline must run through actor handlers.
+
+> **H030 repair (2026-06-27):** The actor runtime was discovered to be
+> database-polling instead of using Go-channel mailboxes — the third
+> occurrence of this heresy. The implementation polled `log.Unprocessed`
+> every loop iteration with zero `chan` declarations, despite the design
+> doc stating "The database remembers. Go delivers." This was repaired:
+> `pending []Update` → `mailbox chan Update`, the loop now `select`s on
+> the channel with an idle timer, and the log is queried only on
+> cold-start replay and post-drain overflow catch. See
+> [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md)
+> and H030 in choir-doctrine.md. Phase 1's "done" status was conditional
+> on this repair — the handler was correct but the delivery substrate
+> underneath it was wrong.
 
 ## The Core Insight
 
@@ -77,7 +93,8 @@ This means:
 - `startRunAsync` is deleted. Runs start when an actor activates.
 - `executeActivation` / `executeWithToolLoop` become the handler's body (or
   are called by the handler).
-- The actor's `pending` mailbox replaces `agentWaiters`. No polling.
+- The actor's `mailbox` Go channel replaces `agentWaiters`. No polling
+  (H030 repair: was polling the DB every iteration, now uses Go channels).
 - The actor's passivation (idle check in `loop()`) replaces the park-waiter
   mechanism. No 200ms polling.
 - The 15 mutexes in `*runtime.Runtime` are either removed (actor runtime
@@ -120,10 +137,10 @@ If the handler blocks inside HandleUpdate waiting for a coagent response:
 2. Handler starts tool loop
 3. Tool loop dispatches to coagent via rt.Send()
 4. Coagent processes and sends response via rt.Send()
-5. Response lands in THIS actor's pending mailbox + durable log
+5. Response lands in THIS actor's mailbox channel + durable log
 6. Tool loop parks — handler blocks, waiting for coagent response
-7. DEADLOCK: handler is waiting for a response that is in the pending
-   mailbox, but the actor loop can't deliver it because HandleUpdate
+7. DEADLOCK: handler is waiting for a response that is in the mailbox
+   channel, but the actor loop can't deliver it because HandleUpdate
    hasn't returned
 ```
 
@@ -210,9 +227,11 @@ store, and resumes.
    actor loop (checks for more updates, passivates if none).
 
 6. **Coagent updates arrive as actor messages, not channel signals.** When a
-   coagent sends a result via `rt.Send()`, it lands in the durable log. The
-   actor loop queries `Unprocessed()` and finds it. The handler receives it
-   as the next HandleUpdate call. No polling. No channels. No 200ms.
+   coagent sends a result via `rt.Send()`, it lands in the durable log AND in
+   the actor's Go-channel mailbox. The actor loop `select`s on the channel and
+   receives it. The handler receives it as the next HandleUpdate call. No
+   polling. No 200ms. (H030 repair: the mailbox is a `chan Update`, not a
+   database-polling loop.)
 
 ### Circuit breaker
 
@@ -428,7 +447,9 @@ Push to main, monitor CI, verify staging:
 - `specs/actor_protocol.tla` — TLA+ spec
 - `internal/objectgraph/` — O1 settled code
 - `internal/qdrant/` — O2 settled code
-- `internal/sourcegraph/` — O3 settled code
+- `internal/sourcegraph/` — O3 settled code (note: `docs/naming-rectification-2026-06-27.md`
+  plans to fold this into `internal/cycle/` as a naming cleanup; the logic is
+  settled, only the package boundary will change)
 - `internal/sources/` — source poller implementations
 - `internal/cycle/` — cycle engine
 - `cmd/sourcecycled/` — sourcecycled daemon
@@ -591,7 +612,12 @@ position / live conjectures / open edges:
 
 next move: settled. Phase 3 complete — CI green, deployed, API verified.
 Future work: app extraction (Phase 2.5) to split runtime by domain and
-eliminate remaining 7 mutexes.
+eliminate remaining 7 mutexes. The vision doc
+([docs/vision-choir-category-texture-transclusion-v0.md](vision-choir-category-texture-transclusion-v0.md))
+defines the next product layer: textures as universal versioned objects with
+transclusion, autopapers as the product unit, and the wire API as graph
+traversal. The actor runtime is the execution substrate that makes per-cycle
+edition creation and per-autopaper agent pipelines possible.
 
 ledger file: docs/mission-3c_2-actor-runtime-migration-real-v0.ledger.md
 version / lineage: v0, successor to mission-3c (Part 1 + States 1-3 done,

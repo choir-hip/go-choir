@@ -4377,12 +4377,8 @@ func TestHandleTopologyReportsOrchestrationShape(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	rt.cfg.ResearcherCount = 5
 
-	if _, err := rt.ChannelManager().Channel("parent-1"); err != nil {
-		t.Fatalf("create parent channel: %v", err)
-	}
-	if _, err := rt.ChannelManager().Channel("child-1"); err != nil {
-		t.Fatalf("create child channel: %v", err)
-	}
+	// In-memory ChannelManager was deleted; actor mailbox replaces it.
+	// ChannelCount is now always 0 from the topology endpoint.
 
 	req := httptest.NewRequest(http.MethodGet, "/api/agent/topology", nil)
 	w := httptest.NewRecorder()
@@ -4401,8 +4397,8 @@ func TestHandleTopologyReportsOrchestrationShape(t *testing.T) {
 	if resp.ResearcherCount != 5 {
 		t.Errorf("researcher_count: got %d, want 5", resp.ResearcherCount)
 	}
-	if resp.ChannelCount != 2 {
-		t.Errorf("channel_count: got %d, want 2", resp.ChannelCount)
+	if resp.ChannelCount != 0 {
+		t.Errorf("channel_count: got %d, want 0 (in-memory channels deleted, actor mailbox replaces them)", resp.ChannelCount)
 	}
 }
 

@@ -2,13 +2,19 @@
 // rearchitecture (docs/choir-rearchitecture-durable-actors-2026-06-11.md),
 // conforming to specs/actor_protocol.tla.
 //
-// An agent is a long-lived actor: a goroutine with an in-memory mailbox while
+// An agent is a long-lived actor: a goroutine with a Go-channel mailbox while
 // resident, an idempotent durable update log plus a compacted memory snapshot
 // while passivated. Sending to a cold actor activates it; sending to a warm
 // actor steers it. Actors never "complete" — they passivate on quiescence and
 // re-warm on the next send or sweep.
 //
 //	The database remembers. Go delivers.
+//
+// The durable log is the recovery substrate: it is replayed once on cold-start
+// activation and queried by the boot/periodic Sweep. It is never polled as a
+// delivery mechanism while the actor is warm — the Go channel is the delivery
+// mechanism. If the channel buffer overflows, the update stays in the log and
+// is caught by a single backlog query after the channel drains.
 //
 // Spec obligations honored here (see actor_protocol.tla header):
 //   - sends dedupe on UpdateID (Log.Append is idempotent);
@@ -63,6 +69,11 @@ type Log interface {
 // working memory and returns the updated memory. Handlers send further
 // updates through Runtime.Send. A handler error leaves the update
 // unprocessed; the loop retries with backoff (at-least-once visibility).
+//
+// Handlers must be idempotent: the same Update may be delivered more than
+// once if it arrives through both the channel and the log backlog query
+// (e.g. a warm steer that lands in the log during cold-start replay). The
+// handler should check durable state (e.g. run state) before acting.
 type Handler interface {
 	HandleUpdate(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error)
 }
@@ -83,6 +94,16 @@ type Options struct {
 	// HandlerRetryBackoff is the delay before retrying a failed handler
 	// (default 100ms).
 	HandlerRetryBackoff time.Duration
+	// MailboxCapacity is the buffer size of the Go-channel mailbox
+	// (default 256). If the buffer overflows, the update stays in the
+	// durable log and is caught by a backlog query after the channel
+	// drains.
+	MailboxCapacity int
+	// IdleTimeout is how long an actor waits with an empty mailbox before
+	// passivating (default 5s). Shorter values passivate faster but cause
+	// more cold-start replays; longer values keep actors resident but
+	// consume memory.
+	IdleTimeout time.Duration
 }
 
 // Runtime hosts resident actors over a durable log.
@@ -99,7 +120,7 @@ type Runtime struct {
 
 type residentActor struct {
 	agentID string
-	pending []Update // warm-steer deliveries since the loop's last log query
+	mailbox chan Update // Go-channel mailbox: the delivery mechanism while warm
 	cancel  context.CancelFunc
 	evicted bool
 }
@@ -113,6 +134,12 @@ func NewRuntime(log Log, handler Handler, opts Options) *Runtime {
 	if opts.HandlerRetryBackoff <= 0 {
 		opts.HandlerRetryBackoff = 100 * time.Millisecond
 	}
+	if opts.MailboxCapacity <= 0 {
+		opts.MailboxCapacity = 256
+	}
+	if opts.IdleTimeout <= 0 {
+		opts.IdleTimeout = 5 * time.Second
+	}
 	return &Runtime{
 		log:      log,
 		handler:  handler,
@@ -122,9 +149,15 @@ func NewRuntime(log Log, handler Handler, opts Options) *Runtime {
 }
 
 // Send durably appends the update, then delivers it: into the recipient's
-// mailbox if warm (steering), by activating it if cold. A resend of an
-// already-logged UpdateID is a no-op. Ledger effects keyed to specific kinds
-// belong in the same transaction as Append (Log implementations own this).
+// Go-channel mailbox if warm (steering), by activating it if cold. A resend
+// of an already-logged UpdateID is a no-op. Ledger effects keyed to specific
+// kinds belong in the same transaction as Append (Log implementations own
+// this).
+//
+// The log append happens BEFORE the residency check so that the update
+// survives even if the actor passivates between the append and the delivery.
+// If the mailbox channel is full, the update stays in the log; the loop's
+// post-drain backlog query catches it.
 func (rt *Runtime) Send(ctx context.Context, u Update) error {
 	u.ToAgentID = strings.TrimSpace(u.ToAgentID)
 	u.UpdateID = strings.TrimSpace(u.UpdateID)
@@ -149,7 +182,12 @@ func (rt *Runtime) Send(ctx context.Context, u Update) error {
 		return ErrClosed
 	}
 	if r, ok := rt.resident[u.ToAgentID]; ok && !r.evicted {
-		r.pending = append(r.pending, u) // warm: steer
+		// Warm: steer via Go channel. Non-blocking — if the buffer is full,
+		// the update is in the log and the loop's backlog query catches it.
+		select {
+		case r.mailbox <- u:
+		default:
+		}
 		return nil
 	}
 	return rt.activateLocked(u.ToAgentID) // cold: wake
@@ -186,7 +224,11 @@ func (rt *Runtime) activateLocked(agentID string) error {
 		return fmt.Errorf("actor activate %s: resident cap %d reached; backlog retained for sweep", agentID, rt.opts.MaxResident)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &residentActor{agentID: agentID, cancel: cancel}
+	r := &residentActor{
+		agentID: agentID,
+		mailbox: make(chan Update, rt.opts.MailboxCapacity),
+		cancel:  cancel,
+	}
 	rt.resident[agentID] = r
 	rt.wg.Add(1)
 	go rt.loop(ctx, r)
@@ -228,9 +270,28 @@ func (rt *Runtime) Stop() {
 	rt.wg.Wait()
 }
 
-// loop is one activation: wake → work (backlog + steering, possibly hours)
-// → passivate. The passivation idle-check is atomic with Send's delivery
-// (both under rt.mu) — the spec's central obligation.
+// loop is one activation: cold-start replay → warm select → passivate.
+//
+// Cold start: replay the durable log backlog (the ONLY time the log is
+// queried for delivery). Then enter the warm loop: select on the Go-channel
+// mailbox with an idle timer. When the mailbox drains, do one backlog query
+// to catch overflow (updates that didn't fit in the channel buffer) and
+// handler-error retries. When the idle timer fires with an empty mailbox,
+// passivate.
+//
+// To prevent double processing (a message can be in both the channel and the
+// log because Send writes to both), the loop tracks UpdateIDs processed from
+// the channel and passes them to processBacklog as a skip set. The set
+// persists for the entire activation lifetime and is NOT cleared between
+// iterations: clearing it opens a race window where a Send that lands in both
+// the log and the channel between the clear and the next backlog query would
+// be double-processed. The set is bounded by the number of unique UpdateIDs
+// processed during one activation, and a fresh set is allocated on each
+// re-activation (loop is one activation).
+//
+// The passivation idle-check is atomic with Send's delivery (both under
+// rt.mu) — the spec's central obligation. If a Send appends to the log and
+// then finds the actor cold, it activates a fresh one that replays the log.
 func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 	defer rt.wg.Done()
 	memory, err := rt.log.LoadSnapshot(ctx, r.agentID)
@@ -238,71 +299,155 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 		memory = nil
 	}
 
+	// Cold start: replay durable backlog. This is the only time the log is
+	// queried as a delivery source. The skip set collects processed IDs so
+	// we can drain the channel of duplicates after replay.
+	skip := make(map[string]bool)
+	rt.processBacklog(ctx, r, &memory, skip)
+
+	// Drain channel of messages already processed during cold-start replay.
+	// Any message in the channel was also appended to the log (Send writes
+	// both), so processBacklog already handled it. Messages that arrived
+	// AFTER the last log query are NOT in skip and get processed here.
+	drainCold:
 	for {
-		if ctx.Err() != nil { // evicted: crash-equivalent exit
+		select {
+		case u := <-r.mailbox:
+			if !skip[u.UpdateID] {
+				rt.processOne(ctx, r, u, &memory, skip)
+			}
+		default:
+			break drainCold
+		}
+	}
+
+	// Warm loop: Go-channel delivery with idle passivation.
+	idleTimer := time.NewTimer(rt.opts.IdleTimeout)
+	defer idleTimer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
 			rt.deregister(r)
 			return
-		}
-		backlog, err := rt.log.Unprocessed(ctx, r.agentID)
-		if err != nil {
-			if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
-				rt.deregister(r)
-				return
+
+		case u := <-r.mailbox:
+			rt.processOne(ctx, r, u, &memory, skip)
+			// Drain any more that arrived while we worked.
+			drainLoop:
+			for {
+				select {
+				case u2 := <-r.mailbox:
+					rt.processOne(ctx, r, u2, &memory, skip)
+				default:
+					break drainLoop
+				}
 			}
-			continue
-		}
-		if len(backlog) == 0 {
+			// Overflow check: catch updates that didn't fit in the channel
+			// buffer (Send's non-blocking send fell through to default).
+			// Also catches updates that failed handler processing (still
+			// unprocessed in the log). Skip IDs already processed from the
+			// channel. This is NOT polling — it's a single query after the
+			// channel drains.
+			rt.processBacklog(ctx, r, &memory, skip)
+			resetTimer(idleTimer, rt.opts.IdleTimeout)
+
+		case <-idleTimer.C:
 			// Attempt passivation. Atomicity argument: Send appends to the
-			// log BEFORE taking rt.mu. If an append landed after our query,
-			// either (a) Send acquires mu before us and appends to pending —
-			// we observe it below and continue — or (b) we deregister first
-			// and Send finds the actor cold and activates a fresh one. In
-			// both cases the update is delivered: no lost wake.
+			// log BEFORE taking rt.mu. If an append landed after our last
+			// drain, either (a) Send acquires mu before us and sends to the
+			// channel — we observe a non-empty mailbox and continue — or
+			// (b) we deregister first and Send finds the actor cold and
+			// activates a fresh one. In both cases the update is delivered:
+			// no lost wake.
 			rt.mu.Lock()
-			if len(r.pending) == 0 && !r.evicted {
+			if len(r.mailbox) == 0 && !r.evicted {
 				delete(rt.resident, r.agentID)
-				rt.mu.Unlock()
+				// Save snapshot under the lock so callers that observe
+				// !Resident() are guaranteed to see the saved snapshot.
 				_ = rt.log.SaveSnapshot(context.Background(), r.agentID, memory)
+				rt.mu.Unlock()
 				return
 			}
-			r.pending = r.pending[:0] // steers are already in the log; re-query
 			evicted := r.evicted
 			rt.mu.Unlock()
 			if evicted {
 				rt.deregister(r)
 				return
 			}
+			idleTimer.Reset(rt.opts.IdleTimeout)
+		}
+	}
+}
+
+// processBacklog queries the durable log for unprocessed updates and processes
+// them all, looping until the backlog is empty. On handler error, the update
+// stays unprocessed and is retried after backoff. The skip set prevents
+// processing updates that were already handled from the channel.
+func (rt *Runtime) processBacklog(ctx context.Context, r *residentActor, memory *[]byte, skip map[string]bool) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		backlog, err := rt.log.Unprocessed(ctx, r.agentID)
+		if err != nil {
+			if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
+				return
+			}
 			continue
+		}
+		if len(backlog) == 0 {
+			return
 		}
 		for _, u := range backlog {
 			if ctx.Err() != nil {
-				rt.deregister(r)
 				return
 			}
-			next, err := rt.handler.HandleUpdate(ctx, r.agentID, u, memory)
+			if skip[u.UpdateID] {
+				continue // already processed from channel
+			}
+			next, err := rt.handler.HandleUpdate(ctx, r.agentID, u, *memory)
 			if err != nil {
-				// Leave unprocessed (at-least-once); back off, then re-query.
 				if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
-					rt.deregister(r)
 					return
 				}
-				break
+				break // re-query; the failed update stays unprocessed
 			}
-			memory = next
+			*memory = next
 			if err := rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID); err != nil {
 				if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
-					rt.deregister(r)
 					return
 				}
 				break
 			}
+			if skip != nil {
+				skip[u.UpdateID] = true
+			}
 		}
-		// Drain steering signals delivered while we worked; their updates are
-		// in the log and the next Unprocessed query returns them.
-		rt.mu.Lock()
-		r.pending = r.pending[:0]
-		rt.mu.Unlock()
 	}
+}
+
+// processOne processes a single update from the channel. On handler error,
+// the update stays unprocessed in the log and is caught by the next
+// processBacklog call. The UpdateID is added to skip so processBacklog
+// doesn't double-process it.
+func (rt *Runtime) processOne(ctx context.Context, r *residentActor, u Update, memory *[]byte, skip map[string]bool) {
+	if ctx.Err() != nil {
+		return
+	}
+	if skip[u.UpdateID] {
+		return // already processed (by processBacklog or a previous processOne)
+	}
+	next, err := rt.handler.HandleUpdate(ctx, r.agentID, u, *memory)
+	if err != nil {
+		// Leave unprocessed; the post-drain processBacklog will retry it.
+		// Don't add to skip — we want processBacklog to find and retry it.
+		_ = sleepCtx(ctx, rt.opts.HandlerRetryBackoff)
+		return
+	}
+	*memory = next
+	_ = rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID)
+	skip[u.UpdateID] = true
 }
 
 // deregister removes an evicted/cancelled actor without saving a snapshot.
@@ -312,6 +457,16 @@ func (rt *Runtime) deregister(r *residentActor) {
 		delete(rt.resident, r.agentID)
 	}
 	rt.mu.Unlock()
+}
+
+func resetTimer(t *time.Timer, d time.Duration) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
+	t.Reset(d)
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
