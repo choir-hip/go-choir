@@ -181,6 +181,34 @@ editorial-frame-independent. They get carried over faithfully. Everything else
 gets generated under the user's styleguide, producing genuinely different
 articles because style implies substance.
 
+### The Portfolio of Perspectives
+
+Each autopaper is a perspective — a particular allocation of attention that
+sees some things and misses others. No single perspective sees everything.
+Every editorial stance is blind to something. That's not a flaw, it's
+structural — attention is finite, style implies substance, and substance
+implies blindness to what doesn't fit your ontology.
+
+With many autopapers covering the same events from different centerings, the
+blind spots don't align. What one autopaper misses, another catches. The
+object graph makes this visible — the same event has nodes and edges from
+every autopaper that covered it, each transcluding different sources, centering
+different people, interrogating different claims.
+
+The platform becomes a portfolio of perspectives, and the portfolio is less
+deceived than any single perspective. Not because any individual autopaper is
+unbiased (there's no such thing), but because the ensemble of biased
+perspectives covers more of reality than any one could. This is the wisdom of
+crowds, but structured — each autopaper is a coherent editorial stance, not
+random noise, and the transclusion graph lets you see exactly where they agree,
+where they diverge, and what each one missed.
+
+As the platform grows — more users, more autopapers, more editions — it
+produces more perspectives on the same events, more attempts to get less
+deceived by partial attention. The value of the network is not more content
+but more vantage points on the same content. Each new autopaper is a new
+camera angle on reality.
+
 ### Wires Get Decoupled
 
 The platform autopaper and user autopapers are independent production
