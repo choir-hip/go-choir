@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -282,10 +283,19 @@ type mockProvider struct {
 	response *provider.LLMResponse
 	err      error
 	lastReq  *provider.LLMRequest
+
+	// mu guards lastReq. The race detector flagged concurrent writes to
+	// lastReq when parallel tests (e.g. TestHandleInference_ParallelSandboxIsolation)
+	// invoke Call from multiple goroutines. The mutex serializes the test-only
+	// capture of the last request without changing the provider's external
+	// behavior (the mock still returns the same canned response).
+	mu sync.Mutex
 }
 
 func (m *mockProvider) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
+	m.mu.Lock()
 	m.lastReq = &req
+	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
 	}
