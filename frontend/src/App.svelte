@@ -23,12 +23,12 @@
 <script lang="ts">
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
-  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession } from './lib/auth.js';
+  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
 
-  /** @type {'checking' | 'signed_out' | 'signed_in'} */
+  /** @type {'checking' | 'signed_out' | 'signed_in' | 'reconnecting'} */
   let authState = 'checking';
 
   /** Current authenticated user, if any. */
@@ -92,9 +92,25 @@
         currentUser = null;
         return { authenticated: false };
       }
-    } catch (_err) {
+    } catch (err) {
       if (!isCurrentCheck()) return { authenticated: false, stale: true };
-      // Network error or unreachable — stay signed out.
+      // Transient error (5xx, network) — auth service may be restarting
+      // during a deploy. Don't log the user out; transition to reconnecting
+      // and retry after a delay. Only a definitive "not authenticated"
+      // response from the server should cause logout.
+      if (err instanceof TransientAuthError) {
+        // Transient error — don't log out. If we were signed in, keep
+        // showing the Desktop while we retry. If we were still checking
+        // (initial load), show a reconnecting state.
+        if (authState !== 'signed_in') {
+          authState = 'reconnecting';
+        }
+        setTimeout(() => {
+          if (seq === sessionCheckSeq) checkSession();
+        }, 3000);
+        return { authenticated: authState === 'signed_in', transient: true };
+      }
+      // Permanent error (401/403) — server says not authenticated.
       authState = 'signed_out';
       currentUser = null;
       return { authenticated: false };
@@ -523,9 +539,9 @@
         </div>
       </div>
     {/if}
-  {:else if authState === 'checking'}
+  {:else if authState === 'checking' || authState === 'reconnecting'}
     <div class="loading">
-      <p>Loading…</p>
+      <p>{authState === 'reconnecting' ? 'Reconnecting…' : 'Loading…'}</p>
     </div>
   {:else}
     <Desktop

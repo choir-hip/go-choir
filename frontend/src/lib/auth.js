@@ -284,15 +284,64 @@ export async function prewarmAuthenticatedComputer() {
 
 let sessionRequestPromise = null;
 
-async function requestSessionState() {
-  const res = await fetch('/auth/session', {
-    method: 'GET',
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    throw new Error(`/auth/session failed: ${res.status}`);
+/**
+ * Error thrown when /auth/session is unreachable or returns a server error
+ * after all retry attempts. This is distinct from AuthRequiredError (which
+ * means the server definitively says the session is invalid). A transient
+ * error means the auth service may be temporarily unavailable (e.g. during
+ * a deploy restart) and the caller should not log the user out.
+ */
+export class TransientAuthError extends Error {
+  constructor(message = 'Auth service temporarily unavailable') {
+    super(message);
+    this.name = 'TransientAuthError';
   }
-  return res.json();
+}
+
+/**
+ * Returns true if an error or response status represents a transient failure
+ * (server error, network error) rather than a permanent auth failure (401/403).
+ * 401/403 are definitive "not authenticated" responses from a healthy server.
+ * 5xx and network errors mean the server is temporarily unavailable.
+ */
+function isTransientStatus(status) {
+  return status === 0 || status >= 500;
+}
+
+const SESSION_MAX_RETRIES = 3;
+const SESSION_BASE_DELAY_MS = 1000;
+
+async function requestSessionState() {
+  let lastError;
+  for (let attempt = 0; attempt <= SESSION_MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch('/auth/session', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        return res.json();
+      }
+      // 401/403: server is healthy and says not authenticated — do not retry.
+      if (!isTransientStatus(res.status)) {
+        throw new Error(`/auth/session failed: ${res.status}`);
+      }
+      // 5xx: transient server error — retry with backoff.
+      lastError = new Error(`/auth/session failed: ${res.status}`);
+    } catch (err) {
+      // Network error (fetch threw) — transient, retry with backoff.
+      // But if it's our own thrown Error with a non-transient status, rethrow.
+      if (err.message && err.message.includes('/auth/session failed:')) {
+        throw err;
+      }
+      lastError = err;
+    }
+    if (attempt < SESSION_MAX_RETRIES) {
+      const delay = SESSION_BASE_DELAY_MS * Math.pow(2, attempt);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw new TransientAuthError(lastError?.message);
 }
 
 function serializedSessionRequest() {
@@ -363,7 +412,11 @@ export async function renewSession() {
       return { renewed: true, user: data.user };
     }
     return { renewed: false };
-  } catch (_err) {
+  } catch (err) {
+    // Transient errors (5xx, network) should not be treated as auth failure.
+    if (err instanceof TransientAuthError) {
+      return { renewed: false, transient: true };
+    }
     return { renewed: false };
   }
 }
@@ -391,7 +444,14 @@ export async function fetchWithRenewal(url, options = {}) {
   }
 
   // Access JWT expired — attempt silent renewal through refresh rotation.
-  const { renewed } = await renewSession();
+  const { renewed, transient } = await renewSession();
+
+  if (transient) {
+    // Auth service temporarily unavailable — don't throw AuthRequiredError.
+    // Return the original 401 response so the caller can decide how to handle
+    // it. The session may still be valid once the auth service recovers.
+    return res;
+  }
 
   if (!renewed) {
     throw new AuthRequiredError('Session expired and renewal failed');

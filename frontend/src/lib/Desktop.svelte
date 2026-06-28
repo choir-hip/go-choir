@@ -1066,7 +1066,14 @@
     const delay = WS_RECONNECT_BASE_DELAY * wsReconnectAttempt;
     try {
       await new Promise((resolve) => setTimeout(resolve, delay));
-      const { renewed } = await renewSession();
+      const { renewed, transient } = await renewSession();
+      if (transient) {
+        // Auth service temporarily unavailable — don't dispatch authexpired.
+        // Schedule a retry without incrementing the attempt counter further.
+        wsReconnectAttempt--;
+        setTimeout(() => attemptWsReconnection(), 3000);
+        return;
+      }
       if (!renewed) {
         dispatch('authexpired');
         return;
