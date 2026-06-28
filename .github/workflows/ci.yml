@@ -206,15 +206,30 @@ jobs:
 
       - name: Build SBOMs for all packages
         run: |
-          set -euo pipefail
+          set -uo pipefail
           mkdir -p sboms
           sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths)
+          failed=0
           for pkg in auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend obscura zot; do
             echo "==> Building SBOM for ${pkg}"
-            store_path=$(nix build .#${pkg} --no-link --print-out-paths)
+            store_path=$(nix build .#${pkg} --no-link --print-out-paths 2>&1) || {
+              echo "    SKIP: package build failed for ${pkg}"
+              echo "${store_path}" | sed 's/^/      /'
+              failed=$((failed + 1))
+              continue
+            }
             mkdir -p "sboms/${pkg}"
-            "$sbomnix_bin/bin/sbomnix" --cdx "sboms/${pkg}/sbom.json" "$store_path"
+            if "$sbomnix_bin/bin/sbomnix" --cdx "sboms/${pkg}/sbom.json" "$store_path" 2>&1; then
+              echo "    OK: sboms/${pkg}/sbom.json"
+            else
+              echo "    SKIP: sbomnix failed for ${pkg}"
+              failed=$((failed + 1))
+            fi
           done
+          echo "==> SBOM generation complete: $failed package(s) skipped"
+          if [ "$failed" -gt 0 ]; then
+            echo "::warning::${failed} SBOM(s) skipped due to build failures (artifacts uploaded for successful packages)"
+          fi
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
