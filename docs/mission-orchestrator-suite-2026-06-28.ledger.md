@@ -273,3 +273,105 @@ code deletion (C17) removed ~4,576 lines without breaking tests. The
 wiring missions (M20b, M21b, M22b) closed 3 of 6 open edges from Pass 2.
 V=1: only C15 (frontend auth staging verification) remains undecided,
 requiring a user-triggered staging deploy."
+
+## Pass 4 — Base Sync Stack, Bounded Inbox, Race Settlement
+
+**Move:** construct (launch M4, M5, M23) + verify (M25c gateway race) +
+settle (merge PR #10)
+**Conjectures being tested:** C21-C23 + C16c (4 new/continuation)
+**Expected ΔV:** -4
+**Actual ΔV:** -4 (V: 1 → 1; C15 remains, all 4 new settled)
+
+### Conjectures
+
+- C16c (M25c): "The gateway mockProvider race found by M11's race
+  detector is fixable with a mutex, test-only." — SUPPORTED
+- C21 (M4): "A content-addressed blob store with REST API can be built
+  on the Base journal without coupling to the runtime." — SUPPORTED
+- C22 (M5): "Base sync can be wired into the Wails desktop app with a
+  cancellable background loop, OS keychain for API keys, and no silent
+  conflict resolution." — SUPPORTED
+- C23 (M23): "Actor mailboxes can be bounded with backpressure on Send,
+  preventing unbounded memory growth, without changing the existing
+  actor runtime API." — SUPPORTED
+
+### Verification Results
+
+| Mission | Conjecture | Verdict | Evidence | Disposition |
+|---------|-----------|---------|----------|-------------|
+| M25c Gateway Race | C16c | SUPPORTED | mockProvider.lastReq mutex, -race clean | **Mainlined** |
+| M4 Base API + Blob Store | C21 | SUPPORTED | 46 tests, content-addressed blob store, REST API | **Mainlined** |
+| M5 Desktop Sync | C22 | SUPPORTED | 3061 lines, cancellable sync loop, OS keychain, no silent conflict resolution | **Mainlined** |
+| M23 Bounded Inbox | C23 | SUPPORTED | 339 test lines, opt-in backpressure, ErrInboxFull, panic recovery, Drain | **Mainlined** (cherry-picked) |
+
+### PR #10 (M11 Race Detector) Merged
+
+PR #10 merged after all 4 data races fixed (M25 proxy+server, M25b
+vmctl, M25c gateway). CI passed clean on the final rebase. The race
+detector CI job is now live on main, running on every push and PR.
+
+### PR #16 (M8 Runtime Deletion) Rebased
+
+PR #16 rebased onto latest main (post-M5, M23, M11 merge). Build and
+actor tests pass. Awaiting red-class review.
+
+### Key Decisions
+
+1. **M23 cherry-picked from M8 branch**: M23 was developed on top of
+   M8's branch (which deletes ~4,576 lines). Since M23's bounded inbox
+   feature doesn't depend on M8's deletions, the M23 commit was
+   cherry-picked onto main independently. This unblocks M23 without
+   waiting for M8's red-class review.
+2. **M5 → M4 sequencing**: M4 (Base API) returned first and was
+   mainlined, unblocking M5 (Desktop Sync) which depends on M4's API.
+   M5 was then launched and returned with full sync engine.
+3. **Vendor sync**: M5 added `go-keyring` dependency. The `vendor/`
+   directory is gitignored (Nix handles via `vendorHash` in flake.nix).
+   Local `nix develop` builds work; CI's nix build step will validate
+   the `vendorHash`.
+
+### Mainlined (4 merges to main):
+
+- M25c (yellow — test-only mutex fix)
+- M4 (orange — Base API + blob store)
+- M5 (orange — desktop sync engine)
+- M23 (orange — bounded inbox + backpressure)
+- M11 (yellow — race detector CI job, via PR #10 squash merge)
+
+### Open edges:
+
+- M24 (C15): frontend auth staging verification — needs user-triggered
+  staging deploy + manual browser test during auth restart
+- M18: triage report not committed to repo (from Pass 2)
+- M14: pricing table static, future models unpriced (from Pass 2)
+- M8 (PR #16): rebased, awaiting red-class review
+
+### Heresy delta (Pass 4):
+
+- `discovered`: 1 additional data race (gateway mockProvider
+  concurrent field access — found by M11 race detector during CI re-run)
+- `introduced`: 0
+- `repaired`: 1 data race (M25c — mutex on mockProvider.lastReq)
+
+### V trajectory:
+
+- Pass 0: V=0 (framework)
+- Pass 1: V=12 (launched)
+- Pass 2: V=0 (all 12 settled)
+- Pass 3 launch: V=8 (8 new conjectures)
+- Pass 3 settlement: V=1 (C15 open edge only)
+- Pass 4 launch: V=4 (C21-C23 + C16c)
+- Pass 4 settlement: V=1 (C15 open edge only)
+
+**Strong definitive statement:** "Pass 4 settled 4 conjectures as
+SUPPORTED and merged PR #10 (M11 race detector), bringing the total
+mainlined count to 20 of 24 missions. The Base sync stack (M4 → M5) is
+now live on main, providing content-addressed blob storage and a
+cancellable desktop sync engine with OS keychain credential storage.
+M23's cherry-pick from M8's branch proves the bounded inbox feature is
+independent of the runtime deletion, allowing it to land while M8
+awaits red-class review. The race detector (M11) is now a permanent CI
+guard, having found and helped fix 4 real data races across proxy,
+server, vmctl, and gateway. V=1: only C15 (frontend auth staging
+verification) remains undecided, requiring a user-triggered staging
+deploy."
