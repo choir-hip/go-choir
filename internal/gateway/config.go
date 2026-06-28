@@ -40,6 +40,15 @@ type Config struct {
 	// IdentityStorePath persists sandbox credential hashes so gateway restarts
 	// do not invalidate still-running desktop VMs.
 	IdentityStorePath string
+
+	// ServiceHealthURLs maps a dependency service name (e.g. "sourcecycled",
+	// "runtime", "qdrant", "dolt", "ollama") to the URL the gateway should
+	// probe for GET /health/{service}. Empty entries fall back to defaults
+	// (see DefaultServiceHealthURLs). These are used by the per-service
+	// health endpoint and the /health/ready aggregator so operators can
+	// observe backend dependency health from outside the gateway
+	// (M22b / C20).
+	ServiceHealthURLs map[string]string
 }
 
 const (
@@ -49,6 +58,20 @@ const (
 	// DefaultSandboxTokenTTL is the default TTL for sandbox credentials.
 	DefaultSandboxTokenTTL = 1 * time.Hour
 )
+
+// DefaultServiceHealthURLs are the default probe URLs for the per-service
+// health endpoint. Each points at a localhost-only backend service the
+// gateway depends on (directly or transitively). "dolt" is probed through
+// the sandbox runtime readiness endpoint because Dolt is an embedded store
+// owned by the runtime, not a standalone TCP service. Operators can override
+// any entry via GATEWAY_HEALTH_<SERVICE>_URL.
+var DefaultServiceHealthURLs = map[string]string{
+	"sourcecycled": "http://127.0.0.1:8787/health",
+	"runtime":      "http://127.0.0.1:8085/health",
+	"qdrant":       "http://127.0.0.1:6333/healthz",
+	"dolt":         "http://127.0.0.1:8085/health/ready",
+	"ollama":       "http://127.0.0.1:11434/api/tags",
+}
 
 // LoadConfig resolves gateway configuration from environment variables.
 func LoadConfig() Config {
@@ -65,7 +88,24 @@ func LoadConfig() Config {
 		Port:              port,
 		SandboxTokenTTL:   ttl,
 		IdentityStorePath: os.Getenv("GATEWAY_IDENTITY_STORE_PATH"),
+		ServiceHealthURLs: loadServiceHealthURLs(),
 	}
+}
+
+// loadServiceHealthURLs resolves the per-service health probe URLs. It starts
+// from DefaultServiceHealthURLs and applies GATEWAY_HEALTH_<SERVICE>_URL
+// overrides (uppercased service name, hyphens replaced with underscores).
+func loadServiceHealthURLs() map[string]string {
+	out := make(map[string]string, len(DefaultServiceHealthURLs))
+	for name, url := range DefaultServiceHealthURLs {
+		envKey := "GATEWAY_HEALTH_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_")) + "_URL"
+		if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
+			out[name] = v
+		} else {
+			out[name] = url
+		}
+	}
+	return out
 }
 
 // LoadRateLimiterConfig resolves rate limiter configuration from
