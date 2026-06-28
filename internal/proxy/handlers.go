@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -679,6 +680,13 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = clientConn.Close() }()
 
+	// Wrap the client connection in a wsWriter so every write to it is
+	// serialized. The relay goroutine and the teardown close-frame write below
+	// both write to clientConn; without serialization the race detector flags
+	// the overlapping WriteMessage calls on gorilla/websocket's shared writer
+	// state.
+	clientW := &wsWriter{conn: clientConn}
+
 	// Step 4: Dial the sandbox WebSocket endpoint.
 	// Use the resolved sandbox URL instead of the static host fallback.
 	sandboxWSURL := h.sandboxWSURLForTarget(sandboxURL, r.URL.RawQuery)
@@ -698,7 +706,7 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("proxy WS: dial sandbox %s: %v", sandboxWSURL, err)
 		// Close the client connection since we can't reach the sandbox.
-		_ = clientConn.WriteMessage(websocket.CloseMessage,
+		_ = clientW.writeMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
 		h.lifecycle.record("ws.dial", "error", time.Since(dialStarted))
 		h.lifecycle.record("ws.total", "dial_error", time.Since(started))
@@ -708,28 +716,35 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	h.lifecycle.record("ws.total", "connected", time.Since(started))
 	defer func() { _ = sandboxConn.Close() }()
 
+	// Wrap the sandbox connection in its own wsWriter for the same reason as
+	// clientW: the client->sandbox relay and the teardown close-frame write
+	// both write to sandboxConn.
+	sandboxW := &wsWriter{conn: sandboxConn}
+
 	// Step 5: Relay frames bidirectionally until either side closes or errors.
 	relayDone := make(chan struct{}, 2)
 
 	// Client -> Sandbox relay.
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(clientConn, sandboxConn, "client->sandbox")
+		h.relayFrames(clientConn, sandboxW, "client->sandbox")
 	}()
 
 	// Sandbox -> Client relay.
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(sandboxConn, clientConn, "sandbox->client")
+		h.relayFrames(sandboxConn, clientW, "sandbox->client")
 	}()
 
 	// Wait for one direction to finish, then close both connections.
 	<-relayDone
 
 	// Send close messages to both sides to unblock the other relay goroutine.
-	_ = clientConn.WriteMessage(websocket.CloseMessage,
+	// These writes are serialized against the still-running relay goroutine's
+	// writes via the per-connection wsWriter mutex.
+	_ = clientW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	_ = sandboxConn.WriteMessage(websocket.CloseMessage,
+	_ = sandboxW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	// Wait briefly for the second goroutine to finish.
@@ -772,6 +787,12 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = clientConn.Close() }()
 
+	// Wrap the client connection in a wsWriter so every write to it is
+	// serialized. See HandleWS for the race explanation: the relay goroutine
+	// and the teardown close-frame write both write to clientConn, and
+	// gorilla/websocket connections are not safe for concurrent writes.
+	clientW := &wsWriter{conn: clientConn}
+
 	// Step 4: Dial the sandbox terminal WebSocket endpoint.
 	terminalWSURL := h.superConsoleWSURLForTarget(sandboxURL, r.URL.RawQuery)
 	sandboxHeader := http.Header{}
@@ -786,30 +807,36 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	sandboxConn, _, err := h.dialer.Dial(terminalWSURL, sandboxHeader)
 	if err != nil {
 		log.Printf("proxy super console WS: dial sandbox %s: %v", terminalWSURL, err)
-		_ = clientConn.WriteMessage(websocket.CloseMessage,
+		_ = clientW.writeMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
 		return
 	}
 	defer func() { _ = sandboxConn.Close() }()
+
+	// Wrap the sandbox connection in its own wsWriter; the client->sandbox
+	// relay and the teardown close-frame write both write to sandboxConn.
+	sandboxW := &wsWriter{conn: sandboxConn}
 
 	// Step 5: Relay frames bidirectionally until either side closes or errors.
 	relayDone := make(chan struct{}, 2)
 
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(clientConn, sandboxConn, "client->super-console")
+		h.relayFrames(clientConn, sandboxW, "client->super-console")
 	}()
 
 	go func() {
 		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(sandboxConn, clientConn, "super-console->client")
+		h.relayFrames(sandboxConn, clientW, "super-console->client")
 	}()
 
 	<-relayDone
 
-	_ = clientConn.WriteMessage(websocket.CloseMessage,
+	// Serialized against the still-running relay goroutine via the
+	// per-connection wsWriter mutex.
+	_ = clientW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	_ = sandboxConn.WriteMessage(websocket.CloseMessage,
+	_ = sandboxW.writeMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	<-relayDone
@@ -973,9 +1000,34 @@ func isTransientVMCTLResolveError(err error) bool {
 	return false
 }
 
+// wsWriter serializes writes to a single websocket.Conn. gorilla/websocket
+// connections are NOT safe for concurrent use: WriteMessage mutates shared
+// internal messageWriter state (the conn's writer/pos fields). In the relay
+// loop one goroutine writes data frames to dst while the main handler
+// goroutine writes a CloseMessage to the same dst to tear down the relay, and
+// the race detector flags the overlapping WriteMessage calls. The mutex here
+// serializes every write to a given connection so the relay goroutine and the
+// teardown close-frame write never touch the conn's writer state at the same
+// time. Reads remain independent of writes per gorilla's contract, so
+// ReadMessage on the underlying conn is still called directly.
+type wsWriter struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+
+// writeMessage writes a single WebSocket message under the connection's
+// write lock, preventing concurrent writes from corrupting message framing.
+func (w *wsWriter) writeMessage(messageType int, data []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.conn.WriteMessage(messageType, data)
+}
+
 // relayFrames copies WebSocket messages from src to dst until an error occurs
 // or the connection is closed. It preserves the message type (text or binary).
-func (h *Handler) relayFrames(src, dst *websocket.Conn, direction string) {
+// dst.writeMessage serializes writes so the relay never races the teardown
+// close-frame write issued by the caller on the same destination connection.
+func (h *Handler) relayFrames(src *websocket.Conn, dst *wsWriter, direction string) {
 	for {
 		mt, msg, err := src.ReadMessage()
 		if err != nil {
@@ -992,7 +1044,7 @@ func (h *Handler) relayFrames(src, dst *websocket.Conn, direction string) {
 			log.Printf("proxy WS relay %s: read error: %v", direction, err)
 			return
 		}
-		if err := dst.WriteMessage(mt, msg); err != nil {
+		if err := dst.writeMessage(mt, msg); err != nil {
 			// Write error means the other side is gone; stop relaying silently.
 			return
 		}

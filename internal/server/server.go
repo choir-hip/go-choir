@@ -31,7 +31,14 @@ type Server struct {
 	httpServer      *http.Server
 	mux             *http.ServeMux
 	addr            string
+	// listener is written by Start (in the Start goroutine) and read by Addr
+	// (which may run in any goroutine, e.g. the health handler invoked from a
+	// test or an in-process caller). listenerMu guards all access to listener
+	// so the read in Addr never races the write in Start. Without this lock the
+	// race detector reports a data race on the listener pointer and on the
+	// underlying net.TCPListener fields populated during net.Listen.
 	listener        net.Listener
+	listenerMu      sync.RWMutex
 	udsListener     net.Listener
 	once            sync.Once
 	done            chan struct{}
@@ -145,6 +152,8 @@ func (s *Server) defaultHealthHandler(w http.ResponseWriter, r *http.Request) {
 // Addr returns the address the server is listening on, in the form "host:port".
 // Returns an empty string if the server hasn't started yet.
 func (s *Server) Addr() string {
+	s.listenerMu.RLock()
+	defer s.listenerMu.RUnlock()
 	if s.listener != nil {
 		return s.listener.Addr().String()
 	}
@@ -180,7 +189,11 @@ func (s *Server) Start() {
 	if err != nil {
 		log.Fatalf("%s: failed to listen on %s: %v", s.serviceName, s.addr, err)
 	}
+	// Publish the listener under the lock so concurrent Addr callers never
+	// observe a half-published pointer or race the net.Listen write.
+	s.listenerMu.Lock()
 	s.listener = ln
+	s.listenerMu.Unlock()
 
 	if err := s.httpServer.Serve(ln); err != http.ErrServerClosed {
 		log.Fatalf("%s: server error: %v", s.serviceName, err)
