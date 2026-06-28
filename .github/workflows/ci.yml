@@ -259,7 +259,7 @@ jobs:
             err_log=$(mktemp)
             store_path=$(nix build .#${pkg} --no-link --print-out-paths 2>"$err_log") || {
               echo "    SKIP: package build failed for ${pkg}"
-              head -5 "$err_log" | sed 's/^/      /'
+              head -20 "$err_log" | sed 's/^/      /'
               failed=$((failed + 1))
               rm -f "$err_log"
               continue
