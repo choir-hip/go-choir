@@ -375,3 +375,106 @@ guard, having found and helped fix 4 real data races across proxy,
 server, vmctl, and gateway. V=1: only C15 (frontend auth staging
 verification) remains undecided, requiring a user-triggered staging
 deploy."
+
+## Pass 5 — M6 File Provider, M8 Merge, M9 Mutation Hardening, vendorHash Fix
+
+**Move:** construct (launch M6, M9) + settle (merge M8, fix vendorHash)
+**Conjectures being tested:** C24-C25 (2 new)
+**Expected ΔV:** -2
+**Actual ΔV:** -2 (V: 1 → 1; C15 remains, both new settled)
+
+### Conjectures
+
+- C24 (M6): "A macOS File Provider extension can be built on top of
+  the Base sync engine (M5) to project Base-synced files into Finder,
+  with read/write support and conflict files." — SUPPORTED
+- C25 (M9): "The appchange/promotion system can be hardened with
+  complete capture, rollback refs, verifier evidence, transaction
+  semantics, freshness checks, and author identity — all without
+  breaking existing promotion flows." — SUPPORTED
+
+### Verification Results
+
+| Mission | Conjecture | Verdict | Evidence | Disposition |
+|---------|-----------|---------|----------|-------------|
+| M6 macOS File Provider | C24 | SUPPORTED | 3067 lines, Go IPC bridge (28 tests), Swift NSFileProviderReplicatedExtension | **Mainlined** |
+| M9 Mutation Hardening | C25 | SUPPORTED | 11 hardening tests, atomic transactions, author identity, -race clean | **PR #18** (red class) |
+
+### PR #16 (M8 Runtime Deletion) Merged
+
+User approved merge of PR #16 (M8 Phase 1 runtime dead code deletion,
+~4,576 lines removed). All CI checks passed. This unblocks M9 and M10.
+
+### vendorHash Fix (PR #17 + follow-up commits)
+
+M5 added `go-keyring` to go.mod, changing the vendored module set for
+all Go services. The Nix `vendorHash` values in flake.nix were stale.
+Additionally, the source filters (`internalDirs`) for proxy, gateway,
+sourcecycled, and sandbox were missing internal directories added by
+M1 (auth), M14 (llmcost), M20 (trace), M22 (health), and M21 (pii).
+
+Process: set vendorHashes to `lib.fakeHash`, pushed to main, read
+correct hashes from CI SBOM job error output, updated flake.nix.
+Iterated 3 times to discover all hashes and fix all missing
+internalDirs.
+
+Final result: CI passes with `success`, SBOMs generated for all
+packages, staging deploy succeeded.
+
+### Key Decisions
+
+1. **M9 is red-class**: promotion/rollback is a protected surface.
+   PR #18 created for review rather than direct mainline.
+2. **vendorHash discovery via CI**: used `lib.fakeHash` + CI error
+   output to discover correct hashes, since we can't build x86_64-linux
+   packages on macOS. This is the standard Nix approach.
+3. **Pre-existing internalDirs gaps**: the source filter issues
+   (missing auth, health, llmcost, trace, pii) were pre-existing,
+   masked by the old vendorHashes. The go-keyring dependency change
+   forced recalculation, exposing them.
+
+### Mainlined (2 merges to main):
+
+- M6 (orange — macOS File Provider extension)
+- M8 (red — runtime dead code deletion, via PR #16 squash merge)
+
+### PR'd (1 new PR):
+
+- PR #18: M9 (red class — mutation hardening, awaiting review)
+
+### Open edges:
+
+- M24 (C15): frontend auth staging verification — needs user-triggered
+  staging deploy + manual browser test during auth restart
+- M18: triage report not committed to repo (from Pass 2)
+- M14: pricing table static, future models unpriced (from Pass 2)
+- M9 (PR #18): awaiting red-class review
+
+### Heresy delta (Pass 5):
+
+- `discovered`: pre-existing internalDirs gaps in flake.nix source
+  filters (proxy missing auth; gateway/sourcecycled/sandbox missing
+  health, llmcost, trace, pii)
+- `introduced`: 0
+- `repaired`: vendorHashes updated, internalDirs gaps fixed
+
+### V trajectory:
+
+- Pass 0: V=0 (framework)
+- Pass 1: V=12 (launched)
+- Pass 2: V=0 (all 12 settled)
+- Pass 3 launch: V=8 (8 new conjectures)
+- Pass 3 settlement: V=1 (C15 open edge only)
+- Pass 4 launch: V=4 (C21-C23 + C16c)
+- Pass 4 settlement: V=1 (C15 open edge only)
+- Pass 5 launch: V=2 (C24 + C25)
+- Pass 5 settlement: V=1 (C15 open edge only)
+
+**Strong definitive statement:** "Pass 5 settled 2 conjectures as
+SUPPORTED, mainlined M6 (macOS File Provider) and M8 (runtime deletion),
+and created PR #18 for M9 (mutation hardening). The vendorHash fix
+exposed and repaired pre-existing source filter gaps in flake.nix.
+22 of 26 missions are now mainlined. The critical path (M8 → M9 → M10)
+is unblocked: M8 merged, M9 in review, M10 ready to launch once M9
+merges. V=1: only C15 (frontend auth staging verification) remains
+undecided, requiring a user-triggered staging deploy."

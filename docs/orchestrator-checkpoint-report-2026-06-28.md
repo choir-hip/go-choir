@@ -1,7 +1,7 @@
 # Orchestrator Checkpoint Report — 2026-06-28
 
-**Generated:** 2026-06-28 (after Pass 4 settlement)
-**Variant V:** 1 (C15 open edge only; C1-C24 all settled)
+**Generated:** 2026-06-28 (after Pass 5 settlement)
+**Variant V:** 1 (C15 open edge only; C1-C25 all settled)
 
 ## Conjecture Verdicts
 
@@ -32,12 +32,14 @@
 | C21 | M4 Base API + Blob Store | SUPPORTED | 46 tests, content-addressed blob store, REST API | **Mainlined** |
 | C22 | M5 Desktop Sync | SUPPORTED | 3061 lines, cancellable sync loop, OS keychain, no silent conflict resolution | **Mainlined** |
 | C23 | M23 Bounded Inbox | SUPPORTED | 339 test lines, opt-in backpressure, ErrInboxFull, panic recovery, Drain | **Mainlined** (cherry-picked from M8 branch) |
+| C24 | M6 macOS File Provider | SUPPORTED | 3067 lines, Go IPC bridge (28 tests), Swift NSFileProviderReplicatedExtension, conflict projection | **Mainlined** |
+| C25 | M9 Mutation Hardening | SUPPORTED | 11 hardening tests, atomic transactions, author identity, evidence gate, -race clean | **PR #18** (red class, review) |
 
 ## Mission Summary
 
-- **Total missions delegated:** 24 (M1-M22 from Pass 2, M3/M7/M8/M20b/M21b/M22b/M25/M25b from Pass 3, M4/M5/M23/M25c from Pass 4)
-- **Mainlined:** 20 (M1, M2, M3, M4, M5, M7, M11, M12, M13, M14, M15, M19, M20, M20b, M21, M21b, M22, M22b, M23, M25, M25b, M25c)
-- **PR'd:** 1 (PR #16 M8 runtime deletion — red class, rebased, awaiting review)
+- **Total missions delegated:** 26 (M1-M22 from Pass 2, M3/M7/M8/M20b/M21b/M22b/M25/M25b from Pass 3, M4/M5/M6/M23/M25c from Pass 4, M9 from Pass 5)
+- **Mainlined:** 22 (M1, M2, M3, M4, M5, M6, M7, M8, M11, M12, M13, M14, M15, M19, M20, M20b, M21, M21b, M22, M22b, M23, M25, M25b, M25c)
+- **PR'd:** 1 (PR #18 M9 mutation hardening — red class, review)
 - **Open edges:** 3 (M18 triage report not committed; M24 staging verification needs user trigger; M14 pricing table static)
 
 ## Strong Definitive Statements
@@ -65,12 +67,12 @@
 - **Pass 3 settlement:** V=1 (C13-C20 settled; C15 remains as open edge)
 - **Pass 4 launch:** V=4 (4 new conjectures: C21-C23 + C16c)
 - **Pass 4 settlement:** V=1 (C21-C23 + C16c settled; C15 remains as open edge)
+- **Pass 5 launch:** V=2 (C24 + C25)
+- **Pass 5 settlement:** V=1 (C24 + C25 settled; C15 remains as open edge)
 
 ## Next Missions to Launch
 
-- **M6 (macOS File Provider):** depends on M5 (now on main). Ready to launch.
-- **M9 (Mutation Transaction Hardening):** depends on M8 (PR #16 rebased, awaiting review). Can start once M8 merges.
-- **M10 (Choir-in-Choir):** depends on M9. Critical path to force multiplier.
+- **M10 (Choir-in-Choir):** depends on M9 (PR #18 pending review). Critical path to force multiplier. Can start once M9 merges.
 - **M24 (Frontend Auth Staging Verify):** needs user-triggered staging deploy.
 
 ## Open PRs
@@ -79,4 +81,6 @@
 |----|---------|--------|
 | #7 | M15 (original docs cleanup) | superseded by PR #12 (merged) |
 | #10 | M11 (race detector CI) | **Merged** (Pass 4) |
-| #16 | M8 Phase 1 (runtime deletion) | rebased, awaiting review |
+| #16 | M8 Phase 1 (runtime deletion) | **Merged** (Pass 5) |
+| #17 | vendorHash fix for go-keyring | **Merged** (Pass 5) |
+| #18 | M9 (mutation hardening) | red class, awaiting review |
