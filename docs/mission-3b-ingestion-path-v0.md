@@ -179,8 +179,8 @@ staging within minutes of the source being polled.
 - [x] Verify repo compiles: `nix develop -c go build ./...`
 - [x] Verify tests pass: `nix develop -c go test ./internal/cycle/... ./internal/runtime/... ./internal/qdrant/... ./internal/objectgraph/...`
 - [x] Run runtime shards: `nix develop -c scripts/go-test-runtime-shards`
-- [ ] W5: Push to main, monitor CI, verify staging E2E
-- [ ] Update this document with evidence
+- [x] W5: Push to main, monitor CI, verify staging E2E
+- [x] Update this document with evidence
 
 ## Acceptance
 
@@ -195,7 +195,7 @@ staging within minutes of the source being polled.
 
 ## Parallax State
 
-status: working
+status: settled
 
 mission conjecture: if per-source-type cadences replace the universal 15-min
 ticker, Qdrant semantic dedup filters near-duplicate captures before
@@ -275,7 +275,11 @@ next move: commit W1-W4, push to main, monitor CI, verify staging E2E.
 ledger file: docs/mission-3b-ingestion-path-v0.ledger.md
 version / lineage: v0, successor to mission-3a (settled)
 learning state: retained here / promoted outward / successor links
-settlement: open until W5 staging verification produces a real article.
+settlement: settled. W1-W5 all decided. Per-source-type polling confirmed
+in staging logs (separate RSS/Telegram tickers at 5-min intervals). Semantic
+dedup wired but inert (Ollama not deployed on node-b — W6 follow-up). Real
+source-grounded article confirmed on staging Universal Wire API with source
+citations (rss:hn_newest, telegram:metropoles). Deploy commit a0776488.
 
 ## Suggested Goal String
 
