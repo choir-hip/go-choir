@@ -12,9 +12,19 @@
       url = "github:microvm-nix/microvm.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # sbomnix for CycloneDX SBOM generation from Nix flakes.
+    # Generates a Software Bill of Materials for each package, listing
+    # every dependency and transitive input. This is the machine-readable
+    # inventory of choir_code in the equation computer = choir_code(artifact_program).
+    # Path to FlakeBOM (Determinate Systems) when we switch to Determinate Nix
+    # for enterprise sales — the CycloneDX format is compatible.
+    sbomnix = {
+      url = "github:tiiuae/sbomnix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm, ... }:
+  outputs = { self, nixpkgs, microvm, sbomnix, ... }:
     let
       # Packages are x86_64-linux only (deployment target)
       system = "x86_64-linux";
@@ -466,6 +476,24 @@ EOF
         #   nix build .#guest-image
         inherit guest-image guest-image-playwright;
       };
+
+      # ── SBOM outputs ─────────────────────────────────────────────────
+      # CycloneDX SBOMs for each Go service package. These are the
+      # machine-readable bills of materials for choir_code, listing every
+      # dependency and transitive input. Used for auditability, compliance,
+      # and the artifact program doctrine's proof of determinism.
+      #   nix build .#sbom.auth
+      #   nix build .#sbom.proxy
+      # The output is a CycloneDX JSON file at $out/sbom.json.
+      # When we switch to Determinate Nix + FlakeBOM, the format is compatible.
+      sbom.${system} = let
+        sbomnixCli = sbomnix.packages.${system}.default;
+        mkSbom = name: pkg:
+          pkgs.runCommand "sbom-${name}" { nativeBuildInputs = [ sbomnixCli ]; } ''
+            mkdir $out
+            sbomnix --output $out/sbom.json --format cyclonedx "${pkg}"
+          '';
+      in builtins.mapAttrs mkSbom goChoirPackages;
 
       # ── Sandbox guest VM NixOS configuration ──────────────────────────
       # This defines the guest VM that runs inside Firecracker on Node B.
