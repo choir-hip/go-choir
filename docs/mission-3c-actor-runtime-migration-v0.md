@@ -180,7 +180,7 @@ Hybrid (per plan doc §3.1):
 
 ## Parallax State
 
-status: ready
+status: working
 
 mission conjecture: if the actor runtime is wired into production and the old
 borked runtime is deleted, the wire pipeline runs on a correct concurrency
@@ -205,13 +205,15 @@ invariants / qualities / domain ramp (I/Q/D):
 - D: Local build + test → staging deploy → staging verification. Must reach
   staging.
 
-variant (conjecture descent) V: count uncompleted states + Part 1 items. V = 12
-(P1.1-P1.4, States 1-8). Each completed item decreases V by 1. State 8
-(staging verification) is the settlement gate.
+variant (conjecture descent) V: count uncompleted states + Part 1 items.
+V = 8 (States 1-8 remaining). Part 1 complete (P1.1-P1.4 done, commit 55ef75bb).
+Last ΔV: -4 (Part 1). Conjecture decided: AGENTS.md revision lands cleanly
+with no broken cross-refs; doccheck passes report-only.
 
-budget: 3-4 passes. Part 1 is 1 pass. States 1-3 are 1 pass (mechanical).
-States 4-6 are 1-2 passes (high reasoning, high entanglement). States 7-8 are
-1 pass (cleanup + verify). Allow extra budget for State 6 staging iteration.
+budget: 3-4 passes granted. 1 spent (Part 1). 2-3 remaining. Solvency: States
+1-3 batchable in 1 pass (mechanical extraction with type aliases). States 4-5
+in 1 pass. States 6-8 need 1+ pass; State 6 is 8 pts high-entanglement, State 8
+needs staging deploy access. Tight but feasible if States 1-5 batch cleanly.
 
 authority / bounds: may modify `AGENTS.md`, `docs/agent-*.md` (new files),
 `internal/runtime/` (extraction + eventual deletion), `internal/provideriface/`
@@ -244,6 +246,12 @@ conjecture delta / heresy delta:
   no backpressure) is repaired by running on the correct runtime
 
 position / live conjectures / open edges:
+- Part 1 done. AGENTS.md split into 3 files, 4 new rules + deletion-first
+  active. Type shapes for State 1 examined: all target types (Provider,
+  ToolLoopProvider, ProviderPolicy, ToolLoopRequest, ToolLoopResponse,
+  TokenUsage, ToolDefinition, EventEmitFunc, AgentProfile*, Config) depend
+  only on context/json/time/internal/types — no circular dep risk. Type
+  alias approach will preserve backward compat.
 - State 6 is the critical path. 3b changes to `wire_synthesis.go`,
   `sourcecycled_web_captures.go`, and `qdrant_dedup.go` add to the
   entanglement that must be untangled during migration.
@@ -252,8 +260,9 @@ position / live conjectures / open edges:
 - Open edge: `go test -race` may reveal handler-level races that were
   hidden by the old runtime's coarse-grained locking.
 
-next move: execute Part 1 (AGENTS.md revision), then State 1 (extract
-interfaces).
+next move: batch States 1-3 (extract interfaces to provideriface + agentprofile,
+rewire providers, extract tool registry + API handlers). Type alias approach:
+define types in new packages, alias in internal/runtime/ for backward compat.
 
 ledger file: docs/mission-3c-actor-runtime-migration-v0.ledger.md
 version / lineage: v0, successor to mission-3b (settled)
