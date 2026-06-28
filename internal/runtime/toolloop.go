@@ -536,6 +536,8 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			"llm_model":            activeLLMConfig.Model,
 			"llm_reasoning_effort": activeLLMConfig.ReasoningEffort,
 			"model_policy":         "run_metadata",
+			"input_tokens":         resp.Usage.InputTokens,
+			"output_tokens":        resp.Usage.OutputTokens,
 		})
 		emit(types.EventRunProgress, "tool_loop", progressPayload)
 
