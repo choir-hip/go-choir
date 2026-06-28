@@ -225,7 +225,8 @@ func (h *Handler) issueAccessJWT(user *User) (string, error) {
 // generateRefreshToken creates a new opaque refresh token, stores its SHA-256
 // hash in the database, and returns the raw token string. The raw token is
 // only ever returned once (to be set as a cookie) and never stored directly.
-func (h *Handler) generateRefreshToken(user *User) (string, error) {
+// The deviceInfo (e.g. User-Agent) is stored for session management display.
+func (h *Handler) generateRefreshToken(user *User, deviceInfo string) (string, error) {
 	raw := uuid.NewString()
 	hash := sha256.Sum256([]byte(raw))
 	hashHex := fmt.Sprintf("%x", hash)
@@ -237,6 +238,7 @@ func (h *Handler) generateRefreshToken(user *User) (string, error) {
 		TokenHash: hashHex,
 		CreatedAt: now,
 		ExpiresAt: now.Add(h.config.RefreshTokenTTL),
+		DeviceInfo: deviceInfo,
 	}
 	if err := h.store.CreateRefreshSession(rs); err != nil {
 		return "", fmt.Errorf("create refresh session: %w", err)
@@ -270,14 +272,16 @@ func (h *Handler) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 
 // issueSession creates a full authenticated session for the user: it mints
 // an access JWT, generates a refresh token, and sets both as cookies. It
-// returns the user info for inclusion in the response body.
-func (h *Handler) issueSession(w http.ResponseWriter, user *User) (*userInfo, error) {
+// returns the user info for inclusion in the response body. The device info
+// (User-Agent) is captured from the request for session management.
+func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *User) (*userInfo, error) {
 	accessToken, err := h.issueAccessJWT(user)
 	if err != nil {
 		return nil, fmt.Errorf("issue access JWT: %w", err)
 	}
 
-	refreshToken, err := h.generateRefreshToken(user)
+	deviceInfo := r.UserAgent()
+	refreshToken, err := h.generateRefreshToken(user, deviceInfo)
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
@@ -293,7 +297,8 @@ func (h *Handler) issueSession(w http.ResponseWriter, user *User) (*userInfo, er
 
 // validateRefreshCookie validates the refresh token from the request cookie
 // against the stored refresh session. Returns the refresh session and user if
-// valid, or nil if the token is missing, invalid, or expired.
+// valid, or nil if the token is missing, invalid, or expired. It also updates
+// the session's last_used_at timestamp.
 func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User, error) {
 	cookie, err := r.Cookie(RefreshTokenCookieName)
 	if err != nil || cookie.Value == "" {
@@ -314,6 +319,9 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 		return nil, nil, errors.New("refresh session expired")
 	}
 
+	// Update last_used_at (non-fatal).
+	_ = h.store.TouchRefreshSessionLastUsed(rs.ID)
+
 	user, err := h.store.GetUserByID(rs.UserID)
 	if err != nil {
 		return nil, nil, errors.New("user not found for refresh session")
@@ -323,15 +331,17 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 }
 
 // rotateRefreshSession replaces the current refresh session with a new one.
-// The old session is deleted to prevent reuse (refresh rotation).
-func (h *Handler) rotateRefreshSession(w http.ResponseWriter, oldSession *RefreshSession, user *User) error {
+// The old session is deleted to prevent reuse (refresh rotation). The device
+// info is carried over from the request for the new session.
+func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, oldSession *RefreshSession, user *User) error {
 	// Delete the old session.
 	if err := h.store.DeleteRefreshSessionByID(oldSession.ID); err != nil {
 		return fmt.Errorf("delete old refresh session: %w", err)
 	}
 
-	// Generate a new refresh token.
-	newRefresh, err := h.generateRefreshToken(user)
+	// Generate a new refresh token with device info from the request.
+	deviceInfo := r.UserAgent()
+	newRefresh, err := h.generateRefreshToken(user, deviceInfo)
 	if err != nil {
 		return fmt.Errorf("generate new refresh token: %w", err)
 	}
@@ -713,7 +723,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s sign_count=%d result=success step=credential_stored", user.ID, dbCred.ID, dbCred.SignCount)
 
 	// Issue cookie-backed auth state.
-	userInfo, err := h.issueSession(w, user)
+	userInfo, err := h.issueSession(w, r, user)
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -836,8 +846,13 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s sign_count=%d step=sign_count_updated", user.ID, string(credential.ID), newSignCount)
 	}
 
+	// Update last_used_at for the credential (non-fatal).
+	if err := h.store.TouchCredentialLastUsed(string(credential.ID)); err != nil {
+		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=touch_last_used error=%q", user.ID, string(credential.ID), err)
+	}
+
 	// Issue cookie-backed auth state.
-	userInfo, err := h.issueSession(w, user)
+	userInfo, err := h.issueSession(w, r, user)
 	if err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=error step=issue_session error=%q", user.ID, string(credential.ID), err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -925,7 +940,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rotate the refresh session and issue new cookies.
-	if err := h.rotateRefreshSession(w, rs, user); err != nil {
+	if err := h.rotateRefreshSession(w, r, rs, user); err != nil {
 		log.Printf("[auth] operation=session_refresh user_id=%s result=error step=rotate_refresh error=%q", user.ID, err)
 		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
 		return

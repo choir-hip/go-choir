@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS credentials (
 	sign_count      INTEGER NOT NULL DEFAULT 0,
 	aaguid          BLOB    NOT NULL,
 	flags           TEXT    NOT NULL DEFAULT '{}',
-	created_at      DATETIME NOT NULL
+	name            TEXT    NOT NULL DEFAULT '',
+	created_at      DATETIME NOT NULL,
+	last_used_at    DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS challenge_state (
@@ -59,7 +61,9 @@ CREATE TABLE IF NOT EXISTS refresh_sessions (
 	token_hash   TEXT    NOT NULL,
 	created_at   DATETIME NOT NULL,
 	expires_at   DATETIME NOT NULL,
-	rotated_from TEXT
+	rotated_from TEXT,
+	device_info  TEXT,
+	last_used_at DATETIME
 );
 
 CREATE INDEX IF NOT EXISTS idx_credentials_user_id ON credentials(user_id);
@@ -93,6 +97,23 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_api_keys_expires_at ON api_keys(expires_at);
+
+CREATE TABLE IF NOT EXISTS recovery_tokens (
+	id          TEXT PRIMARY KEY,
+	user_id     TEXT,
+	email       TEXT    NOT NULL,
+	email_hash  TEXT    NOT NULL,
+	ip_hash     TEXT    NOT NULL,
+	token_hash  TEXT    NOT NULL,
+	created_at  DATETIME NOT NULL,
+	expires_at  DATETIME NOT NULL,
+	used_at     DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_tokens_email_hash ON recovery_tokens(email_hash);
+CREATE INDEX IF NOT EXISTS idx_recovery_tokens_ip_hash ON recovery_tokens(ip_hash);
+CREATE INDEX IF NOT EXISTS idx_recovery_tokens_token_hash ON recovery_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_recovery_tokens_expires_at ON recovery_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_recovery_tokens_user_id ON recovery_tokens(user_id);
 `
 
 // schemaMigrations contains DDL statements that add columns to existing tables
@@ -106,6 +127,14 @@ var schemaMigrations = []string{
 	// Added flags column for storing WebAuthn CredentialFlags (backup_eligible,
 	// backup_state, user_present, user_verified) needed for re-login verification.
 	`ALTER TABLE credentials ADD COLUMN flags TEXT NOT NULL DEFAULT '{}'`,
+	// M7: Added name column for user-facing credential labels (multi-device).
+	`ALTER TABLE credentials ADD COLUMN name TEXT NOT NULL DEFAULT ''`,
+	// M7: Added last_used_at for credential usage tracking.
+	`ALTER TABLE credentials ADD COLUMN last_used_at DATETIME`,
+	// M7: Added device_info for session management (User-Agent at creation).
+	`ALTER TABLE refresh_sessions ADD COLUMN device_info TEXT`,
+	// M7: Added last_used_at for session usage tracking.
+	`ALTER TABLE refresh_sessions ADD COLUMN last_used_at DATETIME`,
 }
 
 // User represents a row in the users table.
@@ -125,7 +154,9 @@ type Credential struct {
 	SignCount       int64
 	AAGUID          []byte
 	Flags           string // JSON-encoded CredentialFlags: user_present, user_verified, backup_eligible, backup_state
+	Name            string
 	CreatedAt       time.Time
+	LastUsedAt      *time.Time
 }
 
 // ChallengeState represents a WebAuthn ceremony challenge row in the
@@ -150,6 +181,8 @@ type RefreshSession struct {
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
 	RotatedFrom string
+	DeviceInfo  string
+	LastUsedAt  *time.Time
 }
 
 // OpenStore opens (or creates) the SQLite database at dbPath and applies the
@@ -407,8 +440,8 @@ func (s *Store) GetUserByEmail(email string) (*User, error) {
 // CreateCredential inserts a WebAuthn credential (passkey) record.
 func (s *Store) CreateCredential(c *Credential) error {
 	_, err := s.db.Exec(
-		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.CreatedAt,
+		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("create credential %q: %w", c.ID, err)
@@ -419,7 +452,7 @@ func (s *Store) CreateCredential(c *Credential) error {
 // GetCredentialsByUserID returns all credentials for the given user.
 func (s *Store) GetCredentialsByUserID(userID string) ([]Credential, error) {
 	rows, err := s.db.Query(
-		"SELECT id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, created_at FROM credentials WHERE user_id = ?",
+		"SELECT id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at, last_used_at FROM credentials WHERE user_id = ?",
 		userID,
 	)
 	if err != nil {
@@ -430,8 +463,12 @@ func (s *Store) GetCredentialsByUserID(userID string) ([]Credential, error) {
 	var creds []Credential
 	for rows.Next() {
 		var c Credential
-		if err := rows.Scan(&c.ID, &c.UserID, &c.PublicKey, &c.AttestationType, &c.Transport, &c.SignCount, &c.AAGUID, &c.Flags, &c.CreatedAt); err != nil {
+		var lastUsedAt sql.NullTime
+		if err := rows.Scan(&c.ID, &c.UserID, &c.PublicKey, &c.AttestationType, &c.Transport, &c.SignCount, &c.AAGUID, &c.Flags, &c.Name, &c.CreatedAt, &lastUsedAt); err != nil {
 			return nil, err
+		}
+		if lastUsedAt.Valid {
+			c.LastUsedAt = &lastUsedAt.Time
 		}
 		creds = append(creds, c)
 	}
@@ -519,8 +556,8 @@ func (s *Store) CleanExpiredChallenges() (int64, error) {
 // CreateRefreshSession inserts a new refresh/session record.
 func (s *Store) CreateRefreshSession(rs *RefreshSession) error {
 	_, err := s.db.Exec(
-		"INSERT INTO refresh_sessions (id, user_id, token_hash, created_at, expires_at, rotated_from) VALUES (?, ?, ?, ?, ?, ?)",
-		rs.ID, rs.UserID, rs.TokenHash, rs.CreatedAt, rs.ExpiresAt, rs.RotatedFrom,
+		"INSERT INTO refresh_sessions (id, user_id, token_hash, created_at, expires_at, rotated_from, device_info) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		rs.ID, rs.UserID, rs.TokenHash, rs.CreatedAt, rs.ExpiresAt, rs.RotatedFrom, rs.DeviceInfo,
 	)
 	if err != nil {
 		return fmt.Errorf("create refresh session %q: %w", rs.ID, err)
@@ -532,12 +569,22 @@ func (s *Store) CreateRefreshSession(rs *RefreshSession) error {
 // token hash, or sql.ErrNoRows.
 func (s *Store) GetRefreshSessionByTokenHash(tokenHash string) (*RefreshSession, error) {
 	rs := &RefreshSession{}
+	var (
+		deviceInfo sql.NullString
+		lastUsedAt sql.NullTime
+	)
 	err := s.db.QueryRow(
-		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from FROM refresh_sessions WHERE token_hash = ?",
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at FROM refresh_sessions WHERE token_hash = ?",
 		tokenHash,
-	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rs.RotatedFrom)
+	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rs.RotatedFrom, &deviceInfo, &lastUsedAt)
 	if err != nil {
 		return nil, err
+	}
+	if deviceInfo.Valid {
+		rs.DeviceInfo = deviceInfo.String
+	}
+	if lastUsedAt.Valid {
+		rs.LastUsedAt = &lastUsedAt.Time
 	}
 	return rs, nil
 }
@@ -815,6 +862,326 @@ func (s *Store) TouchAPIKeyLastUsed(ctx context.Context, keyID string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("touch api key last_used: %w", err)
+	}
+	return nil
+}
+
+// --- Recovery Tokens (M7) ---
+
+// RecoveryTokenPrefix is the prefix for recovery token secrets.
+const RecoveryTokenPrefix = "choir_rt_"
+
+// RecoveryTokenTTL is how long a magic link recovery token remains valid.
+const RecoveryTokenTTL = 15 * time.Minute
+
+// RecoveryMaxPerEmail is the maximum recovery requests per email per hour.
+const RecoveryMaxPerEmail = 3
+
+// RecoveryMaxPerIP is the maximum recovery requests per IP per hour.
+const RecoveryMaxPerIP = 5
+
+// RecoveryToken represents a row in the recovery_tokens table. The raw token
+// secret is never stored — only the SHA-256 hash (token_hash) is persisted.
+type RecoveryToken struct {
+	ID        string
+	UserID    string // may be empty for anti-enumeration dummy records
+	Email     string
+	EmailHash string
+	IPHash    string
+	TokenHash string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
+// generateRecoveryTokenSecret generates a new opaque recovery token of the form
+// choir_rt_<32 bytes base64url>. It returns the raw token (returned once to the
+// caller) and its SHA-256 hex hash (stored in the database).
+func generateRecoveryTokenSecret() (token, tokenHash string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", fmt.Errorf("generate recovery token: %w", err)
+	}
+	token = RecoveryTokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	h := sha256.Sum256([]byte(token))
+	tokenHash = fmt.Sprintf("%x", h)
+	return token, tokenHash, nil
+}
+
+// CreateRecoveryToken generates a recovery token for the given email and IP,
+// stores only the SHA-256 hash, and returns the raw token. The userID may be
+// empty for anti-enumeration dummy records (when the email doesn't match a
+// real user). The raw token is only returned once and never stored in plaintext.
+func (s *Store) CreateRecoveryToken(ctx context.Context, userID, email, emailHash, ipHash string) (token string, err error) {
+	token, tokenHash, err := generateRecoveryTokenSecret()
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now().UTC()
+	rt := &RecoveryToken{
+		ID:        uuid.NewString(),
+		UserID:    userID,
+		Email:     email,
+		EmailHash: emailHash,
+		IPHash:    ipHash,
+		TokenHash: tokenHash,
+		CreatedAt: now,
+		ExpiresAt: now.Add(RecoveryTokenTTL),
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		"INSERT INTO recovery_tokens (id, user_id, email, email_hash, ip_hash, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		rt.ID, rt.UserID, rt.Email, rt.EmailHash, rt.IPHash, rt.TokenHash, rt.CreatedAt, rt.ExpiresAt,
+	)
+	if err != nil {
+		return "", fmt.Errorf("create recovery token: %w", err)
+	}
+
+	return token, nil
+}
+
+// ConsumeRecoveryToken atomically validates and marks a recovery token as used.
+// It checks the token hash, expiry, and single-use constraint (used_at IS NULL).
+// Returns the recovery token record (including user_id) if valid, or an error
+// if the token is not found, already used, expired, or has no associated user
+// (anti-enumeration dummy record).
+func (s *Store) ConsumeRecoveryToken(ctx context.Context, token string) (*RecoveryToken, error) {
+	h := sha256.Sum256([]byte(token))
+	tokenHash := fmt.Sprintf("%x", h)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rt := &RecoveryToken{}
+	var (
+		userID sql.NullString
+		usedAt sql.NullTime
+	)
+	err = tx.QueryRowContext(ctx,
+		"SELECT id, user_id, email, email_hash, ip_hash, token_hash, created_at, expires_at, used_at FROM recovery_tokens WHERE token_hash = ?",
+		tokenHash,
+	).Scan(&rt.ID, &userID, &rt.Email, &rt.EmailHash, &rt.IPHash, &rt.TokenHash, &rt.CreatedAt, &rt.ExpiresAt, &usedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if userID.Valid {
+		rt.UserID = userID.String
+	}
+
+	// Check single-use.
+	if usedAt.Valid {
+		return nil, errors.New("recovery token already used")
+	}
+
+	// Check expiry.
+	if time.Now().UTC().After(rt.ExpiresAt) {
+		// Clean up expired token.
+		_, _ = tx.ExecContext(ctx, "DELETE FROM recovery_tokens WHERE id = ?", rt.ID)
+		_ = tx.Commit()
+		return nil, errors.New("recovery token expired")
+	}
+
+	// Check that this is a real user token (not an anti-enumeration dummy).
+	if !userID.Valid || rt.UserID == "" {
+		return nil, errors.New("recovery token has no associated user")
+	}
+
+	// Mark as used (single-use enforcement).
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, "UPDATE recovery_tokens SET used_at = ? WHERE id = ?", now, rt.ID); err != nil {
+		return nil, fmt.Errorf("mark recovery token used: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	return rt, nil
+}
+
+// CountRecoveryTokensByEmailSince returns the number of recovery tokens created
+// for the given email hash since the given time. Used for rate limiting.
+func (s *Store) CountRecoveryTokensByEmailSince(ctx context.Context, emailHash string, since time.Time) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM recovery_tokens WHERE email_hash = ? AND created_at >= ?",
+		emailHash, since,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count recovery tokens by email: %w", err)
+	}
+	return count, nil
+}
+
+// CountRecoveryTokensByIPSince returns the number of recovery tokens created
+// from the given IP hash since the given time. Used for rate limiting.
+func (s *Store) CountRecoveryTokensByIPSince(ctx context.Context, ipHash string, since time.Time) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM recovery_tokens WHERE ip_hash = ? AND created_at >= ?",
+		ipHash, since,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count recovery tokens by ip: %w", err)
+	}
+	return count, nil
+}
+
+// CleanExpiredRecoveryTokens removes all recovery_tokens rows past their
+// expires_at, or that have been used more than 24 hours ago.
+func (s *Store) CleanExpiredRecoveryTokens() (int64, error) {
+	now := time.Now().UTC()
+	res, err := s.db.Exec(
+		"DELETE FROM recovery_tokens WHERE expires_at < ? OR (used_at IS NOT NULL AND used_at < ?)",
+		now, now.Add(-24*time.Hour),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("clean expired recovery tokens: %w", err)
+	}
+	return res.RowsAffected()
+}
+
+// --- Credential Management (M7) ---
+
+// DeleteCredential removes a WebAuthn credential. It only deletes credentials
+// belonging to the given user (ownership check) and returns sql.ErrNoRows if
+// no matching credential is found.
+func (s *Store) DeleteCredential(ctx context.Context, userID, credID string) error {
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM credentials WHERE id = ? AND user_id = ?",
+		credID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete credential: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete credential rows affected: %w", err)
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// RenameCredential updates the user-facing name of a credential. It only
+// renames credentials belonging to the given user (ownership check) and
+// returns sql.ErrNoRows if no matching credential is found.
+func (s *Store) RenameCredential(ctx context.Context, userID, credID, name string) error {
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE credentials SET name = ? WHERE id = ? AND user_id = ?",
+		name, credID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("rename credential: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rename credential rows affected: %w", err)
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// TouchCredentialLastUsed updates the last_used_at timestamp for the given
+// credential ID. This is called on successful WebAuthn login. Errors are
+// non-fatal (the caller may choose to ignore them).
+func (s *Store) TouchCredentialLastUsed(credID string) error {
+	_, err := s.db.Exec(
+		"UPDATE credentials SET last_used_at = ? WHERE id = ?",
+		time.Now().UTC(), credID,
+	)
+	if err != nil {
+		return fmt.Errorf("touch credential last_used: %w", err)
+	}
+	return nil
+}
+
+// --- Session Management (M7) ---
+
+// ListRefreshSessionsByUserID returns all refresh sessions for the given user,
+// ordered by created_at descending (most recent first). Token hashes are
+// included in the struct but should not be exposed in API responses.
+func (s *Store) ListRefreshSessionsByUserID(userID string) ([]RefreshSession, error) {
+	rows, err := s.db.Query(
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at FROM refresh_sessions WHERE user_id = ? ORDER BY created_at DESC",
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var sessions []RefreshSession
+	for rows.Next() {
+		var rs RefreshSession
+		var (
+			rotatedFrom sql.NullString
+			deviceInfo  sql.NullString
+			lastUsedAt  sql.NullTime
+		)
+		if err := rows.Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt); err != nil {
+			return nil, err
+		}
+		if rotatedFrom.Valid {
+			rs.RotatedFrom = rotatedFrom.String
+		}
+		if deviceInfo.Valid {
+			rs.DeviceInfo = deviceInfo.String
+		}
+		if lastUsedAt.Valid {
+			rs.LastUsedAt = &lastUsedAt.Time
+		}
+		sessions = append(sessions, rs)
+	}
+	return sessions, rows.Err()
+}
+
+// GetRefreshSessionByID returns the refresh session with the given ID, or
+// sql.ErrNoRows if not found.
+func (s *Store) GetRefreshSessionByID(id string) (*RefreshSession, error) {
+	rs := &RefreshSession{}
+	var (
+		rotatedFrom sql.NullString
+		deviceInfo  sql.NullString
+		lastUsedAt  sql.NullTime
+	)
+	err := s.db.QueryRow(
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at FROM refresh_sessions WHERE id = ?",
+		id,
+	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt)
+	if err != nil {
+		return nil, err
+	}
+	if rotatedFrom.Valid {
+		rs.RotatedFrom = rotatedFrom.String
+	}
+	if deviceInfo.Valid {
+		rs.DeviceInfo = deviceInfo.String
+	}
+	if lastUsedAt.Valid {
+		rs.LastUsedAt = &lastUsedAt.Time
+	}
+	return rs, nil
+}
+
+// TouchRefreshSessionLastUsed updates the last_used_at timestamp for the given
+// session ID. This is called when a refresh token is validated (before
+// rotation). Errors are non-fatal.
+func (s *Store) TouchRefreshSessionLastUsed(id string) error {
+	_, err := s.db.Exec(
+		"UPDATE refresh_sessions SET last_used_at = ? WHERE id = ?",
+		time.Now().UTC(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("touch refresh session last_used: %w", err)
 	}
 	return nil
 }
