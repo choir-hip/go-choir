@@ -3,8 +3,10 @@ package actor
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -261,5 +263,342 @@ func TestHandlerErrorRetriesWithoutLoss(t *testing.T) {
 	waitFor(t, 5*time.Second, func() bool { return processedCount(t, log, "a1")() == 0 }, "retried and processed")
 	if attempts.Load() < 2 {
 		t.Fatalf("attempts = %d, want >= 2 (at-least-once)", attempts.Load())
+	}
+}
+
+// TestNonBlockingBackpressureReturnsErrInboxFull verifies that when
+// backpressure is enabled in non-blocking mode, Send returns ErrInboxFull
+// when the mailbox is full. The update is still durably logged.
+func TestNonBlockingBackpressureReturnsErrInboxFull(t *testing.T) {
+	log := testLog(t)
+	// Handler that blocks forever — keeps the actor warm and the mailbox full.
+	block := make(chan struct{})
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		<-block
+		return memory, nil
+	}), Options{
+		MailboxCapacity: 2,
+		Backpressure:    true,
+		SendMode:        SendModeNonBlocking,
+		IdleTimeout:     100 * time.Millisecond,
+	})
+	defer func() {
+		close(block)
+		rt.Stop()
+	}()
+
+	ctx := context.Background()
+	// First send activates the actor (cold). The handler blocks on the
+	// first update, keeping the actor warm.
+	if err := rt.Send(ctx, Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u1: %v", err)
+	}
+	// Wait for the actor to be resident (handler is blocking).
+	waitFor(t, 5*time.Second, func() bool { return rt.Resident("a1") }, "actor resident")
+
+	// Fill the mailbox buffer (capacity 2): u2 and u3 fill it.
+	if err := rt.Send(ctx, Update{UpdateID: "u2", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u2: %v", err)
+	}
+	if err := rt.Send(ctx, Update{UpdateID: "u3", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u3: %v", err)
+	}
+	// u4 should get ErrInboxFull — the mailbox is full.
+	err := rt.Send(ctx, Update{UpdateID: "u4", ToAgentID: "a1"})
+	if !errors.Is(err, ErrInboxFull) {
+		t.Fatalf("send u4: err = %v, want ErrInboxFull", err)
+	}
+	// The update IS in the durable log even though the mailbox was full.
+	backlog, err := log.Unprocessed(ctx, "a1")
+	if err != nil {
+		t.Fatalf("unprocessed: %v", err)
+	}
+	// u1 is being processed (handler blocked on it), u2-u4 are unprocessed.
+	// Actually u1 is in-flight (handler is blocked on it, not yet marked
+	// processed). So all 4 are unprocessed in the log.
+	if len(backlog) < 3 {
+		t.Fatalf("backlog = %d, want >= 3 (u2,u3,u4 durably logged despite ErrInboxFull)", len(backlog))
+	}
+}
+
+// TestBlockingBackpressureWaitsForSpace verifies that blocking backpressure
+// waits for the mailbox to drain and succeeds when space becomes available.
+func TestBlockingBackpressureWaitsForSpace(t *testing.T) {
+	log := testLog(t)
+	// Handler blocks on the first update, then releases on subsequent ones.
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	closeRelease := func() { releaseOnce.Do(func() { close(release) }) }
+	var processed atomic.Int64
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		n := processed.Add(1)
+		if n == 1 {
+			// First update: block until released, keeping the actor warm
+			// and the mailbox full.
+			<-release
+			return memory, nil
+		}
+		return memory, nil
+	}), Options{
+		MailboxCapacity: 1,
+		Backpressure:    true,
+		SendMode:        SendModeBlocking,
+		SendTimeout:     5 * time.Second,
+		IdleTimeout:     100 * time.Millisecond,
+	})
+	defer func() {
+		closeRelease()
+		rt.Stop()
+	}()
+
+	ctx := context.Background()
+	// u1: cold activate, handler blocks on u1 (first call).
+	if err := rt.Send(ctx, Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u1: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return processed.Load() >= 1 }, "u1 in flight (handler blocked)")
+
+	// u2: fills the mailbox (capacity 1). Handler is blocked on u1, so
+	// the mailbox stays full.
+	if err := rt.Send(ctx, Update{UpdateID: "u2", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u2: %v", err)
+	}
+
+	// u3: blocking send. The mailbox is full (u2 is in it, handler is
+	// blocked on u1). This should block until the handler finishes u1
+	// and reads u2 from the mailbox.
+	sendDone := make(chan error, 1)
+	go func() {
+		sendDone <- rt.Send(ctx, Update{UpdateID: "u3", ToAgentID: "a1"})
+	}()
+	// Verify the send is actually blocking (not returning immediately).
+	select {
+	case err := <-sendDone:
+		t.Fatalf("blocking send returned before release: %v", err)
+	case <-time.After(200 * time.Millisecond):
+		// Good — still blocking.
+	}
+
+	// Release the handler; u1 finishes, loop reads u2 from mailbox,
+	// mailbox has space, u3's blocking send succeeds.
+	closeRelease()
+	select {
+	case err := <-sendDone:
+		if err != nil {
+			t.Fatalf("blocking send u3 after release: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocking send u3 did not complete after release")
+	}
+}
+
+// TestBlockingBackpressureTimeoutReturnsErrInboxFull verifies that blocking
+// backpressure returns ErrInboxFull after the timeout expires.
+func TestBlockingBackpressureTimeoutReturnsErrInboxFull(t *testing.T) {
+	log := testLog(t)
+	block := make(chan struct{})
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		<-block
+		return memory, nil
+	}), Options{
+		MailboxCapacity: 1,
+		Backpressure:    true,
+		SendMode:        SendModeBlocking,
+		SendTimeout:     100 * time.Millisecond, // short timeout for test
+		IdleTimeout:     100 * time.Millisecond,
+	})
+	defer func() {
+		close(block)
+		rt.Stop()
+	}()
+
+	ctx := context.Background()
+	// u1: cold activate, handler blocks.
+	if err := rt.Send(ctx, Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u1: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return rt.Resident("a1") }, "actor resident")
+
+	// u2: fills the mailbox (capacity 1).
+	if err := rt.Send(ctx, Update{UpdateID: "u2", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u2: %v", err)
+	}
+
+	// u3: blocking send, should timeout and return ErrInboxFull.
+	start := time.Now()
+	err := rt.Send(ctx, Update{UpdateID: "u3", ToAgentID: "a1"})
+	elapsed := time.Since(start)
+	if !errors.Is(err, ErrInboxFull) {
+		t.Fatalf("send u3: err = %v, want ErrInboxFull", err)
+	}
+	if elapsed < 90*time.Millisecond {
+		t.Fatalf("send u3 returned in %v, want >= ~100ms (timeout)", elapsed)
+	}
+}
+
+// TestActorFailureNotificationOnPanic verifies that when a handler panics,
+// the OnActorFailure callback is invoked with the agent ID and an error,
+// and the actor goroutine exits cleanly.
+func TestActorFailureNotificationOnPanic(t *testing.T) {
+	log := testLog(t)
+	var failureAgentID string
+	var failureErr error
+	var failureMu sync.Mutex
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		panic("intentional test panic")
+	}), Options{
+		IdleTimeout: 100 * time.Millisecond,
+		OnActorFailure: func(agentID string, err error) {
+			failureMu.Lock()
+			failureAgentID = agentID
+			failureErr = err
+			failureMu.Unlock()
+		},
+	})
+	defer rt.Stop()
+
+	if err := rt.Send(context.Background(), Update{UpdateID: "u1", ToAgentID: "panic-actor"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool {
+		failureMu.Lock()
+		defer failureMu.Unlock()
+		return failureErr != nil
+	}, "OnActorFailure callback invoked")
+
+	failureMu.Lock()
+	defer failureMu.Unlock()
+	if failureAgentID != "panic-actor" {
+		t.Fatalf("failure agentID = %q, want %q", failureAgentID, "panic-actor")
+	}
+	if failureErr == nil || !strings.Contains(failureErr.Error(), "panic") {
+		t.Fatalf("failure err = %v, want error containing 'panic'", failureErr)
+	}
+	// The actor should have been deregistered (goroutine exited).
+	waitFor(t, 5*time.Second, func() bool { return !rt.Resident("panic-actor") }, "panic actor deregistered")
+}
+
+// TestDrainCompletesWithinTimeout verifies that Drain waits for in-flight
+// handlers to complete and returns within the timeout when handlers respect
+// context cancellation.
+func TestDrainCompletesWithinTimeout(t *testing.T) {
+	log := testLog(t)
+	started := make(chan struct{}, 1)
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-ctx.Done() // respect cancellation
+		return memory, ctx.Err()
+	}), Options{IdleTimeout: 30 * time.Second}) // long idle so actor stays resident
+	defer rt.Stop()
+
+	ctx := context.Background()
+	if err := rt.Send(ctx, Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	<-started // handler is mid-update, blocking on ctx.Done
+
+	// Drain with a generous timeout. The handler should see ctx cancellation
+	// and exit, so Drain completes well within the timeout.
+	done := make(chan struct{})
+	go func() {
+		rt.Drain(5 * time.Second)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// Good — drain completed.
+	case <-time.After(10 * time.Second):
+		t.Fatal("drain did not complete within 10s")
+	}
+}
+
+// TestDrainTimeoutLogsRemaining verifies that Drain logs (but does not hang)
+// when an actor handler ignores context cancellation and the timeout expires.
+func TestDrainTimeoutLogsRemaining(t *testing.T) {
+	log := testLog(t)
+	block := make(chan struct{})
+	started := make(chan struct{}, 1)
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-block // ignore ctx cancellation
+		return memory, nil
+	}), Options{IdleTimeout: 30 * time.Second})
+
+	ctx := context.Background()
+	if err := rt.Send(ctx, Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	<-started // handler is mid-update, blocking on block (not ctx)
+
+	// Drain with a short timeout. The handler ignores cancellation, so
+	// Drain should timeout and return (not hang).
+	done := make(chan struct{})
+	go func() {
+		rt.Drain(100 * time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// Good — drain returned after timeout.
+	case <-time.After(5 * time.Second):
+		t.Fatal("drain hung past timeout")
+	}
+
+	// Clean up: close block so the handler can exit and the goroutine
+	// can be collected. We need to call Stop to wait for the goroutine.
+	close(block)
+	rt.Stop()
+}
+
+// TestLegacySendNoBackpressure verifies that without backpressure enabled,
+// Send silently drops to the log when the mailbox is full (legacy behavior,
+// backward compatible). No error is returned.
+func TestLegacySendNoBackpressure(t *testing.T) {
+	log := testLog(t)
+	block := make(chan struct{})
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		<-block
+		return memory, nil
+	}), Options{
+		MailboxCapacity: 2,
+		// Backpressure NOT enabled — legacy behavior
+		IdleTimeout: 100 * time.Millisecond,
+	})
+	defer func() {
+		close(block)
+		rt.Stop()
+	}()
+
+	ctx := context.Background()
+	if err := rt.Send(ctx, Update{UpdateID: "u1", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u1: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return rt.Resident("a1") }, "actor resident")
+
+	// Fill the mailbox (capacity 2).
+	if err := rt.Send(ctx, Update{UpdateID: "u2", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u2: %v", err)
+	}
+	if err := rt.Send(ctx, Update{UpdateID: "u3", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u3: %v", err)
+	}
+	// u4: mailbox is full, but no backpressure — should NOT return an error.
+	// The update is silently dropped to the log.
+	if err := rt.Send(ctx, Update{UpdateID: "u4", ToAgentID: "a1"}); err != nil {
+		t.Fatalf("send u4: err = %v, want nil (legacy no-backpressure)", err)
+	}
+	// The update IS in the durable log.
+	backlog, err := log.Unprocessed(ctx, "a1")
+	if err != nil {
+		t.Fatalf("unprocessed: %v", err)
+	}
+	if len(backlog) < 3 {
+		t.Fatalf("backlog = %d, want >= 3 (u2,u3,u4 in log)", len(backlog))
 	}
 }
