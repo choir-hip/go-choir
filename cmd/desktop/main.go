@@ -335,6 +335,19 @@ const bridgeScript = `
 
 // ─── Main ───────────────────────────────────────────────────────────────
 
+// newSyncService constructs the Base sync service. The local sync root is
+// ~/Choir (created lazily by the sync engine on first scan). The device ID
+// is derived from the data dir so it is stable across restarts.
+func newSyncService(localMode bool, backend string) *SyncService {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
+	localRoot := filepath.Join(home, "Choir")
+	deviceID := "desktop:" + filepath.Base(dataDir)
+	return NewSyncService(localRoot, backend, deviceID)
+}
+
 func main() {
 	localMode := os.Getenv("CHOIR_MODE") == "local"
 	backend := os.Getenv("CHOIR_BACKEND")
@@ -401,6 +414,7 @@ func main() {
 				localMode: localMode,
 				backend:   backend,
 			}),
+			application.NewService(newSyncService(localMode, backend)),
 		},
 		Assets: application.AssetOptions{
 			Handler: assetHandler(backend),
