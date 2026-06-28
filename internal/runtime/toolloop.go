@@ -9,101 +9,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// ToolLoopProvider extends the Provider interface with tool-calling
-// capabilities. When the LLM returns a tool_use stop reason, the
-// tool-calling loop needs to:
-//  1. Parse the tool calls from the response
-//  2. Execute them via the ToolRegistry
-//  3. Feed the results back into the next LLM call
-//
-// This interface separates the tool-loop orchestration (owned by the
-// runtime) from the LLM API mechanics (owned by the provider). The
-// BridgeProvider implements this interface when wrapping a real LLM
-// provider; the StubProvider implements it with optional tool simulation.
-type ToolLoopProvider interface {
-	Provider
-
-	// CallWithTools sends a request with tool definitions and conversation
-	// history, returning a response that may contain tool calls. This is the
-	// primitive used by the tool-calling loop: each iteration calls
-	// CallWithTools, inspects the stop reason, and either executes tools
-	// or returns the final text.
-	CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error)
-}
-
-// ToolLoopRequest is the request shape for the tool-calling loop. It carries
-// the full conversation history including prior tool results, the available
-// tool definitions, and the system prompt.
-type ToolLoopRequest struct {
-	// Provider is the provider identifier for gateway-routed requests.
-	Provider string `json:"provider,omitempty"`
-
-	// Model is the per-run model resolved from runtime/user-computer policy.
-	Model string `json:"model,omitempty"`
-
-	// ReasoningEffort is the provider-specific per-run reasoning control.
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-
-	// System is the system prompt (potentially including the tool catalog).
-	System string `json:"system"`
-
-	// Messages is the conversation history in Anthropic Messages format.
-	// Each entry is a raw JSON message object with role and content fields.
-	Messages []json.RawMessage `json:"messages"`
-
-	// ToolDefinitions is the list of available tool schemas.
-	ToolDefinitions []ToolDefinition `json:"tool_definitions"`
-
-	// ToolChoice optionally constrains provider tool selection for this call.
-	// Supported values are provider-dependent. Shared OpenAI-compatible modes
-	// are "auto", "none", and "required"; "function:<name>" means the next
-	// provider call must select that exact tool when the adapter supports exact
-	// tool choice.
-	ToolChoice string `json:"tool_choice,omitempty"`
-
-	// MaxTokens is the maximum output tokens for this call.
-	MaxTokens int `json:"max_tokens"`
-}
-
-// ToolLoopResponse is the response from a single LLM call in the tool-calling
-// loop. It may contain text output, tool calls, or both, depending on the
-// stop reason.
-type ToolLoopResponse struct {
-	// ID is the provider-assigned response identifier.
-	ID string `json:"id"`
-
-	// StopReason is why the model stopped: "tool_use", "end_turn", "max_tokens",
-	// or other provider-specific reasons.
-	StopReason string `json:"stop_reason"`
-
-	// Text is the concatenated text content from the response. May be empty
-	// if the model only produced tool calls.
-	Text string `json:"text"`
-
-	// ReasoningContent is hidden provider context returned by reasoning models.
-	// Some OpenAI-compatible tool loops require this field to be passed back on
-	// the next assistant turn. It is not user-facing answer text.
-	ReasoningContent string `json:"reasoning_content,omitempty"`
-
-	// ToolCalls contains the tool invocation requests from the provider.
-	// Non-empty only when StopReason is "tool_use".
-	ToolCalls []types.ToolCall `json:"tool_calls,omitempty"`
-
-	// Usage contains token usage information.
-	Usage TokenUsage `json:"usage"`
-
-	// Model is the model that produced the response.
-	Model string `json:"model"`
-}
-
-// TokenUsage tracks token counts for a tool-loop response.
-type TokenUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-}
+// Re-exported from internal/provideriface for backward compatibility.
+// New code should import internal/provideriface directly.
+type (
+	ToolLoopProvider = provideriface.ToolLoopProvider
+	ToolLoopRequest  = provideriface.ToolLoopRequest
+	ToolLoopResponse = provideriface.ToolLoopResponse
+	TokenUsage       = provideriface.TokenUsage
+)
 
 // InjectUserTurnsFunc allows the runtime to splice additional user turns into a
 // running loop between model iterations. This is used for runtime-owned inbox

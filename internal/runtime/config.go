@@ -19,7 +19,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
+
+// Re-exported from internal/provideriface for backward compatibility.
+type Config = provideriface.Config
 
 const (
 	// DefaultStorePath is the local marker/legacy-import path used to derive the
@@ -97,133 +102,6 @@ const (
 	// it is a tunable baseline, not a universal constant.
 	DefaultQdrantDedupThreshold = 0.7862
 )
-
-// Config holds runtime configuration resolved from environment variables.
-type Config struct {
-	// SandboxID is the stable identity of this sandbox instance.
-	SandboxID string
-
-	// StorePath is the marker/legacy-import path used to derive the embedded
-	// Dolt workspace for task/event persistence.
-	StorePath string
-
-	// PromptRoot is the sandbox-owned filesystem root for editable role prompts.
-	PromptRoot string
-
-	// SkillsRoot is the repo-owned filesystem root for natural-language skills
-	// that should be summarized into selected agent prompts.
-	SkillsRoot string
-
-	// ProviderTimeout is the simulated work duration for the stub provider.
-	ProviderTimeout time.Duration
-
-	// SupervisionInterval is legacy reserved configuration. The old polling
-	// supervisor has been deleted and this value is currently unused.
-	SupervisionInterval time.Duration
-
-	// ResearcherCount is the configured researcher worker count for this VM.
-	ResearcherCount int
-
-	// TextureWakeDebounce is the coalescing window for addressed worker findings
-	// before the runtime schedules the next texture synthesis.
-	TextureWakeDebounce time.Duration
-
-	// TextureActorParkIdle enables default park-on-idle for Texture revision
-	// actors when positive. Hand-constructed test configs leave this zero unless
-	// they opt into parked lifecycle behavior explicitly.
-	TextureActorParkIdle time.Duration
-
-	// VmctlURL is the host-side vmctl control plane URL, used by super-only
-	// lifecycle tools to request branch desktops and worker VMs.
-	VmctlURL string
-
-	// MaildURL is the host-side mail service URL. Texture-originated Email
-	// appagent draft requests use this only to persist reviewable drafts; it
-	// must not expose raw send authority to runtime agents.
-	MaildURL string
-
-	// WirePublishURL is the host-mediated proxy route for autonomous Universal
-	// Wire platform publication. Platform VM sandboxes call this instead of
-	// platformd directly.
-	WirePublishURL string
-
-	// PlatformdURL is an optional direct platformd endpoint for local publish
-	// tests or host-colocated sandboxes when WirePublishURL is unset.
-	PlatformdURL string
-
-	// LLMProvider is the explicitly selected provider for runtime LLM calls.
-	// Empty means no provider is selected by this runtime config.
-	LLMProvider string
-
-	// LLMModel is the explicitly selected model for runtime LLM calls.
-	LLMModel string
-
-	// LLMReasoningEffort is the provider-specific reasoning effort for runtime
-	// LLM calls.
-	LLMReasoningEffort string
-
-	// ModelPolicyPath is the computer-owned editable text file that maps agent
-	// roles to provider/model/reasoning selections. Environment LLM settings
-	// remain the platform fallback; this file is the user-computer policy.
-	ModelPolicyPath string
-
-	// ObscuraPath is an optional path or executable name for the backend browser
-	// provider. Empty means the backend browser substrate is not configured.
-	ObscuraPath string
-
-	// ObscuraCDPScreenshots enables the opt-in CDP screenshot substrate for the
-	// backend Browser app. The default remains CLI snapshot extraction only.
-	ObscuraCDPScreenshots bool
-
-	// EnableTestAPIs exposes local-only browser test hooks. These endpoints are
-	// disabled by default and should never be enabled on deployed environments.
-	EnableTestAPIs bool
-
-	// RunMemoryContextThresholdTokens controls automatic context compaction for
-	// tool-loop runs. Zero means derive from the selected model context window.
-	// The estimator is intentionally approximate.
-	RunMemoryContextThresholdTokens int
-
-	// RunMemoryKeepRecentTokens controls how much recent raw context is kept
-	// alongside each run-memory compaction checkpoint.
-	RunMemoryKeepRecentTokens int
-
-	// PromotionSourceRepo is the server-owned canonical go-choir source used
-	// to create product-safe promotion integration workspaces.
-	PromotionSourceRepo string
-
-	// SourceLedgerRepo is the product-visible source lineage remote. It may be
-	// private; package/adoption records name refs in this ledger.
-	SourceLedgerRepo string
-
-	// PromotionWorkspaceRoot is the server-owned root for per-candidate
-	// integration workspaces. Browser callers never provide this path.
-	PromotionWorkspaceRoot string
-
-	AppPromotionRuntimeBuildCommand string
-	AppPromotionRuntimeArtifactPath string
-	AppPromotionUIBuildCommand      string
-	AppPromotionUIArtifactPath      string
-	AppPromotionBuildTimeout        time.Duration
-
-	// QdrantURL is the Qdrant instance URL for semantic routing and indexing.
-	// Defaults to the node-b local instance.
-	QdrantURL string
-
-	// OllamaURL is the Ollama instance URL for embedding generation.
-	// Defaults to localhost:11434.
-	OllamaURL string
-
-	// OllamaEmbeddingModel is the model name for Ollama embeddings.
-	OllamaEmbeddingModel string
-
-	// QdrantDedupThreshold is the cosine similarity score at which a newly
-	// ingested capture is treated as a semantic duplicate of an existing
-	// capture and dropped before processor dispatch. Defaults to the spike-5
-	// baseline (0.7862); tune via QDRANT_DEDUP_THRESHOLD. A threshold of 0
-	// disables semantic dedup.
-	QdrantDedupThreshold float32
-}
 
 // LoadConfig resolves runtime configuration from environment variables.
 func LoadConfig() Config {

@@ -9,21 +9,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/runtime/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// Re-exported from internal/agentprofile for backward compatibility.
+// New code should import internal/agentprofile directly.
 const (
-	AgentProfileConductor  = "conductor"
-	AgentProfileSuper      = "super"
-	AgentProfileCoSuper    = "co-super"
-	AgentProfileVSuper     = "vsuper"
-	AgentProfileResearcher = "researcher"
-	AgentProfileTexture    = "texture"
-	AgentProfileProcessor  = "processor"
-	AgentProfileReconciler = "reconciler"
-	AgentProfileEmail      = "email"
+	AgentProfileConductor  = agentprofile.Conductor
+	AgentProfileSuper      = agentprofile.Super
+	AgentProfileCoSuper    = agentprofile.CoSuper
+	AgentProfileVSuper     = agentprofile.VSuper
+	AgentProfileResearcher = agentprofile.Researcher
+	AgentProfileTexture    = agentprofile.Texture
+	AgentProfileProcessor  = agentprofile.Processor
+	AgentProfileReconciler = agentprofile.Reconciler
+	AgentProfileEmail      = agentprofile.Email
 )
 
 const (

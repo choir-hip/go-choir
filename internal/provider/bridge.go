@@ -9,6 +9,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -48,8 +49,8 @@ func (b *BridgeProvider) ProviderName() string { return b.inner.Name() }
 
 // RuntimeProviderPolicy returns the effective provider/model policy for a
 // direct real-provider bridge.
-func (b *BridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
-	policy := runtime.ProviderPolicy{
+func (b *BridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
+	policy := provideriface.ProviderPolicy{
 		ActiveProvider:              b.inner.Name(),
 		ModelSelection:              "The active provider uses the configured runtime model unless a child run explicitly requests a model override.",
 		SupportsPerRunModelOverride: true,
@@ -108,7 +109,7 @@ func (b *BridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
 // runtime (VAL-RUNTIME-008). The emitted events contain enough detail
 // (provider name, model, usage) to distinguish real upstream work from
 // canned stub responses.
-func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit runtime.EventEmitFunc) error {
+func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	providerName := b.inner.Name()
 	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
 
@@ -195,7 +196,7 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 // This method is called by the tool-calling loop when a tool registry is
 // active. Each iteration of the loop calls CallWithTools, inspects the
 // stop reason, and either executes tools or returns the final text.
-func (b *BridgeProvider) CallWithTools(ctx context.Context, req runtime.ToolLoopRequest) (*runtime.ToolLoopResponse, error) {
+func (b *BridgeProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	providerName := b.inner.Name()
 
 	// Convert the tool-loop request into an LLMRequest.
@@ -220,12 +221,12 @@ func (b *BridgeProvider) CallWithTools(ctx context.Context, req runtime.ToolLoop
 	}
 
 	// Build the tool-loop response from the LLM response.
-	tlr := &runtime.ToolLoopResponse{
+	tlr := &provideriface.ToolLoopResponse{
 		ID:               resp.ID,
 		StopReason:       convertStopReason(resp.StopReason),
 		Text:             resp.Text,
 		ReasoningContent: resp.ReasoningContent,
-		Usage: runtime.TokenUsage{
+		Usage: provideriface.TokenUsage{
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,
 		},
@@ -425,8 +426,8 @@ func (g *GatewayBridgeProvider) ProviderName() string { return g.client.Name() }
 
 // RuntimeProviderPolicy returns the effective provider/model policy for a
 // gateway-routed sandbox.
-func (g *GatewayBridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
-	return runtime.ProviderPolicy{
+func (g *GatewayBridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
+	return provideriface.ProviderPolicy{
 		ActiveProvider:              g.client.Name(),
 		DefaultModel:                g.llmModel,
 		ModelSelection:              "The sandbox routes through the host gateway with explicit runtime provider/model configuration.",
@@ -441,7 +442,7 @@ func (g *GatewayBridgeProvider) RuntimeProviderPolicy() runtime.ProviderPolicy {
 // Execute implements the runtime.Provider interface. It translates the
 // task prompt into an LLM request and routes it through the gateway with
 // streaming enabled, emitting incremental delta events for each text chunk.
-func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit runtime.EventEmitFunc) error {
+func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
 	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
 	providerName := firstNonEmpty(llmConfig.Provider, g.llmProvider)
@@ -506,7 +507,7 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 // CallWithTools implements the runtime.ToolLoopProvider interface.
 // It translates the tool-loop request into a gateway LLM request and
 // returns a response that may contain tool calls.
-func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req runtime.ToolLoopRequest) (*runtime.ToolLoopResponse, error) {
+func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	llmReq := LLMRequest{
 		Provider:        firstNonEmpty(req.Provider, g.llmProvider),
 		Model:           firstNonEmpty(req.Model, g.llmModel),
@@ -526,12 +527,12 @@ func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req runtime.T
 		return nil, fmt.Errorf("gateway call failed: %w", err)
 	}
 
-	tlr := &runtime.ToolLoopResponse{
+	tlr := &provideriface.ToolLoopResponse{
 		ID:               resp.ID,
 		StopReason:       convertStopReason(resp.StopReason),
 		Text:             resp.Text,
 		ReasoningContent: resp.ReasoningContent,
-		Usage: runtime.TokenUsage{
+		Usage: provideriface.TokenUsage{
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,
 		},
@@ -556,11 +557,11 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// convertToolLoopDefs converts runtime.ToolDefinition values to provider
+// convertToolLoopDefs converts provideriface.ToolDefinition values to provider
 // ToolDef values for inclusion in the LLM request. This bridges the gap
 // between the runtime's tool schema format and the Anthropic Messages
 // API tool definition format.
-func convertToolLoopDefs(defs []runtime.ToolDefinition) []ToolDef {
+func convertToolLoopDefs(defs []provideriface.ToolDefinition) []ToolDef {
 	if len(defs) == 0 {
 		return nil
 	}

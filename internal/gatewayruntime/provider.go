@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -51,8 +52,8 @@ func (p *Provider) SetRuntimeLLMConfig(providerName, model, reasoningEffort stri
 func (p *Provider) ProviderName() string { return "gateway" }
 
 // RuntimeProviderPolicy reports gateway-routed model policy.
-func (p *Provider) RuntimeProviderPolicy() runtime.ProviderPolicy {
-	return runtime.ProviderPolicy{
+func (p *Provider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
+	return provideriface.ProviderPolicy{
 		ActiveProvider:              "gateway",
 		DefaultModel:                p.llmModel,
 		ModelSelection:              "The sandbox routes through the host gateway with explicit runtime provider/model configuration.",
@@ -65,7 +66,7 @@ func (p *Provider) RuntimeProviderPolicy() runtime.ProviderPolicy {
 }
 
 // Execute implements runtime.Provider.
-func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit runtime.EventEmitFunc) error {
+func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
 
 	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
@@ -123,7 +124,7 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit runt
 }
 
 // CallWithTools implements runtime.ToolLoopProvider.
-func (p *Provider) CallWithTools(ctx context.Context, req runtime.ToolLoopRequest) (*runtime.ToolLoopResponse, error) {
+func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	llmReq := llmRequest{
 		Provider:        firstNonEmpty(req.Provider, p.llmProvider),
 		Model:           firstNonEmpty(req.Model, p.llmModel),
@@ -141,12 +142,12 @@ func (p *Provider) CallWithTools(ctx context.Context, req runtime.ToolLoopReques
 		return nil, fmt.Errorf("gateway call failed: %w", err)
 	}
 
-	out := &runtime.ToolLoopResponse{
+	out := &provideriface.ToolLoopResponse{
 		ID:               resp.ID,
 		StopReason:       convertStopReason(resp.StopReason),
 		Text:             resp.Text,
 		ReasoningContent: resp.ReasoningContent,
-		Usage: runtime.TokenUsage{
+		Usage: provideriface.TokenUsage{
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,
 		},
@@ -333,7 +334,7 @@ func convertRawMessages(raw []json.RawMessage) []message {
 	return out
 }
 
-func convertToolLoopDefs(defs []runtime.ToolDefinition) []toolDef {
+func convertToolLoopDefs(defs []provideriface.ToolDefinition) []toolDef {
 	if len(defs) == 0 {
 		return nil
 	}

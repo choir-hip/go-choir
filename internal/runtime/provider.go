@@ -5,39 +5,17 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// EventEmitFunc is a callback for emitting incremental events during task
-// execution. Providers call this to report progress, deltas, or other
-// lifecycle updates before the task completes.
-type EventEmitFunc func(kind types.EventKind, phase string, payload json.RawMessage)
-
-// ProviderPolicy describes the runtime-visible provider/model policy shown in
-// Settings. It is read-only observability metadata, not a mutable config API.
-type ProviderPolicy struct {
-	ActiveProvider              string   `json:"active_provider"`
-	DefaultModel                string   `json:"default_model,omitempty"`
-	ModelSelection              string   `json:"model_selection"`
-	SupportsPerRunModelOverride bool     `json:"supports_per_run_model_override"`
-	Notes                       []string `json:"notes,omitempty"`
-}
-
-// Provider is the interface for executing a runtime task. The stub provider
-// simulates execution; the real Bedrock/Z.AI bridge (via the provider package's
-// BridgeProvider) implements this interface for real upstream calls.
-type Provider interface {
-	// Execute runs the task to completion, emitting incremental events via
-	// the callback. Returns nil on success or an error describing the failure.
-	// The runtime transitions the task to failed/blocked on error and remains
-	// available for later runs (VAL-RUNTIME-008).
-	Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error
-
-	// ProviderName returns the name of the provider for observability
-	// (e.g., "stub", "bedrock", "zai"). This is used in health responses
-	// and event payloads to distinguish real providers from stubs.
-	ProviderName() string
-}
+// Re-exported from internal/provideriface for backward compatibility.
+// New code should import internal/provideriface directly.
+type (
+	EventEmitFunc   = provideriface.EventEmitFunc
+	ProviderPolicy  = provideriface.ProviderPolicy
+	Provider        = provideriface.Provider
+)
 
 // StubProvider simulates task execution with a configurable delay and optional
 // failure. It emits progress events during the simulated work and returns a
