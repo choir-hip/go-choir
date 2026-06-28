@@ -3,6 +3,8 @@ package proxy
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"golang.org/x/crypto/ssh"
@@ -4065,5 +4068,365 @@ func TestLoadConfig_VMctlTimeoutFallsBackOnInvalidValue(t *testing.T) {
 	}
 	if cfg.VmctlTimeout != DefaultVmctlTimeout {
 		t.Fatalf("VmctlTimeout = %s, want default %s", cfg.VmctlTimeout, DefaultVmctlTimeout)
+	}
+}
+
+// --- Bearer Token (API Key) Auth Tests ---
+
+// testProxyEnvWithAuthStore sets up a proxy Handler with a real backend sandbox
+// and an auth store for API key validation. It returns the handler, signing
+// key, sandbox server, and the auth store.
+func testProxyEnvWithAuthStore(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server, *auth.Store) {
+	t.Helper()
+
+	handler, priv, sandbox := testProxyEnv(t)
+
+	// Create an auth store and wire it into the handler for API key validation.
+	dbDir := t.TempDir()
+	store, err := auth.OpenStore(filepath.Join(dbDir, "test-auth.db"))
+	if err != nil {
+		t.Fatalf("open auth store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	handler.SetAPIKeyValidator(store)
+	return handler, priv, sandbox, store
+}
+
+// createTestAPIKey creates a user and an API key in the auth store, returning
+// the raw secret and the user.
+func createTestAPIKey(t *testing.T, store *auth.Store, label string, scopes []string, expiresAt *time.Time) (*auth.User, string) {
+	t.Helper()
+	ctx := context.Background()
+	user, err := store.CreateUser("proxy-test-user-"+label, label+"@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, secret, err := store.CreateAPIKey(ctx, user.ID, label, scopes, expiresAt)
+	if err != nil {
+		t.Fatalf("create api key: %v", err)
+	}
+	return user, secret
+}
+
+// hashSecretForTest computes the SHA-256 hex hash of an API key secret.
+func hashSecretForTest(secret string) string {
+	h := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(h[:])
+}
+
+func TestBearerTokenAuthAcceptsValidAPIKey(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+
+	user, secret := createTestAPIKey(t, store, "valid-key", []string{"read:base", "write:base"}, nil)
+
+	// Make a request with the Bearer token to the bootstrap endpoint.
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	// Verify the sandbox received the authenticated user header.
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := resp["user"]; got != user.ID {
+		t.Errorf("sandbox user: got %v, want %q", got, user.ID)
+	}
+
+	// Verify scopes were injected as a header to the upstream.
+	// The sandbox test backend doesn't echo scopes, but we can verify the
+	// auth result had scopes by checking last_used_at was updated.
+	ctx := context.Background()
+	ak, err := store.GetAPIKeyByHash(ctx, hashSecretForTest(secret))
+	if err != nil {
+		t.Fatalf("get api key: %v", err)
+	}
+	if ak.LastUsedAt == nil {
+		t.Error("last_used_at should be updated after successful validation")
+	}
+}
+
+func TestBearerTokenAuthRejectsNoAuth(t *testing.T) {
+	handler, _, _, _ := testProxyEnvWithAuthStore(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBearerTokenAuthRejectsInvalidToken(t *testing.T) {
+	handler, _, _, _ := testProxyEnvWithAuthStore(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer choir_sk_bogustoken123")
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBearerTokenAuthRejectsNonChoirPrefix(t *testing.T) {
+	handler, _, _, _ := testProxyEnvWithAuthStore(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer some-other-token")
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBearerTokenAuthRejectsRevokedKey(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+
+	user, secret := createTestAPIKey(t, store, "revoked-key", []string{"read:base"}, nil)
+
+	// Revoke the key.
+	ctx := context.Background()
+	// Look up the key ID via hash.
+	ak, err := store.GetAPIKeyByHash(ctx, hashSecretForTest(secret))
+	if err != nil {
+		t.Fatalf("get api key: %v", err)
+	}
+	if err := store.RevokeAPIKey(ctx, user.ID, ak.ID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d (revoked key)", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBearerTokenAuthRejectsExpiredKey(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+
+	// Create a key that expired 1 hour ago.
+	past := time.Now().Add(-1 * time.Hour)
+	// We can't create an expired key via CreateAPIKey (it rejects past expiry
+	// at the handler level, but the store itself doesn't check). Use the store
+	// directly.
+	ctx := context.Background()
+	user, err := store.CreateUser("expired-user", "expired@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, secret, err := store.CreateAPIKey(ctx, user.ID, "expired-key", []string{"read:base"}, &past)
+	if err != nil {
+		t.Fatalf("create expired api key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d (expired key)", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBearerTokenAuthScopePropagation(t *testing.T) {
+	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+
+	// Use a sandbox backend that echoes the X-Authenticated-Scopes header.
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"user":   r.Header.Get("X-Authenticated-User"),
+			"scopes": r.Header.Get("X-Authenticated-Scopes"),
+		})
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	// Replace the sandbox server handler.
+	sandbox.Config.Handler = sandboxMux
+
+	scopes := []string{"read:base", "write:base"}
+	user, secret := createTestAPIKey(t, store, "scope-key", scopes, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := resp["user"]; got != user.ID {
+		t.Errorf("user: got %v, want %q", got, user.ID)
+	}
+	if got := resp["scopes"]; got != strings.Join(scopes, ",") {
+		t.Errorf("scopes: got %v, want %q", got, strings.Join(scopes, ","))
+	}
+}
+
+func TestCookieAuthStillWorksAfterAPIKeyAdded(t *testing.T) {
+	handler, priv, _, _ := testProxyEnvWithAuthStore(t)
+
+	// Make a request with a valid cookie JWT (no Bearer header).
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "cookie-user")})
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := resp["user"]; got != "cookie-user" {
+		t.Errorf("user: got %v, want %q", got, "cookie-user")
+	}
+}
+
+func TestCookieAuthPreferredOverBearerToken(t *testing.T) {
+	handler, priv, _, store := testProxyEnvWithAuthStore(t)
+
+	// Create an API key for a different user.
+	_, secret := createTestAPIKey(t, store, "other-key", []string{"read:base"}, nil)
+
+	// Make a request with BOTH a valid cookie and a valid Bearer token.
+	// Cookie auth should win (it's tried first).
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "cookie-priority-user")})
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := resp["user"]; got != "cookie-priority-user" {
+		t.Errorf("user: got %v, want %q (cookie should take priority)", got, "cookie-priority-user")
+	}
+}
+
+func TestBearerTokenAuthProtectedAPI(t *testing.T) {
+	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+
+	// Use a sandbox that echoes the user header.
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"user":   r.Header.Get("X-Authenticated-User"),
+			"scopes": r.Header.Get("X-Authenticated-Scopes"),
+		})
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox.Config.Handler = sandboxMux
+
+	user, secret := createTestAPIKey(t, store, "api-key", []string{"read:runtime", "write:runtime"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleProtectedAPI(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := resp["user"]; got != user.ID {
+		t.Errorf("user: got %v, want %q", got, user.ID)
+	}
+	if got := resp["scopes"]; got != "read:runtime,write:runtime" {
+		t.Errorf("scopes: got %v, want %q", got, "read:runtime,write:runtime")
+	}
+}
+
+func TestBearerTokenAuthWithoutValidatorSkipsAPIKey(t *testing.T) {
+	// When no API key validator is configured, Bearer tokens should be
+	// rejected (only cookie auth works). This verifies the fallback path
+	// doesn't accidentally accept unknown tokens.
+	handler, _, _ := testProxyEnv(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer choir_sk_sometoken")
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d (no validator configured)", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
+	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+
+	// Use a sandbox that echoes the scopes header.
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"scopes": r.Header.Get("X-Authenticated-Scopes"),
+		})
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox.Config.Handler = sandboxMux
+
+	scopes := []string{"read:base"}
+	_, secret := createTestAPIKey(t, store, "strip-key", scopes, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	// Client tries to inject fake scopes — should be stripped.
+	req.Header.Set("X-Authenticated-Scopes", "admin,write:runtime")
+	rec := httptest.NewRecorder()
+	handler.HandleBootstrap(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Should be the key's scopes, not the client-supplied ones.
+	if got := resp["scopes"]; got != "read:base" {
+		t.Errorf("scopes: got %v, want %q (client-supplied scopes should be stripped)", got, "read:base")
 	}
 }

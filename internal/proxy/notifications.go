@@ -57,7 +57,7 @@ func (h *Handler) HandleFeatureAdoptionCompletionWatch(w http.ResponseWriter, r 
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return

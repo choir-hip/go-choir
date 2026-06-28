@@ -80,7 +80,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 	}
 
 	authStarted := time.Now()
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		h.lifecycle.record("platform_publish.auth", "unauthorized", time.Since(authStarted))

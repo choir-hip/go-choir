@@ -3,6 +3,8 @@ package proxy
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -28,6 +31,7 @@ import (
 var clientIdentityHeaders = []string{
 	"X-Authenticated-User",
 	"X-Authenticated-Email",
+	"X-Authenticated-Scopes",
 	"X-User-Id",
 	"X-User-Name",
 	"X-Forwarded-User",
@@ -72,11 +76,22 @@ type proxyVMctlHealthSummary struct {
 	Warmness        vmctl.WarmnessHealthSummary `json:"warmness"`
 }
 
-// AuthResult holds the result of access JWT validation.
+// AuthResult holds the result of access JWT or API key validation.
 type AuthResult struct {
-	UserID string
-	Email  string
-	Valid  bool
+	UserID     string
+	Email      string
+	Valid      bool
+	Scopes     []string // empty for cookie auth = full access
+	AuthMethod string   // "cookie" or "api_key"
+}
+
+// APIKeyValidator is the interface the proxy uses to validate Bearer token
+// (API key) auth. It is satisfied by *auth.Store. When no validator is
+// configured (nil), API key auth is skipped and only cookie auth is used.
+type APIKeyValidator interface {
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (*auth.APIKey, error)
+	TouchAPIKeyLastUsed(ctx context.Context, keyID string) error
+	GetUserByID(id string) (*auth.User, error)
 }
 
 func requestDesktopID(r *http.Request) string {
@@ -94,18 +109,20 @@ func requestDesktopID(r *http.Request) string {
 
 // Handler provides HTTP and WebSocket handlers for the proxy routes.
 type Handler struct {
-	cfg          *Config
-	pubKey       ed25519.PublicKey
-	reverseProxy *httputil.ReverseProxy
-	upgrader     websocket.Upgrader
-	dialer       *websocket.Dialer
-	platformd    *http.Client
-	maild        *http.Client
-	sandboxHTTP  *http.Client
-	sandboxURL   *url.URL      // parsed sandbox URL for WS dial derivation
-	vmctlClient  *vmctl.Client // optional vmctl client for VM-backed routing
-	lifecycle    *lifecycleRecorder
-	recoveries   *computeRecoveryTracker
+	cfg             *Config
+	pubKey          ed25519.PublicKey
+	reverseProxy    *httputil.ReverseProxy
+	upgrader        websocket.Upgrader
+	dialer          *websocket.Dialer
+	platformd       *http.Client
+	maild           *http.Client
+	sandboxHTTP     *http.Client
+	sandboxURL      *url.URL      // parsed sandbox URL for WS dial derivation
+	vmctlClient     *vmctl.Client // optional vmctl client for VM-backed routing
+	lifecycle       *lifecycleRecorder
+	recoveries      *computeRecoveryTracker
+	apiKeyValidator APIKeyValidator // optional: enables Bearer token (API key) auth
+	authStore       *auth.Store     // optional: owned auth store for API key validation
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
@@ -181,10 +198,15 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		if trustedEmail != "" {
 			req.Header.Set("X-Authenticated-Email", trustedEmail)
 		}
+		trustedScopes := req.Header.Get("X-Proxy-Trusted-Scopes")
+		if trustedScopes != "" {
+			req.Header.Set("X-Authenticated-Scopes", trustedScopes)
+		}
 
 		// Clean up internal proxy headers before forwarding.
 		req.Header.Del("X-Proxy-Trusted-User")
 		req.Header.Del("X-Proxy-Trusted-Email")
+		req.Header.Del("X-Proxy-Trusted-Scopes")
 		req.Header.Del("X-Original-Path")
 		req.Header.Del("X-Original-RawQuery")
 		req.Header.Del("X-Resolved-Sandbox-URL")
@@ -197,7 +219,23 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		log.Printf("proxy: vmctl-backed routing enabled (vmctl=%s timeout=%s)", cfg.VmctlURL, cfg.VmctlTimeout)
 	}
 
-	return &Handler{
+	// Optional auth store for API key (Bearer token) validation. When
+	// AuthDBPath is configured, the proxy opens the auth database and can
+	// validate API keys as a fallback to cookie-based JWT auth.
+	var authStore *auth.Store
+	if strings.TrimSpace(cfg.AuthDBPath) != "" {
+		as, err := auth.OpenStore(cfg.AuthDBPath)
+		if err != nil {
+			return nil, fmt.Errorf("open auth store for api key validation: %w", err)
+		}
+		authStore = as
+		log.Printf("proxy: api key (bearer token) auth enabled (auth_db=%s)", cfg.AuthDBPath)
+	}
+
+	// Build the handler. When authStore is nil, apiKeyValidator must be a
+	// nil interface (not a typed-nil *auth.Store) so the nil check in
+	// validateAPIKey works correctly.
+	h := &Handler{
 		cfg:          cfg,
 		pubKey:       pubKey,
 		reverseProxy: proxy,
@@ -209,15 +247,20 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 				return true
 			},
 		},
-		dialer:      websocket.DefaultDialer,
-		platformd:   &http.Client{Timeout: 30 * time.Second},
-		maild:       &http.Client{Timeout: 30 * time.Second},
-		sandboxHTTP: &http.Client{Timeout: 30 * time.Second},
-		sandboxURL:  sandboxURL,
-		vmctlClient: vmctlCli,
-		lifecycle:   newLifecycleRecorder(),
-		recoveries:  newComputeRecoveryTracker(),
-	}, nil
+		dialer:          websocket.DefaultDialer,
+		platformd:       &http.Client{Timeout: 30 * time.Second},
+		maild:           &http.Client{Timeout: 30 * time.Second},
+		sandboxHTTP:     &http.Client{Timeout: 30 * time.Second},
+		sandboxURL:      sandboxURL,
+		vmctlClient:     vmctlCli,
+		lifecycle:       newLifecycleRecorder(),
+		recoveries:      newComputeRecoveryTracker(),
+		authStore:       authStore,
+	}
+	if authStore != nil {
+		h.apiKeyValidator = authStore
+	}
+	return h, nil
 }
 
 // writeJSON writes a JSON response with the given status code.
@@ -226,6 +269,28 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("proxy handler: json encode error: %v", err)
+	}
+}
+
+// SetAPIKeyValidator sets the API key validator used for Bearer token auth.
+// This is primarily used in tests to inject a mock validator without opening
+// a real auth database. In production, the validator is configured via
+// Config.AuthDBPath in NewHandler.
+func (h *Handler) SetAPIKeyValidator(v APIKeyValidator) {
+	h.apiKeyValidator = v
+}
+
+// setTrustedAuthHeaders injects the proxy-validated user context as internal
+// carrier headers for the reverse proxy director to consume. The director
+// strips all client-supplied identity headers and replaces them with these
+// trusted values before forwarding to the upstream.
+func (h *Handler) setTrustedAuthHeaders(r *http.Request, authResult *AuthResult) {
+	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
+	if authResult.Email != "" {
+		r.Header.Set("X-Proxy-Trusted-Email", authResult.Email)
+	}
+	if len(authResult.Scopes) > 0 {
+		r.Header.Set("X-Proxy-Trusted-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 }
 
@@ -271,7 +336,89 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 	}
 	email, _ := claims["email"].(string)
 
-	return &AuthResult{UserID: userID, Email: strings.TrimSpace(email), Valid: true}, nil
+	return &AuthResult{UserID: userID, Email: strings.TrimSpace(email), Valid: true, AuthMethod: "cookie"}, nil
+}
+
+// authenticate tries cookie-based JWT auth first (browser sessions), then
+// falls back to Bearer token (API key) auth for headless access. This is the
+// single entry point for all protected route auth — existing WebAuthn session
+// flows are unchanged; API keys are an additional path.
+func (h *Handler) authenticate(r *http.Request) (*AuthResult, error) {
+	// 1. Try cookie-based JWT (browser sessions).
+	if result, err := h.validateAccessJWT(r); err == nil {
+		return result, nil
+	}
+	// 2. Try Bearer token (API keys for headless access).
+	if result, err := h.validateAPIKey(r); err == nil {
+		return result, nil
+	}
+	return nil, errors.New("no valid authentication")
+}
+
+// validateAPIKey validates an API key from the Authorization: Bearer header.
+// It extracts the token, SHA-256 hashes it, looks up the key in the auth
+// store, checks it is not revoked or expired, updates last_used_at, and
+// returns an AuthResult with the user ID and scopes.
+func (h *Handler) validateAPIKey(r *http.Request) (*AuthResult, error) {
+	if h.apiKeyValidator == nil {
+		return nil, errors.New("api key auth not configured")
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return nil, errors.New("no authorization header")
+	}
+
+	// Expect "Bearer choir_sk_...".
+	const bearerPrefix = "Bearer "
+	if !strings.HasPrefix(authHeader, bearerPrefix) {
+		return nil, errors.New("authorization header is not a bearer token")
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
+	if token == "" {
+		return nil, errors.New("empty bearer token")
+	}
+
+	// Only accept choir_sk_ prefixed tokens.
+	if !strings.HasPrefix(token, auth.APIKeyPrefix) {
+		return nil, errors.New("bearer token is not an api key")
+	}
+
+	// Hash the token with SHA-256.
+	hSum := sha256.Sum256([]byte(token))
+	keyHash := hex.EncodeToString(hSum[:])
+
+	ctx := r.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	ak, err := h.apiKeyValidator.GetAPIKeyByHash(ctx, keyHash)
+	if err != nil {
+		return nil, fmt.Errorf("api key not found: %w", err)
+	}
+
+	// Check expiry.
+	if ak.ExpiresAt != nil && time.Now().UTC().After(*ak.ExpiresAt) {
+		return nil, errors.New("api key expired")
+	}
+
+	// Look up the user to get the email for header injection.
+	user, err := h.apiKeyValidator.GetUserByID(ak.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found for api key: %w", err)
+	}
+
+	// Update last_used_at (non-fatal on error).
+	_ = h.apiKeyValidator.TouchAPIKeyLastUsed(ctx, ak.ID)
+
+	return &AuthResult{
+		UserID:     ak.UserID,
+		Email:      user.Email,
+		Valid:      true,
+		Scopes:     ak.Scopes,
+		AuthMethod: "api_key",
+	}, nil
 }
 
 // HandleBootstrap handles GET /api/shell/bootstrap.
@@ -290,9 +437,9 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate auth.
+	// Validate auth (cookie JWT or Bearer API key).
 	authStarted := time.Now()
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		// Missing or invalid auth — deny with a machine-readable auth failure.
 		// Do NOT reach the upstream.
@@ -317,13 +464,7 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	h.lifecycle.record("bootstrap.resolve", "ok", time.Since(resolveStarted))
 
 	// Auth is valid. Store the trusted user context for the director to inject.
-	// Use X-Proxy-Trusted-User as an internal carrier; the director will
-	// strip any client-supplied X-Authenticated-User and replace it with
-	// this trusted value before forwarding to the upstream.
-	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
-	if authResult.Email != "" {
-		r.Header.Set("X-Proxy-Trusted-Email", authResult.Email)
-	}
+	h.setTrustedAuthHeaders(r, authResult)
 
 	// Preserve the original path and query for the director to use.
 	r.Header.Set("X-Original-Path", r.URL.Path)
@@ -352,9 +493,9 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	if r != nil && r.URL != nil && r.URL.Path == "/api/prompt-bar" {
 		stagePrefix = "prompt_bar"
 	}
-	// Validate auth.
+	// Validate auth (cookie JWT or Bearer API key).
 	authStarted := time.Now()
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		h.lifecycle.record(stagePrefix+".auth", "unauthorized", time.Since(authStarted))
@@ -379,10 +520,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	h.lifecycle.record(stagePrefix+".resolve", "ok", time.Since(resolveStarted))
 
 	// Auth is valid. Store the trusted user context for the director.
-	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
-	if authResult.Email != "" {
-		r.Header.Set("X-Proxy-Trusted-Email", authResult.Email)
-	}
+	h.setTrustedAuthHeaders(r, authResult)
 	r.Header.Set("X-Original-Path", r.URL.Path)
 	r.Header.Set("X-Original-RawQuery", r.URL.RawQuery)
 
@@ -510,7 +648,7 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Validate auth BEFORE upgrading. Missing or invalid auth is
 	// denied with a machine-readable 401 JSON response and no WS upgrade.
 	authStarted := time.Now()
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		h.lifecycle.record("ws.auth", "unauthorized", time.Since(authStarted))
@@ -546,10 +684,13 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	sandboxWSURL := h.sandboxWSURLForTarget(sandboxURL, r.URL.RawQuery)
 	sandboxHeader := http.Header{}
 	// Inject the trusted user context; strip any client-supplied value.
-	// The proxy is the trust boundary — only JWT-verified identity flows.
+	// The proxy is the trust boundary — only verified identity flows.
 	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
 	if authResult.Email != "" {
 		sandboxHeader.Set("X-Authenticated-Email", authResult.Email)
+	}
+	if len(authResult.Scopes) > 0 {
+		sandboxHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 
 	dialStarted := time.Now()
@@ -609,7 +750,7 @@ func (h *Handler) sandboxWSURL() string {
 // the auth-gated proxy without exposing a raw terminal app.
 func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Validate auth BEFORE upgrading.
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
@@ -637,6 +778,9 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	sandboxHeader.Set("X-Authenticated-User", authResult.UserID)
 	if authResult.Email != "" {
 		sandboxHeader.Set("X-Authenticated-Email", authResult.Email)
+	}
+	if len(authResult.Scopes) > 0 {
+		sandboxHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
 
 	sandboxConn, _, err := h.dialer.Dial(terminalWSURL, sandboxHeader)
@@ -982,7 +1126,7 @@ func (h *Handler) HandleVMctlDeny(w http.ResponseWriter, r *http.Request) {
 // from platformd's DoltDB for Universal Wire articles. Published articles
 // carry their full revision history in platformd, not the platform sandbox.
 func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Request) {
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return

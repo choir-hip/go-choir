@@ -175,7 +175,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		h.lifecycle.record("platform_proposal.auth", "unauthorized", time.Since(started))

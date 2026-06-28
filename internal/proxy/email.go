@@ -14,7 +14,7 @@ func (h *Handler) HandleEmailAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Request) {
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return

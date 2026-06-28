@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -195,6 +196,13 @@ func extractChallengeFromBody(body []byte) (string, error) {
 	}
 
 	return clientData.Challenge, nil
+}
+
+// hashAPIKeySecret returns the SHA-256 hex hash of an API key secret. This
+// matches the hash stored in the api_keys.key_hash column.
+func hashAPIKeySecret(secret string) string {
+	h := sha256.Sum256([]byte(secret))
+	return fmt.Sprintf("%x", h)
 }
 
 // --- Session issuance helpers ---
@@ -1236,4 +1244,240 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  exchange.AccessToken,
 		RefreshToken: exchange.RefreshToken,
 	})
+}
+
+// --- API Key Management ---
+//
+// API keys provide headless (non-browser) access to the platform. They are
+// created by an authenticated user (via a WebAuthn session cookie), stored as
+// SHA-256 hashes, and validated via Bearer token in the proxy. The secret is
+// only returned once at creation time.
+
+// validScopes is the set of scope strings accepted by the API key system.
+var validScopes = map[string]bool{
+	"read:texture":  true,
+	"write:texture": true,
+	"read:base":     true,
+	"write:base":    true,
+	"read:runtime":  true,
+	"write:runtime": true,
+	"admin":         true,
+}
+
+// createAPIKeyRequest is the JSON body for POST /auth/api-keys.
+type createAPIKeyRequest struct {
+	Label     string    `json:"label"`
+	Scopes    []string  `json:"scopes"`
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+// apiKeyResponse is the JSON response for a single API key (no secret).
+type apiKeyResponse struct {
+	ID         string     `json:"id"`
+	Label      string     `json:"label"`
+	Scopes     []string   `json:"scopes"`
+	CreatedAt  string     `json:"created_at"`
+	ExpiresAt  *string    `json:"expires_at"`
+	LastUsedAt *string    `json:"last_used_at"`
+	RevokedAt  *string    `json:"revoked_at"`
+}
+
+// createAPIKeyResponse includes the secret, only returned at creation time.
+type createAPIKeyResponse struct {
+	apiKeyResponse
+	Secret string `json:"secret"`
+}
+
+// listAPIKeysResponse is the JSON response for GET /auth/api-keys.
+type listAPIKeysResponse struct {
+	Keys []apiKeyResponse `json:"keys"`
+}
+
+// requireAuthUser validates the choir_access cookie and returns the
+// authenticated user. It writes a 401 response and returns nil if the cookie
+// is missing or invalid.
+func (h *Handler) requireAuthUser(w http.ResponseWriter, r *http.Request) *User {
+	cookie, err := r.Cookie(AccessTokenCookieName)
+	if err != nil || cookie.Value == "" {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return nil
+	}
+	userID, err := h.ValidateAccessToken(cookie.Value)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return nil
+	}
+	user, err := h.store.GetUserByID(userID)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return nil
+	}
+	return user
+}
+
+// formatTimePtr formats a *time.Time as RFC3339, returning nil for nil.
+func formatTimePtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
+}
+
+// apiKeyToResponse converts an APIKey to its JSON response form (no secret).
+func apiKeyToResponse(ak *APIKey) apiKeyResponse {
+	return apiKeyResponse{
+		ID:         ak.ID,
+		Label:      ak.Label,
+		Scopes:     ak.Scopes,
+		CreatedAt:  ak.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiresAt:  formatTimePtr(ak.ExpiresAt),
+		LastUsedAt: formatTimePtr(ak.LastUsedAt),
+		RevokedAt:  formatTimePtr(ak.RevokedAt),
+	}
+}
+
+// validateScopes checks that all provided scope strings are in the valid set.
+// It returns an error naming the first invalid scope.
+func validateScopes(scopes []string) error {
+	for _, sc := range scopes {
+		if !validScopes[sc] {
+			return fmt.Errorf("invalid scope: %q", sc)
+		}
+	}
+	return nil
+}
+
+// HandleCreateAPIKey handles POST /auth/api-keys.
+// It requires a valid choir_access cookie (WebAuthn session), creates a new
+// API key, and returns the secret once. The secret is never stored in
+// plaintext — only the SHA-256 hash is persisted.
+func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	user := h.requireAuthUser(w, r)
+	if user == nil {
+		return
+	}
+
+	var req createAPIKeyRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+
+	if req.Label == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "label is required"})
+		return
+	}
+
+	if err := validateScopes(req.Scopes); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+
+	// Reject expiry in the past.
+	if req.ExpiresAt != nil && req.ExpiresAt.Before(time.Now().UTC()) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "expires_at must be in the future"})
+		return
+	}
+
+	id, secret, err := h.store.CreateAPIKey(r.Context(), user.ID, req.Label, req.Scopes, req.ExpiresAt)
+	if err != nil {
+		log.Printf("[auth] operation=create_api_key user_id=%s result=error error=%q", user.ID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create api key"})
+		return
+	}
+
+	// Look up the created key to return full metadata.
+	ak, err := h.store.GetAPIKeyByHash(r.Context(), hashAPIKeySecret(secret))
+	if err != nil {
+		// The key was created but we can't read it back; return minimal info.
+		log.Printf("[auth] operation=create_api_key user_id=%s key_id=%s result=warning step=readback error=%q", user.ID, id, err)
+		writeJSON(w, http.StatusCreated, createAPIKeyResponse{
+			apiKeyResponse: apiKeyResponse{
+				ID:        id,
+				Label:     req.Label,
+				Scopes:    req.Scopes,
+				CreatedAt: time.Now().UTC().Format(time.RFC3339),
+				ExpiresAt: formatTimePtr(req.ExpiresAt),
+			},
+			Secret: secret,
+		})
+		return
+	}
+
+	log.Printf("[auth] operation=create_api_key user_id=%s key_id=%s result=success", user.ID, id)
+	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
+		apiKeyResponse: apiKeyToResponse(ak),
+		Secret:         secret,
+	})
+}
+
+// HandleListAPIKeys handles GET /auth/api-keys.
+// It requires a valid choir_access cookie and returns the user's API keys
+// (without secrets).
+func (h *Handler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	user := h.requireAuthUser(w, r)
+	if user == nil {
+		return
+	}
+
+	keys, err := h.store.ListAPIKeys(r.Context(), user.ID)
+	if err != nil {
+		log.Printf("[auth] operation=list_api_keys user_id=%s result=error error=%q", user.ID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to list api keys"})
+		return
+	}
+
+	resp := listAPIKeysResponse{Keys: make([]apiKeyResponse, 0, len(keys))}
+	for i := range keys {
+		resp.Keys = append(resp.Keys, apiKeyToResponse(&keys[i]))
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleRevokeAPIKey handles DELETE /auth/api-keys/{id}.
+// It requires a valid choir_access cookie and soft-deletes (revokes) the
+// specified API key. Only the key owner can revoke their own keys.
+func (h *Handler) HandleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	user := h.requireAuthUser(w, r)
+	if user == nil {
+		return
+	}
+
+	// Extract the key ID from the path: /auth/api-keys/{id}.
+	keyID := strings.TrimPrefix(r.URL.Path, "/auth/api-keys/")
+	keyID = strings.Trim(keyID, "/")
+	if keyID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "key id is required"})
+		return
+	}
+
+	if err := h.store.RevokeAPIKey(r.Context(), user.ID, keyID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, errorResponse{Error: "api key not found"})
+			return
+		}
+		log.Printf("[auth] operation=revoke_api_key user_id=%s key_id=%s result=error error=%q", user.ID, keyID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to revoke api key"})
+		return
+	}
+
+	log.Printf("[auth] operation=revoke_api_key user_id=%s key_id=%s result=success", user.ID, keyID)
+	w.WriteHeader(http.StatusNoContent)
 }

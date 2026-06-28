@@ -83,7 +83,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
@@ -273,7 +273,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	authResult, err := h.validateAccessJWT(r)
+	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
