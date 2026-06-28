@@ -28,12 +28,15 @@ Choir is a category. The structure is:
     proximity. This is semantic search.
   - `Publish: Choir → Corpus` (platformd) — faithful functor, preserves
     transclusion structure. This is the publication store of record.
-  - `Project: Choir × Styleguide → UserChoir` — maps textures to personalized
-    variants. This is styleguide projection.
+  - `Generate: Autopaper × Sources → Choir` — maps an autopaper (with its
+    transcluded algorithm, styleguide, and context textures) plus source
+    items to new article textures. This is the agent pipeline. Personalization
+    is generative, not projective — the styleguide shapes what gets written,
+    not how it gets reformatted.
 
 - **Natural transformations:** The wire API. `η: PublishedChoir → UserView` —
   transforms "all published textures" into "what this user sees on this
-  domain." This is graph traversal + projection.
+  domain." This is graph traversal + rendering.
 
 ### The Yoneda Perspective
 
@@ -69,21 +72,59 @@ An autopaper is a texture. It transcludes:
 ```
 autopaper texture
   ├── transcludes → algorithm texture (what to cover)
-  ├── transcludes → styleguide texture (how to present)
+  ├── transcludes → styleguide texture (how to write)
   ├── transcludes → schedule texture (when to publish)
   ├── transcludes → renderer texture (JS/CSS — how to display)
+  ├── transcludes → context textures (background, previous coverage,
+  │              entity profiles, reference material — anything)
   └── transcluded by → edition textures (one per cycle)
 ```
 
 Creating an autopaper = creating a texture that transcludes an algorithm +
-styleguide + schedule + renderer. The agent pipeline reads the autopaper
-texture, follows its transclusions to get the configuration, and produces
-editions. Each edition transcludes the autopaper (provenance — "this edition
+styleguide + schedule + renderer + context textures. The agent pipeline reads
+the autopaper texture, follows ALL its transclusions, pulls those textures
+into the generation context, and produces original articles informed by all
+of them. Each edition transcludes the autopaper (provenance — "this edition
 was produced by this autopaper following this algorithm").
+
+### Personalization Is Generative, Not Projective
+
+The styleguide is not a rendering transform applied to an already-published
+article. It is a generative input. The agent pipeline generates NEW articles
+from scratch, with the styleguide and context textures as inputs to the LLM.
+Personalization means the agent considers the styleguide + algorithm + context
+textures (related articles, background, the user's previous coverage, entity
+history, source preferences) when deciding what to write and how to write it.
+
+A user who transcludes a "focus on Latin American politics" algorithm texture
+and a "skeptical investigative tone" styleguide and a "here's my previous
+coverage of Brazil" context texture gets articles that are genuinely different
+from the platform default — different topics, different angle, different voice,
+informed by their history.
+
+The user VM runs its own generation pipeline. The user's processor agents read
+the autopaper texture, follow transclusions for context, and produce original
+articles. The platform's articles and the user's articles are both textures in
+the same graph, and they can transclude each other — the user's article might
+reference and build on a platform article, transcluding it as a source.
+
+### Wires Get Decoupled
+
+The platform autopaper and user autopapers are independent production
+pipelines. The platform publishes its editions; users publish theirs. They
+share the same source pool (sourcecycled), the same object graph, the same
+Qdrant index. But each autopaper's agent pipeline runs independently, driven
+by its own transcluded configuration.
+
+A user's autopaper can transclude the platform's articles as context — "here's
+what the platform covered, now give me my angle on these stories." Or it can
+ignore the platform entirely and cover completely different ground. The
+transclusion structure makes this compositional: any texture can be pulled
+into any other texture's generation context.
 
 The default `choir.news` autopaper is just the `universal-wire-platform`
 autopaper texture. A user's autopaper is owned by their user VM. Same objects,
-same morphisms, same functors — different algorithm texture.
+same morphisms, same functors — different transcluded configuration.
 
 ## The Product
 
@@ -96,11 +137,14 @@ each cycle.
 
 **Publishing:** You create your own autopaper. Your algorithm texture defines
 what you cover (categories, sources, embedding clusters, entity subscriptions).
-Your styleguide defines how you present it (tone, format, editorial voice).
-Your renderer defines how it looks (JS/CSS). Choir runs the same pipeline —
-sourcecycled → processor → texture agent → edition — but following YOUR
-algorithm texture instead of the platform default. Your autopaper gets its own
-URL: `choir.news/?i=yourname` or `yourname.com` if you bring a domain.
+Your styleguide defines how you write (tone, format, editorial voice). Your
+context textures provide background — previous coverage, entity profiles,
+reference material, even other autopapers' articles. Your renderer defines how
+it looks (JS/CSS). Choir runs the same pipeline — sourcecycled → processor →
+texture agent → edition — but following YOUR autopaper's transcluded
+configuration, generating original articles informed by your styleguide and
+context. Your autopaper gets its own URL: `choir.news/?i=yourname` or
+`yourname.com` if you bring a domain.
 
 All editions are public URLs. All are viewable logged out. All are textures in
 the object graph. All get embedded in Qdrant. All can be transcluded by other
@@ -258,8 +302,12 @@ with its own mission doc, parallax state, and landing loop. The order matters:
 2. Per-cycle edition creation (agent-authored editions)
 3. Wire API rewrite (graph traversal)
 4. Qdrant indexing on publish (semantic search)
-5. Autopaper texture concept (algorithm + styleguide + schedule + renderer)
-6. Instance resolution (domain → autopaper)
-7. Renderer execution (frontend bootstrap)
+5. Autopaper texture concept (algorithm + styleguide + schedule + renderer +
+   context textures — the agent pipeline reads transclusions as generative
+   inputs, not projection rules)
+6. User VM generation pipeline (each autopaper runs its own processor →
+   texture agent → edition pipeline, independently from the platform)
+7. Instance resolution (domain → autopaper)
+8. Renderer execution (frontend bootstrap)
 
 Each step is independently valuable and deploys on its own.
