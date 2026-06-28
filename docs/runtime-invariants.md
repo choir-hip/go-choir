@@ -115,7 +115,7 @@ can mutate candidate state within scope and can spawn subordinate cosupers
 inside its own VM boundary. It cannot promote canonical state.
 
 `cosuper` is a durable execution co-agent, usually in a background computer. Only
-`super` or `vsuper` authority can lease cosuper work; cosupers coordinate within
+`super` or `vsuper` authority can retired-lease cosuper work; cosupers coordinate within
 their assigned work but do not create more privileged execution roots.
 
 `worker` is the general category for delegated agents such as researcher, super,
@@ -160,7 +160,7 @@ artifacts can be served without hydrating private user computers.
 or control it through typed APIs, but mutable workspace changes should happen in
 background/candidate computer forks.
 
-Do not over-design locks, leases, or predeclared edit scopes as the core safety
+Do not over-design locks, retired leases, or predeclared edit scopes as the core safety
 model. The current safety model is VM placement, typed app APIs, durable
 provenance, Trace visibility, and merge/promotion review.
 
@@ -260,7 +260,7 @@ Acceptance levels are explicit:
 - `staging-smoke-level`
 - `export-level`
 - `promotion-level`
-- `continuation-level`
+- retired `continuation-level`
 
 Do not claim `promotion-level` without verifier contract evidence plus owner
 review and promotion or rollback evidence. Do not claim `continuation-level`

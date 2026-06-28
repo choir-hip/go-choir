@@ -712,7 +712,7 @@ func TestContentItemAllowsPublishedSnapshotRejectsPrivateProvenance(t *testing.T
 }
 
 // TestHandleAPIDispatchesTexturePublication guards against a regression where a
-// duplicate router case (introduced by the vtext->Texture blind rename) shadowed
+// duplicate router case (introduced by the predecessor->Texture blind rename) shadowed
 // the canonical publish route, returning 404 for the exact path the frontend
 // posts to. Routing through HandleAPI must reach the handler, not a 404 shadow.
 func TestHandleAPIDispatchesTexturePublication(t *testing.T) {

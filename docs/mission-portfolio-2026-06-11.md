@@ -163,13 +163,13 @@ Operating rules for the remaining missions:
 
 **Real artifact:** the synthesis *decision* layer deleted ahead of M1, on the
 principle that a deletion costing nothing proven and requiring no replacement
-should not wait for its cutover step: `SynthesizeRunContinuation`,
-`SelectSynthesizedRunContinuation`, the app-adoption→objective mapping with
+should not wait for its cutover step: retired `SynthesizeRunContinuation`,
+retired `SelectSynthesizedRunContinuation`, the app-adoption→objective mapping with
 its adoption-ID substring match, the hardcoded mission-doc fallback, the
-synthesis legacy lease defaults, and the synonym folding inside the fingerprint
-normalizer. `POST /api/continuations` now requires an explicit objective (the
+synthesis legacy retired lease defaults, and the synonym folding inside the fingerprint
+normalizer. retired `POST /api/continuations` now requires an explicit objective (the
 caller decides; the record layer only records). The record layer —
-`SelectRunContinuation`, `StartRunContinuation`, fingerprint dedup,
+retired `SelectRunContinuation`, `StartRunContinuation`, fingerprint dedup,
 compaction-before-handoff — survives until M1 ports it to work items and M4
 retires it.
 
@@ -185,7 +185,7 @@ Suite green (runtime, actor, store; comprehensive continuation/API tests).
 **Real artifact:** durable trajectory records (kind, subject refs, status,
 settlement rule as data) + `trajectory_id` on runs + work items (the ported
 continuation mechanics: objective, bounded authority profile, step/token
-budgets, fingerprint dedup — no lease vocabulary in v1), in the runtime store. Additive; no control-flow change.
+budgets, fingerprint dedup — no retired lease vocabulary in v1), in the runtime store. Additive; no control-flow change.
 
 **Bridge conjecture (N2′):** one durable object — trajectory + work items —
 replaces every parent/child control use with no loss of budget, cancellation,
@@ -254,7 +254,7 @@ quarantined.
 **Real artifact:** `executeRun` goroutine closures replaced by actor
 activation loops; `recoverInterruptedRuns` blanket-fail deleted (boot = cold
 actors + sweep); cancel-by-trajectory replaces `CancelRunGraph`;
-`ParentRunID` → `spawned_by_run_id` provenance-only.
+retired `ParentRunID` → `spawned_by_run_id` provenance-only.
 
 **Bridge conjecture (R1/R2):** activation/passivation/sweep semantics,
 already proven at the protocol level (actor_protocol.tla) and package level
@@ -264,7 +264,7 @@ with correct memory and zero stranded messages. *Edge (resource):* the LLM
 loop's streaming/tool machinery may resist the clean turn boundary; budget
 for a shim layer rather than distorting the actor semantics.
 
-**Settlement:** restart amnesia gone (the falsifier passes); ~50 ParentRunID
+**Settlement:** restart amnesia gone (the falsifier passes); ~50 retired ParentRunID
 test sites migrated with their features; acceptance evidence re-pointed.
 
 **Dependencies / blocked by:** M2; M3.1 has settled the immediate
@@ -277,16 +277,16 @@ documents. **Size:** 2 overnight missions; the big one.
 
 **Kind:** spine.
 
-**Real artifact:** the residual RunContinuation record/API/event surface is
+**Real artifact:** the residual retired RunContinuation record/API/event surface is
 removed or explicitly shimmed to trajectory work items; app-adoption
 progression is event-driven (adoption state change -> update to the owning
 actor's mailbox); acceptance-evidence "continuation-level" is re-pointed at
-work items; `/api/continuations` returns 410 or a compatibility response that
+work items; retired `/api/continuations` returns 410 or a compatibility response that
 names the replacement. M1a already deleted the synthesis decision layer
-(`SynthesizeRunContinuation`, `SelectSynthesizedRunContinuation`, hardcoded
-mission fallback, adoption-ID substring policy, legacy lease defaults). M4 finishes
+(retired `SynthesizeRunContinuation`, retired `SelectSynthesizedRunContinuation`, hardcoded
+mission fallback, adoption-ID substring policy, legacy retired lease defaults). M4 finishes
 the ontology cut: no remaining product or verifier path depends on
-RunContinuation as the way work continues.
+retired RunContinuation as the way work continues.
 
 **Heresies / evidence:** repairs H006-H008, H014, and the continuation/progress
 portion of H022. Evidence class: architectural-level plus staging product proof
@@ -299,7 +299,7 @@ and no acceptance record uses continuation events as architecture proof.
 the synthesis layer provided is unproven (autonomous self-development) or
 better expressed as events + work items. *Falsifier:* one app-adoption flow
 end-to-end (propose → verify → approve → promote/rollback) with no
-SynthesizeRunContinuation in the binary. *Edge (independence):* quiet
+retired SynthesizeRunContinuation in the binary. *Edge (independence):* quiet
 dependencies in trace evidence projections and acceptance records; sweep them
 in the same mission or verifier discipline silently weakens.
 
@@ -469,7 +469,7 @@ unblocks the curl|bash story and hybrid Milestones 1–3.
 frontend JS/TS (dead exports inside live files — the `synthesizeContinuation`
 class; tooling like `knip` or per-export grep), a Go API-route sweep
 (endpoints with no remaining frontend or agent callers — candidate: parts of
-`/api/trace/*` after the Trace app was unshipped in 95196069), and a verdict
+`/api/trace/*` after the retired Trace app was unshipped in 95196069), and a verdict
 on the 16 remaining pre-rewrite `.js` files (~2,670 lines: js→ts stragglers
 from the TS migration unit — `stores/desktop.js` 688, `vtext.js` 555 (old v-name file path),
 `auth.js` 384, …). File-level reachability already verified clean 2026-06-12

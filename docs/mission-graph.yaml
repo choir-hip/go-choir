@@ -1000,3 +1000,13 @@ nodes:
   - docs/mission-3a-cleanup-wiring-v0.md
   - docs/mission-3-spikes-2026-06-27.md
   - AGENTS.md
+- id: update-coagent-source-centric-deletion-v0
+  title: 'Mission: update_coagent Source-Centric Deletion v0'
+  path: docs/mission-update-coagent-source-centric-deletion-v0.md
+  ledger: docs/mission-update-coagent-source-centric-deletion-v0.ledger.md
+  status: settled
+  kind: side
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-portfolio-2026-06-11.md

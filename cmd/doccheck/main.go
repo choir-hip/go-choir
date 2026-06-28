@@ -321,9 +321,16 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 		if err != nil {
 			continue
 		}
-		warnings = append(warnings, scanHeresyTerms(p, string(content), detectorTerms)...)
+		// The doctrine file defines heresy detectors and banned patterns; it
+		// must list retired terms as vocabulary. Skip H1/H3 heresy scanning
+		// for it — those scans are for docs that *use* retired terms as live
+		// claims, not for the authority source that defines them.
+		isDoctrine := p == "docs/choir-doctrine.md"
+		if !isDoctrine {
+			warnings = append(warnings, scanHeresyTerms(p, string(content), detectorTerms)...)
+			warnings = append(warnings, scanTextureAgency(p, string(content), info)...)
+		}
 		warnings = append(warnings, scanOverclaims(p, string(content), info)...)
-		warnings = append(warnings, scanTextureAgency(p, string(content), info)...)
 		warnings = append(warnings, scanCurrentTargetCollapse(p, string(content), info)...)
 	}
 
@@ -1112,7 +1119,7 @@ func scanHeresyTerms(path, content string, terms []string) []warning {
 
 func allowedHeresyLine(line string) bool {
 	lower := strings.ToLower(line)
-	for _, term := range []string{"historical", "deprecated", "retired", "detector", "residue", "transitional", "target-only", "target architecture", "successor", "not endorsed", "quoted", "evidence", "forbidden pattern"} {
+	for _, term := range []string{"historical", "deprecated", "retired", "detector", "residue", "transitional", "target-only", "target architecture", "successor", "not endorsed", "quoted", "evidence", "forbidden pattern", "bad pattern", "banned pattern", "deletion gate", "successor pattern"} {
 		if strings.Contains(lower, term) {
 			return true
 		}
@@ -1133,7 +1140,19 @@ func scanTextureAgency(path, content string, info *docInfo) []warning {
 		return nil
 	}
 	patterns := []string{"Texture workflow", "Texture pipeline", "Texture must call", "Texture always calls", "requiredContinuationAfterTextureEdit", "initialTextureToolChoice", "WithInitialToolChoice"}
-	return scanLinePatterns("H3", path, content, patterns, "Texture agency may be collapsed into a fixed workflow", "preserve Texture as canonical document actor with authority to choose delegation")
+	warnings := scanLinePatterns("H3", path, content, patterns, "Texture agency may be collapsed into a fixed workflow", "preserve Texture as canonical document actor with authority to choose delegation")
+	// Filter out warnings on detector-definition or heresy-label lines: docs
+	// that list retired detector terms as vocabulary are not claiming them as
+	// live workflow patterns.
+	filtered := warnings[:0]
+	lines := strings.Split(content, "\n")
+	for _, w := range warnings {
+		if w.Line > 0 && w.Line <= len(lines) && allowedHeresyLine(lines[w.Line-1]) {
+			continue
+		}
+		filtered = append(filtered, w)
+	}
+	return filtered
 }
 
 func scanCurrentTargetCollapse(path, content string, info *docInfo) []warning {

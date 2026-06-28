@@ -180,7 +180,7 @@ Current capabilities:
   windows at once;
 - desktop state persists shared app instances, semantic order, icon positions,
   and per-session window placements for authenticated sessions;
-- real local input renews a driver lease; only the driving session should save
+- real local input renews a driver retired lease; only the driving session should save
   visible focus, foreground window, and local geometry;
 - passive sessions receive shared app roster/order updates without stealing
   active focus or moving local windows;
@@ -203,7 +203,7 @@ Known gaps:
   sessions still need broader product-path proof; deployed live-sync proof now
   covers media recents/progress, Files changes, Texture recent updates, shared
   app roster/order, session-local focus/geometry, and `/api/ws?after_seq=`
-  catch-up on top of the driver-lease state model;
+  catch-up on top of the driver-retired-lease state model;
 - the Shelf/prompt bar must keep shrinking when input is empty and only grow
   for real prompt content;
 - Desk menu, Shelf placement, and desktop icon surfaces are not yet a unified,
@@ -223,7 +223,7 @@ Known gaps:
 | **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Source citation is tri-state: every source entity is cited (`source_ref` in the body), toolbar-only (a Style.texture style source), or marked-unused (`mark_source_unused` with rationale). The former `source_embed` block node is removed; all citations are `source_ref` with `display_mode` (`numbered_ref` \| `expanded_ref`). There is no `WireTexture` prompt control-flow branch; article-format guidance is unconditional, driven by the default Style.texture. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested Textures. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, Texture reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
 | **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and candidate-computer inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
-| **Super Console** | Target replacement for Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
+| **Super Console** | Target replacement for retired Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose retired raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple retired chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
 | **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`, registry name "Features") | Launcher-facing catalog app that replaced "Apps & Changes" in the 2026-05-28/31 frontend redesign cutover (registry.ts:193-201). It lists `AppChangePackage`s as a catalog with status pills (available/importing/ready/active/rolled back/blocked), and a detail pane with demo video/screenshot, summary, and a "View details" technical panel (source package id, import/adoption id, build/runtime/UI digests, rollback recorded/pending, evidence refs). Actions: **Import** (creates an adoption for `TARGET_COMPUTER_ID = 'primary'` and kicks off an async verify with email notification on completion/block); **Activate**, which as of 2026-06-11 (commit `77f65651`) first POSTs `/api/adoptions/{id}/approve` (the resurrected owner-approval gate, producing status `owner_approved`) and then POSTs `/promote` — `promote` now requires `owner_approved` status server-side; **Roll back** (requires a recorded rollback ref); **Roll forward** (requires a rolled-back adoption with both runtime and UI digests). Live updates arrive via `/api/ws`-backed SSE on `app_change_package.published`, `app_adoption.proposed`, `app_adoption.verification_started`, `app_adoption.verified`, `app_adoption.blocked`, `app_adoption.promoted`, and `app_adoption.rolled_back`; the backend also now emits `app_adoption.owner_approved` (types.EventAppAdoptionOwnerApproved) when the approval gate fires, but the Features app's live-event handler does not yet include that kind in its refresh trigger list (verify on next touch). | Promotion mechanics: "Activate" updates the `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in product state. Nothing yet consumes `RouteProfile`: there is no route switch, process restart, or binary swap. Two new server-side guards landed 2026-06-11: promote requires `owner_approved` (the approve step above), and a freshness CAS blocks promotion with a "re-verify" error if the foreground lineage moved since verification. Making the route flip real is **planned**, not shipped: portfolio M6 (route-flip consumer, promotion record + reconciler) and the design in `docs/system-v1-one-cut-2026-06-11.md` Cut 4; see also `docs/choir-promotion-protocol-conjecture-2026-06-11.md`. A preview endpoint exists at `/api/adoptions/{id}/preview/*` (requires a verified recipient build) but the Features UI never calls it; wiring a Try-it-now flow to it is portfolio M7 ("cheapest high-value fix in the system"). `TARGET_COMPUTER_ID` is hardcoded to `'primary'` (single-computer assumption). See "Design intent, not shipped" below for Uninstall/Disable/portfolio-review/Trace-integration intentions that predate the cutover and were not carried into Features. |
@@ -262,9 +262,9 @@ behavior.
   app review loop") — see `docs/mission-portfolio-2026-06-11.md`.
 - **Trace integration.** The pre-cutover design intended the selected Change
   to surface run-acceptance/evidence refs and expose evidence without a separate
-  visual Trace app. In the shipped Features app, this path is still a
-  compatibility stub and may return `"Trace UI is unshipped"` when a trace ref
-  exists. That behavior is a known bug-shaped gap: the visual Trace app is not a
+  visual retired Trace app. In the shipped Features app, this path is still a
+  compatibility stub and may return `"Trace UI is unshipped"` (retired) when a trace ref
+  exists. That behavior is a known bug-shaped gap: the visual retired Trace app is not a
   product direction, and product-ready behavior should replace this stub with a
   trace-evidence/provenance action and run-acceptance linkage.
 - **Try/preview flow.** The pre-cutover design described an internal-frame
@@ -400,14 +400,14 @@ Recent deployed platform proof for live multi-device computer sync:
   `Live sync Texture proof 1779474356092`;
 - proof covered websocket catch-up from `/api/ws?after_seq=6`, returning missed
   `media.recent.updated`, `media.progress.updated`,
-  `desktop.driver_lease.updated`, `desktop.app_instances.updated`,
+  `desktop.driver_lease.updated` (retired), `desktop.app_instances.updated`,
   `desktop.window_placement.updated`, `file.changed`, and
   `texture.document_revision.created` events;
 - proof covered Desktop Overview convergence: desktop and mobile card/map app
   ids all matched `files`, `audio`, `texture` while local focus/z-index and
   placement remained session-specific;
 - artifacts:
-  `test-results/live-sync-driver-lease-staging-20260522T182540Z/metrics.json`,
+  `test-results/live-sync-driver-lease-staging-20260522T182540Z/metrics.json` (retired),
   `desktop-driver-files.png`, `mobile-passive-files-synced.png`,
   `desktop-overview-order.png`, `mobile-overview-order.png`,
   `desktop-after-app-content-sync.png`, and

@@ -221,9 +221,9 @@ documents:
       - doctrine_change
 
   - path: docs/mission-texture-hard-cutover-v0.md
-    claim_scope: current
+    claim_scope: historical
     is_root: false
-    is_evidence: false
+    is_evidence: true
     annotations:
       doc_role: paradoc
       authority: mission
@@ -283,3 +283,1443 @@ documents:
     refresh_triggers:
       - target_architecture_change
       - explicit_owner_promotion
+  - path: docs/adr-dolt-as-canonical-state.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/architecture-consolidation-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/auth-passkey-info-pretext-problem-2026-05-30.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-agentic-depth-canonical.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-base-product-spec-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-conjecture-refactor-program-2026-06-11.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-deck-treatment-and-faq-2026-06-09.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-design-language-2026-06-07.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-email-reference-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-global-wire-broad-source-vtext-newsroom-spec-2026-06-07.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-global-wire-living-vtext-newsroom-spec-2026-06-07.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-liquid-material-engine-design-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-rearchitecture-durable-actors-2026-06-11.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-refactor-status-2026-06-19.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-role-free-actor-protocol-2026-06-11.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-strategy-overview-2026-06-09.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/choir-wire-source-to-vtext-spec-2026-06-09.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/code-docs-reconciliation-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/comprehensive-runtime-dolt-lock-problem-2026-06-12.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-attention-unifying-layer-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-conductor-supervision-protocol-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-index.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-mutation-transaction-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-object-graph-versioning-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-observer-hierarchy-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-philosophy-object-graph-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-search-provider-plane-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-self-developing-software-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/design-virtual-agentic-graph-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/dispatch-proxy-architecture-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/document-extraction-substrate-problem-2026-06-08.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/evidence/node-b-nix-root-classification-2026-06-14.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/global-wire-sourcemaxx-newsroom-architecture-diagram-2026-06-07.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/glossary.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/handoff-conjecture-learning-fixed-point-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/handoff-grand-synthesis-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/handoff-pptx-renderer-worktree.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/handoff-texture-structured-doc-legacy-surfaces-2026-06-22.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/implementation-scope.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/incident-gateway-auth-vm-orphan-2026-05-21.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/incident-vm-bootstrap-stale-route-2026-06-09.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/metaconductor.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-agentic-debugging-vtext-stability-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-apps-and-changes-store-sweep-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-campaign-compiler-selfdev-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-choir-base-reconciliation-kernel-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-choir-doctrine-upgrade-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-choir-grand-deformation-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-computer-recovery-system-monitor-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-conductor-url-source-routing-h029-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-continuation-deletion-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-demo-stability-foundations-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-deploy-impact-isolation-cache-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-doc-heresy-checker-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-doctrine-conformance-findings-2026-06-13.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-email-demo-ingress-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-geometry.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-global-wire-hard-cutover-real-newsroom-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-global-wire-living-vtext-newsroom-v1.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-global-wire-sourcemaxx-publication-system-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-human-proof-experiment-rerun-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-lifecycle-cutover-m3.1-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-lifecycle-cutover-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-llm-run-memory-compaction-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-maild-email-ingress-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-messaging-cutover-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-natural-compaction-pdf-recall-eval-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-node-b-nix-store-retention-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-node-b-storage-retention-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-provider-config-conformance-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-public-pulse-app-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-report-natural-compaction-document-recall-2026-06-09.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-report-universal-wire-production-recovery-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-report-wire-community-news-2026-06-09.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-research-runtime-evidence-cadence-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-run-memory-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-runtime-human-proof-experiment-rerun-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-runtime-model-context-substrate-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-runtime-test-pyramid-hardening-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-search-provider-plane-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-source-system-hard-review-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-source-system-loop8-simplify-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-source-system-simplify-secure-smart-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-standalone-sourcecycled-data-platform-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-super-console-real-zot-cutover-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-super-console-source-mount-promotion-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-surface-ontology-cleanup-h027-h029-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-texture-long-running-agent-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-texture-product-loop-recovery-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-texture-structured-document-transclusion-cutover-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-trajectory-model-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-update-coagent-source-centric-deletion-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-first-draft-regression-m3.4-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-live-cadence-repair-v3.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-vtext-version-compare-merge-debuggability-v1.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-web-surface-rationalization-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-wire-autonomous-ingestion-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-wire-community-news-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-wire-community-news-v1.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-wire-on-settlement-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-wire-settlement-substrate-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/mission-youtube-review-studio-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/model-policy-chatgpt-pin-rewrite-problem-2026-06-19.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/news-econ-publishing-synthesis-2026-06-04.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/news-system-current-state-and-improvements-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/news-voice-autoradio-forward-plan-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/north-star.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/object-graph-schema-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/object-graph-synthesis-2026-06-23.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-docs-checker-clear.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-email-freeze-diagnosis.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-object-service-prototype.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-pptx-renderer-prototype.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-qdrant-indexing-pipeline.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-source-entity-migration.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/paradoc-universal-wire-diagnosis.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/project-goals.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/public-identity-and-custom-domains.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/publication-rich-export-design.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/runbook-node-b-universal-wire-migration-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/source-publication-consolidation-2026-06-06.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/spec-choir-desktop-wails-v3-2026-06-22.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/stable-platform-divergent-computers-architecture-2026-05-17.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/staging-proxy-icu-runtime-link-problem-2026-06-05.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/texture-versioned-reader-ux-options-2026-06-19.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/theme-system-contract-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/universal-wire-activation-topology-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/universal-wire-empty-front-page-root-cause-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/universal-wire-production-recovery-missiongradient-2026-06-10.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vm-priority-policy.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-compare-after-publish-ui-problem-2026-06-05.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-durable-version-number-problem-2026-06-05.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-fluid-editing-doc-roundtrip-transclusion-problem-2026-06-05.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-publish-link-navigation-problem-2026-06-05.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-publish-public-guest-ux-problem-2026-06-04.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-publish-url-history-problem-2026-06-05.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-styleguide-source-theme-synthesis-2026-06-06.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-styleguide-system-research-2026-06-06.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-toolbar-responsive-layout-problem-2026-06-08.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-user-draft-versioning-problem-2026-06-03.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-version-compare-merge-debuggability-problem-2026-06-04.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/vtext-version-compare-merge-debuggability-spec.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: docs/wire-news-system-learning-saga-2026-06-09.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: frontend/src/lib/apps/README.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
+  - path: load/README.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: historical_evidence
+      authority: support
+      lifecycle: archived
+
