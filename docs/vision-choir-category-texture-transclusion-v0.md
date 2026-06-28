@@ -108,6 +108,42 @@ articles. The platform's articles and the user's articles are both textures in
 the same graph, and they can transclude each other — the user's article might
 reference and build on a platform article, transcluding it as a source.
 
+### Style Implies Substance
+
+The styleguide is not superficial. It does not merely control word choice or
+formatting. Style implies substance — a coherent editorial worldview that
+determines what gets seen, what gets questioned, what gets pursued, and what
+gets ignored. "Skeptical investigative tone" is not about adjectives; it is
+about which sources you trust, which claims you interrogate, which stories you
+chase, which entities you track. The styleguide encodes an entire editorial
+ontology.
+
+This is holographic: each stylistic choice contains the whole. "Lead with the
+human impact" implies an ontology of what matters (people over institutions),
+which implies a sourcing strategy (eyewitnesses over officials), which implies
+a story selection bias (crises over policy). Change one stylistic axis and the
+substance shifts coherently. The style IS the substance, viewed from a
+different angle.
+
+Because style implies substance, a user's autopaper does not produce
+"reformatted versions" of the platform's articles. It produces different
+articles. Different topics surface. Different sources get cited. Different
+claims get interrogated. The styleguide shapes the entire generative pipeline,
+from source selection through synthesis to final article.
+
+### Faithful Transclusion
+
+When a story is particularly poignant — a major event, a breaking story that
+transcends editorial framing — it can be faithfully transcluded into the
+user's edition. The platform's article is included as-is, unmodified, via a
+direct transclusion link. No regeneration, no restyling. The user's edition
+carries it because the story matters regardless of editorial angle.
+
+This is the complement to generative personalization: some stories are
+editorial-frame-independent. They get carried over faithfully. Everything else
+gets generated under the user's styleguide, producing genuinely different
+articles because style implies substance.
+
 ### Wires Get Decoupled
 
 The platform autopaper and user autopapers are independent production
