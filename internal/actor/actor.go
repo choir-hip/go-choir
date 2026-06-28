@@ -30,6 +30,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -104,6 +106,22 @@ type Options struct {
 	// more cold-start replays; longer values keep actors resident but
 	// consume memory.
 	IdleTimeout time.Duration
+	// Backpressure enables backpressure on Send when the mailbox is full.
+	// When false (default), Send silently drops to the durable log (legacy
+	// behavior). When true, Send returns ErrInboxFull (non-blocking mode)
+	// or waits up to SendTimeout (blocking mode).
+	Backpressure bool
+	// SendMode controls Send behavior when Backpressure is true and the
+	// mailbox is full. Default is SendModeNonBlocking.
+	SendMode SendMode
+	// SendTimeout is the maximum wait for a blocking Send when the mailbox
+	// is full (default 5s). Only used when Backpressure is true and
+	// SendMode is SendModeBlocking.
+	SendTimeout time.Duration
+	// OnActorFailure is called when an actor dies from a panic or
+	// unrecoverable error. The callback receives the agent ID and the
+	// error. It must not block. When nil, failures are logged only.
+	OnActorFailure FailureFunc
 }
 
 // Runtime hosts resident actors over a durable log.
@@ -128,6 +146,31 @@ type residentActor struct {
 // ErrClosed is returned by Send after Stop.
 var ErrClosed = errors.New("actor runtime is closed")
 
+// ErrInboxFull is returned by Send when backpressure is enabled and the
+// recipient's mailbox is full. The update IS durably logged — it will be
+// delivered when the mailbox drains (via the post-drain backlog query) or
+// on the next Sweep. The error is feedback to the sender, not a data-loss
+// signal.
+var ErrInboxFull = errors.New("actor inbox is full")
+
+// SendMode controls how Send behaves when the recipient's mailbox is full
+// and backpressure is enabled (Options.Backpressure = true).
+type SendMode int
+
+const (
+	// SendModeNonBlocking returns ErrInboxFull immediately when the inbox
+	// is full. This is the default backpressure mode.
+	SendModeNonBlocking SendMode = iota
+	// SendModeBlocking waits up to Options.SendTimeout (default 5s) for
+	// space in the inbox, then returns ErrInboxFull if still full.
+	SendModeBlocking
+)
+
+// FailureFunc is called when an actor dies from a panic or unrecoverable
+// error. The supervisor receives the agent ID and the error. The callback
+// must not block (it is called from the dying actor's goroutine).
+type FailureFunc func(agentID string, err error)
+
 // NewRuntime constructs a runtime. Call Sweep afterwards to recover any
 // backlog left by a previous process (boot recovery).
 func NewRuntime(log Log, handler Handler, opts Options) *Runtime {
@@ -139,6 +182,9 @@ func NewRuntime(log Log, handler Handler, opts Options) *Runtime {
 	}
 	if opts.IdleTimeout <= 0 {
 		opts.IdleTimeout = 5 * time.Second
+	}
+	if opts.SendTimeout <= 0 {
+		opts.SendTimeout = 5 * time.Second
 	}
 	return &Runtime{
 		log:      log,
@@ -156,8 +202,16 @@ func NewRuntime(log Log, handler Handler, opts Options) *Runtime {
 //
 // The log append happens BEFORE the residency check so that the update
 // survives even if the actor passivates between the append and the delivery.
-// If the mailbox channel is full, the update stays in the log; the loop's
-// post-drain backlog query catches it.
+//
+// When Options.Backpressure is false (default, legacy), a full mailbox is a
+// silent drop to the log — the loop's post-drain backlog query catches it.
+//
+// When Options.Backpressure is true:
+//   - SendModeNonBlocking: returns ErrInboxFull immediately if the mailbox
+//     is full. The update is durably logged and will be delivered on drain
+//     or Sweep.
+//   - SendModeBlocking: waits up to Options.SendTimeout for space, then
+//     returns ErrInboxFull if still full.
 func (rt *Runtime) Send(ctx context.Context, u Update) error {
 	u.ToAgentID = strings.TrimSpace(u.ToAgentID)
 	u.UpdateID = strings.TrimSpace(u.UpdateID)
@@ -176,21 +230,56 @@ func (rt *Runtime) Send(ctx context.Context, u Update) error {
 	}
 
 	rt.mu.Lock()
-	defer rt.mu.Unlock()
 	if rt.closed {
+		rt.mu.Unlock()
 		// The update is durably logged; the next process's sweep delivers it.
 		return ErrClosed
 	}
-	if r, ok := rt.resident[u.ToAgentID]; ok && !r.evicted {
-		// Warm: steer via Go channel. Non-blocking — if the buffer is full,
-		// the update is in the log and the loop's backlog query catches it.
+	r, ok := rt.resident[u.ToAgentID]
+	if !ok || r.evicted {
+		err := rt.activateLocked(u.ToAgentID)
+		rt.mu.Unlock()
+		return err
+	}
+	// Warm: steer via Go channel.
+	if !rt.opts.Backpressure {
+		// Legacy non-blocking: silent drop to log if full.
 		select {
 		case r.mailbox <- u:
 		default:
 		}
+		rt.mu.Unlock()
 		return nil
 	}
-	return rt.activateLocked(u.ToAgentID) // cold: wake
+	// Backpressure mode.
+	if rt.opts.SendMode == SendModeBlocking {
+		// Blocking: release the lock and wait for space (or timeout).
+		// The channel reference is stable even if the actor passivates
+		// while we wait — a stale channel send is harmless because the
+		// update is in the durable log and a re-activation's cold-start
+		// replay will deliver it.
+		ch := r.mailbox
+		rt.mu.Unlock()
+		timer := time.NewTimer(rt.opts.SendTimeout)
+		defer timer.Stop()
+		select {
+		case ch <- u:
+			return nil
+		case <-ctx.Done():
+			return ErrInboxFull
+		case <-timer.C:
+			return ErrInboxFull
+		}
+	}
+	// Non-blocking backpressure: return ErrInboxFull if full.
+	select {
+	case r.mailbox <- u:
+		rt.mu.Unlock()
+		return nil
+	default:
+		rt.mu.Unlock()
+		return ErrInboxFull
+	}
 }
 
 // Sweep activates every agent with unprocessed backlog. It is the boot
@@ -270,6 +359,45 @@ func (rt *Runtime) Stop() {
 	rt.wg.Wait()
 }
 
+// Drain gracefully shuts down the actor runtime with a timeout. It cancels
+// all in-flight actor contexts (so handlers receive a cancellation signal)
+// and waits up to timeout for goroutines to exit. If the timeout expires,
+// remaining actors are logged — their partial side effects are visible in
+// the durable log, not silently dropped. Durable state is untouched; a new
+// runtime over the same log recovers via Sweep.
+//
+// Drain is safe to call instead of Stop. It is also safe to call Stop after
+// Drain (Stop will wait for any actors that did not finish within the drain
+// timeout).
+func (rt *Runtime) Drain(timeout time.Duration) {
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	rt.mu.Lock()
+	rt.closed = true
+	for _, r := range rt.resident {
+		r.evicted = true
+		r.cancel()
+	}
+	rt.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		rt.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Printf("actor runtime: drain complete")
+	case <-time.After(timeout):
+		rt.mu.Lock()
+		remaining := len(rt.resident)
+		rt.mu.Unlock()
+		log.Printf("actor runtime: drain timed out after %v; %d actor(s) still running", timeout, remaining)
+	}
+}
+
 // loop is one activation: cold-start replay → warm select → passivate.
 //
 // Cold start: replay the durable log backlog (the ONLY time the log is
@@ -294,6 +422,22 @@ func (rt *Runtime) Stop() {
 // then finds the actor cold, it activates a fresh one that replays the log.
 func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 	defer rt.wg.Done()
+	// Ensure the actor is deregistered on any exit path, including panic.
+	// deregister is idempotent: if passivation already deleted the entry,
+	// this is a no-op.
+	defer rt.deregister(r)
+	// Recover from handler panics: notify the supervisor, log the stack,
+	// and let the goroutine exit. The update that caused the panic stays
+	// unprocessed in the durable log; a Sweep will re-activate the actor
+	// (the supervisor can decide whether to retry).
+	defer func() {
+		if rv := recover(); rv != nil {
+			err := fmt.Errorf("actor %s panic: %v", r.agentID, rv)
+			log.Printf("actor: %v\n%s", err, debug.Stack())
+			rt.notifyFailure(r.agentID, err)
+		}
+	}()
+
 	memory, err := rt.log.LoadSnapshot(ctx, r.agentID)
 	if err != nil {
 		memory = nil
@@ -328,7 +472,6 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 	for {
 		select {
 		case <-ctx.Done():
-			rt.deregister(r)
 			return
 
 		case u := <-r.mailbox:
@@ -372,7 +515,6 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 			evicted := r.evicted
 			rt.mu.Unlock()
 			if evicted {
-				rt.deregister(r)
 				return
 			}
 			idleTimer.Reset(rt.opts.IdleTimeout)
@@ -457,6 +599,15 @@ func (rt *Runtime) deregister(r *residentActor) {
 		delete(rt.resident, r.agentID)
 	}
 	rt.mu.Unlock()
+}
+
+// notifyFailure calls the OnActorFailure callback if configured. Called from
+// the dying actor's goroutine (via recover in loop). The callback must not
+// block.
+func (rt *Runtime) notifyFailure(agentID string, err error) {
+	if rt.opts.OnActorFailure != nil {
+		rt.opts.OnActorFailure(agentID, err)
+	}
 }
 
 func resetTimer(t *time.Timer, d time.Duration) {
