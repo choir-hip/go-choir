@@ -1,6 +1,6 @@
 # Mission 3: Universal Wire Ingestion Rebuild
 
-**Status:** in progress — 3a settled, 3b settled, 3c next  
+**Status:** in progress — 3a settled, 3b settled, 3c (actor migration) next  
 **Date:** 2026-06-27  
 **Spikes:** `docs/mission-3-spikes-2026-06-27.md` (all 6 complete, evidence gathered)  
 **Predecessor:** `docs/mission-heresy-deletion-v1.md` (settled — deterministic scaffold deleted, processor dispatch wired)  
@@ -105,9 +105,23 @@ Follow-up items (not blocking):
 - W7: Add explicit QDRANT_URL/QDRANT_DEDUP_THRESHOLD env vars to sandbox service config
 - W8: Improve sandbox runtime logging for processor runs and dedup activity
 
-### 3c: Distribution
+### 3c: Actor Runtime Migration
 
-**Paradoc:** `docs/mission-3c-distribution-v0.md` (to be drafted after 3b)  
+**Paradoc:** `docs/mission-3c-actor-runtime-migration-v0.md`  
+**Plan doc:** `docs/actor-runtime-migration-and-agents-md-revision-2026-06-27.md`  
+**Confidence:** High — replacement exists and is verified, work is extraction + rewiring  
+**Risk:** Medium — State 6 (wire pipeline migration) is high-entanglement; 3b changes add to entanglement  
+**Priority:** **Key priority.** The actor runtime (`internal/actor/`, 326 lines, 1 mutex) was built and verified on 2026-06-11 but never wired in. The wire pipeline runs on the borked `internal/runtime/` (3797 lines, 15 mutexes) — the exact substrate bugs that caused two weeks of misdirected debugging. This must land before distribution work.  
+
+Two parts:
+- **Part 1: AGENTS.md revision** — split into 3 files, add 4 new rules (check-for-existing-fixes, root cause clustering, substrate-vs-symptom, dead-end escalation), add deletion-first heuristic, simplify mutation class ceremony
+- **Part 2: Runtime migration** — 8-state machine: extract interfaces → rewire providers → extract tool registry → build actor adapter → rewire sandbox → migrate wire pipeline → delete old concurrency → E2E verify
+
+29 pts total. Hybrid execution: agent does mechanical States 1-3, human+agent do States 4 and 6, agent does 7-8.
+
+### 3d: Distribution
+
+**Paradoc:** `docs/mission-3d-distribution-v0.md` (to be drafted after 3c)  
 **Confidence:** Medium — proven mechanics, unproven under real load  
 **Risk:** Medium — merge contention, routing accuracy at scale  
 
@@ -117,9 +131,9 @@ Scale to multiple VMs:
 - 2-3 VMs running, captures distributed
 - Acceptance: captures distributed across VMs, branches merged, articles from merged state
 
-### 3d: Source Expansion
+### 3e: Source Expansion
 
-**Paradoc:** `docs/mission-3d-source-expansion-v0.md` (to be drafted after 3b)  
+**Paradoc:** `docs/mission-3e-source-expansion-v0.md` (to be drafted after 3c)  
 **Confidence:** Medium — per-source risk varies  
 **Risk:** Low-medium per source, research-heavy  
 
@@ -128,7 +142,7 @@ Expand source coverage to new protocols:
 - **ATProto** — Bluesky's protocol (public firehose via WebSocket, or authenticated app)
 - **RSSHub** — open-source RSS generator for Asian social media (Weibo, Zhihu, Bilibili, etc.)
 - **More** — Hacker News, Reddit, Mastodon streaming, etc.
-- Can parallel with 3c (independent of distribution work)
+- Can parallel with 3d (independent of distribution work)
 
 ## Post-Mission 3 Portfolio (Future, Not Yet Scoped)
 
@@ -151,5 +165,5 @@ Expand source coverage to new protocols:
 ## Suggested Goal String
 
 ```text
-Mission 3 is an umbrella mission with 4 sub-missions (3a-3d). 3a (cleanup & component wiring) is settled — commit e76aa068. Next: 3b (new ingestion path E2E). See docs/mission-3-universal-wire-ingestion-rebuild-v0.md for the full architecture, docs/mission-3a-cleanup-wiring-v0.md for 3a (settled), and docs/mission-3b-ingestion-path-v0.md for the 3b paradoc. Spike evidence is in docs/mission-3-spikes-2026-06-27.md. All spikes are merged to main. Qdrant is deployed on node-b.
+Mission 3 is an umbrella mission with 5 sub-missions (3a-3e). 3a (cleanup & component wiring) is settled — commit e76aa068. 3b (new ingestion path E2E) is settled — deploy a0776488, real article on staging. Next: 3c (actor runtime migration) — the key priority. The actor runtime exists but was never wired in; the wire pipeline runs on the borked old runtime. See docs/mission-3-universal-wire-ingestion-rebuild-v0.md for the full architecture, docs/mission-3c-actor-runtime-migration-v0.md for the 3c paradoc, and docs/actor-runtime-migration-and-agents-md-revision-2026-06-27.md for the detailed plan. Spike evidence is in docs/mission-3-spikes-2026-06-27.md. All spikes are merged to main. Qdrant is deployed on node-b.
 ```
