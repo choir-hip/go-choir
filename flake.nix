@@ -491,7 +491,7 @@ EOF
         mkSbom = name: pkg:
           pkgs.runCommand "sbom-${name}" { nativeBuildInputs = [ sbomnixCli ]; } ''
             mkdir $out
-            sbomnix --output $out/sbom.json --format cyclonedx "${pkg}"
+            sbomnix --cdx "$out/sbom.json" "${pkg}"
           '';
       in builtins.mapAttrs mkSbom goChoirPackages;
 
@@ -548,6 +548,19 @@ EOF
           ./nix/hardware.nix
           ./nix/disks.nix
           ./nix/node-b.nix
+        ];
+      };
+
+      # ── Node A host configuration ─────────────────────────────────────
+      # Offsite replica, restore rehearsal target, shadow compute node.
+      # Does NOT serve live traffic. Pulls backups from Node B and runs
+      # restore rehearsal on a daily timer. See
+      # docs/mission-node-a-deployment-restore-rehearsal-v0.md
+      nixosConfigurations.go-choir-a = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          ./nix/node-a-hardware.nix
+          ./nix/node-a.nix
         ];
       };
 

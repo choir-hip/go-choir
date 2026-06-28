@@ -37,6 +37,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go vet
         run: go vet ./...
@@ -69,8 +70,12 @@ jobs:
           done
 
   go-test:
-    name: Go Test (non-runtime)
+    name: Go Test (non-runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@v6
 
@@ -78,15 +83,14 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Go test non-runtime packages
+      - name: Go test non-runtime shard
         shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
-          if (( ${#packages[@]} > 0 )); then
-            scripts/go-test-with-timing -count=1 "${packages[@]}"
-          fi
+        env:
+          TOTAL_SHARDS: 3
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: scripts/go-test-non-runtime-shards
 
   go-test-runtime:
     name: Go Test (internal/runtime shard ${{ matrix.shard }})
@@ -102,6 +106,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go test internal/runtime shard
         shell: bash
@@ -120,6 +125,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go test integration-tagged smoke
         shell: bash
@@ -135,6 +141,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Run doccheck
         shell: bash

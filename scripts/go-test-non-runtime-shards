@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Sharded non-runtime Go test runner for CI.
+#
+# Splits all non-runtime packages across TOTAL_SHARDS runners. Each runner
+# builds and tests only its assigned packages, reducing wall-clock CI time
+# versus running all 51 non-runtime packages in a single serial job.
+#
+# Usage in CI:
+#   env:
+#     TOTAL_SHARDS: 3
+#     SHARD_INDEX: ${{ matrix.shard }}
+#   run: scripts/go-test-non-runtime-shards
+#
+# Any extra args (e.g. -race) are forwarded to go test.
+set -euo pipefail
+
+total_shards="${TOTAL_SHARDS:-3}"
+if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
+  echo "TOTAL_SHARDS must be a positive integer, got: $total_shards" >&2
+  exit 2
+fi
+
+# List all packages except internal/runtime (which has its own sharded runner).
+mapfile -t all_packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
+if (( ${#all_packages[@]} == 0 )); then
+  echo "No non-runtime packages found"
+  exit 0
+fi
+
+run_shard() {
+  local shard_index="$1"
+  shift
+  local -a selected=()
+  for i in "${!all_packages[@]}"; do
+    if (( i % total_shards == shard_index )); then
+      selected+=("${all_packages[$i]}")
+    fi
+  done
+
+  if (( ${#selected[@]} == 0 )); then
+    echo "No non-runtime packages selected for shard ${shard_index}/${total_shards}"
+    return 0
+  fi
+
+  echo "Running ${#selected[@]} of ${#all_packages[@]} non-runtime packages in shard ${shard_index}/${total_shards}"
+  "$(dirname "$0")/go-test-with-timing" -count=1 "${selected[@]}" "$@"
+}
+
+if [[ -n "${SHARD_INDEX:-}" ]]; then
+  if ! [[ "$SHARD_INDEX" =~ ^[0-9]+$ ]] || (( SHARD_INDEX >= total_shards )); then
+    echo "SHARD_INDEX must be an integer in [0, $((total_shards - 1))], got: ${SHARD_INDEX:-}" >&2
+    exit 2
+  fi
+  run_shard "$SHARD_INDEX" "$@"
+  exit $?
+fi
+
+# Fallback: run all non-runtime packages in a single process.
+echo "SHARD_INDEX not set; running all ${#all_packages[@]} non-runtime packages in one process"
+"$(dirname "$0")/go-test-with-timing" -count=1 "${all_packages[@]}" "$@"
