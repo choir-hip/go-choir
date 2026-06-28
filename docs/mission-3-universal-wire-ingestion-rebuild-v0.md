@@ -1,6 +1,6 @@
 # Mission 3: Universal Wire Ingestion Rebuild
 
-**Status:** in progress — 3a settled, 3b settled, 3c (actor migration) next  
+**Status:** in progress — 3a settled, 3b settled, 3c partial (Part 1 + States 1-3), 3c_2 (real migration) next  
 **Date:** 2026-06-27  
 **Spikes:** `docs/mission-3-spikes-2026-06-27.md` (all 6 complete, evidence gathered)  
 **Predecessor:** `docs/mission-heresy-deletion-v1.md` (settled — deterministic scaffold deleted, processor dispatch wired)  
@@ -105,19 +105,37 @@ Follow-up items (not blocking):
 - W7: Add explicit QDRANT_URL/QDRANT_DEDUP_THRESHOLD env vars to sandbox service config
 - W8: Improve sandbox runtime logging for processor runs and dedup activity
 
-### 3c: Actor Runtime Migration
+### 3c: Actor Runtime Migration (Partial — Part 1 + States 1-3 done)
 
 **Paradoc:** `docs/mission-3c-actor-runtime-migration-v0.md`  
 **Plan doc:** `docs/actor-runtime-migration-and-agents-md-revision-2026-06-27.md`  
-**Confidence:** High — replacement exists and is verified, work is extraction + rewiring  
-**Risk:** Medium — State 6 (wire pipeline migration) is high-entanglement; 3b changes add to entanglement  
-**Priority:** **Key priority.** The actor runtime (`internal/actor/`, 326 lines, 1 mutex) was built and verified on 2026-06-11 but never wired in. The wire pipeline runs on the borked `internal/runtime/` (3797 lines, 15 mutexes) — the exact substrate bugs that caused two weeks of misdirected debugging. This must land before distribution work.  
+**Status:** Partial. Part 1 (AGENTS.md revision, commit `55ef75bb`) and States 1-3 (interface extraction, commit `b98531cd`) are settled. States 4-7 failed — the agent wired the actor runtime as a wake/dispatch layer on top of the old runtime instead of replacing it. The old runtime (3750 lines, 15 mutexes) remained the execution substrate. Attempt stashed, not committed.  
 
-Two parts:
-- **Part 1: AGENTS.md revision** — split into 3 files, add 4 new rules (check-for-existing-fixes, root cause clustering, substrate-vs-symptom, dead-end escalation), add deletion-first heuristic, simplify mutation class ceremony
-- **Part 2: Runtime migration** — 8-state machine: extract interfaces → rewire providers → extract tool registry → build actor adapter → rewire sandbox → migrate wire pipeline → delete old concurrency → E2E verify
+Completed:
+- Part 1: AGENTS.md split into 3 files, 4 new rules, deletion-first heuristic ✅
+- State 1: Interface extraction to `internal/provideriface`, `internal/agentprofile` ✅
+- State 2: Providers rewired to new packages ✅
+- State 3: ToolRegistry extracted to `internal/toolregistry` ✅
 
-29 pts total. Hybrid execution: agent does mechanical States 1-3, human+agent do States 4 and 6, agent does 7-8.
+Failed:
+- States 4-7: Actor handler called `ReconcileActorWake` → `startRunAsync` (async goroutine). Actor passivated while run continued outside actor model. 200ms polling replaced channel-based wake. Old runtime still the execution substrate. Stashed.
+
+### 3c_2: Actor Runtime Migration (Real) — **Key Priority**
+
+**Paradoc:** `docs/mission-3c_2-actor-runtime-migration-real-v0.md`  
+**Predecessor:** 3c (Part 1 + States 1-3 done, States 4-7 failed)  
+**Confidence:** High — the core insight is clear: actor handler must be the execution boundary  
+**Risk:** High — replacing the execution substrate, not just the wake layer  
+
+Complete what 3c failed to do. The actor handler (`HandleUpdate`) must run
+`executeActivation` synchronously — no `startRunAsync`, no separate goroutine.
+The actor goroutine IS the run goroutine. The actor mailbox replaces polling.
+Delete `channels.go`, old concurrency mutexes, and `startRunAsync`.
+
+Three phases:
+- **Phase 1:** Actor handler as execution boundary (replaces States 4-5)
+- **Phase 2:** Delete old concurrency code (replaces States 6-7)
+- **Phase 3:** Staging E2E (State 8)
 
 ### 3d: Distribution
 
@@ -165,5 +183,5 @@ Expand source coverage to new protocols:
 ## Suggested Goal String
 
 ```text
-Mission 3 is an umbrella mission with 5 sub-missions (3a-3e). 3a (cleanup & component wiring) is settled — commit e76aa068. 3b (new ingestion path E2E) is settled — deploy a0776488, real article on staging. Next: 3c (actor runtime migration) — the key priority. The actor runtime exists but was never wired in; the wire pipeline runs on the borked old runtime. See docs/mission-3-universal-wire-ingestion-rebuild-v0.md for the full architecture, docs/mission-3c-actor-runtime-migration-v0.md for the 3c paradoc, and docs/actor-runtime-migration-and-agents-md-revision-2026-06-27.md for the detailed plan. Spike evidence is in docs/mission-3-spikes-2026-06-27.md. All spikes are merged to main. Qdrant is deployed on node-b.
+Mission 3 is an umbrella mission with sub-missions 3a-3e plus 3c_2. 3a (cleanup & component wiring) is settled — commit e76aa068. 3b (new ingestion path E2E) is settled — deploy a0776488, real article on staging. 3c (actor runtime migration) is partial — Part 1 (AGENTS.md revision, commit 55ef75bb) and States 1-3 (interface extraction, commit b98531cd) are done; States 4-7 failed (agent wired actor as wake layer, not execution substrate). Next: 3c_2 (real actor runtime migration) — the key priority. The actor handler must be the execution boundary: HandleUpdate runs executeActivation synchronously, no startRunAsync. See docs/mission-3c_2-actor-runtime-migration-real-v0.md for the 3c_2 paradoc. Spike evidence is in docs/mission-3-spikes-2026-06-27.md. Qdrant is deployed on node-b.
 ```
