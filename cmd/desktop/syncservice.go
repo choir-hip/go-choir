@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/yusefmosiah/go-choir/internal/desktop"
+	"github.com/yusefmosiah/go-choir/internal/desktop/fileprovider"
 )
 
 // SyncService is the Wails-exposed service that owns the Base sync engine.
@@ -22,6 +25,7 @@ import (
 // StoreAPIKey.
 type SyncService struct {
 	engine   *desktop.SyncEngine
+	bridge   *fileprovider.Bridge
 	keyStore desktop.APIKeyStore
 	cfg      desktop.SyncConfig
 }
@@ -61,6 +65,9 @@ func (s *SyncService) ClearAPIKey() error {
 
 // StartSync launches the background sync loop using the stored API key. It
 // returns an error if no key is stored or the loop is already running.
+// On macOS it also starts the File Provider IPC bridge so the
+// NSFileProviderReplicatedExtension can enumerate, read, and write
+// Base-synced files in Finder.
 func (s *SyncService) StartSync() error {
 	secret, err := s.keyStore.Load()
 	if err != nil {
@@ -70,11 +77,40 @@ func (s *SyncService) StartSync() error {
 	// Persist the synced state under the local root's Choir metadata dir.
 	statePath := filepath.Join(s.cfg.LocalRoot, ".choir", "synced-state.json")
 	s.engine.SetSyncedStateStore(desktop.NewFileSyncedStateStore(statePath))
-	return s.engine.Start(context.Background())
+	if err := s.engine.Start(context.Background()); err != nil {
+		return err
+	}
+
+	// Start the File Provider IPC bridge (macOS only). The bridge listens
+	// on a Unix domain socket in the app support directory; the
+	// .appex extension connects to it to serve Finder requests.
+	if runtime.GOOS == "darwin" {
+		socketPath := fileProviderSocketPath()
+		b, berr := fileprovider.NewBridge(fileprovider.BridgeConfig{
+			Engine:     s.engine,
+			LocalRoot:  s.cfg.LocalRoot,
+			SocketPath: socketPath,
+			DeviceID:   s.cfg.DeviceID,
+		})
+		if berr != nil {
+			log.Printf("[sync] fileprovider bridge: %v (File Provider disabled)", berr)
+		} else if err := b.Start(context.Background()); err != nil {
+			log.Printf("[sync] fileprovider bridge start: %v (File Provider disabled)", err)
+		} else {
+			s.bridge = b
+			log.Printf("[sync] fileprovider bridge listening on %s", socketPath)
+		}
+	}
+	return nil
 }
 
-// StopSync cancels the background sync loop.
+// StopSync cancels the background sync loop and stops the File Provider
+// bridge if it is running.
 func (s *SyncService) StopSync() {
+	if s.bridge != nil {
+		s.bridge.Stop()
+		s.bridge = nil
+	}
 	if s.engine != nil {
 		s.engine.Stop()
 	}
@@ -133,3 +169,21 @@ type sentinelMsg string
 func (e sentinelMsg) Error() string { return string(e) }
 
 func errSentinelMsg(s string) error { return sentinelMsg(s) }
+
+// fileProviderSocketPath returns the Unix domain socket path for the File
+// Provider IPC bridge. The socket lives in the Choir app support directory
+// so the .appex extension can access it via the app group container.
+func fileProviderSocketPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
+	// On macOS, the app group container is preferred, but for development
+	// we use ~/Library/Application Support/Choir/ which is accessible to
+	// both the host app and the extension when running with dev
+	// entitlements.
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Application Support", "Choir", "fileprovider.sock")
+	}
+	return filepath.Join(home, ".choir", "fileprovider.sock")
+}

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Development entitlements for local testing. These MUST be replaced
+      with a Developer ID provisioning profile before distribution.
+
+      The file-provider extension needs:
+        - com.apple.security.application-groups: to share the socket path
+          with the Choir desktop app
+        - com.apple.developer.fileprovider: to register as a File Provider
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(TeamIdentifierPrefix)news.choir</string>
+    </array>
+
+    <key>com.apple.developer.fileprovider</key>
+    <true/>
+
+    <!--
+      For development (without a paid Developer ID), we use a minimal
+      sandbox. The app group allows the extension and the host app to
+      share the Unix socket file in ~/Library/Application Support/Choir/.
+    -->
+</dict>
+</plist>
