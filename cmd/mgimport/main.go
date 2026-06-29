@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/mgcomment"
 	"gopkg.in/yaml.v2"
 )
 
@@ -53,8 +54,11 @@ type missionGraphFile struct {
 // bead is the subset of `bd list --json` we need.
 type bead struct {
 	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
 	ExternalRef string   `json:"external_ref"`
 	Status      string   `json:"status"`
+	Design      string   `json:"design"`
 	Labels      []string `json:"labels"`
 }
 
@@ -105,7 +109,7 @@ func run() error {
 
 		// Special case: the migration epic itself.
 		if n.ID == existingNodeID {
-			if err := ensureExistingEpic(existing); err != nil {
+			if err := ensureExistingEpic(existing, n); err != nil {
 				return err
 			}
 			nodeBead[n.ID] = existingBead
@@ -114,9 +118,14 @@ func run() error {
 		}
 
 		if b, ok := existing[ref]; ok {
-			// Already present: converge labels (idempotent). Status itself is
-			// applied only on creation; close/in_progress already persisted.
+			// Already present: converge labels + the projected body fields so
+			// edits to the mission graph (e.g. a path added to a node after the
+			// original import) round-trip back through mgexport. Status itself
+			// is applied only on creation; close/in_progress already persisted.
 			if err := ensureLabels(b.ID, b.Labels, desiredLabels(n)...); err != nil {
+				return err
+			}
+			if err := ensureBody(b, n); err != nil {
 				return err
 			}
 			nodeBead[n.ID] = b.ID
@@ -140,9 +149,72 @@ func run() error {
 		return err
 	}
 
-	fmt.Printf("nodes=%d created=%d skipped=%d closed_on_create=%d edges_added=%d edges_skipped=%d\n",
-		len(graph.Nodes), created, skipped, closed, edgesAdded, edgesSkipped)
+	commentsUpdated, err := captureComments(raw, nodeBead)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("nodes=%d created=%d skipped=%d closed_on_create=%d edges_added=%d edges_skipped=%d comments_updated=%d\n",
+		len(graph.Nodes), created, skipped, closed, edgesAdded, edgesSkipped, commentsUpdated)
 	return nil
+}
+
+// captureComments recovers the per-node comment prose (head/section blocks,
+// pre-depends_on triage verdicts and lineage rationale, and inline
+// allow-directives) that yaml.v2 discards, and stores each node's payload in
+// its bead's --design field. Idempotent: a bead is only updated when its
+// recovered design blob differs from what is already stored, so re-runs
+// converge to a fixed point with zero updates.
+func captureComments(raw []byte, nodeBead map[string]string) (int, error) {
+	perNode, err := mgcomment.Parse(raw)
+	if err != nil {
+		return 0, err
+	}
+
+	// Current design per bead id, for the idempotency comparison.
+	beads, err := listBeadsFull()
+	if err != nil {
+		return 0, err
+	}
+	curDesign := make(map[string]string, len(beads))
+	for _, b := range beads {
+		curDesign[b.ID] = b.Design
+	}
+
+	updated := 0
+	for _, nid := range mgcomment.SortedIDs(perNode) {
+		beadID, ok := nodeBead[nid]
+		if !ok {
+			// Node has no mirrored bead (should not happen); skip rather than fail.
+			continue
+		}
+		desired := perNode[nid].Encode()
+		if desired == "" {
+			// Nothing to capture for this node.
+			continue
+		}
+		if curDesign[beadID] == desired {
+			continue // already converged
+		}
+		if err := bdRun("update", beadID, "--design", desired); err != nil {
+			return updated, fmt.Errorf("capture comments for %s (%s): %w", nid, beadID, err)
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+// listBeadsFull returns every bead (including the design field).
+func listBeadsFull() ([]bead, error) {
+	out, err := bdOutput("list", "--all", "-n", "0", "--json")
+	if err != nil {
+		return nil, err
+	}
+	var beads []bead
+	if err := json.Unmarshal(out, &beads); err != nil {
+		return nil, fmt.Errorf("parse bd list json: %w", err)
+	}
+	return beads, nil
 }
 
 // indexExistingBeads returns a map of external-ref -> bead for every bead
@@ -169,7 +241,7 @@ func indexExistingBeads() (map[string]bead, error) {
 
 // ensureExistingEpic stamps choir-pfg with the migration node's external-ref
 // and ensures it carries the kind:spine + mission labels. Idempotent.
-func ensureExistingEpic(existing map[string]bead) error {
+func ensureExistingEpic(existing map[string]bead, n missionGraphNode) error {
 	b, ok := existing["id:"+existingBead]
 	if !ok {
 		return fmt.Errorf("expected existing epic %s not found", existingBead)
@@ -181,6 +253,11 @@ func ensureExistingEpic(existing map[string]bead) error {
 	}
 	// node beads-mission-state-v0 is kind:spine, status planned -> stays open.
 	if err := ensureLabels(existingBead, b.Labels, "mission", "kind:spine"); err != nil {
+		return err
+	}
+	// Converge title/description so the migration node (aliased onto the
+	// pre-existing choir-pfg epic) round-trips through mgexport like any other.
+	if err := ensureBody(b, n); err != nil {
 		return err
 	}
 	return nil
@@ -267,6 +344,24 @@ func description(n missionGraphNode) string {
 	}
 	b.WriteString("\nImported from docs/mission-graph.yaml (shadow mode, reversible).")
 	return b.String()
+}
+
+// ensureBody converges an existing bead's title and description to the values
+// projected from mission node n. Idempotent: only issues bd updates when a
+// field actually differs. This keeps path/ledger/sources/title round-tripping
+// when the mission graph is edited after the original import.
+func ensureBody(b bead, n missionGraphNode) error {
+	if b.Title != n.Title {
+		if err := bdRun("update", b.ID, "--title", n.Title); err != nil {
+			return err
+		}
+	}
+	if want := description(n); b.Description != want {
+		if err := bdRun("update", b.ID, "--description", want); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ensureLabels adds any of want not already present in have. Idempotent.
