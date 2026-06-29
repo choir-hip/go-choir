@@ -53,6 +53,58 @@ func processedCount(t *testing.T, log *SQLiteLog, agentID string) func() int {
 	}
 }
 
+type faultLog struct {
+	base              *SQLiteLog
+	mu                sync.Mutex
+	markFailures      int
+	saveAttempts      int
+	saveSnapshotsFail bool
+}
+
+func (l *faultLog) Append(ctx context.Context, u Update) (bool, error) {
+	return l.base.Append(ctx, u)
+}
+
+func (l *faultLog) Unprocessed(ctx context.Context, agentID string) ([]Update, error) {
+	return l.base.Unprocessed(ctx, agentID)
+}
+
+func (l *faultLog) MarkProcessed(ctx context.Context, agentID, updateID string) error {
+	l.mu.Lock()
+	if l.markFailures > 0 {
+		l.markFailures--
+		l.mu.Unlock()
+		return errors.New("injected mark processed failure")
+	}
+	l.mu.Unlock()
+	return l.base.MarkProcessed(ctx, agentID, updateID)
+}
+
+func (l *faultLog) AgentsWithBacklog(ctx context.Context) ([]string, error) {
+	return l.base.AgentsWithBacklog(ctx)
+}
+
+func (l *faultLog) SaveSnapshot(ctx context.Context, agentID string, memory []byte) error {
+	l.mu.Lock()
+	l.saveAttempts++
+	fail := l.saveSnapshotsFail
+	l.mu.Unlock()
+	if fail {
+		return errors.New("injected snapshot failure")
+	}
+	return l.base.SaveSnapshot(ctx, agentID, memory)
+}
+
+func (l *faultLog) LoadSnapshot(ctx context.Context, agentID string) ([]byte, error) {
+	return l.base.LoadSnapshot(ctx, agentID)
+}
+
+func (l *faultLog) SaveAttempts() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.saveAttempts
+}
+
 func TestAppendIdempotent(t *testing.T) {
 	log := testLog(t)
 	ctx := context.Background()
@@ -123,6 +175,63 @@ func TestWarmSteerDuringActivation(t *testing.T) {
 	close(release)
 	waitFor(t, 5*time.Second, func() bool { mu.Lock(); defer mu.Unlock(); return len(seen) == 2 }, "steered update handled in same residency")
 	waitFor(t, 5*time.Second, func() bool { return processedCount(t, log, "a1")() == 0 }, "all marked processed")
+}
+
+func TestMarkProcessedFailureRetriesWithoutAdvancingMemory(t *testing.T) {
+	base := testLog(t)
+	log := &faultLog{base: base, markFailures: 1}
+	var handled atomic.Int64
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		handled.Add(1)
+		return append(memory, u.Content...), nil
+	}), Options{IdleTimeout: 100 * time.Millisecond, HandlerRetryBackoff: 10 * time.Millisecond})
+	defer rt.Stop()
+
+	if err := rt.Send(context.Background(), Update{UpdateID: "u1", ToAgentID: "a1", Content: "x"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool {
+		return handled.Load() >= 2 && processedCount(t, base, "a1")() == 0
+	}, "retried and marked processed after injected MarkProcessed failure")
+	waitFor(t, 5*time.Second, func() bool { return !rt.Resident("a1") }, "actor passivated after retry")
+
+	memory, err := base.LoadSnapshot(context.Background(), "a1")
+	if err != nil {
+		t.Fatalf("load snapshot: %v", err)
+	}
+	if string(memory) != "x" {
+		t.Fatalf("snapshot memory = %q, want %q", memory, "x")
+	}
+}
+
+func TestSnapshotFailureKeepsActorResident(t *testing.T) {
+	base := testLog(t)
+	log := &faultLog{base: base, saveSnapshotsFail: true}
+	var handled atomic.Int64
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		handled.Add(1)
+		return append(memory, u.Content...), nil
+	}), Options{IdleTimeout: 50 * time.Millisecond, HandlerRetryBackoff: 10 * time.Millisecond})
+	defer rt.Stop()
+
+	if err := rt.Send(context.Background(), Update{UpdateID: "u1", ToAgentID: "a1", Content: "x"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool {
+		return handled.Load() == 1 && processedCount(t, base, "a1")() == 0
+	}, "update processed before snapshot failure")
+	waitFor(t, 5*time.Second, func() bool { return log.SaveAttempts() > 0 }, "snapshot save attempted")
+
+	if !rt.Resident("a1") {
+		t.Fatal("actor deregistered after snapshot failure")
+	}
+	memory, err := base.LoadSnapshot(context.Background(), "a1")
+	if err != nil {
+		t.Fatalf("load snapshot: %v", err)
+	}
+	if len(memory) != 0 {
+		t.Fatalf("snapshot memory saved despite injected failure: %q", memory)
+	}
 }
 
 func TestNoLostWakeUnderConcurrentSendsAndPassivations(t *testing.T) {
