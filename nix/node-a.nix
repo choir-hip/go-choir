@@ -14,6 +14,9 @@
         handle /health {
           reverse_proxy 127.0.0.1:8082
         }
+        handle /health/* {
+          reverse_proxy 127.0.0.1:8084
+        }
         handle /api/email/resend/webhook {
           reverse_proxy 127.0.0.1:8087
         }
