@@ -29,6 +29,7 @@
 # Environment
 .env
 .env.local
+.envrc.local
 gateway-provider.env
 
 # Dolt databases (per-user, not committed)

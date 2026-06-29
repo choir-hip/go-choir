@@ -31,6 +31,11 @@ local coverage prefer `scripts/go-test-runtime-shards` or focused
 hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
 — the durable fix is ensuring direnv is loaded (check with `echo $CGO_CFLAGS`).
 
+Per-developer secrets (API keys, provider tokens) live in a gitignored
+`.envrc.local` file that is sourced by `.envrc` if it exists. Create it with
+`dotenv .env` to auto-load your `.env` file. The tracked `.envrc` never
+references `.env` directly, so a fresh clone won't load any secrets.
+
 Browser proof is specialized; do not assume every worker VM should carry
 Playwright/Chromium. For source-opening doctrine, default durable web-derived
 reading to Source Viewer/reader artifacts and use Web Lens only for explicit
