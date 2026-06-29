@@ -250,17 +250,42 @@ jobs:
 
       - name: Build SBOMs for all packages
         run: |
-          set -uo pipefail
+          set -euo pipefail
           mkdir -p sboms
           sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths 2>/dev/null)
+          required_packages=" auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend zot "
           failed=0
+          required_failed=0
+          manifest="sboms/manifest.jsonl"
+          : > "$manifest"
+          is_required() {
+            [[ "$required_packages" == *" $1 "* ]]
+          }
+          record_manifest() {
+            local pkg="$1"
+            local required="$2"
+            local status="$3"
+            local reason="$4"
+            printf '{"package":"%s","required":%s,"status":"%s","reason":"%s"}\n' "$pkg" "$required" "$status" "$reason" >> "$manifest"
+          }
           for pkg in auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend obscura zot; do
             echo "==> Building SBOM for ${pkg}"
+            required=false
+            if is_required "$pkg"; then
+              required=true
+            fi
             err_log=$(mktemp)
             store_path=$(nix build .#${pkg} --no-link --print-out-paths 2>"$err_log") || {
               echo "    SKIP: package build failed for ${pkg}"
-              head -20 "$err_log" | sed 's/^/      /'
+              echo "      --- first 40 stderr lines ---"
+              sed -n '1,40p' "$err_log" | sed 's/^/      /'
+              echo "      --- last 80 stderr lines ---"
+              tail -80 "$err_log" | sed 's/^/      /'
               failed=$((failed + 1))
+              if [[ "$required" == "true" ]]; then
+                required_failed=$((required_failed + 1))
+              fi
+              record_manifest "$pkg" "$required" "skipped" "package_build_failed"
               rm -f "$err_log"
               continue
             }
@@ -268,21 +293,34 @@ jobs:
             mkdir -p "sboms/${pkg}"
             if "$sbomnix_bin/bin/sbomnix" --cdx "sboms/${pkg}/sbom.json" "$store_path" 2>&1; then
               echo "    OK: sboms/${pkg}/sbom.json"
+              record_manifest "$pkg" "$required" "ok" ""
             else
               echo "    SKIP: sbomnix failed for ${pkg}"
               failed=$((failed + 1))
+              if [[ "$required" == "true" ]]; then
+                required_failed=$((required_failed + 1))
+              fi
+              record_manifest "$pkg" "$required" "skipped" "sbomnix_failed"
             fi
           done
-          echo "==> SBOM generation complete: $failed package(s) skipped"
+          echo "==> SBOM generation complete: $failed package(s) skipped, $required_failed required package(s) missing"
           if [ "$failed" -gt 0 ]; then
             echo "::warning::${failed} SBOM(s) skipped due to build failures (artifacts uploaded for successful packages)"
           fi
+          if [ "$required_failed" -gt 0 ]; then
+            echo "::error::${required_failed} required SBOM(s) missing; see sboms/manifest.jsonl"
+            exit 1
+          fi
 
       - name: Upload SBOM artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sboms-${{ github.sha }}
-          path: sboms/*/sbom.json
+          path: |
+            sboms/*/sbom.json
+            sboms/manifest.jsonl
+          if-no-files-found: error
           retention-days: 90
 
   build-frontend:
