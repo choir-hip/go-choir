@@ -158,6 +158,28 @@ func (c *BaseClient) GetItem(id model.ItemID) (ItemResponse, error) {
 	return out, nil
 }
 
+func (c *BaseClient) GetBlob(ref model.BlobRef) ([]byte, error) {
+	u := c.baseURL + "/api/base/blobs/" + string(ref)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("base client: get blob request: %w", err)
+	}
+	c.setAuth(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("base client: get blob: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("base client: get blob read: %w", err)
+	}
+	return data, nil
+}
+
 // --- helpers ------------------------------------------------------------
 
 func (c *BaseClient) setAuth(req *http.Request) {

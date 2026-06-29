@@ -7,6 +7,7 @@
 package journal
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -35,8 +36,10 @@ CREATE TABLE IF NOT EXISTS journal_events (
     created_at      TEXT    NOT NULL
 );
 CREATE TABLE IF NOT EXISTS device_cursors (
-    device_id   TEXT    PRIMARY KEY,
-    cursor_seq  INTEGER NOT NULL
+    owner_id    TEXT    NOT NULL DEFAULT '',
+    device_id   TEXT    NOT NULL,
+    cursor_seq  INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, device_id)
 );
 `
 
@@ -53,11 +56,8 @@ const selectUpToSQL = `SELECT event_id, parent_event_id, cursor_seq, owner_id,
     item_id, device_id, subject_id, event_type, kind, blob_ref, payload_json,
     hash, created_at FROM journal_events WHERE cursor_seq <= ? ORDER BY cursor_seq`
 
-const selectCursorSQL = `SELECT cursor_seq FROM device_cursors WHERE device_id = ?`
-const upsertCursorSQL = `INSERT INTO device_cursors (device_id, cursor_seq) VALUES (?, ?)
-    ON CONFLICT(device_id) DO UPDATE SET cursor_seq = excluded.cursor_seq`
 const selectHeadSQL = `SELECT COALESCE(MAX(cursor_seq), 0) FROM journal_events`
-const selectLastByItemSQL = `SELECT event_id FROM journal_events WHERE item_id = ?
+const selectLastByItemSQL = `SELECT event_id FROM journal_events WHERE owner_id = ? AND item_id = ?
     ORDER BY cursor_seq DESC LIMIT 1`
 
 // SQLiteJournal is a persistent append-only event store backed by SQLite.
@@ -73,9 +73,18 @@ func NewSQLiteJournal(path string) (*SQLiteJournal, error) {
 	if err != nil {
 		return nil, fmt.Errorf("journal: open sqlite: %w", err)
 	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA busy_timeout = 60000`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("journal: configure sqlite: %w", err)
+	}
 	if _, err := db.Exec(schemaSQL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("journal: create schema: %w", err)
+	}
+	if err := migrateDeviceCursorsOwnerScope(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return &SQLiteJournal{db: db}, nil
 }
@@ -89,8 +98,24 @@ func (j *SQLiteJournal) Append(evt model.Event) (Entry, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
+	ctx := context.Background()
+	conn, err := j.db.Conn(ctx)
+	if err != nil {
+		return Entry{}, fmt.Errorf("journal: get append connection: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return Entry{}, fmt.Errorf("journal: begin append transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+
 	var head int64
-	if err := j.db.QueryRow(selectHeadSQL).Scan(&head); err != nil {
+	if err := conn.QueryRowContext(ctx, selectHeadSQL).Scan(&head); err != nil {
 		return Entry{}, fmt.Errorf("journal: read head: %w", err)
 	}
 
@@ -103,12 +128,15 @@ func (j *SQLiteJournal) Append(evt model.Event) (Entry, error) {
 
 	// Look up the previous event for this item.
 	var expectedParent string
-	if err := j.db.QueryRow(selectLastByItemSQL, evt.ItemID).Scan(&expectedParent); err != nil && err != sql.ErrNoRows {
+	if err := conn.QueryRowContext(ctx, selectLastByItemSQL, evt.OwnerID, evt.ItemID).Scan(&expectedParent); err != nil && err != sql.ErrNoRows {
 		return Entry{}, fmt.Errorf("journal: read last event for item: %w", err)
 	}
 
 	if evt.ParentEventID == "" {
 		evt.ParentEventID = model.EventID(expectedParent)
+	} else if expectedParent == "" {
+		return Entry{}, fmt.Errorf("journal: first event for item %s must not declare parent event %q",
+			evt.ItemID, evt.ParentEventID)
 	} else if expectedParent != "" && evt.ParentEventID != model.EventID(expectedParent) {
 		return Entry{}, fmt.Errorf("journal: parent event %q does not match known predecessor %q for item %s",
 			evt.ParentEventID, expectedParent, evt.ItemID)
@@ -118,7 +146,7 @@ func (j *SQLiteJournal) Append(evt model.Event) (Entry, error) {
 	parentHash := ""
 	if expectedParent != "" {
 		var ph string
-		if err := j.db.QueryRow(`SELECT hash FROM journal_events WHERE event_id = ?`, expectedParent).Scan(&ph); err != nil {
+		if err := conn.QueryRowContext(ctx, `SELECT hash FROM journal_events WHERE event_id = ?`, expectedParent).Scan(&ph); err != nil {
 			return Entry{}, fmt.Errorf("journal: read parent hash: %w", err)
 		}
 		parentHash = ph
@@ -126,7 +154,7 @@ func (j *SQLiteJournal) Append(evt model.Event) (Entry, error) {
 
 	hash := computeHash(evt, parentHash)
 
-	_, err := j.db.Exec(insertSQL,
+	_, err = conn.ExecContext(ctx, insertSQL,
 		evt.EventID, evt.ParentEventID, evt.CursorSeq, evt.OwnerID, evt.ItemID,
 		evt.DeviceID, evt.SubjectID, evt.EventType, evt.Kind, evt.BlobRef,
 		evt.PayloadJSON, hash, evt.CreatedAt.Format(time.RFC3339Nano),
@@ -134,6 +162,10 @@ func (j *SQLiteJournal) Append(evt model.Event) (Entry, error) {
 	if err != nil {
 		return Entry{}, fmt.Errorf("journal: insert event: %w", err)
 	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return Entry{}, fmt.Errorf("journal: commit append: %w", err)
+	}
+	committed = true
 
 	return Entry{Event: evt, Hash: hash}, nil
 }
@@ -160,35 +192,6 @@ func (j *SQLiteJournal) EntriesUpTo(maxSeq int64) []Entry {
 	}
 	defer rows.Close()
 	return scanEntries(rows)
-}
-
-// Cursor returns the last-acked CursorSeq for a device.
-func (j *SQLiteJournal) Cursor(deviceID string) int64 {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	var seq int64
-	if err := j.db.QueryRow(selectCursorSQL, deviceID).Scan(&seq); err != nil {
-		return 0
-	}
-	return seq
-}
-
-// SetCursor records the sync position for a device.
-func (j *SQLiteJournal) SetCursor(deviceID string, seq int64) error {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if seq < 0 {
-		return fmt.Errorf("journal: cursor seq must be non-negative, got %d", seq)
-	}
-	var head int64
-	if err := j.db.QueryRow(selectHeadSQL).Scan(&head); err != nil {
-		return fmt.Errorf("journal: read head: %w", err)
-	}
-	if seq > head {
-		return fmt.Errorf("journal: cursor seq %d exceeds journal head %d", seq, head)
-	}
-	_, err := j.db.Exec(upsertCursorSQL, deviceID, seq)
-	return err
 }
 
 // VerifyChain walks every entry and confirms the hash chain is intact.

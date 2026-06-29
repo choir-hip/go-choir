@@ -96,13 +96,14 @@ func TestScenario1LocalAddRemoteAddSamePath(t *testing.T) {
 	var found bool
 	for _, c := range conflicts {
 		if contains(c.Reason, "path collision") {
-			if c.LocalVer.VersionID == "base_ver_local" && c.RemoteVer.VersionID == "base_ver_remote" {
+			if c.LocalItemID == "base_item_local" && c.RemoteItemID == "base_item_remote" &&
+				c.LocalVer.VersionID == "base_ver_local" && c.RemoteVer.VersionID == "base_ver_remote" {
 				found = true
 			}
 		}
 	}
 	if !found {
-		t.Errorf("path-collision conflict must preserve both sides, got %v", conflicts)
+		t.Errorf("path-collision conflict must preserve both participant ids and versions, got %v", conflicts)
 	}
 	// Both items should still be uploaded/downloaded (they are genuinely new).
 	hasUpload := false

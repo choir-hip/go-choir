@@ -36,13 +36,15 @@ func (r ConflictResolution) Valid() bool {
 // both the local and remote versions (preserved, never silently dropped) and
 // the planner's reason.
 type ConflictRecord struct {
-	ItemID    model.ItemID       `json:"item_id"`
-	Path      string             `json:"path,omitempty"`
-	Reason    string             `json:"reason"`
-	LocalVer  model.Version      `json:"local_version"`
-	RemoteVer model.Version      `json:"remote_version"`
-	SyncedVer model.Version      `json:"synced_version,omitempty"`
-	Resolved  ConflictResolution `json:"resolved,omitempty"`
+	ItemID       model.ItemID       `json:"item_id"`
+	LocalItemID  model.ItemID       `json:"local_item_id,omitempty"`
+	RemoteItemID model.ItemID       `json:"remote_item_id,omitempty"`
+	Path         string             `json:"path,omitempty"`
+	Reason       string             `json:"reason"`
+	LocalVer     model.Version      `json:"local_version"`
+	RemoteVer    model.Version      `json:"remote_version"`
+	SyncedVer    model.Version      `json:"synced_version,omitempty"`
+	Resolved     ConflictResolution `json:"resolved,omitempty"`
 }
 
 // ConflictManager collects conflicts produced by the planner and tracks
@@ -71,15 +73,17 @@ func (m *ConflictManager) SetConflicts(cs []planner.Conflict, local, remote plan
 	next := make(map[model.ItemID]ConflictRecord, len(cs))
 	for _, c := range cs {
 		rec := ConflictRecord{
-			ItemID:    c.ItemID,
-			Reason:    c.Reason,
-			LocalVer:  c.LocalVer,
-			RemoteVer: c.RemoteVer,
-			SyncedVer: c.SyncedVer,
+			ItemID:       c.ItemID,
+			LocalItemID:  conflictLocalItemID(c),
+			RemoteItemID: conflictRemoteItemID(c),
+			Reason:       c.Reason,
+			LocalVer:     c.LocalVer,
+			RemoteVer:    c.RemoteVer,
+			SyncedVer:    c.SyncedVer,
 		}
-		rec.Path = RelPathFromID(local, c.ItemID)
+		rec.Path = RelPathFromID(local, rec.LocalItemID)
 		if rec.Path == "" {
-			rec.Path = RelPathFromID(remote, c.ItemID)
+			rec.Path = RelPathFromID(remote, rec.RemoteItemID)
 		}
 		// Preserve a prior resolution if the same item is still in conflict.
 		if prior, ok := m.conflicts[c.ItemID]; ok && prior.Resolved.Valid() {
@@ -123,12 +127,12 @@ func (m *ConflictManager) Resolve(itemID model.ItemID, resolution ConflictResolu
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rec, ok := m.conflicts[itemID]
+	key, rec, ok := m.recordForItemLocked(itemID)
 	if !ok {
 		return ErrConflictNotFound
 	}
 	rec.Resolved = resolution
-	m.conflicts[itemID] = rec
+	m.conflicts[key] = rec
 	return nil
 }
 
@@ -137,11 +141,23 @@ func (m *ConflictManager) Resolve(itemID model.ItemID, resolution ConflictResolu
 func (m *ConflictManager) Resolution(itemID model.ItemID) (ConflictResolution, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rec, ok := m.conflicts[itemID]
+	_, rec, ok := m.recordForItemLocked(itemID)
 	if !ok || !rec.Resolved.Valid() {
 		return "", false
 	}
 	return rec.Resolved, true
+}
+
+func (m *ConflictManager) recordForItemLocked(itemID model.ItemID) (model.ItemID, ConflictRecord, bool) {
+	if rec, ok := m.conflicts[itemID]; ok {
+		return itemID, rec, true
+	}
+	for key, rec := range m.conflicts {
+		if rec.LocalItemID == itemID || rec.RemoteItemID == itemID {
+			return key, rec, true
+		}
+	}
+	return "", ConflictRecord{}, false
 }
 
 // HasUnresolved reports whether any conflict lacks a user resolution. The
