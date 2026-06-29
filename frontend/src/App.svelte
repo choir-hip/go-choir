@@ -23,6 +23,7 @@
 <script lang="ts">
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
+  import LegalDocument from './lib/LegalDocument.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
@@ -50,6 +51,8 @@
   let sessionCheckSeq = 0;
   let lastPrewarmStartedAt = 0;
   let publicRoutePath = '';
+  let legalDocumentKind: 'privacy' | 'terms' = 'privacy';
+  let isLegalDocumentRoute = false;
   let universalWirePublicToken = '';
   let universalWirePublicLink = null;
   let universalWirePublicStatus = '';
@@ -395,7 +398,16 @@
     return pathname.startsWith('/pub/texture/');
   }
 
+  function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' {
+    if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy';
+    if (pathname === '/terms' || pathname === '/terms/') return 'terms';
+    return '';
+  }
+
   onMount(() => {
+    const legalKind = legalDocumentKindFromPath(window.location.pathname);
+    legalDocumentKind = legalKind || 'privacy';
+    isLegalDocumentRoute = !!legalKind;
     publicRoutePath = isPublicTextureRoutePath(window.location.pathname) ? window.location.pathname : '';
     universalWirePublicToken = universalWirePublicTokenFromPath(window.location.pathname);
     applyTheme(loadThemeBootCache(), false);
@@ -458,7 +470,9 @@
 </script>
 
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
-  {#if isUniversalWirePublicReader}
+  {#if isLegalDocumentRoute}
+    <LegalDocument kind={legalDocumentKind} />
+  {:else if isUniversalWirePublicReader}
     <main class="universal-wire-public-reader" data-universal-wire-public-reader>
       <header>
         <a class="reader-brand" href="/">Choir Universal Wire</a>

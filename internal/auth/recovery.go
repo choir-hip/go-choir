@@ -31,11 +31,8 @@ type recoveryRequest struct {
 }
 
 // recoveryResponse is the JSON response for POST /auth/recovery/request.
-// In production, the token is sent via email and the Token field is omitted.
-// For development/testing, the token is returned so tests can verify the flow.
 type recoveryResponse struct {
-	OK    bool   `json:"ok"`
-	Token string `json:"token,omitempty"` // dev/test only; production sends via email
+	OK bool `json:"ok"`
 }
 
 // recoveryVerifyRequest is the JSON body for POST /auth/recovery/verify.
@@ -57,18 +54,13 @@ func sha256SumHex(s string) string {
 	return fmt.Sprintf("%x", h)
 }
 
-// clientIP extracts the client IP address from the request. It checks
-// X-Forwarded-For first (for requests behind a reverse proxy), then falls
-// back to RemoteAddr. Only the first IP in X-Forwarded-For is used.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Use the first (leftmost) IP in the list.
-		if idx := strings.IndexByte(xff, ','); idx >= 0 {
-			return strings.TrimSpace(xff[:idx])
+		if idx := strings.LastIndexByte(xff, ','); idx >= 0 {
+			return strings.TrimSpace(xff[idx+1:])
 		}
 		return strings.TrimSpace(xff)
 	}
-	// RemoteAddr is "host:port" — strip the port.
 	addr := r.RemoteAddr
 	if idx := strings.LastIndexByte(addr, ':'); idx >= 0 {
 		addr = addr[:idx]
@@ -157,8 +149,7 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		log.Printf("[auth] operation=recovery_request email_hash=%s step=user_not_found", emailHash)
 	}
 
-	// --- Create recovery token (hash stored, raw token returned once) ---
-	token, err := h.store.CreateRecoveryToken(ctx, userID, req.Email, emailHash, ipHash)
+	_, err = h.store.CreateRecoveryToken(ctx, userID, req.Email, emailHash, ipHash)
 	if err != nil {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=error step=create_token error=%q", emailHash, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create recovery token"})
@@ -167,9 +158,7 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 
 	log.Printf("[auth] operation=recovery_request email_hash=%s result=success step=token_created", emailHash)
 
-	// In production, the token would be sent via email and not returned here.
-	// For development/testing, we return it so the flow can be verified.
-	writeJSON(w, http.StatusOK, recoveryResponse{OK: true, Token: token})
+	writeJSON(w, http.StatusOK, recoveryResponse{OK: true})
 }
 
 // HandleRecoveryVerify handles POST /auth/recovery/verify.
@@ -554,16 +543,14 @@ func (h *Handler) HandleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if this is the current session (by comparing the refresh cookie
-	// hash to the session's token hash). The current session must be revoked
-	// via /auth/logout, not this endpoint.
-	if cookie, err := r.Cookie(RefreshTokenCookieName); err == nil && cookie.Value != "" {
-		cookieHash := sha256SumHex(cookie.Value)
-		rs, err := h.store.GetRefreshSessionByID(sessionID)
-		if err == nil && rs.TokenHash == cookieHash {
-			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "cannot revoke current session — use /auth/logout instead"})
-			return
-		}
+	currentSession, _, err := h.validateRefreshCookie(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "refresh cookie is required to revoke sessions"})
+		return
+	}
+	if currentSession.ID == sessionID {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "cannot revoke current session — use /auth/logout instead"})
+		return
 	}
 
 	// Look up the session to verify ownership before deleting.

@@ -428,12 +428,15 @@ export async function renewSession() {
  * silent renewal via GET /auth/session. If renewal succeeds (refresh rotation
  * mints new cookies), the original request is retried. If renewal fails,
  * an AuthRequiredError is thrown so the caller can fall back to the guest
- * auth state (VAL-CROSS-004 / VAL-CROSS-008).
+ * auth state (VAL-CROSS-004 / VAL-CROSS-008). If /auth/session is temporarily
+ * unavailable while checking renewal, a TransientAuthError is thrown instead;
+ * callers must not treat that as definitive sign-out.
  *
  * @param {string} url - The URL to fetch.
  * @param {object} [options] - Fetch options (credentials: 'include' is added automatically).
  * @returns {Promise<Response>}
- * @throws {AuthRequiredError} If the session cannot be renewed.
+ * @throws {AuthRequiredError} If the session definitively cannot be renewed.
+ * @throws {TransientAuthError} If renewal could not be checked due to transient auth-service failure.
  */
 export async function fetchWithRenewal(url, options = {}) {
   const scopedURL = withDesktopSelector(url);
@@ -447,10 +450,7 @@ export async function fetchWithRenewal(url, options = {}) {
   const { renewed, transient } = await renewSession();
 
   if (transient) {
-    // Auth service temporarily unavailable — don't throw AuthRequiredError.
-    // Return the original 401 response so the caller can decide how to handle
-    // it. The session may still be valid once the auth service recovers.
-    return res;
+    throw new TransientAuthError('Auth service temporarily unavailable during session renewal');
   }
 
   if (!renewed) {
