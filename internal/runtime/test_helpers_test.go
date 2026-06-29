@@ -221,11 +221,32 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 		case "coagent_result":
 			// Synchronous: the boot sweep needs the reconcile to
 			// complete before the test checks the result.
+			ownerID := ""
 			agent, err := s.GetAgent(ctx, toAgentID)
-			if err != nil {
-				return nil // agent not found — nothing to wake
+			if err == nil {
+				ownerID = agent.OwnerID
 			}
-			if _, err := rt.ReconcileCoagentWake(ctx, agent.OwnerID, toAgentID); err != nil {
+			if ownerID == "" {
+				updates, listErr := s.ListPendingWorkerUpdatesAll(ctx, 1000)
+				if listErr != nil {
+					return nil
+				}
+				updateID := strings.TrimSpace(content)
+				for _, update := range updates {
+					if strings.TrimSpace(update.TargetAgentID) != strings.TrimSpace(toAgentID) {
+						continue
+					}
+					if updateID != "" && strings.TrimSpace(update.UpdateID) != updateID {
+						continue
+					}
+					ownerID = update.OwnerID
+					break
+				}
+			}
+			if ownerID == "" {
+				return nil
+			}
+			if _, err := rt.ReconcileCoagentWake(ctx, ownerID, toAgentID); err != nil {
 				log.Printf("test dispatch: reconcile coagent wake for %s: %v", toAgentID, err)
 			}
 		}

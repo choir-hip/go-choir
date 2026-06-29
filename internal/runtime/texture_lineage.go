@@ -207,7 +207,11 @@ func markdownLineageBodyDocBlocks(content string, parseInline func(string) ([]te
 		if len(paragraph) == 0 {
 			return nil
 		}
-		block, ok, err := paragraphNode(strings.Join(paragraph, " "))
+		text := strings.Join(paragraph, " ")
+		if markdownLineageParagraphContainsTable(paragraph) {
+			text = strings.Join(paragraph, "\n")
+		}
+		block, ok, err := paragraphNode(text)
 		if err != nil {
 			return err
 		}
@@ -328,6 +332,13 @@ func markdownLineageBodyDocBlocks(content string, parseInline func(string) ([]te
 		return nil, err
 	}
 	return blocks, nil
+}
+
+func markdownLineageParagraphContainsTable(lines []string) bool {
+	if len(lines) < 3 {
+		return false
+	}
+	return len(extractMarkdownTableBlocks(strings.Join(lines, "\n"))) > 0
 }
 
 func trimTrailingInlineHorizontalSpace(nodes *[]texturedoc.Node) {

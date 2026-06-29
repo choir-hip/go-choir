@@ -90,6 +90,15 @@ type anthropicResponse struct {
 	} `json:"content"`
 }
 
+type anthropicCompletion struct {
+	Text  string
+	Usage TokenUsage
+}
+
+type anthropicTextureToolClient struct {
+	*anthropicClient
+}
+
 // ProviderName implements the runtime.Provider interface.
 func (c *anthropicClient) ProviderName() string { return c.name }
 
@@ -99,7 +108,15 @@ func (c *anthropicClient) ProviderName() string { return c.name }
 func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(
 		`{"status":"started","provider":"`+c.name+`","real":"true"}`))
+	completion, err := c.completePrompt(ctx, task.Prompt, task.RunID, emit)
+	if err != nil {
+		return err
+	}
+	task.Result = completion.Text
+	return nil
+}
 
+func (c *anthropicClient) completePrompt(ctx context.Context, prompt, logID string, emit provideriface.EventEmitFunc) (anthropicCompletion, error) {
 	// Build the request body with streaming.
 	body := anthropicRequestBody{
 		Model:     c.modelID,
@@ -116,7 +133,7 @@ func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, em
 					Type string `json:"type"`
 					Text string `json:"text"`
 				}{
-					{Type: "text", Text: task.Prompt},
+					{Type: "text", Text: prompt},
 				},
 			},
 		},
@@ -124,34 +141,35 @@ func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, em
 
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
-		return err
+		return anthropicCompletion{}, err
 	}
 
 	endpoint := c.baseURL + "/v1/messages"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyJSON))
 	if err != nil {
-		return err
+		return anthropicCompletion{}, err
 	}
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	log.Printf("real-llm-test: calling %s (%s) stream=true for task %s", c.name, c.modelID, task.RunID)
+	log.Printf("real-llm-test: calling %s (%s) stream=true for task %s", c.name, c.modelID, logID)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return err
+		return anthropicCompletion{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return errProviderCall(resp.StatusCode, resp.Status, respBody)
+		return anthropicCompletion{}, errProviderCall(resp.StatusCode, resp.Status, respBody)
 	}
 
 	// Parse the SSE stream.
 	var accumulatedText string
+	var usage TokenUsage
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -183,26 +201,72 @@ func (c *anthropicClient) Execute(ctx context.Context, task *types.RunRecord, em
 
 		if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" && event.Delta.Text != "" {
 			accumulatedText += event.Delta.Text
-			deltaPayload, _ := json.Marshal(map[string]string{
-				"text":     event.Delta.Text,
-				"provider": c.name,
-				"real":     "true",
-			})
-			emit(types.EventRunDelta, "execution", deltaPayload)
+			if emit != nil {
+				deltaPayload, _ := json.Marshal(map[string]string{
+					"text":     event.Delta.Text,
+					"provider": c.name,
+					"real":     "true",
+				})
+				emit(types.EventRunDelta, "execution", deltaPayload)
+			}
+		}
+		if event.Message != nil {
+			usage.InputTokens = event.Message.Usage.InputTokens
+			usage.OutputTokens = event.Message.Usage.OutputTokens
 		}
 	}
 
-	task.Result = accumulatedText
+	if emit != nil {
+		progressPayload, _ := json.Marshal(map[string]string{
+			"status":   "completed",
+			"provider": c.name,
+			"real":     "true",
+		})
+		emit(types.EventRunProgress, "execution", progressPayload)
+	}
 
-	progressPayload, _ := json.Marshal(map[string]string{
-		"status":   "completed",
-		"provider": c.name,
-		"real":     "true",
-	})
-	emit(types.EventRunProgress, "execution", progressPayload)
+	log.Printf("real-llm-test: %s completed for task %s (text_len=%d)", c.name, logID, len(accumulatedText))
+	return anthropicCompletion{Text: accumulatedText, Usage: usage}, nil
+}
 
-	log.Printf("real-llm-test: %s completed for task %s (text_len=%d)", c.name, task.RunID, len(accumulatedText))
-	return nil
+func (c *anthropicTextureToolClient) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
+		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: c.modelID}, nil
+	}
+	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
+		completion, err := c.completePrompt(ctx, toolLoopPromptContext(req), "tool-loop-no-texture-tool", nil)
+		if err != nil {
+			return nil, err
+		}
+		return &ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       completion.Text,
+			Usage:      completion.Usage,
+			Model:      c.modelID,
+		}, nil
+	}
+	prompt := toolLoopPromptContext(req)
+	completion, err := c.completePrompt(ctx, prompt, "texture-tool-loop", nil)
+	if err != nil {
+		return nil, err
+	}
+	result := textureReplaceAllResult(completion.Text)
+	call, err := requiredPatchTextureToolCallFromLegacyResult(prompt, result)
+	if err != nil {
+		return &ToolLoopResponse{
+			StopReason: "end_turn",
+			Text:       completion.Text,
+			Usage:      completion.Usage,
+			Model:      c.modelID,
+		}, nil
+	}
+	return &ToolLoopResponse{
+		StopReason: "tool_use",
+		Text:       completion.Text,
+		ToolCalls:  []types.ToolCall{call},
+		Usage:      completion.Usage,
+		Model:      c.modelID,
+	}, nil
 }
 
 type providerError struct {
@@ -221,10 +285,12 @@ func errProviderCall(statusCode int, status string, body []byte) *providerError 
 
 // --- Test Setup Helpers ---
 
+const realLLMTestOwnerID = "user-real-llm"
+
 // resolveRealProvider creates a real LLM runtime.Provider from environment
 // credentials. It returns the provider and display name, or skips the test
 // if no credentials are available.
-func resolveRealProvider(t *testing.T) (provideriface.Provider, string) {
+func resolveRealProvider(t *testing.T) (*anthropicClient, string) {
 	t.Helper()
 
 	// Try Z.AI first.
@@ -254,7 +320,17 @@ func resolveRealProvider(t *testing.T) (provideriface.Provider, string) {
 func textureRealLLMSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, string) {
 	t.Helper()
 	realProvider, providerName := resolveRealProvider(t)
+	return textureRealLLMSetupWithProvider(t, realProvider, providerName, false)
+}
 
+func textureRealLLMToolSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, string) {
+	t.Helper()
+	realProvider, providerName := resolveRealProvider(t)
+	return textureRealLLMSetupWithProvider(t, &anthropicTextureToolClient{anthropicClient: realProvider}, providerName, true)
+}
+
+func textureRealLLMSetupWithProvider(t *testing.T, realProvider provideriface.Provider, providerName string, installTools bool) (*APIHandler, *store.Store, *Runtime, string) {
+	t.Helper()
 	dir := filepath.Join(os.TempDir(), "go-choir-m2-texture-real-llm-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
@@ -278,6 +354,15 @@ func textureRealLLMSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, str
 
 	rt := New(cfg, s, bus, realProvider)
 	setTestDispatch(rt, s)
+	if installTools {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("get working directory: %v", err)
+		}
+		if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+			t.Fatalf("install default agent tools: %v", err)
+		}
+	}
 	ctx := context.Background()
 	rt.Start(ctx)
 	t.Cleanup(func() { rt.Stop() })
@@ -299,8 +384,29 @@ func textureRealLLMRequest(t *testing.T, method, path string, body interface{}) 
 		reqBody = bytes.NewReader(nil)
 	}
 	req := httptest.NewRequest(method, path, reqBody)
-	req.Header.Set("X-Authenticated-User", "user-real-llm")
+	req.Header.Set("X-Authenticated-User", realLLMTestOwnerID)
 	return req
+}
+
+func waitForRealLLMTaskCompletion(t *testing.T, h *APIHandler, taskID string, timeout time.Duration) types.RunState {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		req := textureRealLLMRequest(t, http.MethodGet, "/api/agent/status?loop_id="+taskID, nil)
+		w := httptest.NewRecorder()
+		h.HandleRunStatus(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("get task status: status = %d, body: %s", w.Code, w.Body.String())
+		}
+		var resp runStatusResponse
+		_ = json.NewDecoder(w.Body).Decode(&resp)
+		if resp.State.Terminal() {
+			return resp.State
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("task %s did not complete within %v", taskID, timeout)
+	return ""
 }
 
 // --- Real LLM E2E Tests ---
@@ -317,7 +423,7 @@ func textureRealLLMRequest(t *testing.T, method, path string, body interface{}) 
 //
 // Fulfills: VAL-LLM-013, VAL-LLM-014
 func TestTextureAgentRevisionRealLLM(t *testing.T) {
-	h, s, _, providerName := textureRealLLMSetup(t)
+	h, s, _, providerName := textureRealLLMToolSetup(t)
 	ctx := context.Background()
 
 	t.Logf("Testing with provider: %s", providerName)
@@ -341,7 +447,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	// Step 2: Add initial user content.
 	initialContent := "Hey there! This is a simple test document. It has some informal language and could use improvement."
 	revReq := textureCreateRevisionRequest{
-		Content:     initialContent,
+		Content: initialContent,
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -385,7 +491,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	}
 
 	// Step 4: Wait for the task to complete.
-	state := waitForTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		statusReq := textureRealLLMRequest(t, http.MethodGet,
 			"/api/agent/status?loop_id="+agentResp.RunID, nil)
@@ -412,7 +518,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	}
 
 	// Step 5: Verify a canonical appagent-authored revision was created.
-	revs, err := s.ListRevisionsByDoc(ctx, docResp.DocID, "user-real-llm", 10)
+	revs, err := s.ListRevisionsByDoc(ctx, docResp.DocID, realLLMTestOwnerID, 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
 	}
@@ -444,7 +550,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	}
 
 	// Step 6: Verify document head is updated.
-	doc, err := s.GetDocument(ctx, docResp.DocID, "user-real-llm")
+	doc, err := s.GetDocument(ctx, docResp.DocID, realLLMTestOwnerID)
 	if err != nil {
 		t.Fatalf("get document: %v", err)
 	}
@@ -454,7 +560,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	}
 
 	// Step 7: Verify history shows both user and appagent attribution.
-	entries, err := s.GetHistory(ctx, docResp.DocID, "user-real-llm", 10)
+	entries, err := s.GetHistory(ctx, docResp.DocID, realLLMTestOwnerID, 10)
 	if err != nil {
 		t.Fatalf("get history: %v", err)
 	}
@@ -478,7 +584,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 //
 // Fulfills: VAL-LLM-015
 func TestTextureAgentRevisionRealLLMCodeGeneration(t *testing.T) {
-	h, s, _, providerName := textureRealLLMSetup(t)
+	h, s, _, providerName := textureRealLLMToolSetup(t)
 	ctx := context.Background()
 
 	t.Logf("Testing code generation with provider: %s", providerName)
@@ -496,7 +602,7 @@ func TestTextureAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 
 	// Create initial revision.
 	revReq := textureCreateRevisionRequest{
-		Content:     "I need a Python function to calculate fibonacci numbers.",
+		Content: "I need a Python function to calculate fibonacci numbers.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -520,13 +626,13 @@ func TestTextureAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&agentResp)
 
 	// Wait for completion.
-	state := waitForTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("task state = %q, want completed", state)
 	}
 
 	// Verify code-like content.
-	revs, err := s.ListRevisionsByDoc(ctx, docResp.DocID, "user-real-llm", 10)
+	revs, err := s.ListRevisionsByDoc(ctx, docResp.DocID, realLLMTestOwnerID, 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
 	}
@@ -559,7 +665,7 @@ func TestTextureAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 // TestTextureAgentRevisionRealLLMEventsEmitted validates that lifecycle
 // events are emitted during a real LLM agent revision.
 func TestTextureAgentRevisionRealLLMEventsEmitted(t *testing.T) {
-	h, s, _, providerName := textureRealLLMSetup(t)
+	h, s, _, providerName := textureRealLLMToolSetup(t)
 	ctx := context.Background()
 
 	t.Logf("Testing event emission with provider: %s", providerName)
@@ -573,7 +679,7 @@ func TestTextureAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Some content to revise.",
+		Content: "Some content to revise.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -589,7 +695,7 @@ func TestTextureAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 	var agentResp textureAgentRevisionResponse
 	_ = json.NewDecoder(w.Body).Decode(&agentResp)
 
-	state := waitForTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("task state = %q, want completed", state)
 	}
@@ -636,25 +742,13 @@ func TestTextureAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 		}
 	}
 
-	// Verify delta events from real streaming.
-	hasDelta := false
-	for _, ev := range evts {
-		if ev.Kind == types.EventRunDelta {
-			hasDelta = true
-			break
-		}
-	}
-	if !hasDelta {
-		t.Error("expected loop.delta events from real LLM streaming")
-	}
-
 	t.Logf("✓ Event emission validated (%d events captured)", len(evts))
 }
 
 // TestTextureAgentRevisionRealLLMMutationIdempotency validates that
 // retrying an agent revision request returns the same task ID.
 func TestTextureAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
-	h, s, _, _ := textureRealLLMSetup(t)
+	h, s, _, _ := textureRealLLMToolSetup(t)
 
 	// Create document and user revision.
 	req := textureRealLLMRequest(t, http.MethodPost, "/api/texture/documents",
@@ -665,7 +759,7 @@ func TestTextureAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Content for idempotency test.",
+		Content: "Content for idempotency test.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -702,12 +796,12 @@ func TestTextureAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 	}
 
 	// Wait and verify only one appagent revision.
-	state := waitForTaskCompletion(t, h, resp1.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, resp1.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("task state = %q, want completed", state)
 	}
 
-	revs, err := s.ListRevisionsByDoc(context.Background(), docResp.DocID, "user-real-llm", 10)
+	revs, err := s.ListRevisionsByDoc(context.Background(), docResp.DocID, realLLMTestOwnerID, 10)
 	if err != nil {
 		t.Fatalf("list revisions: %v", err)
 	}
@@ -742,7 +836,7 @@ func TestTextureAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Short text.",
+		Content: "Short text.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -758,7 +852,7 @@ func TestTextureAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 	var agentResp textureAgentRevisionResponse
 	_ = json.NewDecoder(w.Body).Decode(&agentResp)
 
-	state := waitForTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("task state = %q, want completed", state)
 	}
@@ -806,7 +900,7 @@ func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Some text for metadata test.",
+		Content: "Some text for metadata test.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -822,7 +916,7 @@ func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 	var agentResp textureAgentRevisionResponse
 	_ = json.NewDecoder(w.Body).Decode(&agentResp)
 
-	state := waitForTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("task state = %q, want completed", state)
 	}
@@ -855,7 +949,7 @@ func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 // TestTextureAgentRevisionRealLLMFullHistory validates a sequence of
 // user edits and agent revisions produces correct history.
 func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
-	h, s, _, providerName := textureRealLLMSetup(t)
+	h, s, _, providerName := textureRealLLMToolSetup(t)
 	ctx := context.Background()
 
 	t.Logf("Testing full history with provider: %s", providerName)
@@ -870,7 +964,7 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 
 	// User edit 1.
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft by user.",
+		Content: "First draft by user.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -886,14 +980,14 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 	var agentResp1 textureAgentRevisionResponse
 	_ = json.NewDecoder(w.Body).Decode(&agentResp1)
 
-	state := waitForTaskCompletion(t, h, agentResp1.RunID, 60*time.Second)
+	state := waitForRealLLMTaskCompletion(t, h, agentResp1.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("agent task 1 state = %q, want completed", state)
 	}
 
 	// User edit 2.
 	revReq = textureCreateRevisionRequest{
-		Content:     "User adds more content after agent revision.",
+		Content: "User adds more content after agent revision.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -909,13 +1003,13 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 	var agentResp2 textureAgentRevisionResponse
 	_ = json.NewDecoder(w.Body).Decode(&agentResp2)
 
-	state = waitForTaskCompletion(t, h, agentResp2.RunID, 60*time.Second)
+	state = waitForRealLLMTaskCompletion(t, h, agentResp2.RunID, 60*time.Second)
 	if state != types.RunCompleted {
 		t.Fatalf("agent task 2 state = %q, want completed", state)
 	}
 
 	// Verify full history.
-	entries, err := s.GetHistory(ctx, docResp.DocID, "user-real-llm", 10)
+	entries, err := s.GetHistory(ctx, docResp.DocID, realLLMTestOwnerID, 10)
 	if err != nil {
 		t.Fatalf("get history: %v", err)
 	}

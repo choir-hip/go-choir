@@ -255,7 +255,7 @@ func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req Too
 	prompt := req.System + "\n" + extractLastUserMessage(req.Messages)
 	var result string
 	switch {
-	case !messagesContainToolCall(req.Messages, "patch_texture"):
+	case !messagesContainToolCall(req.Messages, "patch_texture") && !messagesContainToolCall(req.Messages, "rewrite_texture"):
 		result = textureReplaceAllResult("Model-prior resident draft before worker evidence.")
 	case messagesContainText(req.Messages, "A new grounded finding arrived") &&
 		!messagesContainText(req.Messages, "Grounded update from parked resident actor."):
@@ -263,7 +263,7 @@ func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req Too
 	default:
 		return &ToolLoopResponse{StopReason: "end_turn", Text: "resident actor idle", Model: "test-model"}, nil
 	}
-	call, err := editTextureToolCallFromLegacyResult(prompt, result)
+	call, err := requiredPatchTextureToolCallFromLegacyResult(prompt, result)
 	if err != nil {
 		return nil, err
 	}
@@ -965,9 +965,7 @@ func TestTextureAPICreateRevisionUserEdit(t *testing.T) {
 	// Create a user-authored revision. Public revision POSTs ignore
 	// browser-supplied author labels and use the authenticated owner.
 	revReq := textureCreateRevisionRequest{
-		Content:     "Hello, world!",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "Hello, world!",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1131,9 +1129,7 @@ func TestTextureAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 
 	// Create a user revision first.
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "First draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1142,9 +1138,7 @@ func TestTextureAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 	// Attempt to create an appagent revision through the public revision
 	// endpoint. This must still be stored as a user-authored edit.
 	revReq = textureCreateRevisionRequest{
-		Content:     "AI-improved draft",
-		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "appagent",
+		Content: "AI-improved draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1184,9 +1178,7 @@ func TestTextureAPIIgnoresInvalidAuthorKind(t *testing.T) {
 	// cannot select canonical authorship, so the request is accepted as a
 	// normal user edit instead of exposing an author-kind validator.
 	revReq := textureCreateRevisionRequest{
-		Content:     "Worker content",
-		AuthorKind:  "worker",
-		AuthorLabel: "worker-1",
+		Content: "Worker content",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1220,18 +1212,14 @@ func TestTextureAPIGetHistory(t *testing.T) {
 
 	// Create revisions.
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "First draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleTextureRevisions(w, req)
 
 	revReq = textureCreateRevisionRequest{
-		Content:     "AI-improved",
-		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "appagent",
+		Content: "AI-improved",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1275,9 +1263,7 @@ func TestTextureAPIGetDiff(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "First draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1286,9 +1272,7 @@ func TestTextureAPIGetDiff(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&rev1Resp)
 
 	revReq = textureCreateRevisionRequest{
-		Content:     "AI-improved draft",
-		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "appagent",
+		Content: "AI-improved draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1333,18 +1317,14 @@ func TestTextureAPIGetBlame(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "First draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleTextureRevisions(w, req)
 
 	revReq = textureCreateRevisionRequest{
-		Content:     "AI-improved draft",
-		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: "appagent",
+		Content: "AI-improved draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1390,9 +1370,7 @@ func TestTextureAPISnapshotDoesNotMutateHead(t *testing.T) {
 
 	// Create two revisions.
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "First draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1401,9 +1379,7 @@ func TestTextureAPISnapshotDoesNotMutateHead(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&rev1Resp)
 
 	revReq = textureCreateRevisionRequest{
-		Content:     "Second draft",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "Second draft",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -1469,7 +1445,7 @@ func TestTextureAPIAuthGating(t *testing.T) {
 
 // ----- Citations and metadata -----
 
-func TestTextureAPICitationsMetadataRoundTrip(t *testing.T) {
+func TestTextureAPIMetadataRoundTripAndRejectsLegacyCitations(t *testing.T) {
 	t.Parallel()
 	h, _ := textureAPISetup(t)
 
@@ -1481,23 +1457,18 @@ func TestTextureAPICitationsMetadataRoundTrip(t *testing.T) {
 	var docResp textureCreateDocResponse
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
-	// Create a revision with citations and metadata.
-	citations := []types.Citation{
-		{ID: "c1", Type: "url", Value: "https://example.com", Label: "Example"},
-	}
-	citJSON, _ := json.Marshal(citations)
 	metaJSON, _ := json.Marshal(map[string]any{"tags": []string{"draft"}})
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Document with citations",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
-		Citations:   citJSON,
-		Metadata:    metaJSON,
+		Content:  "Document with metadata",
+		Metadata: metaJSON,
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleTextureRevisions(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create revision status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
 
 	var revResp textureRevisionResponse
 	if err := json.NewDecoder(w.Body).Decode(&revResp); err != nil {
@@ -1515,14 +1486,6 @@ func TestTextureAPICitationsMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	var gotCitations []types.Citation
-	if err := json.Unmarshal(getResp.Citations, &gotCitations); err != nil {
-		t.Fatalf("unmarshal citations: %v", err)
-	}
-	if len(gotCitations) != 1 || gotCitations[0].Value != "https://example.com" {
-		t.Errorf("citations round-trip failed: %v", gotCitations)
-	}
-
 	var gotMeta map[string]any
 	if err := json.Unmarshal(getResp.Metadata, &gotMeta); err != nil {
 		t.Fatalf("unmarshal metadata: %v", err)
@@ -1530,6 +1493,21 @@ func TestTextureAPICitationsMetadataRoundTrip(t *testing.T) {
 	tags, _ := gotMeta["tags"].([]interface{})
 	if len(tags) != 1 {
 		t.Errorf("metadata tags round-trip failed: %v", tags)
+	}
+
+	citations := []types.Citation{
+		{ID: "c1", Type: "url", Value: "https://example.com", Label: "Example"},
+	}
+	citJSON, _ := json.Marshal(citations)
+	legacyReq := textureCreateRevisionRequest{
+		Content:   "Document with legacy citations",
+		Citations: citJSON,
+	}
+	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", legacyReq)
+	w = httptest.NewRecorder()
+	h.HandleTextureRevisions(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "citations_json is legacy source identity") {
+		t.Fatalf("legacy citations status/body = %d %q, want 400 legacy-source rejection", w.Code, w.Body.String())
 	}
 }
 
@@ -1866,9 +1844,7 @@ func createDocWithUserRevision(t *testing.T, h *APIHandler) (string, string) {
 
 	// Create a user-authored revision.
 	revReq := textureCreateRevisionRequest{
-		Content:     "Hello, world!",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "Hello, world!",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -2021,8 +1997,6 @@ func createUserRevisionFromCurrentHead(t *testing.T, h *APIHandler, s *store.Sto
 	}
 	req := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          content,
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "user",
 		ParentRevisionID: doc.CurrentRevisionID,
 	})
 	w := httptest.NewRecorder()
@@ -3769,8 +3743,6 @@ func TestTextureStaleAgentRevisionRejectsEditAfterUserEdit(t *testing.T) {
 
 	userEditReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          "Fresh user edit should survive.",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "user",
 		ParentRevisionID: baseRevisionID,
 	})
 	userEditW := httptest.NewRecorder()
@@ -4077,9 +4049,7 @@ func TestTextureWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	userRevReq := textureCreateRevisionRequest{
-		Content:     "Original draft.\n\nAdd a short section about recent model releases.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
+		Content: "Original draft.\n\nAdd a short section about recent model releases.",
 	}
 	userRevReqBody := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
@@ -4187,9 +4157,7 @@ func TestTextureWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	userRevReq := textureCreateRevisionRequest{
-		Content:     "Original draft.\n\nNeed the newest facts.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
+		Content: "Original draft.\n\nNeed the newest facts.",
 	}
 	userRevReqBody := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
@@ -4402,9 +4370,7 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	userRevReq := textureCreateRevisionRequest{
-		Content:     "Original draft.\n\nNeed a sourced update.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
+		Content: "Original draft.\n\nNeed a sourced update.",
 	}
 	userRevReqBody := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
@@ -4672,11 +4638,12 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	if !revisionContentsContain(revs, "Grounded update from parked resident actor.") {
 		t.Fatalf("missing parked resident V2 revision; revisions=%+v", revs)
 	}
-	if ids := metadataStringSlice(textureRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
+	persistedRun := waitForStoredRunState(t, s, textureRun.RunID, types.RunPassivated, 5*time.Second)
+	if ids := metadataStringSlice(persistedRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
 		t.Fatalf("resident run worker_update_ids = %+v, want %s", ids, updateResp.UpdateID)
 	}
-	if !metadataBoolValue(textureRun.Metadata, runMetadataWorkerUpdatesInjected) {
-		t.Fatalf("resident run %s missing %s metadata: %+v", textureRun.RunID, runMetadataWorkerUpdatesInjected, textureRun.Metadata)
+	if !metadataBoolValue(persistedRun.Metadata, runMetadataWorkerUpdatesInjected) {
+		t.Fatalf("resident run %s missing %s metadata: %+v", persistedRun.RunID, runMetadataWorkerUpdatesInjected, persistedRun.Metadata)
 	}
 	waitForNoPendingWorkerUpdates(t, s, "user-1", "texture:"+docID, 2*time.Second)
 
@@ -4936,7 +4903,13 @@ func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 
 func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	t.Parallel()
-	provider := newTextureEditToolProvider(textureReplaceAllResult("Integrated structured super update into the next revision."))
+	provider := newTextureEditToolProvider(textureReplaceAllResult("Initial active revision before worker update."))
+	provider.resultFunc = func(prompt string) string {
+		if strings.Contains(prompt, "Choir coagent update packet") || strings.Contains(prompt, "coagent_update") || strings.Contains(prompt, "update_coagent records") {
+			return textureReplaceAllResult("Integrated structured super update into the next revision.")
+		}
+		return textureReplaceAllResult("Initial active revision before worker update.")
+	}
 	provider.delay = 500 * time.Millisecond
 	clock := &fakeTextureWakeClock{}
 
@@ -4944,9 +4917,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	userRevReq := textureCreateRevisionRequest{
-		Content:     "Original draft.\n\nNeed execution artifacts and verification results.",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "user",
+		Content: "Original draft.\n\nNeed execution artifacts and verification results.",
 	}
 	userRevReqBody := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", userRevReq)
 	userRevW := httptest.NewRecorder()
@@ -4955,13 +4926,13 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("second user revision: status = %d, want %d; body: %s", userRevW.Code, http.StatusCreated, userRevW.Body.String())
 	}
 
-	textureRun, err := rt.StartRunWithMetadata(context.Background(), "Own the document", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
-		runMetadataChannelID:    docID,
-		runMetadataAgentID:      "texture:" + docID,
-		"doc_id":                docID,
-	})
+	doc, err := s.GetDocument(context.Background(), docID, "user-1")
+	if err != nil {
+		t.Fatalf("get doc: %v", err)
+	}
+	textureRun, err := rt.submitTextureAgentRevisionRun(context.Background(), doc, "user-1", textureAgentRevisionRequest{
+		Prompt: "Own the document",
+	}, 0)
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
@@ -4991,8 +4962,9 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("update_coagent: %v", err)
 	}
 	var updateResp struct {
-		Status string `json:"status"`
-		Cursor int64  `json:"cursor"`
+		Status   string `json:"status"`
+		UpdateID string `json:"update_id"`
+		Cursor   int64  `json:"cursor"`
 	}
 	if err := json.Unmarshal([]byte(raw), &updateResp); err != nil {
 		t.Fatalf("decode update_coagent: %v", err)
@@ -5002,7 +4974,9 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 
 	clock.fireAll()
-	revs := waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
+	_ = waitForRevisionCount(t, s, docID, "user-1", 3, 5*time.Second)
+	clock.fireAll()
+	revs := waitForRevisionCount(t, s, docID, "user-1", 4, 5*time.Second)
 	var agentRev *types.Revision
 	for _, rev := range revs {
 		if rev.AuthorKind == types.AuthorAppAgent && strings.Contains(rev.Content, "Integrated structured super update") {
@@ -5019,7 +4993,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("worker update seq %d was not consumed; metadata=%+v", updateResp.Cursor, agentMeta)
 	}
 
-	update, err := s.GetWorkerUpdate(context.Background(), "user-1", "super-artifact-001")
+	update, err := s.GetWorkerUpdate(context.Background(), "user-1", updateResp.UpdateID)
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
@@ -5034,18 +5008,26 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list channel runs: %v", err)
 	}
+	var textureRevisionRuns []types.RunRecord
 	var wakeRun *types.RunRecord
+	foundInitialRun := false
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == superRun.RunID {
-			wakeRun = &runs[i]
-			break
+		if agentProfileForRun(&runs[i]) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+			textureRevisionRuns = append(textureRevisionRuns, runs[i])
+			if runs[i].RunID == textureRun.RunID {
+				foundInitialRun = true
+			}
+			if runs[i].RequestedByRunID == superRun.RunID {
+				wakeRun = &runs[i]
+			}
 		}
 	}
-	if wakeRun == nil {
-		t.Fatalf("expected structured worker update wake run on channel %s, got %+v", docID, runs)
+	if !foundInitialRun || wakeRun == nil {
+		t.Fatalf("texture revision runs = %+v, want initial run %s and wake requested by %s", textureRevisionRuns, textureRun.RunID, superRun.RunID)
 	}
-	if !strings.Contains(wakeRun.Prompt, "artifacts/evolution-ca.html") || !strings.Contains(wakeRun.Prompt, "evolution-ca.verify.js passed") {
-		t.Fatalf("wake run prompt missing structured worker update context: %q", wakeRun.Prompt)
+	completedWakeRun := waitForRunTerminalState(t, rt, wakeRun.RunID, "user-1", 5*time.Second)
+	if ids := metadataStringSlice(completedWakeRun.Metadata["worker_update_ids"]); !containsString(ids, updateResp.UpdateID) {
+		t.Fatalf("same-run worker_update_ids = %+v, want %s", ids, updateResp.UpdateID)
 	}
 }
 
@@ -5548,9 +5530,9 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 			},
 			{
 				"source_id": "src-evidence",
-				"kind":      "evidence",
+				"kind":      "screenshot",
 				"target": map[string]any{
-					"uri": "evidence:evidence-browser-001",
+					"uri": "screenshot:evidence-browser-001.png",
 				},
 			},
 		},
@@ -5565,15 +5547,22 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 		t.Fatalf("test worker update status = %d, want %d; body: %s", w.Code, http.StatusAccepted, w.Body.String())
 	}
 
-	var resp map[string]any
+	var resp struct {
+		Status   string `json:"status"`
+		UpdateID string `json:"update_id"`
+		LoopID   string `json:"loop_id"`
+	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode worker update response: %v", err)
 	}
-	if got, _ := resp["status"].(string); got != "submitted" {
-		t.Fatalf("status = %q, want submitted", got)
+	if resp.Status != "submitted" {
+		t.Fatalf("status = %q, want submitted", resp.Status)
 	}
-	workerLoopID, _ := resp["loop_id"].(string)
-	if strings.TrimSpace(workerLoopID) == "" {
+	if strings.TrimSpace(resp.UpdateID) == "" {
+		t.Fatal("update_id should not be empty")
+	}
+	workerLoopID := strings.TrimSpace(resp.LoopID)
+	if workerLoopID == "" {
 		t.Fatal("loop_id should not be empty")
 	}
 	workerRun, err := s.GetRun(context.Background(), workerLoopID)
@@ -5588,7 +5577,7 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 		t.Fatalf("get texture loop: %v", err)
 	}
 
-	update, err := s.GetWorkerUpdate(context.Background(), "user-1", "browser-worker-update-001")
+	update, err := s.GetWorkerUpdate(context.Background(), "user-1", resp.UpdateID)
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
@@ -5646,13 +5635,12 @@ func TestTextureAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *
 
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
 	metadata, _ := json.Marshal(map[string]any{
-		"seed_prompt":       "Create a research-backed working document.",
-		"conductor_loop_id": conductorRun.RunID,
+		"seed_prompt":         "Create a research-backed working document.",
+		"conductor_loop_id":   conductorRun.RunID,
+		"requested_by_run_id": conductorRun.RunID,
 	})
 	revReq := textureCreateRevisionRequest{
 		Content:          "User refined the conductor-framed working document.",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "alice",
 		Metadata:         metadata,
 		ParentRevisionID: baseRevisionID,
 	}
@@ -6169,8 +6157,7 @@ func TestTextureRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 	sourceReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/revisions", textureCreateRevisionRequest{
 		Content: malformedSource,
 		Metadata: json.RawMessage(`{
-			"created_from":"historical_import",
-			"source_entities":[{"entity_id":"src-restore-rule","label":"ABA Model Rule 1.6"}]
+			"created_from":"historical_import"
 		}`),
 	})
 	w = httptest.NewRecorder()
@@ -6231,10 +6218,6 @@ func TestTextureRestoreRevisionNormalizesMalformedTableTailRows(t *testing.T) {
 	if meta["texture_structure_stabilized"] != true ||
 		meta["texture_structure_stabilized_reason"] != "normalized_restored_markdown_table_rows" {
 		t.Fatalf("restored metadata did not record normalization: %#v", meta)
-	}
-	entities := decodeTextureSourceEntities(meta["source_entities"])
-	if len(entities) != 1 || entities[0].EntityID != "src-restore-rule" {
-		t.Fatalf("restored source_entities = %#v", meta["source_entities"])
 	}
 }
 
@@ -6581,10 +6564,9 @@ func TestTextureUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T)
 	}
 
 	userContent := strings.Replace(parentRev.Content, "A private legal cloud solves this.", "A private legal cloud addresses this.", 1)
+	userContent = strings.Replace(userContent, " [1]", "", 1)
 	userReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/revisions", textureCreateRevisionRequest{
 		Content:          userContent,
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "owner",
 		Metadata:         json.RawMessage(`{"created_from":"browser_user_edit"}`),
 		ParentRevisionID: imported.CurrentRevisionID,
 	})
@@ -6601,10 +6583,9 @@ func TestTextureUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetRevision user: %v", err)
 	}
-	userMeta := decodeRevisionMetadata(userRev.Metadata)
-	userEntities := decodeTextureSourceEntities(userMeta["source_entities"])
+	userEntities := decodeTextureSourceEntities(userRev.SourceEntities)
 	if len(userEntities) != 1 || userEntities[0].EntityID != entity.EntityID {
-		t.Fatalf("user revision source_entities = %#v", userMeta["source_entities"])
+		t.Fatalf("user revision source_entities = %#v", userRev.SourceEntities)
 	}
 	userTables := extractMarkdownTableBlocks(userRev.Content)
 	if len(userTables) != 1 || userTables[0].Text != parentTables[0].Text {
@@ -6620,10 +6601,9 @@ func TestTextureUserSaveAndAgentRevisePreserveSourcesAndTableShape(t *testing.T)
 	}
 	revs := waitForRevisionCount(t, s, imported.DocID, "user-1", 3, 5*time.Second)
 	agentRev := revs[0]
-	agentMeta := decodeRevisionMetadata(agentRev.Metadata)
-	agentEntities := decodeTextureSourceEntities(agentMeta["source_entities"])
+	agentEntities := decodeTextureSourceEntities(agentRev.SourceEntities)
 	if len(agentEntities) != 1 || agentEntities[0].EntityID != entity.EntityID {
-		t.Fatalf("agent revision source_entities = %#v", agentMeta["source_entities"])
+		t.Fatalf("agent revision source_entities = %#v", agentRev.SourceEntities)
 	}
 	agentTables := extractMarkdownTableBlocks(agentRev.Content)
 	if len(agentTables) != 1 || agentTables[0].Text != parentTables[0].Text {
@@ -6696,11 +6676,10 @@ func TestTextureUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
 	}
 
 	userContent := strings.Replace(parentRev.Content, "A private legal cloud solves this", "A private legal cloud addresses this", 1)
+	userContent = strings.Replace(userContent, " [1]", "", 1)
 	userContent = strings.Replace(userContent, "| --- | --- |\n| Agent |", "| --- | --- |\n| --- | --- |\n| Agent |", 1)
 	userReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+imported.DocID+"/revisions", textureCreateRevisionRequest{
 		Content:          userContent,
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "owner",
 		Metadata:         json.RawMessage(`{"created_from":"browser_user_edit"}`),
 		ParentRevisionID: imported.CurrentRevisionID,
 	})
@@ -6731,9 +6710,9 @@ func TestTextureUserSaveRemovesDuplicateMarkdownTableSeparator(t *testing.T) {
 	if userMeta["texture_structure_stabilized"] != true {
 		t.Fatalf("user metadata did not record table stabilization: %#v", userMeta)
 	}
-	userEntities := decodeTextureSourceEntities(userMeta["source_entities"])
+	userEntities := decodeTextureSourceEntities(userRev.SourceEntities)
 	if len(userEntities) != 1 || userEntities[0].EntityID != entity.EntityID {
-		t.Fatalf("user revision source_entities = %#v", userMeta["source_entities"])
+		t.Fatalf("user revision source_entities = %#v", userRev.SourceEntities)
 	}
 }
 
@@ -7402,8 +7381,6 @@ func TestTextureCreateRevisionRejectsStaleHead(t *testing.T) {
 
 	headReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          "Latest head",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "alice",
 		ParentRevisionID: baseRevisionID,
 	})
 	headW := httptest.NewRecorder()
@@ -7414,8 +7391,6 @@ func TestTextureCreateRevisionRejectsStaleHead(t *testing.T) {
 
 	staleReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          "Stale write",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "alice",
 		ParentRevisionID: baseRevisionID,
 	})
 	staleW := httptest.NewRecorder()
@@ -7432,8 +7407,6 @@ func TestTextureCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
 
 	headReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          "Initial content.\n\nAgent-added latest head detail.",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "alice",
 		ParentRevisionID: baseRevisionID,
 	})
 	headW := httptest.NewRecorder()
@@ -7448,8 +7421,6 @@ func TestTextureCreateRevisionRebasesAllowedStaleUserDraft(t *testing.T) {
 
 	staleReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          "Initial content.\n\nUser dirty draft detail.",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "alice",
 		ParentRevisionID: baseRevisionID,
 		AllowRebase:      true,
 		Metadata:         json.RawMessage(`{"autosaved":true}`),
@@ -7595,6 +7566,7 @@ func TestTextureDocumentResponseReconcilesPendingMutationFromCurrentHead(t *test
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
 		Content:          "Hello, edited document.",
+		BodyDoc:          runtimeTestTextureBodyDoc(t, docID, "rev-appagent-current-head", "Hello, edited document."),
 		Citations:        json.RawMessage("[]"),
 		Metadata:         meta,
 		ParentRevisionID: baseRevisionID,
@@ -7629,13 +7601,15 @@ func TestTextureDiagnosisReportsCurrentRevisionVersion(t *testing.T) {
 	t.Parallel()
 	h, s := textureAPISetup(t)
 	docID, baseRevisionID := createDocWithUserRevision(t, h)
+	content := "## Appendix\n\n| Owner | State |\n| --- | --- |\n| Legal cloud | Preserved |"
 	if err := s.CreateRevision(context.Background(), types.Revision{
 		RevisionID:       "rev-diagnosis-v1",
 		DocID:            docID,
 		OwnerID:          "user-1",
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
-		Content:          "## Appendix\n\n| Owner | State |\n| --- | --- |\n| Legal cloud | Preserved |\n",
+		Content:          content,
+		BodyDoc:          runtimeTestTextureBodyDoc(t, docID, "rev-diagnosis-v1", content),
 		Citations:        json.RawMessage("[]"),
 		Metadata:         json.RawMessage(`{"source":"edit_texture"}`),
 		ParentRevisionID: baseRevisionID,
@@ -7925,8 +7899,6 @@ func TestTextureDocumentStreamEmitsHeadChangeAfterUserRevision(t *testing.T) {
 
 	createReq := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", textureCreateRevisionRequest{
 		Content:          "User-authored next head",
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      "alice",
 		ParentRevisionID: baseRevisionID,
 	})
 	createW := httptest.NewRecorder()
@@ -8028,9 +8000,7 @@ func TestTextureAgentRevisionPreservesUserAndAppAgentAttribution(t *testing.T) {
 
 	// Make another user edit after the agent revision.
 	revReq := textureCreateRevisionRequest{
-		Content:     "User final edit",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: "User final edit",
 	}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", revReq)
 	w = httptest.NewRecorder()
@@ -8214,6 +8184,7 @@ func TestTextureAgentRevisionDeliversOwnerRequestToResidentActor(t *testing.T) {
 		AuthorKind:       types.AuthorAppAgent,
 		AuthorLabel:      "appagent",
 		Content:          "Resident actor wrote V1.",
+		BodyDoc:          runtimeTestTextureBodyDoc(t, docID, "rev-resident-head", "Resident actor wrote V1."),
 		Citations:        json.RawMessage("[]"),
 		Metadata:         headMeta,
 		ParentRevisionID: baseRevisionID,
@@ -8343,18 +8314,14 @@ func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	rawArgs, err := json.Marshal(editTextureArgs{
 		DocID:          doc.DocID,
 		BaseRevisionID: base.RevisionID,
-		Operation:      "apply_edits",
-		StructuredEdits: []textureStructuredEdit{{
-			Op:      "update_block_text",
-			BlockID: "p-" + doc.DocID + "-" + base.RevisionID + "-0",
-			Text:    "# Legacy Proposal\n\nImported Markdown body revised as canonical Texture.",
-		}},
+		Content:        "# Legacy Proposal\n\nImported Markdown body revised as canonical Texture.",
+		Rationale:      "rewrite imported Markdown proposal into canonical Texture prose",
 	})
 	if err != nil {
 		t.Fatalf("marshal edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err != nil {
-		t.Fatalf("patch_texture: %v", err)
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "rewrite_texture", rawArgs); err != nil {
+		t.Fatalf("rewrite_texture: %v", err)
 	}
 	got, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
 	if err != nil {
@@ -8651,6 +8618,7 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: "appagent",
 		Content:     baseContent,
+		BodyDoc:     runtimeTestTextureBodyDoc(t, docID, "rev-worker-noop-v1", baseContent),
 		CreatedAt:   now,
 	}
 	if err := s.CreateRevision(ctx, base); err != nil {
@@ -9054,6 +9022,7 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing
 		AuthorKind:  types.AuthorAppAgent,
 		AuthorLabel: AgentProfileSuper,
 		Content:     "Super artifact is ready; researcher evidence is still missing.",
+		BodyDoc:     runtimeTestTextureBodyDoc(t, doc.DocID, "rev-super-explicit-researcher", "Super artifact is ready; researcher evidence is still missing."),
 		CreatedAt:   time.Now().UTC(),
 	}
 	if err := s.CreateRevision(ctx, superRev); err != nil {
@@ -9571,9 +9540,7 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 	content := "Review these sources:\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ\n\n" + image.URL + "/cover.png"
 	revReq := textureCreateRevisionRequest{
-		Content:     content,
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
+		Content: content,
 	}
 	req := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revisions", revReq)
 	w := httptest.NewRecorder()
@@ -9681,25 +9648,38 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 	if err := s.CreateRun(ctx, researchRun); err != nil {
 		t.Fatalf("CreateRun researcher: %v", err)
 	}
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{"content_id:" + item.ContentID})
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-content-source-research",
+		OwnerID:       "user-1",
+		AgentID:       "researcher-content-source",
+		TargetAgentID: "texture:" + docID,
+		ChannelID:     docID,
+		Role:          AgentProfileResearcher,
+		Packet: newCoagentPacket(
+			"evidence_update",
+			"Cloud auditability source ready.",
+			coagentClaimsFromTexts([]string{"The source supports this bounded claim: \"Cloud providers should preserve auditability.\""}, sources),
+			sources,
+			nil,
+			nil,
+			nil,
+		),
+		Content:   "Coagent update ready with typed content source.",
+		CreatedAt: now,
+	}
 	message := &types.ChannelMessage{
 		ChannelID:   docID,
 		From:        "researcher",
 		FromRunID:   researchRun.RunID,
-		FromAgentID: "researcher-content-source",
+		FromAgentID: update.AgentID,
 		ToAgentID:   "texture:" + docID,
 		Role:        AgentProfileResearcher,
-		Content: strings.Join([]string{
-			"Coagent update ready.",
-			"Role: researcher.",
-			"Kind: findings.",
-			"",
-			"Findings:",
-			"- The source supports this bounded claim: \"Cloud providers should preserve auditability.\" content_id:content-cloud-audit",
-		}, "\n"),
-		Timestamp: now,
+		Content:     update.Content,
+		Timestamp:   now,
 	}
-	if err := s.AppendChannelMessage(ctx, message, "user-1"); err != nil {
-		t.Fatalf("AppendChannelMessage: %v", err)
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, message); err != nil {
+		t.Fatalf("DispatchWorkerUpdate: %v", err)
 	}
 
 	req := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
@@ -9728,8 +9708,8 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 		entity.Display.OpenSurface != "source" ||
 		entity.Evidence.ResearchState != "represented" ||
 		len(entity.Selectors) != 1 ||
-		entity.Selectors[0].SelectorKind != "text_quote" ||
-		entity.Selectors[0].ContentHash != item.ContentHash {
+		entity.Selectors[0].SelectorKind != "whole_resource" ||
+		metadataString(entity.ReaderSnapshot, "content_hash") != item.ContentHash {
 		t.Fatalf("content source entity = %#v", entity)
 	}
 	if !strings.Contains(run.Prompt, "Detected Texture source entities") ||
