@@ -1063,7 +1063,7 @@ func (h *APIHandler) handleInternalRunEventAppend(w http.ResponseWriter, r *http
 		Phase:        firstNonEmpty(strings.TrimSpace(in.Phase), "email_appagent_evidence"),
 		Payload:      raw,
 	}
-	if err := h.rt.Store().AppendEvent(r.Context(), &event); err != nil {
+	if err := h.rt.appendEventRecord(r.Context(), &event); err != nil {
 		log.Printf("runtime api: append internal run event: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to append event"})
 		return
@@ -1400,6 +1400,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
+	s.HandleFunc("/api/trace/trajectories", h.HandleTraceTrajectories)
+	s.HandleFunc("/api/trace/trajectories/", h.HandleTraceTrajectories)
 	s.HandleFunc("/api/costs", h.HandleCosts)
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
 	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)

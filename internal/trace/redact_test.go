@@ -137,10 +137,10 @@ type failingRedactor struct{}
 func (failingRedactor) Name() string { return "failing-test" }
 
 func (failingRedactor) RedactText(text string) (string, []pii.Finding, error) {
-	return text, nil, errors.New("synthetic redactor failure")
+	return text, nil, errors.New("synthetic redactor failure containing alice@example.com")
 }
 
-func TestRedactingStore_RedactionFailureStoresOriginalWithWarning(t *testing.T) {
+func TestRedactingStore_RedactionFailureDropsOriginalPayloadWithWarning(t *testing.T) {
 	inner, err := NewSQLiteStore(":memory:")
 	if err != nil {
 		t.Fatalf("open trace store: %v", err)
@@ -163,7 +163,6 @@ func TestRedactingStore_RedactionFailureStoresOriginalWithWarning(t *testing.T) 
 		t.Fatalf("Append must not fail on redactor error: %v", err)
 	}
 
-	// Event must still be stored (with original payload — graceful degradation).
 	got, err := s.Get(ctx, "evt-fail")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -171,16 +170,25 @@ func TestRedactingStore_RedactionFailureStoresOriginalWithWarning(t *testing.T) 
 	if got.ID != "evt-fail" {
 		t.Fatalf("event not stored: %+v", got)
 	}
+	if strings.Contains(string(got.Payload), "alice@example.com") {
+		t.Fatalf("raw PII persisted after redaction failure: %s", got.Payload)
+	}
+	var stored map[string]string
+	if err := json.Unmarshal(got.Payload, &stored); err != nil {
+		t.Fatalf("stored payload is not valid JSON: %v", err)
+	}
+	if stored["redaction_error"] != "payload_dropped" {
+		t.Fatalf("redaction failure marker: got %q want payload_dropped", stored["redaction_error"])
+	}
 
-	// A warning must have been logged.
 	if len(warnLog.warnings) == 0 {
 		t.Fatalf("expected a redaction warning, got none")
 	}
 	if !strings.Contains(warnLog.warnings[0], "evt-fail") {
 		t.Fatalf("warning should reference event id: %q", warnLog.warnings[0])
 	}
-	if !strings.Contains(warnLog.warnings[0], "synthetic redactor failure") {
-		t.Fatalf("warning should contain error: %q", warnLog.warnings[0])
+	if strings.Contains(warnLog.warnings[0], "alice@example.com") {
+		t.Fatalf("warning leaked raw PII: %q", warnLog.warnings[0])
 	}
 }
 
