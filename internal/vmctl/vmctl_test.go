@@ -73,6 +73,28 @@ func TestOwnershipRegistry_ResolveOrAssignReturnsSameVM(t *testing.T) {
 	}
 }
 
+func TestOwnershipRegistry_ResolveOrAssignReturnsSnapshot(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	own, err := reg.ResolveOrAssign("user-snapshot")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+	own.SandboxURL = "http://caller-mutated"
+	own.State = VMStateFailed
+
+	got := reg.GetOwnership("user-snapshot")
+	if got == nil {
+		t.Fatal("expected registry ownership")
+	}
+	if got.SandboxURL == "http://caller-mutated" {
+		t.Fatal("ResolveOrAssign returned a live ownership pointer")
+	}
+	if got.State != VMStateActive {
+		t.Fatalf("registry state = %s, want active", got.State)
+	}
+}
+
 func TestOwnershipRegistry_DifferentUsersGetDifferentVMs(t *testing.T) {
 	// VAL-VM-005: Different users receive distinct VMs and isolated state.
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
@@ -501,6 +523,50 @@ func TestOwnershipRegistry_RequestWorkerReusesActiveLeaseUnlessParallelAllowed(t
 	}
 	if parallel.WorkerID == first.WorkerID || parallel.VMID == first.VMID {
 		t.Fatalf("parallel worker reused %s/%s unexpectedly", parallel.WorkerID, parallel.VMID)
+	}
+}
+
+func TestOwnershipRegistry_RequestWorkerReturnsSnapshot(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+
+	if _, err := reg.ResolveOrAssignDesktop("user-worker-snapshot", PrimaryDesktopID); err != nil {
+		t.Fatalf("ResolveOrAssignDesktop: %v", err)
+	}
+	req := WorkerRequest{
+		UserID:        "user-worker-snapshot",
+		DesktopID:     PrimaryDesktopID,
+		ParentAgentID: "super:primary",
+		TrajectoryID:  "traj-worker-snapshot",
+		Purpose:       "Run a worker snapshot test",
+		MachineClass:  "worker-small",
+	}
+	first, err := reg.RequestWorker(req)
+	if err != nil {
+		t.Fatalf("RequestWorker first: %v", err)
+	}
+	first.SandboxURL = "http://caller-mutated"
+	first.State = VMStateFailed
+
+	stored := reg.GetOwnershipByVMID(first.VMID)
+	if stored == nil {
+		t.Fatal("expected stored worker ownership")
+	}
+	if stored.SandboxURL == "http://caller-mutated" || stored.State != VMStateActive {
+		t.Fatalf("stored worker was mutated through returned pointer: url=%q state=%s", stored.SandboxURL, stored.State)
+	}
+
+	reused, err := reg.RequestWorker(req)
+	if err != nil {
+		t.Fatalf("RequestWorker reused: %v", err)
+	}
+	reused.State = VMStateFailed
+
+	stored = reg.GetOwnershipByVMID(reused.VMID)
+	if stored == nil {
+		t.Fatal("expected reused worker ownership")
+	}
+	if stored.State != VMStateActive {
+		t.Fatalf("reused worker return was a live pointer: state=%s", stored.State)
 	}
 }
 
@@ -3181,7 +3247,7 @@ func TestOwnershipRegistry_FailedVMGetsNewAssignment(t *testing.T) {
 
 	// Simulate a failure.
 	reg.mu.Lock()
-	own1.State = VMStateFailed
+	reg.ownerships[ownershipKey("user-1", PrimaryDesktopID)].State = VMStateFailed
 	reg.mu.Unlock()
 
 	// ResolveOrAssign should create a new VM for the failed state.
@@ -4229,6 +4295,94 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 	if own.SandboxURL != "http://127.0.0.1:9045" {
 		t.Fatalf("sandbox URL = %s", own.SandboxURL)
 	}
+}
+
+func TestOwnershipRegistry_LiveSandboxURLSnapshotsDuringRefresh(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(&mockVMManager{
+		refreshResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9045",
+			Epoch:   100,
+			Healthy: true,
+			State:   "running",
+		},
+	})
+
+	_, _ = reg.ResolveOrAssign("user-live-url-refresh")
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			if _, err := reg.LiveSandboxURL("user-live-url-refresh", PrimaryDesktopID); err != nil {
+				t.Errorf("LiveSandboxURL: %v", err)
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			if _, err := reg.RefreshVMForDesktop("user-live-url-refresh", PrimaryDesktopID); err != nil {
+				t.Errorf("RefreshVMForDesktop: %v", err)
+				return
+			}
+		}
+	}()
+
+	close(start)
+	wg.Wait()
+}
+
+func TestOwnershipRegistry_ResolveReturnSnapshotDuringRefresh(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(&mockVMManager{
+		refreshResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9047",
+			Epoch:   102,
+			Healthy: true,
+			State:   "running",
+		},
+	})
+
+	own, err := reg.ResolveOrAssign("user-resolve-refresh")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			_ = own.SandboxURL
+			_ = own.State
+			_ = own.Epoch
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			if _, err := reg.RefreshVMForDesktop("user-resolve-refresh", PrimaryDesktopID); err != nil {
+				t.Errorf("RefreshVMForDesktop: %v", err)
+				return
+			}
+		}
+	}()
+
+	close(start)
+	wg.Wait()
 }
 
 func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {

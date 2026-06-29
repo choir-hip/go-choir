@@ -1290,17 +1290,19 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 				current.StoppedBy = ""
 				r.saveLocked()
 				vmID := current.VMID
+				result := cloneOwnership(current)
 				r.mu.Unlock()
 				r.ensureExistingGatewayCredential(vmID)
-				return current, nil
+				return result, nil
 			}
 
 			own.LastActiveAt = time.Now()
 			r.saveLocked()
 			vmID := own.VMID
+			result := cloneOwnership(own)
 			r.mu.Unlock()
 			r.ensureExistingGatewayCredential(vmID)
-			return own, nil
+			return result, nil
 		}
 
 		// VM exists but is stopped or hibernated. Resume it instead
@@ -1308,29 +1310,41 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 		// (VAL-CROSS-116, VAL-CROSS-117).
 		if own.State == VMStateStopped || own.State == VMStateHibernated {
 			mgr := r.vmManager
+			pending := cloneOwnership(own)
 			r.mu.Unlock()
 
 			if mgr != nil {
-				info, err := r.startExistingVM(own, mgr)
+				info, err := r.startExistingVM(pending, mgr)
 				if err != nil {
-					log.Printf("vmctl: start existing VM %s failed: %v", own.VMID, err)
-					return nil, fmt.Errorf("failed to start existing VM %s: %w", own.VMID, err)
+					log.Printf("vmctl: start existing VM %s failed: %v", pending.VMID, err)
+					return nil, fmt.Errorf("failed to start existing VM %s: %w", pending.VMID, err)
 				}
 				r.mu.Lock()
-				own.SandboxURL = info.HostURL
-				own.Epoch = info.Epoch
+				current := r.ownerships[key]
+				if current == nil || current.VMID != pending.VMID {
+					r.mu.Unlock()
+					return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
+				}
+				current.SandboxURL = info.HostURL
+				current.Epoch = info.Epoch
 				r.mu.Unlock()
 			}
 
 			r.mu.Lock()
-			own.State = VMStateActive
-			own.LastActiveAt = time.Now()
-			own.StoppedBy = ""
+			current := r.ownerships[key]
+			if current == nil || current.VMID != pending.VMID {
+				r.mu.Unlock()
+				return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
+			}
+			current.State = VMStateActive
+			current.LastActiveAt = time.Now()
+			current.StoppedBy = ""
 			r.saveLocked()
+			result := cloneOwnership(current)
 			r.mu.Unlock()
-			r.ensureExistingGatewayCredential(own.VMID)
-			log.Printf("vmctl: resumed VM %s for user %s desktop %s on resolve (epoch=%d)", own.VMID, userID, desktopID, own.Epoch)
-			return own, nil
+			r.ensureExistingGatewayCredential(result.VMID)
+			log.Printf("vmctl: resumed VM %s for user %s desktop %s on resolve (epoch=%d)", result.VMID, userID, desktopID, result.Epoch)
+			return result, nil
 		}
 
 		if own.State == VMStateBooting {
@@ -1434,15 +1448,16 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 	r.mu.Lock()
 	waiters := r.pendingWaiters[key]
 	delete(r.pendingWaiters, key)
+	result := cloneOwnership(own)
 	r.mu.Unlock()
 
 	for _, ch := range waiters {
-		ch <- own
+		ch <- cloneOwnership(result)
 	}
 
 	log.Printf("vmctl: assigned VM %s to user %s desktop %s", vmID, userID, desktopID)
 
-	return own, nil
+	return result, nil
 }
 
 func (r *OwnershipRegistry) waitForPendingAssignmentLocked(ctx context.Context, key, userID, desktopID string, waiters []chan *VMOwnership) (*VMOwnership, error) {
@@ -1455,7 +1470,7 @@ func (r *OwnershipRegistry) waitForPendingAssignmentLocked(ctx context.Context, 
 		if own == nil {
 			return nil, fmt.Errorf("vm assignment failed for user %s desktop %s", userID, desktopID)
 		}
-		return own, nil
+		return cloneOwnership(own), nil
 	case <-ctx.Done():
 		r.removePendingWaiter(key, ch)
 		return nil, fmt.Errorf("vm assignment canceled for user %s desktop %s: %w", userID, desktopID, ctx.Err())
@@ -1644,9 +1659,10 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 	if parent != nil && !req.AllowParallel {
 		for _, worker := range r.workerVMs {
 			if reusableWorkerLease(worker, req, machineClass) {
+				result := cloneOwnership(worker)
 				r.mu.RUnlock()
-				log.Printf("vmctl: reused worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", worker.VMID, req.UserID, req.DesktopID, worker.WorkerID, req.Purpose)
-				return worker, nil
+				log.Printf("vmctl: reused worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", result.VMID, req.UserID, req.DesktopID, result.WorkerID, req.Purpose)
+				return result, nil
 			}
 		}
 	}
@@ -1750,7 +1766,10 @@ func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, erro
 
 	r.transitionVM(vmID, VMStateActive)
 	log.Printf("vmctl: assigned worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", vmID, req.UserID, req.DesktopID, workerID, req.Purpose)
-	return own, nil
+	r.mu.RLock()
+	result := cloneOwnership(r.vmByID[vmID])
+	r.mu.RUnlock()
+	return result, nil
 }
 
 func reusableWorkerLease(worker *VMOwnership, req WorkerRequest, machineClass string) bool {
@@ -1818,16 +1837,22 @@ func (r *OwnershipRegistry) GetOwnershipForDesktop(userID, desktopID string) *VM
 func (r *OwnershipRegistry) LiveSandboxURL(userID, desktopID string) (string, error) {
 	r.mu.RLock()
 	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	mgr := r.vmManager
+	var snap VMOwnership
+	found := ok && own != nil
+	if found {
+		snap = *own
+	}
 	r.mu.RUnlock()
-	if ok && own != nil {
+	if found {
 		// Prefer live VM manager URL if available.
-		if r.vmManager != nil {
-			if info := r.vmManager.GetVM(own.VMID); info != nil && strings.TrimSpace(info.HostURL) != "" {
+		if mgr != nil {
+			if info := mgr.GetVM(snap.VMID); info != nil && strings.TrimSpace(info.HostURL) != "" {
 				return info.HostURL, nil
 			}
 		}
-		if strings.TrimSpace(own.SandboxURL) != "" {
-			return own.SandboxURL, nil
+		if strings.TrimSpace(snap.SandboxURL) != "" {
+			return snap.SandboxURL, nil
 		}
 	}
 	return "", fmt.Errorf("no live sandbox URL for %s/%s", userID, desktopID)

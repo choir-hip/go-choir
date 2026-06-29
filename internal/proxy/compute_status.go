@@ -88,6 +88,9 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
 
 	desktopID := requestDesktopID(r)
 	resp := computeStatusResponse{
@@ -276,6 +279,9 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
 		return
 	}
 	if h.vmctlClient == nil {

@@ -189,6 +189,8 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		for _, hdr := range clientIdentityHeaders {
 			req.Header.Del(hdr)
 		}
+		req.Header.Del("Authorization")
+		req.Header.Del("Cookie")
 
 		// Inject trusted user context from the proxy-validated JWT.
 		trustedUser := req.Header.Get("X-Proxy-Trusted-User")
@@ -248,15 +250,15 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 				return true
 			},
 		},
-		dialer:          websocket.DefaultDialer,
-		platformd:       &http.Client{Timeout: 30 * time.Second},
-		maild:           &http.Client{Timeout: 30 * time.Second},
-		sandboxHTTP:     &http.Client{Timeout: 30 * time.Second},
-		sandboxURL:      sandboxURL,
-		vmctlClient:     vmctlCli,
-		lifecycle:       newLifecycleRecorder(),
-		recoveries:      newComputeRecoveryTracker(),
-		authStore:       authStore,
+		dialer:      websocket.DefaultDialer,
+		platformd:   &http.Client{Timeout: 30 * time.Second},
+		maild:       &http.Client{Timeout: 30 * time.Second},
+		sandboxHTTP: &http.Client{Timeout: 30 * time.Second},
+		sandboxURL:  sandboxURL,
+		vmctlClient: vmctlCli,
+		lifecycle:   newLifecycleRecorder(),
+		recoveries:  newComputeRecoveryTracker(),
+		authStore:   authStore,
 	}
 	if authStore != nil {
 		h.apiKeyValidator = authStore
@@ -356,6 +358,47 @@ func (h *Handler) authenticate(r *http.Request) (*AuthResult, error) {
 	return nil, errors.New("no valid authentication")
 }
 
+func (h *Handler) authorizeAPIKeyScope(w http.ResponseWriter, r *http.Request, authResult *AuthResult) bool {
+	if authResult == nil || authResult.AuthMethod != "api_key" {
+		return true
+	}
+	requiredScope := requiredAPIKeyScope(r)
+	if requiredScope == "" || hasAPIKeyScope(authResult.Scopes, "admin") || hasAPIKeyScope(authResult.Scopes, requiredScope) {
+		return true
+	}
+	writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + requiredScope})
+	return false
+}
+
+func requiredAPIKeyScope(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return "read:runtime"
+	}
+	action := "read"
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+	default:
+		action = "write"
+	}
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/api/base/"):
+		return action + ":base"
+	case strings.HasPrefix(r.URL.Path, "/api/texture/"):
+		return action + ":texture"
+	default:
+		return action + ":runtime"
+	}
+}
+
+func hasAPIKeyScope(scopes []string, want string) bool {
+	for _, scope := range scopes {
+		if scope == want {
+			return true
+		}
+	}
+	return false
+}
+
 // validateAPIKey validates an API key from the Authorization: Bearer header.
 // It extracts the token, SHA-256 hashes it, looks up the key in the auth
 // store, checks it is not revoked or expired, updates last_used_at, and
@@ -450,6 +493,11 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.lifecycle.record("bootstrap.auth", "ok", time.Since(authStarted))
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		h.lifecycle.record("bootstrap.authz", "forbidden", time.Since(authStarted))
+		h.lifecycle.record("bootstrap.total", "forbidden", time.Since(started))
+		return
+	}
 
 	// Resolve the sandbox URL for this user.
 	desktopID := requestDesktopID(r)
@@ -504,6 +552,11 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.lifecycle.record(stagePrefix+".auth", "ok", time.Since(authStarted))
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		h.lifecycle.record(stagePrefix+".authz", "forbidden", time.Since(authStarted))
+		h.lifecycle.record(stagePrefix+".total", "forbidden", time.Since(started))
+		return
+	}
 
 	// Resolve the sandbox URL for this user. Universal Wire stories read the
 	// platform computer's embedded store, not the caller's personal computer.
@@ -657,6 +710,11 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.lifecycle.record("ws.auth", "ok", time.Since(authStarted))
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		h.lifecycle.record("ws.authz", "forbidden", time.Since(authStarted))
+		h.lifecycle.record("ws.total", "forbidden", time.Since(started))
+		return
+	}
 
 	// Step 2: Resolve the sandbox URL for this user (VAL-VM-006).
 	desktopID := requestDesktopID(r)
@@ -768,6 +826,9 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
 		return
 	}
 
@@ -953,6 +1014,17 @@ func (h *Handler) resolveSandboxURLOnce(ctx context.Context, userID, desktopID s
 	}
 
 	if desktopID == vmctl.PrimaryDesktopID {
+		resp, err := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
+		if err != nil {
+			return "", err
+		}
+		if !resp.Published {
+			return "", fmt.Errorf("desktop %s is not published", desktopID)
+		}
+		return resp.SandboxURL, nil
+	}
+
+	if userID == vmctl.UniversalWirePlatformOwnerID && desktopID == vmctl.UniversalWirePlatformDesktopID {
 		resp, err := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
 		if err != nil {
 			return "", err
@@ -1183,7 +1255,9 @@ func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	_ = authResult
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
 
 	path := r.URL.Path
 	var platformdPath string

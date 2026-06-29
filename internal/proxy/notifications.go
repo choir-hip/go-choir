@@ -62,6 +62,9 @@ func (h *Handler) HandleFeatureAdoptionCompletionWatch(w http.ResponseWriter, r 
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
 	var in featureAdoptionWatchRequest
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	decoder.DisallowUnknownFields()

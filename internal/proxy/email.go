@@ -19,6 +19,9 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
 	target, err := joinBasePath(h.cfg.MaildURL, r.URL.Path)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "mail service is not configured"})

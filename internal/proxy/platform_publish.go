@@ -88,6 +88,11 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.lifecycle.record("platform_publish.auth", "ok", time.Since(authStarted))
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		h.lifecycle.record("platform_publish.authz", "forbidden", time.Since(authStarted))
+		h.lifecycle.record("platform_publish.total", "forbidden", time.Since(started))
+		return
+	}
 
 	var req publishTextureRequest
 	dec := json.NewDecoder(r.Body)

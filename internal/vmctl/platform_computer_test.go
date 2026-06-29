@@ -1,6 +1,8 @@
 package vmctl
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +58,43 @@ func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	own := reg.ownerships[key]
 	if own == nil || own.WarmnessClass != WarmnessClassPublicPlatform {
 		t.Fatalf("expected public_platform ownership, got %#v", own)
+	}
+}
+
+func TestHandleResolveEnsuresUniversalWirePlatformComputer(t *testing.T) {
+	mgr := &mockVMManager{
+		bootResponse: &VMInstanceInfo{
+			HostURL: "http://10.203.141.2:8085",
+			Epoch:   4,
+			Healthy: true,
+			State:   "running",
+		},
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	handler := NewHandler(reg)
+
+	body := bytes.NewBufferString(`{"user_id":"universal-wire-platform","desktop_id":"platform"}`)
+	req := httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", body)
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	handler.HandleResolve(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp resolveResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resolve response: %v", err)
+	}
+	if resp.UserID != UniversalWirePlatformOwnerID || resp.DesktopID != UniversalWirePlatformDesktopID {
+		t.Fatalf("resolve identity = (%q, %q), want platform computer", resp.UserID, resp.DesktopID)
+	}
+	if resp.SandboxURL != "http://10.203.141.2:8085" || !resp.Published || resp.State != string(VMStateActive) {
+		t.Fatalf("resolve response = %+v, want active published platform sandbox", resp)
+	}
+	if len(mgr.boots) != 1 || mgr.boots[0].VMID != UniversalWirePlatformVMID {
+		t.Fatalf("platform boot calls = %#v, want stable platform VM", mgr.boots)
 	}
 }
 
