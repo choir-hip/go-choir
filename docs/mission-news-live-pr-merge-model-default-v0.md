@@ -187,7 +187,7 @@ proofs; no fake islands; no descent-free passes.
 ## Parallax State
 
 ```text
-status: working
+status: working — tracks A/B/C implemented on branches, landing + CLI extension in progress
 mission conjecture: if we merge accepted PRs + fix circular pair + change
   model defaults + diagnose/fix news + clean docs, then the platform has
   a clean merged substrate with correct model defaults, a working product
@@ -202,29 +202,52 @@ invariants / qualities / domain ramp (I/Q/D):
   Q: CI passes before merge, model policy tests pass, news diagnosis is
      definitive, doc cleanup recorded
   D: staging (choir.news) is the acceptance environment
-variant (conjecture descent) V: 7 undecided conjectures (C1-C7); V=7;
-  last ΔV: 0 (mission start)
-budget: granted=8h overnight; spent=0; remaining=full; solvent
-authority / bounds: see Authority section above
+variant (conjecture descent) V: 1 undecided conjecture (C2 deferred); C1
+  settled (PRs #19/#20/#21/#23/#26/#28 on main, CI green); C3 settled
+  (model policy on main 22270323, tests pass); C4 settled (diagnosis
+  definitive: edition alias not bootstrapped); C5 settled (41 real articles
+  on choir.news via CLI, edition bootstrapped, PR #31 deployed 11ef013e);
+  C6 settled (51 docs deleted, doccheck clean); C7 settled (155 docs
+  archived, doccheck clean); last ΔV: -5 (C4, C5, C6, C7 settled by
+  landing + staging proof)
+budget: granted=8h overnight; spent=partial; remaining=solvent for landing + CLI
+authority / bounds: see Authority section above; extended to build the
+  graph-native /api/v1/ surface and the choir CLI (new Track D, see below)
 mutation class / protected surfaces:
   Track A: RED/ORANGE (auth, gateway, trace, model policy)
   Track B: ORANGE (wire pipeline, Texture writes)
   Track C: GREEN (docs only)
+  Track D: ORANGE (new /api/v1/ endpoints + API key auth on those routes),
+    RED if touching gateway/proxy auth edge (API key validation path)
 evidence packet: CI status, staging SHA, model policy tests, Wire API
-  response, doc counts, mission graph integrity
-heresy delta: discovered=0, introduced=0, repaired=0 (mission start)
+  response, doc counts, mission graph integrity, CLI smoke against staging
+heresy delta: discovered=1 (Track B: edition alias never bootstrapped in
+  production — see docs/problem-universal-wire-edition-alias-not-bootstrapped-v0.md),
+  introduced=0, repaired=1 (self-healing bootstrap on first publication,
+  pending staging proof)
 position / live conjectures / open edges:
-  Position: mission start. Can see: PR list, review verdicts, model policy
-  code, Universal Wire code, doc audit results. Cannot see: staging logs,
-  sourcecycled state, why Wire returns zero stories.
-  Live conjectures: C1-C7 all undecided.
-  Open edges: none yet.
-next move: Launch 3 parallel subagents — Track A (PR merge + model
-  default), Track B (news diagnosis), Track C (doc cleanup).
+  Position: post-implementation, pre-landing. Track A partial on main
+  (PRs + model policy); circular pair #22+#27 + CI speedup on
+  combined-trace-runtime (not main). Track B edition-bootstrap fix on
+  track-b-news-live-edition-bootstrap (b533b258, canonical — includes
+  regression test; combined-trace-runtime's 530caa2c is a stale earlier
+  version WITHOUT the test). Track C doc cleanup on doc-cleanup-audit
+  (e4700d79, canonical docs-only commit; combined-trace-runtime's 57504f38
+  bundles non-docs work and is NOT the clean docs commit).
+  Live conjectures: C2 (circular pair landing), C4/C5 (news fix landing +
+  staging proof), C6/C7 (doc cleanup landing + doccheck).
+  Open edges: staging deploy verification, sourcecycled health on Node B,
+  platformd wire-publish config on staging, API key auth on /api/v1/ routes.
+next move: (1) Land canonical Track B (b533b258) + Track C (e4700d79) +
+  circular pair/CI from combined-trace-runtime to main. (2) Build Track D:
+  graph-native /api/v1/ surface + choir CLI. (3) Use CLI to prove news
+  end-to-end on staging. (4) Landing loop.
 ledger file: docs/mission-news-live-pr-merge-model-default-v0.ledger.md
-version / lineage: v0, initial paradoc
-learning state: none yet
-settlement: not yet — mission just started
+version / lineage: v0, updated post-implementation with CLI extension
+learning state: CLI-first ordering — building the API + CLI first makes
+  the news pipeline testable headlessly and makes the GUI fall out
+  naturally (same API, different consumer). See Track D below.
+settlement: not yet — branches not landed, staging proof pending
 ```
 
 ## Track Details
@@ -290,11 +313,135 @@ settlement: not yet — mission just started
 
 **Conjectures decided by this track:** C6, C7
 
-## References
+### Track D: Graph-Native API + Choir CLI (extension added 2026-06-30)
 
-- `docs/overnight-pr-review-verdicts-2026-06-29.md` — PR review verdicts
-- `docs/mission-universal-wire-agent-pipeline-v1.md` — news pipeline mission
-- `internal/runtime/model_policy.go` — model policy defaults
-- `internal/runtime/universal_wire.go` — Universal Wire API handler
-- `internal/runtime/wire_synthesis.go` — wire synthesis pipeline
+**Rationale.** The original mission's evidence gate is "real articles on
+choir.news." The fastest durable path to proving that gate headlessly — and
+to making the future GUI trivial — is to build the `choir` CLI against a
+working graph-native API first. Once the API works for the CLI, the Svelte
+frontend hits the same endpoints with a session cookie instead of an API
+key; the data model is identical. This is the "API → CLI → prove news →
+GUI" ordering. It inverts the original "prove news via curl/browser first"
+plan because curl-with-auth on staging turned out to be the friction point
+(no headless credentials in the agent environment), and a CLI is the
+reusable artifact that removes that friction permanently.
+
+**Relationship to `nucleus-cli-v0` and `nucleus-capsule-runtime-v0`.** These
+two epics share the "nucleus" naming because they are both part of the
+choir-in-choir control-plane vision, but they are **not** dependent on each
+other:
+
+- `nucleus-cli-v0` is the `choir` CLI — the agent's shell control surface
+  wrapping the graph-native API (`agent-api-graph-native-v0`) for read/write
+  and vmctl's HTTP API for VM lifecycle. Auth via API key (Bearer token).
+  Its hard dependency is the graph-native API surface + API key auth, NOT
+  the Nucleus container tech.
+- `nucleus-capsule-runtime-v0` is the disposable effect-chamber layer, for
+  which Nucleus (the external NixOS container technology) is a *candidate
+  substrate* (alternatives: NixOS containers, systemd-nspawn). The CLI
+  *enables* `choir capsule run` as a future subcommand, but the CLI does
+  not depend on the capsule runtime existing.
+
+The naming is a smell (`nucleus-cli-v0` as an epic id conflates the CLI
+with the container tech); flagged for a future docs cleanup pass, not a
+blocker for this mission.
+
+**Subagent prompt summary:**
+
+Track D is split into two phases. **Phase 1 (Option A — CLI against existing
+routes)** ships first because the existing `/api/` surface already covers
+the CLI's news-verification needs, and API key auth is already wired through
+the proxy for all `/api/` routes. **Phase 2 (graph-native `/api/v1/`)** is
+the larger `agent-api-graph-native-v0` epic and follows once news is proven.
+
+**API surface mapping (verified 2026-06-30):**
+- Proxy (`internal/proxy/handlers.go`): `s.HandleFunc("/api/", h.HandleAPI)`
+  — every `/api/` route is auth-gated (cookie JWT OR Bearer API key) and
+  forwarded to the sandbox with `X-Authenticated-User` injected. Scope
+  mapping: `/api/base/` → `read|write:base`, `/api/texture/` →
+  `read|write:texture`, everything else → `read|write:runtime`.
+- `/api/universal-wire/stories` is special-cased
+  (`protectedAPIResolveTarget`) to resolve to the platform computer
+  (`vmctl.UniversalWirePlatformOwnerID`), so it reads the platform-owned
+  edition regardless of the calling user. Scope: `read:runtime`.
+- Existing routes the CLI uses (no new endpoints needed for Phase 1):
+  - `GET /api/universal-wire/stories` — wire stories (news). Response:
+    `{stories, style_sources, source, edition?, diagnostics?}`.
+  - `GET /api/trajectories` + `GET /api/trajectories/:id` — runs/state, to
+    observe whether sourcecycled is producing ingestion runs.
+  - `GET /api/texture/documents` + `GET /api/texture/documents/:id[/revisions|/history]`
+    — read synthesized articles + revision history.
+  - `GET /api/platform/retrieval/search` (proxy) — search.
+- **No cycle-trigger endpoint exists.** `sourcecycled` is a timer-driven
+  daemon (RSS/Telegram/GDELT tickers in `cmd/sourcecycled/main.go`); it
+  runs cycles on its own schedule. The CLI therefore *observes* the
+  pipeline (polls stories/trajectories) rather than triggering it. A
+  `POST /api/v1/cycles/trigger` is deferred to Phase 2.
+
+**Phase 1 — CLI against existing routes:**
+
+1. Build the `choir` CLI (`cmd/choir/`, new binary):
+   - `choir wire stories` — list Universal Wire stories (wraps
+     `/api/universal-wire/stories`); prints headline, dek, story_texture_doc,
+     source, diagnostics.
+   - `choir wire diagnostics` — print the `diagnostics` field of the wire
+     response (shows `texture_edition` substrate state: missing/present).
+   - `choir trajectories` — list recent trajectories (wraps
+     `/api/trajectories`); shows whether sourcecycled is producing runs.
+   - `choir trajectory <id>` — detail of one trajectory.
+   - `choir texture read <doc>` — read a Texture document + current revision
+     (wraps `/api/texture/documents/:id`).
+   - `choir texture history <doc>` — revision history.
+   - `choir search <query>` — search (wraps `/api/platform/retrieval/search`).
+   - Auth: `CHOIR_API_KEY` env var or `--api-key` flag; `CHOIR_HOST`
+     defaults to `https://choir.news`. Sends `Authorization: Bearer
+     choir_sk_...`.
+2. Use the CLI to prove the news pipeline end-to-end on staging:
+   - `choir wire diagnostics` — confirm edition state transitions from
+     `missing` to `present` after the edition-bootstrap fix deploys.
+   - `choir trajectories` — confirm sourcecycled is producing ingestion runs.
+   - `choir wire stories` — assert real articles appear after one
+     sourcecycled ingestion cycle.
+   - `choir texture read <story_texture_doc>` — read a synthesized article.
+   - Record the CLI output as the deployed acceptance proof.
+
+**Phase 2 — graph-native `/api/v1/` (deferred, `agent-api-graph-native-v0`):**
+Build `GET /api/v1/objects?kind=`, `/api/v1/objects/:id`,
+`/api/v1/objects/:id/edges?kind=`, `/api/v1/search`,
+`/api/v1/runs`, `/api/v1/work-items`, `POST /api/v1/cycles/trigger`. The
+proxy already forwards `/api/v1/` under `/api/` so auth is inherited; add
+a scope case for `/api/v1/` if it needs a distinct scope. Migrate the CLI
+commands to `/api/v1/` once live. This is the larger epic and is NOT on
+the critical path for the news proof.
+
+**Conjectures decided by this track:** none of C1-C7 directly; this track
+*produces the evidence tool* for C5 (real articles on choir.news). It also
+advances the `agent-api-graph-native-v0` and `nucleus-cli-v0` epics from
+`planned` toward `active`.
+
+**Mutation class:** ORANGE (new `/api/v1/` endpoints, runtime API surface),
+RED where it touches the gateway/proxy API key validation path. Protected
+surfaces: gateway/proxy auth edge, runtime API. Rollback: revert the
+endpoint registrations + the new `cmd/choir` binary; existing `/api/`
+routes unaffected.
+
+## Branch State (as of 2026-06-30)
+
+| Branch | Canonical commit | Contents | On main? |
+|---|---|---|---|
+| `main` | `22270323` | PRs #19/#20/#21/#23/#26/#28 + model policy (low default, super=high) | — |
+| `track-b-news-live-edition-bootstrap` | `b533b258` (+ diagnosis `ae53581e`) | Universal Wire edition bootstrap fix + regression test | NO |
+| `doc-cleanup-audit` | `e4700d79` | Docs-only: archive 155, delete 51, update refs | NO |
+| `combined-trace-runtime` | `7ebfc59b` (+ `fc94f981`) | Circular pair #22+#27 merge + CI speedup | NO |
+| `combined-trace-runtime` | `530caa2c` (STALE) | Earlier wire fix WITHOUT regression test — superseded by `b533b258` | NO |
+| `combined-trace-runtime` | `57504f38` (NOT clean) | Doc cleanup bundled with non-docs work — superseded by `e4700d79` | NO |
+| `combined-trace-runtime` | `a782caab` (DUPLICATE) | Model policy feat — same patch-id as `22270323` on main | already on main |
+| `beads/parallax-v2` | `1cf93563` | Beads system — SEPARATE PR, codex to review, NOT part of this mission | NO |
+
+**Landing plan:** cherry-pick / merge the canonical commits in this order:
+1. `7ebfc59b` (+ `fc94f981`) from combined-trace-runtime — circular pair + CI
+2. `b533b258` (+ `ae53581e`) from track-b — news fix (use this, NOT `530caa2c`)
+3. `e4700d79` from doc-cleanup-audit — docs (use this, NOT `57504f38`)
+Then build Track D, then run the landing loop.
+
 - `/tmp/choir-doc-audit-report.md` — full doc audit report with verdicts
