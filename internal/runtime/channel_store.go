@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -49,11 +50,52 @@ func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunI
 			ownerID = rec.OwnerID
 		}
 	}
+	if rt.shouldDispatchLegacyTextureWorkerUpdate(message, ownerID) {
+		update := types.CoagentSourcePacket{
+			UpdateID:      uuid.NewString(),
+			OwnerID:       ownerID,
+			AgentID:       message.FromAgentID,
+			TargetAgentID: message.ToAgentID,
+			ChannelID:     message.ChannelID,
+			TrajectoryID:  message.TrajectoryID,
+			Role:          message.Role,
+			Packet:        newCoagentPacket("evidence_update", message.Content, nil, nil, nil, nil, nil),
+			Content:       message.Content,
+			CreatedAt:     message.Timestamp,
+		}
+		stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, &message)
+		if err != nil {
+			return 0, err
+		}
+		if created {
+			rt.emitChannelMessageEvent(ctx, message, ownerID)
+			rt.scheduleTextureWorkerWake(ownerID, stored.ChannelID, "")
+		}
+		return uint64(message.Seq), nil
+	}
 	if err := rt.store.AppendChannelMessage(ctx, &message, ownerID); err != nil {
 		return 0, err
 	}
 	rt.emitChannelMessageEvent(ctx, message, ownerID)
 	return uint64(message.Seq), nil
+}
+
+func (rt *Runtime) shouldDispatchLegacyTextureWorkerUpdate(message ChannelMessage, ownerID string) bool {
+	if strings.TrimSpace(ownerID) == "" {
+		return false
+	}
+	if !isTextureAgentID(message.ToAgentID) {
+		return false
+	}
+	if strings.TrimSpace(message.FromRunID) == "" || strings.TrimSpace(message.Content) == "" {
+		return false
+	}
+	switch canonicalAgentProfile(message.Role) {
+	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+		return true
+	default:
+		return false
+	}
 }
 
 // ChannelRead reads messages from the store for the given channel ID since

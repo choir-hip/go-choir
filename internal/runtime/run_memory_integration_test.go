@@ -245,6 +245,9 @@ func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
 	if err := RegisterEvidenceTools(registry, rt); err != nil {
 		t.Fatalf("register evidence tools: %v", err)
 	}
+	if err := RegisterRunMemoryTools(registry, rt); err != nil {
+		t.Fatalf("register run-memory tools: %v", err)
+	}
 	rt.cfg.RunMemoryContextThresholdTokens = 1_000_000
 
 	prompt := strings.Join([]string{

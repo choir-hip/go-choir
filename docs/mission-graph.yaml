@@ -57,11 +57,19 @@ nodes:
   - m4-continuation-deletion
   - m5-wire-on-settlement
   - docs-truth-system-v1
+  # 2026-06-29: Type theory / object graph ubiquitous spine
+  - objectgraph-dolt-production-v0
+  - base-journal-dolt-migration-v0
+  - beads-mission-state-v0
+  - dead-vtext-workspace-cleanup-v0
+  # 2026-06-29: Nucleus / choir-in-choir control plane
+  - nucleus-cli-v0
   sources:
   - docs/choir-doctrine.md
-  - docs/choir-rearchitecture-durable-actors-2026-06-11.md
+  - docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md
   - docs/conjecture-learning-proof-theory-2026-06-11.md
   - docs/conjecture-assertion-ledger-2026-06.md
+  - docs/overnight-pr-review-verdicts-2026-06-29.md
 - id: overnight-autoradio-platform-checklist-v0
   title: Overnight Autoradio Platform Checklist v0
   path: docs/mission-overnight-autoradio-platform-checklist-v0.md
@@ -78,17 +86,17 @@ nodes:
   - docs/parallax-design-2026-06-11.md
   - docs/worktree-review-2026-06-23.md
   - docs/report-conceptual-refactor-2026-06-23.md
-  - docs/news-voice-autoradio-forward-plan-2026-06-06.md
-  - docs/paradoc-object-service-prototype.md
-  - docs/paradoc-qdrant-indexing-pipeline.md
-  - docs/paradoc-source-entity-migration.md
-  - docs/paradoc-universal-wire-diagnosis.md
-  - docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
-  - docs/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
-  - docs/mission-choir-base-reconciliation-kernel-v0.md
+  - docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md
+  - docs/archive/paradoc-object-service-prototype.md
+  - docs/archive/paradoc-qdrant-indexing-pipeline.md
+  - docs/archive/paradoc-source-entity-migration.md
+  - docs/archive/paradoc-universal-wire-diagnosis.md
+  - docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/archive/mission-choir-base-reconciliation-kernel-v0.md
 - id: m1-trajectory-model
   title: M1 Trajectory Model
-  path: docs/mission-trajectory-model-v0.md
+  path: docs/archive/mission-trajectory-model-v0.md
   ledger: ''
   status: settled
   kind: spine
@@ -100,7 +108,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m2-messaging-cutover
   title: M2 Messaging Cutover
-  path: docs/mission-messaging-cutover-v0.md
+  path: docs/archive/mission-messaging-cutover-v0.md
   ledger: docs/mission-messaging-cutover-v0.ledger.md
   status: settled
   kind: spine
@@ -112,7 +120,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m3.1-lifecycle-recovery
   title: M3.1 Lifecycle Cutover Regression Recovery
-  path: docs/mission-lifecycle-cutover-m3.1-v0.md
+  path: docs/archive/mission-lifecycle-cutover-m3.1-v0.md
   ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md
   status: settled
   kind: spine
@@ -122,12 +130,12 @@ nodes:
   - m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-v0.md
+  - docs/archive/mission-lifecycle-cutover-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.2 Texture Prompt Register And Decision Notes
-  path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   status: settled
   kind: spine
@@ -137,12 +145,12 @@ nodes:
   - m3.3-vm-bootstrap-recovery-race
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-m3.1-v0.md
+  - docs/archive/mission-lifecycle-cutover-m3.1-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3.3-vm-bootstrap-recovery-race
   title: M3.3 VM Bootstrap Recovery Race
-  path: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md
+  path: docs/archive/mission-vm-bootstrap-recovery-race-m3.3-v0.md
   ledger: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md
   status: settled
   kind: spine
@@ -152,13 +160,13 @@ nodes:
   - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-v0.md
-  - docs/incident-vm-bootstrap-stale-route-2026-06-09.md
-  - docs/mission-computer-recovery-system-monitor-v0.md
+  - docs/archive/mission-lifecycle-cutover-v0.md
+  - docs/archive/incident-vm-bootstrap-stale-route-2026-06-09.md
+  - docs/archive/mission-computer-recovery-system-monitor-v0.md
   - AGENTS.md
 - id: m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.4 Prompt-Bar Texture First-Draft Regression
-  path: docs/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   status: settled
   kind: spine
@@ -168,12 +176,12 @@ nodes:
   - texture-product-loop-recovery-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-v0.md
+  - docs/archive/mission-lifecycle-cutover-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: texture-product-loop-recovery-v0
   title: Texture Hard Cutover And Product Loop Recovery v0
-  path: docs/mission-texture-product-loop-recovery-v0.md
+  path: docs/archive/mission-texture-product-loop-recovery-v0.md
   ledger: docs/mission-texture-product-loop-recovery-v0.ledger.md
   status: open_handoff
   kind: spine
@@ -196,7 +204,7 @@ nodes:
   - AGENTS.md
 - id: texture-long-running-agent-v0
   title: Texture As A Long-Running Agent v0
-  path: docs/mission-texture-long-running-agent-v0.md
+  path: docs/archive/mission-texture-long-running-agent-v0.md
   ledger: docs/mission-texture-long-running-agent-v0.ledger.md
   status: superseded
   kind: superseded
@@ -209,7 +217,7 @@ nodes:
   enables:
   - texture-durable-thread-v1
   sources:
-  - docs/mission-texture-product-loop-recovery-v0.md
+  - docs/archive/mission-texture-product-loop-recovery-v0.md
   - docs/mission-texture-product-loop-recovery-v0.ledger.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/choir-doctrine.md
@@ -226,7 +234,7 @@ nodes:
   enables:
   - texture-hard-cutover-v0
   sources:
-  - docs/mission-texture-long-running-agent-v0.md
+  - docs/archive/mission-texture-long-running-agent-v0.md
   - docs/mission-texture-versioned-artifact-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/choir-doctrine.md
@@ -276,7 +284,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: texture-structured-document-transclusion-cutover-v0
   title: Texture Structured Document And Transclusion Cutover v0
-  path: docs/mission-texture-structured-document-transclusion-cutover-v0.md
+  path: docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md
   ledger: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
   status: working
   kind: spine
@@ -289,18 +297,18 @@ nodes:
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/mission-texture-hard-cutover-v0.md
   - docs/mission-texture-versioned-artifact-v0.md
-  - docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission evidence path; delete-by texture-hard-cutover-v0
+  - docs/archive/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission evidence path; delete-by texture-hard-cutover-v0
   - docs/choir-doctrine.md
   - AGENTS.md
 - id: m3-lifecycle-cutover
   title: M3 Lifecycle Cutover
-  path: docs/mission-lifecycle-cutover-v0.md
+  path: docs/archive/mission-lifecycle-cutover-v0.md
   ledger: docs/mission-lifecycle-cutover-v0.ledger.md
   status: settled
   kind: spine
   # Lineage edge, not a blocking gate. M3's lifecycle settlement was proven
   # against the deployed Texture product loop at commit 968ff7ff (see
-  # docs/mission-lifecycle-cutover-v0.md settlement) and does not require the
+  # docs/archive/mission-lifecycle-cutover-v0.md settlement) and does not require the
   # texture-hard-cutover / texture-product-loop-recovery rename+residue-deletion
   # missions to settle first; those remain open_handoff successors.
   depends_on:
@@ -311,7 +319,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m4-continuation-deletion
   title: M4 Continuation Deletion
-  path: docs/mission-continuation-deletion-v0.md
+  path: docs/archive/mission-continuation-deletion-v0.md
   ledger: docs/mission-continuation-deletion-v0.ledger.md
   status: planned
   kind: spine
@@ -324,7 +332,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m5-wire-on-settlement
   title: M5 Wire On Settlement
-  path: docs/mission-wire-on-settlement-v0.md
+  path: docs/archive/mission-wire-on-settlement-v0.md
   ledger: docs/mission-wire-on-settlement-v0.ledger.md
   status: open_handoff
   kind: spine
@@ -375,7 +383,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: doc-heresy-checker-v0
   title: Doc/Heresy Checker v0
-  path: docs/mission-doc-heresy-checker-v0.md
+  path: docs/archive/mission-doc-heresy-checker-v0.md
   ledger: docs/mission-doc-heresy-checker-v0.ledger.md
   status: settled
   kind: docs_truth
@@ -387,7 +395,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: doc-truth-drift-context-v0
   title: Doc Truth, Drift CI, And Context Packet v0
-  path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
+  path: docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md
   ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
   status: superseded
   kind: superseded
@@ -401,11 +409,9 @@ nodes:
   enables:
   - docs-truth-system-v1
   sources:
-  - docs/mission-doc-heresy-checker-v0.md
-  - docs/mission-heresy-detectors-ci-v0.md
+  - docs/archive/mission-doc-heresy-checker-v0.md
 - id: heresy-detectors-ci-v0
   title: Heresy Detectors CI v0
-  path: docs/mission-heresy-detectors-ci-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -436,7 +442,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: agentic-debugging-vtext-stability-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient: Agentic Debugging And Texture Stability v0'
-  path: docs/mission-agentic-debugging-vtext-stability-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-agentic-debugging-vtext-stability-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -446,7 +452,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: apps-and-changes-store-sweep-v0
   title: 'MissionGradient: Apps & Changes Store Sweep v0'
-  path: docs/mission-apps-and-changes-store-sweep-v0.md
+  path: docs/archive/mission-apps-and-changes-store-sweep-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -456,7 +462,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: campaign-compiler-selfdev-v0
   title: 'MissionGradient: Campaign Compiler Self-Development v0'
-  path: docs/mission-campaign-compiler-selfdev-v0.md
+  path: docs/archive/mission-campaign-compiler-selfdev-v0.md
   ledger: ''
   status: planned
   kind: side
@@ -466,7 +472,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: choir-base-reconciliation-kernel-v0
   title: 'MissionGradient v0: Choir Base Reconciliation Kernel'
-  path: docs/mission-choir-base-reconciliation-kernel-v0.md
+  path: docs/archive/mission-choir-base-reconciliation-kernel-v0.md
   ledger: ''
   status: planned
   kind: side
@@ -476,7 +482,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: choir-doctrine-upgrade-v0
   title: Mission - Choir Doctrine Upgrade - v0
-  path: docs/mission-choir-doctrine-upgrade-v0.md
+  path: docs/archive/mission-choir-doctrine-upgrade-v0.md
   ledger: docs/mission-choir-doctrine-upgrade-v0.ledger.md
   status: settled
   kind: docs_truth
@@ -487,7 +493,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: choir-grand-deformation-v0
   title: 'MissionGradient: Choir Grand Deformation v0'
-  path: docs/mission-choir-grand-deformation-v0.md
+  path: docs/archive/mission-choir-grand-deformation-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -502,7 +508,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: choir-in-choir-platform-pr-accelerator-v0
   title: 'Mission: Choir-in-Choir Platform PR Accelerator'
-  path: docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
+  path: docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -512,7 +518,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: computer-recovery-system-monitor-v0
   title: 'MissionGradient: Computer Recovery And System Monitor v0'
-  path: docs/mission-computer-recovery-system-monitor-v0.md
+  path: docs/archive/mission-computer-recovery-system-monitor-v0.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -527,7 +533,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: conductor-url-source-routing-h029-v0
   title: Mission - Texture Source Intake And Conductor URL Routing H029 - v0
-  path: docs/mission-conductor-url-source-routing-h029-v0.md
+  path: docs/archive/mission-conductor-url-source-routing-h029-v0.md
   ledger: docs/mission-conductor-url-source-routing-h029-v0.ledger.md
   status: open_handoff
   kind: side
@@ -544,7 +550,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: demo-stability-foundations-v0
   title: 'Mission: Demo Stability Foundations v0'
-  path: docs/mission-demo-stability-foundations-v0.md
+  path: docs/archive/mission-demo-stability-foundations-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -559,7 +565,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: deploy-impact-isolation-cache-v1
   title: 'MissionGradient: Deploy Impact Isolation And Cache v1'
-  path: docs/mission-deploy-impact-isolation-cache-v1.md
+  path: docs/archive/mission-deploy-impact-isolation-cache-v1.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -584,7 +590,6 @@ nodes:
   - docs/heresy-detectors.md
 - id: doctrine-conformance-findings-2026-06-13
   title: Doctrine Conformance Update Report — 2026-06-13
-  path: docs/mission-doctrine-conformance-findings-2026-06-13.md
   ledger: ''
   status: settled
   kind: evidence
@@ -597,7 +602,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: email-demo-ingress-v0
   title: 'MissionGradient: Email Demo Ingress v0'
-  path: docs/mission-email-demo-ingress-v0.md
+  path: docs/archive/mission-email-demo-ingress-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -607,7 +612,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: geometry
   title: Choir Mission Geometry
-  path: docs/mission-geometry.md
+  path: docs/archive/mission-geometry.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -622,7 +627,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: global-wire-broad-source-vtext-newsroom-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire Broad-Source Texture Newsroom'
-  path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-global-wire-broad-source-vtext-newsroom-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -632,7 +637,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-hard-cutover-real-newsroom-v0
   title: 'Mission: Global Wire Hard Cutover To Real Texture Newsroom'
-  path: docs/mission-global-wire-hard-cutover-real-newsroom-v0.md
+  path: docs/archive/mission-global-wire-hard-cutover-real-newsroom-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -642,7 +647,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-living-vtext-newsroom-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire Living Texture Newsroom'
-  path: docs/mission-global-wire-living-vtext-newsroom-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-global-wire-living-vtext-newsroom-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -657,7 +662,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-sourcemaxx-publication-system-v0
   title: 'Mission: Global Wire SourceMaxx Newsroom Runtime'
-  path: docs/mission-global-wire-sourcemaxx-publication-system-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -667,7 +671,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-style-vtext-collaborative-storygraph-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire / Style.vtext Collaborative StoryGraph' # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
-  path: docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-global-wire-style-vtext-collaborative-storygraph-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -677,7 +681,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: human-proof-experiment-rerun-v1
   title: 'MissionGradient: Human-Proof Experiment Rerun v1'
-  path: docs/mission-human-proof-experiment-rerun-v1.md
+  path: docs/archive/mission-human-proof-experiment-rerun-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -687,7 +691,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: llm-run-memory-compaction-v0
   title: LLM Run-Memory Compaction Mission v0
-  path: docs/mission-llm-run-memory-compaction-v0.md
+  path: docs/archive/mission-llm-run-memory-compaction-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -697,7 +701,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: maild-email-ingress-v0
   title: 'Mission: maild Email Ingress v0'
-  path: docs/mission-maild-email-ingress-v0.md
+  path: docs/archive/mission-maild-email-ingress-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -707,7 +711,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: natural-compaction-pdf-recall-eval-v0
   title: Natural Compaction Document Recall Eval Mission v0
-  path: docs/mission-natural-compaction-pdf-recall-eval-v0.md
+  path: docs/archive/mission-natural-compaction-pdf-recall-eval-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -717,7 +721,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: node-b-nix-store-retention-v0
   title: Node B Nix Store Retention Mission v0
-  path: docs/mission-node-b-nix-store-retention-v0.md
+  path: docs/archive/mission-node-b-nix-store-retention-v0.md
   ledger: docs/mission-node-b-nix-store-retention-v0.ledger.md
   status: settled
   kind: side
@@ -727,7 +731,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: node-b-storage-retention-v0
   title: 'Mission: Node B Storage Retention And VM State Prevention v0'
-  path: docs/mission-node-b-storage-retention-v0.md
+  path: docs/archive/mission-node-b-storage-retention-v0.md
   ledger: docs/mission-node-b-storage-retention-v0.ledger.md
   status: open_handoff
   kind: side
@@ -741,7 +745,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: platform-source-service-vtext-publication-campaign-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient Campaign v1: Platform Source Service, Texture Sources, And Publication'
-  path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-platform-source-service-vtext-publication-campaign-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -756,7 +760,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: provider-config-conformance-v0
   title: Provider Config Conformance Mission v0
-  path: docs/mission-provider-config-conformance-v0.md
+  path: docs/archive/mission-provider-config-conformance-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -766,7 +770,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: public-pulse-app-v0
   title: Public Pulse App Mission v0
-  path: docs/mission-public-pulse-app-v0.md
+  path: docs/archive/mission-public-pulse-app-v0.md
   ledger: docs/mission-public-pulse-app-v0.ledger.md
   status: settled
   kind: side
@@ -776,7 +780,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: report-natural-compaction-document-recall-2026-06-09
   title: 'Mission Report: Natural Compaction Document Recall Eval'
-  path: docs/mission-report-natural-compaction-document-recall-2026-06-09.md
   ledger: ''
   status: settled
   kind: evidence
@@ -786,7 +789,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: report-universal-wire-production-recovery-2026-06-10
   title: 'Mission Report: Universal Wire Production Recovery — 2026-06-10'
-  path: docs/mission-report-universal-wire-production-recovery-2026-06-10.md
+  path: docs/archive/mission-report-universal-wire-production-recovery-2026-06-10.md
   ledger: ''
   status: settled
   kind: evidence
@@ -798,7 +801,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: report-wire-community-news-2026-06-09
   title: 'Mission Report: Wire Community News'
-  path: docs/mission-report-wire-community-news-2026-06-09.md
+  path: docs/archive/mission-report-wire-community-news-2026-06-09.md
   ledger: ''
   status: settled
   kind: evidence
@@ -808,7 +811,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: research-runtime-evidence-cadence-v1
   title: 'MissionGradient: Research Runtime Evidence Cadence v1'
-  path: docs/mission-research-runtime-evidence-cadence-v1.md
+  path: docs/archive/mission-research-runtime-evidence-cadence-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -818,7 +821,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: run-memory-v0
   title: 'MissionGradient: Choir Run Memory v0'
-  path: docs/mission-run-memory-v0.md
+  path: docs/archive/mission-run-memory-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -831,7 +834,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: runtime-human-proof-experiment-rerun-v1
   title: 'MissionGradient: Runtime Human-Proof Experiment Rerun v1'
-  path: docs/mission-runtime-human-proof-experiment-rerun-v1.md
+  path: docs/archive/mission-runtime-human-proof-experiment-rerun-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -841,7 +844,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: runtime-model-context-substrate-v0
   title: 'MissionGradient: Runtime Model And Context Substrate v0'
-  path: docs/mission-runtime-model-context-substrate-v0.md
+  path: docs/archive/mission-runtime-model-context-substrate-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -851,7 +854,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: runtime-test-pyramid-hardening-v0
   title: 'MissionGradient: Runtime Test Pyramid Hardening v0'
-  path: docs/mission-runtime-test-pyramid-hardening-v0.md
+  path: docs/archive/mission-runtime-test-pyramid-hardening-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -861,7 +864,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: search-provider-plane-v1
   title: 'MissionGradient: Search Provider Plane v1'
-  path: docs/mission-search-provider-plane-v1.md
+  path: docs/archive/mission-search-provider-plane-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -871,7 +874,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: source-system-hard-review-2026-06-06
   title: Source System Mission Hard Review
-  path: docs/mission-source-system-hard-review-2026-06-06.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -885,7 +887,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: source-system-loop8-simplify-v0
   title: 'Source System Loop 8: Simplify, Stabilize, Modularize'
-  path: docs/mission-source-system-loop8-simplify-v0.md
+  path: docs/archive/mission-source-system-loop8-simplify-v0.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -901,7 +903,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: source-system-simplify-secure-smart-v0
   title: 'MissionGradient v0: Source System Simplification, Security, And Intelligence'
-  path: docs/mission-source-system-simplify-secure-smart-v0.md
+  path: docs/archive/mission-source-system-simplify-secure-smart-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -911,7 +913,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: standalone-sourcecycled-data-platform-v0
   title: 'MissionGradient: Standalone Sourcecycled Data Platform v0'
-  path: docs/mission-standalone-sourcecycled-data-platform-v0.md
+  path: docs/archive/mission-standalone-sourcecycled-data-platform-v0.md
   ledger: ''
   status: planned
   kind: side
@@ -921,7 +923,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: super-console-real-zot-cutover-v0
   title: Super Console Real Zot Cutover
-  path: docs/mission-super-console-real-zot-cutover-v0.md
+  path: docs/archive/mission-super-console-real-zot-cutover-v0.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -935,7 +937,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: super-console-source-mount-promotion-v0
   title: 'MissionGradient: Super Console Source Mount And Promotion v0'
-  path: docs/mission-super-console-source-mount-promotion-v0.md
+  path: docs/archive/mission-super-console-source-mount-promotion-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -950,7 +952,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: surface-ontology-cleanup-h027-h029-v0
   title: Mission - Surface Ontology Cleanup H027-H029 - v0
-  path: docs/mission-surface-ontology-cleanup-h027-h029-v0.md
+  path: docs/archive/mission-surface-ontology-cleanup-h027-h029-v0.md
   ledger: ''
   status: open_handoff
   kind: docs_truth
@@ -967,7 +969,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: vtext-client-ready-source-transclusion-pretext-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Client-Ready Texture Source Transclusion And Proposal Cleanup'
-  path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-client-ready-source-transclusion-pretext-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -980,7 +982,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-fluid-editing-doc-roundtrip-transclusion-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Texture Fluid Editing, Document Roundtrip, And Source Transclusion'
-  path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: docs_truth
@@ -991,7 +993,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: vtext-live-cadence-repair-v3 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient: Texture Live Cadence Repair v3'
-  path: docs/mission-vtext-live-cadence-repair-v3.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-live-cadence-repair-v3.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -1005,7 +1007,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-source-entities-multimedia-transclusion-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission Campaign: Texture Source Entities, Multimedia Review, And Transclusion v0'
-  path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -1020,7 +1022,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-source-viewer-reader-mode-hardening-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Source Viewer Reader-Mode Hardening And Source UX Simplification'
-  path: docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-source-viewer-reader-mode-hardening-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -1030,7 +1032,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-version-compare-merge-debuggability-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v1: Texture Version Compare, Concept Merge, And Debuggability'
-  path: docs/mission-vtext-version-compare-merge-debuggability-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-version-compare-merge-debuggability-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -1040,7 +1042,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: web-surface-rationalization-v0
   title: 'MissionGradient: Web Surface Rationalization v0'
-  path: docs/mission-web-surface-rationalization-v0.md
+  path: docs/archive/mission-web-surface-rationalization-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -1056,7 +1058,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-autonomous-ingestion-v1
   title: 'Mission Archive: Wire Autonomous Ingestion (v1)'
-  path: docs/mission-wire-autonomous-ingestion-v1.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -1069,7 +1070,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-community-news-v0
   title: 'MissionGradient: Wire Community News'
-  path: docs/mission-wire-community-news-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -1079,7 +1079,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-community-news-v1
   title: 'MissionGradient: Universal Wire (Wire Community News)'
-  path: docs/mission-wire-community-news-v1.md
+  path: docs/archive/mission-wire-community-news-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -1089,7 +1089,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-settlement-substrate-v0
   title: Mission M5a — Wire Settlement Substrate (split from M5 evidence gate) — v0
-  path: docs/mission-wire-settlement-substrate-v0.md
+  path: docs/archive/mission-wire-settlement-substrate-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -1103,7 +1103,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: youtube-review-studio-v0
   title: 'MissionGradient: YouTube And Image Review Studio v0'
-  path: docs/mission-youtube-review-studio-v0.md
+  path: docs/archive/mission-youtube-review-studio-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -1113,8 +1113,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: mission-3b-ingestion-path-v0
   title: 'Mission 3b: New Ingestion Path (E2E)'
-  path: docs/mission-3b-ingestion-path-v0.md
-  ledger: docs/mission-3b-ingestion-path-v0.ledger.md
   status: working
   kind: spine
   depends_on: []
@@ -1126,7 +1124,7 @@ nodes:
   - AGENTS.md
 - id: update-coagent-source-centric-deletion-v0
   title: 'Mission: update_coagent Source-Centric Deletion v0'
-  path: docs/mission-update-coagent-source-centric-deletion-v0.md
+  path: docs/archive/mission-update-coagent-source-centric-deletion-v0.md
   ledger: docs/mission-update-coagent-source-centric-deletion-v0.ledger.md
   status: settled
   kind: side
@@ -1134,3 +1132,874 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
+# === Type Theory / Object Graph Ubiquitous Spine (2026-06-29) ===
+# These missions implement the vision's core architectural shift: textures are
+# object graph nodes, transclusions are edges, the wire API is graph traversal.
+# The object graph already exists with a Dolt backend (tested but not wired as
+# primary in production). The texture store is already on embedded Dolt. The
+# web capture path already uses graph traversal. The article path does not —
+# it uses a singleton Wire.texture document with regex-parsed text references.
+# This spine makes everything graph-native and deletes the singleton.
+- id: objectgraph-dolt-production-v0
+  title: 'Mission: Object Graph Dolt Backend In Production v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # The Dolt backend (internal/objectgraph/dolt_store.go) exists and is tested
+  # (dolt_branch_test.go proves DOLT_BRANCH/CHECKOUT/COMMIT/MERGE work on the
+  # object graph schema). The runtime's newRuntimeObjectGraphService already
+  # creates a DoltStore — but the production object graph on the platform VM
+  # still has a 538M SQLite sidecar (state.objectgraph.db) from sourcecycled.
+  # This mission wires the Dolt backend as the sole primary in production and
+  # migrates any existing SQLite data into Dolt.
+  depends_on: []
+  enables:
+  - texture-kinds-objectgraph-v0
+  - objectgraph-sourcecycled-consolidation-v0
+  sources:
+  - internal/objectgraph/dolt_store.go
+  - internal/objectgraph/dolt_branch_test.go
+  - internal/runtime/objectgraph_runtime.go
+  - docs/overnight-pr-review-verdicts-2026-06-29.md
+- id: objectgraph-sourcecycled-consolidation-v0
+  title: 'Mission: Object Graph Sourcecycled Consolidation v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # The platform VM has two object graph stores with the same schema: the
+  # runtime's Dolt-backed graph (objectgraph-dolt/) and sourcecycled's SQLite
+  # sidecar (state.objectgraph.db, 538M). The Nix assertion says sourcecycled
+  # "must share the sandbox runtime store path so Universal Wire graph captures
+  # are written to the sandbox-visible objectgraph sidecar." This mission
+  # consolidates both into the single Dolt-backed object graph.
+  depends_on:
+  - objectgraph-dolt-production-v0
+  enables: []
+  sources:
+  - nix/node-b.nix
+  - internal/runtime/sourcecycled_web_captures.go
+  - internal/objectgraph/sqlite_store.go
+- id: texture-kinds-objectgraph-v0
+  title: 'Mission: Texture Kinds In Object Graph v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Register texture kinds in the object graph registry: choir.texture.article,
+  # choir.texture.edition, choir.texture.autopaper, choir.texture.algorithm,
+  # choir.texture.styleguide, choir.texture.schedule, choir.texture.renderer.
+  # Register the "transcludes" edge kind — the core morphism. Create shadow
+  # nodes for existing textures (version_id points to current revision_id).
+  # Create edges for existing Wire.texture transclusion refs (parsed from the
+  # current edition content). This is the type theory step: textures become
+  # first-class object graph nodes, transclusions become first-class edges.
+  depends_on:
+  - objectgraph-dolt-production-v0
+  enables:
+  - wire-api-graph-traversal-v0
+  - qdrant-index-on-publish-v0
+  - edition-texture-schema-v0
+  - agent-api-graph-native-v0
+  sources:
+  - internal/objectgraph/registry.go
+  - internal/objectgraph/object.go
+  - internal/types/texture.go
+  - internal/runtime/universal_wire.go
+  - docs/overnight-pr-review-verdicts-2026-06-29.md
+- id: wire-api-graph-traversal-v0
+  title: 'Mission: Wire API Graph Traversal v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Rewrite HandleUniversalWireStories to use graph traversal instead of
+  # regex-parsed Wire.texture. The web capture path (universalWireWebCapture-
+  # Stories) already does graph traversal — ListObjects + ListEdges. The
+  # article path (universalWireEditionTextureStories) reads one document,
+  # regex-parses texture:doc-id refs from its content, and fetches each doc
+  # individually (N+1 queries). The graph path is: list recent edition objects
+  # → list transcludes edges → batch-fetch article objects → project to
+  # WireStory. Same shape as the web capture path. Proof: the wire API returns
+  # the same stories through graph traversal that it returned through regex
+  # parsing.
+  depends_on:
+  - texture-kinds-objectgraph-v0
+  - edition-texture-schema-v0
+  enables:
+  - delete-wire-texture-singleton-v0
+  - agent-api-graph-native-v0
+  sources:
+  - internal/runtime/universal_wire.go
+  - internal/runtime/wire_publication.go
+  - internal/wirepublish/eligibility.go
+- id: delete-wire-texture-singleton-v0
+  title: 'Mission: Delete Wire.texture Singleton v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # After wire-api-graph-traversal-v0 proves the graph path returns the same
+  # stories, Wire.texture is dead code. Delete: universalWireEditionSourcePath,
+  # universalWireEditionTextureStories, autonomousPublishWireArticleToEdition,
+  # wire_publication_policy (the string-concatenation edition appender), and
+  # the textureTransclusionRefRE regex. The edition becomes a graph object
+  # with transcludes edges, not a markdown document with regex-parsed links.
+  # This is the vision's "the fix is not to patch Wire.texture, the fix is to
+  # delete it."
+  depends_on:
+  - wire-api-graph-traversal-v0
+  enables: []
+  sources:
+  - internal/runtime/universal_wire.go
+  - internal/runtime/wire_publication.go
+- id: qdrant-index-on-publish-v0
+  title: 'Mission: Qdrant Index On Publish v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Embed published textures into Qdrant on publish. Currently Qdrant is only
+  # used for source dedup (qdrant_dedup.go). No code indexes published articles
+  # into Qdrant. When a texture is published, embed its content and upsert into
+  # Qdrant with metadata {owner_id, doc_id, revision_id, kind, published_at}.
+  # This is the Embed functor — semantic search over the texture space. Enables
+  # "search for articles about X" and "find similar to article Y" as Qdrant
+  # queries. Prerequisite for the agent API search endpoint.
+  depends_on:
+  - texture-kinds-objectgraph-v0
+  enables:
+  - agent-api-graph-native-v0
+  sources:
+  - internal/qdrant/client.go
+  - internal/runtime/qdrant_dedup.go
+  - internal/runtime/qdrant_runtime.go
+  - docs/production-readiness-checklist.md
+- id: edition-texture-schema-v0
+  title: 'Mission: Edition Texture Schema v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Model what an edition texture IS: its structure, its transclusion links to
+  # articles, its lifecycle (per-cycle creation, accumulation, archival). The
+  # vision says editions are textures that transclude articles. Currently the
+  # edition is a single Wire.texture document with regex-parsed links. This
+  # mission defines the edition as an object graph node (choir.texture.edition)
+  # with transcludes edges to article nodes. Per-cycle edition creation: each
+  # cycle creates a new edition node with edges to that cycle's articles,
+  # replacing the string-concatenation append in autonomousPublishWireArticleTo-
+  # Edition. Editions accumulate as immutable blocks in the editorial chain
+  # (Dolt time-travel provides as-of queries for free).
+  depends_on:
+  - texture-kinds-objectgraph-v0
+  enables:
+  - wire-api-graph-traversal-v0
+  - autopaper-texture-concept-v0
+  sources:
+  - internal/runtime/wire_publication.go
+  - internal/runtime/universal_wire.go
+  - internal/platform/types.go
+- id: autopaper-texture-concept-v0
+  title: 'Mission: Autopaper Texture Concept v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Model the autopaper: a texture that transcludes algorithm + styleguide +
+  # schedule + renderer + context textures. The autopaper is the configuration
+  # for a user's automatic computer — it says what the computer does, how it
+  # does it, when it does it, how it renders, and what context it carries.
+  # Currently the agent pipeline gets its configuration from hardcoded prompts
+  # and runtime config. The vision says it should read the autopaper texture,
+  # follow its transclusions, and pull algorithm/styleguide/context textures
+  # into the generation context. This mission defines the autopaper schema and
+  # the sub-texture type conventions (algorithm, styleguide, schedule, renderer).
+  depends_on:
+  - edition-texture-schema-v0
+  enables:
+  - agent-pipeline-transclusion-config-v0
+  sources:
+  - internal/runtime/universal_wire.go
+  - internal/platform/types.go
+- id: agent-pipeline-transclusion-config-v0
+  title: 'Mission: Agent Pipeline Transclusion Config v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # The agent pipeline (processor, texture agent, reconciler) reads autopaper
+  # transclusions as configuration instead of hardcoded prompts. When a cycle
+  # runs, it reads the autopaper object, follows transcludes edges to algorithm,
+  # styleguide, schedule, and context textures, and pulls them into the
+  # generation context. This is a fundamental change to how the agent pipeline
+  # works — configuration becomes graph traversal, not env vars and prompt files.
+  depends_on:
+  - autopaper-texture-concept-v0
+  enables: []
+  sources:
+  - internal/runtime/
+  - internal/sandbox/
+  - prompts/
+# === Dolt Unification Spine (2026-06-29) ===
+# The texture store is already on embedded Dolt. The object graph has a Dolt
+# backend (tested but not primary). The Base journal is on SQLite, reinventing
+# what Dolt does natively (hash chain, cursor, conflict detection). This spine
+# moves everything to Dolt and makes sync native.
+- id: base-journal-dolt-migration-v0
+  title: 'Mission: Base Journal Dolt Migration v0'
+  path: docs/mission-spine-dolt-unification-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Replace the SQLite Base journal with Dolt commits. The Journal interface
+  # (Append → DOLT_COMMIT, Cursor → remote tracking branch, VerifyChain → Dolt
+  # hash verification) maps directly to Dolt capabilities. The custom hash chain
+  # (computeHash in journal.go) is Dolt's content-addressed commit hash. The
+  # cursor is a remote tracking branch. The parent-event chaining is Dolt's
+  # parent commit. PR #24's owner-scoped cursors, conflict participant IDs,
+  # and cursor-pause-on-unresolved all become Dolt's native merge semantics.
+  depends_on: []
+  enables:
+  - base-sync-dolt-merge-v0
+  - dolt-remote-endpoint-v0
+  sources:
+  - internal/base/journal/journal.go
+  - internal/base/journal/sqlite.go
+  - internal/base/model/types.go
+  - internal/store/texture.go
+- id: base-sync-dolt-merge-v0
+  title: 'Mission: Base Sync As Dolt Merge v0'
+  path: docs/mission-spine-dolt-unification-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Replace the Base sync planner with Dolt merge. Instead of diffing local and
+  # remote trees and computing actions, DOLT_MERGE handles it. Conflict
+  # resolution becomes Dolt's conflict resolution (SQL-level, row-level). The
+  # cursor system disappears — Dolt's remote tracking branches handle it. The
+  # sync target is the user VM state (Dolt repos + filesystem), not the platform
+  # state. The platform is the sync hub between VMs, desktops, and web clients.
+  depends_on:
+  - base-journal-dolt-migration-v0
+  enables:
+  - desktop-embedded-dolt-cloud-v0
+  sources:
+  - internal/base/planner/planner.go
+  - internal/base/api/handlers.go
+  - internal/base/model/types.go
+- id: dolt-remote-endpoint-v0
+  title: 'Mission: Dolt Remote Endpoint On Platform v0'
+  path: docs/mission-spine-dolt-unification-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Expose a Dolt remote endpoint on the platform so user VMs and desktop apps
+  # can pull from and push to the platform's Dolt server. This replaces the
+  # current Base API's delta/items/blobs endpoints with Dolt's native remote
+  # protocol (DOLT_REMOTE_ADD + DOLT_PUSH/DOLT_PULL). The remote goes through
+  # the gateway's auth and routing. Integration point to verify early: Dolt's
+  # remote protocol over HTTP through the gateway.
+  depends_on:
+  - base-journal-dolt-migration-v0
+  enables:
+  - desktop-embedded-dolt-cloud-v0
+  sources:
+  - internal/proxy/handlers.go
+  - internal/base/api/handlers.go
+  - nix/node-b.nix
+- id: desktop-embedded-dolt-cloud-v0
+  title: 'Mission: Desktop Embedded Dolt Cloud Mode v0'
+  path: docs/mission-spine-dolt-unification-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Add embedded Dolt to the cloud-mode desktop app as a sync replica for File
+  # Provider + offline access. The desktop's Dolt is a clone of the user's
+  # portion of the platform's Dolt. Sync is DOLT_PULL from platform + DOLT_PUSH
+  # to platform. Local edits (File Provider writes) are local Dolt commits.
+  # Offline work is local commits pushed when back online. The desktop's Dolt
+  # is not a full computer — it doesn't run agents. It's a sync replica.
+  # In local mode, the desktop app currently launches sandbox/gateway/proxy as
+  # child processes (host-process mode). The desktop-local-vm-v0 mission upgrades
+  # local mode to a real VM with capsule support.
+  depends_on:
+  - base-sync-dolt-merge-v0
+  - dolt-remote-endpoint-v0
+  enables:
+  - desktop-local-vm-v0
+  sources:
+  - cmd/desktop/main.go
+  - internal/desktop/
+  - internal/base/api/handlers.go
+- id: desktop-local-vm-v0
+  title: 'Mission: Desktop Local VM v0'
+  path: docs/mission-spine-desktop-local-vm-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # The Mac (or other OS) Wails desktop app gets a real VM with nucleus capsules
+  # in local mode. Today local mode launches sandbox/gateway/proxy as child
+  # processes (host-process mode, no isolation). The vision is a real VM running
+  # on the desktop with the same capsule runtime as the platform VMs. The agent
+  # in the desktop VM can spawn capsules for risky work, just like on the
+  # platform. This unifies the desktop and platform execution models — the same
+  # code runs in both, the difference is scale and location.
+  #
+  # Primary substrate: Apple `container` (github.com/apple/container). It has
+  # two modes that map directly to Choir's architecture:
+  #   - `container machine` = persistent Linux VM (the desktop local VM)
+  #   - `container run` = ephemeral lightweight VMs (the capsules)
+  # Capsules are sibling VMs on the macOS host, not nested sandboxes inside the
+  # container machine. This is stronger isolation than systemd-nspawn and
+  # simpler than nesting. `container` uses the Containerization Swift package
+  # (successor to vfkit, which was used in a previous prototype). OCI images
+  # built by Nix, distributed via registry or bundled in the Wails app.
+  # Requires Apple Silicon + macOS 26.
+  #
+  # Fallback substrates (pursue as needed for stability, security, performance,
+  # and partnerships):
+  #   - vfkit (Go bindings to Virtualization.framework, used in prior prototype)
+  #   - Lima/colima (QEMU-based, mature on macOS, works on older macOS)
+  #   - Firecracker on macOS (not available today, Linux/KVM only)
+  #   - cloud-hypervisor (Rust-based, cross-platform, immature on macOS)
+  #   - Host-process (current fallback, no isolation, no capsules)
+  #
+  # Key constraint: the desktop VM must not require a full NixOS install on
+  # the host. The VM image is an OCI image built by Nix and distributed via
+  # registry or bundled. The host only needs `container` + the Wails app.
+  depends_on:
+  - desktop-embedded-dolt-cloud-v0
+  - nucleus-capsule-runtime-v0
+  enables:
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - cmd/desktop/main.go
+  - internal/vmmanager/config.go
+  - internal/vmmanager/manager.go
+  - nix/sandbox-vm.nix
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/computer-ontology.md
+# === Agent API Surface Spine (2026-06-29) ===
+# The API key scopes from PR #20 (read:texture, write:texture, read:base,
+# write:base, read:runtime, write:runtime) are the right scopes. But the
+# endpoints they gate are shaped for the frontend and sync engine, not for
+# agents. This spine builds a graph-native API surface and an MCP server.
+- id: agent-api-graph-native-v0
+  title: 'Mission: Agent API Graph-Native v0'
+  path: docs/mission-spine-agent-api-surface-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Build graph-native /api/v1/ endpoint surface: objects, edges, search, runs,
+  # work-items, files. Unified API for all consumers (frontend, desktop, web
+  # desktop, external agents, internal services). The frontend stops calling
+  # /api/universal-wire/stories and starts calling /api/v1/objects?kind=
+  # texture.edition → /api/v1/objects/:id/edges?kind=transcludes → batch fetch.
+  # Same API, different consumer. Scopes map: read:texture → GET objects/edges/
+  # search, write:texture → POST/PATCH objects/edges, read:base → GET files,
+  # write:base → PUT files, read:runtime → GET runs/work-items, write:runtime
+  # → POST runs/cancel. Batch-friendly, cursor-paginated, structured errors,
+  # idempotency keys, time-travel (as_of).
+  depends_on:
+  - texture-kinds-objectgraph-v0
+  - qdrant-index-on-publish-v0
+  - wire-api-graph-traversal-v0
+  enables:
+  - agent-api-mcp-server-v0
+  sources:
+  - internal/runtime/api.go
+  - internal/proxy/handlers.go
+  - internal/auth/handlers.go
+  - internal/base/api/handlers.go
+- id: agent-api-mcp-server-v0
+  title: 'Mission: Agent API MCP Server v0'
+  path: docs/mission-spine-agent-api-surface-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Expose Choir as an MCP server wrapping the graph-native API. Agents
+  # (Claude Code, Codex, Devin) configure Choir as an MCP server and get tools:
+  # choir_read_object, choir_list_objects, choir_search, choir_traverse,
+  # choir_get_edges, choir_create_object, choir_update_object, choir_create_edge,
+  # choir_get_history, choir_as_of, choir_trigger_cycle, choir_get_runs,
+  # choir_get_work_items, choir_get_computer, choir_read_file, choir_write_file.
+  # Each tool maps to one or two API calls. The MCP server handles auth,
+  # pagination, and error translation. The agent sees clean tool calls.
+  depends_on:
+  - agent-api-graph-native-v0
+  enables:
+  - nucleus-cli-v0
+  - choir-mcp-app-v0
+  sources:
+  - internal/runtime/api.go
+  - internal/proxy/handlers.go
+- id: choir-mcp-app-v0
+  title: 'Mission: Choir MCP App v0'
+  path: docs/mission-spine-agent-api-surface-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # The Choir web desktop as an MCP App (SEP-1865, ratified January 2026).
+  # The MCP server declares ui:// resources alongside its tools. When an agent
+  # calls choir_show_missions, the host (Claude Desktop, ChatGPT, VS Code
+  # Copilot, Microsoft 365 Copilot) renders the kanban board inline in the
+  # conversation. When an agent calls choir_read_wire, the host renders the
+  # wire reader inline. The user interacts with the UI inside Claude's
+  # conversation — drag cards, read articles, trigger cycles — without
+  # switching tabs. The iframe calls back to the Choir MCP server via JSON-RPC
+  # over postMessage through the host.
+  #
+  # MCP Apps use ui:// URI scheme, mimeType text/html;profile=mcp-app, sandboxed
+  # iframe rendering, JSON-RPC over postMessage. SDK
+  # (@modelcontextprotocol/ext-apps) has Svelte examples — Choir's frontend is
+  # already Svelte. The convert-web-app skill turns an existing web app into a
+  # hybrid web + MCP App. Choir's web desktop is the existing web app.
+  #
+  # This is the killer entree into choir-in-choir: the human and the agent
+  # collaborate in the same conversation. The human says "show me the mission
+  # board," Claude calls the tool, the kanban renders inline, the human drags
+  # a card, the agent sees the change, the agent works, the board updates in
+  # real time. No tab switching. No separate app.
+  depends_on:
+  - agent-api-mcp-server-v0
+  - beads-kanban-ui-v0
+  enables:
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - cmd/frontend/
+  - cmd/desktop/main.go
+  - internal/runtime/api.go
+  - internal/proxy/handlers.go
+# === Nucleus / Choir-In-Choir Control Plane (2026-06-29) ===
+# The vision: a coding agent (Devin, Claude Code, Codex) uses a Choir CLI to
+# control one or more VMs which run many computers. The agent is the
+# supervisory agent living in a persistent computer. The CLI is its hands.
+# Capsules are disposable effect chambers for risky/parallel work. Candidate
+# computers are speculative futures. Promotion is the transaction that turns
+# selected effects into canonical state. This is choir-in-choir: Choir
+# developing Choir inside Choir, agents using Choir as a tool to manage Choir
+# computers.
+- id: nucleus-cli-v0
+  title: 'Mission: Nucleus CLI v0'
+  path: docs/mission-spine-nucleus-choir-in-choir-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Build a `choir` CLI that agents use to control VMs and computers. Today
+  # there is no choir CLI — only service binaries (vmctl, sandbox, proxy,
+  # sourcecycled, maild, etc.) and the browser/frontend. The CLI is the agent's
+  # control surface: `choir computer list`, `choir computer create`,
+  # `choir computer shell`, `choir vm boot`, `choir vm stop`, `choir capsule run`,
+  # `choir cycle trigger`, `choir texture read`, `choir texture write`,
+  # `choir search`, `choir graph traverse`. It wraps the agent API
+  # (agent-api-graph-native-v0) for read/write and vmctl's HTTP API for VM
+  # lifecycle. Auth via API key (Bearer token). The CLI is what makes
+  # choir-in-choir real: an agent in a persistent computer uses the CLI to
+  # spawn candidate computers, run capsules, trigger cycles, and manage the
+  # fleet — without a browser.
+  depends_on:
+  - agent-api-mcp-server-v0
+  enables:
+  - nucleus-capsule-runtime-v0
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - cmd/vmctl/main.go
+  - internal/vmctl/ownership.go
+  - internal/vmmanager/manager.go
+  - internal/proxy/handlers.go
+  - internal/auth/handlers.go
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/computer-ontology.md
+- id: nucleus-capsule-runtime-v0
+  title: 'Mission: Nucleus Capsule Runtime v0'
+  path: docs/mission-spine-nucleus-choir-in-choir-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Implement Nucleus-style capsules as an execution primitive inside user,
+  # candidate, and platform computers. A capsule is an ephemeral, effect-fenced
+  # sandbox used by a persistent computer to run risky, parallel, or disposable
+  # work. The handoff doc (2026-06-10) specifies the full architecture: strict-
+  # agent mode, network deny/allowlist, copy-in-out or bind-ro workspace, tmpfs
+  # home, pinned Nix-built toolchain rootfs, no secrets by default, typed output
+  # directory. The effect report schema captures downloads, filesystem writes,
+  # package manager attempts, service changes, network attempts. Capsules are
+  # the "disposable effect chamber" in the three-layer model: agent lives in
+  # persistent computer, risky effects run in capsules, effects become durable
+  # through mutation transactions. This mission implements the capsule runtime
+  # inside a VM (not a separate VM — a sandbox inside the VM, lighter than a
+  # Firecracker microVM). Candidate: NixOS containers, systemd-nspawn, or
+  # Nucleus itself if it matures. The capsule is to the VM what the VM is to
+  # the host — one level down in the isolation hierarchy.
+  depends_on:
+  - nucleus-cli-v0
+  enables:
+  - mutation-transaction-coordinator-v0
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/computer-ontology.md
+  - nix/sandbox-vm.nix
+  - internal/vmmanager/manager.go
+- id: mutation-transaction-coordinator-v0
+  title: 'Mission: Mutation Transaction Coordinator v0'
+  path: docs/mission-spine-nucleus-choir-in-choir-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Implement the durable MutationTransaction object from the handoff doc. This
+  # is the saga-like protocol that coordinates base refs, staged effects,
+  # verification, commit, and rollback across all ledgers (VM/runtime, Dolt/app,
+  # source/build, blob/content, artifact/provenance, route identity). Phases:
+  # Begin → Stage → Execute → Capture → Classify → Verify → Commit → Rollback.
+  # Not one ACID transaction — a saga with strong local transactions (Dolt
+  # commit, git patch, NixOS generation, route pointer switch) and explicit
+  # cross-ledger coordination. The promotion certificate proves: no foreground
+  # update silently lost, no candidate mutation touched canonical state before
+  # promotion, typed deltas merged or explicitly conflicted, verifier contracts
+  # ran, route switch has rollback target, retry is idempotent. This is the
+  # cathedral that coordinates the existing Lego blocks (NixOS generations,
+  # Dolt branches, git worktrees, Qdrant shadow collections, route pointers).
+  depends_on:
+  - nucleus-capsule-runtime-v0
+  - base-sync-dolt-merge-v0
+  enables:
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/computer-ontology.md
+  - internal/platform/types.go
+  - internal/runtime/promotion.go
+- id: choir-in-choir-agent-loop-v0
+  title: 'Mission: Choir-In-Choir Agent Loop v0'
+  path: docs/mission-spine-nucleus-choir-in-choir-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # The full choir-in-choir loop: an agent in a persistent computer uses the
+  # Choir CLI to (1) read the current state of its computer (textures, graph,
+  # runs), (2) spawn a candidate computer fork, (3) run capsules inside the
+  # candidate for risky experiments, (4) verify the results in read-only
+  # verifier capsules, (5) produce a promotion certificate, (6) promote the
+  # candidate to active via mutation transaction, (7) publish the result as a
+  # typed artifact (AppChangePackage or texture). This is the vision's "Choir
+  # developing Choir inside Choir" — the agent is both user and developer of
+  # the system. The loop is: read → fork → experiment → verify → promote →
+  # publish. The agent uses the MCP server for read/search/traverse, the CLI
+  # for VM/computer/capsule lifecycle, and the mutation transaction coordinator
+  # for promotion. This mission wires the loop together end-to-end. Proof: an
+  # agent can make a reviewable change to Choir, inside Choir, without a
+  # browser, and the change goes through the same promotion path a human would
+  # use.
+  depends_on:
+  - nucleus-cli-v0
+  - nucleus-capsule-runtime-v0
+  - mutation-transaction-coordinator-v0
+  - agent-api-mcp-server-v0
+  enables: []
+  sources:
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/computer-ontology.md
+  - docs/choir-doctrine.md
+  - internal/runtime/runtime.go
+  - internal/platform/types.go
+# === Beads Migration (2026-06-29) ===
+- id: beads-mission-state-v0
+  title: 'Mission: Beads Mission State v0'
+  path: docs/mission-spine-beads-migration-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # Migrate mission state to beads: epic=mission, sub-issue=conjecture, beads
+  # for the churny middle (definition + state + ledger + DAG), docs for durable
+  # ends (ideas that seed missions, learning that exits missions). Active
+  # missions get generated docs/mission-*.md projections (bd export, read-only,
+  # regenerated). The truth boundary: in motion → beads, settled into idea or
+  # learning → docs. Phasing: P0 spike + vocab freeze → P1 shadow mode → P2
+  # flip source of truth → P3 go native (conjectures) → P4 backlog migration +
+  # harvest-and-mow → P5 enforcement → P6 doctrine + queries. Dogfood: scope
+  # this transformation itself as a beads epic.
+  depends_on: []
+  enables:
+  - beads-kanban-ui-v0
+  sources:
+  - docs/mission-graph.yaml
+  - docs/parallax-design-2026-06-11.md
+  - docs/agent-parallax-rules.md
+- id: beads-kanban-ui-v0
+  title: 'Mission: Beads Kanban UI v0'
+  path: docs/mission-spine-beads-migration-v0.md
+  ledger: ''
+  status: planned
+  kind: spine
+  # A kanban board inside Choir that visualizes beads mission state. Columns:
+  # backlog → ready → in_progress → review → closed. Cards are conjectures
+  # (sub-issues); swimlanes are epics (missions). Drag to advance state. Click
+  # a card to see the conjecture's move-log (bead notes), verdict, and residue
+  # links. This is the human-facing entree into choir-in-choir: a human can see
+  # the mission DAG, watch agents work in real time, and advance or redirect
+  # conjectures visually — without `bd` or the CLI.
+  #
+  # Four entry points into choir-in-choir, all hitting the same graph-native
+  # API (agent-api-graph-native-v0):
+  #   1. Beads kanban UI (human, visual) — this mission
+  #   2. Raw API (agent, HTTP) — /api/v1/ endpoints
+  #   3. CLI (agent, shell) — `choir` commands wrapping the API (nucleus-cli-v0)
+  #   4. MCP server (agent, no shell) — tools for web-UI agents (agent-api-mcp-server-v0)
+  # The difference is presentation, not data model. The kanban UI is the
+  # Svelte frontend calling /api/v1/ with session cookie auth. The CLI is Go
+  # calling /api/v1/ with API key auth. The MCP server is a thin wrapper
+  # exposing the same endpoints as tools.
+  #
+  # Implementation: the kanban UI is a Svelte route in the existing frontend
+  # (cmd/frontend or the Wails desktop app). It calls /api/v1/missions (new
+  # endpoint that reads from .beads/) and /api/v1/missions/:id/conjectures.
+  # State transitions are PATCH /api/v1/conjectures/:id with the new status.
+  # The beads store (.beads/issues.jsonl) is the source of truth; the UI is a
+  # projection. Real-time updates via SSE or polling.
+  depends_on:
+  - beads-mission-state-v0
+  - agent-api-graph-native-v0
+  enables:
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - .beads/issues.jsonl
+  - cmd/frontend/
+  - cmd/desktop/main.go
+  - internal/desktop/
+  - internal/runtime/api.go
+# === Cleanup (2026-06-29) ===
+- id: dead-vtext-workspace-cleanup-v0
+  title: 'Mission: Dead VText Workspace Cleanup v0'
+  path: docs/mission-spine-object-graph-ubiquitous-v0.md
+  ledger: ''
+  status: planned
+  kind: side
+  # The texture rename (commit 05162395, 2026-06-16) changed the workspace path
+  # suffix from .vtext to .texture. The runtime started writing to state.texture/
+  # and stopped touching state.vtext/. But nobody deleted the old state.vtext/
+  # directory. It's 1.7G of orphaned Dolt noms storage on the platform VM data
+  # image. This mission: (1) deletes state.vtext/ on existing VM data images,
+  # (2) adds a boot-time cleanup step in the sandbox init that removes known-
+  # orphaned directories, (3) cleans up state.objectgraph.db after the
+  # sourcecycled consolidation mission settles.
+  depends_on: []
+  enables: []
+  sources:
+  - internal/store/texture.go
+  - nix/sandbox-vm.nix
+  - docs/overnight-pr-review-verdicts-2026-06-29.md
+# === Naming Rectification + Host Sandbox Deletion (2026-06-29) ===
+# The naming rectification plan (docs/naming-rectification-2026-06-27.md)
+# audits all object/concept/process/system names. The key renames:
+#   sandbox → autoputer (service/binary name)
+#   platformd → corpusd (service/binary name)
+#   sourcegraph → fold into cycle (delete package)
+#   channel → mailbox (actor protocol)
+# Plus: delete the host-side sandbox-m1 service on node-b. It's a remnant
+# from the desktop bootstrap before Apple containerization. The platform
+# computer should be a real VM (or container machine), not a bare host
+# process.
+- id: host-sandbox-deletion-v0
+  title: 'Mission: Host Sandbox Deletion v0'
+  path: docs/naming-rectification-2026-06-27.md
+  ledger: ''
+  status: planned
+  kind: side
+  # Delete the host-side go-choir-sandbox service (sandbox-m1) on node-b.
+  # This is a remnant from the desktop bootstrap before Apple containerization.
+  # The platform computer should be a real VM (or container machine), not a
+  # bare host process running directly on the node-b host.
+  #
+  # Today: nix/node-b.nix defines go-choir-sandbox as a host systemd service
+  # with SANDBOX_ID=sandbox-m1, RUNTIME_STORE_PATH=/var/lib/go-choir/runtime/
+  # runtime.db. The proxy routes to it (PROXY_SANDBOX_URL=http://127.0.0.1:8085)
+  # when no VM is running. Sourcecycled shares its runtime store path. The
+  # host sandbox runs the Universal Wire pipeline (processor agents, texture
+  # agents, publication).
+  #
+  # The fix: the platform computer becomes a real VM (like user computers).
+  # The host sandbox service is deleted. The proxy routes to the platform VM
+  # via vmctl. Sourcecycled dispatches to the platform VM's sandbox endpoint.
+  # The Nix assertion about shared store paths is deleted — sourcecycled
+  # dispatches via HTTP, not via shared filesystem.
+  #
+  # This unblocks the sourcecycled SQLite consolidation: without a host
+  # sandbox sharing the filesystem, sourcecycled can write to Dolt directly
+  # (or to its own Dolt store that syncs with the platform VM's Dolt).
+  #
+  # Dependency: the platform VM must exist and run the Universal Wire
+  # pipeline before the host sandbox can be deleted. This is a VM lifecycle
+  # change — vmctl boots a platform VM at startup, the proxy routes to it.
+  depends_on:
+  - nucleus-cli-v0
+  enables:
+  - objectgraph-sourcecycled-consolidation-v0
+  sources:
+  - nix/node-b.nix
+  - nix/sandbox-vm.nix
+  - internal/vmmanager/config.go
+  - internal/vmctl/ownership.go
+  - cmd/sandbox/main.go
+  - docs/computer-ontology.md
+- id: naming-rectification-v0
+  title: 'Mission: Naming Rectification v0'
+  path: docs/naming-rectification-2026-06-27.md
+  ledger: ''
+  status: planned
+  kind: side
+  # Comprehensive rename pass: sandbox → autoputer, platformd → corpusd,
+  # sourcegraph → fold into cycle, channel → mailbox, retired vocabulary
+  # cleanup. The plan is in docs/naming-rectification-2026-06-27.md.
+  #
+  # Key renames:
+  #   1. sandbox → autoputer (service/binary name, product ontology)
+  #      cmd/sandbox/ → cmd/autoputer/, internal/sandbox/ → internal/autoputer/
+  #      Sandbox* types → Autoputer* types, sandbox* functions → autoputer*
+  #      The product object is a "computer" (doctrine term); "autoputer" is
+  #      the service/binary name (like sourcecycled, corpusd).
+  #   2. platformd → corpusd (service/binary name)
+  #      cmd/platformd/ → cmd/corpusd/, internal/platform/ → internal/corpus/
+  #      Platform* → Corpus*, platformd → corpusd
+  #   3. internal/sourcegraph/ → fold into internal/cycle/ (delete package)
+  #   4. internal/store/texture_source_graph.go → texture_source_store.go
+  #   5. channel → mailbox (actor protocol)
+  #   6. Retired vocabulary cleanup (vtext, continuation, lease, etc.)
+  #
+  # Method: ast-grep for Go code, sed/manual for docs and configs.
+  # One commit per rename, with before/after line counts.
+  # Verify: go build ./..., go test -race ./..., nix develop -c go vet.
+  depends_on:
+  - host-sandbox-deletion-v0
+  enables: []
+  sources:
+  - docs/naming-rectification-2026-06-27.md
+  - cmd/sandbox/main.go
+  - cmd/platformd/main.go
+  - internal/sandbox/
+  - internal/platform/
+  - internal/sourcegraph/
+  - internal/store/texture_source_graph.go
+# === Untracked Recent Missions (2026-06-28) ===
+- id: node-a-deployment-restore-rehearsal-v0
+  title: 'Mission: Node A — Full Mirror Deployment and Update v0'
+  path: docs/mission-node-a-deployment-restore-rehearsal-v0.md
+  ledger: ''
+  status: in_progress
+  kind: side
+  # Node A (choir-ip.com, 51.81.93.94) is a full Choir mirror running all 8
+  # host services. Its NixOS config files (nix/node-a.nix, node-a-hardware.nix,
+  # node-a-disks.nix) were never merged to main. A prior attempt created WRONG
+  # config files that would have destroyed all running services if deployed
+  # (caught before deployment). This mission restores the real configs from
+  # the codex/redesign-hard-cutover-node-a branch, merges to main, then pulls
+  # and rebuilds on Node A.
+  # Class: red — deployment routing, protected surface (production mirror).
+  # Protected surfaces: deployment routing (choir-ip.com), running services,
+  # auth config (AUTH_RP_ID=choir-ip.com), mail config (MAILD_PRIMARY_DOMAIN).
+  # Rollback: nixos-rebuild switch --rollback (generation 36).
+  depends_on: []
+  enables: []
+  sources:
+  - nix/node-a.nix
+  - nix/node-a-hardware.nix
+  - nix/node-a-disks.nix
+  - flake.nix
+- id: orchestrator-suite-2026-06-28
+  title: 'Mission: Orchestrator Suite 2026-06-28'
+  path: docs/mission-orchestrator-suite-2026-06-28.md
+  ledger: docs/mission-orchestrator-suite-2026-06-28.ledger.md
+  status: settled
+  kind: evidence
+  # The orchestrator suite: 24 missions delegated to subagents, each in its
+  # own worktree, each with a conjecture to decide and a parallax doc. The
+  # mission suite IS the artifact program building itself: each mission is a
+  # typed transaction with an author, a conjecture, evidence, and a verdict.
+  # The set of mainlined missions becomes the tape. This was the first
+  # self-authoring cycle: the orchestrator delegates conjectures, subagents
+  # produce evidence, the orchestrator verifies and mainlines.
+  # Checkpoint report: docs/orchestrator-checkpoint-report-2026-06-28.md
+  depends_on: []
+  enables:
+  - choir-in-choir-agent-loop-v0
+  sources:
+  - docs/mission-orchestrator-suite-2026-06-28.md
+  - docs/mission-orchestrator-suite-2026-06-28.ledger.md
+  - docs/orchestrator-checkpoint-report-2026-06-28.md
+  - docs/mission-suite-2026-06-28.md
+- id: mission-graph-triage-2026-06-28
+  title: 'Mission Graph Triage 2026-06-28'
+  ledger: ''
+  status: settled
+  kind: evidence
+  # M19 triage: classified all 27 open_handoff missions. 18 resolved (15
+  # superseded, 3 settled); 9 remain active. open_handoff dropped from 27 to 9.
+  # Every superseded node carries an explicit successor link and triage note.
+  # No nodes deleted; DAG remains indexable.
+  depends_on: []
+  enables: []
+  sources:
+- id: frontend-auth-transient-logout-v0
+  title: 'Mission: Frontend Auth Transient Logout Bug v0'
+  path: docs/memo-frontend-auth-transient-logout-2026-06-28.md
+  ledger: ''
+  status: settled
+  kind: side
+  # Red class bug: users get logged out during staging deploys. Root cause:
+  # requestSessionState() in frontend/src/lib/auth.js throws on ANY non-2xx
+  # with no retry. checkSession() in App.svelte catches all errors and
+  # transitions to signed_out. During deploy, auth service has 2-14s downtime;
+  # any /auth/session call in that window triggers permanent logout.
+  # Fix: distinguish transient (5xx, network) from permanent (401/403). Add
+  # retry with exponential backoff for transient. Only sign out on explicit
+  # {authenticated: false}.
+  # Heresy delta: discovered + repaired.
+  # Commits: 7c2b0259 (docs), 6286f89f (fix).
+  depends_on: []
+  enables: []
+  sources:
+  - frontend/src/lib/auth.js
+  - frontend/src/App.svelte
+  - docs/memo-frontend-auth-transient-logout-2026-06-28.md
+# === Overnight PR Review Verdicts (2026-06-29) ===
+- id: overnight-pr-review-2026-06-29
+  title: 'Overnight PR Review Verdicts 2026-06-29'
+  path: docs/overnight-pr-review-verdicts-2026-06-29.md
+  ledger: ''
+  status: settled
+  kind: evidence
+  # Review of 10 PRs (#19-#28) from the overnight mission suite. Verdicts:
+  # 5 clean (#19, #20, #21, #23, #26), 2 circular dependency (#22 + #27 — must
+  # merge or reorganize), 2 linear dependency (#24 → #25 — #25 needs fields
+  # from #24), 1 security issue resolved (#28 .envrc). The suite hardened the
+  # substrate but did not advance the vision (0 for 8 on vision implementation
+  # plan). The vision's 8 steps are now tracked as the type theory / object
+  # graph ubiquitous spine above.
+  depends_on: []
+  enables: []
+  sources:
+  - docs/overnight-pr-review-verdicts-2026-06-29.md
+# === News Live + PR Merge + Model Default + Doc Cleanup (2026-06-29) ===
+- id: news-live-pr-merge-model-default-v0
+  title: 'News Live + PR Merge + Model Default + Doc Cleanup v0'
+  path: docs/mission-news-live-pr-merge-model-default-v0.md
+  ledger: docs/mission-news-live-pr-merge-model-default-v0.ledger.md
+  status: active
+  kind: spine
+  # Three parallel tracks: (A) merge 5 accepted PRs + fix circular pair #22/#27
+  # + change model default to gpt-5.5-low (super=gpt-5.5-high), (B) diagnose
+  # and fix Universal Wire so real articles appear on staging, (C) delete 53
+  # docs + archive 133 docs from the doc audit. Product-visible outcome: real
+  # news articles on choir.news.
+  depends_on:
+  - overnight-pr-review-2026-06-29
+  enables:
+  - objectgraph-sourcecycled-consolidation-v0
+  - naming-rectification-v0
+  sources:
+  - docs/mission-news-live-pr-merge-model-default-v0.md
+  - docs/overnight-pr-review-verdicts-2026-06-29.md
+  - internal/runtime/model_policy.go
+  - internal/runtime/universal_wire.go

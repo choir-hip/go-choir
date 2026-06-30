@@ -4,14 +4,14 @@
 // persistence as a middleware stage: events → PII redaction → persistence.
 // The regex redactor always runs (fast, deterministic); the SLM redactor is
 // opt-in via RedactionConfig.EnableSLM and requires a running Ollama instance.
-// Redaction failure degrades gracefully — the event is stored with a warning
-// rather than dropped, so the ingestion invariant (never block observability)
-// holds even when the redactor misbehaves.
+// Redaction failure stores the event envelope with a warning, but drops unsafe
+// payload bytes before persistence.
 
 package trace
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -74,9 +74,8 @@ func NewPipelineFromConfig(cfg RedactionConfig) *pii.Pipeline {
 // through unchanged — only the JSON Payload is scanned, because that is where
 // LLM I/O, tool arguments, and message content live.
 //
-// Redaction failure does NOT block event storage: on error the original event
-// is stored and a warning is logged, so observability is never lost to a
-// redactor fault.
+// Redaction failure does not block event storage: on error the event envelope is
+// stored with a warning, but the unsafe payload is replaced before persistence.
 type RedactingStore struct {
 	inner    Store
 	pipeline *pii.Pipeline
@@ -119,9 +118,9 @@ func (r *RedactingStore) Pipeline() *pii.Pipeline { return r.pipeline }
 
 // Append redacts the event payload through the PII pipeline, then persists the
 // redacted event via the inner store. The caller's *Event is not mutated: a
-// shallow copy is redacted and stored. On redaction error the original event
-// is stored with a warning so observability is never blocked by a redactor
-// fault.
+// shallow copy is redacted and stored. On redaction error the event envelope is
+// stored with a failure marker payload so observability is preserved without
+// persisting unredacted bytes.
 func (r *RedactingStore) Append(ctx context.Context, e *Event) error {
 	if e == nil {
 		return r.inner.Append(ctx, e)
@@ -136,13 +135,9 @@ func (r *RedactingStore) Append(ctx context.Context, e *Event) error {
 		}
 		cleaned, report, err := r.pipeline.RedactEvent(rec)
 		if err != nil {
-			// Graceful degradation: store the original event and warn.
-			// The ingestion invariant is that observability is never
-			// blocked by a redactor fault. Raw PII may reach persistence
-			// in this failure case, but losing the event entirely would
-			// be worse; the warning makes the fault visible.
-			r.logf("trace redaction: failed to redact event %q (redactor=%s): %v — storing original",
-				e.ID, r.pipeline.Redactor().Name(), err)
+			redacted.Payload = redactionFailurePayload()
+			r.logf("trace redaction: failed to redact event %q (redactor=%s); persisted payload dropped",
+				e.ID, r.pipeline.Redactor().Name())
 		} else {
 			redacted.Payload = cleaned.Payload
 			if report.Changed {
@@ -155,14 +150,32 @@ func (r *RedactingStore) Append(ctx context.Context, e *Event) error {
 	return r.inner.Append(ctx, &redacted)
 }
 
+func redactionFailurePayload() json.RawMessage {
+	payload, err := json.Marshal(map[string]string{"redaction_error": "payload_dropped"})
+	if err != nil {
+		return json.RawMessage(`{"redaction_error":"payload_dropped"}`)
+	}
+	return payload
+}
+
 // Get delegates to the inner store.
 func (r *RedactingStore) Get(ctx context.Context, id string) (*Event, error) {
 	return r.inner.Get(ctx, id)
 }
 
+// GetForOwner delegates to the inner store.
+func (r *RedactingStore) GetForOwner(ctx context.Context, ownerID, id string) (*Event, error) {
+	return r.inner.GetForOwner(ctx, ownerID, id)
+}
+
 // ListByRun delegates to the inner store.
 func (r *RedactingStore) ListByRun(ctx context.Context, runID string, limit int) ([]Event, error) {
 	return r.inner.ListByRun(ctx, runID, limit)
+}
+
+// ListByRunForOwner delegates to the inner store.
+func (r *RedactingStore) ListByRunForOwner(ctx context.Context, ownerID, runID string, limit int) ([]Event, error) {
+	return r.inner.ListByRunForOwner(ctx, ownerID, runID, limit)
 }
 
 // ListByOwner delegates to the inner store.

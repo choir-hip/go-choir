@@ -41,6 +41,33 @@ func toolSchemaStringEnum(schema map[string]any, property string) []string {
 	return out
 }
 
+func firstParagraphBlockIDFromBodyDoc(t *testing.T, raw json.RawMessage) string {
+	t.Helper()
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode structured texture body_doc: %v", err)
+	}
+	var walk func(texturedoc.Node) string
+	walk = func(node texturedoc.Node) string {
+		if node.Type == "paragraph" {
+			if id := textureNodeStringAttr(node, "id"); id != "" {
+				return id
+			}
+		}
+		for _, child := range node.Content {
+			if id := walk(child); id != "" {
+				return id
+			}
+		}
+		return ""
+	}
+	if id := walk(doc.Doc); id != "" {
+		return id
+	}
+	t.Fatalf("structured texture body_doc has no paragraph block id: %s", string(raw))
+	return ""
+}
+
 func TestWorkerRepoBootstrapPromptIncludesHumanEvidenceBrowserContract(t *testing.T) {
 	t.Parallel()
 	prompt := remoteWorkerRepoBootstrapPrompt("https://github.com/yusefmosiah/go-choir.git", "abc123")
@@ -1325,6 +1352,7 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	handler := vmctl.NewHandler(reg)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
+	mux.HandleFunc("/internal/vmctl/hibernate-worker", handler.HandleHibernateWorker)
 	vmctlSrv := httptest.NewServer(mux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
@@ -1576,6 +1604,12 @@ func TestSuperRequestWorkerVMDedupesSameRunByMachineClass(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request_worker_vm: %v", err)
 		}
+		var output map[string]any
+		if err := json.Unmarshal([]byte(out), &output); err != nil {
+			t.Fatalf("decode request_worker_vm output: %v", err)
+		}
+		appendRuntimeToolResult(t, rt.store, *superTask, "request_worker_vm", output)
+
 		var resp struct {
 			Deduped bool `json:"deduped"`
 			Handle  struct {
@@ -2114,6 +2148,9 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		t.Fatal("processor should not be allowed to spawn researcher")
 	}
 
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+		return nil
+	})
 	spawnTextureRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
 		"objective":"write a source-grounded article from this processor brief about Fed rates and inflation",
 		"role":"texture",
@@ -2263,8 +2300,8 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		!strings.Contains(textureRun.Prompt, "By Choir News") {
 		t.Fatalf("processor texture run missing article-head completion contract: %q", textureRun.Prompt)
 	}
-	articleBlockID := "p-" + textureSpawn.DocID + "-" + textureSpawn.SeedRevisionID + "-0"
-	articleContent := "Fed rate cut expectations cool as inflation prints remain uneven\n\nMarkets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures.\n\nThe result is a market-moving macro update with a narrower evidentiary claim: officials can still cut later, but the latest batch gives them less room to declare inflation contained."
+	articleBlockID := firstParagraphBlockIDFromBodyDoc(t, seedRev.BodyDoc)
+	articleContent := "Fed rate cut expectations cooled as inflation prints remained uneven. Markets repriced the near-term rate path after the latest inflation batch, but the stronger claim is not that a cut is off the table. The useful reading is narrower: officials have less room to declare victory while price pressure remains uneven across services and shelter measures."
 	editArgs, err := json.Marshal(map[string]any{
 		"doc_id":           textureSpawn.DocID,
 		"base_revision_id": textureSpawn.SeedRevisionID,
@@ -3240,7 +3277,7 @@ func appendRuntimeToolResult(t *testing.T, s *store.Store, run types.RunRecord, 
 		"output":   string(outputJSON),
 	})
 	if err := s.AppendEvent(context.Background(), &types.EventRecord{
-		EventID:      run.RunID + "-" + tool + "-result",
+		EventID:      fmt.Sprintf("%s-%s-result-%d", run.RunID, tool, time.Now().UTC().UnixNano()),
 		RunID:        run.RunID,
 		AgentID:      run.AgentID,
 		ChannelID:    run.ChannelID,
@@ -3450,12 +3487,15 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 	if provenance["rights_scope"] != "private_user_source" || provenance["untrusted_source_text"] != true {
 		t.Fatalf("provenance = %#v", provenance)
 	}
-	// The hard next_required_tool gate was replaced by a soft checkpoint
-	// instruction; researchers must still be told to submit findings before
-	// further research turns.
 	instruction, _ := resp["next_instruction"].(string)
-	if !strings.Contains(instruction, "findings update") {
-		t.Fatalf("next_instruction = %#v, want findings checkpoint instruction", resp["next_instruction"])
+	for _, want := range []string{
+		"update_coagent source packet",
+		`schema_version="coagent_source_packet.v1"`,
+		"packet.sources for citeable handles",
+	} {
+		if !strings.Contains(instruction, want) {
+			t.Fatalf("next_instruction = %#v, want source-packet checkpoint containing %q", resp["next_instruction"], want)
+		}
 	}
 }
 
@@ -3543,6 +3583,9 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+		return nil
+	})
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
 	}
@@ -3654,7 +3697,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "texture:"+docID || messages[0].Role != AgentProfileSuper {
 		t.Fatalf("unexpected channel message: %+v", messages[0])
 	}
-	if !strings.Contains(messages[0].Content, "Coagent update ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
+	if !strings.Contains(messages[0].Content, "Coagent source packet ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
 		t.Fatalf("channel message should be a structured update, not a patch: %q", messages[0].Content)
 	}
 
@@ -4047,6 +4090,7 @@ func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testi
 		t.Fatalf("update_coagent should not require local requester agent row: %v", err)
 	}
 	var resp struct {
+		UpdateID  string `json:"update_id"`
 		AgentID   string `json:"agent_id"`
 		ChannelID string `json:"channel_id"`
 		Status    string `json:"status"`
@@ -4054,11 +4098,11 @@ func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testi
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode update_coagent response: %v", err)
 	}
-	if resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
+	if resp.UpdateID == "" || resp.AgentID != "texture:"+docID || resp.ChannelID != docID || resp.Status != "submitted" {
 		t.Fatalf("response target/channel/status = %+v, want inherited texture target", resp)
 	}
 
-	update, err := s.GetWorkerUpdate(ctx, ownerID, "remote-worker-update")
+	update, err := s.GetWorkerUpdate(ctx, ownerID, resp.UpdateID)
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
@@ -4540,9 +4584,6 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	if provenance["texture_doc_id"] != "doc-tool-proof" {
 		t.Fatalf("texture_doc_id = %q, want doc-tool-proof", provenance["texture_doc_id"])
 	}
-	if _, ok := provenance["texture_doc_id"]; ok {
-		t.Fatalf("new package provenance emitted legacy texture_doc_id: %+v", provenance)
-	}
 	shots, _ := provenance["screenshot_refs"].([]any)
 	if len(shots) != 1 || shots[0] != "test-results/tool-proof.png" {
 		t.Fatalf("screenshot_refs = %+v", provenance["screenshot_refs"])
@@ -4616,6 +4657,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
 	}, workerDB, events.NewEventBus(), workerProvider)
+	setTestDispatch(workerRT, workerDB)
 	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
 		t.Fatalf("install worker tools: %v", err)
 	}
@@ -4871,6 +4913,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
 	}, workerDB, events.NewEventBus(), workerProvider)
+	setTestDispatch(workerRT, workerDB)
 	if err := workerRT.InstallDefaultAgentTools(workerDir); err != nil {
 		t.Fatalf("install worker tools: %v", err)
 	}
@@ -5473,6 +5516,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
 	}, workerDB, events.NewEventBus(), workerProvider)
+	setTestDispatch(workerRT, workerDB)
 	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
 		t.Fatalf("install worker tools: %v", err)
 	}
@@ -6153,7 +6197,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		t.Fatalf("worker update checkpoint did not preserve child package evidence: %+v", updates[0])
 	}
 	if !containsString(sourceURIs, "app_change_package:package-timeout") ||
-		!strings.Contains(strings.Join(sourceURIs, "\n"), "manifest-timeout") {
+		!strings.Contains(joinedFindings, "manifest-timeout") {
 		t.Fatalf("worker update checkpoint missing child export artifacts: %+v", updates[0])
 	}
 }
@@ -6287,17 +6331,24 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list worker updates: %v", err)
 	}
-	if len(updates) != 1 {
-		t.Fatalf("worker update checkpoint count = %d, want 1; updates=%+v raw=%s", len(updates), updates, raw)
+	var textureUpdate *types.CoagentSourcePacket
+	for i := range updates {
+		if updates[i].TargetAgentID == "texture:doc-finish-active" {
+			textureUpdate = &updates[i]
+			break
+		}
 	}
-	joinedFindings := coagentClaimsText(updates[0].Packet.Claims)
-	sourceURIs := coagentPacketSourceURIs(updates[0].Packet)
+	if textureUpdate == nil {
+		t.Fatalf("worker update checkpoint missing Texture-targeted update; updates=%+v raw=%s", updates, raw)
+	}
+	joinedFindings := coagentClaimsText(textureUpdate.Packet.Claims)
+	sourceURIs := coagentPacketSourceURIs(textureUpdate.Packet)
 	if !strings.Contains(joinedFindings, "worker event summary was preserved with 2 event") ||
-		!strings.Contains(strings.Join(updates[0].Packet.Notes, "\n"), "checkpoint_source=async_finish_active") ||
-		!strings.Contains(strings.Join(updates[0].Packet.Notes, "\n"), "active_worker_obligation=true") ||
+		!strings.Contains(strings.Join(textureUpdate.Packet.Notes, "\n"), "checkpoint_source=async_finish_active") ||
+		!strings.Contains(strings.Join(textureUpdate.Packet.Notes, "\n"), "active_worker_obligation=true") ||
 		!containsString(sourceURIs, "worker_vm:vm-worker-active") ||
 		!containsString(sourceURIs, "worker_loop:worker-run-active") {
-		t.Fatalf("worker update checkpoint missing active finish evidence: %+v", updates[0])
+		t.Fatalf("worker update checkpoint missing active finish evidence: %+v", textureUpdate)
 	}
 
 	messages, err := s.ListChannelMessages(context.Background(), "user-alice", "doc-finish-active", 0, 10)
@@ -6577,6 +6628,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
 	}, workerDB, events.NewEventBus(), workerProvider)
+	setTestDispatch(workerRT, workerDB)
 	if err := workerRT.InstallDefaultAgentTools(workerCWD); err != nil {
 		t.Fatalf("install worker tools: %v", err)
 	}

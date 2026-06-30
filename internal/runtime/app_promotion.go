@@ -801,7 +801,7 @@ func (rt *Runtime) emitAppPromotionEvent(ctx context.Context, ownerID, traceID s
 		Phase:        phase,
 		Payload:      data,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist app promotion event %s: %v", evRec.EventID, err)
 	}
 }

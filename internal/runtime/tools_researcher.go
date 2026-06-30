@@ -87,12 +87,6 @@ func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgen
 		}
 	}
 
-	if runRec != nil {
-		if channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID)); channelID != "" {
-			return currentTextureAgentID(channelID), channelID, nil
-		}
-	}
-
 	explicitAgentID = strings.TrimSpace(explicitAgentID)
 	if explicitAgentID != "" {
 		target, err := rt.store.GetAgent(ctx, explicitAgentID)
@@ -105,6 +99,12 @@ func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgen
 			return "", "", fmt.Errorf("resolve delivery target lookup: %w", err)
 		}
 		return explicitAgentID, strings.TrimSpace(target.ChannelID), nil
+	}
+
+	if runRec != nil {
+		if channelID := strings.TrimSpace(metadataStringValue(runRec.Metadata, runMetadataChannelID)); channelID != "" {
+			return currentTextureAgentID(channelID), channelID, nil
+		}
 	}
 	return "", "", fmt.Errorf("structured delivery requires agent_id, requested_by_agent_id, or a texture channel context")
 }
@@ -253,7 +253,7 @@ func (rt *Runtime) emitChannelMessageEvent(ctx context.Context, message types.Ch
 		Kind:         types.EventChannelMessage,
 		Payload:      payload,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist channel event: %v", err)
 		return
 	}

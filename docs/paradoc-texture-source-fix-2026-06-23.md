@@ -3,15 +3,12 @@
 ## Suggested Goal String
 
 ```text
-/goal Run docs/paradoc-texture-source-fix-2026-06-23.md as a Parallax mission: remove source_embed, add expanded_ref to source_ref, add mark_source_unused, remove the WireTexture prompt branch (preserving {{else}} research guidance as unconditional text), register style textures as toolbar-only source entities, remove negative prompt phrasing, and update core docs (AGENTS.md, choir-doctrine.md, texture-agentic-invariants, runtime-invariants, platform-os-app-state) in the same PR. Hard cutover, no migration, no users yet. Orange mutation class; protected surfaces: Texture canonical writes, prompt generation, tool schemas. Rollback: revert PR. Invariants: tri-state source handling (cited, toolbar-only, marked-unused), no prompt control flow, display_mode string enum (numbered_ref, expanded_ref), core docs update with code. Design doc: docs/design-source-ref-expansion-2026-06-23.md. Prompt revisions: docs/prompt-revisions-needed-2026-06-23.md. Ledger: docs/paradoc-texture-source-fix-2026-06-23.ledger.md. Settle when staging QA shows inline citations and article-format prose, grep clean for source_embed and WireTexture, all tests pass, and the PR is landed through the landing loop.
 ```
 
 ## Design References
 
 - `docs/design-source-ref-expansion-2026-06-23.md` — full design document with
   schema, tool, renderer, prompt, and test change specifications.
-- `docs/prompt-revisions-needed-2026-06-23.md` — prompt overlay revision plan.
-- `docs/triage-next-steps-2026-06-23.md` — triage context (Priority 1).
 
 ## Parallax State
 
@@ -117,8 +114,6 @@ next move: investigate root cause — why are research results not converted
   identified.
 ledger file: docs/paradoc-texture-source-fix-2026-06-23.ledger.md
 version / lineage: spawned from triage session 2026-06-23. Parent:
-  docs/triage-next-steps-2026-06-23.md (Priority 1). Related:
-  docs/worktree-review-2026-06-23.md (worktree #5).
 learning state:
   - WireTexture branch was a workaround for missing default style guidance.
   - Prompt control flow is an antipattern: behavior depends on hidden runtime

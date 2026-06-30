@@ -2,7 +2,6 @@
 
 **Date:** 2026-06-06  
 **Status:** research checkpoint  
-**Source docs:** [vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md](vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md), [source-external-data-publication.md](source-external-data-publication.md), [news-econ-publishing-synthesis-2026-06-04.md](news-econ-publishing-synthesis-2026-06-04.md), [project-goals.md](project-goals.md)  
 
 ## How To Use This Report
 

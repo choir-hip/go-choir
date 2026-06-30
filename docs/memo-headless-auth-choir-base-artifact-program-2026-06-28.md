@@ -4,8 +4,8 @@
 **Status:** design doc — implementation plan for delegation
 **Related:**
 - `docs/memo-artifact-program-doctrine-2026-06-28.md` (the tape, the self-authoring program)
-- `docs/choir-base-product-spec-2026-06-06.md` (Base product spec)
-- `docs/mission-choir-base-reconciliation-kernel-v0.md` (Base mission doc)
+- `docs/archive/choir-base-product-spec-2026-06-06.md` (Base product spec)
+- `docs/archive/mission-choir-base-reconciliation-kernel-v0.md` (Base mission doc)
 - `docs/vision-choir-category-texture-transclusion-v0.md` (the audited computer)
 - `internal/auth/store.go` (current auth schema)
 - `internal/proxy/handlers.go` (current JWT validation)
@@ -211,7 +211,7 @@ API keys are an additional auth path, not a replacement for WebAuthn.
 ### 2. Choir Base Reconciliation Kernel
 
 Build the first implementation of Choir Base as specified in
-`docs/mission-choir-base-reconciliation-kernel-v0.md`. Local-only, pure Go,
+`docs/archive/mission-choir-base-reconciliation-kernel-v0.md`. Local-only, pure Go,
 no deployment dependencies.
 
 #### Package Structure
@@ -604,5 +604,5 @@ both Agent 1 and Agent 2 to be complete. Not started tonight.
   doctrine — the three-tree reconciliation IS tape consensus for file
   mutations.
 - Related: `docs/memo-artifact-program-doctrine-2026-06-28.md` (the tape),
-  `docs/choir-base-product-spec-2026-06-06.md` (Base spec),
-  `docs/mission-choir-base-reconciliation-kernel-v0.md` (Base mission).
+  `docs/archive/choir-base-product-spec-2026-06-06.md` (Base spec),
+  `docs/archive/mission-choir-base-reconciliation-kernel-v0.md` (Base mission).

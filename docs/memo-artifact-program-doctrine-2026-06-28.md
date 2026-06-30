@@ -348,6 +348,6 @@ is the medium of learning.
 ## Lineage
 
 - This doctrine emerged from investigating user logout during deploys (2026-06-28), which led to questioning the single-node deployment model, which led to questioning VM state representation, which led to the artifact program assertion.
-- Related: `docs/choir-base-product-spec-2026-06-06.md` (file sync architecture), `docs/computer-ontology.md` (typed artifact decomposition), `docs/choir-doctrine.md` (apex doctrine), `docs/road-ahead-2026-06-27.md` (mutation transaction hardening), `docs/vision-choir-category-texture-transclusion-v0.md` (texture as program), `docs/conjecture-assertion-ledger-2026-06.md` (conjecture tracking infrastructure).
+- Related: `docs/archive/choir-base-product-spec-2026-06-06.md` (file sync architecture), `docs/computer-ontology.md` (typed artifact decomposition), `docs/choir-doctrine.md` (apex doctrine), `docs/road-ahead-2026-06-27.md` (mutation transaction hardening), `docs/vision-choir-category-texture-transclusion-v0.md` (texture as program), `docs/conjecture-assertion-ledger-2026-06.md` (conjecture tracking infrastructure).
 - The self-authoring program / conjecture learning connection emerged from recognizing that the tape is both computation history and learning history — the same category-theoretic structure, viewed from two functors.
 - The "promote typed artifacts, not opaque machine accidents" principle in computer-ontology.md is the direct ancestor of this doctrine.

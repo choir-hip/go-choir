@@ -9,7 +9,7 @@
 - Expected ΔV: 0; the move creates the mission control surface, not the
   prevention witness.
 - Actual ΔV: 0.
-- Receipt: `docs/mission-node-b-storage-retention-v0.md`.
+- Receipt: `docs/archive/mission-node-b-storage-retention-v0.md`.
 - Open edge: next pass must construct a read-only classifier/report before any
   live deletion or retention behavior change.
 
@@ -134,7 +134,7 @@
   passed.
 - Expected ΔV: -1 for independent baseline review and repair.
 - Actual ΔV: -1.
-- Receipt: `scripts/node-b-storage-report`; `docs/mission-node-b-storage-retention-v0.md`.
+- Receipt: `scripts/node-b-storage-report`; `docs/archive/mission-node-b-storage-retention-v0.md`.
 - Open edge: implement dry-run/staging retention behavior with tests before
   any active deletion.
 

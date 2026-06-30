@@ -12,7 +12,7 @@ code-bearing mission with boundaries, invariants, and settlement criteria.
 
 Actual ΔV: -1. The mission now has a dedicated problem record and next move.
 
-Receipt: `docs/mission-conductor-url-source-routing-h029-v0.md`.
+Receipt: `docs/archive/mission-conductor-url-source-routing-h029-v0.md`.
 
 Open edge: no runtime prompt/default code has been changed yet; repair is not
 claimed.
@@ -35,7 +35,7 @@ transclusion, text/PDF/EPUB/upload source extraction, podcast transcript
 discovery, speech-to-text research, and deferred text-to-speech/vector-index
 work.
 
-Receipt: `docs/mission-conductor-url-source-routing-h029-v0.md`.
+Receipt: `docs/archive/mission-conductor-url-source-routing-h029-v0.md`.
 
 Open edge: no runtime prompt/default or source-intake code has been changed yet;
 repair and product progress are not claimed.

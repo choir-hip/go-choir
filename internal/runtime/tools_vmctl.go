@@ -594,8 +594,16 @@ func (rt *Runtime) invalidateWorkerVMRequestCacheForDelegateResult(ctx context.C
 	if rt == nil || !shouldInvalidateWorkerVMRequestFromDelegateResult(result) {
 		return result
 	}
-	// In-memory worker request cache deleted (workerRequestMu eliminated).
-	// Dedup is store-backed via findExistingWorkerVMRequest.
+	result["worker_request_cache_invalidated"] = true
+	workerID := stringMapValue(result, "worker_id")
+	if workerID == "" || strings.TrimSpace(rt.cfg.VmctlURL) == "" {
+		return result
+	}
+	if err := vmctl.NewClient(rt.cfg.VmctlURL).HibernateWorker(workerID); err != nil {
+		result["worker_request_cache_invalidation_warning"] = err.Error()
+		return result
+	}
+	result["worker_hibernated"] = true
 	return result
 }
 

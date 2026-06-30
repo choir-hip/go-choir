@@ -79,7 +79,6 @@ revisions via tools). It must not branch on runtime metadata to switch behavior
 (`{{if .WireTexture}}`, first-owner-prompt special cases, worker-finding gates).
 Unconditional invariant text is not control flow. Decisions that used to live in
 prompt branches belong in the style texture, the run context, or tool
-availability. See `prompt-revisions-needed-2026-06-23.md` for the flattening
 plan and `choir-doctrine.md` invariant I16.
 
 Source citation is tri-state and citation shape is a display mode, not a

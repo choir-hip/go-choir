@@ -46,7 +46,7 @@ func (rt *Runtime) EmitProductEvent(ctx context.Context, ownerID, desktopID stri
 		Phase:     "product",
 		Payload:   raw,
 	}
-	if err := rt.store.AppendEvent(ctx, &rec); err != nil {
+	if err := rt.appendEventRecord(ctx, &rec); err != nil {
 		return types.EventRecord{}, fmt.Errorf("append product event: %w", err)
 	}
 	if rt.bus != nil {

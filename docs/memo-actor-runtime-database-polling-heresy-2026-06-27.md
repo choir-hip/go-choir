@@ -25,7 +25,7 @@ of using Go concurrency primitives:
 
 1. **Old `channels.go`** — database-polling message bus (deleted in Phase 2a)
 2. **Actor runtime design** — explicitly said "Go-channel mailbox, database
-   remembers" (docs/choir-rearchitecture-durable-actors-2026-06-11.md)
+   remembers" (docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md)
 3. **Actor runtime implementation** — polled the database every loop iteration,
    no Go channel in sight
 
@@ -133,7 +133,7 @@ If not, it's database-polling regardless of what the comments say.
 
 ## See Also
 
-- [docs/choir-rearchitecture-durable-actors-2026-06-11.md](choir-rearchitecture-durable-actors-2026-06-11.md)
+- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](choir-rearchitecture-durable-actors-2026-06-11.md)
   — original design doc, section 2.2 "Messaging: Go delivers, the database
   remembers"
 - [docs/mission-3c_2-actor-runtime-migration-real-v0.md](mission-3c_2-actor-runtime-migration-real-v0.md)

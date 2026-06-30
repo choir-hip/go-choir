@@ -297,8 +297,8 @@ func delegateWorkerContinuationRequired(output map[string]any) bool {
 func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.EventRecord, output map[string]any, targetAgentID, channelID string, now time.Time) types.CoagentSourcePacket {
 	status := stringMapValue(output, "status")
 	state := stringMapValue(output, "state")
-	workerLoopID := stringMapValue(output, "loop_id")
-	workerVMID := stringMapValue(output, "worker_vm_id")
+	workerLoopID := firstNonEmpty(stringMapValue(output, "worker_loop_id"), stringMapValue(output, "loop_id"), stringMapValue(output, "run_id"))
+	workerVMID := firstNonEmpty(stringMapValue(output, "worker_vm_id"), stringMapValue(output, "vm_id"))
 	workerID := stringMapValue(output, "worker_id")
 	terminalError := firstNonEmpty(stringMapValue(output, "terminal_error"), stringMapValue(output, "error"))
 	eventCount := intMapValue(output, "event_count")

@@ -9,8 +9,6 @@ move: construct (design docs + cognitive transforms + paradoc compilation).
 expected ΔV: 0 (planning pass, no code changes).
 actual ΔV: 0.
 receipt: docs/design-source-ref-expansion-2026-06-23.md,
-  docs/prompt-revisions-needed-2026-06-23.md,
-  docs/paradoc-texture-source-fix-2026-06-23.md.
 edge: staging model behavior unobservable until deployed.
 
 ## Pass 1 — 2026-06-24

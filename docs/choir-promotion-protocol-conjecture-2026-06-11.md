@@ -9,8 +9,8 @@ art) plus the new spec `specs/promotion_protocol.tla` (model-checked green;
 three sabotage variants caught, **two of which encode today's actual code
 behavior**).
 
-Companions: `docs/choir-rearchitecture-durable-actors-2026-06-11.md`,
-`docs/handoff-hybrid-computer-capsule-architecture-2026-06-10.md` (the
+Companions: `docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md`,
+`docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md` (the
 original MutationTransaction sketch), `specs/README.md`.
 
 ---

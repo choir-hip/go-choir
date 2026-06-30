@@ -277,9 +277,10 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 
 	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent:         "universal_wire_" + callerProfile + "_article_revision",
-		Prompt:         prompt,
-		SourceEntities: sourceEntities,
+		Intent:           "universal_wire_" + callerProfile + "_article_revision",
+		Prompt:           prompt,
+		RequestedByRunID: parentRec.RunID,
+		SourceEntities:   sourceEntities,
 	}, 0)
 	if err != nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
@@ -509,7 +510,7 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 		} else {
 			b.WriteString("y")
 		}
-		b.WriteString(" in reader-facing article prose through structured patch_texture insert_source_ref operations placed after the supported sentence or clause. Use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, use mark_source_unused with a short rationale. Every material source must appear as a source_ref in the body; no source is silently ignored.")
+		b.WriteString(" in reader-facing article prose through structured patch_texture insert_source_ref operations placed after the supported sentence or clause. Use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, use mark_source_unused with a short rationale. Every material source must appear as a source_ref in the body; no source is silently ignored. Source ids that appear only in inventory headings such as Source Handles or Source Manifest, ordinary markdown links, source inventories, notes, or metadata sections do not satisfy this requirement.")
 		b.WriteString("\n\nSource briefs (excerpt text for synthesis):\n")
 		for _, entity := range sourceEntities {
 			if strings.TrimSpace(entity.EntityID) == "" {

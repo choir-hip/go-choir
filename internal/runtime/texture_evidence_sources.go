@@ -671,6 +671,10 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "benchmark_log"
 	case "file", "file_artifact", "artifact":
 		return "file_artifact"
+	case "worker_loop", "worker_run", "worker_run_id":
+		return "worker_loop"
+	case "worker_vm", "worker_vm_id", "vm_id":
+		return "worker_vm"
 	default:
 		return ""
 	}
@@ -696,7 +700,7 @@ func executionEvidenceTarget(rec types.EvidenceRecord) (string, string) {
 
 func executionTargetKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact", "worker_loop", "worker_vm":
 		return true
 	default:
 		return false
@@ -777,6 +781,10 @@ func executionSourceDefaultLabel(kind string) string {
 		return "Benchmark log"
 	case "file_artifact":
 		return "File artifact"
+	case "worker_loop":
+		return "Worker loop"
+	case "worker_vm":
+		return "Worker VM"
 	default:
 		return "Coagent source"
 	}
