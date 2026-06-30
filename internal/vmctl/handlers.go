@@ -202,6 +202,33 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if req.UserID == UniversalWirePlatformOwnerID && req.DesktopID == UniversalWirePlatformDesktopID {
+		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
+			log.Printf("vmctl: resolve platform computer failed: %v", err)
+			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve platform computer"})
+			return
+		}
+		own := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
+		if own == nil {
+			log.Printf("vmctl: resolve platform computer lookup failed after ensure")
+			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve platform computer"})
+			return
+		}
+		writeVMCTLJSON(w, http.StatusOK, resolveResponse{
+			VMID:            own.VMID,
+			UserID:          own.UserID,
+			DesktopID:       own.DesktopID,
+			Kind:            own.Kind,
+			ParentDesktopID: own.ParentDesktopID,
+			ParentVMID:      own.ParentVMID,
+			SnapshotKind:    own.SnapshotKind,
+			Published:       own.Published,
+			WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
+			SandboxURL:      own.SandboxURL,
+			State:           string(own.State),
+		})
+		return
+	}
 	if req.DesktopID != PrimaryDesktopID {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{
 			Error: "resolve can provision only the primary desktop; use lookup for published desktops or fork/publish for new desktops",

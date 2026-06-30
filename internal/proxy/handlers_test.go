@@ -2878,6 +2878,56 @@ func TestResolveSandboxURLRetriesTransientVMctlFailure(t *testing.T) {
 	}
 }
 
+func TestResolveSandboxURLUsesResolveForUniversalWirePlatformComputer(t *testing.T) {
+	resolveCalls := 0
+	lookupCalls := 0
+	vmctlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal/vmctl/resolve":
+			resolveCalls++
+			var req struct {
+				UserID    string `json:"user_id"`
+				DesktopID string `json:"desktop_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode resolve request: %v", err)
+			}
+			if req.UserID != vmctl.UniversalWirePlatformOwnerID || req.DesktopID != vmctl.UniversalWirePlatformDesktopID {
+				t.Fatalf("resolve request = %+v, want Universal Wire platform computer", req)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"vm_id":          vmctl.UniversalWirePlatformVMID,
+				"user_id":        vmctl.UniversalWirePlatformOwnerID,
+				"desktop_id":     vmctl.UniversalWirePlatformDesktopID,
+				"kind":           string(vmctl.VMKindInteractive),
+				"published":      true,
+				"sandbox_url":    "http://10.203.141.2:8085",
+				"state":          string(vmctl.VMStateActive),
+				"warmness_class": "public_platform",
+			})
+		case "/internal/vmctl/lookup":
+			lookupCalls++
+			http.Error(w, "lookup should not serve platform computer", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(func() { vmctlSrv.Close() })
+
+	handler := &Handler{vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
+	got, err := handler.resolveSandboxURL(context.Background(), vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID)
+	if err != nil {
+		t.Fatalf("resolveSandboxURL: %v", err)
+	}
+	if got != "http://10.203.141.2:8085" {
+		t.Fatalf("sandbox URL = %q, want platform sandbox", got)
+	}
+	if resolveCalls != 1 || lookupCalls != 0 {
+		t.Fatalf("vmctl calls: resolve=%d lookup=%d, want resolve-only", resolveCalls, lookupCalls)
+	}
+}
+
 func TestVMctlRouting_UnpublishedDesktopRejected(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 
@@ -4118,7 +4168,7 @@ func hashSecretForTest(secret string) string {
 func TestBearerTokenAuthAcceptsValidAPIKey(t *testing.T) {
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
 
-	user, secret := createTestAPIKey(t, store, "valid-key", []string{"read:base", "write:base"}, nil)
+	user, secret := createTestAPIKey(t, store, "valid-key", []string{"read:runtime"}, nil)
 
 	// Make a request with the Bearer token to the bootstrap endpoint.
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
@@ -4262,7 +4312,7 @@ func TestBearerTokenAuthScopePropagation(t *testing.T) {
 	// Replace the sandbox server handler.
 	sandbox.Config.Handler = sandboxMux
 
-	scopes := []string{"read:base", "write:base"}
+	scopes := []string{"read:runtime", "write:runtime"}
 	user, secret := createTestAPIKey(t, store, "scope-key", scopes, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
@@ -4343,8 +4393,10 @@ func TestBearerTokenAuthProtectedAPI(t *testing.T) {
 	sandboxMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"user":   r.Header.Get("X-Authenticated-User"),
-			"scopes": r.Header.Get("X-Authenticated-Scopes"),
+			"user":          r.Header.Get("X-Authenticated-User"),
+			"scopes":        r.Header.Get("X-Authenticated-Scopes"),
+			"authorization": r.Header.Get("Authorization"),
+			"cookie":        r.Header.Get("Cookie"),
 		})
 	})
 	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -4372,6 +4424,94 @@ func TestBearerTokenAuthProtectedAPI(t *testing.T) {
 	}
 	if got := resp["scopes"]; got != "read:runtime,write:runtime" {
 		t.Errorf("scopes: got %v, want %q", got, "read:runtime,write:runtime")
+	}
+	if got := resp["authorization"]; got != "" {
+		t.Errorf("authorization forwarded upstream: got %v, want empty", got)
+	}
+	if got := resp["cookie"]; got != "" {
+		t.Errorf("cookie forwarded upstream: got %v, want empty", got)
+	}
+}
+
+func TestBearerTokenAuthRejectsMissingScope_whenProtectedAPIRouteRequiresRuntimeWrite(t *testing.T) {
+	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+
+	var upstreamReached bool
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
+		upstreamReached = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox.Config.Handler = sandboxMux
+
+	_, secret := createTestAPIKey(t, store, "runtime-read-only", []string{"read:runtime"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleProtectedAPI(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if upstreamReached {
+		t.Fatal("upstream reached with API key missing required write:runtime scope")
+	}
+}
+
+func TestBearerTokenAuthRejectsMissingScope_whenComputeRecoveryRequiresRuntimeWrite(t *testing.T) {
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+
+	_, secret := createTestAPIKey(t, store, "compute-read-only", []string{"read:runtime"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleComputeRecovery(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+func TestBearerTokenAuthAcceptsBaseReadScope_whenProtectedAPIRouteIsBaseRead(t *testing.T) {
+	handler, _, sandbox, store := testProxyEnvWithAuthStore(t)
+
+	sandboxMux := http.NewServeMux()
+	sandboxMux.HandleFunc("/api/base/delta", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"user":   r.Header.Get("X-Authenticated-User"),
+			"scopes": r.Header.Get("X-Authenticated-Scopes"),
+		})
+	})
+	sandboxMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	sandbox.Config.Handler = sandboxMux
+
+	user, secret := createTestAPIKey(t, store, "base-read", []string{"read:base"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/base/delta?cursor=0", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	handler.HandleProtectedAPI(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := resp["user"]; got != user.ID {
+		t.Errorf("user: got %v, want %q", got, user.ID)
+	}
+	if got := resp["scopes"]; got != "read:base" {
+		t.Errorf("scopes: got %v, want %q", got, "read:base")
 	}
 }
 
@@ -4407,7 +4547,7 @@ func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
 	})
 	sandbox.Config.Handler = sandboxMux
 
-	scopes := []string{"read:base"}
+	scopes := []string{"read:runtime"}
 	_, secret := createTestAPIKey(t, store, "strip-key", scopes, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
@@ -4426,7 +4566,7 @@ func TestBearerTokenAuthStripsClientSuppliedScopes(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	// Should be the key's scopes, not the client-supplied ones.
-	if got := resp["scopes"]; got != "read:base" {
-		t.Errorf("scopes: got %v, want %q (client-supplied scopes should be stripped)", got, "read:base")
+	if got := resp["scopes"]; got != "read:runtime" {
+		t.Errorf("scopes: got %v, want %q (client-supplied scopes should be stripped)", got, "read:runtime")
 	}
 }

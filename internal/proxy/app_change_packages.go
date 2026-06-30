@@ -61,6 +61,9 @@ func (h *Handler) HandleAppChangePackageReviewEvidence(w http.ResponseWriter, r 
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
 	packageID, ok := appChangePackageReviewEvidencePackageID(r.URL.Path)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "app change package not found"})
@@ -298,6 +301,9 @@ func (h *Handler) HandleAppChangePackagePull(w http.ResponseWriter, r *http.Requ
 	authResult, err := h.authenticate(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
 		return
 	}
 	var req appChangePackagePullRequest

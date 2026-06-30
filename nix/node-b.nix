@@ -162,6 +162,9 @@ in
         handle /health {
           reverse_proxy 127.0.0.1:8082
         }
+        handle /health/* {
+          reverse_proxy 127.0.0.1:8084
+        }
         handle /api/email/resend/webhook {
           reverse_proxy 127.0.0.1:8087
         }
@@ -289,13 +292,14 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
-      # Proxy needs to read the auth signing public key.
-      ReadWritePaths = [ "/var/lib/go-choir/auth-signing" ];
+      # Proxy needs to read auth signing material and the auth DB for API-key validation.
+      ReadWritePaths = [ "/var/lib/go-choir/auth-signing" "/var/lib/go-choir/auth" ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "PROXY_PORT=8082"
         "PROXY_SANDBOX_URL=http://127.0.0.1:8085"
         "PROXY_AUTH_PUBLIC_KEY_PATH=${authSigningDir}/ed25519-key.pub"
+        "PROXY_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
         # When vmctl is running, the proxy resolves user VM ownership
         # through vmctl instead of using the static sandbox URL
         # (VAL-VM-001, VAL-VM-002).

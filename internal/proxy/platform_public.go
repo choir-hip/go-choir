@@ -181,6 +181,10 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		h.lifecycle.record("platform_proposal.auth", "unauthorized", time.Since(started))
 		return
 	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		h.lifecycle.record("platform_proposal.authz", "forbidden", time.Since(started))
+		return
+	}
 	var req proposalRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
