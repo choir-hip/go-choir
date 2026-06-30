@@ -1316,6 +1316,63 @@ func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// HandlePlatformObjectGraph forwards object graph API requests from the
+// runtime (inside a VM) to platformd. The runtime's objectgraph.HTTPStore
+// sets X-Internal-Caller: true; the proxy checks this header on the incoming
+// request and then sets its own X-Internal-Caller header when forwarding to
+// platformd, so the caller cannot forge arbitrary header values.
+//
+// Security model: this route uses the same X-Internal-Caller trust signal as
+// HandleInternalWirePlatformPublish. The Caddy edge (nix/node-b.nix) blocks
+// all /internal/* routes from the public internet with a 403, so this handler
+// is only reachable from inside VMs via the VM-to-host network. VM processes
+// are already trusted to run runtime code. A hard cryptographic boundary
+// (shared secret between proxy and platformd) is out of scope for this PR.
+// Both /internal/platform/objects and /internal/platform/edges (with optional
+// sub-paths and query strings) are forwarded as-is.
+func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Request) {
+	// Require the internal-caller header on the incoming request, matching
+	// the HandleInternalWirePlatformPublish pattern.
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "internal caller required"})
+		return
+	}
+	target, err := joinBasePath(h.cfg.PlatformdURL, r.URL.Path)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platformd URL"})
+		return
+	}
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	httpReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platformd request"})
+		return
+	}
+	// The proxy is the trusted internal caller to platformd. Strip any
+	// caller-supplied X-Internal-Caller header and set it ourselves so a
+	// VM process cannot forge internal-caller privileges.
+	httpReq.Header.Set("X-Internal-Caller", "true")
+	if v := r.Header.Get("Content-Type"); v != "" {
+		httpReq.Header.Set("Content-Type", v)
+	}
+
+	resp, err := h.platformd.Do(httpReq)
+	if err != nil {
+		log.Printf("proxy: platformd objectgraph: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to reach platformd"})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("proxy: platformd objectgraph copy: %v", err)
+	}
+}
+
 // isPlatformTextureReadRequest returns true for read-only Texture requests that
 // should be served from platformd's published store rather than the sandbox.
 func isPlatformTextureReadRequest(r *http.Request) bool {
@@ -1350,4 +1407,11 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// exposed as public browser-facing routes.
 	s.HandleFunc("/internal/vmctl/", h.HandleVMctlDeny)
 	s.HandleFunc("/internal/wire/platform/publications/texture", h.HandleInternalWirePlatformPublish)
+	// Object graph API: forward runtime objectgraph HTTPStore calls to
+	// platformd. The runtime (inside a VM) reaches platformd through the
+	// proxy; these routes pass through /internal/platform/objects and
+	// /internal/platform/edges to platformd's object graph handler.
+	s.HandleFunc("/internal/platform/objects", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/objects/", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/edges", h.HandlePlatformObjectGraph)
 }

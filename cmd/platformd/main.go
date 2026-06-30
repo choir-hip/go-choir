@@ -46,7 +46,7 @@ func main() {
 	ogService := objectgraph.NewService(objectgraph.Config{
 		Durable: ogStore,
 	})
-	ogHandler := platform.NewObjectGraphHandler(ogService)
+	ogHandler := platform.NewObjectGraphHandler(ogService, ogStore)
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
 	s.Start()

@@ -84,6 +84,13 @@ const (
 	// DefaultQdrantURL is the node-b Qdrant instance URL.
 	DefaultQdrantURL = "http://127.0.0.1:6333"
 
+	// DefaultPlatformdURL is the default platformd/proxy URL used when
+	// neither RUNTIME_PLATFORMD_URL nor PROXY_PLATFORMD_URL is set. In
+	// deployed VMs this is the proxy port (8082); in local dev it's the
+	// same. The proxy routes /internal/platform/objects and
+	// /internal/platform/edges to platformd.
+	DefaultPlatformdURL = "http://127.0.0.1:8082"
+
 	// DefaultOllamaURL is the local Ollama instance URL for embeddings.
 	DefaultOllamaURL = "http://localhost:11434"
 
@@ -118,7 +125,7 @@ func LoadConfig() Config {
 		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),
 		WirePublishURL:     os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
-		PlatformdURL:       envOr("RUNTIME_PLATFORMD_URL", os.Getenv("PROXY_PLATFORMD_URL")),
+		PlatformdURL:       envOr("RUNTIME_PLATFORMD_URL", envOr("PROXY_PLATFORMD_URL", DefaultPlatformdURL)),
 		LLMProvider:        os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:           os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort: os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),
@@ -163,10 +170,10 @@ func LoadConfig() Config {
 			"RUNTIME_APP_PROMOTION_BUILD_TIMEOUT",
 			DefaultAppPromotionBuildTimeout,
 		),
-		QdrantURL:            envOr("QDRANT_URL", DefaultQdrantURL),
-		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
-		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
-		QdrantDedupThreshold: float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
+		QdrantURL:               envOr("QDRANT_URL", DefaultQdrantURL),
+		OllamaURL:               envOr("OLLAMA_URL", DefaultOllamaURL),
+		OllamaEmbeddingModel:    envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
+		QdrantDedupThreshold:    float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
 		TracePersistenceEnabled: boolOr("RUNTIME_TRACE_PERSISTENCE_ENABLED", false),
 	})
 }

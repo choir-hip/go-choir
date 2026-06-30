@@ -2,6 +2,7 @@ package platform
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -23,13 +24,19 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 
 type ObjectGraphHandler struct {
 	service *objectgraph.Service
+	store   objectgraph.Store
 }
 
-func NewObjectGraphHandler(svc *objectgraph.Service) *ObjectGraphHandler {
-	return &ObjectGraphHandler{service: svc}
+// NewObjectGraphHandler builds a handler that exposes both Service-level
+// methods (CreateObject/GET, used by sourcecycled and VMs that want the
+// platform to derive object identity) and Store-level PUT methods (used by
+// runtimes that derive identity locally and only need durable persistence).
+func NewObjectGraphHandler(svc *objectgraph.Service, store objectgraph.Store) *ObjectGraphHandler {
+	return &ObjectGraphHandler{service: svc, store: store}
 }
 
-// HandleObjects handles POST /internal/platform/objects (create) and
+// HandleObjects handles POST /internal/platform/objects (Service create),
+// PUT /internal/platform/objects (Store put with a pre-built Object), and
 // GET /internal/platform/objects (list with optional kind/owner/limit filters).
 func (h *ObjectGraphHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
 	if err := requireInternalCaller(r); err != nil {
@@ -39,6 +46,8 @@ func (h *ObjectGraphHandler) HandleObjects(w http.ResponseWriter, r *http.Reques
 	switch r.Method {
 	case http.MethodPost:
 		h.createObject(w, r)
+	case http.MethodPut:
+		h.putObject(w, r)
 	case http.MethodGet:
 		h.listObjects(w, r)
 	default:
@@ -75,7 +84,8 @@ func (h *ObjectGraphHandler) HandleObjectByID(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, obj)
 }
 
-// HandleEdges handles POST /internal/platform/edges (create) and
+// HandleEdges handles POST /internal/platform/edges (Service create),
+// PUT /internal/platform/edges (Store put with a pre-built Edge), and
 // GET /internal/platform/edges (list with optional from/to/kind/limit filters).
 func (h *ObjectGraphHandler) HandleEdges(w http.ResponseWriter, r *http.Request) {
 	if err := requireInternalCaller(r); err != nil {
@@ -85,6 +95,8 @@ func (h *ObjectGraphHandler) HandleEdges(w http.ResponseWriter, r *http.Request)
 	switch r.Method {
 	case http.MethodPost:
 		h.createEdge(w, r)
+	case http.MethodPut:
+		h.putEdge(w, r)
 	case http.MethodGet:
 		h.listEdges(w, r)
 	default:
@@ -137,6 +149,34 @@ func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, obj)
 }
 
+// putObject handles PUT /internal/platform/objects. It accepts a full
+// objectgraph.Object (with a pre-built canonical_id and content_hash) and
+// persists it directly via the Store, bypassing Service.CreateObject's ID
+// derivation. This is the path used by runtimes that derive identity locally.
+// The handler validates that the canonical_id is well-formed and consistent
+// with the object_kind and owner_id before storing.
+func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph store unavailable"})
+		return
+	}
+	var obj objectgraph.Object
+	if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if err := validateObject(obj); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if err := h.store.PutObject(r.Context(), obj); err != nil {
+		log.Printf("platformd: put object %s: %v", obj.CanonicalID, err)
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, obj)
+}
+
 func (h *ObjectGraphHandler) listObjects(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph unavailable"})
@@ -187,6 +227,33 @@ func (h *ObjectGraphHandler) createEdge(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusCreated, edge)
 }
 
+// putEdge handles PUT /internal/platform/edges. It accepts a full
+// objectgraph.Edge (with a pre-built edge_id) and persists it directly via the
+// Store, bypassing Service.PutEdge's validation/derivation. This is the path
+// used by runtimes that derive edge identity locally. The handler validates
+// that required fields are non-empty before storing.
+func (h *ObjectGraphHandler) putEdge(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph store unavailable"})
+		return
+	}
+	var edge objectgraph.Edge
+	if err := json.NewDecoder(r.Body).Decode(&edge); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if err := validateEdge(edge); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if err := h.store.PutEdge(r.Context(), edge); err != nil {
+		log.Printf("platformd: put edge %s: %v", edge.EdgeID, err)
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, edge)
+}
+
 func (h *ObjectGraphHandler) listEdges(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph unavailable"})
@@ -234,4 +301,49 @@ func parseLimit(s string) int {
 		return 0
 	}
 	return n
+}
+
+// validateObject checks that a pre-built Object has a well-formed canonical_id
+// consistent with its object_kind and owner_id, and that the content_hash
+// matches the body/metadata. This prevents a buggy or malicious internal
+// caller from persisting inconsistent graph rows via the PUT endpoint.
+func validateObject(obj objectgraph.Object) error {
+	if strings.TrimSpace(obj.CanonicalID) == "" {
+		return fmt.Errorf("canonical_id is required")
+	}
+	kind, ownerID, _, err := objectgraph.ParseCanonicalID(obj.CanonicalID)
+	if err != nil {
+		return fmt.Errorf("invalid canonical_id: %w", err)
+	}
+	if kind != obj.ObjectKind {
+		return fmt.Errorf("canonical_id kind %q does not match object_kind %q", kind, obj.ObjectKind)
+	}
+	if ownerID != obj.OwnerID {
+		return fmt.Errorf("canonical_id owner %q does not match owner_id %q", ownerID, obj.OwnerID)
+	}
+	if strings.TrimSpace(obj.ContentHash) == "" {
+		return fmt.Errorf("content_hash is required")
+	}
+	expectedHash := objectgraph.ContentHash(obj.ObjectKind, obj.Body, obj.Metadata)
+	if obj.ContentHash != expectedHash {
+		return fmt.Errorf("content_hash %q does not match computed hash %q", obj.ContentHash, expectedHash)
+	}
+	return nil
+}
+
+// validateEdge checks that a pre-built Edge has all required non-empty fields.
+func validateEdge(edge objectgraph.Edge) error {
+	if strings.TrimSpace(edge.EdgeID) == "" {
+		return fmt.Errorf("edge_id is required")
+	}
+	if strings.TrimSpace(edge.FromID) == "" {
+		return fmt.Errorf("from_id is required")
+	}
+	if strings.TrimSpace(edge.ToID) == "" {
+		return fmt.Errorf("to_id is required")
+	}
+	if strings.TrimSpace(string(edge.Kind)) == "" {
+		return fmt.Errorf("kind is required")
+	}
+	return nil
 }

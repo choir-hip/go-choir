@@ -272,7 +272,7 @@ func TestObjectGraphHandler_CreateAndGet(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
-	handler := NewObjectGraphHandler(ogService)
+	handler := NewObjectGraphHandler(ogService, ogStore)
 
 	// POST an object.
 	body := `{"kind":"choir.source_entity","owner_id":"handler-owner","body":"test","metadata":{"schema_version":"choir.source_entity.v1"}}`
@@ -312,7 +312,7 @@ func TestObjectGraphHandler_ListObjects(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
-	handler := NewObjectGraphHandler(ogService)
+	handler := NewObjectGraphHandler(ogService, ogStore)
 	ctx := context.Background()
 
 	// Seed an object.
@@ -347,7 +347,7 @@ func TestObjectGraphHandler_RequireInternalCaller(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
-	handler := NewObjectGraphHandler(ogService)
+	handler := NewObjectGraphHandler(ogService, ogStore)
 
 	// No X-Internal-Caller header → 403.
 	req := httptest.NewRequest(http.MethodGet, "/internal/platform/objects", nil)
@@ -362,7 +362,7 @@ func TestObjectGraphHandler_CreateEdge(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ogStore := NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
-	handler := NewObjectGraphHandler(ogService)
+	handler := NewObjectGraphHandler(ogService, ogStore)
 	ctx := context.Background()
 
 	// Seed two objects.

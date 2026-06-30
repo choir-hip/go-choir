@@ -3,16 +3,18 @@ package runtime
 import (
 	"fmt"
 	"log"
-	"path/filepath"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // ObjectGraph returns the runtime-owned durable objectgraph service. It is
 // initialized lazily so tests and lightweight runtimes that never touch graph
 // APIs do not open another database handle.
+//
+// In production the durable store is an HTTPStore that queries corpusd (the
+// platform Dolt SQL server) through platformd. Tests may inject an in-memory
+// store via Config.ObjectGraphStore to avoid requiring a running platformd.
 func (rt *Runtime) ObjectGraph() *objectgraph.Service {
 	if rt == nil {
 		return nil
@@ -25,7 +27,7 @@ func (rt *Runtime) ObjectGraph() *objectgraph.Service {
 	if rt.objectGraphInitErr != nil {
 		return nil
 	}
-	svc, err := newRuntimeObjectGraphService(rt.cfg, rt.store)
+	svc, err := newRuntimeObjectGraphService(rt.cfg)
 	if err != nil {
 		rt.objectGraphInitErr = err
 		log.Printf("runtime: objectgraph unavailable: %v", err)
@@ -50,35 +52,34 @@ func (rt *Runtime) closeObjectGraph() {
 	rt.objectGraph = nil
 }
 
-func newRuntimeObjectGraphService(cfg Config, s *store.Store) (*objectgraph.Service, error) {
-	workspacePath, dbName, err := runtimeObjectGraphDoltWorkspace(cfg, s)
-	if err != nil {
-		return nil, err
+// newRuntimeObjectGraphService builds the runtime objectgraph Service. The
+// durable store defaults to an HTTPStore backed by platformd (via the proxy)
+// so object graph data persists in corpusd. When cfg.ObjectGraphStore is set
+// (a test seam), it is used directly instead of constructing an HTTPStore.
+//
+// URL precedence: WirePublishURL is preferred because it is always set
+// correctly in deployed VMs (derived from vmctl_url). PlatformdURL is used as
+// a fallback (it defaults to http://127.0.0.1:8082 for local dev). The proxy
+// routes /internal/platform/objects and /internal/platform/edges to platformd.
+func newRuntimeObjectGraphService(cfg Config) (*objectgraph.Service, error) {
+	if cfg.ObjectGraphStore != nil {
+		return objectgraph.NewService(objectgraph.Config{
+			Memory:  objectgraph.NewMemoryStore(),
+			Durable: cfg.ObjectGraphStore,
+		}), nil
 	}
-	doltStore, err := objectgraph.OpenDoltStore(workspacePath, dbName)
-	if err != nil {
-		return nil, err
+	// Prefer WirePublishURL — in VMs it's derived from vmctl_url and points
+	// to the host proxy. PlatformdURL defaults to localhost for local dev.
+	baseURL := strings.TrimSpace(cfg.WirePublishURL)
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(cfg.PlatformdURL)
 	}
+	if baseURL == "" {
+		return nil, fmt.Errorf("runtime: platformd URL is required for objectgraph (set RUNTIME_PLATFORMD_URL or RUNTIME_WIRE_PUBLISH_URL)")
+	}
+	httpStore := objectgraph.NewHTTPStore(baseURL)
 	return objectgraph.NewService(objectgraph.Config{
 		Memory:  objectgraph.NewMemoryStore(),
-		Durable: doltStore,
+		Durable: httpStore,
 	}), nil
-}
-
-func runtimeObjectGraphDoltWorkspace(cfg Config, s *store.Store) (workspacePath, dbName string, err error) {
-	base := ""
-	if s != nil {
-		base = strings.TrimSpace(s.Path())
-	}
-	if base == "" {
-		base = strings.TrimSpace(cfg.StorePath)
-	}
-	if base == "" {
-		return "", "", fmt.Errorf("runtime store path is required")
-	}
-	dir := filepath.Dir(base)
-	if dir == "" || dir == "." {
-		dir = "/tmp/go-choir-m3"
-	}
-	return filepath.Join(dir, "objectgraph-dolt"), "objectgraph", nil
 }
