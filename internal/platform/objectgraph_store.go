@@ -49,6 +49,9 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put object: %w", err)
 	}
+	if err := o.store.commitDolt(ctx, "objectgraph put object "+obj.CanonicalID); err != nil {
+		return fmt.Errorf("platform objectgraph: put object commit: %w", err)
+	}
 	return nil
 }
 
@@ -116,6 +119,9 @@ func (o *ObjectGraphStore) PutEdge(ctx context.Context, edge objectgraph.Edge) e
 		edge.CreatedAt.UTC(), edge.Tombstone)
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put edge: %w", err)
+	}
+	if err := o.store.commitDolt(ctx, "objectgraph put edge "+edge.EdgeID); err != nil {
+		return fmt.Errorf("platform objectgraph: put edge commit: %w", err)
 	}
 	return nil
 }

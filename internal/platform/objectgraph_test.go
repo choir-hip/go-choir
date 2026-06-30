@@ -25,11 +25,11 @@ func TestObjectGraphStore_PutAndGet(t *testing.T) {
 		OwnerID: "test-owner",
 		Body:    []byte("test body"),
 		Metadata: map[string]any{
-			"schema_version":       objectgraph.WebCaptureSchemaVersion,
-			"url":                  "https://example.com/article",
-			"canonical_url":        "https://example.com/article",
-			"fetched_at":           time.Now().UTC().Format(time.RFC3339Nano),
-			"content_blob_id":      "test:content",
+			"schema_version":         objectgraph.WebCaptureSchemaVersion,
+			"url":                    "https://example.com/article",
+			"canonical_url":          "https://example.com/article",
+			"fetched_at":             time.Now().UTC().Format(time.RFC3339Nano),
+			"content_blob_id":        "test:content",
 			"extracted_text_blob_id": "test:extracted",
 		},
 	})
@@ -72,11 +72,11 @@ func TestObjectGraphStore_ListObjects(t *testing.T) {
 			OwnerID: "list-owner",
 			Body:    []byte("body"),
 			Metadata: map[string]any{
-				"schema_version":       objectgraph.WebCaptureSchemaVersion,
-				"url":                  "https://example.com/" + string(rune('a'+i)),
-				"canonical_url":        "https://example.com/" + string(rune('a'+i)),
-				"fetched_at":           time.Now().UTC().Format(time.RFC3339Nano),
-				"content_blob_id":      "test:content",
+				"schema_version":         objectgraph.WebCaptureSchemaVersion,
+				"url":                    "https://example.com/" + string(rune('a'+i)),
+				"canonical_url":          "https://example.com/" + string(rune('a'+i)),
+				"fetched_at":             time.Now().UTC().Format(time.RFC3339Nano),
+				"content_blob_id":        "test:content",
 				"extracted_text_blob_id": "test:extracted",
 			},
 		})
@@ -110,11 +110,11 @@ func TestObjectGraphStore_PutAndListEdges(t *testing.T) {
 		OwnerID: "edge-owner",
 		Body:    []byte("capture body"),
 		Metadata: map[string]any{
-			"schema_version":       objectgraph.WebCaptureSchemaVersion,
-			"url":                  "https://example.com/cap",
-			"canonical_url":        "https://example.com/cap",
-			"fetched_at":           time.Now().UTC().Format(time.RFC3339Nano),
-			"content_blob_id":      "test:content",
+			"schema_version":         objectgraph.WebCaptureSchemaVersion,
+			"url":                    "https://example.com/cap",
+			"canonical_url":          "https://example.com/cap",
+			"fetched_at":             time.Now().UTC().Format(time.RFC3339Nano),
+			"content_blob_id":        "test:content",
 			"extracted_text_blob_id": "test:extracted",
 		},
 	})
@@ -162,6 +162,98 @@ func TestObjectGraphStore_PutAndListEdges(t *testing.T) {
 	}
 	if edges[0].Kind != "captured_from" {
 		t.Errorf("kind: got %s, want captured_from", edges[0].Kind)
+	}
+}
+
+func TestObjectGraphStore_IdempotentEdgeUpsert(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ogStore := NewObjectGraphStore(store)
+	ctx := context.Background()
+	ogService := objectgraph.NewService(objectgraph.Config{Durable: ogStore})
+
+	capture, err := ogService.CreateObject(ctx, objectgraph.CreateObjectRequest{
+		Kind:    objectgraph.WebCaptureObjectKind,
+		OwnerID: "idempotent-owner",
+		Body:    []byte("cap"),
+		Metadata: map[string]any{
+			"schema_version":         objectgraph.WebCaptureSchemaVersion,
+			"url":                    "https://example.com/idem",
+			"canonical_url":          "https://example.com/idem",
+			"fetched_at":             time.Now().UTC().Format(time.RFC3339Nano),
+			"content_blob_id":        "test:content",
+			"extracted_text_blob_id": "test:extracted",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateObject capture: %v", err)
+	}
+	source, err := ogService.CreateObject(ctx, objectgraph.CreateObjectRequest{
+		Kind:     "choir.source_entity",
+		OwnerID:  "idempotent-owner",
+		Body:     []byte("src"),
+		Metadata: map[string]any{"schema_version": "choir.source_entity.v1"},
+	})
+	if err != nil {
+		t.Fatalf("CreateObject source: %v", err)
+	}
+
+	// First PutEdge — creates the edge.
+	edge1, err := ogService.PutEdge(ctx, capture.CanonicalID, source.CanonicalID, "captured_from", map[string]any{
+		"relation": "test",
+	})
+	if err != nil {
+		t.Fatalf("PutEdge first: %v", err)
+	}
+
+	// Second PutEdge with identical values — must not fail with "nothing to
+	// commit". Dolt returns an error on DOLT_COMMIT when the working set has
+	// no changes; commitDolt must tolerate this for idempotent retries.
+	_, err = ogService.PutEdge(ctx, capture.CanonicalID, source.CanonicalID, "captured_from", map[string]any{
+		"relation": "test",
+	})
+	if err != nil {
+		t.Fatalf("PutEdge idempotent retry: %v", err)
+	}
+
+	// Verify only one edge exists.
+	edges, err := ogStore.ListEdges(ctx, objectgraph.EdgeFilter{
+		FromID: capture.CanonicalID,
+	})
+	if err != nil {
+		t.Fatalf("ListEdges: %v", err)
+	}
+	if len(edges) != 1 {
+		t.Errorf("expected 1 edge after idempotent retry, got %d", len(edges))
+	}
+	if edges[0].EdgeID != edge1.EdgeID {
+		t.Errorf("edge_id: got %s, want %s", edges[0].EdgeID, edge1.EdgeID)
+	}
+}
+
+func TestObjectGraphStore_IdempotentObjectUpsert(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ogStore := NewObjectGraphStore(store)
+	ctx := context.Background()
+
+	// PutObject directly with a fixed timestamp so a retry produces no
+	// working-set change.
+	now := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
+	obj := objectgraph.Object{
+		CanonicalID: "obj:choir.source_entity:idem-owner:sha256-abc",
+		ObjectKind:  "choir.source_entity",
+		OwnerID:     "idem-owner",
+		ContentHash: "sha256:abc",
+		Body:        []byte("body"),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := ogStore.PutObject(ctx, obj); err != nil {
+		t.Fatalf("PutObject first: %v", err)
+	}
+	// Retry with identical values — must not fail with "nothing to commit".
+	if err := ogStore.PutObject(ctx, obj); err != nil {
+		t.Fatalf("PutObject idempotent retry: %v", err)
 	}
 }
 

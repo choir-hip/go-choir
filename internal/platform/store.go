@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -456,6 +457,13 @@ func (s *Store) commitDolt(ctx context.Context, message string) error {
 		message = "platform change"
 	}
 	if _, err := s.db.ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
+		// Dolt returns "nothing to commit" when the working set has no changes
+		// relative to the current commit (e.g. an idempotent upsert that did
+		// not alter any row values). This is not a failure — the data is
+		// already in the desired state — so treat it as success.
+		if strings.Contains(err.Error(), "nothing to commit") {
+			return nil
+		}
 		return fmt.Errorf("platform store: dolt commit: %w", err)
 	}
 	return nil
