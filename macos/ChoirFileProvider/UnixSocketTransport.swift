@@ -8,14 +8,18 @@
 // "unix" (a sentinel), connects to the configured Unix socket, sends the
 // HTTP request, and returns the response.
 
+import Darwin
 import Foundation
 
 /// UnixSocketTransport routes HTTP requests through a Unix domain socket.
 /// It is registered as a custom URLProtocol in the URLSession configuration.
 final class UnixSocketTransport: URLProtocol {
 
-    /// The socket path to connect to.
-    private let socketPath: String
+    private static var configuredSocketPath: String = ""
+
+    static func configure(socketPath: String) {
+        configuredSocketPath = socketPath
+    }
 
     /// The active socket connection.
     private var socket: FileHandle?
@@ -25,13 +29,6 @@ final class UnixSocketTransport: URLProtocol {
 
     /// The HTTP response being built.
     private var httpResponse: HTTPURLResponse?
-
-    init(socketPath: String) {
-        self.socketPath = socketPath
-        super.init(request: URLRequest(url: URL(string: "http://unix/")!,
-                                       cachePolicy: .reloadIgnoringLocalCacheData,
-                                       timeoutInterval: 30))
-    }
 
     // MARK: - URLProtocol
 
@@ -49,11 +46,14 @@ final class UnixSocketTransport: URLProtocol {
             client?.urlProtocol(self, didFailWithError: BridgeError.invalidResponse)
             return
         }
+        let socketPath = Self.configuredSocketPath
+        guard !socketPath.isEmpty else {
+            client?.urlProtocol(self, didFailWithError: BridgeError.socketUnavailable)
+            return
+        }
 
         // Connect to the Unix socket.
-        let fd = socketPath.withCString { path -> Int32 in
-            return Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        }
+        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
 
         guard fd >= 0 else {
             client?.urlProtocol(self, didFailWithError: BridgeError.socketUnavailable)
@@ -62,10 +62,10 @@ final class UnixSocketTransport: URLProtocol {
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
+        let maxSocketPathLength = MemoryLayout.size(ofValue: addr.sun_path)
         socketPath.withCString { path in
-            withUnsafeMutableBytes(of: &addr.sun_path) { buf in
-                let pathBytes = path.utf8CString
-                buf.copyBytes(from: pathBytes)
+            withUnsafeMutablePointer(to: &addr.sun_path.0) { destination in
+                _ = Darwin.strncpy(destination, path, maxSocketPathLength - 1)
             }
         }
 
@@ -109,7 +109,7 @@ final class UnixSocketTransport: URLProtocol {
     }
 
     override func stopLoading() {
-        socket?.close()
+        try? socket?.close()
         socket = nil
     }
 

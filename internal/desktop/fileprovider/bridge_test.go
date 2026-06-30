@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/base/model"
+	"github.com/yusefmosiah/go-choir/internal/base/planner"
 	"github.com/yusefmosiah/go-choir/internal/desktop"
 )
 
@@ -56,9 +57,9 @@ func writeJSONTest(w http.ResponseWriter, status int, v interface{}) {
 
 // testBridge holds the bridge, its root, an HTTP client, and cleanup.
 type testBridge struct {
-	bridge *Bridge
-	root   string
-	client *http.Client
+	bridge  *Bridge
+	root    string
+	client  *http.Client
 	cleanup func()
 }
 
@@ -80,9 +81,9 @@ func newTestBridge(t *testing.T, withEngine bool) *testBridge {
 
 	socketPath := filepath.Join(t.TempDir(), "fp.sock")
 	cfg := BridgeConfig{
-		LocalRoot:   root,
-		SocketPath:  socketPath,
-		DeviceID:    "test-device",
+		LocalRoot:  root,
+		SocketPath: socketPath,
+		DeviceID:   "test-device",
 	}
 
 	if withEngine {
@@ -545,6 +546,35 @@ func TestConflictsEmpty(t *testing.T) {
 	}
 	if len(cr.Conflicts) != 0 {
 		t.Errorf("expected 0 conflicts, got %d", len(cr.Conflicts))
+	}
+}
+
+func TestConflictsExposeCollisionParticipants(t *testing.T) {
+	tb := newTestBridge(t, true)
+	defer tb.cleanup()
+
+	tb.bridge.engine.Conflicts().SetConflicts([]planner.Conflict{{
+		ItemID:       "base_item_remote",
+		LocalItemID:  "base_item_local",
+		RemoteItemID: "base_item_remote",
+		Reason:       "add/add path collision",
+	}}, planner.NewTree(), planner.NewTree())
+
+	resp := tb.do(t, "GET", "/conflicts", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var cr ConflictsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(cr.Conflicts) != 1 {
+		t.Fatalf("conflicts: got %d want 1", len(cr.Conflicts))
+	}
+	got := cr.Conflicts[0]
+	if got.LocalItemID != "base_item_local" || got.RemoteItemID != "base_item_remote" {
+		t.Fatalf("participant ids: got local=%q remote=%q", got.LocalItemID, got.RemoteItemID)
 	}
 }
 

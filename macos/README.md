@@ -15,11 +15,16 @@ directly call Go code, so it communicates with the Go sync engine via a
 Unix domain socket HTTP bridge (`internal/desktop/fileprovider/bridge.go`).
 
 The Go bridge is started by the Choir desktop app (Wails) when the sync
-engine is running. The socket path is:
+engine is running. The default socket path is in the shared app-group
+container:
 
 ```
-~/Library/Application Support/Choir/fileprovider.sock
+~/Library/Group Containers/group.news.choir/Choir/fileprovider.sock
 ```
+
+Set `CHOIR_FILEPROVIDER_APP_GROUP_ID` to the provisioned app-group
+identifier if the signed host app uses a team-scoped group identifier, or
+`CHOIR_FILEPROVIDER_SOCKET_PATH` to force an exact socket path.
 
 ## Files
 
@@ -103,7 +108,7 @@ engine is running. The socket path is:
 
 The `ChoirFileProvider.entitlements` file uses:
 - `com.apple.security.app-sandbox` = true
-- `com.apple.security.application-groups` = `$(TeamIdentifierPrefix)news.choir`
+- `com.apple.security.application-groups` = `group.news.choir`
 - `com.apple.developer.fileprovider` = true
 
 For unsigned local testing, set `CODE_SIGNING_ALLOWED=NO` in the Xcode

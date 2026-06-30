@@ -138,9 +138,8 @@ final class BridgeClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        // We use a custom URLProtocol to route through the Unix socket.
-        let transport = UnixSocketTransport(socketPath: socketPath)
-        config.protocolClasses = [transport.self]
+        UnixSocketTransport.configure(socketPath: socketPath)
+        config.protocolClasses = [UnixSocketTransport.self]
         self.session = URLSession(configuration: config)
     }
 
@@ -235,7 +234,7 @@ final class BridgeClient {
         guard let url = URL(string: "http://unix\(path)") else {
             throw BridgeError.invalidResponse
         }
-        let bodyData = try JSONEncoder().encode(body)
+        let bodyData = try bridgeEncoder().encode(body)
         return try synchronousRequest(url: url, method: "PUT", body: bodyData)
     }
 
@@ -245,7 +244,7 @@ final class BridgeClient {
         }
         let bodyData: Data?
         if let body = body {
-            bodyData = try JSONEncoder().encode(body)
+            bodyData = try bridgeEncoder().encode(body)
         } else {
             bodyData = nil
         }
@@ -267,33 +266,33 @@ final class BridgeClient {
 
         let semaphore = DispatchSemaphore(value: 0)
         var resultData: Data?
+        var resultResponse: URLResponse?
         var resultError: Error?
 
         let task = session.dataTask(with: req) { data, response, error in
             resultData = data
+            resultResponse = response
             resultError = error
             semaphore.signal()
         }
         task.resume()
-        _ = semaphore.wait(timeout: .now() + 30)
+        if semaphore.wait(timeout: .now() + 30) == .timedOut {
+            task.cancel()
+            throw BridgeError.socketUnavailable
+        }
 
         if let error = resultError {
             throw error
         }
 
-        guard let httpResp = resultData != nil ? nil : nil,
-              let resp = task.response as? HTTPURLResponse else {
-            // We have data; check status from the response.
-            if let data = resultData {
-                return data
-            }
+        guard let resp = resultResponse as? HTTPURLResponse else {
             throw BridgeError.invalidResponse
         }
 
-        if resp.statusCode != 200 {
+        guard (200..<300).contains(resp.statusCode) else {
             let msg: String
             if let data = resultData {
-                if let errResp = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                if let errResp = try? bridgeDecoder().decode(ErrorResponse.self, from: data) {
                     msg = errResp.error
                 } else {
                     msg = "HTTP \(resp.statusCode)"
@@ -311,8 +310,7 @@ final class BridgeClient {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = bridgeDecoder()
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
@@ -322,5 +320,19 @@ final class BridgeClient {
 
     private func urlEncode(_ s: String) -> String {
         s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s
+    }
+
+    private func bridgeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private func bridgeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }
