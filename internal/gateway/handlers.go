@@ -232,22 +232,22 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // serviceHealthResponse is the JSON body returned by GET /health/{service}.
-// It exposes only coarse status and a truncated error message — never
+// It exposes only coarse status and a generic error message — never
 // credentials, internal URLs, or upstream response bodies (M22b / C20:
 // health endpoints are public but expose no secrets).
 type serviceHealthResponse struct {
-	Status    string    `json:"status"`
-	Service   string    `json:"service"`
-	LatencyMs float64   `json:"latency_ms,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	Breaker   *string   `json:"breaker,omitempty"`
+	Status    string  `json:"status"`
+	Service   string  `json:"service"`
+	LatencyMs float64 `json:"latency_ms,omitempty"`
+	Error     string  `json:"error,omitempty"`
+	Breaker   *string `json:"breaker,omitempty"`
 }
 
 // HandleServiceHealth handles GET /health/{service} for the gateway. It probes
 // a single named backend dependency (sourcecycled, runtime, qdrant, dolt, or
 // ollama) and reports its coarse status. The endpoint is public (no auth) and
 // exposes no secrets: the response contains only the service name, a status of
-// "ok"/"unhealthy"/"not configured", a truncated error message, and — when a
+// "ok"/"unhealthy"/"not configured", a generic error message, and — when a
 // circuit breaker is registered for the service — the breaker state.
 //
 // This makes backend dependency health observable from outside the gateway
@@ -301,11 +301,7 @@ func (h *Handler) HandleServiceHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		resp.Status = string(health.StatusUnhealthy)
-		msg := err.Error()
-		if len(msg) > 200 {
-			msg = msg[:200] + "..."
-		}
-		resp.Error = msg
+		resp.Error = "dependency check failed"
 	} else {
 		resp.Status = string(health.StatusOK)
 	}

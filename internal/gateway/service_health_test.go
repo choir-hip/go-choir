@@ -51,8 +51,8 @@ func TestHandleServiceHealth_OkWhenHealthy(t *testing.T) {
 }
 
 // TestHandleServiceHealth_UnhealthyWhenDown verifies that GET /health/{service}
-// returns "unhealthy" (503) with a truncated error when the probed dependency
-// is unreachable.
+// returns "unhealthy" (503) with a generic public error when the probed
+// dependency is unreachable.
 func TestHandleServiceHealth_UnhealthyWhenDown(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 	h.SetServiceCheckers(map[string]health.Checker{
@@ -183,7 +183,7 @@ func TestHandleServiceHealth_SurfacesBreakerState(t *testing.T) {
 }
 
 // TestHandleServiceHealth_NoSecretsInError verifies the error field is
-// truncated and never contains the full upstream URL or response body. This
+// generic and never contains the raw checker error or secret material. This
 // guards the "health endpoints are public but expose no secrets" invariant.
 func TestHandleServiceHealth_NoSecretsInError(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
@@ -191,7 +191,9 @@ func TestHandleServiceHealth_NoSecretsInError(t *testing.T) {
 	h.SetServiceCheckers(map[string]health.Checker{
 		"ollama": health.CheckerFunc{
 			NameStr: "ollama",
-			Fn:      func(ctx context.Context) error { return errors.New("dial " + secret + " failed") },
+			Fn: func(ctx context.Context) error {
+				return errors.New("dial " + secret + " failed with Authorization: Bearer sk-live-secret-token")
+			},
 		},
 	})
 
@@ -200,17 +202,21 @@ func TestHandleServiceHealth_NoSecretsInError(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.HandleServiceHealth(w, req)
 
+	body := w.Body.String()
 	var resp serviceHealthResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.NewDecoder(strings.NewReader(body)).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// The error is surfaced (truncated) but the response must not contain
-	// unrelated secret material beyond what the checker itself returned.
 	if resp.Error == "" {
 		t.Fatal("error empty for unhealthy dependency")
 	}
-	if len(resp.Error) > 203 {
-		t.Fatalf("error not truncated: len=%d", len(resp.Error))
+	if resp.Error != "dependency check failed" {
+		t.Fatalf("error = %q, want generic public health error", resp.Error)
+	}
+	for _, leak := range []string{secret, "Authorization:", "Bearer ", "sk-live-secret-token", "dial "} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("public health response leaked %q: %s", leak, body)
+		}
 	}
 }
 
