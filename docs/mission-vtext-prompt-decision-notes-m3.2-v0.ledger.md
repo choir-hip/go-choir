@@ -14,7 +14,7 @@ with typed obligations for checkpoint, schema/store, tool, Trace/log
 projection, Sources-panel visibility, and prompt-register tests.
 
 Receipts:
-- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`
+- `docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md`
 - `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`
 - `docs/mission-graph.yaml`
 
@@ -33,7 +33,7 @@ runtime/frontend edits. Expected Delta V: close the first obligation. Actual
 Delta V: V=6 to V=5 at docs-level only.
 
 Receipts:
-- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`
+- `docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md`
 - `internal/runtime/prompt_defaults/vtext.md` inspection
 
 Open edge: schema/tool/API/UI/prompt implementation and all product-path
@@ -1065,7 +1065,7 @@ Receipts:
 - `docs/vtext-agentic-invariants-2026-06-13.md` now makes VText-centered
   ingress a non-negotiable rule and acceptance requirement.
 - `docs/conjecture-assertion-ledger-2026-06.md` adds invariant candidate I8.
-- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md` adds the
+- `docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md` adds the
   VText Control-Plane Ingress checkpoint and supersedes no-worker route
   predicates as overfit staging repair evidence.
 
@@ -1134,7 +1134,7 @@ Receipts:
 - CI run `27523603303` concluded `success` at
   `eae9a96f59e1fd7420ae7283374f2cafdbe798e8`.
 - Deploy to Staging (Node B) job `81346528915` concluded `success`.
-- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md` now says the next move
+- `docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md` now says the next move
   is staging identity plus deployed prompt-bar/source-news-article proof.
 
 Open edge: verify `https://choir.news/health` reports the expected deployed

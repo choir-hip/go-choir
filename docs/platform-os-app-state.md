@@ -164,7 +164,7 @@ A native macOS app (`cmd/desktop/`) wraps the same Svelte frontend in a Wails v3
 window with `ASWebAuthenticationSession` for passkey auth via Safari. It launches
 in cloud mode by default (connecting to `choir.news`). See
 [cmd/desktop/README.md](../cmd/desktop/README.md) and
-[docs/spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
+[docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
 
 Current capabilities:
 

@@ -20,7 +20,7 @@ Actual ΔV: 0. M2 remains unstarted, ready, and first in the active
 architecture spine.
 
 Receipt:
-- Updated `docs/mission-messaging-cutover-v0.md`.
+- Updated `docs/archive/mission-messaging-cutover-v0.md`.
 - M1 is treated as settled; line numbers and grep receipts must still be
   re-verified at M2 start.
 - The first M2 discriminator is Q1: whether durable update append and ledger

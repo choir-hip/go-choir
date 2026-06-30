@@ -6,7 +6,7 @@
   private operator analytics console.
 - Owner premise: aggregate usage/health data should be public; private
   surveillance data is liability, not asset.
-- Move: created `docs/mission-public-pulse-app-v0.md` with working name
+- Move: created `docs/archive/mission-public-pulse-app-v0.md` with working name
   Pulse, no-surveillance invariants, aggregate metric scope, classification
   boundary, and settlement requirements.
 - Expected ΔV: 0 against implementation obligations; this creates the source
@@ -75,7 +75,7 @@
 
 - Claim: the paradoc should not keep routing future agents through an
   implementation handoff after v0 staging settlement has already been recorded.
-- Move: rewrote `docs/mission-public-pulse-app-v0.md` Parallax State from
+- Move: rewrote `docs/archive/mission-public-pulse-app-v0.md` Parallax State from
   `open_handoff` to `settled`, named Pulse / Choir Pulse as the v0 product
   name, preserved "metrics" as the ordinary noun for counters, and updated the
   suggested goal string to prevent accidental v0 re-entry.

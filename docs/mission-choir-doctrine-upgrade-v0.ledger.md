@@ -16,8 +16,7 @@ Receipts: `docs/choir-doctrine.md`, `AGENTS.md`, `README.md`,
 `docs/README.md`, `docs/mission-portfolio-2026-06-11.md`,
 `docs/vtext-agentic-invariants-2026-06-13.md`,
 `docs/heresy-detectors.md`,
-`docs/mission-surface-ontology-cleanup-h027-h029-v0.md`,
-`docs/mission-heresy-detectors-ci-v0.md`, grep/doc validation.
+`docs/archive/mission-surface-ontology-cleanup-h027-h029-v0.md`,
 
 Heresy delta: discovered H027-H029 and detector/process gaps; introduced 0
 intended; repaired doctrine/high-read framing only. Code-bearing H027-H029,

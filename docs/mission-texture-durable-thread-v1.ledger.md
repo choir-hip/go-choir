@@ -17,7 +17,7 @@ Receipts:
 - `docs/mission-texture-durable-thread-v1.md`
 - `docs/mission-texture-durable-thread-v1.ledger.md`
 - `docs/mission-graph.yaml`
-- `docs/mission-texture-long-running-agent-v0.md`
+- `docs/archive/mission-texture-long-running-agent-v0.md`
 
 Open edge: v1 still needs code execution. The first high-information move is R0a
 tests for runtime-owned `update_id` and owner-visible work-state revisions.

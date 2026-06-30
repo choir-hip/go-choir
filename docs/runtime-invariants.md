@@ -229,7 +229,7 @@ Cross-VM routing should use direct transport or a relay, not platform-Dolt
 polling.
 
 This invariant is the spirit of the target durable-actor model
-(`docs/choir-rearchitecture-durable-actors-2026-06-11.md`: "the database
+(`docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md`: "the database
 remembers, Go delivers"). Today's `channel_messages`/inbox-poll path is being
 replaced by Go-channel mailboxes with activation-on-send; until that cutover
 lands, the current per-turn inbox-poll path is what satisfies this invariant in
@@ -269,7 +269,7 @@ without run-memory/compaction and bounded continuation evidence.
 acceptance class.
 
 `continuation-level` is transitional: per
-`docs/choir-rearchitecture-durable-actors-2026-06-11.md`, this acceptance
+`docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md`, this acceptance
 level is being re-pointed at trajectory/work-item settlement evidence
 (portfolio M4). Until that re-pointing lands, the current rule and evidence
 requirement above remain in force.

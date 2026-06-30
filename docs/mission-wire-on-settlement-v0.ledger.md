@@ -1,7 +1,7 @@
 # M5 Wire on Settlement — Parallax Mission Ledger
 
 This is the append-only Parallax mission ledger for the M5 paradoc,
-`docs/mission-wire-on-settlement-v0.md`.
+`docs/archive/mission-wire-on-settlement-v0.md`.
 
 Historical passes before 2026-06-12 are retained inline in the mission
 document under `ledger / move log`. Future passes should append here and

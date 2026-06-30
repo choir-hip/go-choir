@@ -38,9 +38,9 @@ carried only as named temporary shims inside one landing batch.
 Claim/scope: portfolio spine advances only after M2's post-review repair lands
 on staging; no product-surface detour.
 
-Move: recorded M2 settlement in `docs/mission-messaging-cutover-v0.md`,
+Move: recorded M2 settlement in `docs/archive/mission-messaging-cutover-v0.md`,
 updated portfolio V from 7 to 6, marked M2 done, and compiled the M3 lifecycle
-paradoc at `docs/mission-lifecycle-cutover-v0.md`.
+paradoc at `docs/archive/mission-lifecycle-cutover-v0.md`.
 
 Actual Delta V: -1 at the portfolio level. Next spine mission is M3 lifecycle
 cutover.
@@ -73,8 +73,8 @@ that must settle before M3 can reduce lifecycle V.
 
 Receipts:
 - `docs/mission-graph.yaml` now indexes the mission corpus;
-- `docs/mission-lifecycle-cutover-m3.1-v0.md` carries the active goal string;
-- `docs/mission-lifecycle-cutover-v0.md` names the M3.1 recovery gate.
+- `docs/archive/mission-lifecycle-cutover-m3.1-v0.md` carries the active goal string;
+- `docs/archive/mission-lifecycle-cutover-v0.md` names the M3.1 recovery gate.
 
 Open edge: historical mission docs remain indexed evidence, not converted
 Parallax doctrine. Direct rewrites should be limited to active/open missions
@@ -88,7 +88,7 @@ defaults explain delegation pressure without forcing tool choreography or
 polluting canonical documents. Scope is docs/graph routing only; the behavior
 mission remains open.
 
-Move: created `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`, added its
+Move: created `docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md`, added its
 ledger, inserted it between M3.1 and M3 in `docs/mission-graph.yaml`, marked
 M3.1 settled in the graph, and updated the portfolio next move.
 
@@ -97,7 +97,7 @@ M3.2 adds the durable prompt/decision-observability gate before M3. Actual
 Delta V: 0. Portfolio V remains 7.
 
 Receipts:
-- `docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`
+- `docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md`
 - `docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md`
 - `docs/mission-graph.yaml`
 - `go run ./cmd/doccheck` completed report-only: 204 docs, 800 warnings,

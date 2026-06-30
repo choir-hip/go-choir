@@ -1,6 +1,6 @@
 # Mission Ledger: Texture As A Long-Running Agent v0
 
-Parallax ledger for `docs/mission-texture-long-running-agent-v0.md`. The paradoc
+Parallax ledger for `docs/archive/mission-texture-long-running-agent-v0.md`. The paradoc
 holds current Parallax State; this ledger records dated checkpoints, evidence,
 and conjecture/heresy deltas.
 
@@ -2564,7 +2564,7 @@ Owner direction (re-pointing the mission, captured in the rewritten paradoc):
   delete cold rewarm, the classifiers/guards, the exact-first-tool machinery,
   the AgentMutation one-write scaffolding, and the idle-death/resume-cap gates.
 
-The paradoc body (`docs/mission-texture-long-running-agent-v0.md`) was rewritten
+The paradoc body (`docs/archive/mission-texture-long-running-agent-v0.md`) was rewritten
 to this target with ramp R1-R7. The earlier T1-T8 construct/falsification trail
 above is retained as historical evidence only. No fix has been authored against
 this re-pointing yet; the design is the gate before code (owner reviews the
@@ -2655,7 +2655,7 @@ Texture thread; same-thread resume; event-driven delivery; classifier/guard
 deletion; deep-research proof.
 
 Receipts:
-- `docs/mission-texture-long-running-agent-v0.md`
+- `docs/archive/mission-texture-long-running-agent-v0.md`
 - `docs/mission-texture-long-running-agent-v0.ledger.md`
 - `docs/mission-graph.yaml`
 - deleted `docs/mission-texture-workstate-update-id-v0.md`

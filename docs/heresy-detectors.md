@@ -68,7 +68,6 @@ trusted.
 
 ## Deferred Enforcement
 
-Successor paradoc: `docs/mission-heresy-detectors-ci-v0.md`.
 
 Required work:
 
