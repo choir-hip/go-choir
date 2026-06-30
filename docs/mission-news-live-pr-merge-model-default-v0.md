@@ -444,18 +444,4 @@ routes unaffected.
 3. `e4700d79` from doc-cleanup-audit — docs (use this, NOT `57504f38`)
 Then build Track D, then run the landing loop.
 
-## References
-
-- `docs/overnight-pr-review-verdicts-2026-06-29.md` — PR review verdicts
-- `docs/mission-universal-wire-agent-pipeline-v1.md` — news pipeline mission
-- `internal/runtime/model_policy.go` — model policy defaults
-- `internal/runtime/universal_wire.go` — Universal Wire API handler
-- `internal/runtime/wire_synthesis.go` — wire synthesis pipeline
-- `internal/runtime/wire_publication.go` — wire edition publication + bootstrap
-- `docs/problem-universal-wire-edition-alias-not-bootstrapped-v0.md` — Track B root cause
-- `docs/memo-headless-auth-choir-base-artifact-program-2026-06-28.md` — API key auth design
-- `docs/mission-spine-agent-api-surface-v0.md` — graph-native API + CLI + MCP spine
-- `docs/mission-spine-nucleus-choir-in-choir-v0.md` — nucleus CLI + capsule runtime spine
-- `docs/handoff-hybrid-computer-capsule-architecture-2026-06-10.md` — Nucleus-as-capsule fit
-- `internal/auth/store.go`, `internal/auth/handlers.go` — API key auth (implemented)
 - `/tmp/choir-doc-audit-report.md` — full doc audit report with verdicts
