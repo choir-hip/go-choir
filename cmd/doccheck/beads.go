@@ -27,6 +27,7 @@ type beadsIssue struct {
 	IssueType    string            `json:"issue_type"`
 	Labels       []string          `json:"labels"`
 	Parent       string            `json:"parent"`
+	ExternalRef  string            `json:"external_ref"`
 	Dependencies []beadsDependency `json:"dependencies"`
 	CreatedAt    string            `json:"created_at"`
 	UpdatedAt    string            `json:"updated_at"`
