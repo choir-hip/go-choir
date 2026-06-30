@@ -314,28 +314,55 @@ func TestRecoveryRequestSucceedsForExistingUser(t *testing.T) {
 		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	var resp recoveryResponse
+	var resp struct {
+		OK    bool   `json:"ok"`
+		Token string `json:"token,omitempty"`
+	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if !resp.OK {
 		t.Error("ok should be true")
 	}
-	if !strings.HasPrefix(resp.Token, RecoveryTokenPrefix) {
-		t.Errorf("token: got %q, want prefix %q", resp.Token, RecoveryTokenPrefix)
+	if resp.Token != "" {
+		t.Fatal("recovery request response must not include a raw recovery token")
 	}
 
-	// Verify the token hash is stored in the DB (not the raw token).
-	h2 := sha256SumHex(resp.Token)
 	var count int
 	err = h.store.DB().QueryRow(
-		"SELECT COUNT(*) FROM recovery_tokens WHERE token_hash = ?", h2,
+		"SELECT COUNT(*) FROM recovery_tokens WHERE user_id = ? AND token_hash <> ''",
+		user.ID,
 	).Scan(&count)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected 1 row with matching hash, got %d", count)
+		t.Errorf("expected 1 recovery token row, got %d", count)
+	}
+}
+
+func TestRecoveryRequestResponseDoesNotContainRawToken(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+
+	_, err := h.store.CreateUser("rec-no-leak-user", "noleak@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	body := `{"email":"noleak@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.HandleRecoveryRequest(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), RecoveryTokenPrefix) {
+		t.Fatalf("response body must not contain a raw recovery token: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `"token"`) {
+		t.Fatalf("response body must omit token field: %s", rec.Body.String())
 	}
 }
 
@@ -354,18 +381,30 @@ func TestRecoveryRequestSucceedsForNonexistentUser(t *testing.T) {
 		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	var resp recoveryResponse
+	var resp struct {
+		OK    bool   `json:"ok"`
+		Token string `json:"token,omitempty"`
+	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if !resp.OK {
 		t.Error("ok should be true (anti-enumeration)")
 	}
+	if resp.Token != "" {
+		t.Fatal("anti-enumeration response must not include a raw recovery token")
+	}
 
-	// The token should not be usable (dummy record with no user_id).
-	_, err := h.store.ConsumeRecoveryToken(context.Background(), resp.Token)
-	if err == nil {
-		t.Error("dummy token should not be consumable")
+	var count int
+	err := h.store.DB().QueryRow(
+		"SELECT COUNT(*) FROM recovery_tokens WHERE email_hash = ? AND (user_id IS NULL OR user_id = '')",
+		hashEmail("nonexistent@example.com"),
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query dummy token: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 dummy token row, got %d", count)
 	}
 }
 
@@ -1008,6 +1047,17 @@ func TestListSessionsReturnsSessionsWithoutTokenHash(t *testing.T) {
 
 // --- Session Revocation Handler Tests ---
 
+func refreshCookieFromRecorder(t *testing.T, rec *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == RefreshTokenCookieName {
+			return c
+		}
+	}
+	t.Fatal("no refresh cookie set")
+	return nil
+}
+
 func TestRevokeSessionRejectsUnauthenticated(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -1039,6 +1089,7 @@ func TestRevokeSessionSucceedsForOtherSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue session 2: %v", err)
 	}
+	currentRefreshCookie := refreshCookieFromRecorder(t, rec2)
 
 	// List sessions to get the IDs.
 	listReq := authedAPIKeyReq(http.MethodGet, "/auth/sessions", nil, priv, user.ID)
@@ -1055,6 +1106,7 @@ func TestRevokeSessionSucceedsForOtherSession(t *testing.T) {
 	// Revoke the second session (not the current one).
 	targetID := listResp.Sessions[1].ID
 	delReq := authedAPIKeyReq(http.MethodDelete, "/auth/sessions/"+targetID, nil, priv, user.ID)
+	delReq.AddCookie(currentRefreshCookie)
 	delRec := httptest.NewRecorder()
 	h.HandleRevokeSession(delRec, delReq)
 
@@ -1126,6 +1178,40 @@ func TestRevokeSessionRejectsCurrentSession(t *testing.T) {
 	}
 }
 
+func TestRevokeSessionRejectsAccessOnlyRequest(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+
+	user, err := h.store.CreateUser("sess-access-only-user", "sessaccessonly@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	if err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+
+	listReq := authedAPIKeyReq(http.MethodGet, "/auth/sessions", nil, priv, user.ID)
+	listRec := httptest.NewRecorder()
+	h.HandleListSessions(listRec, listReq)
+	var listResp listSessionsResponse
+	if err := json.NewDecoder(listRec.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(listResp.Sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(listResp.Sessions))
+	}
+
+	delReq := authedAPIKeyReq(http.MethodDelete, "/auth/sessions/"+listResp.Sessions[0].ID, nil, priv, user.ID)
+	delRec := httptest.NewRecorder()
+	h.HandleRevokeSession(delRec, delReq)
+
+	if delRec.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d (session revocation requires refresh cookie); body: %s", delRec.Code, http.StatusBadRequest, delRec.Body.String())
+	}
+}
+
 func TestRevokeSessionRejectsNonOwner(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -1137,6 +1223,13 @@ func TestRevokeSessionRejectsNonOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create other: %v", err)
 	}
+
+	otherRec := httptest.NewRecorder()
+	_, err = h.issueSession(otherRec, httptest.NewRequest(http.MethodGet, "/", nil), other)
+	if err != nil {
+		t.Fatalf("issue other session: %v", err)
+	}
+	otherRefreshCookie := refreshCookieFromRecorder(t, otherRec)
 
 	// Owner creates a session.
 	rec := httptest.NewRecorder()
@@ -1160,6 +1253,7 @@ func TestRevokeSessionRejectsNonOwner(t *testing.T) {
 
 	// Other user tries to revoke owner's session.
 	delReq := authedAPIKeyReq(http.MethodDelete, "/auth/sessions/"+targetID, nil, priv, other.ID)
+	delReq.AddCookie(otherRefreshCookie)
 	delRec := httptest.NewRecorder()
 	h.HandleRevokeSession(delRec, delReq)
 
@@ -1175,21 +1269,15 @@ func TestRecoveryRequestDoesNotLeakTokenInLogs(t *testing.T) {
 
 	h.store.CreateUser("log-user", "loguser@example.com")
 
-	var token string
 	logs := captureLogs(t, func() {
 		body := `{"email":"loguser@example.com"}`
 		req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		h.HandleRecoveryRequest(rec, req)
-
-		// Extract the token from the response.
-		var resp recoveryResponse
-		_ = json.NewDecoder(rec.Body).Decode(&resp)
-		token = resp.Token
 	})
 
-	if token != "" && strings.Contains(logs, token) {
+	if strings.Contains(logs, RecoveryTokenPrefix) {
 		t.Errorf("logs should not contain the recovery token:\n%s", logs)
 	}
 }

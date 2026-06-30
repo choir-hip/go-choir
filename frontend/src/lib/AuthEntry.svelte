@@ -149,7 +149,11 @@
             {/if}
           </button>
         </form>
-        <p class="fine-print">No password is created. Choir stores only the public credential needed to recognize your passkey.</p>
+        <p class="fine-print">
+          No password is created. Choir stores only the public credential needed to recognize your passkey.
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </p>
       </div>
     {:else}
       <div class="auth-view" data-login-view>
@@ -184,7 +188,11 @@
             {/if}
           </button>
         </form>
-        <p class="fine-print">The browser may offer this device, another device, or a security key depending on where your passkey lives.</p>
+        <p class="fine-print">
+          The browser may offer this device, another device, or a security key depending on where your passkey lives.
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </p>
       </div>
     {/if}
 
@@ -386,6 +394,18 @@
     color: var(--choir-text-muted);
     font-size: 0.78rem;
     line-height: 1.42;
+  }
+
+  .fine-print a {
+    margin-left: 0.45rem;
+    color: var(--choir-text-accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .fine-print a:hover,
+  .fine-print a:focus-visible {
+    text-decoration: underline;
   }
 
   :global(:root[data-theme-id='london-salmon']) .auth-card,
