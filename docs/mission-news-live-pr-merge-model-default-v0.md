@@ -344,37 +344,71 @@ blocker for this mission.
 
 **Subagent prompt summary:**
 
-1. Build the graph-native `/api/v1/` surface needed by the CLI
-   (`agent-api-graph-native-v0`, currently `status: planned`):
-   - `GET /api/v1/objects?kind=` — list objects (documents/revisions) by
-     kind, cursor-paginated
-   - `GET /api/v1/objects/:id` — read a single object
-   - `GET /api/v1/objects/:id/edges?kind=` — traverse edges (e.g.
-     `transcludes`)
-   - `GET /api/v1/search?q=` — vector + text search
-   - `GET /api/v1/runs`, `GET /api/v1/work-items` — runtime state
-   - `POST /api/v1/cycles/trigger` — trigger an ingestion cycle
-   - Wire API key auth (Bearer `choir_sk_...`) on these routes; the auth
-     store already supports API keys (`internal/auth/store.go`,
-     `internal/auth/handlers.go`). Verify the proxy validates API keys on
-     the `/api/v1/` prefix.
-2. Build the `choir` CLI (`cmd/choir/`, new binary):
+Track D is split into two phases. **Phase 1 (Option A — CLI against existing
+routes)** ships first because the existing `/api/` surface already covers
+the CLI's news-verification needs, and API key auth is already wired through
+the proxy for all `/api/` routes. **Phase 2 (graph-native `/api/v1/`)** is
+the larger `agent-api-graph-native-v0` epic and follows once news is proven.
+
+**API surface mapping (verified 2026-06-30):**
+- Proxy (`internal/proxy/handlers.go`): `s.HandleFunc("/api/", h.HandleAPI)`
+  — every `/api/` route is auth-gated (cookie JWT OR Bearer API key) and
+  forwarded to the sandbox with `X-Authenticated-User` injected. Scope
+  mapping: `/api/base/` → `read|write:base`, `/api/texture/` →
+  `read|write:texture`, everything else → `read|write:runtime`.
+- `/api/universal-wire/stories` is special-cased
+  (`protectedAPIResolveTarget`) to resolve to the platform computer
+  (`vmctl.UniversalWirePlatformOwnerID`), so it reads the platform-owned
+  edition regardless of the calling user. Scope: `read:runtime`.
+- Existing routes the CLI uses (no new endpoints needed for Phase 1):
+  - `GET /api/universal-wire/stories` — wire stories (news). Response:
+    `{stories, style_sources, source, edition?, diagnostics?}`.
+  - `GET /api/trajectories` + `GET /api/trajectories/:id` — runs/state, to
+    observe whether sourcecycled is producing ingestion runs.
+  - `GET /api/texture/documents` + `GET /api/texture/documents/:id[/revisions|/history]`
+    — read synthesized articles + revision history.
+  - `GET /api/platform/retrieval/search` (proxy) — search.
+- **No cycle-trigger endpoint exists.** `sourcecycled` is a timer-driven
+  daemon (RSS/Telegram/GDELT tickers in `cmd/sourcecycled/main.go`); it
+  runs cycles on its own schedule. The CLI therefore *observes* the
+  pipeline (polls stories/trajectories) rather than triggering it. A
+  `POST /api/v1/cycles/trigger` is deferred to Phase 2.
+
+**Phase 1 — CLI against existing routes:**
+
+1. Build the `choir` CLI (`cmd/choir/`, new binary):
    - `choir wire stories` — list Universal Wire stories (wraps
-     `/api/universal-wire/stories` initially, then `/api/v1/objects?kind=
-     texture.edition` once graph-native is live)
+     `/api/universal-wire/stories`); prints headline, dek, story_texture_doc,
+     source, diagnostics.
+   - `choir wire diagnostics` — print the `diagnostics` field of the wire
+     response (shows `texture_edition` substrate state: missing/present).
+   - `choir trajectories` — list recent trajectories (wraps
+     `/api/trajectories`); shows whether sourcecycled is producing runs.
+   - `choir trajectory <id>` — detail of one trajectory.
    - `choir texture read <doc>` — read a Texture document + current revision
-   - `choir texture history <doc>` — revision history
-   - `choir search <query>` — search
-   - `choir cycle trigger` — trigger an ingestion cycle
-   - `choir computer list`, `choir vm boot`, `choir vm stop` — VM lifecycle
-     via vmctl HTTP API (deferred to later if it blocks the news proof)
+     (wraps `/api/texture/documents/:id`).
+   - `choir texture history <doc>` — revision history.
+   - `choir search <query>` — search (wraps `/api/platform/retrieval/search`).
    - Auth: `CHOIR_API_KEY` env var or `--api-key` flag; `CHOIR_HOST`
-     defaults to `https://choir.news`
-3. Use the CLI to prove the news pipeline end-to-end on staging:
-   - `choir cycle trigger` (or confirm sourcecycled is running on Node B)
+     defaults to `https://choir.news`. Sends `Authorization: Bearer
+     choir_sk_...`.
+2. Use the CLI to prove the news pipeline end-to-end on staging:
+   - `choir wire diagnostics` — confirm edition state transitions from
+     `missing` to `present` after the edition-bootstrap fix deploys.
+   - `choir trajectories` — confirm sourcecycled is producing ingestion runs.
    - `choir wire stories` — assert real articles appear after one
-     sourcecycled ingestion cycle
-   - Record the CLI output as the deployed acceptance proof
+     sourcecycled ingestion cycle.
+   - `choir texture read <story_texture_doc>` — read a synthesized article.
+   - Record the CLI output as the deployed acceptance proof.
+
+**Phase 2 — graph-native `/api/v1/` (deferred, `agent-api-graph-native-v0`):**
+Build `GET /api/v1/objects?kind=`, `/api/v1/objects/:id`,
+`/api/v1/objects/:id/edges?kind=`, `/api/v1/search`,
+`/api/v1/runs`, `/api/v1/work-items`, `POST /api/v1/cycles/trigger`. The
+proxy already forwards `/api/v1/` under `/api/` so auth is inherited; add
+a scope case for `/api/v1/` if it needs a distinct scope. Migrate the CLI
+commands to `/api/v1/` once live. This is the larger epic and is NOT on
+the critical path for the news proof.
 
 **Conjectures decided by this track:** none of C1-C7 directly; this track
 *produces the evidence tool* for C5 (real articles on choir.news). It also
