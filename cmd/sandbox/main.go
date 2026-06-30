@@ -6,10 +6,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
+	baseapi "github.com/yusefmosiah/go-choir/internal/base/api"
+	"github.com/yusefmosiah/go-choir/internal/base/blob"
+	"github.com/yusefmosiah/go-choir/internal/base/journal"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
@@ -110,7 +114,7 @@ func main() {
 	}
 
 	// Build runtime options based on configuration.
-	var rtOpts []actorruntime.RuntimeOption
+	rtOpts := actorRuntimeOptionsFromEnv(os.Getenv)
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
 	// wraps the same embedded Dolt *sql.DB that owns runtime/Texture state, so
@@ -122,8 +126,8 @@ func main() {
 		if err != nil {
 			log.Printf("sandbox: trace persistence disabled (dolt store init failed, continuing without): %v", err)
 		} else {
-			rtOpts = append(rtOpts, actorruntime.WithTraceStore(traceStore))
-			log.Printf("sandbox: trace persistence enabled (dolt-backed observability store mounted)")
+			rtOpts = append(rtOpts, actorruntime.WithTraceStore(tracePersistenceStore(traceStore)))
+			log.Printf("sandbox: trace persistence enabled (dolt-backed redacting observability store mounted)")
 		}
 	}
 
@@ -182,6 +186,16 @@ func main() {
 	apiHandler := runtime.NewAPIHandler(rt.Runtime)
 	runtime.RegisterRoutes(s, apiHandler)
 
+	closeBaseAPI, err := registerBaseAPIRoutes(s, rtCfg.StorePath)
+	if err != nil {
+		log.Fatalf("sandbox: register Base API routes: %v", err)
+	}
+	defer func() {
+		if err := closeBaseAPI(); err != nil {
+			log.Printf("sandbox: close Base API journal: %v", err)
+		}
+	}()
+
 	// Readiness endpoint: probes Qdrant and Ollama, the two external
 	// dependencies of the semantic-dedup path. Both degrade gracefully via
 	// circuit breakers, so an unhealthy dependency reports "degraded" (200)
@@ -214,6 +228,86 @@ func storeDir(path string) string {
 		}
 	}
 	return "."
+}
+
+func registerBaseAPIRoutes(s *server.Server, runtimeStorePath string) (func() error, error) {
+	baseDir := filepath.Join(storeDir(runtimeStorePath), "base")
+	baseBlobs, err := blob.NewStore(filepath.Join(baseDir, "blobs"))
+	if err != nil {
+		return nil, err
+	}
+	baseJournal, err := journal.NewSQLiteJournal(filepath.Join(baseDir, "journal.sqlite"))
+	if err != nil {
+		return nil, err
+	}
+	handler := baseapi.NewHandler(baseBlobs, baseJournal, nil)
+	s.HandleFunc("/api/base/", handler.Routes().ServeHTTP)
+	return baseJournal.Close, nil
+}
+
+func tracePersistenceStore(inner trace.Store) trace.Store {
+	return trace.NewRedactingStore(inner, trace.NewPipelineFromConfig(trace.RedactionConfig{}))
+}
+
+type actorMailboxConfig struct {
+	BackpressureEnabled  bool
+	BlockingBackpressure bool
+	InboxCapacity        int
+	SendTimeout          time.Duration
+}
+
+func actorMailboxConfigFromEnv(getenv func(string) string) actorMailboxConfig {
+	cfg := actorMailboxConfig{
+		BackpressureEnabled:  true,
+		BlockingBackpressure: true,
+		InboxCapacity:        1000,
+		SendTimeout:          5 * time.Second,
+	}
+	if getenv == nil {
+		return cfg
+	}
+	if raw := strings.TrimSpace(getenv("RUNTIME_ACTOR_BACKPRESSURE_ENABLED")); raw != "" {
+		cfg.BackpressureEnabled = parseEnvBool(raw, true)
+	}
+	if raw := strings.TrimSpace(getenv("RUNTIME_ACTOR_BACKPRESSURE_BLOCKING")); raw != "" {
+		cfg.BlockingBackpressure = parseEnvBool(raw, true)
+	}
+	if raw := strings.TrimSpace(getenv("RUNTIME_ACTOR_INBOX_CAPACITY")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			cfg.InboxCapacity = n
+		}
+	}
+	if raw := strings.TrimSpace(getenv("RUNTIME_ACTOR_SEND_TIMEOUT")); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			cfg.SendTimeout = d
+		}
+	}
+	return cfg
+}
+
+func actorRuntimeOptionsFromEnv(getenv func(string) string) []actorruntime.RuntimeOption {
+	cfg := actorMailboxConfigFromEnv(getenv)
+	opts := []actorruntime.RuntimeOption{
+		actorruntime.WithInboxCapacity(cfg.InboxCapacity),
+	}
+	if cfg.BackpressureEnabled {
+		opts = append(opts,
+			actorruntime.WithBackpressure(cfg.BlockingBackpressure),
+			actorruntime.WithSendTimeout(cfg.SendTimeout),
+		)
+	}
+	return opts
+}
+
+func parseEnvBool(raw string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "t", "yes", "y", "on":
+		return true
+	case "0", "false", "f", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRoot string) runtime.Config {
