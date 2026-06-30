@@ -20,12 +20,21 @@ transition. Do not claim local proof for vmctl, live worker/candidate computers,
 gateway credentials, model/search calls, auth/session renewal, platform
 promotion, rollback, or Choir-in-Choir behavior.
 
-Use the repo dev shell for Go/Dolt work: `nix develop -c go test ...`. The
-runtime package is broad and CI shards it; for local coverage prefer
-`nix develop -c scripts/go-test-runtime-shards` or focused
+The repo dev shell (Nix flake with ICU for Dolt cgo) loads automatically via
+direnv + nix-direnv. `CGO_CFLAGS`, `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, and
+the Nix `PATH` entries are exported by `~/.zshenv` (for zsh-based agents:
+codex, cursor, opencode, pi) and `~/.bashenv` via `BASH_ENV` (for bash-based
+agents: devin, claude code). No `nix develop -c` wrapper is needed — run
+`go test ...` directly. The runtime package is broad and CI shards it; for
+local coverage prefer `scripts/go-test-runtime-shards` or focused
 `go test ./internal/runtime -run TestName` while shaping one transition. Do not
 hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
-— the durable fix is entering the dev shell.
+— the durable fix is ensuring direnv is loaded (check with `echo $CGO_CFLAGS`).
+
+Per-developer secrets (API keys, provider tokens) live in a gitignored
+`.envrc.local` file that is sourced by `.envrc` if it exists. Create it with
+`dotenv .env` to auto-load your `.env` file. The tracked `.envrc` never
+references `.env` directly, so a fresh clone won't load any secrets.
 
 Browser proof is specialized; do not assume every worker VM should carry
 Playwright/Chromium. For source-opening doctrine, default durable web-derived
