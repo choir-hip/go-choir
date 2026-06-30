@@ -7,14 +7,14 @@
 #
 # Usage in CI:
 #   env:
-#     TOTAL_SHARDS: 3
+#     TOTAL_SHARDS: 4
 #     SHARD_INDEX: ${{ matrix.shard }}
 #   run: scripts/go-test-non-runtime-shards
 #
 # Any extra args (e.g. -race) are forwarded to go test.
 set -euo pipefail
 
-total_shards="${TOTAL_SHARDS:-3}"
+total_shards="${TOTAL_SHARDS:-4}"
 if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   echo "TOTAL_SHARDS must be a positive integer, got: $total_shards" >&2
   exit 2
