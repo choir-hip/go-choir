@@ -12,10 +12,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/sergi/go-diff v1.3.1
+	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.50.0
 	golang.org/x/net v0.52.0
 	golang.org/x/sync v0.20.0
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.48.2
 )
 
@@ -146,7 +148,6 @@ require (
 	github.com/xitongsys/parquet-go v1.6.2 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20240122235623-d6294584ab18 // indirect
 	github.com/xtaci/smux v1.5.56 // indirect
-	github.com/zalando/go-keyring v0.2.8 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.38.0 // indirect
