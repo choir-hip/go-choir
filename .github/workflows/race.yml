@@ -1,0 +1,85 @@
+name: Race Detector
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  schedule:
+    - cron: '17 8 * * 1'
+
+concurrency:
+  group: race-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  go-test-runtime-race:
+    name: Go Test (internal/runtime race shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Go test internal/runtime shard with -race
+        shell: bash
+        env:
+          TOTAL_SHARDS: 4
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: scripts/go-test-runtime-shards -race
+
+  go-test-race:
+    name: Go Test (non-runtime race)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Go test non-runtime packages with -race
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
+          if (( ${#packages[@]} > 0 )); then
+            scripts/go-test-with-timing -race -count=1 "${packages[@]}"
+          fi

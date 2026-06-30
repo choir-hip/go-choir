@@ -27,6 +27,47 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  go-cache-refresh:
+    name: Refresh Go Cache
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        id: go-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Warm Go build cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -run '^$' ./...
+          go test -tags=integration -run '^$' ./internal/provider ./internal/runtime
+
+      - name: Save Go cache
+        if: steps.go-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
   go-vet-build:
     name: Go Vet + Build
     runs-on: ubuntu-latest
@@ -37,7 +78,17 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go vet
         run: go vet ./...
@@ -83,7 +134,17 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go test non-runtime shard
         shell: bash
@@ -106,7 +167,17 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go test internal/runtime shard
         shell: bash
@@ -115,63 +186,8 @@ jobs:
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-runtime-shards
 
-  go-test-runtime-race:
-    name: Go Test (internal/runtime race shard ${{ matrix.shard }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Go test internal/runtime shard with -race
-        shell: bash
-        env:
-          TOTAL_SHARDS: 4
-          SHARD_INDEX: ${{ matrix.shard }}
-        run: scripts/go-test-runtime-shards -race
-
-  go-test-race:
-    name: Go Test (non-runtime race)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Go test non-runtime packages with -race
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
-          if (( ${#packages[@]} > 0 )); then
-            scripts/go-test-with-timing -race -count=1 "${packages[@]}"
-          fi
-
-  go-test-integration:
-    name: Go Test (integration-tagged smoke)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Go test integration-tagged smoke
+        if: matrix.shard == 1
         shell: bash
         run: scripts/go-test-integration
 
@@ -185,7 +201,17 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run doccheck
         shell: bash
@@ -196,7 +222,7 @@ jobs:
         run: test -s doccheck-report.md && test -s doccheck.json
 
       - name: Upload doccheck reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: doccheck-report
           path: |
@@ -206,7 +232,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [go-vet-build, go-test, go-test-runtime, go-test-integration, doccheck]
+    needs: [go-vet-build, go-test, go-test-runtime, doccheck]
     if: always()
     steps:
       - name: Confirm Go gates passed
@@ -223,10 +249,6 @@ jobs:
           fi
           if [[ "${{ needs.go-test-runtime.result }}" != "success" ]]; then
             echo "go-test-runtime result: ${{ needs.go-test-runtime.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.go-test-integration.result }}" != "success" ]]; then
-            echo "go-test-integration result: ${{ needs.go-test-integration.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.doccheck.result }}" != "success" ]]; then
@@ -314,7 +336,7 @@ jobs:
 
       - name: Upload SBOM artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sboms-${{ github.sha }}
           path: |
