@@ -179,7 +179,7 @@ func (s *DoltStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 		args = append(args, *filter.Tombstone)
 	}
 	query += ` ORDER BY updated_at DESC LIMIT ?`
-	args = append(args, normalizedLimit(filter.Limit))
+	args = append(args, NormalizedLimit(filter.Limit))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("dolt store: list objects: %w", err)
@@ -237,7 +237,7 @@ func (s *DoltStore) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, e
 		args = append(args, *filter.Tombstone)
 	}
 	query += ` ORDER BY created_at LIMIT ?`
-	args = append(args, normalizedLimit(filter.Limit))
+	args = append(args, NormalizedLimit(filter.Limit))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("dolt store: list edges: %w", err)

@@ -115,7 +115,7 @@ func (s *SQLiteStore) ListObjects(ctx context.Context, filter ListFilter) ([]Obj
 		args = append(args, boolInt(*filter.Tombstone))
 	}
 	query += ` ORDER BY updated_at DESC LIMIT ?`
-	args = append(args, normalizedLimit(filter.Limit))
+	args = append(args, NormalizedLimit(filter.Limit))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite store: list objects: %w", err)
@@ -173,7 +173,7 @@ func (s *SQLiteStore) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge,
 		args = append(args, boolInt(*filter.Tombstone))
 	}
 	query += ` ORDER BY created_at LIMIT ?`
-	args = append(args, normalizedLimit(filter.Limit))
+	args = append(args, NormalizedLimit(filter.Limit))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite store: list edges: %w", err)
