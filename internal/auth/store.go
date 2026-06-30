@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -864,6 +866,91 @@ func (s *Store) TouchAPIKeyLastUsed(ctx context.Context, keyID string) error {
 		return fmt.Errorf("touch api key last_used: %w", err)
 	}
 	return nil
+}
+
+// BootstrapAdminAPIKeyUserID is the user ID for the bootstrap admin API key.
+// It is a synthetic platform-admin user, not a WebAuthn-registered human. The
+// bootstrap ensures this user row exists (idempotent) before seeding the key.
+const BootstrapAdminAPIKeyUserID = "choir-bootstrap-admin"
+const bootstrapAdminAPIKeyUserEmail = "bootstrap-admin@choir.local"
+const bootstrapAdminAPIKeyLabel = "bootstrap-admin"
+
+// SeedBootstrapAdminAPIKey seeds a single admin-scoped API key from rawKey
+// when the auth DB has zero non-revoked API keys. This is the first-run
+// escape hatch for the chicken-and-egg problem: a machine needs an API key
+// to call the API, but only a WebAuthn-authenticated human can create one
+// through the normal flow. The bootstrap lets an operator seed the first key
+// from config (env var) so headless agents (the choir CLI) can authenticate
+// before any human has provisioned a key.
+//
+// Safety properties:
+//   - First-run-only: if any non-revoked API key exists, this is a no-op and
+//     logs that it skipped. Reboots after first provisioning do not create
+//     duplicate or shadow keys.
+//   - Only the SHA-256 hash is stored (same as WebAuthn-provisioned keys);
+//     the raw key is never persisted and never logged.
+//   - The key has admin scope (full access) so it can provision other keys
+//     and verify any route. It is revocable via the existing RevokeAPIKey
+//     flow, identical to a WebAuthn-provisioned key.
+//   - The activation is logged loudly (key ID + label) so operators can see
+//     when the bootstrap fired.
+//
+// rawKey must already include the choir_sk_ prefix. If it does not, the
+// function returns an error without touching the DB.
+func (s *Store) SeedBootstrapAdminAPIKey(ctx context.Context, rawKey string) (keyID string, seeded bool, err error) {
+	rawKey = strings.TrimSpace(rawKey)
+	if rawKey == "" {
+		return "", false, errors.New("seed bootstrap api key: raw key is required")
+	}
+	if !strings.HasPrefix(rawKey, APIKeyPrefix) {
+		return "", false, fmt.Errorf("seed bootstrap api key: raw key must start with %q", APIKeyPrefix)
+	}
+
+	// First-run-only guard: count non-revoked API keys. If any exist, skip.
+	var count int
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM api_keys WHERE revoked_at IS NULL",
+	).Scan(&count); err != nil {
+		return "", false, fmt.Errorf("seed bootstrap api key: count existing: %w", err)
+	}
+	if count > 0 {
+		log.Printf("auth: bootstrap admin api key skipped (%d api key(s) already exist)", count)
+		return "", false, nil
+	}
+
+	// Ensure the synthetic bootstrap-admin user exists (idempotent). The
+	// api_keys.user_id column has a FK to users(id), so the row must exist.
+	if _, err := s.GetUserByID(BootstrapAdminAPIKeyUserID); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", false, fmt.Errorf("seed bootstrap api key: lookup bootstrap user: %w", err)
+		}
+		if _, err := s.CreateUser(BootstrapAdminAPIKeyUserID, bootstrapAdminAPIKeyUserEmail); err != nil {
+			return "", false, fmt.Errorf("seed bootstrap api key: create bootstrap user: %w", err)
+		}
+		log.Printf("auth: created bootstrap admin user %q", BootstrapAdminAPIKeyUserID)
+	}
+
+	// Hash the raw key (SHA-256) and insert the key row. No expiry: the
+	// key is revocable by the operator the moment a WebAuthn-provisioned
+	// key exists.
+	h := sha256.Sum256([]byte(rawKey))
+	keyHash := fmt.Sprintf("%x", h)
+	keyID = "ak_" + uuid.NewString()
+	scopesJSON, err := json.Marshal([]string{"admin"})
+	if err != nil {
+		return "", false, fmt.Errorf("seed bootstrap api key: marshal scopes: %w", err)
+	}
+	now := time.Now().UTC()
+	if _, err := s.db.ExecContext(ctx,
+		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		keyID, BootstrapAdminAPIKeyUserID, keyHash, bootstrapAdminAPIKeyLabel, string(scopesJSON), now, nil,
+	); err != nil {
+		return "", false, fmt.Errorf("seed bootstrap api key: insert: %w", err)
+	}
+
+	log.Printf("auth: bootstrap admin api key seeded (key_id=%s label=%s user=%s) — revoke it once a WebAuthn-provisioned key exists",
+		keyID, bootstrapAdminAPIKeyLabel, BootstrapAdminAPIKeyUserID)
+	return keyID, true, nil
 }
 
 // --- Recovery Tokens (M7) ---

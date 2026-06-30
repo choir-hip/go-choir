@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -233,6 +234,21 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		}
 		authStore = as
 		log.Printf("proxy: api key (bearer token) auth enabled (auth_db=%s)", cfg.AuthDBPath)
+
+		// Bootstrap admin API key: if CHOIR_BOOTSTRAP_ADMIN_API_KEY is set,
+		// seed it into the auth DB on first run (when no API keys exist).
+		// This is the escape hatch for headless agents (the choir CLI) to
+		// authenticate before any WebAuthn-provisioned key exists. The
+		// first-run-only guard makes repeated starts safe.
+		if bootstrapKey := strings.TrimSpace(os.Getenv("CHOIR_BOOTSTRAP_ADMIN_API_KEY")); bootstrapKey != "" {
+			if _, seeded, err := authStore.SeedBootstrapAdminAPIKey(context.Background(), bootstrapKey); err != nil {
+				log.Printf("proxy: bootstrap admin api key: %v", err)
+				// Non-fatal: the proxy can still validate existing keys.
+				// A failed seed is logged but does not block startup.
+			} else if seeded {
+				log.Printf("proxy: bootstrap admin api key activated — revoke it once a WebAuthn-provisioned key exists")
+			}
+		}
 	}
 
 	// Build the handler. When authStore is nil, apiKeyValidator must be a
