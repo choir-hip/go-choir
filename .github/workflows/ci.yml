@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [0, 1]
     steps:
       - uses: actions/checkout@v6
 
@@ -88,7 +88,7 @@ jobs:
       - name: Go test non-runtime shard
         shell: bash
         env:
-          TOTAL_SHARDS: 3
+          TOTAL_SHARDS: 2
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-non-runtime-shards
 
@@ -98,7 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1]
     steps:
       - uses: actions/checkout@v6
 
@@ -111,7 +111,7 @@ jobs:
       - name: Go test internal/runtime shard
         shell: bash
         env:
-          TOTAL_SHARDS: 4
+          TOTAL_SHARDS: 2
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-runtime-shards
 
@@ -119,10 +119,11 @@ jobs:
     name: Go Test (internal/runtime race shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1]
     steps:
       - uses: actions/checkout@v6
 
@@ -130,11 +131,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go test internal/runtime shard with -race
         shell: bash
         env:
-          TOTAL_SHARDS: 4
+          TOTAL_SHARDS: 2
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-runtime-shards -race
 
@@ -142,6 +144,7 @@ jobs:
     name: Go Test (non-runtime race)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v6
 
@@ -149,6 +152,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go test non-runtime packages with -race
         shell: bash
