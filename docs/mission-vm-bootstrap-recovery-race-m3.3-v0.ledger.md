@@ -6,7 +6,7 @@ Claim/scope: the owner-visible `BOOTSTRAP FAILED (502)` / reload-success
 behavior is now its own pre-M3 substrate bug. It should not be hidden inside M3
 proper, because M3 needs vmctl refresh/restart as trustworthy lifecycle proof.
 
-Move: created `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md` as a narrow
+Move: created `docs/archive/mission-vm-bootstrap-recovery-race-m3.3-v0.md` as a narrow
 Parallax paramission. The paradoc records the current evidence: owner bootstrap
 requests canceled around `2026-06-15T10:17Z`, vmctl refreshed the owner VM active
 seconds later, the owner VM later reported `ready` with low persistent-disk use,
@@ -43,7 +43,7 @@ deadline, the proxy can cancel vmctl work and has no redacted durable operation
 state for `/api/compute/status` or a later bootstrap probe to observe.
 
 Move: read the current incident record and the named code paths:
-`docs/incident-vm-bootstrap-stale-route-2026-06-09.md`,
+`docs/archive/incident-vm-bootstrap-stale-route-2026-06-09.md`,
 `frontend/src/lib/Desktop.svelte`, `internal/proxy/compute_status.go`,
 `internal/proxy/handlers.go`, `internal/vmctl/client.go`, and
 `internal/vmctl/ownership.go`. Rewrote Parallax State to name the current

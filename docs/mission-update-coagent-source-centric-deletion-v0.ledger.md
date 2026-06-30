@@ -34,7 +34,7 @@ acceptance).
 
 Actual delta V: initialized. No execution obligations discharged in this pass.
 
-Receipt: `docs/mission-update-coagent-source-centric-deletion-v0.md`.
+Receipt: `docs/archive/mission-update-coagent-source-centric-deletion-v0.md`.
 
 Open edges:
 - E0 must name the actual v3 stall cause among three candidates
@@ -157,7 +157,7 @@ Notable side-discoveries:
 - `research_findings` is a dead live path: written only by tests, read only by
   the trace UI. Deletion is cleanup of the dead schema/type/trace exposure.
 
-Receipt: `docs/mission-update-coagent-source-centric-deletion-v0.md` §"E0 Stall
+Receipt: `docs/archive/mission-update-coagent-source-centric-deletion-v0.md` §"E0 Stall
 Diagnosis - 2026-06-22". Code citations cross-referenced against both deployed
 `63f44e07` and local HEAD `c35502b2` via `git show`. Live evidence from the
 VM runtime API on node-b.
@@ -175,7 +175,7 @@ Open edges:
 - E2 data migration still required for existing accounts (legacy findings-
   shaped rows, raw-markdown revisions, queued non-execution Super packets).
 
-Receipt: `docs/mission-update-coagent-source-centric-deletion-v0.md`
+Receipt: `docs/archive/mission-update-coagent-source-centric-deletion-v0.md`
 §"E0 Stall Diagnosis - 2026-06-22". Code citations verified against the files.
 
 Open edges:
@@ -298,7 +298,7 @@ not cover.
 Scratch files (/tmp/audit, /tmp/diag.json, /tmp/docs.json, /tmp/traj.json on
 node-b) cleaned up; no scratch data left on the host.
 
-Receipt: docs/mission-update-coagent-source-centric-deletion-v0.md §"E2 Data
+Receipt: docs/archive/mission-update-coagent-source-centric-deletion-v0.md §"E2 Data
 Audit - 2026-06-22". Evidence: 25 diagnosis JSON pulls from the VM runtime
 API (transient, aggregated into the counts above).
 
@@ -487,7 +487,7 @@ Residual risks:
   and post-deletion re-confirmation; this checkpoint only removes the
   counterproductive `current_version_number > 3` requirement.
 
-Receipt: `docs/mission-update-coagent-source-centric-deletion-v0.md`
+Receipt: `docs/archive/mission-update-coagent-source-centric-deletion-v0.md`
 §"E5 Acceptance Semantics Clarification - 2026-06-22".
 
 ## 2026-06-22 - Pass 8 - E5 Adjudication Evidence Boundary Repair

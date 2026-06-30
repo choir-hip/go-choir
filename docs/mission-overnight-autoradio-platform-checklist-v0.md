@@ -28,14 +28,14 @@ thin Autoradio vertical slice to prove that the substrate is useful.
 - `docs/parallax-design-2026-06-11.md`
 - `docs/worktree-review-2026-06-23.md`
 - `docs/report-conceptual-refactor-2026-06-23.md`
-- `docs/news-voice-autoradio-forward-plan-2026-06-06.md`
-- `docs/paradoc-object-service-prototype.md`
-- `docs/paradoc-qdrant-indexing-pipeline.md`
-- `docs/paradoc-source-entity-migration.md`
-- `docs/paradoc-universal-wire-diagnosis.md`
-- `docs/mission-choir-in-choir-platform-pr-accelerator-v0.md`
-- `docs/handoff-hybrid-computer-capsule-architecture-2026-06-10.md`
-- `docs/mission-choir-base-reconciliation-kernel-v0.md`
+- `docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md`
+- `docs/archive/paradoc-object-service-prototype.md`
+- `docs/archive/paradoc-qdrant-indexing-pipeline.md`
+- `docs/archive/paradoc-source-entity-migration.md`
+- `docs/archive/paradoc-universal-wire-diagnosis.md`
+- `docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md`
+- `docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md`
+- `docs/archive/mission-choir-base-reconciliation-kernel-v0.md`
 
 ## Thread Operating Model
 

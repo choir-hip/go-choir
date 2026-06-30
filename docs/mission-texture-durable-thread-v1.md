@@ -251,7 +251,7 @@ and staging proof in Comet.
 
 ledger file: docs/mission-texture-durable-thread-v1.ledger.md
 
-version / lineage: v1 supersedes `docs/mission-texture-long-running-agent-v0.md`
+version / lineage: v1 supersedes `docs/archive/mission-texture-long-running-agent-v0.md`
 as the source program. v0 and its ledger remain cautionary evidence only.
 Depends on `docs/mission-texture-versioned-artifact-v0.md` for provenance,
 source validation, hash chain, and full-history publication substrate.

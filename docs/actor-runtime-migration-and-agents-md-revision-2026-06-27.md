@@ -19,7 +19,6 @@ The wire bugs were symptoms of the borked concurrency substrate. The fix already
 3. No rule said "escalate when you're not converging"
 4. The AGENTS.md optimized for careful incremental work, not for recognizing when incremental work is the wrong strategy
 
-The root cause doc from 2026-06-10 (`universal-wire-empty-front-page-root-cause-2026-06-10.md`) already identified the substrate-level failures: lost wakes, no backpressure, no completion feedback, check-then-act races. These are the exact bugs the actor runtime was built to fix. The connection was never made.
 
 ## Cognitive transform analysis
 
@@ -374,8 +373,7 @@ The AGENTS.md revision (Part 1) should land before the migration (Part 2). The n
 
 ## Lineage
 
-- Predecessor: `docs/choir-rearchitecture-durable-actors-2026-06-11.md` (actor runtime design)
-- Predecessor: `docs/universal-wire-empty-front-page-root-cause-2026-06-10.md` (wire failure root cause)
+- Predecessor: `docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md` (actor runtime design)
 - Predecessor: `docs/production-readiness-checklist.md` (actor model checklist items)
 - This document: connects the actor runtime, the wire failures, and the AGENTS.md revision into one coherent migration plan
 - Successor: the migration execution (States 1-8) and the AGENTS.md revision commit

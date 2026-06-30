@@ -36,8 +36,7 @@ or stashing, the work is lost.
 
 | File | Change |
 |------|--------|
-| `docs/email-freeze-diagnosis-2026-06-23.md` | +147 lines (new diagnosis doc) |
-| `docs/paradoc-email-freeze-diagnosis.md` | +28 lines (paradoc updated with Parallax State) |
+| `docs/archive/paradoc-email-freeze-diagnosis.md` | +28 lines (paradoc updated with Parallax State) |
 | `docs/paradoc-email-freeze-diagnosis.ledger.md` | +31 lines (new ledger) |
 | `frontend/src/lib/EmailApp.svelte` | +166/-40 (bootstrap hardening) |
 | `frontend/tests/email-app-state.spec.js` | +133 lines (new Playwright spec) |
@@ -474,7 +473,7 @@ payload filtering, and add batch embedding with rate limiting.
 | `docs/README.md` | +5/-1 |
 | `docs/doc-authority-manifest.yaml` | +19 |
 | `docs/mission-graph.yaml` | +15 |
-| `docs/paradoc-source-entity-migration.md` | +2431/-50 |
+| `docs/archive/paradoc-source-entity-migration.md` | +2431/-50 |
 | **Total** | **+2420/-50** |
 
 ### What It Contains
@@ -632,7 +631,7 @@ the durable learnings.
 | File | Lines |
 |------|-------|
 | `docs/mission-graph.yaml` | +17 |
-| `docs/paradoc-universal-wire-diagnosis.md` | +423/-13 |
+| `docs/archive/paradoc-universal-wire-diagnosis.md` | +423/-13 |
 | `docs/paradoc-universal-wire-diagnosis.ledger.md` | new (untracked) |
 | **Total** | **+427/-13** |
 

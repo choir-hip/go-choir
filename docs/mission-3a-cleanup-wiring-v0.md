@@ -4,7 +4,6 @@
 **Date:** 2026-06-27  
 **Umbrella:** `docs/mission-3-universal-wire-ingestion-rebuild-v0.md`  
 **Predecessor:** `docs/mission-heresy-deletion-v1.md` (settled)  
-**Successor:** `docs/mission-3b-ingestion-path-v0.md` (to be drafted after 3a)
 
 ## Objective
 

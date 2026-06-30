@@ -1,7 +1,7 @@
 # Mission - Docs Truth System v1
 
 This paradoc supersedes the broader open handoff in
-`docs/mission-doc-truth-drift-ci-context-packet-v0.md` for the next docs truth
+`docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md` for the next docs truth
 implementation slice. It keeps `cmd/doccheck` v0 as the existing report-only
 instrument, but widens the target from "docs checker" to a docs truth system:
 canonical focal docs, machine-readable mission DAG, canonical conjecture
@@ -163,9 +163,8 @@ whether to fail CI on newly introduced unaccepted current violations.
 ledger file: docs/mission-docs-truth-system-v1.ledger.md
 
 version / lineage: successor to
-`docs/mission-doc-truth-drift-ci-context-packet-v0.md`,
-`docs/mission-doc-heresy-checker-v0.md`, and
-`docs/mission-heresy-detectors-ci-v0.md`. It also depends on
+`docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md`,
+`docs/archive/mission-doc-heresy-checker-v0.md`, and
 `docs/mission-portfolio-2026-06-11.md` and
 `docs/conjecture-assertion-ledger-2026-06.md`.
 

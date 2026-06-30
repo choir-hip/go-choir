@@ -59,7 +59,7 @@ nodes:
   - docs-truth-system-v1
   sources:
   - docs/choir-doctrine.md
-  - docs/choir-rearchitecture-durable-actors-2026-06-11.md
+  - docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md
   - docs/conjecture-learning-proof-theory-2026-06-11.md
   - docs/conjecture-assertion-ledger-2026-06.md
 - id: overnight-autoradio-platform-checklist-v0
@@ -78,17 +78,17 @@ nodes:
   - docs/parallax-design-2026-06-11.md
   - docs/worktree-review-2026-06-23.md
   - docs/report-conceptual-refactor-2026-06-23.md
-  - docs/news-voice-autoradio-forward-plan-2026-06-06.md
-  - docs/paradoc-object-service-prototype.md
-  - docs/paradoc-qdrant-indexing-pipeline.md
-  - docs/paradoc-source-entity-migration.md
-  - docs/paradoc-universal-wire-diagnosis.md
-  - docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
-  - docs/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
-  - docs/mission-choir-base-reconciliation-kernel-v0.md
+  - docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md
+  - docs/archive/paradoc-object-service-prototype.md
+  - docs/archive/paradoc-qdrant-indexing-pipeline.md
+  - docs/archive/paradoc-source-entity-migration.md
+  - docs/archive/paradoc-universal-wire-diagnosis.md
+  - docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md
+  - docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
+  - docs/archive/mission-choir-base-reconciliation-kernel-v0.md
 - id: m1-trajectory-model
   title: M1 Trajectory Model
-  path: docs/mission-trajectory-model-v0.md
+  path: docs/archive/mission-trajectory-model-v0.md
   ledger: ''
   status: settled
   kind: spine
@@ -100,7 +100,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m2-messaging-cutover
   title: M2 Messaging Cutover
-  path: docs/mission-messaging-cutover-v0.md
+  path: docs/archive/mission-messaging-cutover-v0.md
   ledger: docs/mission-messaging-cutover-v0.ledger.md
   status: settled
   kind: spine
@@ -112,7 +112,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m3.1-lifecycle-recovery
   title: M3.1 Lifecycle Cutover Regression Recovery
-  path: docs/mission-lifecycle-cutover-m3.1-v0.md
+  path: docs/archive/mission-lifecycle-cutover-m3.1-v0.md
   ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md
   status: settled
   kind: spine
@@ -122,12 +122,12 @@ nodes:
   - m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-v0.md
+  - docs/archive/mission-lifecycle-cutover-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.2 Texture Prompt Register And Decision Notes
-  path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   status: settled
   kind: spine
@@ -137,12 +137,12 @@ nodes:
   - m3.3-vm-bootstrap-recovery-race
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-m3.1-v0.md
+  - docs/archive/mission-lifecycle-cutover-m3.1-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: m3.3-vm-bootstrap-recovery-race
   title: M3.3 VM Bootstrap Recovery Race
-  path: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md
+  path: docs/archive/mission-vm-bootstrap-recovery-race-m3.3-v0.md
   ledger: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md
   status: settled
   kind: spine
@@ -152,13 +152,13 @@ nodes:
   - m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-v0.md
-  - docs/incident-vm-bootstrap-stale-route-2026-06-09.md
-  - docs/mission-computer-recovery-system-monitor-v0.md
+  - docs/archive/mission-lifecycle-cutover-v0.md
+  - docs/archive/incident-vm-bootstrap-stale-route-2026-06-09.md
+  - docs/archive/mission-computer-recovery-system-monitor-v0.md
   - AGENTS.md
 - id: m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.4 Prompt-Bar Texture First-Draft Regression
-  path: docs/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   status: settled
   kind: spine
@@ -168,12 +168,12 @@ nodes:
   - texture-product-loop-recovery-v0
   sources:
   - docs/mission-portfolio-2026-06-11.md
-  - docs/mission-lifecycle-cutover-v0.md
+  - docs/archive/mission-lifecycle-cutover-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - AGENTS.md
 - id: texture-product-loop-recovery-v0
   title: Texture Hard Cutover And Product Loop Recovery v0
-  path: docs/mission-texture-product-loop-recovery-v0.md
+  path: docs/archive/mission-texture-product-loop-recovery-v0.md
   ledger: docs/mission-texture-product-loop-recovery-v0.ledger.md
   status: open_handoff
   kind: spine
@@ -196,7 +196,7 @@ nodes:
   - AGENTS.md
 - id: texture-long-running-agent-v0
   title: Texture As A Long-Running Agent v0
-  path: docs/mission-texture-long-running-agent-v0.md
+  path: docs/archive/mission-texture-long-running-agent-v0.md
   ledger: docs/mission-texture-long-running-agent-v0.ledger.md
   status: superseded
   kind: superseded
@@ -209,7 +209,7 @@ nodes:
   enables:
   - texture-durable-thread-v1
   sources:
-  - docs/mission-texture-product-loop-recovery-v0.md
+  - docs/archive/mission-texture-product-loop-recovery-v0.md
   - docs/mission-texture-product-loop-recovery-v0.ledger.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/choir-doctrine.md
@@ -226,7 +226,7 @@ nodes:
   enables:
   - texture-hard-cutover-v0
   sources:
-  - docs/mission-texture-long-running-agent-v0.md
+  - docs/archive/mission-texture-long-running-agent-v0.md
   - docs/mission-texture-versioned-artifact-v0.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/choir-doctrine.md
@@ -276,7 +276,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: texture-structured-document-transclusion-cutover-v0
   title: Texture Structured Document And Transclusion Cutover v0
-  path: docs/mission-texture-structured-document-transclusion-cutover-v0.md
+  path: docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md
   ledger: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
   status: working
   kind: spine
@@ -289,18 +289,18 @@ nodes:
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/mission-texture-hard-cutover-v0.md
   - docs/mission-texture-versioned-artifact-v0.md
-  - docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission evidence path; delete-by texture-hard-cutover-v0
+  - docs/archive/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission evidence path; delete-by texture-hard-cutover-v0
   - docs/choir-doctrine.md
   - AGENTS.md
 - id: m3-lifecycle-cutover
   title: M3 Lifecycle Cutover
-  path: docs/mission-lifecycle-cutover-v0.md
+  path: docs/archive/mission-lifecycle-cutover-v0.md
   ledger: docs/mission-lifecycle-cutover-v0.ledger.md
   status: settled
   kind: spine
   # Lineage edge, not a blocking gate. M3's lifecycle settlement was proven
   # against the deployed Texture product loop at commit 968ff7ff (see
-  # docs/mission-lifecycle-cutover-v0.md settlement) and does not require the
+  # docs/archive/mission-lifecycle-cutover-v0.md settlement) and does not require the
   # texture-hard-cutover / texture-product-loop-recovery rename+residue-deletion
   # missions to settle first; those remain open_handoff successors.
   depends_on:
@@ -311,7 +311,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m4-continuation-deletion
   title: M4 Continuation Deletion
-  path: docs/mission-continuation-deletion-v0.md
+  path: docs/archive/mission-continuation-deletion-v0.md
   ledger: docs/mission-continuation-deletion-v0.ledger.md
   status: planned
   kind: spine
@@ -324,7 +324,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: m5-wire-on-settlement
   title: M5 Wire On Settlement
-  path: docs/mission-wire-on-settlement-v0.md
+  path: docs/archive/mission-wire-on-settlement-v0.md
   ledger: docs/mission-wire-on-settlement-v0.ledger.md
   status: open_handoff
   kind: spine
@@ -375,7 +375,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: doc-heresy-checker-v0
   title: Doc/Heresy Checker v0
-  path: docs/mission-doc-heresy-checker-v0.md
+  path: docs/archive/mission-doc-heresy-checker-v0.md
   ledger: docs/mission-doc-heresy-checker-v0.ledger.md
   status: settled
   kind: docs_truth
@@ -387,7 +387,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: doc-truth-drift-context-v0
   title: Doc Truth, Drift CI, And Context Packet v0
-  path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
+  path: docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md
   ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
   status: superseded
   kind: superseded
@@ -401,11 +401,9 @@ nodes:
   enables:
   - docs-truth-system-v1
   sources:
-  - docs/mission-doc-heresy-checker-v0.md
-  - docs/mission-heresy-detectors-ci-v0.md
+  - docs/archive/mission-doc-heresy-checker-v0.md
 - id: heresy-detectors-ci-v0
   title: Heresy Detectors CI v0
-  path: docs/mission-heresy-detectors-ci-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -436,7 +434,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: agentic-debugging-vtext-stability-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient: Agentic Debugging And Texture Stability v0'
-  path: docs/mission-agentic-debugging-vtext-stability-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-agentic-debugging-vtext-stability-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -446,7 +444,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: apps-and-changes-store-sweep-v0
   title: 'MissionGradient: Apps & Changes Store Sweep v0'
-  path: docs/mission-apps-and-changes-store-sweep-v0.md
+  path: docs/archive/mission-apps-and-changes-store-sweep-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -456,7 +454,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: campaign-compiler-selfdev-v0
   title: 'MissionGradient: Campaign Compiler Self-Development v0'
-  path: docs/mission-campaign-compiler-selfdev-v0.md
+  path: docs/archive/mission-campaign-compiler-selfdev-v0.md
   ledger: ''
   status: planned
   kind: side
@@ -466,7 +464,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: choir-base-reconciliation-kernel-v0
   title: 'MissionGradient v0: Choir Base Reconciliation Kernel'
-  path: docs/mission-choir-base-reconciliation-kernel-v0.md
+  path: docs/archive/mission-choir-base-reconciliation-kernel-v0.md
   ledger: ''
   status: planned
   kind: side
@@ -476,7 +474,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: choir-doctrine-upgrade-v0
   title: Mission - Choir Doctrine Upgrade - v0
-  path: docs/mission-choir-doctrine-upgrade-v0.md
+  path: docs/archive/mission-choir-doctrine-upgrade-v0.md
   ledger: docs/mission-choir-doctrine-upgrade-v0.ledger.md
   status: settled
   kind: docs_truth
@@ -487,7 +485,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: choir-grand-deformation-v0
   title: 'MissionGradient: Choir Grand Deformation v0'
-  path: docs/mission-choir-grand-deformation-v0.md
+  path: docs/archive/mission-choir-grand-deformation-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -502,7 +500,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: choir-in-choir-platform-pr-accelerator-v0
   title: 'Mission: Choir-in-Choir Platform PR Accelerator'
-  path: docs/mission-choir-in-choir-platform-pr-accelerator-v0.md
+  path: docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -512,7 +510,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: computer-recovery-system-monitor-v0
   title: 'MissionGradient: Computer Recovery And System Monitor v0'
-  path: docs/mission-computer-recovery-system-monitor-v0.md
+  path: docs/archive/mission-computer-recovery-system-monitor-v0.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -527,7 +525,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: conductor-url-source-routing-h029-v0
   title: Mission - Texture Source Intake And Conductor URL Routing H029 - v0
-  path: docs/mission-conductor-url-source-routing-h029-v0.md
+  path: docs/archive/mission-conductor-url-source-routing-h029-v0.md
   ledger: docs/mission-conductor-url-source-routing-h029-v0.ledger.md
   status: open_handoff
   kind: side
@@ -544,7 +542,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: demo-stability-foundations-v0
   title: 'Mission: Demo Stability Foundations v0'
-  path: docs/mission-demo-stability-foundations-v0.md
+  path: docs/archive/mission-demo-stability-foundations-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -559,7 +557,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: deploy-impact-isolation-cache-v1
   title: 'MissionGradient: Deploy Impact Isolation And Cache v1'
-  path: docs/mission-deploy-impact-isolation-cache-v1.md
+  path: docs/archive/mission-deploy-impact-isolation-cache-v1.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -584,7 +582,6 @@ nodes:
   - docs/heresy-detectors.md
 - id: doctrine-conformance-findings-2026-06-13
   title: Doctrine Conformance Update Report — 2026-06-13
-  path: docs/mission-doctrine-conformance-findings-2026-06-13.md
   ledger: ''
   status: settled
   kind: evidence
@@ -597,7 +594,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: email-demo-ingress-v0
   title: 'MissionGradient: Email Demo Ingress v0'
-  path: docs/mission-email-demo-ingress-v0.md
+  path: docs/archive/mission-email-demo-ingress-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -607,7 +604,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: geometry
   title: Choir Mission Geometry
-  path: docs/mission-geometry.md
+  path: docs/archive/mission-geometry.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -622,7 +619,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: global-wire-broad-source-vtext-newsroom-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire Broad-Source Texture Newsroom'
-  path: docs/mission-global-wire-broad-source-vtext-newsroom-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-global-wire-broad-source-vtext-newsroom-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -632,7 +629,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-hard-cutover-real-newsroom-v0
   title: 'Mission: Global Wire Hard Cutover To Real Texture Newsroom'
-  path: docs/mission-global-wire-hard-cutover-real-newsroom-v0.md
+  path: docs/archive/mission-global-wire-hard-cutover-real-newsroom-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -642,7 +639,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-living-vtext-newsroom-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire Living Texture Newsroom'
-  path: docs/mission-global-wire-living-vtext-newsroom-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-global-wire-living-vtext-newsroom-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -657,7 +654,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-sourcemaxx-publication-system-v0
   title: 'Mission: Global Wire SourceMaxx Newsroom Runtime'
-  path: docs/mission-global-wire-sourcemaxx-publication-system-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -667,7 +663,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: global-wire-style-vtext-collaborative-storygraph-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission: Global Wire / Style.vtext Collaborative StoryGraph' # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
-  path: docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-global-wire-style-vtext-collaborative-storygraph-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -677,7 +673,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: human-proof-experiment-rerun-v1
   title: 'MissionGradient: Human-Proof Experiment Rerun v1'
-  path: docs/mission-human-proof-experiment-rerun-v1.md
+  path: docs/archive/mission-human-proof-experiment-rerun-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -687,7 +683,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: llm-run-memory-compaction-v0
   title: LLM Run-Memory Compaction Mission v0
-  path: docs/mission-llm-run-memory-compaction-v0.md
+  path: docs/archive/mission-llm-run-memory-compaction-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -697,7 +693,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: maild-email-ingress-v0
   title: 'Mission: maild Email Ingress v0'
-  path: docs/mission-maild-email-ingress-v0.md
+  path: docs/archive/mission-maild-email-ingress-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -707,7 +703,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: natural-compaction-pdf-recall-eval-v0
   title: Natural Compaction Document Recall Eval Mission v0
-  path: docs/mission-natural-compaction-pdf-recall-eval-v0.md
+  path: docs/archive/mission-natural-compaction-pdf-recall-eval-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -717,7 +713,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: node-b-nix-store-retention-v0
   title: Node B Nix Store Retention Mission v0
-  path: docs/mission-node-b-nix-store-retention-v0.md
+  path: docs/archive/mission-node-b-nix-store-retention-v0.md
   ledger: docs/mission-node-b-nix-store-retention-v0.ledger.md
   status: settled
   kind: side
@@ -727,7 +723,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: node-b-storage-retention-v0
   title: 'Mission: Node B Storage Retention And VM State Prevention v0'
-  path: docs/mission-node-b-storage-retention-v0.md
+  path: docs/archive/mission-node-b-storage-retention-v0.md
   ledger: docs/mission-node-b-storage-retention-v0.ledger.md
   status: open_handoff
   kind: side
@@ -741,7 +737,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: platform-source-service-vtext-publication-campaign-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient Campaign v1: Platform Source Service, Texture Sources, And Publication'
-  path: docs/mission-platform-source-service-vtext-publication-campaign-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-platform-source-service-vtext-publication-campaign-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -756,7 +752,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: provider-config-conformance-v0
   title: Provider Config Conformance Mission v0
-  path: docs/mission-provider-config-conformance-v0.md
+  path: docs/archive/mission-provider-config-conformance-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -766,7 +762,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: public-pulse-app-v0
   title: Public Pulse App Mission v0
-  path: docs/mission-public-pulse-app-v0.md
+  path: docs/archive/mission-public-pulse-app-v0.md
   ledger: docs/mission-public-pulse-app-v0.ledger.md
   status: settled
   kind: side
@@ -776,7 +772,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: report-natural-compaction-document-recall-2026-06-09
   title: 'Mission Report: Natural Compaction Document Recall Eval'
-  path: docs/mission-report-natural-compaction-document-recall-2026-06-09.md
   ledger: ''
   status: settled
   kind: evidence
@@ -786,7 +781,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: report-universal-wire-production-recovery-2026-06-10
   title: 'Mission Report: Universal Wire Production Recovery — 2026-06-10'
-  path: docs/mission-report-universal-wire-production-recovery-2026-06-10.md
+  path: docs/archive/mission-report-universal-wire-production-recovery-2026-06-10.md
   ledger: ''
   status: settled
   kind: evidence
@@ -798,7 +793,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: report-wire-community-news-2026-06-09
   title: 'Mission Report: Wire Community News'
-  path: docs/mission-report-wire-community-news-2026-06-09.md
+  path: docs/archive/mission-report-wire-community-news-2026-06-09.md
   ledger: ''
   status: settled
   kind: evidence
@@ -808,7 +803,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: research-runtime-evidence-cadence-v1
   title: 'MissionGradient: Research Runtime Evidence Cadence v1'
-  path: docs/mission-research-runtime-evidence-cadence-v1.md
+  path: docs/archive/mission-research-runtime-evidence-cadence-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -818,7 +813,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: run-memory-v0
   title: 'MissionGradient: Choir Run Memory v0'
-  path: docs/mission-run-memory-v0.md
+  path: docs/archive/mission-run-memory-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -831,7 +826,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: runtime-human-proof-experiment-rerun-v1
   title: 'MissionGradient: Runtime Human-Proof Experiment Rerun v1'
-  path: docs/mission-runtime-human-proof-experiment-rerun-v1.md
+  path: docs/archive/mission-runtime-human-proof-experiment-rerun-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -841,7 +836,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: runtime-model-context-substrate-v0
   title: 'MissionGradient: Runtime Model And Context Substrate v0'
-  path: docs/mission-runtime-model-context-substrate-v0.md
+  path: docs/archive/mission-runtime-model-context-substrate-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -851,7 +846,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: runtime-test-pyramid-hardening-v0
   title: 'MissionGradient: Runtime Test Pyramid Hardening v0'
-  path: docs/mission-runtime-test-pyramid-hardening-v0.md
+  path: docs/archive/mission-runtime-test-pyramid-hardening-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -861,7 +856,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: search-provider-plane-v1
   title: 'MissionGradient: Search Provider Plane v1'
-  path: docs/mission-search-provider-plane-v1.md
+  path: docs/archive/mission-search-provider-plane-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -871,7 +866,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: source-system-hard-review-2026-06-06
   title: Source System Mission Hard Review
-  path: docs/mission-source-system-hard-review-2026-06-06.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -885,7 +879,7 @@ nodes:
   - docs/choir-doctrine.md
 - id: source-system-loop8-simplify-v0
   title: 'Source System Loop 8: Simplify, Stabilize, Modularize'
-  path: docs/mission-source-system-loop8-simplify-v0.md
+  path: docs/archive/mission-source-system-loop8-simplify-v0.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -901,7 +895,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: source-system-simplify-secure-smart-v0
   title: 'MissionGradient v0: Source System Simplification, Security, And Intelligence'
-  path: docs/mission-source-system-simplify-secure-smart-v0.md
+  path: docs/archive/mission-source-system-simplify-secure-smart-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -911,7 +905,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: standalone-sourcecycled-data-platform-v0
   title: 'MissionGradient: Standalone Sourcecycled Data Platform v0'
-  path: docs/mission-standalone-sourcecycled-data-platform-v0.md
+  path: docs/archive/mission-standalone-sourcecycled-data-platform-v0.md
   ledger: ''
   status: planned
   kind: side
@@ -921,7 +915,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: super-console-real-zot-cutover-v0
   title: Super Console Real Zot Cutover
-  path: docs/mission-super-console-real-zot-cutover-v0.md
+  path: docs/archive/mission-super-console-real-zot-cutover-v0.md
   ledger: ''
   status: open_handoff
   kind: side
@@ -935,7 +929,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: super-console-source-mount-promotion-v0
   title: 'MissionGradient: Super Console Source Mount And Promotion v0'
-  path: docs/mission-super-console-source-mount-promotion-v0.md
+  path: docs/archive/mission-super-console-source-mount-promotion-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -950,7 +944,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: surface-ontology-cleanup-h027-h029-v0
   title: Mission - Surface Ontology Cleanup H027-H029 - v0
-  path: docs/mission-surface-ontology-cleanup-h027-h029-v0.md
+  path: docs/archive/mission-surface-ontology-cleanup-h027-h029-v0.md
   ledger: ''
   status: open_handoff
   kind: docs_truth
@@ -967,7 +961,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: vtext-client-ready-source-transclusion-pretext-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Client-Ready Texture Source Transclusion And Proposal Cleanup'
-  path: docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-client-ready-source-transclusion-pretext-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -980,7 +974,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-fluid-editing-doc-roundtrip-transclusion-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Texture Fluid Editing, Document Roundtrip, And Source Transclusion'
-  path: docs/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: docs_truth
@@ -991,7 +985,7 @@ nodes:
   - docs/heresy-detectors.md
 - id: vtext-live-cadence-repair-v3 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient: Texture Live Cadence Repair v3'
-  path: docs/mission-vtext-live-cadence-repair-v3.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-live-cadence-repair-v3.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -1005,7 +999,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-source-entities-multimedia-transclusion-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'Mission Campaign: Texture Source Entities, Multimedia Review, And Transclusion v0'
-  path: docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: superseded
   kind: superseded
@@ -1020,7 +1014,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-source-viewer-reader-mode-hardening-v0 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v0: Source Viewer Reader-Mode Hardening And Source UX Simplification'
-  path: docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-source-viewer-reader-mode-hardening-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -1030,7 +1024,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: vtext-version-compare-merge-debuggability-v1 # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: 'MissionGradient v1: Texture Version Compare, Concept Merge, And Debuggability'
-  path: docs/mission-vtext-version-compare-merge-debuggability-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  path: docs/archive/mission-vtext-version-compare-merge-debuggability-v1.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   ledger: ''
   status: settled
   kind: side
@@ -1040,7 +1034,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: web-surface-rationalization-v0
   title: 'MissionGradient: Web Surface Rationalization v0'
-  path: docs/mission-web-surface-rationalization-v0.md
+  path: docs/archive/mission-web-surface-rationalization-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -1056,7 +1050,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-autonomous-ingestion-v1
   title: 'Mission Archive: Wire Autonomous Ingestion (v1)'
-  path: docs/mission-wire-autonomous-ingestion-v1.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -1069,7 +1062,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-community-news-v0
   title: 'MissionGradient: Wire Community News'
-  path: docs/mission-wire-community-news-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -1079,7 +1071,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-community-news-v1
   title: 'MissionGradient: Universal Wire (Wire Community News)'
-  path: docs/mission-wire-community-news-v1.md
+  path: docs/archive/mission-wire-community-news-v1.md
   ledger: ''
   status: settled
   kind: side
@@ -1089,7 +1081,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: wire-settlement-substrate-v0
   title: Mission M5a — Wire Settlement Substrate (split from M5 evidence gate) — v0
-  path: docs/mission-wire-settlement-substrate-v0.md
+  path: docs/archive/mission-wire-settlement-substrate-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -1103,7 +1095,7 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: youtube-review-studio-v0
   title: 'MissionGradient: YouTube And Image Review Studio v0'
-  path: docs/mission-youtube-review-studio-v0.md
+  path: docs/archive/mission-youtube-review-studio-v0.md
   ledger: ''
   status: settled
   kind: side
@@ -1113,8 +1105,6 @@ nodes:
   - docs/mission-portfolio-2026-06-11.md
 - id: mission-3b-ingestion-path-v0
   title: 'Mission 3b: New Ingestion Path (E2E)'
-  path: docs/mission-3b-ingestion-path-v0.md
-  ledger: docs/mission-3b-ingestion-path-v0.ledger.md
   status: working
   kind: spine
   depends_on: []
@@ -1126,7 +1116,7 @@ nodes:
   - AGENTS.md
 - id: update-coagent-source-centric-deletion-v0
   title: 'Mission: update_coagent Source-Centric Deletion v0'
-  path: docs/mission-update-coagent-source-centric-deletion-v0.md
+  path: docs/archive/mission-update-coagent-source-centric-deletion-v0.md
   ledger: docs/mission-update-coagent-source-centric-deletion-v0.ledger.md
   status: settled
   kind: side

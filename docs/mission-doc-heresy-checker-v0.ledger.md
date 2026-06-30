@@ -6,7 +6,7 @@ Claim: the imported draft has the right checker shape but assumed repo-wide
 frontmatter and a four-kind doc type system that the actual corpus does not
 support.
 
-Move: copy the draft into `docs/mission-doc-heresy-checker-v0.md`, run repo
+Move: copy the draft into `docs/archive/mission-doc-heresy-checker-v0.md`, run repo
 probes, and edit the spec in place.
 
 Expected Delta V: -3 by grounding the draft in frontmatter reality, link graph
@@ -49,7 +49,7 @@ Actual Delta V: matched expected. No code was implemented.
 
 Receipts:
 
-- `docs/mission-doc-heresy-checker-v0.md` rule audit now states field reads for
+- `docs/archive/mission-doc-heresy-checker-v0.md` rule audit now states field reads for
   R1-R4 and H1-H4.
 - `doc_role`, `authority`, and `lifecycle` remain only as manifest
   annotations.
@@ -84,7 +84,7 @@ Receipts:
 - Independent prover found three grammar-regrowth risks: witness payload as an
   accidental gate, R3's incomplete field-read audit, and top-level
   `refresh_triggers` without a non-gating note.
-- `docs/mission-doc-heresy-checker-v0.md` now states that `annotations` and
+- `docs/archive/mission-doc-heresy-checker-v0.md` now states that `annotations` and
   `refresh_triggers` are report metadata, while `witnesses` is evidence payload.
 - R2 now fires from `claim_scope: current|mixed`, not from the mere presence of
   `witnesses`.

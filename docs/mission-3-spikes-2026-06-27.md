@@ -29,7 +29,7 @@ Group B (after Group A):
 - **Existing Qdrant code:** `internal/qdrant/` — REST client, schema, pipeline, projection. All prototype-quality, already tested locally.
 - **Existing objectgraph code:** `internal/objectgraph/` — `Store` interface, `SQLiteStore`, `Object`, `Edge`, `Service`. SQLite is the current store.
 - **Existing Dolt integration:** `internal/store/store.go` — embedded Dolt workspace via `github.com/dolthub/driver`. Platform Dolt runs as `dolt sql-server` on node-b at `127.0.0.1:13306`.
-- **ADR:** `docs/adr-dolt-as-canonical-state.md` — Dolt is the default canonical store for durable product state.
+- **ADR:** `docs/archive/adr-dolt-as-canonical-state.md` — Dolt is the default canonical store for durable product state.
 
 ---
 

@@ -392,7 +392,7 @@ The mission's most productive moves were staging product replays. For platform b
 This mission document is the source program for the overnight run. Its successors include:
 
 - The service-as-appagent architectural pivot (identified but not yet paradoc'd)
-- The metaconductor/supervision protocol implementation (designed in `docs/design-conductor-supervision-protocol-2026-06-23.md`, not yet implemented)
+- The metaconductor/supervision protocol implementation (designed in `docs/archive/design-conductor-supervision-protocol-2026-06-23.md`, not yet implemented)
 - The next O4 realism axis: semantic story clustering plus same-article/world-model updates
 
 The Parallax skill itself was updated during this mission and is now at a new state: conjecture descent, not obligation counting. This is a durable protocol improvement that affects all future missions.
