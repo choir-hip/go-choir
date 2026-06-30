@@ -128,7 +128,7 @@ func (s *Service) ListObjects(ctx context.Context, filter ListFilter) ([]Object,
 			out = append(out, obj)
 		}
 	}
-	limit := normalizedLimit(filter.Limit)
+	limit := NormalizedLimit(filter.Limit)
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -188,7 +188,7 @@ func (s *Service) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, err
 			out = append(out, edge)
 		}
 	}
-	limit := normalizedLimit(filter.Limit)
+	limit := NormalizedLimit(filter.Limit)
 	if len(out) > limit {
 		out = out[:limit]
 	}

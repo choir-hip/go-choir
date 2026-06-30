@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -38,5 +39,15 @@ func main() {
 	handler := platform.NewHandler(svc)
 	s := server.NewServer("platformd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
+
+	// Object graph API: allows sourcecycled and VMs to project and query
+	// object graph data stored in the platform Dolt SQL server (corpusd).
+	ogStore := platform.NewObjectGraphStore(store)
+	ogService := objectgraph.NewService(objectgraph.Config{
+		Durable: ogStore,
+	})
+	ogHandler := platform.NewObjectGraphHandler(ogService)
+	platform.RegisterObjectGraphRoutes(s, ogHandler)
+
 	s.Start()
 }
