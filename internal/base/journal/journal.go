@@ -57,9 +57,17 @@ type Journal interface {
 	// the device has no recorded cursor.
 	Cursor(deviceID string) int64
 
+	// CursorForOwner returns the last-acked CursorSeq for one owner's
+	// device. Returns 0 if the owner/device pair has no recorded cursor.
+	CursorForOwner(ownerID, deviceID string) int64
+
 	// SetCursor records the sync position for a device. The sequence must
 	// not exceed the journal's current head.
 	SetCursor(deviceID string, seq int64) error
+
+	// SetCursorForOwner records the sync position for one owner's device.
+	// The sequence must not exceed the journal's current head.
+	SetCursorForOwner(ownerID, deviceID string, seq int64) error
 
 	// VerifyChain walks every entry and confirms the hash chain is
 	// intact, ParentEventID links are consistent, and CursorSeq is
@@ -96,16 +104,26 @@ func computeHash(evt model.Event, parentHash string) string {
 type MemJournal struct {
 	mu         sync.Mutex
 	entries    []Entry
-	lastByItem map[model.ItemID]model.EventID
+	lastByItem map[ownerItemKey]model.EventID
 	lastSeq    int64
-	cursors    map[string]int64
+	cursors    map[ownerDeviceKey]int64
+}
+
+type ownerItemKey struct {
+	ownerID string
+	itemID  model.ItemID
+}
+
+type ownerDeviceKey struct {
+	ownerID  string
+	deviceID string
 }
 
 // NewMemJournal returns a new empty in-memory journal.
 func NewMemJournal() *MemJournal {
 	return &MemJournal{
-		lastByItem: make(map[model.ItemID]model.EventID),
-		cursors:    make(map[string]int64),
+		lastByItem: make(map[ownerItemKey]model.EventID),
+		cursors:    make(map[ownerDeviceKey]int64),
 	}
 }
 
@@ -128,9 +146,13 @@ func (j *MemJournal) Append(evt model.Event) (Entry, error) {
 
 	// Assign ParentEventID from the previous event for this item. If the
 	// caller set it explicitly, it must match the known predecessor.
-	expectedParent := j.lastByItem[evt.ItemID]
+	key := ownerItemKey{ownerID: evt.OwnerID, itemID: evt.ItemID}
+	expectedParent := j.lastByItem[key]
 	if evt.ParentEventID == "" {
 		evt.ParentEventID = expectedParent
+	} else if expectedParent == "" {
+		return Entry{}, fmt.Errorf("journal: first event for item %s must not declare parent event %q",
+			evt.ItemID, evt.ParentEventID)
 	} else if expectedParent != "" && evt.ParentEventID != expectedParent {
 		return Entry{}, fmt.Errorf("journal: parent event %q does not match known predecessor %q for item %s",
 			evt.ParentEventID, expectedParent, evt.ItemID)
@@ -140,7 +162,7 @@ func (j *MemJournal) Append(evt model.Event) (Entry, error) {
 	parentHash := ""
 	if expectedParent != "" {
 		for i := len(j.entries) - 1; i >= 0; i-- {
-			if j.entries[i].Event.ItemID == evt.ItemID {
+			if j.entries[i].Event.EventID == expectedParent {
 				parentHash = j.entries[i].Hash
 				break
 			}
@@ -151,7 +173,7 @@ func (j *MemJournal) Append(evt model.Event) (Entry, error) {
 	entry := Entry{Event: evt, Hash: hash}
 
 	j.entries = append(j.entries, entry)
-	j.lastByItem[evt.ItemID] = evt.EventID
+	j.lastByItem[key] = evt.EventID
 	j.lastSeq = evt.CursorSeq
 
 	return entry, nil
@@ -183,13 +205,21 @@ func (j *MemJournal) EntriesUpTo(maxSeq int64) []Entry {
 
 // Cursor returns the last-acked CursorSeq for a device.
 func (j *MemJournal) Cursor(deviceID string) int64 {
+	return j.CursorForOwner("", deviceID)
+}
+
+func (j *MemJournal) CursorForOwner(ownerID, deviceID string) int64 {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.cursors[deviceID]
+	return j.cursors[ownerDeviceKey{ownerID: ownerID, deviceID: deviceID}]
 }
 
 // SetCursor records the sync position for a device.
 func (j *MemJournal) SetCursor(deviceID string, seq int64) error {
+	return j.SetCursorForOwner("", deviceID, seq)
+}
+
+func (j *MemJournal) SetCursorForOwner(ownerID, deviceID string, seq int64) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if seq < 0 {
@@ -198,7 +228,7 @@ func (j *MemJournal) SetCursor(deviceID string, seq int64) error {
 	if seq > j.lastSeq {
 		return fmt.Errorf("journal: cursor seq %d exceeds journal head %d", seq, j.lastSeq)
 	}
-	j.cursors[deviceID] = seq
+	j.cursors[ownerDeviceKey{ownerID: ownerID, deviceID: deviceID}] = seq
 	return nil
 }
 
@@ -243,7 +273,7 @@ func validateEvent(evt model.Event) error {
 func verifyChain(entries []Entry) error {
 	// Index entries by EventID for parent lookup.
 	byID := make(map[model.EventID]Entry, len(entries))
-	lastByItem := make(map[model.ItemID]model.EventID)
+	lastByItem := make(map[ownerItemKey]model.EventID)
 	var lastSeq int64 = -1
 
 	for _, e := range entries {
@@ -253,7 +283,8 @@ func verifyChain(entries []Entry) error {
 		}
 		lastSeq = e.Event.CursorSeq
 
-		expectedParent := lastByItem[e.Event.ItemID]
+		key := ownerItemKey{ownerID: e.Event.OwnerID, itemID: e.Event.ItemID}
+		expectedParent := lastByItem[key]
 		if e.Event.ParentEventID != expectedParent {
 			return fmt.Errorf("journal: event %s has parent %q but expected %q for item %s",
 				e.Event.EventID, e.Event.ParentEventID, expectedParent, e.Event.ItemID)
@@ -275,7 +306,7 @@ func verifyChain(entries []Entry) error {
 		}
 
 		byID[e.Event.EventID] = e
-		lastByItem[e.Event.ItemID] = e.Event.EventID
+		lastByItem[key] = e.Event.EventID
 	}
 	return nil
 }

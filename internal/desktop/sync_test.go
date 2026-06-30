@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -143,6 +144,9 @@ func TestSyncEngineDownloadCycle(t *testing.T) {
 	// Remote has one file; local is empty; synced is empty.
 	// The planner should produce an ActionDownload.
 	root := t.TempDir()
+	remoteData := []byte("remote file bytes")
+	remoteHash := fmt.Sprintf("%x", sha256.Sum256(remoteData))
+	remoteRef := model.BlobRef("sha256:" + remoteHash)
 
 	api := &fakeBaseAPI{}
 	// Add a remote create event for a file.
@@ -156,7 +160,7 @@ func TestSyncEngineDownloadCycle(t *testing.T) {
 		SubjectID:   "user_test",
 		EventType:   model.EventCreate,
 		Kind:        model.KindFile,
-		PayloadJSON: `{"name":"remote.txt","kind":"file","version_id":"base_ver_remote1","blob_ref":"sha256:abc","content_hash":"abc"}`,
+		PayloadJSON: fmt.Sprintf(`{"name":"remote.txt","kind":"file","version_id":"base_ver_remote1","blob_ref":%q,"content_hash":%q}`, remoteRef, remoteHash),
 	})
 
 	srv := httptest.NewServer(api)
@@ -174,8 +178,11 @@ func TestSyncEngineDownloadCycle(t *testing.T) {
 				Kind:           model.KindFile,
 				CurrentVersion: verID,
 			},
-			Version: model.Version{VersionID: verID, ItemID: itemID, BlobRef: "sha256:abc"},
+			Version: model.Version{VersionID: verID, ItemID: itemID, BlobRef: remoteRef},
 		})
+	})
+	mux.HandleFunc("/api/base/blobs/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(remoteData)
 	})
 	srv2 := httptest.NewServer(mux)
 	defer srv2.Close()
@@ -191,10 +198,13 @@ func TestSyncEngineDownloadCycle(t *testing.T) {
 
 	eng.runCycle(context.Background())
 
-	// The downloaded file should exist locally (placeholder).
 	// The remote item has no parent, so its path is just "remote.txt".
-	if _, err := os.Stat(filepath.Join(root, "remote.txt")); err != nil {
+	got, err := os.ReadFile(filepath.Join(root, "remote.txt"))
+	if err != nil {
 		t.Errorf("downloaded file not created: %v", err)
+	}
+	if string(got) != string(remoteData) {
+		t.Fatalf("downloaded file content: got %q want %q", string(got), string(remoteData))
 	}
 
 	p := eng.Status().Snapshot()
@@ -282,13 +292,13 @@ func TestSyncEngineConflictPauses(t *testing.T) {
 	itemID := localItemID("both.txt")
 	// Remote create event with different content hash than local.
 	api.addEvent(model.Event{
-		EventID:   model.EventID("base_evt_r1"),
-		OwnerID:   "user_test",
-		ItemID:    itemID,
-		DeviceID:  "remote",
-		SubjectID: "user_test",
-		EventType: model.EventCreate,
-		Kind:      model.KindFile,
+		EventID:     model.EventID("base_evt_r1"),
+		OwnerID:     "user_test",
+		ItemID:      itemID,
+		DeviceID:    "remote",
+		SubjectID:   "user_test",
+		EventType:   model.EventCreate,
+		Kind:        model.KindFile,
 		PayloadJSON: `{"name":"both.txt","kind":"file","version_id":"base_ver_remote","blob_ref":"sha256:remotehash","content_hash":"remotehash"}`,
 	})
 
@@ -351,6 +361,20 @@ func TestSyncEngineConflictPauses(t *testing.T) {
 		}
 	}
 	api.mu.Unlock()
+
+	saved, err := store.Load()
+	if err != nil {
+		t.Fatalf("load synced state: %v", err)
+	}
+	if saved.Cursor != oldState.Cursor {
+		t.Fatalf("synced cursor advanced through unresolved conflict: got %d want %d", saved.Cursor, oldState.Cursor)
+	}
+	if len(saved.Versions) != 1 {
+		t.Fatalf("saved versions: got %d want 1", len(saved.Versions))
+	}
+	if saved.Versions[0].VersionID != "base_ver_old" {
+		t.Fatalf("synced version advanced through unresolved conflict: got %q want base_ver_old", saved.Versions[0].VersionID)
+	}
 }
 
 func TestSyncEngineResolveConflict(t *testing.T) {
@@ -364,13 +388,13 @@ func TestSyncEngineResolveConflict(t *testing.T) {
 	api := &fakeBaseAPI{}
 	itemID := localItemID("both.txt")
 	api.addEvent(model.Event{
-		EventID:   model.EventID("base_evt_r1"),
-		OwnerID:   "user_test",
-		ItemID:    itemID,
-		DeviceID:  "remote",
-		SubjectID: "user_test",
-		EventType: model.EventCreate,
-		Kind:      model.KindFile,
+		EventID:     model.EventID("base_evt_r1"),
+		OwnerID:     "user_test",
+		ItemID:      itemID,
+		DeviceID:    "remote",
+		SubjectID:   "user_test",
+		EventType:   model.EventCreate,
+		Kind:        model.KindFile,
 		PayloadJSON: `{"name":"both.txt","kind":"file","version_id":"base_ver_remote","blob_ref":"sha256:remotehash","content_hash":"remotehash"}`,
 	})
 
@@ -378,7 +402,7 @@ func TestSyncEngineResolveConflict(t *testing.T) {
 	defer srv.Close()
 
 	oldState := SyncedState{
-		Items: []model.Item{{ItemID: itemID, Name: "both.txt", Kind: model.KindFile, CurrentVersion: "base_ver_old"}},
+		Items:    []model.Item{{ItemID: itemID, Name: "both.txt", Kind: model.KindFile, CurrentVersion: "base_ver_old"}},
 		Versions: []model.Version{{VersionID: "base_ver_old", ItemID: itemID, BlobRef: "sha256:oldhash", ContentHash: "oldhash"}},
 	}
 	statePath := filepath.Join(root, ".state.json")
@@ -425,6 +449,22 @@ func TestSyncEngineResolveConflict(t *testing.T) {
 	// Conflicts should be cleared after successful resolution.
 	if eng.Conflicts().Count() != 0 {
 		t.Errorf("conflicts after resolve: got %d, want 0", eng.Conflicts().Count())
+	}
+}
+
+func TestSafeCursorBeforeUnresolvedStopsAtFirstBlockedEvent(t *testing.T) {
+	events := []model.Event{
+		{CursorSeq: 3, ItemID: "base_item_after"},
+		{CursorSeq: 1, ItemID: "base_item_safe"},
+		{CursorSeq: 2, ItemID: "base_item_blocked"},
+	}
+	unresolved := map[model.ItemID]struct{}{
+		"base_item_blocked": {},
+	}
+
+	got := safeCursorBeforeUnresolved(0, events, unresolved)
+	if got != 1 {
+		t.Fatalf("safe cursor: got %d want 1", got)
 	}
 }
 
@@ -520,7 +560,7 @@ func TestSyncedStateStoreRoundTrip(t *testing.T) {
 
 func TestSnapshotToTreeAndPlanner(t *testing.T) {
 	s := SyncedState{
-		Items: []model.Item{{ItemID: "base_item_1", Name: "x", Kind: model.KindFile, CurrentVersion: "base_ver_1"}},
+		Items:    []model.Item{{ItemID: "base_item_1", Name: "x", Kind: model.KindFile, CurrentVersion: "base_ver_1"}},
 		Versions: []model.Version{{VersionID: "base_ver_1", ItemID: "base_item_1", BlobRef: "sha256:abc", ContentHash: "abc"}},
 	}
 	tt := snapshotToTree(s)

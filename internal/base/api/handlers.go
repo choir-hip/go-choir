@@ -6,16 +6,17 @@
 // Endpoints:
 //
 //	POST /api/base/blobs            — upload a blob (returns BlobRef)
+//	GET  /api/base/blobs/{ref}      — download raw blob bytes by BlobRef
 //	POST /api/base/items            — create/update an item (journal Event)
 //	GET  /api/base/items/{id}       — get item at current state
 //	GET  /api/base/delta?cursor=... — get events since cursor
 //	GET  /api/base/items/{id}/status — get sync status for item
 //	POST /api/base/repair/preview   — preview repair actions (planner)
 //
-// Auth: every endpoint requires an API key Bearer token. GET endpoints
-// require the read:base scope; POST endpoints require write:base. Each
-// mutation creates a journal Event with SubjectID set to the authenticated
-// API key's user ID.
+// Auth: every endpoint requires either trusted proxy identity headers or an
+// API key Bearer token. GET endpoints require the read:base scope; POST
+// endpoints require write:base. Each mutation creates a journal Event with
+// SubjectID set to the authenticated user's ID.
 package api
 
 import (
@@ -47,6 +48,8 @@ const (
 	ScopeReadBase  = "read:base"
 	ScopeWriteBase = "write:base"
 )
+
+const maxBlobUploadBytes = 64 << 20
 
 // APIKeyValidator is the interface used to validate Bearer token (API key)
 // auth. It mirrors the subset of *auth.Store the API needs, so tests can
@@ -90,6 +93,7 @@ func (h *Handler) SetClock(now func() time.Time) {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/base/blobs", h.handlePutBlob)
+	mux.HandleFunc("GET /api/base/blobs/{ref}", h.handleGetBlob)
 	mux.HandleFunc("POST /api/base/items", h.handlePutItem)
 	mux.HandleFunc("GET /api/base/items/{id}", h.handleGetItem)
 	mux.HandleFunc("GET /api/base/items/{id}/status", h.handleGetStatus)
@@ -102,15 +106,20 @@ func (h *Handler) Routes() http.Handler {
 
 // authResult holds the authenticated identity for a request.
 type authResult struct {
-	UserID  string
-	Email   string
-	KeyID   string
-	Scopes  []string
+	UserID string
+	Email  string
+	KeyID  string
+	Scopes []string
 }
 
-// authenticate validates the Bearer token API key and returns the identity.
-// It enforces that the key is not expired.
+// authenticate returns the proxy-validated identity when the request has
+// already crossed the proxy trust boundary, otherwise validates a direct
+// Bearer token API key. The proxy path is necessary because the public edge
+// strips raw Authorization before forwarding to the sandbox.
 func (h *Handler) authenticate(r *http.Request) (*authResult, error) {
+	if ar, ok := trustedProxyAuth(r); ok {
+		return ar, nil
+	}
 	if h.validator == nil {
 		return nil, errors.New("api key auth not configured")
 	}
@@ -160,6 +169,34 @@ func (h *Handler) authenticate(r *http.Request) (*authResult, error) {
 		KeyID:  ak.ID,
 		Scopes: ak.Scopes,
 	}, nil
+}
+
+func trustedProxyAuth(r *http.Request) (*authResult, bool) {
+	userID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
+	if userID == "" {
+		return nil, false
+	}
+	scopes := parseTrustedScopes(r.Header.Get("X-Authenticated-Scopes"))
+	return &authResult{
+		UserID: userID,
+		Email:  strings.TrimSpace(r.Header.Get("X-Authenticated-Email")),
+		Scopes: scopes,
+	}, true
+}
+
+func parseTrustedScopes(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	scopes := make([]string, 0, len(parts))
+	for _, part := range parts {
+		scope := strings.TrimSpace(part)
+		if scope != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes
 }
 
 // requireScope authenticates the request and verifies the key carries the
@@ -218,10 +255,13 @@ func (h *Handler) handlePutBlob(w http.ResponseWriter, r *http.Request) {
 	if ar == nil {
 		return
 	}
-	// Limit to 64 MiB to prevent abuse.
-	data, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxBlobUploadBytes+1))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorBody{Error: "read body: " + err.Error()})
+		return
+	}
+	if len(data) > maxBlobUploadBytes {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorBody{Error: "blob exceeds 64 MiB limit"})
 		return
 	}
 	if len(data) == 0 {
@@ -240,6 +280,51 @@ func (h *Handler) handlePutBlob(w http.ResponseWriter, r *http.Request) {
 		SHA256:    stat.SHA256,
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// --- GET /api/base/blobs/{ref} ------------------------------------------
+
+func (h *Handler) handleGetBlob(w http.ResponseWriter, r *http.Request) {
+	ar := h.requireScope(w, r, ScopeReadBase)
+	if ar == nil {
+		return
+	}
+	ref := model.BlobRef(r.PathValue("ref"))
+	if !ref.Valid() {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid blob_ref"})
+		return
+	}
+	if !h.ownerReferencesBlob(ar.UserID, ref) {
+		writeJSON(w, http.StatusNotFound, errorBody{Error: "blob not found"})
+		return
+	}
+	data, err := h.blobs.Get(ref)
+	if err != nil {
+		if errors.Is(err, blob.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, errorBody{Error: "blob not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, errorBody{Error: "get blob: " + err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("base api: blob write error: %v", err)
+	}
+}
+
+func (h *Handler) ownerReferencesBlob(ownerID string, ref model.BlobRef) bool {
+	for _, entry := range entriesForOwner(h.jr.Entries(), ownerID) {
+		if entry.Event.BlobRef == ref {
+			return true
+		}
+		var payload tree.Payload
+		if err := json.Unmarshal([]byte(entry.Event.PayloadJSON), &payload); err == nil && payload.BlobRef == ref {
+			return true
+		}
+	}
+	return false
 }
 
 // --- POST /api/base/items ------------------------------------------------
@@ -279,17 +364,13 @@ func (h *Handler) handlePutItem(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid json: " + err.Error()})
 		return
 	}
-	if !req.ItemID.Valid() {
-		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid item_id"})
+	if req.OwnerID != "" && req.OwnerID != ar.UserID {
+		writeJSON(w, http.StatusForbidden, errorBody{Error: "owner_id does not match authenticated user"})
 		return
 	}
-	if !req.EventType.Valid() {
-		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid event_type"})
+	if status, msg := h.validatePutItemRequest(req); status != 0 {
+		writeJSON(w, status, errorBody{Error: msg})
 		return
-	}
-	owner := req.OwnerID
-	if owner == "" {
-		owner = ar.UserID
 	}
 	deviceID := req.DeviceID
 	if deviceID == "" {
@@ -309,7 +390,7 @@ func (h *Handler) handlePutItem(w http.ResponseWriter, r *http.Request) {
 
 	evt := model.Event{
 		EventID:     model.EventID("base_evt_" + uuid.NewString()),
-		OwnerID:     owner,
+		OwnerID:     ar.UserID,
 		ItemID:      req.ItemID,
 		DeviceID:    deviceID,
 		SubjectID:   ar.UserID,
@@ -352,7 +433,7 @@ func (h *Handler) handleGetItem(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid item id"})
 		return
 	}
-	tr := tree.Derive(journal.Events(h.jr.Entries()))
+	tr := tree.Derive(journal.Events(entriesForOwner(h.jr.Entries(), ar.UserID)))
 	item, ok := tr.Items[id]
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorBody{Error: "item not found"})
@@ -368,10 +449,10 @@ func (h *Handler) handleGetItem(w http.ResponseWriter, r *http.Request) {
 // --- GET /api/base/items/{id}/status ------------------------------------
 
 type statusResponse struct {
-	ItemID    model.ItemID  `json:"item_id"`
+	ItemID    model.ItemID    `json:"item_id"`
 	State     model.SyncState `json:"state"`
 	VersionID model.VersionID `json:"version_id,omitempty"`
-	UpdatedAt time.Time     `json:"updated_at,omitempty"`
+	UpdatedAt time.Time       `json:"updated_at,omitempty"`
 }
 
 // handleGetStatus returns a derived sync status for an item. Without a local
@@ -390,7 +471,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorBody{Error: "invalid item id"})
 		return
 	}
-	tr := tree.Derive(journal.Events(h.jr.Entries()))
+	tr := tree.Derive(journal.Events(entriesForOwner(h.jr.Entries(), ar.UserID)))
 	item, ok := tr.Items[id]
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorBody{Error: "item not found"})
@@ -443,7 +524,7 @@ func (h *Handler) handleDelta(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	entries := h.jr.Entries()
+	entries := entriesForOwner(h.jr.Entries(), ar.UserID)
 	var out []model.Event
 	var newCursor int64 = cursor
 	var head int64

@@ -12,39 +12,41 @@ import (
 type SyncPhase string
 
 const (
-	PhaseIdle       SyncPhase = "idle"
-	PhaseScanning   SyncPhase = "scanning"
-	PhaseFetching   SyncPhase = "fetching"
-	PhasePlanning   SyncPhase = "planning"
-	PhaseExecuting  SyncPhase = "executing"
-	PhaseConflicts  SyncPhase = "conflicts"
-	PhaseError      SyncPhase = "error"
-	PhaseCancelled  SyncPhase = "cancelled"
+	PhaseIdle      SyncPhase = "idle"
+	PhaseScanning  SyncPhase = "scanning"
+	PhaseFetching  SyncPhase = "fetching"
+	PhasePlanning  SyncPhase = "planning"
+	PhaseExecuting SyncPhase = "executing"
+	PhaseConflicts SyncPhase = "conflicts"
+	PhaseError     SyncPhase = "error"
+	PhaseCancelled SyncPhase = "cancelled"
 )
 
 // ItemStatus is the per-item sync state surfaced to the UI. It is derived
 // from the planner's actions and conflicts after a sync cycle.
 type ItemStatus struct {
-	ItemID    model.ItemID    `json:"item_id"`
-	Path      string          `json:"path,omitempty"`
-	State     model.SyncState `json:"state"`
-	LocalVer  model.VersionID `json:"local_version_id,omitempty"`
-	RemoteVer model.VersionID `json:"remote_version_id,omitempty"`
-	SyncedVer model.VersionID `json:"synced_version_id,omitempty"`
-	UpdatedAt time.Time       `json:"updated_at,omitempty"`
+	ItemID       model.ItemID    `json:"item_id"`
+	LocalItemID  model.ItemID    `json:"local_item_id,omitempty"`
+	RemoteItemID model.ItemID    `json:"remote_item_id,omitempty"`
+	Path         string          `json:"path,omitempty"`
+	State        model.SyncState `json:"state"`
+	LocalVer     model.VersionID `json:"local_version_id,omitempty"`
+	RemoteVer    model.VersionID `json:"remote_version_id,omitempty"`
+	SyncedVer    model.VersionID `json:"synced_version_id,omitempty"`
+	UpdatedAt    time.Time       `json:"updated_at,omitempty"`
 }
 
 // SyncProgress is the overall sync status reported to the frontend.
 type SyncProgress struct {
-	Phase           SyncPhase    `json:"phase"`
-	LastSyncAt      *time.Time   `json:"last_sync_at,omitempty"`
-	Cursor          int64        `json:"cursor"`
-	RemoteHead      int64        `json:"remote_head"`
-	ActionsTotal    int          `json:"actions_total"`
-	ActionsDone     int          `json:"actions_done"`
-	ConflictsCount  int          `json:"conflicts_count"`
-	LastError       string       `json:"last_error,omitempty"`
-	Items           []ItemStatus `json:"items,omitempty"`
+	Phase          SyncPhase    `json:"phase"`
+	LastSyncAt     *time.Time   `json:"last_sync_at,omitempty"`
+	Cursor         int64        `json:"cursor"`
+	RemoteHead     int64        `json:"remote_head"`
+	ActionsTotal   int          `json:"actions_total"`
+	ActionsDone    int          `json:"actions_done"`
+	ConflictsCount int          `json:"conflicts_count"`
+	LastError      string       `json:"last_error,omitempty"`
+	Items          []ItemStatus `json:"items,omitempty"`
 }
 
 // StatusTracker is a concurrency-safe holder of sync progress and per-item
@@ -164,14 +166,18 @@ func (s *StatusTracker) UpdateFromPlan(actions []planner.Action, conflicts []pla
 	}
 
 	for _, c := range conflicts {
+		localID := conflictLocalItemID(c)
+		remoteID := conflictRemoteItemID(c)
 		st := ItemStatus{
-			ItemID:    c.ItemID,
-			State:     model.StateConflict,
-			UpdatedAt: now,
+			ItemID:       c.ItemID,
+			LocalItemID:  localID,
+			RemoteItemID: remoteID,
+			State:        model.StateConflict,
+			UpdatedAt:    now,
 		}
-		st.Path = RelPathFromID(local, c.ItemID)
+		st.Path = RelPathFromID(local, localID)
 		if st.Path == "" {
-			st.Path = RelPathFromID(remote, c.ItemID)
+			st.Path = RelPathFromID(remote, remoteID)
 		}
 		st.LocalVer = c.LocalVer.VersionID
 		st.RemoteVer = c.RemoteVer.VersionID

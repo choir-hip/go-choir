@@ -18,12 +18,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/base/blob"
 	"github.com/yusefmosiah/go-choir/internal/base/journal"
 	"github.com/yusefmosiah/go-choir/internal/base/model"
+	"github.com/yusefmosiah/go-choir/internal/base/tree"
 )
 
 // mockValidator is a test APIKeyValidator that returns a fixed key.
 type mockValidator struct {
-	key    *auth.APIKey
-	user   *auth.User
+	key     *auth.APIKey
+	user    *auth.User
 	touched bool
 }
 
@@ -50,6 +51,15 @@ func (m *mockValidator) GetUserByID(id string) (*auth.User, error) {
 }
 
 var errNotFound = errors.New("not found")
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
+}
 
 // fakeValidator returns a validator that authenticates a single key whose
 // secret is `secret`. The key hash is SHA-256(secret).
@@ -129,8 +139,202 @@ func TestPutBlobWrongScope(t *testing.T) {
 	}
 }
 
+func TestDeltaAcceptsTrustedProxyIdentity(t *testing.T) {
+	h, _, _, _, _ := newHandler(t, []string{ScopeReadBase})
+	h.validator = nil
+	req := httptest.NewRequest(http.MethodGet, "/api/base/delta?cursor=0", nil)
+	req.Header.Set("X-Authenticated-User", "user_test")
+	req.Header.Set("X-Authenticated-Email", "test@choir.local")
+	req.Header.Set("X-Authenticated-Scopes", "read:base")
+	rr := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 body: %s", rr.Code, rr.Body.String())
+	}
+	var resp deltaResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Events) != 0 || resp.Cursor != 0 || resp.Head != 0 {
+		t.Fatalf("delta response = %+v, want empty zero response", resp)
+	}
+}
+
+func TestDeltaRejectsTrustedProxyIdentityWithoutScope(t *testing.T) {
+	h, _, _, _, _ := newHandler(t, []string{ScopeReadBase})
+	h.validator = nil
+	req := httptest.NewRequest(http.MethodGet, "/api/base/delta?cursor=0", nil)
+	req.Header.Set("X-Authenticated-User", "user_test")
+	rr := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d want 403 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPutBlobRejectsOversizedBody(t *testing.T) {
+	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase})
+	body := io.LimitReader(zeroReader{}, maxBlobUploadBytes+1)
+
+	rr := do(t, h.Routes(), http.MethodPost, "/api/base/blobs", secret, body)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status: got %d want 413 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetBlobSuccess(t *testing.T) {
+	h, _, secret, bs, jr := newHandler(t, []string{ScopeReadBase})
+	data := []byte("downloadable blob content")
+	ref, err := bs.Put(data)
+	if err != nil {
+		t.Fatalf("put blob: %v", err)
+	}
+	if _, err := jr.Append(model.Event{
+		EventID:   "base_evt_blob_owner",
+		OwnerID:   "user_test",
+		ItemID:    "base_item_blob_owner",
+		DeviceID:  "dev1",
+		SubjectID: "user_test",
+		EventType: model.EventCreate,
+		Kind:      model.KindFile,
+		BlobRef:   ref,
+		PayloadJSON: tree.Payload{
+			Name:      "owned.txt",
+			Kind:      model.KindFile,
+			VersionID: "base_ver_blob_owner",
+			BlobRef:   ref,
+		}.JSON(),
+		CreatedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("append owner event: %v", err)
+	}
+
+	rr := do(t, h.Routes(), http.MethodGet, "/api/base/blobs/"+string(ref), secret, nil)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 body: %s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Body.Bytes(); !bytes.Equal(got, data) {
+		t.Fatalf("body: got %q want %q", string(got), string(data))
+	}
+}
+
+func TestGetBlobDoesNotExposeForeignOwnerBlob(t *testing.T) {
+	h, _, secret, bs, jr := newHandler(t, []string{ScopeReadBase})
+	ref, err := bs.Put([]byte("foreign blob content"))
+	if err != nil {
+		t.Fatalf("put blob: %v", err)
+	}
+	if _, err := jr.Append(model.Event{
+		EventID:   "base_evt_blob_foreign",
+		OwnerID:   "other_owner",
+		ItemID:    "base_item_blob_foreign",
+		DeviceID:  "dev1",
+		SubjectID: "other_owner",
+		EventType: model.EventCreate,
+		Kind:      model.KindFile,
+		BlobRef:   ref,
+		PayloadJSON: tree.Payload{
+			Name:      "foreign.txt",
+			Kind:      model.KindFile,
+			VersionID: "base_ver_blob_foreign",
+			BlobRef:   ref,
+		}.JSON(),
+		CreatedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("append foreign event: %v", err)
+	}
+
+	rr := do(t, h.Routes(), http.MethodGet, "/api/base/blobs/"+string(ref), secret, nil)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status: got %d want 404 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetBlobWrongScope(t *testing.T) {
+	h, _, secret, bs, _ := newHandler(t, []string{ScopeWriteBase})
+	ref, err := bs.Put([]byte("private blob"))
+	if err != nil {
+		t.Fatalf("put blob: %v", err)
+	}
+
+	rr := do(t, h.Routes(), http.MethodGet, "/api/base/blobs/"+string(ref), secret, nil)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d want 403", rr.Code)
+	}
+}
+
+func TestPutItemRejectsExplicitOtherOwner_whenAuthenticatedUserDiffers(t *testing.T) {
+	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
+	body := putItemRequest{
+		ItemID:    "base_item_cross_owner",
+		OwnerID:   "other_owner",
+		EventType: model.EventCreate,
+		Kind:      model.KindFolder,
+		Name:      "private",
+		VersionID: "base_ver_folder_cross_owner",
+	}
+	b, _ := json.Marshal(body)
+
+	rr := do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d want 403 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPutItemRejectsMissingBlob_whenFileReferencesUnknownBlob(t *testing.T) {
+	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
+	body := putItemRequest{
+		ItemID:      "base_item_missing_blob",
+		EventType:   model.EventCreate,
+		Kind:        model.KindFile,
+		Name:        "notes.txt",
+		VersionID:   "base_ver_missing_blob",
+		BlobRef:     model.BlobRef("sha256:" + strings.Repeat("d", 64)),
+		ContentHash: strings.Repeat("d", 64),
+	}
+	b, _ := json.Marshal(body)
+
+	rr := do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPutItemRejectsInvalidBlobRef_whenFileHasMalformedBlobRef(t *testing.T) {
+	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
+	body := putItemRequest{
+		ItemID:    "base_item_invalid_blob",
+		EventType: model.EventCreate,
+		Kind:      model.KindFile,
+		Name:      "notes.txt",
+		VersionID: "base_ver_invalid_blob",
+		BlobRef:   "sha256:not-valid",
+	}
+	b, _ := json.Marshal(body)
+
+	rr := do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestPutItemAndDelta(t *testing.T) {
 	h, _, secret, _, jr := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
+	ref, err := h.blobs.Put([]byte("api item body"))
+	if err != nil {
+		t.Fatalf("put blob: %v", err)
+	}
 	itemID := model.ItemID("base_item_" + "abc123")
 	body := putItemRequest{
 		ItemID:    itemID,
@@ -138,7 +342,7 @@ func TestPutItemAndDelta(t *testing.T) {
 		Kind:      model.KindFile,
 		Name:      "notes.txt",
 		VersionID: model.VersionID("base_ver_v1"),
-		BlobRef:   model.BlobRef("sha256:" + strings.Repeat("a", 64)),
+		BlobRef:   ref,
 	}
 	b, _ := json.Marshal(body)
 	rr := do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))
@@ -163,6 +367,9 @@ func TestPutItemAndDelta(t *testing.T) {
 	}
 	if entries[0].Event.SubjectID != "user_test" {
 		t.Fatalf("subject: got %q want user_test", entries[0].Event.SubjectID)
+	}
+	if entries[0].Event.OwnerID != "user_test" {
+		t.Fatalf("owner: got %q want user_test", entries[0].Event.OwnerID)
 	}
 
 	// Delta query returns the event.
@@ -194,6 +401,44 @@ func TestPutItemAndDelta(t *testing.T) {
 	}
 	if len(dresp.Events) != 0 {
 		t.Fatalf("delta2 events: got %d want 0", len(dresp.Events))
+	}
+}
+
+func TestDeltaDoesNotExposeOtherOwnerEvents_whenJournalContainsForeignOwner(t *testing.T) {
+	h, _, secret, _, jr := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
+	_, err := jr.Append(model.Event{
+		EventID:   "base_evt_foreign_owner",
+		OwnerID:   "other_owner",
+		ItemID:    "base_item_foreign_owner",
+		DeviceID:  "dev1",
+		SubjectID: "other_owner",
+		EventType: model.EventCreate,
+		Kind:      model.KindFolder,
+		PayloadJSON: tree.Payload{
+			Name:      "foreign",
+			Kind:      model.KindFolder,
+			VersionID: "base_ver_foreign_owner",
+		}.JSON(),
+		CreatedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("append foreign event: %v", err)
+	}
+
+	rr := do(t, h.Routes(), http.MethodGet, "/api/base/delta?cursor=0", secret, nil)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 body: %s", rr.Code, rr.Body.String())
+	}
+	var resp deltaResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Events) != 0 {
+		t.Fatalf("events: got %d want 0", len(resp.Events))
+	}
+	if resp.Head != 0 {
+		t.Fatalf("head: got %d want 0", resp.Head)
 	}
 }
 
@@ -230,6 +475,34 @@ func TestGetItem(t *testing.T) {
 	}
 }
 
+func TestGetItemDoesNotExposeOtherOwnerItem_whenItemIDExistsForForeignOwner(t *testing.T) {
+	h, _, secret, _, jr := newHandler(t, []string{ScopeReadBase})
+	_, err := jr.Append(model.Event{
+		EventID:   "base_evt_foreign_get",
+		OwnerID:   "other_owner",
+		ItemID:    "base_item_foreign_get",
+		DeviceID:  "dev1",
+		SubjectID: "other_owner",
+		EventType: model.EventCreate,
+		Kind:      model.KindFolder,
+		PayloadJSON: tree.Payload{
+			Name:      "foreign",
+			Kind:      model.KindFolder,
+			VersionID: "base_ver_foreign_get",
+		}.JSON(),
+		CreatedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("append foreign event: %v", err)
+	}
+
+	rr := do(t, h.Routes(), http.MethodGet, "/api/base/items/base_item_foreign_get", secret, nil)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status: got %d want 404 body: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestGetItemNotFound(t *testing.T) {
 	h, _, secret, _, _ := newHandler(t, []string{ScopeReadBase})
 	rr := do(t, h.Routes(), http.MethodGet, "/api/base/items/base_item_nope", secret, nil)
@@ -240,6 +513,10 @@ func TestGetItemNotFound(t *testing.T) {
 
 func TestGetStatus(t *testing.T) {
 	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
+	ref, err := h.blobs.Put([]byte("status body"))
+	if err != nil {
+		t.Fatalf("put blob: %v", err)
+	}
 	itemID := model.ItemID("base_item_status")
 	body := putItemRequest{
 		ItemID:    itemID,
@@ -247,7 +524,7 @@ func TestGetStatus(t *testing.T) {
 		Kind:      model.KindFile,
 		Name:      "file.txt",
 		VersionID: model.VersionID("base_ver_s1"),
-		BlobRef:   model.BlobRef("sha256:" + strings.Repeat("b", 64)),
+		BlobRef:   ref,
 	}
 	b, _ := json.Marshal(body)
 	do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))

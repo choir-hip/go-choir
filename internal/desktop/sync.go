@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,10 +20,10 @@ import (
 // cursor. It is the "synced ancestor" the planner compares against. The
 // state is stored as JSON in the Choir config directory.
 type SyncedState struct {
-	Cursor    int64                  `json:"cursor"`
-	Items     []model.Item           `json:"items"`
-	Versions  []model.Version        `json:"versions"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	Cursor    int64           `json:"cursor"`
+	Items     []model.Item    `json:"items"`
+	Versions  []model.Version `json:"versions"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // SyncedStateStore persists the synced state (cursor + synced tree) across
@@ -105,10 +106,10 @@ type SyncEngine struct {
 	status *StatusTracker
 	conf   *ConflictManager
 
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	running  bool
-	syncNow  chan struct{}
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	running bool
+	syncNow chan struct{}
 
 	// syncedMu guards lastSynced, the cached synced tree from the most recent
 	// cycle. deleteLocal and stateSnapshotItem read it to resolve paths and
@@ -318,10 +319,12 @@ func (e *SyncEngine) runCycle(ctx context.Context) {
 	if e.conf.HasUnresolved() {
 		// Pause: do not advance the cursor past unresolved conflicts. The
 		// local and remote sides remain divergent until the user chooses.
-		// We still persist the cursor for the non-conflicting actions that
-		// succeeded, but we do NOT advance past the unresolved items.
+		// We persist only the contiguous remote delta prefix before the first
+		// unresolved conflict item. The cursor is a linear acknowledgement, so
+		// it cannot skip an unresolved event even when later actions succeeded.
 		e.status.SetPhase(PhaseConflicts)
-		_ = e.persistState(state, delta, executed)
+		safeCursor := safeCursorBeforeUnresolved(state.Cursor, delta.Events, unresolvedItemIDs(e.conf))
+		_ = e.persistState(state, deltaUpToCursor(delta, safeCursor), executed)
 		return
 	}
 
@@ -374,25 +377,23 @@ func (e *SyncEngine) applyResolutions(ctx context.Context, conflicts []planner.C
 		if !ok {
 			continue // unresolved; skipped
 		}
+		localID := conflictLocalItemID(c)
+		remoteID := conflictRemoteItemID(c)
 		switch res {
 		case ResolveKeepLocal:
-			// Push the local version to remote.
-			if err := e.uploadLocal(c.ItemID, local); err != nil {
-				return applied, fmt.Errorf("keep_local %s: %w", c.ItemID, err)
+			if err := e.uploadLocal(localID, local); err != nil {
+				return applied, fmt.Errorf("keep_local %s: %w", localID, err)
 			}
 		case ResolveKeepRemote:
-			// Pull the remote version to local.
-			if err := e.downloadRemote(c.ItemID, remote); err != nil {
-				return applied, fmt.Errorf("keep_remote %s: %w", c.ItemID, err)
+			if err := e.downloadRemote(remoteID, remote); err != nil {
+				return applied, fmt.Errorf("keep_remote %s: %w", remoteID, err)
 			}
 		case ResolveKeepBoth:
-			// Upload the local version as a new item (renamed) AND download
-			// the remote version. Neither side is discarded.
-			if err := e.uploadLocal(c.ItemID, local); err != nil {
-				return applied, fmt.Errorf("keep_both upload %s: %w", c.ItemID, err)
+			if err := e.uploadLocal(localID, local); err != nil {
+				return applied, fmt.Errorf("keep_both upload %s: %w", localID, err)
 			}
-			if err := e.downloadRemote(c.ItemID, remote); err != nil {
-				return applied, fmt.Errorf("keep_both download %s: %w", c.ItemID, err)
+			if err := e.downloadRemote(remoteID, remote); err != nil {
+				return applied, fmt.Errorf("keep_both download %s: %w", remoteID, err)
 			}
 		}
 		applied[c.ItemID] = struct{}{}
@@ -405,11 +406,82 @@ func (e *SyncEngine) applyResolutions(ctx context.Context, conflicts []planner.C
 // (resolved or unresolved) in the conflict manager.
 func hasConflictRecord(cm *ConflictManager, id model.ItemID) bool {
 	for _, c := range cm.All() {
-		if c.ItemID == id {
+		if c.ItemID == id || c.LocalItemID == id || c.RemoteItemID == id {
 			return true
 		}
 	}
 	return false
+}
+
+func conflictLocalItemID(c planner.Conflict) model.ItemID {
+	if c.LocalItemID != "" {
+		return c.LocalItemID
+	}
+	if c.LocalVer.ItemID != "" {
+		return c.LocalVer.ItemID
+	}
+	return c.ItemID
+}
+
+func conflictRemoteItemID(c planner.Conflict) model.ItemID {
+	if c.RemoteItemID != "" {
+		return c.RemoteItemID
+	}
+	if c.RemoteVer.ItemID != "" {
+		return c.RemoteVer.ItemID
+	}
+	return c.ItemID
+}
+
+func unresolvedItemIDs(cm *ConflictManager) map[model.ItemID]struct{} {
+	pending := cm.Pending()
+	out := make(map[model.ItemID]struct{}, len(pending))
+	for _, c := range pending {
+		out[c.ItemID] = struct{}{}
+		if c.LocalItemID != "" {
+			out[c.LocalItemID] = struct{}{}
+		}
+		if c.RemoteItemID != "" {
+			out[c.RemoteItemID] = struct{}{}
+		}
+	}
+	return out
+}
+
+func safeCursorBeforeUnresolved(start int64, events []model.Event, unresolved map[model.ItemID]struct{}) int64 {
+	safe := start
+	for _, evt := range eventsByCursor(events) {
+		if evt.CursorSeq <= safe {
+			continue
+		}
+		if _, blocked := unresolved[evt.ItemID]; blocked {
+			break
+		}
+		safe = evt.CursorSeq
+	}
+	return safe
+}
+
+func eventsByCursor(events []model.Event) []model.Event {
+	out := append([]model.Event(nil), events...)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CursorSeq < out[j].CursorSeq
+	})
+	return out
+}
+
+func deltaUpToCursor(delta DeltaResponse, cursor int64) DeltaResponse {
+	events := make([]model.Event, 0, len(delta.Events))
+	for _, evt := range delta.Events {
+		if evt.CursorSeq <= cursor {
+			events = append(events, evt)
+		}
+	}
+	return DeltaResponse{
+		Events: events,
+		Cursor: cursor,
+		Head:   delta.Head,
+	}
 }
 
 // executeAction performs a single reconciliation action against the local
@@ -515,24 +587,22 @@ func (e *SyncEngine) downloadRemote(id model.ItemID, remote planner.Tree) error 
 		return os.MkdirAll(abs, 0o755)
 	}
 
-	// For a file, fetch the item to get the blob ref, then download the blob.
-	// The Base API's GET /items/{id} returns the current version; the blob
-	// bytes are fetched via a separate blob endpoint. The current Base API
-	// (M4) does not expose a blob GET endpoint, so we record the download as
-	// a pending operation and write a placeholder. A full blob download will
-	// be wired when the blob GET endpoint lands.
 	resp, err := e.client.GetItem(id)
 	if err != nil {
 		return fmt.Errorf("get item: %w", err)
 	}
-	_ = resp
+	if resp.Version.BlobRef == "" {
+		return fmt.Errorf("remote item %s has no blob ref", id)
+	}
+	data, err := e.client.GetBlob(resp.Version.BlobRef)
+	if err != nil {
+		return fmt.Errorf("get blob: %w", err)
+	}
 	// Ensure the parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return fmt.Errorf("mkdir parent: %w", err)
 	}
-	// Write an empty placeholder so the local tree reflects the remote
-	// presence. The content will be backfilled by the blob download path.
-	if err := os.WriteFile(abs, nil, 0o644); err != nil {
+	if err := os.WriteFile(abs, data, 0o644); err != nil {
 		return fmt.Errorf("write local file: %w", err)
 	}
 	return nil

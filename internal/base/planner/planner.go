@@ -43,14 +43,14 @@ func NewTree() Tree {
 type ActionType string
 
 const (
-	ActionDownload      ActionType = "download"       // remote has it, local doesn't
-	ActionUpload        ActionType = "upload"         // local has it, remote doesn't
-	ActionDeleteLocal   ActionType = "delete_local"   // remote deleted, local has
-	ActionDeleteRemote  ActionType = "delete_remote"  // local deleted, remote has
-	ActionUpdateLocal   ActionType = "update_local"   // remote has newer version
-	ActionUpdateRemote  ActionType = "update_remote"  // local has newer version
-	ActionMoveLocal     ActionType = "move_local"     // remote moved it
-	ActionMoveRemote    ActionType = "move_remote"    // local moved it
+	ActionDownload     ActionType = "download"      // remote has it, local doesn't
+	ActionUpload       ActionType = "upload"        // local has it, remote doesn't
+	ActionDeleteLocal  ActionType = "delete_local"  // remote deleted, local has
+	ActionDeleteRemote ActionType = "delete_remote" // local deleted, remote has
+	ActionUpdateLocal  ActionType = "update_local"  // remote has newer version
+	ActionUpdateRemote ActionType = "update_remote" // local has newer version
+	ActionMoveLocal    ActionType = "move_local"    // remote moved it
+	ActionMoveRemote   ActionType = "move_remote"   // local moved it
 )
 
 // Action describes one reconciliation step. The Version field carries the
@@ -69,11 +69,13 @@ type Action struct {
 // downstream resolver can choose explicitly. The planner NEVER silently
 // picks a winner.
 type Conflict struct {
-	ItemID    model.ItemID
-	LocalVer  model.Version
-	RemoteVer model.Version
-	SyncedVer model.Version
-	Reason    string // "both modified", "modify/delete", "add/add", "move/edit", etc.
+	ItemID       model.ItemID
+	LocalItemID  model.ItemID
+	RemoteItemID model.ItemID
+	LocalVer     model.Version
+	RemoteVer    model.Version
+	SyncedVer    model.Version
+	Reason       string // "both modified", "modify/delete", "add/add", "move/edit", etc.
 }
 
 // Plan produces actions that reconcile local and remote trees relative to the
@@ -134,9 +136,9 @@ func pathCollisions(remote, local Tree) []Conflict {
 	// collision exists. We only flag collisions across sides (a local item and
 	// a remote item at the same path with different IDs).
 	type collision struct {
-		localID  model.ItemID
-		localVer model.Version
-		remoteID model.ItemID
+		localID   model.ItemID
+		localVer  model.Version
+		remoteID  model.ItemID
 		remoteVer model.Version
 	}
 	seen := make(map[loc]collision)
@@ -170,10 +172,12 @@ func pathCollisions(remote, local Tree) []Conflict {
 		}
 		// Distinct items at the same path: conflict.
 		out = append(out, Conflict{
-			ItemID:    id, // the remote item (the local item is preserved via LocalVer)
-			LocalVer:  c.localVer,
-			RemoteVer: remote.Versions[id],
-			Reason:    "add/add path collision: local item " + string(c.localID) + " and remote item " + string(id) + " occupy the same path",
+			ItemID:       id,
+			LocalItemID:  c.localID,
+			RemoteItemID: id,
+			LocalVer:     c.localVer,
+			RemoteVer:    remote.Versions[id],
+			Reason:       "add/add path collision: local item " + string(c.localID) + " and remote item " + string(id) + " occupy the same path",
 		})
 	}
 	return out
@@ -393,10 +397,11 @@ func versionContentChanged(a, b model.Version) bool {
 // versionsEqual reports whether two versions represent the same content.
 func versionsEqual(a, b model.Version) bool {
 	if a.VersionID != "" && b.VersionID != "" {
-		return a.VersionID == b.VersionID
+		if a.VersionID == b.VersionID {
+			return true
+		}
 	}
-	// Fall back to content addressing.
-	return a.BlobRef == b.BlobRef && a.ContentHash == b.ContentHash
+	return a.BlobRef != "" && a.BlobRef == b.BlobRef && a.ContentHash != "" && a.ContentHash == b.ContentHash
 }
 
 // moved reports whether an item's location (parent, name) changed relative to

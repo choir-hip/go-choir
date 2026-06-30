@@ -78,6 +78,37 @@ func TestStatusTrackerUpdateFromPlan(t *testing.T) {
 	}
 }
 
+func TestStatusTrackerUpdateFromPlanCarriesCollisionParticipants(t *testing.T) {
+	s := NewStatusTracker()
+	localID := model.ItemID("base_item_local")
+	remoteID := model.ItemID("base_item_remote")
+	conflicts := []planner.Conflict{{
+		ItemID:       remoteID,
+		LocalItemID:  localID,
+		RemoteItemID: remoteID,
+		Reason:       "add/add path collision",
+		LocalVer:     model.Version{ItemID: localID, VersionID: "base_ver_local"},
+		RemoteVer:    model.Version{ItemID: remoteID, VersionID: "base_ver_remote"},
+	}}
+	local := planner.NewTree()
+	local.Items[localID] = model.Item{ItemID: localID, Name: "same.txt", Kind: model.KindFile}
+	remote := planner.NewTree()
+	remote.Items[remoteID] = model.Item{ItemID: remoteID, Name: "same.txt", Kind: model.KindFile}
+
+	s.UpdateFromPlan(nil, conflicts, local, remote)
+	p := s.Snapshot()
+	if len(p.Items) != 1 {
+		t.Fatalf("status items: got %d want 1", len(p.Items))
+	}
+	st := p.Items[0]
+	if st.LocalItemID != localID || st.RemoteItemID != remoteID {
+		t.Fatalf("participant ids: got local=%q remote=%q", st.LocalItemID, st.RemoteItemID)
+	}
+	if st.Path != "same.txt" {
+		t.Fatalf("path: got %q want same.txt", st.Path)
+	}
+}
+
 func TestStatusTrackerCancelled(t *testing.T) {
 	s := NewStatusTracker()
 	s.MarkCancelled()

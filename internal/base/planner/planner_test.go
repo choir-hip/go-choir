@@ -256,6 +256,21 @@ func TestAddAddSameContentConverges(t *testing.T) {
 	}
 }
 
+func TestAddAddSameContentDifferentVersionIDsConverges(t *testing.T) {
+	localItem := mkItem("base_item_1", "base_item_0", "a.txt", model.KindFile, "base_ver_local")
+	localVer := mkFileVer("base_ver_local", "base_item_1", "aaa")
+	local := treeOf([]model.Item{localItem}, []model.Version{localVer})
+
+	remoteItem := mkItem("base_item_1", "base_item_0", "a.txt", model.KindFile, "base_ver_remote")
+	remoteVer := mkFileVer("base_ver_remote", "base_item_1", "aaa")
+	remote := treeOf([]model.Item{remoteItem}, []model.Version{remoteVer})
+
+	actions, conflicts := Plan(remote, local, NewTree())
+	if len(actions) != 0 || len(conflicts) != 0 {
+		t.Errorf("content-identical add/add should converge, got %d actions %d conflicts", len(actions), len(conflicts))
+	}
+}
+
 func TestAddAddDifferentContentConflict(t *testing.T) {
 	localItem := mkItem("base_item_1", "base_item_0", "a.txt", model.KindFile, "base_ver_1")
 	localVer := mkFileVer("base_ver_1", "base_item_1", "aaa")
@@ -271,6 +286,25 @@ func TestAddAddDifferentContentConflict(t *testing.T) {
 	}
 	if !containsConflict(conflicts, "base_item_1", "add/add") {
 		t.Errorf("expected add/add conflict, got %v", conflicts)
+	}
+}
+
+func TestBothChangeSameContentDifferentVersionIDsConverges(t *testing.T) {
+	syncedItem := mkItem("base_item_1", "base_item_0", "a.txt", model.KindFile, "base_ver_1")
+	syncedVer := mkFileVer("base_ver_1", "base_item_1", "aaa")
+	synced := treeOf([]model.Item{syncedItem}, []model.Version{syncedVer})
+
+	localItem := mkItem("base_item_1", "base_item_0", "a.txt", model.KindFile, "base_ver_local")
+	localVer := mkFileVer("base_ver_local", "base_item_1", "bbb")
+	local := treeOf([]model.Item{localItem}, []model.Version{localVer})
+
+	remoteItem := mkItem("base_item_1", "base_item_0", "a.txt", model.KindFile, "base_ver_remote")
+	remoteVer := mkFileVer("base_ver_remote", "base_item_1", "bbb")
+	remote := treeOf([]model.Item{remoteItem}, []model.Version{remoteVer})
+
+	actions, conflicts := Plan(remote, local, synced)
+	if len(actions) != 0 || len(conflicts) != 0 {
+		t.Errorf("content-identical edit/edit should converge, got %d actions %d conflicts", len(actions), len(conflicts))
 	}
 }
 

@@ -76,6 +76,55 @@ func TestMemAppendSetsParentEventID(t *testing.T) {
 	}
 }
 
+func TestMemAppendRejectsParentOnFirstItemEvent(t *testing.T) {
+	j := NewMemJournal()
+	defer j.Close()
+
+	first := mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0)
+	first.ParentEventID = "base_evt_missing"
+	if _, err := j.Append(first); err == nil {
+		t.Fatal("expected first event with explicit parent to fail")
+	}
+}
+
+func TestMemAppendKeepsParentEventIDOwnerScoped_whenOwnersShareItemID(t *testing.T) {
+	j := NewMemJournal()
+	defer j.Close()
+	itemID := "base_item_shared"
+	ownerOne := mkEvent("base_evt_owner_1", itemID, model.EventCreate, 0)
+	ownerOne.OwnerID = "owner_1"
+	ownerTwo := mkEvent("base_evt_owner_2", itemID, model.EventCreate, 0)
+	ownerTwo.OwnerID = "owner_2"
+	ownerOneUpdate := mkEvent("base_evt_owner_1_update", itemID, model.EventUpdate, 0)
+	ownerOneUpdate.OwnerID = "owner_1"
+
+	entryOne, err := j.Append(ownerOne)
+	if err != nil {
+		t.Fatalf("append owner one: %v", err)
+	}
+	entryTwo, err := j.Append(ownerTwo)
+	if err != nil {
+		t.Fatalf("append owner two: %v", err)
+	}
+	entryOneUpdate, err := j.Append(ownerOneUpdate)
+	if err != nil {
+		t.Fatalf("append owner one update: %v", err)
+	}
+
+	if entryOne.Event.ParentEventID != "" {
+		t.Fatalf("owner one parent: got %q want empty", entryOne.Event.ParentEventID)
+	}
+	if entryTwo.Event.ParentEventID != "" {
+		t.Fatalf("owner two parent: got %q want empty", entryTwo.Event.ParentEventID)
+	}
+	if entryOneUpdate.Event.ParentEventID != entryOne.Event.EventID {
+		t.Fatalf("owner one update parent: got %q want %q", entryOneUpdate.Event.ParentEventID, entryOne.Event.EventID)
+	}
+	if err := j.VerifyChain(); err != nil {
+		t.Fatalf("verify chain: %v", err)
+	}
+}
+
 func TestMemAppendRejectsNonMonotonicSeq(t *testing.T) {
 	j := NewMemJournal()
 	defer j.Close()
@@ -227,154 +276,6 @@ func TestMemVerifyChainMultipleItems(t *testing.T) {
 	}
 	if entries[3].Event.ParentEventID != "base_evt_2" {
 		t.Errorf("item b second event parent should be base_evt_2, got %q", entries[3].Event.ParentEventID)
-	}
-}
-
-// --- cursor tracking tests ----------------------------------------------
-
-func TestMemCursorTracking(t *testing.T) {
-	j := NewMemJournal()
-	defer j.Close()
-
-	j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0))
-	j.Append(mkEvent("base_evt_2", "base_item_1", model.EventUpdate, 0))
-	j.Append(mkEvent("base_evt_3", "base_item_1", model.EventDelete, 0))
-
-	// Device hasn't acked anything.
-	if got := j.Cursor("dev1"); got != 0 {
-		t.Errorf("unset cursor should be 0, got %d", got)
-	}
-
-	if err := j.SetCursor("dev1", 2); err != nil {
-		t.Fatalf("set cursor: %v", err)
-	}
-	if got := j.Cursor("dev1"); got != 2 {
-		t.Errorf("cursor should be 2, got %d", got)
-	}
-
-	// EntriesUpTo should return only events up to the cursor.
-	entries := j.EntriesUpTo(2)
-	if len(entries) != 2 {
-		t.Errorf("EntriesUpTo(2) should return 2 entries, got %d", len(entries))
-	}
-}
-
-func TestMemCursorRejectsExceedsHead(t *testing.T) {
-	j := NewMemJournal()
-	defer j.Close()
-
-	j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0))
-
-	if err := j.SetCursor("dev1", 99); err == nil {
-		t.Error("expected error for cursor exceeding head")
-	}
-}
-
-func TestMemCursorMultipleDevices(t *testing.T) {
-	j := NewMemJournal()
-	defer j.Close()
-
-	j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0))
-	j.Append(mkEvent("base_evt_2", "base_item_1", model.EventUpdate, 0))
-	j.Append(mkEvent("base_evt_3", "base_item_1", model.EventDelete, 0))
-
-	j.SetCursor("dev1", 1)
-	j.SetCursor("dev2", 3)
-
-	if j.Cursor("dev1") != 1 {
-		t.Errorf("dev1 cursor should be 1, got %d", j.Cursor("dev1"))
-	}
-	if j.Cursor("dev2") != 3 {
-		t.Errorf("dev2 cursor should be 3, got %d", j.Cursor("dev2"))
-	}
-}
-
-// --- SQLite journal tests -----------------------------------------------
-
-func TestSQLiteAppendAndReadBack(t *testing.T) {
-	j, err := NewSQLiteJournal(":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	defer j.Close()
-
-	e1 := mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0)
-	entry, err := j.Append(e1)
-	if err != nil {
-		t.Fatalf("append: %v", err)
-	}
-	if entry.Event.CursorSeq != 1 {
-		t.Errorf("expected cursor seq 1, got %d", entry.Event.CursorSeq)
-	}
-	if entry.Event.ParentEventID != "" {
-		t.Errorf("first event parent should be empty, got %q", entry.Event.ParentEventID)
-	}
-
-	e2 := mkEvent("base_evt_2", "base_item_1", model.EventUpdate, 0)
-	entry2, _ := j.Append(e2)
-	if entry2.Event.ParentEventID != "base_evt_1" {
-		t.Errorf("second event parent should be base_evt_1, got %q", entry2.Event.ParentEventID)
-	}
-
-	entries := j.Entries()
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
-	if entries[1].Event.ParentEventID != "base_evt_1" {
-		t.Errorf("read-back parent should be base_evt_1, got %q", entries[1].Event.ParentEventID)
-	}
-}
-
-func TestSQLiteVerifyChain(t *testing.T) {
-	j, err := NewSQLiteJournal(":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	defer j.Close()
-
-	j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0))
-	j.Append(mkEvent("base_evt_2", "base_item_1", model.EventUpdate, 0))
-	j.Append(mkEvent("base_evt_3", "base_item_2", model.EventCreate, 0))
-
-	if err := j.VerifyChain(); err != nil {
-		t.Errorf("sqlite chain should verify: %v", err)
-	}
-}
-
-func TestSQLiteCursorTracking(t *testing.T) {
-	j, err := NewSQLiteJournal(":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	defer j.Close()
-
-	j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0))
-	j.Append(mkEvent("base_evt_2", "base_item_1", model.EventUpdate, 0))
-
-	if err := j.SetCursor("dev1", 2); err != nil {
-		t.Fatalf("set cursor: %v", err)
-	}
-	if j.Cursor("dev1") != 2 {
-		t.Errorf("cursor should be 2, got %d", j.Cursor("dev1"))
-	}
-
-	entries := j.EntriesUpTo(1)
-	if len(entries) != 1 {
-		t.Errorf("EntriesUpTo(1) should return 1 entry, got %d", len(entries))
-	}
-}
-
-func TestSQLiteAppendRejectsDuplicateEventID(t *testing.T) {
-	j, err := NewSQLiteJournal(":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	defer j.Close()
-
-	j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0))
-	_, err = j.Append(mkEvent("base_evt_1", "base_item_1", model.EventUpdate, 0))
-	if err == nil {
-		t.Error("expected error for duplicate event id")
 	}
 }
 

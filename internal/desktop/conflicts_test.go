@@ -11,9 +11,9 @@ func TestConflictManagerSetAndPending(t *testing.T) {
 	m := NewConflictManager()
 	id := model.ItemID("base_item_conflict1")
 	cs := []planner.Conflict{{
-		ItemID:   id,
-		Reason:   "both modified",
-		LocalVer: model.Version{VersionID: "base_ver_l1"},
+		ItemID:    id,
+		Reason:    "both modified",
+		LocalVer:  model.Version{VersionID: "base_ver_l1"},
 		RemoteVer: model.Version{VersionID: "base_ver_r1"},
 	}}
 	local := planner.NewTree()
@@ -61,6 +61,41 @@ func TestConflictManagerResolve(t *testing.T) {
 	// Unknown item.
 	if err := m.Resolve(model.ItemID("base_item_unknown"), ResolveKeepRemote); err == nil {
 		t.Fatal("Resolve unknown item should error")
+	}
+}
+
+func TestHasConflictRecordMatchesCollisionParticipants(t *testing.T) {
+	m := NewConflictManager()
+	m.SetConflicts([]planner.Conflict{{
+		ItemID:       "base_item_remote",
+		LocalItemID:  "base_item_local",
+		RemoteItemID: "base_item_remote",
+		Reason:       "add/add path collision",
+	}}, planner.NewTree(), planner.NewTree())
+
+	if !hasConflictRecord(m, "base_item_local") {
+		t.Fatal("local collision participant should be treated as conflicted")
+	}
+	if !hasConflictRecord(m, "base_item_remote") {
+		t.Fatal("remote collision participant should be treated as conflicted")
+	}
+}
+
+func TestConflictManagerResolveMatchesCollisionParticipants(t *testing.T) {
+	m := NewConflictManager()
+	m.SetConflicts([]planner.Conflict{{
+		ItemID:       "base_item_remote",
+		LocalItemID:  "base_item_local",
+		RemoteItemID: "base_item_remote",
+		Reason:       "add/add path collision",
+	}}, planner.NewTree(), planner.NewTree())
+
+	if err := m.Resolve("base_item_local", ResolveKeepLocal); err != nil {
+		t.Fatalf("resolve by local participant: %v", err)
+	}
+	res, ok := m.Resolution("base_item_remote")
+	if !ok || res != ResolveKeepLocal {
+		t.Fatalf("resolution via remote participant: got %q ok=%v", res, ok)
 	}
 }
 
