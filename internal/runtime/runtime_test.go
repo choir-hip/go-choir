@@ -398,19 +398,19 @@ func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
-	if !strings.Contains(prompt, "open worker work first") {
+	if !strings.Contains(prompt, "If the request needs live evidence, Probe (researcher) is the morphism class for world knowledge") {
 		t.Fatalf("texture system prompt should bias toward opening worker work first for factual requests, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "`spawn_agent` with `role=\"researcher\"`") {
+	if !strings.Contains(prompt, "Probe morphisms (spawn_agent researcher) gather world knowledge") {
 		t.Fatalf("texture system prompt should route research through spawn_agent researcher, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "Choose researcher parallelism from the task shape") {
+	if !strings.Contains(prompt, "choose researcher parallelism from the task shape") {
 		t.Fatalf("texture system prompt should make researcher parallelism contextual, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
 		t.Fatalf("texture system prompt should include coordination channel, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "ask super to lease a worker VM and delegate a `vsuper`") ||
+	if !strings.Contains(prompt, "ask super to lease a worker VM and delegate a vsuper") ||
 		!strings.Contains(prompt, "For bounded local scratch work such as API calls") {
 		t.Fatalf("texture system prompt should preserve sweep substrate topology in super requests, got %q", prompt)
 	}
@@ -441,7 +441,8 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		"instead of asking a worker VM to impersonate a browser session",
 		"Delegate work that changes Choir/app/harness behavior",
 		"first call request_worker_vm",
-		"start_worker_delegation` using the returned `start_args",
+		"start_worker_delegation",
+		"returned start_args",
 		"observe_worker_delegation",
 		"finish_worker_delegation",
 		"Do not answer that class of request only with update_coagent",
@@ -582,7 +583,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	if !strings.Contains(prompt, "verified final scores from live, pending, scheduled, or snippet-only states") {
 		t.Fatalf("researcher system prompt should distinguish final sports evidence from partial states, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "send another update_coagent after each additional search/fetch batch") {
+	if !strings.Contains(prompt, "Send another update_coagent after each additional search/fetch batch") {
 		t.Fatalf("researcher system prompt should require incremental checkpoints after continued research, got %q", prompt)
 	}
 }
@@ -706,7 +707,7 @@ func TestSystemPromptForUniversalWireTextureRunsUsesUnconditionalArticleGuidance
 	if err != nil {
 		t.Fatalf("systemPromptForRun ordinary Texture: %v", err)
 	}
-	if !strings.Contains(ordinaryPrompt, "evidence-grounded author") {
+	if !strings.Contains(ordinaryPrompt, "model priors are not evidence") {
 		t.Fatalf("ordinary Texture prompt should preserve grounded-author policy: %q", ordinaryPrompt)
 	}
 	// Ordinary runs now receive the same unconditional article-format guidance.
@@ -1009,6 +1010,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	}
 	provider1 := NewStubProvider(50 * time.Millisecond)
 	rt1 := New(cfg, s1, bus1, provider1)
+	setTestDispatch(rt1, s1)
 
 	rec, err := rt1.StartRun(context.Background(), "survive restart", "user-alice")
 	if err != nil {

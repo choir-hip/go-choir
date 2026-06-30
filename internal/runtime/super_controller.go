@@ -89,7 +89,11 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 		}
 	}
 
-	rec, err := rt.createRunWithMetadata(ctx, "Process pending coagent update packets for privileged execution.", ownerID, metadata)
+	prompt := buildPersistentSuperUpdatePrompt(updates)
+	if prompt == "" {
+		prompt = "Process pending coagent update packets for privileged execution."
+	}
+	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -527,6 +531,9 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		}
 	}
 	return func(finalCheckpoint bool) ([]json.RawMessage, error) {
+		if isPersistentSuperAgentRun(rec) && len(seen) > 0 {
+			return nil, nil
+		}
 		updates, err := rt.store.ListCoagentMailboxBacklog(context.Background(), ownerID, agentID, 100)
 		if err != nil {
 			return nil, fmt.Errorf("list pending update_coagent turns: %w", err)

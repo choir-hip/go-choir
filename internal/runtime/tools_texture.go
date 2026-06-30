@@ -467,6 +467,9 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		if superRun != nil {
 			loopID = superRun.RunID
 			state = string(superRun.State)
+			if err := rt.markExistingSuperExecutionRequestDelivered(ctx, ownerID, channelID, superAgent.AgentID, requesterAgentID, existing, loopID); err != nil {
+				return nil, err
+			}
 		}
 		return map[string]any{
 			"agent_id":            superAgent.AgentID,
@@ -570,6 +573,38 @@ func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerI
 		}
 	}
 	return types.ChannelMessage{}, false, nil
+}
+
+func (rt *Runtime) markExistingSuperExecutionRequestDelivered(ctx context.Context, ownerID, channelID, superAgentID, requesterAgentID string, existing types.ChannelMessage, runID string) error {
+	if rt == nil || rt.store == nil || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	updates, err := rt.store.ListPendingWorkerUpdates(ctx, ownerID, superAgentID, 100)
+	if err != nil {
+		return fmt.Errorf("list pending super execution request for delivery claim: %w", err)
+	}
+	var updateIDs []string
+	for _, update := range updates {
+		if strings.TrimSpace(update.ChannelID) != strings.TrimSpace(channelID) {
+			continue
+		}
+		if strings.TrimSpace(update.AgentID) != strings.TrimSpace(requesterAgentID) {
+			continue
+		}
+		if existing.Seq > 0 && update.MessageSeq != existing.Seq {
+			continue
+		}
+		if id := strings.TrimSpace(update.UpdateID); id != "" {
+			updateIDs = append(updateIDs, id)
+		}
+	}
+	if len(updateIDs) == 0 {
+		return nil
+	}
+	if err := rt.store.MarkWorkerUpdatesDelivered(ctx, ownerID, superAgentID, updateIDs, runID); err != nil {
+		return fmt.Errorf("mark existing super execution request delivered: %w", err)
+	}
+	return nil
 }
 
 func buildStructuredAppagentRevisionProvenance(rec *types.RunRecord, sourceEntitiesRaw json.RawMessage, now time.Time) json.RawMessage {
@@ -750,6 +785,7 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			canonicalTextureSourcePathMetadataKey: canonicalPath,
 		})
 	}
+	revMetaForPendingWake := decodeRevisionMetadata(revMeta)
 	revMeta = sanitizeTextureToolRevisionMetadata(revMeta)
 	now := time.Now().UTC()
 	rev := types.Revision{
@@ -796,6 +832,8 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		if err := rt.markTextureWorkerUpdatesDelivered(ctx, rec, docID, consumedThroughSeq); err != nil {
 			return types.Revision{}, fmt.Errorf("mark texture worker updates delivered: %w", err)
 		}
+	} else if len(metadataArray(revMetaForPendingWake["worker_updates_pending"])) > 0 {
+		rt.scheduleTextureWorkerWake(rec.OwnerID, docID, "")
 	}
 
 	rt.emitTextureDocumentRevisionEventForRun(ctx, rec, storedRev)

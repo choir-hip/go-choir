@@ -3754,15 +3754,22 @@ func TestHandleHealthReflectsRunningTasks(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	w = httptest.NewRecorder()
-	handler.HandleHealth(w, req)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		w = httptest.NewRecorder()
+		handler.HandleHealth(w, req)
 
-	var resp2 runtimeHealthResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp2); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp2.RunningRuns < 1 {
-		t.Errorf("running_runs: got %d, want >= 1", resp2.RunningRuns)
+		var resp2 runtimeHealthResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp2); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp2.RunningRuns >= 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("running_runs: got %d, want >= 1", resp2.RunningRuns)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

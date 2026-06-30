@@ -53,7 +53,9 @@ type Runtime struct {
 	toolRegistry *ToolRegistry
 	toolProfiles map[string]*ToolRegistry
 
-	textureWakeAfter func(time.Duration, func()) textureWakeTimer
+	textureWakeAfter       func(time.Duration, func()) textureWakeTimer
+	textureWorkerWakeMu    sync.Mutex
+	textureWorkerWakeTimer map[string]textureWakeTimer
 
 	wirePublishDebounceMu sync.Mutex
 	wirePublishDebouncer  *wirePublishDebouncer
@@ -91,17 +93,18 @@ type textureWakeTimer interface {
 func New(cfg Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Runtime {
 	cfg = normalizeConfig(cfg)
 	rt := &Runtime{
-		cfg:              cfg,
-		store:            s,
-		bus:              bus,
-		provider:         provider,
-		health:           types.HealthReady,
-		running:          make(map[string]context.CancelFunc),
-		promptStore:      NewPromptStore(cfg.PromptRoot),
-		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
-		browserOps:       make(map[string]*sync.Mutex),
-		browserCDP:       make(map[string]*browserCDPSession),
-		modelPolicies:    make(map[string]ModelPolicy),
+		cfg:                    cfg,
+		store:                  s,
+		bus:                    bus,
+		provider:               provider,
+		health:                 types.HealthReady,
+		running:                make(map[string]context.CancelFunc),
+		promptStore:            NewPromptStore(cfg.PromptRoot),
+		textureWakeAfter:       func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
+		textureWorkerWakeTimer: make(map[string]textureWakeTimer),
+		browserOps:             make(map[string]*sync.Mutex),
+		browserCDP:             make(map[string]*browserCDPSession),
+		modelPolicies:          make(map[string]ModelPolicy),
 	}
 	for _, opt := range opts {
 		opt(rt)
@@ -255,9 +258,6 @@ func persistentSuperAgentID(ownerID string) string {
 func defaultChannelID(profile string, metadata map[string]any, parent *types.RunRecord, agentID string) string {
 	if channelID := metadataStringValue(metadata, runMetadataChannelID); channelID != "" {
 		return channelID
-	}
-	if legacy := metadataStringValue(metadata, "work_id"); legacy != "" {
-		return legacy
 	}
 	if parent != nil && strings.TrimSpace(parent.ChannelID) != "" {
 		return strings.TrimSpace(parent.ChannelID)
@@ -519,18 +519,19 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	rec := &types.RunRecord{
-		RunID:        runID,
-		AgentID:      agentRec.AgentID,
-		ChannelID:    agentRec.ChannelID,
-		AgentProfile: agentRec.Profile,
-		AgentRole:    agentRec.Role,
-		OwnerID:      ownerID,
-		SandboxID:    rt.cfg.SandboxID,
-		State:        types.RunPending,
-		Prompt:       prompt,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata:     metadata,
+		RunID:            runID,
+		AgentID:          agentRec.AgentID,
+		ChannelID:        agentRec.ChannelID,
+		RequestedByRunID: metadataStringValue(metadata, "requested_by_run_id"),
+		AgentProfile:     agentRec.Profile,
+		AgentRole:        agentRec.Role,
+		OwnerID:          ownerID,
+		SandboxID:        rt.cfg.SandboxID,
+		State:            types.RunPending,
+		Prompt:           prompt,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		Metadata:         metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
 
@@ -1235,7 +1236,7 @@ func (rt *Runtime) SetHealth(state types.RuntimeHealthState) {
 		Kind:      kind,
 		Payload:   payload,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist health event %s: %v", evRec.EventID, err)
 	}
 	rt.bus.Publish(events.RuntimeEvent{
@@ -1557,7 +1558,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 		rt.runningMu.Lock()
 		delete(rt.running, rec.RunID)
 		rt.runningMu.Unlock()
-		if rec.State == types.RunCompleted && !metadataBoolValue(rec.Metadata, "texture_revision_failed_no_write") {
+		if rec.State == types.RunCompleted && shouldReconcileCompletedTextureRun(rec) {
 			rt.reconcileCompletedTextureRun(rec)
 		}
 	}()
@@ -1763,6 +1764,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
+	rt.postCoagentTerminalMessageToRequester(persistCtx, rec, "result", rec.Result)
 	if shouldLogWireLifecycle(rec) {
 		preview := rec.Result
 		if len(preview) > 160 {
@@ -1832,7 +1834,7 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payloadJSON)
-	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
+	if isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) && shouldReconcileCompletedTextureRun(rec) {
 		rt.reconcileCompletedTextureRun(rec)
 	}
 	if shouldLogWireLifecycle(rec) {
@@ -1962,6 +1964,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
 	}
+	rt.postCoagentTerminalMessageToRequester(persistCtx, rec, "result", rec.Result)
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
@@ -1976,6 +1979,39 @@ func (rt *Runtime) normalizeCompletedRunResult(rec *types.RunRecord) {
 		return
 	}
 	rec.Result = normalizeConductorDecision(rec)
+}
+
+func (rt *Runtime) postCoagentTerminalMessageToRequester(ctx context.Context, rec *types.RunRecord, role, content string) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	requesterRunID := strings.TrimSpace(rec.RequestedByRunID)
+	if requesterRunID == "" {
+		requesterRunID = strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by"))
+	}
+	if requesterRunID == "" || requesterRunID == rec.RunID || strings.TrimSpace(rec.OwnerID) == "" {
+		return
+	}
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return
+	}
+	message := types.ChannelMessage{
+		ChannelID:    requesterRunID,
+		From:         rec.RunID,
+		FromAgentID:  rec.AgentID,
+		FromRunID:    rec.RunID,
+		ToRunID:      requesterRunID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		Role:         role,
+		Content:      strings.TrimSpace(content),
+		Timestamp:    time.Now().UTC(),
+	}
+	if err := rt.store.AppendChannelMessage(ctx, &message, rec.OwnerID); err != nil {
+		log.Printf("runtime: post %s message from coagent run %s to requester %s: %v", role, rec.RunID, requesterRunID, err)
+		return
+	}
+	rt.emitChannelMessageEvent(ctx, message, rec.OwnerID)
 }
 
 type conductorDecision struct {
@@ -2231,6 +2267,8 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 	if rec == nil || agentProfileForRun(rec) != AgentProfileConductor {
 		return conductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
 	}
+	rt.textureEditMu.Lock()
+	defer rt.textureEditMu.Unlock()
 
 	if current, err := rt.store.GetRun(ctx, rec.RunID); err == nil {
 		mergeStoredConductorRoute(rec, current)
@@ -2346,8 +2384,9 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		initialPrompt = "Create the first useful current-state version of this Texture document."
 	}
 	initialRun, err := rt.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
-		Intent: "initial_conductor_workflow",
-		Prompt: initialPrompt,
+		Intent:           "initial_conductor_workflow",
+		Prompt:           initialPrompt,
+		RequestedByRunID: rec.RunID,
 	}, 0)
 	if err != nil {
 		return conductorDecision{}, fmt.Errorf("start initial Texture agent revision: %w", err)
@@ -2954,6 +2993,16 @@ func (rt *Runtime) reconcileCompletedTextureRun(rec *types.RunRecord) {
 	}
 }
 
+func shouldReconcileCompletedTextureRun(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	if !metadataBoolValue(rec.Metadata, "texture_revision_failed_no_write") {
+		return true
+	}
+	return len(coagentUpdateIDsForRun(rec)) > 0
+}
+
 func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, channelID string, before time.Time) (bool, error) {
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
@@ -3042,6 +3091,7 @@ var durableMetadataKeys = []string{
 	"import_manifest",
 	"migration_manifest",
 	"conductor_loop_id",
+	"requested_by_run_id",
 	runMetadataTrajectoryID,
 	"artifact_kind",
 	"revision_role",
@@ -3503,6 +3553,9 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	if updateErr := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); updateErr != nil {
 		log.Printf("runtime: update run %s to %s: %v", rec.RunID, state, updateErr)
 	}
+	if state == types.RunFailed {
+		rt.postCoagentTerminalMessageToRequester(persistCtx, rec, "error", rec.Error)
+	}
 
 	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
 	rt.emitEvent(persistCtx, rec, kind, cause, errPayload)
@@ -3552,7 +3605,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 				events.CauseProviderFailure, failPayload)
 		}
 	}
-	if state.Terminal() && !metadataBoolValue(rec.Metadata, "texture_revision_failed_no_write") {
+	if state.Terminal() && shouldReconcileCompletedTextureRun(rec) {
 		rt.reconcileCompletedTextureRun(rec)
 	}
 
@@ -3633,11 +3686,9 @@ func (rt *Runtime) emitEvent(ctx context.Context, rec *types.RunRecord, kind typ
 		Payload:      payload,
 	}
 
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist event %s: %v", evRec.EventID, err)
 	}
-
-	rt.appendTraceEvent(ctx, evRec)
 
 	rt.bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
@@ -3660,6 +3711,13 @@ func (rt *Runtime) persistEvent(ctx context.Context, rec *types.RunRecord, kind 
 		Kind:         kind,
 		Payload:      payload,
 	}
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rt *Runtime) appendEventRecord(ctx context.Context, evRec *types.EventRecord) error {
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
 		return err
 	}

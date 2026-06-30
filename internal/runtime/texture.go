@@ -1218,15 +1218,48 @@ func (h *APIHandler) handleTextureCreateRevision(w http.ResponseWriter, r *http.
 		log.Printf("texture api: ensure canonical texture projection path: %v", err)
 	}
 
+	revisionID := uuid.New().String()
+	bodyDoc := req.BodyDoc
+	sourceEntities := req.SourceEntities
+	if hasParentRev &&
+		!textureRawMessageCarriesData(bodyDoc) &&
+		!textureRawMessageCarriesData(sourceEntities) &&
+		textureRawMessageCarriesData(parentRev.SourceEntities) {
+		inheritedEntities := decodeTextureSourceEntities(parentRev.SourceEntities)
+		unusedIDs := make([]string, 0, len(inheritedEntities))
+		for _, entity := range inheritedEntities {
+			if id := strings.TrimSpace(entity.EntityID); id != "" {
+				unusedIDs = append(unusedIDs, id)
+			}
+		}
+		if len(unusedIDs) > 0 {
+			structuredDoc, err := structuredTextureToolDocFromMarkdown(docID, revisionID, content)
+			if err != nil {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid texture revision: " + err.Error()})
+				return
+			}
+			bodyDocJSON, err := json.Marshal(structuredDoc)
+			if err != nil {
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create revision"})
+				return
+			}
+			bodyDoc = bodyDocJSON
+			sourceEntities = parentRev.SourceEntities
+			metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
+				"unused_source_entity_ids": dedupeTextureUnusedSourceIDs(unusedIDs),
+			})
+		}
+	}
+
 	rev := types.Revision{
-		RevisionID:       uuid.New().String(),
+		RevisionID:       revisionID,
 		DocID:            docID,
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
 		Content:          content,
-		BodyDoc:          req.BodyDoc,
-		SourceEntities:   req.SourceEntities,
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
 		Citations:        citations,
 		Metadata:         metadata,
 		ParentRevisionID: parentID,
@@ -1328,6 +1361,15 @@ func mergeTextureRevisionMetadata(raw json.RawMessage, additions map[string]any)
 		return raw
 	}
 	return encoded
+}
+
+func textureRawMessageCarriesData(raw json.RawMessage) bool {
+	switch strings.TrimSpace(string(raw)) {
+	case "", "null", "[]", "{}":
+		return false
+	default:
+		return true
+	}
 }
 
 func defaultDraftLine() textureDraftLineSummary {
@@ -1932,8 +1974,12 @@ func (h *APIHandler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http
 		"draft_line":                 defaultDraftLine(),
 	})
 	content := sourceRev.Content
+	bodyDoc := sourceRev.BodyDoc
+	sourceEntities := sourceRev.SourceEntities
 	if normalized, changed := markdownstructure.NormalizeTableShapedRows(content); changed {
 		content = normalized
+		bodyDoc = nil
+		sourceEntities = nil
 		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
 			"texture_structure_stabilized":        true,
 			"texture_structure_stabilized_reason": "normalized_restored_markdown_table_rows",
@@ -1946,6 +1992,8 @@ func (h *APIHandler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
 		Content:          content,
+		BodyDoc:          bodyDoc,
+		SourceEntities:   sourceEntities,
 		Citations:        sourceRev.Citations,
 		Metadata:         metadata,
 		ParentRevisionID: doc.CurrentRevisionID,

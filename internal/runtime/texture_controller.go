@@ -12,10 +12,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// scheduleTextureWorkerWake sends an actor message to the Texture agent for
-// the given doc. The actor mailbox replaces the old debounce timer system —
-// the handler processes the message when the actor activates, and the tool
-// loop's park-resume handles coalescing naturally.
+// scheduleTextureWorkerWake coalesces worker messages for a document before
+// sending the actor wake. The actor mailbox owns durable delivery; the timer
+// keeps rapid source packets in one Texture revision instead of one run per
+// channel message.
 func (rt *Runtime) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
@@ -26,9 +26,27 @@ func (rt *Runtime) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 	if rt.dispatchActor == nil {
 		return
 	}
-	if err := rt.dispatchActor(context.Background(), textureAgentID, "coagent_result", "", "", ""); err != nil {
-		log.Printf("runtime: schedule texture wake for doc %s: %v", docID, err)
+	if rt.textureWakeAfter == nil {
+		rt.textureWakeAfter = func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) }
 	}
+	key := ownerID + "\x00" + docID
+	var timer textureWakeTimer
+	timer = rt.textureWakeAfter(rt.cfg.TextureWakeDebounce, func() {
+		rt.textureWorkerWakeMu.Lock()
+		if rt.textureWorkerWakeTimer[key] == timer {
+			delete(rt.textureWorkerWakeTimer, key)
+		}
+		rt.textureWorkerWakeMu.Unlock()
+		if err := rt.dispatchActor(context.Background(), textureAgentID, "coagent_result", "", "", ""); err != nil {
+			log.Printf("runtime: schedule texture wake for doc %s: %v", docID, err)
+		}
+	})
+	rt.textureWorkerWakeMu.Lock()
+	if previous := rt.textureWorkerWakeTimer[key]; previous != nil {
+		previous.Stop()
+	}
+	rt.textureWorkerWakeTimer[key] = timer
+	rt.textureWorkerWakeMu.Unlock()
 }
 
 func (rt *Runtime) reconcileAllTextureDocuments(ctx context.Context) {
@@ -93,18 +111,44 @@ func (rt *Runtime) reconcileTextureAgentWake(ctx context.Context, ownerID, docID
 			scheduledSeq = update.MessageSeq
 		}
 	}
+	requestedByRunID := rt.textureWakeRequesterRunID(ctx, ownerID, updates)
 	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
 		return nil, err
 	} else if reactivated {
 		return rec, nil
 	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: "integrate_worker_findings",
+		Intent:           "integrate_worker_findings",
+		RequestedByRunID: requestedByRunID,
 	}, scheduledSeq)
 	if err != nil {
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
 	return rec, nil
+}
+
+func (rt *Runtime) textureWakeRequesterRunID(ctx context.Context, ownerID string, updates []types.CoagentSourcePacket) string {
+	if rt == nil || rt.store == nil {
+		return ""
+	}
+	for _, update := range updates {
+		channelID := strings.TrimSpace(update.ChannelID)
+		if channelID == "" || update.MessageSeq <= 0 {
+			continue
+		}
+		messages, err := rt.store.ListChannelMessages(ctx, ownerID, channelID, update.MessageSeq-1, 1)
+		if err != nil {
+			log.Printf("runtime: load texture wake requester for channel=%s seq=%d: %v", channelID, update.MessageSeq, err)
+			continue
+		}
+		if len(messages) == 0 || messages[0].Seq != update.MessageSeq {
+			continue
+		}
+		if runID := strings.TrimSpace(messages[0].FromRunID); runID != "" {
+			return runID
+		}
+	}
+	return ""
 }
 
 func (rt *Runtime) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64) (*types.RunRecord, bool, error) {

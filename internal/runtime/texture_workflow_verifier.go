@@ -238,7 +238,7 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		}
 		if agentProfileForRun(&parent) == AgentProfileTexture {
 			switch agentProfileForRun(&run) {
-			case AgentProfileResearcher:
+			case AgentProfileResearcher, AgentProfileSuper:
 			default:
 				return fmt.Errorf("texture run %s directly delegated to disallowed %s run %s", parent.RunID, agentProfileForRun(&run), run.RunID)
 			}
@@ -274,6 +274,13 @@ func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
 		}
 	}
 	return fmt.Errorf("missing persistent super inbox run requested by texture")
+}
+
+func persistentSuperRunRequestedByTexture(run types.RunRecord) bool {
+	return agentProfileForRun(&run) == AgentProfileSuper &&
+		strings.TrimSpace(run.AgentID) == persistentSuperAgentID(run.OwnerID) &&
+		metadataStringValue(run.Metadata, "request_source") == "update_coagent" &&
+		metadataStringValue(run.Metadata, "requested_by_profile") == AgentProfileTexture
 }
 
 func verifyCoSuperParents(runs []types.RunRecord) error {
@@ -322,6 +329,11 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		case parentProfile == AgentProfileTexture && childProfile == AgentProfileResearcher:
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("researcher run %s lacks parent texture spawn_agent result", run.RunID)
+			}
+		case parentProfile == AgentProfileTexture && childProfile == AgentProfileSuper:
+			if !toolResultOutputLoopID(events, parent.RunID, "request_super_execution", run.RunID) &&
+				!persistentSuperRunRequestedByTexture(run) {
+				return fmt.Errorf("super run %s lacks parent texture request_super_execution result", run.RunID)
 			}
 		case parentProfile == AgentProfileSuper && (childProfile == AgentProfileCoSuper || childProfile == AgentProfileResearcher):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
