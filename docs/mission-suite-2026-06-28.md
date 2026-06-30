@@ -66,7 +66,7 @@ M7 (auth recovery), M9 (mutation transactions need author identity)
 
 **Class:** yellow — new packages, tests only, no production behavior change
 **Status:** ready to delegate — spec and mission doc complete
-**Spec:** `docs/mission-choir-base-reconciliation-kernel-v0.md`,
+**Spec:** `docs/archive/mission-choir-base-reconciliation-kernel-v0.md`,
 `docs/memo-headless-auth-choir-base-artifact-program-2026-06-28.md` §2
 
 Build `internal/base/model`, `internal/base/planner`, `internal/base/testkit`:
@@ -85,7 +85,7 @@ Build `internal/base/model`, `internal/base/planner`, `internal/base/testkit`:
 
 **Class:** yellow — new packages, tests only
 **Status:** depends on M2 (needs model types)
-**Spec:** `docs/choir-base-product-spec-2026-06-06.md` data model section
+**Spec:** `docs/archive/choir-base-product-spec-2026-06-06.md` data model section
 
 Build `internal/base/journal`, `internal/base/tree`:
 - Journal: append-only event store (in-memory + SQLite for tests)
@@ -102,7 +102,7 @@ Build `internal/base/journal`, `internal/base/tree`:
 
 **Class:** orange — new HTTP endpoints, new storage
 **Status:** depends on M3 (needs journal/tree)
-**Spec:** `docs/choir-base-product-spec-2026-06-06.md` API v0 section
+**Spec:** `docs/archive/choir-base-product-spec-2026-06-06.md` API v0 section
 
 Build `internal/base/blob`, `internal/base/api`:
 - Blob store: immutable, content-addressed (SHA-256), hash-verified
@@ -120,7 +120,7 @@ Build `internal/base/blob`, `internal/base/api`:
 
 **Class:** orange — desktop app behavior change
 **Status:** depends on M1 (auth) + M4 (Base API)
-**Spec:** `docs/spec-choir-desktop-wails-v3-2026-06-22.md` Phase 4
+**Spec:** `docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md` Phase 4
 
 Wire Base sync into Wails desktop app:
 - Desktop app authenticates with API key (created via WebAuthn, one time)
@@ -137,7 +137,7 @@ Wire Base sync into Wails desktop app:
 
 **Class:** orange — native macOS extension
 **Status:** depends on M5 (desktop sync)
-**Spec:** `docs/choir-base-product-spec-2026-06-06.md`,
+**Spec:** `docs/archive/choir-base-product-spec-2026-06-06.md`,
 `docs/choir-base-research-report-2026-06-06.md`
 
 Implement NSFileProviderReplicatedExtension:
@@ -468,7 +468,7 @@ Independent (ready now):
   `docs/memo-headless-auth-choir-base-artifact-program-2026-06-28.md`
   (API auth + Base design),
   `docs/memo-artifact-program-doctrine-2026-06-28.md` (the tape),
-  `docs/mission-choir-base-reconciliation-kernel-v0.md` (Base mission),
+  `docs/archive/mission-choir-base-reconciliation-kernel-v0.md` (Base mission),
   and the four worktree assessments.
 - The mission suite is sequenced to maximize parallelism: independent
   missions start tonight, critical-path missions are serial, and the

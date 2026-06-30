@@ -47,7 +47,7 @@ and Web Lens/Candidate Desktop rationalization.
 
 Their ongoing spec value now lives here and in:
 
-- `docs/mission-web-surface-rationalization-v0.md`
+- `docs/archive/mission-web-surface-rationalization-v0.md`
 - `docs/frontend-app-building-api.md`
 - `docs/runtime-invariants.md`
 - browser/runtime/frontend tests that exercise the current product behavior

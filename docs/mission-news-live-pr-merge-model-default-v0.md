@@ -274,7 +274,6 @@ next move: Phase 1 — rebase combined-trace-runtime onto main, verify
 ledger file: docs/mission-news-live-pr-merge-model-default-v0.ledger.md
 version / lineage: v1 (revised to include deployment workflow and API key)
 learning state: edition bootstrap root cause found and documented (see
-  docs/problem-universal-wire-edition-alias-not-bootstrapped-v0.md)
 settlement: not yet — mission just started
 ```
 
@@ -347,7 +346,6 @@ Title: "feat: combined trace+runtime merge + model defaults + wire edition boots
 ## References
 
 - `docs/overnight-pr-review-verdicts-2026-06-29.md` — PR review verdicts
-- `docs/problem-universal-wire-edition-alias-not-bootstrapped-v0.md` — root cause
 - `internal/runtime/model_policy.go` — model policy defaults
 - `internal/runtime/universal_wire.go` — Universal Wire API handler
 - `internal/runtime/wire_publication.go` — edition bootstrap fix (already written)

@@ -86,7 +86,7 @@ explicitly promotes one as source form.
 - `docs/mission-docs-truth-system-v1.md` - active docs truth system mission:
   focal docs spine, mission DAG, assertion-register wiring, and code/docs
   heresy baseline.
-- `docs/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
+- `docs/archive/mission-geometry.md` - high-level mission geometry: Choir as statistical/symbolic/evolutionary learner and automatic computer -> newspaper -> radio -> capital vector.
 - `docs/why-texture-2026-06-15.md` - explanatory support document for Texture:
   the artifact layer for directed autonomous results and compounding learning.
 - `docs/why-texture-background-2026-06-15.md` - historical/background support
@@ -99,7 +99,7 @@ explicitly promotes one as source form.
   Parallax conjecture circuits and paradocs for new broad work.
 - `docs/mission-portfolio-2026-06-11.md` - current durable-actor
   rearchitecture mission portfolio and execution order.
-- `docs/choir-agentic-depth-canonical.md` - canonical run-depth vocabulary for
+- `docs/archive/choir-agentic-depth-canonical.md` - canonical run-depth vocabulary for
   MissionGradient-era MissionBag, Sweep, Leap, Fly, Cycle, and
   worker/verifier/orchestrator roles; read through Parallax for new missions.
 - `docs/missiongradient-method.md` - legacy run-geometry method. Use only as
@@ -107,43 +107,39 @@ explicitly promotes one as source form.
   Parallax.
 - `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
-- `docs/wire-news-system-learning-saga-2026-06-09.md` - current learning record
+- `docs/archive/wire-news-system-learning-saga-2026-06-09.md` - current learning record
   for the news/Wire ontology correction: Wire is platform-level in the
   Community Cloud, reusable in Private Clouds, and personalized in user
   computers.
-- `docs/choir-strategy-overview-2026-06-09.md` - high-level strategy overview:
+- `docs/archive/choir-strategy-overview-2026-06-09.md` - high-level strategy overview:
   own your AI cloud, own the learning, private clouds, Wire, Texture, and radio.
-- `docs/choir-deck-treatment-and-faq-2026-06-09.md` - current deck/FAQ treatment
+- `docs/archive/choir-deck-treatment-and-faq-2026-06-09.md` - current deck/FAQ treatment
   for export after the Wire terminology correction.
-- `docs/vm-priority-policy.md` - current and future VM/computer warmness,
+- `docs/archive/vm-priority-policy.md` - current and future VM/computer warmness,
   reclaim, always-on, and uptime-tier policy.
 - `docs/platform-os-app-state.md` - current common platform/default computer
   state ledger for the OS substrate, desktop shell, app catalog, app boundaries,
   proof anchors, and known UX/app gaps. Keep it updated as platform app state
   changes; later divergent user computers should expose their own equivalent
   state records.
-- `docs/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
-- `docs/glossary.md` - canonical vocabulary for current product/runtime terms.
-- `docs/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
-- `docs/source-publication-consolidation-2026-06-06.md` - cleanup ledger for
-  the deleted platform Dolt/publication/retrieval/citation research report.
-- `docs/public-identity-and-custom-domains.md` - public handle, route, and
+- `docs/archive/project-goals.md` - current goal continuum and extracted live signal from older project/mission docs.
+- `docs/archive/glossary.md` - canonical vocabulary for current product/runtime terms.
+- `docs/archive/adr-dolt-as-canonical-state.md` - Dolt/SQLite state-boundary decision.
+- `docs/archive/public-identity-and-custom-domains.md` - public handle, route, and
   custom domain roadmap.
 - `docs/current-architecture.md` - current product/runtime architecture,
   including the surviving service-topology signal from deleted older sketches.
-- `docs/choir-rearchitecture-durable-actors-2026-06-11.md` - target durable-actor
+- `docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md` - target durable-actor
   rearchitecture conjecture (trajectories/work items replacing parent/child run
   control, Go-channel mailboxes replacing DB-table channels, continuation
   synthesis deletion). Conjecture-program target, not yet cut over; current code
   still uses parent/child runs and continuations during the transition.
-- `docs/choir-role-free-actor-protocol-2026-06-11.md` - target prompt/identity
+- `docs/archive/choir-role-free-actor-protocol-2026-06-11.md` - target prompt/identity
   doctrine: obligations and authority envelopes instead of persona/"you are X"
   framing. Bounded profiles (super/vsuper/researcher/...) remain as authority
   envelopes; only the persona-prompt layer is retired, on the same cutover.
 - `docs/system-v1-one-cut-2026-06-11.md` - derisking pseudocode for the v1 cut
   of the durable-actor model (durable schema, settlement, transactional send).
-- `docs/code-docs-reconciliation-2026-06-06.md` - code-to-core-docs review
-  notes from the 2026-06-06 full-codebase reconciliation pass.
 - `docs/intended-architecture-next-2026-06-06.md` - target architecture for
   the next week-plus of work; not current-state proof.
 - `docs/frontend-app-building-api.md` - current frontend app registry, preview,
@@ -152,65 +148,52 @@ explicitly promotes one as source form.
 - `docs/source-external-data-publication.md` - canonical contract for external
   data ingestion, source cleaning, Texture source metadata, transclusion,
   publication policy, and export.
-- `docs/news-system-current-state-and-improvements-2026-06-06.md` - current
+- `docs/archive/news-system-current-state-and-improvements-2026-06-06.md` - current
   source/news code-state and code-review note. Use it for sourcecycled,
   source_search, Texture source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
-- `docs/choir-wire-source-to-vtext-spec-2026-06-09.md` - current Wire requirements contract (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`): Universal Wire, Private Wire reuse, platform/user
-  computer authority, Texture ownership, source artifacts, and deletion of legacy
-  graph/source-maxxing behavior.
 - `docs/mission-*-v*.md` - mission paradocs. Use the portfolio's Parallax
   State to identify the current spine mission instead of updating this index
   for every mission transition.
-- `docs/mission-wire-community-news-v0.md` - older Universal Wire product
-  mission. Do not resume it as the architecture spine; current Wire proof is
-  downstream of M2-M4 in the portfolio.
 - `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` - (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   historical product/architecture spec for the superseded Universal Wire +
   retired StoryGraph/Texture framing. Do not use it as current ontology.
-- `docs/vtext-styleguide-system-research-2026-06-06.md` - research synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
+- `docs/archive/vtext-styleguide-system-research-2026-06-06.md` - research synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   for Texture-native style support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
-- `docs/vtext-styleguide-sources-review-2026-06-06.md` - full source-by-source review (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`) of the styleguide/voice corpus with concise signal summaries for each URL.
-- `docs/vtext-styleguide-source-theme-synthesis-2026-06-06.md` - theme synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
+- `docs/archive/vtext-styleguide-source-theme-synthesis-2026-06-06.md` - theme synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   across all styleguide and anti-slop sources with consensus, controversy, and
   outlier breakdown.
-- `docs/implementation-scope.md` - near-term implementation scope.
-- `docs/north-star.md` - long-range product direction.
-- `docs/spec-choir-desktop-wails-v3-2026-06-22.md` - native macOS desktop app
+- `docs/archive/implementation-scope.md` - near-term implementation scope.
+- `docs/archive/north-star.md` - long-range product direction.
+- `docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md` - native macOS desktop app
   build spec: Wails v3 shell, ASWebAuthenticationSession auth bridge, phase
   plan (Phase 1 implemented, Phase 2 and 7 partially implemented, Phases 3-6 spec'd).
 - `cmd/desktop/README.md` - native macOS app setup, build, auth bridge docs,
   and configuration reference.
-- `docs/mission-campaign-compiler-selfdev-v0.md` - retained Choir-in-Choir
+- `docs/archive/mission-campaign-compiler-selfdev-v0.md` - retained Choir-in-Choir
   benchmark input. Do not treat it as the current spine when the portfolio
   names an architecture-spine mission.
 - `docs/legacy-promotion-experiments-learnings.md` - consolidated lessons from
   pruned patchset-promotion experiments.
-- `docs/old-docs-review-2026-06-06.md` - cleanup ledger for old docs reviewed
-  on 2026-06-06, including mined insights from deleted proof/checklist files.
-- `docs/mid-age-docs-review-2026-06-06.md` - cleanup ledger for existing docs
-  last committed from 2026-05-24 through 2026-06-02.
-- `docs/architecture-consolidation-2026-06-06.md` - cleanup ledger for mining
-  older architecture sketches into `docs/current-architecture.md`.
-- `docs/mission-apps-and-changes-store-sweep-v0.md` - retained state for the
+- `docs/archive/mission-apps-and-changes-store-sweep-v0.md` - retained state for the
   Apps & Changes product path; historical portfolio inputs were pruned.
 
 ## Current Mission Family
 
 - `docs/mission-portfolio-2026-06-11.md` and `docs/mission-graph.yaml` define
   the current durable-actor spine. As of 2026-06-15, M3 proper is gated by
-  `docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md`, the narrow
+  `docs/archive/mission-vm-bootstrap-recovery-race-m3.3-v0.md`, the narrow
   bootstrap/recovery race paramission that must settle before lifecycle cutover
   uses vmctl refresh/restart as proof substrate.
-- `docs/mission-platform-source-service-vtext-publication-campaign-v1.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
+- `docs/archive/mission-platform-source-service-vtext-publication-campaign-v1.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
   active Source Service / Texture source metadata / publication campaign. Its
   requirements contract is `docs/source-external-data-publication.md`.
-- `docs/mission-campaign-compiler-selfdev-v0.md` is the primary current
+- `docs/archive/mission-campaign-compiler-selfdev-v0.md` is the primary current
   self-development mission surface.
-- `docs/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
-- `docs/mission-run-memory-v0.md` - run-memory/compaction mission.
-- `docs/mission-web-surface-rationalization-v0.md` - Obscura/Web Lens surface rationalization mission.
+- `docs/archive/mission-choir-grand-deformation-v0.md` - broad Choir-in-Choir deformation sketch.
+- `docs/archive/mission-run-memory-v0.md` - run-memory/compaction mission.
+- `docs/archive/mission-web-surface-rationalization-v0.md` - Obscura/Web Lens surface rationalization mission.
 - `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
   historical draft mission for the superseded Universal Wire / Style artifact
   collaborative retired StoryGraph trajectory. Do not use it as current ontology.
@@ -233,12 +216,10 @@ When proof docs contradict `README.md`, `AGENTS.md`, `current-architecture.md`, 
 
 - `docs/PROJECT-STATE.md` was deleted during the 2026-06-06 cleanup because it
   had become only a pointer to newer docs.
-- Old Mission 1/2/3/5/6/7 milestone docs were deleted after live signal was folded into `docs/project-goals.md`, `docs/glossary.md`, `docs/adr-dolt-as-canonical-state.md`, and the canonical architecture docs. Use git history for the removed originals.
+- Old Mission 1/2/3/5/6/7 milestone docs were deleted after live signal was folded into `docs/archive/project-goals.md`, `docs/archive/glossary.md`, `docs/archive/adr-dolt-as-canonical-state.md`, and the canonical architecture docs. Use git history for the removed originals.
 - Top-level `TODOS.md`, `PROJECT-GOALS.md`, and `PROJECT-GLOSSARY.md` were removed after extraction.
 - The old artifact-control hard-cutover checklist was deleted during the 2026-06-06
-  mid-age cleanup. Its durable review lessons were folded into
-  `docs/old-docs-review-2026-06-06.md` and
-  `docs/mid-age-docs-review-2026-06-06.md`.
+  mid-age cleanup. Its durable review lessons were folded into canonical docs.
 
 Do not delete historical docs during ordinary feature work. Label, index, or update them. Delete only when a cleanup mission explicitly proves they are junk or duplicated.
 
@@ -249,21 +230,12 @@ old-mission cleanup. Remaining cleanup work is intentionally narrower:
 
 - gradually fold durable lessons from dated proof/evidence files into canonical
   architecture/invariant docs when they become current;
-- use `docs/old-docs-review-2026-06-06.md` for the 2026-06-06 extraction of
-  lessons from deleted proof/checklist/research snapshots;
-- use `docs/mid-age-docs-review-2026-06-06.md` for the 2026-06-06 extraction
-  of lessons from deleted 2026-05-24 through 2026-06-02 snapshots;
-- use `docs/architecture-consolidation-2026-06-06.md` for the 2026-06-06
-  extraction of service-topology lessons from deleted architecture sketches;
-- use `docs/source-publication-consolidation-2026-06-06.md` for the 2026-06-06
-  extraction of platform Dolt/publication/citation lessons from deleted
-  research;
 - old backend-browser proof shards were consolidated into
   `docs/backend-browser-substrate-learnings.md`;
 - keep `docs/deferred-reliability-migrations-2026-05-14.md` as historical
   context for the later sandbox-to-computer hard rename; the runtime/control
   SQLite-to-Dolt cutover itself is now complete and reflected in
-  `docs/adr-dolt-as-canonical-state.md`;
+  `docs/archive/adr-dolt-as-canonical-state.md`;
 - leave proof docs as evidence artifacts unless a cleanup mission explicitly
   indexes, extracts, and deletes them;
 - keep `docs/README.md`, `README.md`, and `AGENTS.md` current when missions

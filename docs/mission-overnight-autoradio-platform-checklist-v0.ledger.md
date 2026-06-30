@@ -365,7 +365,7 @@ Receipts:
 - Prototype finding: alias switch used an `update_alias` action shape. O2 will
   implement switch/rollback with one Qdrant alias transaction containing
   `delete_alias` for the old mapping plus `create_alias` for the new mapping.
-- `docs/paradoc-qdrant-indexing-pipeline.md` now records the narrowed O2
+- `docs/archive/paradoc-qdrant-indexing-pipeline.md` now records the narrowed O2
   source-of-truth, embedder-boundary, rebuild, and rollback path.
 
 Evidence boundary: branch-level docs checkpoint only. No Qdrant runtime,
@@ -575,7 +575,7 @@ Receipts:
 - O3 reviewer thread `019f02a7-11d9-7573-885c-d91b7cffe8be` created, titled
   `O3 reviewer - Source Entity Migration design`, and pinned.
 - Reviewer prompt is read-only and asks it to compare the root
-  `docs/paradoc-source-entity-migration.md` with preserved O0 source-entity
+  `docs/archive/paradoc-source-entity-migration.md` with preserved O0 source-entity
   migration commit `7a355806` in
   `/Users/wiz/.codex/worktrees/2bae/go-choir`.
 - Protected surfaces named for review: Texture canonical writes, source entity
@@ -605,14 +605,14 @@ Receipts:
 
 - O3 reviewer thread `019f02a7-11d9-7573-885c-d91b7cffe8be` returned verdict
   `revise_before_continue`.
-- Reviewer finding: root `docs/paradoc-source-entity-migration.md` was only a
+- Reviewer finding: root `docs/archive/paradoc-source-entity-migration.md` was only a
   thin outline and did not carry the preserved detailed design.
 - Reviewer finding: preserved commit `7a355806` was useful but stale because it
   still referenced removed `source_embed` semantics; current Choir Doctrine
   requires `source_ref.display_mode` and tri-state citation.
 - Reviewer finding: preserved design predated landed `internal/objectgraph` and
   `internal/qdrant`, so the design needed to account for O1/O2 reality.
-- Revised root `docs/paradoc-source-entity-migration.md` to define
+- Revised root `docs/archive/paradoc-source-entity-migration.md` to define
   `choir.source_entity`, `choir.source_ref`, tri-state citation, Texture
   transaction/version boundaries, producer/consumer mapping, Qdrant and
   publication/export projections, phased rollout, verifier tests, rollback, and
@@ -1267,7 +1267,7 @@ Receipts:
   implementation commit list, test report, or final dirty-path classification
   exists yet.
 - Worker dirty paths observed by verifier: docs WIP in
-  `docs/paradoc-source-entity-migration.md`,
+  `docs/archive/paradoc-source-entity-migration.md`,
   `docs/mission-overnight-autoradio-platform-checklist-v0.md`, and
   `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`.
 - Verifier thread `019f02ed-d05e-78f1-975c-1de2df51451b` returned `blocked`
@@ -6709,7 +6709,7 @@ Move: in logged-in Chrome on `https://choir.news` as
 `yusefnathanson@me.com`, submitted prompt marker
 `O5_PRODUCT_PATH_PROBE_20260626` through the prompt bar at
 `2026-06-26T19:45:58Z`. The prompt asked the product path to continue
-`docs/mission-choir-in-choir-platform-pr-accelerator-v0.md`, create or update a
+`docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md`, create or update a
 Texture mission narrative first, and ask Super for one bounded
 self-development run: inspect whether the current Universal Wire
 graph-backed capture projection can yield a reviewable AppChangePackage or a

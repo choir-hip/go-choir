@@ -561,7 +561,7 @@ Primary doc:
 
 ```text
 ecd19fd docs: scope source-mounted super console repair
-docs/mission-super-console-source-mount-promotion-v0.md
+docs/archive/mission-super-console-source-mount-promotion-v0.md
 ```
 
 The mission distinguished:

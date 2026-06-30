@@ -17,7 +17,7 @@ docs-only CI policy.
 Actual ΔV: -2. The mission now has a dedicated problem record, context-packet
 conjecture, invariants, variant, and next move.
 
-Receipt: `docs/mission-doc-truth-drift-ci-context-packet-v0.md`.
+Receipt: `docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md`.
 
 Open edge: no README repair, detector script, context compiler, or CI workflow
 has been implemented yet. Repair is not claimed.
@@ -27,7 +27,7 @@ has been implemented yet. Repair is not claimed.
 Claim: the broader docs-truth mission needs a narrower checker spec that can
 iterate independently with the originating agent.
 
-Move: link `docs/mission-doc-heresy-checker-v0.md` as the reviewed checker spec
+Move: link `docs/archive/mission-doc-heresy-checker-v0.md` as the reviewed checker spec
 inside the broader mission.
 
 Expected Delta V: -1 by making the implementation-scope checker review
@@ -36,7 +36,7 @@ discoverable from the broader docs-truth paradoc.
 Actual Delta V: -1. The broader paradoc now references the narrower checker
 mission.
 
-Receipt: `docs/mission-doc-truth-drift-ci-context-packet-v0.md`.
+Receipt: `docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md`.
 
 Open edge: the checker spec still needs external review before implementation.
 
@@ -54,7 +54,7 @@ Expected Delta V: -1 by reducing handoff ambiguity for the next run.
 Actual Delta V: -1. The doc-truth mission now has a copy-pasteable resume
 string.
 
-Receipt: `docs/mission-doc-truth-drift-ci-context-packet-v0.md` and
+Receipt: `docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md` and
 `skills/parallax/SKILL.md`.
 
 Open edge: the installed user-level Parallax skill under `~/.codex` was not

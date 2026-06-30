@@ -178,7 +178,7 @@ mission commits.
 
 ## Lineage
 
-Carved out of `docs/mission-texture-long-running-agent-v0.md` (the durable
+Carved out of `docs/archive/mission-texture-long-running-agent-v0.md` (the durable
 deep-research thread mission) on 2026-06-18 when an R0 design pass found the
 document-schema/provenance/publish concern is distinct from thread lifecycle. The
 thread mission **depends on this one**: the durable thread writes

@@ -15,7 +15,7 @@ with conflicts surfaced in the UI, not silently resolved.
 
 Wire Base sync into the existing Wails desktop app (`cmd/desktop/`).
 
-Phase 4 from `docs/spec-choir-desktop-wails-v3-2026-06-22.md`:
+Phase 4 from `docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md`:
 
 1. **Desktop app authenticates with API key** (created via WebAuthn, one time)
    - Store API key securely (OS keychain on macOS, file on Linux)

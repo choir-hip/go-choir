@@ -210,7 +210,7 @@ The last clarification expanded H029 from a narrow Conductor prompt cleanup into
 a real product wedge: source intake into VText.
 
 The newly created paradoc is
-`docs/mission-conductor-url-source-routing-h029-v0.md`, now titled
+`docs/archive/mission-conductor-url-source-routing-h029-v0.md`, now titled
 "VText Source Intake And Conductor URL Routing H029."
 
 The owner expectation is:
@@ -244,43 +244,39 @@ Commit `79e98525` changed these files:
 - `README.md`
 - `docs/README.md`
 - `docs/choir-architecture-review-next-moves-2026-06-11.md`
-- `docs/choir-deck-treatment-and-faq-2026-06-09.md`
+- `docs/archive/choir-deck-treatment-and-faq-2026-06-09.md`
 - `docs/choir-doctrine.md`
 - `docs/choir-master-spec-review-2026-06-13.md`
-- `docs/choir-rearchitecture-durable-actors-2026-06-11.md`
+- `docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md`
 - `docs/current-architecture.md`
 - `docs/heresy-detectors.md`
-- `docs/mission-agentic-debugging-vtext-stability-v0.md`
-- `docs/mission-apps-and-changes-store-sweep-v0.md`
-- `docs/mission-campaign-compiler-selfdev-v0.md`
-- `docs/mission-choir-doctrine-upgrade-v0.md`
-- `docs/mission-choir-grand-deformation-v0.md`
-- `docs/mission-choir-in-choir-platform-pr-accelerator-v0.md`
-- `docs/mission-doctrine-conformance-findings-2026-06-13.md`
-- `docs/mission-global-wire-style-vtext-collaborative-storygraph-v0.md`
+- `docs/archive/mission-agentic-debugging-vtext-stability-v0.md`
+- `docs/archive/mission-apps-and-changes-store-sweep-v0.md`
+- `docs/archive/mission-campaign-compiler-selfdev-v0.md`
+- `docs/archive/mission-choir-doctrine-upgrade-v0.md`
+- `docs/archive/mission-choir-grand-deformation-v0.md`
+- `docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md`
+- `docs/archive/mission-global-wire-style-vtext-collaborative-storygraph-v0.md`
 - `docs/mission-lifecycle-cutover-v0.ledger.md`
-- `docs/mission-lifecycle-cutover-v0.md`
+- `docs/archive/mission-lifecycle-cutover-v0.md`
 - `docs/mission-messaging-cutover-v0.ledger.md`
 - `docs/mission-portfolio-2026-06-11.md`
-- `docs/mission-source-system-simplify-secure-smart-v0.md`
-- `docs/mission-surface-ontology-cleanup-h027-h029-v0.md`
-- `docs/mission-vtext-client-ready-source-transclusion-pretext-v0.md`
-- `docs/mission-vtext-source-viewer-reader-mode-hardening-v0.md`
-- `docs/mission-web-surface-rationalization-v0.md`
-- `docs/news-econ-publishing-synthesis-2026-06-04.md`
+- `docs/archive/mission-source-system-simplify-secure-smart-v0.md`
+- `docs/archive/mission-surface-ontology-cleanup-h027-h029-v0.md`
+- `docs/archive/mission-vtext-client-ready-source-transclusion-pretext-v0.md`
+- `docs/archive/mission-vtext-source-viewer-reader-mode-hardening-v0.md`
+- `docs/archive/mission-web-surface-rationalization-v0.md`
+- `docs/archive/news-econ-publishing-synthesis-2026-06-04.md`
 - `docs/overnight-vtext-super-console-zot-mega-report-2026-05-31.md`
 - `docs/platform-os-app-state.md`
-- `docs/project-goals.md`
+- `docs/archive/project-goals.md`
 - `docs/runtime-invariants.md`
-- `docs/vtext-mission-current-system-hard-review-2026-06-06.md`
-- `docs/vtext-regression-review-2026-05-31.md`
 - `skills/parallax/SKILL.md`
 
 The follow-up source-intake checkpoint, commit `5f2ecec7`, changed:
 
-- `docs/mission-conductor-url-source-routing-h029-v0.md`
+- `docs/archive/mission-conductor-url-source-routing-h029-v0.md`
 - `docs/mission-conductor-url-source-routing-h029-v0.ledger.md`
-- `docs/mission-doctrine-conformance-findings-2026-06-13.md`
 - `docs/mission-portfolio-2026-06-11.md`
 
 ## Validation Performed

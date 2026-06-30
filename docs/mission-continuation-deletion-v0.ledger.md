@@ -1,7 +1,7 @@
 # M4 Continuation Deletion — Ledger
 
 Append-only Parallax mission ledger. State lives in
-`docs/mission-continuation-deletion-v0.md`; this file is written, not re-read.
+`docs/archive/mission-continuation-deletion-v0.md`; this file is written, not re-read.
 
 ## 2026-06-17 - Paradoc compiled (Path A design)
 
@@ -11,7 +11,7 @@ empty path in `docs/mission-graph.yaml`). Compiled the paradoc as the Path A
 design artifact. No runtime behavior change in this pass.
 
 Move: construct (design only). Authored
-`docs/mission-continuation-deletion-v0.md` with full Parallax State and a
+`docs/archive/mission-continuation-deletion-v0.md` with full Parallax State and a
 Suggested Goal String, grounded in the current continuation surface inventory
 (`internal/runtime/continuation.go` ~293 lines, `internal/store/continuations.go`,
 `/api/continuations/*` in `internal/runtime/api.go`, `types.RunContinuationRecord`,
@@ -25,7 +25,7 @@ a route-planning gap (M4 had no paradoc). Status set to `planned`, explicitly
 gated on M3 settlement.
 
 Receipts:
-- `docs/mission-continuation-deletion-v0.md`
+- `docs/archive/mission-continuation-deletion-v0.md`
 - `docs/mission-continuation-deletion-v0.ledger.md`
 - `docs/mission-graph.yaml` node `m4-continuation-deletion` (path + ledger).
 

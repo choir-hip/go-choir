@@ -4,7 +4,7 @@
 **Status:** active — restoring correct config to main, then updating deployed node
 **Class:** red — deployment routing, protected surface (production mirror)
 **Spec lineage:**
-- `docs/choir-base-product-spec-2026-06-06.md` §Node A / Node B, Landmark 4
+- `docs/archive/choir-base-product-spec-2026-06-06.md` §Node A / Node B, Landmark 4
 - `docs/choir-base-research-report-2026-06-06.md` §Resource Strategy For Node A / Node B
 
 ## Problem Statement

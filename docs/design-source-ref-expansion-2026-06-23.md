@@ -190,7 +190,6 @@ docs must not drift.
 
 Add the prompt control-flow antipattern principle: prompts provide data and
 invariants, not boolean branches that change behavior. Reference the
-`docs/prompt-revisions-needed-2026-06-23.md` plan.
 
 ### `docs/choir-doctrine.md`
 
@@ -569,7 +568,7 @@ docs/choir-doctrine.md
 docs/texture-agentic-invariants-2026-06-13.md
 docs/runtime-invariants.md
 docs/platform-os-app-state.md
-docs/mission-texture-structured-document-transclusion-cutover-v0.md
+docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md
 styles/default.style.texture (new)
 styles/universal-wire.style.texture (update)
 styles/claim-audit.style.texture (update)

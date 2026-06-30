@@ -16,7 +16,7 @@ Delta V: M3.1 V initialized at 9; no code fixes yet. The main gain is observer
 shift from "debug deterministic continuation" to "remove forced workflow and
 repair acceptance witness."
 
-Receipt: `docs/mission-lifecycle-cutover-m3.1-v0.md`.
+Receipt: `docs/archive/mission-lifecycle-cutover-m3.1-v0.md`.
 
 Open edge: no tests or code changes in this pass. The next pass must make the
 documentation checkpoint durable in git before behavior-changing fixes, then
@@ -38,7 +38,7 @@ Delta V: -1. M3.1 V moves from 9 to 8. Code still violates the invariant until
 the forced researcher continuation and related tests are removed.
 
 Receipt: `docs/vtext-agentic-invariants-2026-06-13.md`, `AGENTS.md`,
-`docs/mission-lifecycle-cutover-m3.1-v0.md`.
+`docs/archive/mission-lifecycle-cutover-m3.1-v0.md`.
 
 Open edge: documentation is necessary but not sufficient. Next move remains a
 behavior rollback: remove VText researcher hard continuation, narrow
@@ -54,15 +54,15 @@ path stub.
 Move: construct / handoff. Added `m3.1-lifecycle-recovery` to
 `docs/mission-graph.yaml`, made M3 proper depend on it, marked M3 proper
 blocked in the graph, added a full Suggested Goal String here, and added a
-recovery gate note to `docs/mission-lifecycle-cutover-v0.md`.
+recovery gate note to `docs/archive/mission-lifecycle-cutover-v0.md`.
 
 Expected Delta V: -1 against handoff ambiguity. Actual Delta V: -1. M3.1 is
 ready to execute as the active preflight mission; the code/test recovery V
 remains 8.
 
 Receipt: `docs/mission-graph.yaml`,
-`docs/mission-lifecycle-cutover-m3.1-v0.md`,
-`docs/mission-lifecycle-cutover-v0.md`.
+`docs/archive/mission-lifecycle-cutover-m3.1-v0.md`,
+`docs/archive/mission-lifecycle-cutover-v0.md`.
 
 ## 2026-06-14 - Remove Forced Semantic VText Continuation Locally
 
@@ -206,7 +206,7 @@ Receipts:
   `submitted` and `vtext_opened` checkpoints.
 
 Settlement: M3.1 is settled. Resume M3 proper from
-`docs/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
+`docs/archive/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
 remains a named successor edge, not a blocker for this recovery.
 
 ## 2026-06-14 - Reopen Prompt-Pipeline Forcing Blocker
@@ -305,5 +305,5 @@ Receipts:
   `submitted` and `vtext_opened` checkpoints.
 
 Settlement: M3.1 is settled. Resume M3 proper from
-`docs/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
+`docs/archive/mission-lifecycle-cutover-v0.md`. Actor memory cross-trajectory scoping
 remains a named successor edge, not a blocker for this recovery.

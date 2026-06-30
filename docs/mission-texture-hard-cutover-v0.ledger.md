@@ -4296,7 +4296,7 @@ Receipts:
 - Model-policy residue centers on `[roles.vtext]` and `AgentProfileVText` in
   `internal/runtime/model_policy.go`, `internal/runtime/model_policy_test.go`,
   `internal/runtime/texture_identity_test.go`, and
-  `docs/mission-runtime-model-context-substrate-v0.md`.
+  `docs/archive/mission-runtime-model-context-substrate-v0.md`.
 
 Open edge: implement current Texture task/profile/model-policy names with
 legacy read/fallback compatibility, then prove with focused runtime/model-policy

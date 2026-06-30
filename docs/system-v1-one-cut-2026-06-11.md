@@ -30,7 +30,7 @@ RESIDENT  (volatile; Go delivers)
 POLICY    (prompts + bounded profiles; the untrusted prover layer)
    what agents decide; never load-bearing for safety
    governed by the role-free actor protocol: actors get obligations,
-   not identities (docs/choir-role-free-actor-protocol-2026-06-11.md)
+   not identities (docs/archive/choir-role-free-actor-protocol-2026-06-11.md)
 ```
 
 Rules of the foliation:
