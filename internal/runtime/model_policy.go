@@ -116,12 +116,12 @@ func defaultModelPolicyText(_ Config) string {
 [defaults]
 fallback_provider = "chatgpt"
 fallback_model = "gpt-5.4-mini"
-reasoning = "medium"
+reasoning = "low"
 
 [roles.conductor]
 provider = "chatgpt"
 model = "gpt-5.4-mini"
-reasoning = "medium"
+reasoning = "low"
 
 [roles.texture]
 provider = "chatgpt"
@@ -131,7 +131,7 @@ reasoning = "low"
 [roles.super]
 provider = "chatgpt"
 model = "gpt-5.5"
-reasoning = "medium"
+reasoning = "high"
 
 [roles.vsuper]
 provider = "deepseek"
@@ -144,7 +144,7 @@ model = "deepseek-v4-flash"
 [roles.researcher]
 provider = "chatgpt"
 model = "gpt-5.4-mini"
-reasoning = "medium"
+reasoning = "low"
 
 [roles.processor]
 provider = "chatgpt"
@@ -172,19 +172,19 @@ func fallbackModelPolicy(_ Config) ModelPolicy {
 	defaults := LLMSelection{
 		Provider:        defaultChatGPTProvider,
 		Model:           defaultChatGPTMiniModel,
-		ReasoningEffort: defaultFlashForegroundReasoning,
+		ReasoningEffort: "low",
 		Source:          "platform_fallback",
 	}
 	chatGPTMini := LLMSelection{
 		Provider:        defaultChatGPTProvider,
 		Model:           defaultChatGPTMiniModel,
-		ReasoningEffort: defaultFlashForegroundReasoning,
+		ReasoningEffort: "low",
 		Source:          "platform_fallback",
 	}
 	chatGPTForeground := LLMSelection{
 		Provider:        defaultChatGPTProvider,
 		Model:           defaultChatGPTForegroundModel,
-		ReasoningEffort: defaultFlashForegroundReasoning,
+		ReasoningEffort: "high",
 		Source:          "platform_fallback",
 	}
 	chatGPTWire := LLMSelection{

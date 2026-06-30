@@ -92,11 +92,11 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
-	if conductor.Provider != "chatgpt" || conductor.Model != "gpt-5.4-mini" || conductor.ReasoningEffort != "medium" {
+	if conductor.Provider != "chatgpt" || conductor.Model != "gpt-5.4-mini" || conductor.ReasoningEffort != "low" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
 	super := policy.Resolve(AgentProfileSuper)
-	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" {
+	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "high" {
 		t.Fatalf("super selection = %+v", super)
 	}
 	texture := policy.Resolve(AgentProfileTexture)
@@ -104,7 +104,7 @@ func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 		t.Fatalf("texture selection = %+v", texture)
 	}
 	researcher := policy.Resolve(AgentProfileResearcher)
-	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.4-mini" || researcher.ReasoningEffort != "medium" {
+	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.4-mini" || researcher.ReasoningEffort != "low" {
 		t.Fatalf("researcher selection = %+v", researcher)
 	}
 	processor := policy.Resolve(AgentProfileProcessor)
@@ -169,16 +169,16 @@ func TestDefaultModelPolicyUsesChatGPTCutover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse generated policy: %v", err)
 	}
-	if got := policy.Resolve("unknown-role"); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve("unknown-role"); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated fallback selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileConductor); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated conductor selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated researcher selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "medium" {
+	if got := policy.Resolve(AgentProfileSuper); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "high" {
 		t.Fatalf("generated super selection = %+v", got)
 	}
 }
