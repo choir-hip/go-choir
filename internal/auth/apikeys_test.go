@@ -454,3 +454,149 @@ func TestCreateAPIKeyEmptyScopes(t *testing.T) {
 		t.Errorf("scopes: got %v, want empty", ak.Scopes)
 	}
 }
+
+// TestSeedBootstrapAdminAPIKeySeedsOnFirstRun verifies that the bootstrap
+// seeds an admin-scoped key when no API keys exist, and that the key
+// validates through the normal hash-lookup path (C1, C3).
+func TestSeedBootstrapAdminAPIKeySeedsOnFirstRun(t *testing.T) {
+	store := TestStore(t)
+	ctx := context.Background()
+
+	rawKey := APIKeyPrefix + "bootstrap-test-key-12345"
+	keyID, seeded, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey)
+	if err != nil {
+		t.Fatalf("seed bootstrap: %v", err)
+	}
+	if !seeded {
+		t.Fatal("seeded = false, want true on first run")
+	}
+	if !strings.HasPrefix(keyID, "ak_") {
+		t.Errorf("key id: got %q, want prefix ak_", keyID)
+	}
+
+	// The key must validate through the normal hash-lookup path (C3).
+	h := sha256.Sum256([]byte(rawKey))
+	keyHash := fmt.Sprintf("%x", h)
+	ak, err := store.GetAPIKeyByHash(ctx, keyHash)
+	if err != nil {
+		t.Fatalf("get api key by hash: %v", err)
+	}
+	if ak.ID != keyID {
+		t.Errorf("key id: got %q, want %q", ak.ID, keyID)
+	}
+	if ak.UserID != BootstrapAdminAPIKeyUserID {
+		t.Errorf("user id: got %q, want %q", ak.UserID, BootstrapAdminAPIKeyUserID)
+	}
+	if ak.Label != bootstrapAdminAPIKeyLabel {
+		t.Errorf("label: got %q, want %q", ak.Label, bootstrapAdminAPIKeyLabel)
+	}
+	// Admin scope.
+	foundAdmin := false
+	for _, s := range ak.Scopes {
+		if s == "admin" {
+			foundAdmin = true
+		}
+	}
+	if !foundAdmin {
+		t.Errorf("scopes: got %v, want to contain admin", ak.Scopes)
+	}
+}
+
+// TestSeedBootstrapAdminAPIKeySkipsWhenKeysExist verifies the first-run-only
+// guard: if any non-revoked API key exists, the bootstrap is a no-op (C2).
+func TestSeedBootstrapAdminAPIKeySkipsWhenKeysExist(t *testing.T) {
+	store := TestStore(t)
+	ctx := context.Background()
+
+	// Create a normal user + key first (simulates a WebAuthn-provisioned key).
+	user, err := store.CreateUser("existing-user", "existing@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if _, _, err := store.CreateAPIKey(ctx, user.ID, "existing", []string{"read:runtime"}, nil); err != nil {
+		t.Fatalf("create api key: %v", err)
+	}
+
+	// Now the bootstrap should be a no-op.
+	rawKey := APIKeyPrefix + "bootstrap-should-not-seed"
+	keyID, seeded, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey)
+	if err != nil {
+		t.Fatalf("seed bootstrap: %v", err)
+	}
+	if seeded {
+		t.Error("seeded = true, want false when keys already exist")
+	}
+	if keyID != "" {
+		t.Errorf("key id: got %q, want empty on skip", keyID)
+	}
+
+	// The bootstrap key must NOT validate.
+	h := sha256.Sum256([]byte(rawKey))
+	keyHash := fmt.Sprintf("%x", h)
+	_, err = store.GetAPIKeyByHash(ctx, keyHash)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("get api key by hash: got err=%v, want sql.ErrNoRows (key should not exist)", err)
+	}
+}
+
+// TestSeedBootstrapAdminAPIKeySecondRunIsNoOp verifies that calling the
+// bootstrap a second time on the same store is a no-op (C2).
+func TestSeedBootstrapAdminAPIKeySecondRunIsNoOp(t *testing.T) {
+	store := TestStore(t)
+	ctx := context.Background()
+
+	rawKey := APIKeyPrefix + "bootstrap-once-key"
+	if _, seeded, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey); err != nil || !seeded {
+		t.Fatalf("first seed: seeded=%v err=%v", seeded, err)
+	}
+
+	// Second call: the key from the first run now exists, so this is a no-op.
+	_, seeded2, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey)
+	if err != nil {
+		t.Fatalf("second seed: %v", err)
+	}
+	if seeded2 {
+		t.Error("second seed: seeded = true, want false (first-run-only)")
+	}
+}
+
+// TestSeedBootstrapAdminAPIKeyRevocable verifies that revoking the bootstrap
+// key disables it for future lookups (C4).
+func TestSeedBootstrapAdminAPIKeyRevocable(t *testing.T) {
+	store := TestStore(t)
+	ctx := context.Background()
+
+	rawKey := APIKeyPrefix + "bootstrap-revoke-key"
+	keyID, seeded, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey)
+	if err != nil || !seeded {
+		t.Fatalf("seed: seeded=%v err=%v", seeded, err)
+	}
+
+	// Revoke via the normal flow.
+	if err := store.RevokeAPIKey(ctx, BootstrapAdminAPIKeyUserID, keyID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	// The key must no longer validate.
+	h := sha256.Sum256([]byte(rawKey))
+	keyHash := fmt.Sprintf("%x", h)
+	_, err = store.GetAPIKeyByHash(ctx, keyHash)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("get api key by hash after revoke: got err=%v, want sql.ErrNoRows", err)
+	}
+}
+
+// TestSeedBootstrapAdminAPIKeyRejectsBadPrefix verifies that a raw key
+// without the choir_sk_ prefix is rejected without touching the DB.
+func TestSeedBootstrapAdminAPIKeyRejectsBadPrefix(t *testing.T) {
+	store := TestStore(t)
+	ctx := context.Background()
+
+	_, seeded, err := store.SeedBootstrapAdminAPIKey(ctx, "not-a-choir-key")
+	if err == nil {
+		t.Fatal("err = nil, want error for bad prefix")
+	}
+	if seeded {
+		t.Error("seeded = true, want false on error")
+	}
+}
