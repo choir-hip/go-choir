@@ -453,7 +453,7 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 	// Any message in the channel was also appended to the log (Send writes
 	// both), so processBacklog already handled it. Messages that arrived
 	// AFTER the last log query are NOT in skip and get processed here.
-	drainCold:
+drainCold:
 	for {
 		select {
 		case u := <-r.mailbox:
@@ -477,7 +477,7 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 		case u := <-r.mailbox:
 			rt.processOne(ctx, r, u, &memory, skip)
 			// Drain any more that arrived while we worked.
-			drainLoop:
+		drainLoop:
 			for {
 				select {
 				case u2 := <-r.mailbox:
@@ -505,10 +505,15 @@ func (rt *Runtime) loop(ctx context.Context, r *residentActor) {
 			// no lost wake.
 			rt.mu.Lock()
 			if len(r.mailbox) == 0 && !r.evicted {
-				delete(rt.resident, r.agentID)
 				// Save snapshot under the lock so callers that observe
 				// !Resident() are guaranteed to see the saved snapshot.
-				_ = rt.log.SaveSnapshot(context.Background(), r.agentID, memory)
+				if err := rt.log.SaveSnapshot(context.Background(), r.agentID, memory); err != nil {
+					log.Printf("actor: save snapshot for %s: %v", r.agentID, err)
+					rt.mu.Unlock()
+					idleTimer.Reset(rt.opts.IdleTimeout)
+					continue
+				}
+				delete(rt.resident, r.agentID)
 				rt.mu.Unlock()
 				return
 			}
@@ -555,13 +560,13 @@ func (rt *Runtime) processBacklog(ctx context.Context, r *residentActor, memory 
 				}
 				break // re-query; the failed update stays unprocessed
 			}
-			*memory = next
 			if err := rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID); err != nil {
 				if !sleepCtx(ctx, rt.opts.HandlerRetryBackoff) {
 					return
 				}
 				break
 			}
+			*memory = next
 			if skip != nil {
 				skip[u.UpdateID] = true
 			}
@@ -587,8 +592,11 @@ func (rt *Runtime) processOne(ctx context.Context, r *residentActor, u Update, m
 		_ = sleepCtx(ctx, rt.opts.HandlerRetryBackoff)
 		return
 	}
+	if err := rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID); err != nil {
+		_ = sleepCtx(ctx, rt.opts.HandlerRetryBackoff)
+		return
+	}
 	*memory = next
-	_ = rt.log.MarkProcessed(ctx, r.agentID, u.UpdateID)
 	skip[u.UpdateID] = true
 }
 
