@@ -103,6 +103,9 @@ func (h *Handler) HandleAppChangePackageReviewEvidence(w http.ResponseWriter, r 
 		return
 	}
 	req.Header.Set("X-Authenticated-User", authResult.UserID)
+	if authResult.AuthMethod != "" {
+		req.Header.Set("X-Authenticated-Auth-Method", authResult.AuthMethod)
+	}
 	resp, err := h.platformd.Do(req)
 	if err != nil {
 		log.Printf("proxy app package review evidence: fetch package=%s source_owner=%s: %v", packageID, sourceOwnerID, err)

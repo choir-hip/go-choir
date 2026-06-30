@@ -36,6 +36,8 @@ type publishAppChangePackageInput struct {
 	VerifierContracts           json.RawMessage `json:"verifier_contracts,omitempty"`
 	ProvenanceRefs              json.RawMessage `json:"provenance_refs,omitempty"`
 	TraceID                     string          `json:"trace_id,omitempty"`
+	SubjectID                   string          `json:"-"`
+	SubjectAuthMethod           string          `json:"-"`
 }
 
 type createAppAdoptionInput struct {
@@ -49,6 +51,8 @@ type createAppAdoptionInput struct {
 	TraceID                   string `json:"trace_id,omitempty"`
 	ForegroundTailMergeResult string `json:"foreground_tail_merge_result,omitempty"`
 	MergeStrategy             string `json:"merge_strategy,omitempty"`
+	SubjectID                 string `json:"-"`
+	SubjectAuthMethod         string `json:"-"`
 }
 
 type verifyAppAdoptionInput struct {
@@ -63,6 +67,16 @@ type appAdoptionVerificationState struct {
 	rec        types.AppAdoptionRecord
 	pkg        types.AppChangePackageRecord
 	cutoverRef string
+}
+
+// subjectContext carries the authenticated author identity for a mutation
+// transaction. SubjectID is the authenticated user ID (from M1 API auth or
+// WebAuthn session); SubjectAuthMethod records how they authenticated
+// ("cookie" or "api_key"). Every promotion-family mutation records this so
+// the transaction log can answer "who authorized this, and how?"
+type subjectContext struct {
+	SubjectID       string
+	SubjectAuthMethod string
 }
 
 func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, computerID, kind, activeRef string) (types.ComputerSourceLineageRecord, error) {
@@ -199,6 +213,8 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 		VerifierContractsJSON:       rawJSONOrFallback(in.VerifierContracts, "[]"),
 		ProvenanceRefsJSON:          rawJSONOrFallback(in.ProvenanceRefs, "[]"),
 		TraceID:                     strings.TrimSpace(in.TraceID),
+		SubjectID:                   firstNonEmptyPromotion(strings.TrimSpace(in.SubjectID), ownerID),
+		SubjectAuthMethod:           strings.TrimSpace(in.SubjectAuthMethod),
 	}
 	rec, err = rt.store.UpsertAppChangePackage(ctx, rec)
 	if err != nil {
@@ -272,6 +288,8 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 		RouteProfile:                          firstNonEmptyPromotion(strings.TrimSpace(in.RouteProfile), lineage.RouteProfile, "route:"+safeRefPart(targetComputerID)),
 		DefaultBaseProfile:                    strings.TrimSpace(in.DefaultBaseProfile),
 		TraceID:                               firstNonEmptyPromotion(strings.TrimSpace(in.TraceID), pkg.TraceID),
+		SubjectID:                             firstNonEmptyPromotion(strings.TrimSpace(in.SubjectID), ownerID, pkg.SubjectID),
+		SubjectAuthMethod:                     firstNonEmptyPromotion(strings.TrimSpace(in.SubjectAuthMethod), pkg.SubjectAuthMethod),
 	}
 	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
@@ -289,16 +307,16 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 	return rec, nil
 }
 
-func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
-	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
+func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput, subject subjectContext) (types.AppAdoptionRecord, error) {
+	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in, subject)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	return rt.finishAppAdoptionVerification(ctx, ownerID, state)
 }
 
-func (rt *Runtime) StartVerifyAppAdoptionAsync(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
-	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
+func (rt *Runtime) StartVerifyAppAdoptionAsync(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput, subject subjectContext) (types.AppAdoptionRecord, error) {
+	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in, subject)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -310,7 +328,7 @@ func (rt *Runtime) StartVerifyAppAdoptionAsync(ctx context.Context, ownerID, ado
 	return state.rec, nil
 }
 
-func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (appAdoptionVerificationState, error) {
+func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput, subject subjectContext) (appAdoptionVerificationState, error) {
 	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return appAdoptionVerificationState{}, err
@@ -327,6 +345,8 @@ func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, ad
 	rec.MergeStrategy = firstNonEmptyPromotion(strings.TrimSpace(in.MergeStrategy), rec.MergeStrategy, "rebase")
 	rec.MergeConflictsJSON = rawJSONOrFallback(in.MergeConflicts, "[]")
 	rec.RollbackProfileJSON = appAdoptionRollbackProfileJSON(rec, lineage)
+	rec.SubjectID = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectID), rec.SubjectID, ownerID)
+	rec.SubjectAuthMethod = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectAuthMethod), rec.SubjectAuthMethod)
 	buildReport := appAdoptionBuildReport{Required: true}
 	rec.Status = types.AppAdoptionVerifying
 	rec.Error = ""
@@ -408,7 +428,7 @@ func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID st
 // verified transition; it does not replace verification. Promotion requires
 // this transition — verification alone never makes a change user-visible
 // (specs/promotion_protocol.tla ApprovalGate).
-func (rt *Runtime) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+func (rt *Runtime) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID string, subject subjectContext) (types.AppAdoptionRecord, error) {
 	rec, pkg, _, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -421,6 +441,8 @@ func (rt *Runtime) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID s
 	}
 	rec.Status = types.AppAdoptionOwnerApproved
 	rec.Error = ""
+	rec.SubjectID = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectID), rec.SubjectID, ownerID)
+	rec.SubjectAuthMethod = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectAuthMethod), rec.SubjectAuthMethod)
 	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -453,7 +475,7 @@ func promoteFreshnessCAS(rec types.AppAdoptionRecord, lineage types.ComputerSour
 	return nil
 }
 
-func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID string, subject subjectContext) (types.AppAdoptionRecord, error) {
 	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -461,22 +483,41 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	if rec.Status != types.AppAdoptionOwnerApproved {
 		return rec, fmt.Errorf("promote app adoption: adoption status %q is not owner_approved; verification alone does not authorize promotion", rec.Status)
 	}
+	// Complete capture: both runtime and UI artifact digests must be present
+	// (the recipient build produced both). A partial capture is not promotable.
 	if rec.RuntimeArtifactDigest == "" || rec.UIArtifactDigest == "" {
 		return rec, fmt.Errorf("promote app adoption: runtime/ui artifact digests are required")
 	}
+	// Complete capture: the package manifest hash must be present — it binds
+	// the source deltas, contract, and artifact digests into a single
+	// tamper-evident manifest. Without it the capture is incomplete.
+	if strings.TrimSpace(pkg.PackageManifestSHA256) == "" {
+		return rec, fmt.Errorf("promote app adoption: package manifest hash is required for complete capture")
+	}
+	// Rollback ref: every promotion must carry a valid rollback ref to the
+	// previous active state. Missing rollback ref = no rollback path = unsafe.
 	rollbackSourceRef := rollbackSourceRefFromProfile(rec.RollbackProfileJSON)
 	if rollbackSourceRef == "" {
 		return rec, fmt.Errorf("promote app adoption: rollback source ref is required")
 	}
+	// Verifier evidence: every promotion must carry non-empty verifier results
+	// with at least one passed contract. No evidence = no promotion. This is
+	// defense-in-depth: the verified→approved gate already requires passing
+	// verifiers, but the promotion gate checks the evidence is still present
+	// and not accidentally cleared.
+	if err := verifyPromotionEvidence(rec); err != nil {
+		return rec, fmt.Errorf("promote app adoption: %w", err)
+	}
+	// Freshness check: the foreground lineage must not have moved since
+	// verification. Evidence about a stale base authorizes nothing.
 	if err := promoteFreshnessCAS(rec, lineage); err != nil {
 		return rec, fmt.Errorf("promote app adoption: %w", err)
 	}
+	// Author identity: record who authorized this promotion and how.
+	rec.SubjectID = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectID), rec.SubjectID, ownerID)
+	rec.SubjectAuthMethod = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectAuthMethod), rec.SubjectAuthMethod)
 	rec.Status = types.AppAdoptionAdopted
 	rec.Error = ""
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
-	if err != nil {
-		return types.AppAdoptionRecord{}, err
-	}
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
 	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
 	lineage.UIDigest = rec.UIArtifactDigest
@@ -485,8 +526,14 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = rec.CandidateSourceRef
-	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	// Transaction semantics: the adoption status update and the lineage
+	// advancement are committed in a single database transaction. Either both
+	// commit or neither commits — there is no half-promoted state.
+	rec, lineage, err = rt.store.PromoteAppAdoptionTransaction(ctx, store.PromotionTransactionInput{
+		Adoption: rec,
+		Lineage:  lineage,
+	})
+	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
@@ -499,12 +546,14 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 		"route_profile":           lineage.RouteProfile,
 		"default_base_profile":    lineage.DefaultBaseProfile,
 		"rollback_source_ref":     rollbackSourceRef,
+		"subject_id":              rec.SubjectID,
+		"subject_auth_method":     rec.SubjectAuthMethod,
 		"continuous_app_change":   true,
 	})
 	return rec, nil
 }
 
-func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID string, subject subjectContext) (types.AppAdoptionRecord, error) {
 	rec, _, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -522,12 +571,15 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	lineage.RouteProfile = stringFromMap(rollback, "previous_route_profile")
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = rec.PackageID
-	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
-		return rec, err
-	}
+	rec.SubjectID = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectID), rec.SubjectID, ownerID)
+	rec.SubjectAuthMethod = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectAuthMethod), rec.SubjectAuthMethod)
 	rec.Status = types.AppAdoptionRolledBack
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	// Transaction semantics: rollback is also atomic — the lineage restoration
+	// and the adoption status update commit in a single transaction.
+	rec, lineage, err = rt.store.PromoteAppAdoptionTransaction(ctx, store.PromotionTransactionInput{
+		Adoption: rec,
+		Lineage:  lineage,
+	})
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -536,12 +588,14 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 		"package_id":            rec.PackageID,
 		"target_computer_id":    rec.TargetComputerID,
 		"rollback_source_ref":   lineage.ActiveSourceRef,
+		"subject_id":            rec.SubjectID,
+		"subject_auth_method":   rec.SubjectAuthMethod,
 		"continuous_app_change": true,
 	})
 	return rec, nil
 }
 
-func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoptionID string, subject subjectContext) (types.AppAdoptionRecord, error) {
 	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -562,12 +616,16 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	if strings.TrimSpace(lineage.ActiveSourceRef) != strings.TrimSpace(rollbackSourceRef) {
 		return rec, fmt.Errorf("roll forward app adoption: foreground lineage moved since rollback (expected %q, now %q); re-verify before rolling forward", rollbackSourceRef, lineage.ActiveSourceRef)
 	}
+	// Verifier evidence: roll-forward re-promotes, so the same evidence gate
+	// applies. The verifier results from the original verification are still
+	// present on the record.
+	if err := verifyPromotionEvidence(rec); err != nil {
+		return rec, fmt.Errorf("roll forward app adoption: %w", err)
+	}
+	rec.SubjectID = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectID), rec.SubjectID, ownerID)
+	rec.SubjectAuthMethod = firstNonEmptyPromotion(strings.TrimSpace(subject.SubjectAuthMethod), rec.SubjectAuthMethod)
 	rec.Status = types.AppAdoptionAdopted
 	rec.Error = ""
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
-	if err != nil {
-		return types.AppAdoptionRecord{}, err
-	}
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
 	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
 	lineage.UIDigest = rec.UIArtifactDigest
@@ -576,8 +634,12 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = rec.CandidateSourceRef
-	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	// Transaction semantics: roll-forward is atomic, same as promotion.
+	rec, lineage, err = rt.store.PromoteAppAdoptionTransaction(ctx, store.PromotionTransactionInput{
+		Adoption: rec,
+		Lineage:  lineage,
+	})
+	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
@@ -590,10 +652,43 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 		"route_profile":           lineage.RouteProfile,
 		"default_base_profile":    lineage.DefaultBaseProfile,
 		"rollback_source_ref":     rollbackSourceRef,
+		"subject_id":              rec.SubjectID,
+		"subject_auth_method":     rec.SubjectAuthMethod,
 		"roll_forward":            true,
 		"continuous_app_change":   true,
 	})
 	return rec, nil
+}
+
+// verifyPromotionEvidence is the promotion-time verifier-evidence gate. It
+// checks that the adoption carries non-empty verifier results with at least
+// one contract that passed. This is defense-in-depth: the verified→approved
+// gate already requires passing verifiers, but the promotion gate checks the
+// evidence is still present and not accidentally cleared between approval and
+// promotion.
+func verifyPromotionEvidence(rec types.AppAdoptionRecord) error {
+	if len(rec.VerifierResultsJSON) == 0 || !json.Valid(rec.VerifierResultsJSON) {
+		return fmt.Errorf("verifier evidence is required (results are empty or invalid)")
+	}
+	var results []map[string]any
+	if err := json.Unmarshal(rec.VerifierResultsJSON, &results); err != nil {
+		return fmt.Errorf("verifier evidence is malformed: %w", err)
+	}
+	if len(results) == 0 {
+		return fmt.Errorf("verifier evidence is required (no verifier contracts recorded)")
+	}
+	hasPassed := false
+	for _, result := range results {
+		status, _ := result["status"].(string)
+		if strings.EqualFold(status, "passed") {
+			hasPassed = true
+			break
+		}
+	}
+	if !hasPassed {
+		return fmt.Errorf("verifier evidence must include at least one passed contract")
+	}
+	return nil
 }
 
 func (rt *Runtime) loadAdoptionPackageLineage(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, types.AppChangePackageRecord, types.ComputerSourceLineageRecord, error) {

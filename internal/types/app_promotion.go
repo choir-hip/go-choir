@@ -61,6 +61,8 @@ type AppChangePackageRecord struct {
 	VerifierContractsJSON       json.RawMessage        `json:"verifier_contracts_json,omitempty"`
 	ProvenanceRefsJSON          json.RawMessage        `json:"provenance_refs_json,omitempty"`
 	TraceID                     string                 `json:"trace_id,omitempty"`
+	SubjectID                   string                 `json:"subject_id,omitempty"`
+	SubjectAuthMethod           string                 `json:"subject_auth_method,omitempty"`
 	CreatedAt                   time.Time              `json:"created_at"`
 	UpdatedAt                   time.Time              `json:"updated_at"`
 }
@@ -103,6 +105,8 @@ type AppAdoptionRecord struct {
 	RouteProfile                          string            `json:"route_profile,omitempty"`
 	DefaultBaseProfile                    string            `json:"default_base_profile,omitempty"`
 	TraceID                               string            `json:"trace_id,omitempty"`
+	SubjectID                             string            `json:"subject_id,omitempty"`
+	SubjectAuthMethod                     string            `json:"subject_auth_method,omitempty"`
 	Error                                 string            `json:"error,omitempty"`
 	CreatedAt                             time.Time         `json:"created_at"`
 	UpdatedAt                             time.Time         `json:"updated_at"`

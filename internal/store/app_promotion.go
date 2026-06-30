@@ -115,8 +115,8 @@ func (s *Store) UpsertAppChangePackage(ctx context.Context, rec types.AppChangeP
 			app_protocol_contract, app_protocol_contract_sha256,
 			source_runtime_artifact_digest, source_ui_artifact_digest,
 			manifest_json, verifier_contracts_json, provenance_refs_json,
-			trace_id, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			trace_id, subject_id, subject_auth_method, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			owner_id = VALUES(owner_id),
 			app_id = VALUES(app_id),
@@ -139,6 +139,8 @@ func (s *Store) UpsertAppChangePackage(ctx context.Context, rec types.AppChangeP
 			verifier_contracts_json = VALUES(verifier_contracts_json),
 			provenance_refs_json = VALUES(provenance_refs_json),
 			trace_id = VALUES(trace_id),
+			subject_id = VALUES(subject_id),
+			subject_auth_method = VALUES(subject_auth_method),
 			updated_at = VALUES(updated_at)`,
 		rec.PackageID,
 		rec.OwnerID,
@@ -162,6 +164,8 @@ func (s *Store) UpsertAppChangePackage(ctx context.Context, rec types.AppChangeP
 		contractsJSON,
 		provenanceJSON,
 		rec.TraceID,
+		rec.SubjectID,
+		rec.SubjectAuthMethod,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
@@ -259,8 +263,8 @@ func (s *Store) UpsertAppAdoption(ctx context.Context, rec types.AppAdoptionReco
 			foreground_tail_merge_result, merge_strategy, merge_conflicts_json,
 			runtime_artifact_digest, ui_artifact_digest, verifier_results_json,
 			rollback_profile_json, route_profile, default_base_profile, trace_id,
-			error, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			subject_id, subject_auth_method, error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			owner_id = VALUES(owner_id),
 			package_id = VALUES(package_id),
@@ -282,6 +286,8 @@ func (s *Store) UpsertAppAdoption(ctx context.Context, rec types.AppAdoptionReco
 			route_profile = VALUES(route_profile),
 			default_base_profile = VALUES(default_base_profile),
 			trace_id = VALUES(trace_id),
+			subject_id = VALUES(subject_id),
+			subject_auth_method = VALUES(subject_auth_method),
 			error = VALUES(error),
 			updated_at = VALUES(updated_at)`,
 		rec.AdoptionID,
@@ -305,6 +311,8 @@ func (s *Store) UpsertAppAdoption(ctx context.Context, rec types.AppAdoptionReco
 		rec.RouteProfile,
 		rec.DefaultBaseProfile,
 		rec.TraceID,
+		rec.SubjectID,
+		rec.SubjectAuthMethod,
 		rec.Error,
 		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
@@ -316,6 +324,169 @@ func (s *Store) UpsertAppAdoption(ctx context.Context, rec types.AppAdoptionReco
 	rec.VerifierResultsJSON = json.RawMessage(resultsJSON)
 	rec.RollbackProfileJSON = json.RawMessage(rollbackJSON)
 	return rec, nil
+}
+
+// PromotionTransactionInput carries the two records that a promotion must
+// apply atomically: the adoption record (advanced to adopted/rolled-back) and
+// the computer source lineage (advanced to the new active ref). The store
+// commits both in a single database transaction so a failure between the two
+// writes cannot leave a half-promoted state.
+type PromotionTransactionInput struct {
+	Adoption types.AppAdoptionRecord
+	Lineage  types.ComputerSourceLineageRecord
+}
+
+// PromoteAppAdoptionTransaction applies the adoption status update and the
+// lineage advancement in a single database transaction. Either both commits
+// or neither commits — there is no half-promoted state. This is the
+// transaction-semantics hardening for the promotion protected surface.
+func (s *Store) PromoteAppAdoptionTransaction(ctx context.Context, in PromotionTransactionInput) (types.AppAdoptionRecord, types.ComputerSourceLineageRecord, error) {
+	if s == nil || s.db == nil {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: store is unavailable")
+	}
+	if in.Adoption.OwnerID == "" {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: owner_id is required")
+	}
+	if in.Adoption.AdoptionID == "" {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: adoption_id is required")
+	}
+	if in.Lineage.OwnerID == "" || in.Lineage.ComputerID == "" {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: lineage owner/computer is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	now := time.Now().UTC()
+	adoption := in.Adoption
+	if adoption.UpdatedAt.IsZero() {
+		adoption.UpdatedAt = now
+	}
+	lineage := in.Lineage
+	lineage.UpdatedAt = now
+	if lineage.CreatedAt.IsZero() {
+		lineage.CreatedAt = now
+	}
+
+	conflictsJSON := rawJSONOrDefault(adoption.MergeConflictsJSON, "[]")
+	resultsJSON := rawJSONOrDefault(adoption.VerifierResultsJSON, "[]")
+	rollbackJSON := rawJSONOrDefault(adoption.RollbackProfileJSON, "{}")
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO app_adoptions (
+			adoption_id, owner_id, package_id, app_id, target_computer_id,
+			target_computer_kind, target_candidate_id, status,
+			target_active_source_ref_at_candidate_start,
+			target_active_source_ref_at_cutover, candidate_source_ref,
+			foreground_tail_merge_result, merge_strategy, merge_conflicts_json,
+			runtime_artifact_digest, ui_artifact_digest, verifier_results_json,
+			rollback_profile_json, route_profile, default_base_profile, trace_id,
+			subject_id, subject_auth_method, error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			owner_id = VALUES(owner_id),
+			package_id = VALUES(package_id),
+			app_id = VALUES(app_id),
+			target_computer_id = VALUES(target_computer_id),
+			target_computer_kind = VALUES(target_computer_kind),
+			target_candidate_id = VALUES(target_candidate_id),
+			status = VALUES(status),
+			target_active_source_ref_at_candidate_start = VALUES(target_active_source_ref_at_candidate_start),
+			target_active_source_ref_at_cutover = VALUES(target_active_source_ref_at_cutover),
+			candidate_source_ref = VALUES(candidate_source_ref),
+			foreground_tail_merge_result = VALUES(foreground_tail_merge_result),
+			merge_strategy = VALUES(merge_strategy),
+			merge_conflicts_json = VALUES(merge_conflicts_json),
+			runtime_artifact_digest = VALUES(runtime_artifact_digest),
+			ui_artifact_digest = VALUES(ui_artifact_digest),
+			verifier_results_json = VALUES(verifier_results_json),
+			rollback_profile_json = VALUES(rollback_profile_json),
+			route_profile = VALUES(route_profile),
+			default_base_profile = VALUES(default_base_profile),
+			trace_id = VALUES(trace_id),
+			subject_id = VALUES(subject_id),
+			subject_auth_method = VALUES(subject_auth_method),
+			error = VALUES(error),
+			updated_at = VALUES(updated_at)`,
+		adoption.AdoptionID,
+		adoption.OwnerID,
+		adoption.PackageID,
+		adoption.AppID,
+		adoption.TargetComputerID,
+		adoption.TargetComputerKind,
+		adoption.TargetCandidateID,
+		adoption.Status,
+		adoption.TargetActiveSourceRefAtCandidateStart,
+		adoption.TargetActiveSourceRefAtCutover,
+		adoption.CandidateSourceRef,
+		adoption.ForegroundTailMergeResult,
+		adoption.MergeStrategy,
+		conflictsJSON,
+		adoption.RuntimeArtifactDigest,
+		adoption.UIArtifactDigest,
+		resultsJSON,
+		rollbackJSON,
+		adoption.RouteProfile,
+		adoption.DefaultBaseProfile,
+		adoption.TraceID,
+		adoption.SubjectID,
+		adoption.SubjectAuthMethod,
+		adoption.Error,
+		adoption.CreatedAt.UTC().Format(time.RFC3339Nano),
+		adoption.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: upsert adoption: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO computer_source_lineages (
+			owner_id, computer_id, computer_kind, active_source_ref, runtime_digest,
+			ui_digest, route_profile, default_base_profile, last_adoption_id,
+			last_package_id, last_candidate_ref, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			computer_kind = VALUES(computer_kind),
+			active_source_ref = VALUES(active_source_ref),
+			runtime_digest = VALUES(runtime_digest),
+			ui_digest = VALUES(ui_digest),
+			route_profile = VALUES(route_profile),
+			default_base_profile = VALUES(default_base_profile),
+			last_adoption_id = VALUES(last_adoption_id),
+			last_package_id = VALUES(last_package_id),
+			last_candidate_ref = VALUES(last_candidate_ref),
+			updated_at = VALUES(updated_at)`,
+		lineage.OwnerID,
+		lineage.ComputerID,
+		lineage.ComputerKind,
+		lineage.ActiveSourceRef,
+		lineage.RuntimeDigest,
+		lineage.UIDigest,
+		lineage.RouteProfile,
+		lineage.DefaultBaseProfile,
+		lineage.LastAdoptionID,
+		lineage.LastPackageID,
+		lineage.LastCandidateRef,
+		lineage.CreatedAt.UTC().Format(time.RFC3339Nano),
+		lineage.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: upsert lineage: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return types.AppAdoptionRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("promote transaction: commit: %w", err)
+	}
+	committed = true
+	adoption.MergeConflictsJSON = json.RawMessage(conflictsJSON)
+	adoption.VerifierResultsJSON = json.RawMessage(resultsJSON)
+	adoption.RollbackProfileJSON = json.RawMessage(rollbackJSON)
+	return adoption, lineage, nil
 }
 
 func (s *Store) GetAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
@@ -422,6 +593,8 @@ func scanAppChangePackage(row interface{ Scan(...any) error }) (types.AppChangeP
 		&contractsJSON,
 		&provenanceJSON,
 		&rec.TraceID,
+		&rec.SubjectID,
+		&rec.SubjectAuthMethod,
 		&createdAt,
 		&updatedAt,
 	)
@@ -470,6 +643,8 @@ func scanAppAdoption(row interface{ Scan(...any) error }) (types.AppAdoptionReco
 		&rec.RouteProfile,
 		&rec.DefaultBaseProfile,
 		&rec.TraceID,
+		&rec.SubjectID,
+		&rec.SubjectAuthMethod,
 		&rec.Error,
 		&createdAt,
 		&updatedAt,
@@ -502,7 +677,8 @@ func appChangePackageSelectSQL() string {
 		       package_manifest_sha256, app_protocol_contract,
 		       app_protocol_contract_sha256, source_runtime_artifact_digest,
 		       source_ui_artifact_digest, manifest_json, verifier_contracts_json,
-		       provenance_refs_json, trace_id, created_at, updated_at
+		       provenance_refs_json, trace_id, subject_id, subject_auth_method,
+		       created_at, updated_at
 		  FROM app_change_packages`
 }
 
@@ -514,6 +690,6 @@ func appAdoptionSelectSQL() string {
 		       foreground_tail_merge_result, merge_strategy, merge_conflicts_json,
 		       runtime_artifact_digest, ui_artifact_digest, verifier_results_json,
 		       rollback_profile_json, route_profile, default_base_profile, trace_id,
-		       error, created_at, updated_at
+		       subject_id, subject_auth_method, error, created_at, updated_at
 		  FROM app_adoptions`
 }

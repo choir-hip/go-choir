@@ -33,6 +33,7 @@ var clientIdentityHeaders = []string{
 	"X-Authenticated-User",
 	"X-Authenticated-Email",
 	"X-Authenticated-Scopes",
+	"X-Authenticated-Auth-Method",
 	"X-User-Id",
 	"X-User-Name",
 	"X-Forwarded-User",
@@ -205,11 +206,16 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		if trustedScopes != "" {
 			req.Header.Set("X-Authenticated-Scopes", trustedScopes)
 		}
+		trustedAuthMethod := req.Header.Get("X-Proxy-Trusted-Auth-Method")
+		if trustedAuthMethod != "" {
+			req.Header.Set("X-Authenticated-Auth-Method", trustedAuthMethod)
+		}
 
 		// Clean up internal proxy headers before forwarding.
 		req.Header.Del("X-Proxy-Trusted-User")
 		req.Header.Del("X-Proxy-Trusted-Email")
 		req.Header.Del("X-Proxy-Trusted-Scopes")
+		req.Header.Del("X-Proxy-Trusted-Auth-Method")
 		req.Header.Del("X-Original-Path")
 		req.Header.Del("X-Original-RawQuery")
 		req.Header.Del("X-Resolved-Sandbox-URL")
@@ -294,6 +300,9 @@ func (h *Handler) setTrustedAuthHeaders(r *http.Request, authResult *AuthResult)
 	}
 	if len(authResult.Scopes) > 0 {
 		r.Header.Set("X-Proxy-Trusted-Scopes", strings.Join(authResult.Scopes, ","))
+	}
+	if authResult.AuthMethod != "" {
+		r.Header.Set("X-Proxy-Trusted-Auth-Method", authResult.AuthMethod)
 	}
 }
 
@@ -758,6 +767,9 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if len(authResult.Scopes) > 0 {
 		sandboxHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
 	}
+	if authResult.AuthMethod != "" {
+		sandboxHeader.Set("X-Authenticated-Auth-Method", authResult.AuthMethod)
+	}
 
 	dialStarted := time.Now()
 	sandboxConn, _, err := h.dialer.Dial(sandboxWSURL, sandboxHeader)
@@ -863,6 +875,9 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(authResult.Scopes) > 0 {
 		sandboxHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
+	}
+	if authResult.AuthMethod != "" {
+		sandboxHeader.Set("X-Authenticated-Auth-Method", authResult.AuthMethod)
 	}
 
 	sandboxConn, _, err := h.dialer.Dial(terminalWSURL, sandboxHeader)
