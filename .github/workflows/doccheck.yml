@@ -41,7 +41,7 @@ jobs:
         run: test -s doccheck-report.md && test -s doccheck.json
 
       - name: Upload doccheck reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: doccheck-report
           path: |

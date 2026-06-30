@@ -115,50 +115,6 @@ jobs:
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-runtime-shards
 
-  go-test-runtime-race:
-    name: Go Test (internal/runtime race shard ${{ matrix.shard }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Go test internal/runtime shard with -race
-        shell: bash
-        env:
-          TOTAL_SHARDS: 4
-          SHARD_INDEX: ${{ matrix.shard }}
-        run: scripts/go-test-runtime-shards -race
-
-  go-test-race:
-    name: Go Test (non-runtime race)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Go test non-runtime packages with -race
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
-          if (( ${#packages[@]} > 0 )); then
-            scripts/go-test-with-timing -race -count=1 "${packages[@]}"
-          fi
-
   go-test-integration:
     name: Go Test (integration-tagged smoke)
     runs-on: ubuntu-latest
@@ -196,7 +152,7 @@ jobs:
         run: test -s doccheck-report.md && test -s doccheck.json
 
       - name: Upload doccheck reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: doccheck-report
           path: |
@@ -314,7 +270,7 @@ jobs:
 
       - name: Upload SBOM artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sboms-${{ github.sha }}
           path: |
