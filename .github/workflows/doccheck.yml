@@ -40,6 +40,8 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run doccheck
         shell: bash

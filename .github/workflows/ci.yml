@@ -27,9 +27,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  go-cache:
-    name: Go Cache Warmup
+  go-cache-refresh:
+    name: Refresh Go Cache
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
 
@@ -69,7 +71,6 @@ jobs:
   go-vet-build:
     name: Go Vet + Build
     runs-on: ubuntu-latest
-    needs: [go-cache]
     steps:
       - uses: actions/checkout@v6
 
@@ -86,6 +87,8 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go vet
         run: go vet ./...
@@ -120,7 +123,6 @@ jobs:
   go-test:
     name: Go Test (non-runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    needs: [go-cache]
     strategy:
       fail-fast: false
       matrix:
@@ -141,6 +143,8 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go test non-runtime shard
         shell: bash
@@ -152,7 +156,6 @@ jobs:
   go-test-runtime:
     name: Go Test (internal/runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    needs: [go-cache]
     strategy:
       fail-fast: false
       matrix:
@@ -173,6 +176,8 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go test internal/runtime shard
         shell: bash
@@ -184,7 +189,6 @@ jobs:
   go-test-integration:
     name: Go Test (integration-tagged smoke)
     runs-on: ubuntu-latest
-    needs: [go-cache]
     steps:
       - uses: actions/checkout@v6
 
@@ -201,6 +205,8 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Go test integration-tagged smoke
         shell: bash
@@ -209,7 +215,6 @@ jobs:
   doccheck:
     name: Docs Truth Check
     runs-on: ubuntu-latest
-    needs: [go-cache]
     steps:
       - uses: actions/checkout@v6
 
@@ -226,6 +231,8 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run doccheck
         shell: bash
