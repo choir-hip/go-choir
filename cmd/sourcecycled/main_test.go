@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,17 +14,53 @@ import (
 	"testing"
 	"time"
 
+	embedded "github.com/dolthub/driver"
 	"github.com/yusefmosiah/go-choir/internal/cycle"
-	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	runtimepkg "github.com/yusefmosiah/go-choir/internal/runtime"
-	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
-	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sources"
-	storepkg "github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+// newTestCycleStorage creates an embedded Dolt-backed cycle.Storage for
+// sourcecycled tests, mirroring the platform package's openTestPlatformStore.
+func newTestCycleStorage(t *testing.T) *cycle.Storage {
+	t.Helper()
+	root := t.TempDir()
+	rootDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)
+	rootCfg, err := embedded.ParseDSN(rootDSN)
+	if err != nil {
+		t.Fatalf("parse root dsn: %v", err)
+	}
+	rootConnector, err := embedded.NewConnector(rootCfg)
+	if err != nil {
+		t.Fatalf("new root connector: %v", err)
+	}
+	rootDB := sql.OpenDB(rootConnector)
+	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS platform"); err != nil {
+		t.Fatalf("create database: %v", err)
+	}
+	_ = rootDB.Close()
+	_ = rootConnector.Close()
+
+	dbDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=platform&multistatements=true&clientfoundrows=true", root)
+	dbCfg, err := embedded.ParseDSN(dbDSN)
+	if err != nil {
+		t.Fatalf("parse db dsn: %v", err)
+	}
+	dbConnector, err := embedded.NewConnector(dbCfg)
+	if err != nil {
+		t.Fatalf("new db connector: %v", err)
+	}
+	db := sql.OpenDB(dbConnector)
+	store, err := cycle.NewStorageFromDB(db)
+	if err != nil {
+		t.Fatalf("bootstrap cycle storage: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+		_ = dbConnector.Close()
+	})
+	return store
+}
 
 func TestUniversalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.T) {
 	path := filepath.Join("..", "..", "configs", "sources.json")
@@ -102,189 +140,6 @@ func TestUniversalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.
 	}
 }
 
-func TestRunCycleWritesSourceItemsToObjectGraphWebCaptures(t *testing.T) {
-	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
-	t.Cleanup(func() { sourcefetch.SetAllowPrivateNetworkForTests(previous) })
-	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", "")
-	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
-	runtimeStorePath := filepath.Join(t.TempDir(), "runtime-store.db")
-	graphPath := filepath.Join(filepath.Dir(runtimeStorePath), filepath.Base(runtimeStorePath)+".objectgraph.db")
-	t.Setenv("RUNTIME_STORE_PATH", runtimeStorePath)
-	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID", "universal-wire-platform")
-	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "computer-universal-wire-platform")
-
-	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = w.Write([]byte(`<?xml version="1.0"?>
-<rss version="2.0">
-  <channel>
-    <title>Wire Test Feed</title>
-    <item>
-      <guid>wire-graph-1</guid>
-      <title>Graph ingest story</title>
-      <link>` + "https://example.com/wire-graph-1#frag" + `</link>
-      <description>Sourcecycled persisted this feed item and projected it into objectgraph.</description>
-      <pubDate>Fri, 26 Jun 2026 12:00:00 +0000</pubDate>
-    </item>
-  </channel>
-</rss>`))
-	}))
-	defer feedServer.Close()
-
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
-	defer store.Close()
-	registry := &sources.Registry{
-		UserAgent: "ChoirTest/1.0",
-		Sources: []sources.Source{{
-			ID:        "rss:wire-test",
-			Type:      sources.SourceTypeRSS,
-			Name:      "Wire Test",
-			URL:       feedServer.URL,
-			Verticals: []string{"wire"},
-			Regions:   []string{"global"},
-		}},
-	}
-	if err := store.SaveSources(registry); err != nil {
-		t.Fatalf("save sources: %v", err)
-	}
-	if got := sourceServiceObjectGraphDBPath(); got != graphPath {
-		t.Fatalf("sourcecycled objectgraph path = %q, want runtime-derived path %q", got, graphPath)
-	}
-	engine = nil
-	t.Cleanup(func() { engine = nil })
-
-	runCycle(context.Background(), registry, store, "")
-
-	graphStore, err := objectgraph.NewSQLiteStore(graphPath)
-	if err != nil {
-		t.Fatalf("open objectgraph store: %v", err)
-	}
-	graph := objectgraph.NewService(objectgraph.Config{Durable: graphStore})
-	defer graph.Close()
-	notTombstoned := false
-	captures, err := graph.ListObjects(context.Background(), objectgraph.ListFilter{
-		Kind:      objectgraph.WebCaptureObjectKind,
-		OwnerID:   "universal-wire-platform",
-		Tombstone: &notTombstoned,
-	})
-	if err != nil {
-		t.Fatalf("list web captures: %v", err)
-	}
-	if len(captures) != 1 {
-		t.Fatalf("captures = %d, want 1: %+v", len(captures), captures)
-	}
-	meta, err := objectgraph.WebCaptureMetadataFromObject(captures[0])
-	if err != nil {
-		t.Fatalf("decode capture metadata: %v", err)
-	}
-	if meta.Title != "Graph ingest story" || meta.CanonicalURL != "https://example.com/wire-graph-1" ||
-		!strings.Contains(string(captures[0].Body), "Sourcecycled persisted this feed item") {
-		t.Fatalf("capture metadata/body = %+v body=%q", meta, captures[0].Body)
-	}
-	edges, err := graph.ListEdges(context.Background(), objectgraph.EdgeFilter{FromID: captures[0].CanonicalID, Kind: "captured_from"})
-	if err != nil {
-		t.Fatalf("list captured_from edges: %v", err)
-	}
-	if len(edges) != 1 {
-		t.Fatalf("captured_from edges = %+v, want one source item edge", edges)
-	}
-
-	runtimeStore, err := storepkg.Open(runtimeStorePath)
-	if err != nil {
-		t.Fatalf("open runtime store: %v", err)
-	}
-	rt := runtimepkg.New(runtimepkg.Config{
-		StorePath:           runtimeStorePath,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
-	}, runtimeStore, events.NewEventBus(), runtimepkg.NewStubProvider(0))
-	handler := runtimepkg.NewAPIHandler(rt)
-	// Project the same items into the runtime's Dolt-backed objectgraph so
-	// the Universal Wire diagnostic substrate reports the capture. The
-	// sourcecycled local SQLite path (tested above) and the runtime Dolt
-	// path are separate stores after Mission 3a; the cycle wrote to the
-	// local SQLite store, so we mirror the items into the runtime here.
-	rtGraph := rt.ObjectGraph()
-	if rtGraph == nil {
-		t.Fatal("runtime objectgraph unavailable")
-	}
-	// Re-fetch items from the test feed and project into the runtime graph.
-	// The cycle already deduped against its own store, so we poll a fresh
-	// engine to get the raw items.
-	freshEngine := cycle.NewEngine(registry)
-	freshPoll := freshEngine.PollAll(context.Background())
-	if _, err := cycle.WriteWebCaptureGraphObjects(context.Background(), rtGraph, freshPoll.Items, cycle.WebCaptureGraphProjectionConfig{
-		OwnerID:    "universal-wire-platform",
-		ComputerID: "computer-universal-wire-platform",
-		Now:        time.Now().UTC(),
-	}); err != nil {
-		t.Fatalf("project items into runtime objectgraph: %v", err)
-	}
-	api := server.NewServer("sourcecycled-wire-proof", "0")
-	runtimepkg.RegisterRoutes(api, handler)
-	req := httptest.NewRequest(http.MethodGet, "/api/universal-wire/stories", nil)
-	req.Header.Set("X-Authenticated-User", "user-universal-wire")
-	rec := httptest.NewRecorder()
-	api.ServeHTTP(rec, req)
-	rt.Stop()
-	_ = runtimeStore.Close()
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", rec.Code, rec.Body.String())
-	}
-	var wireResp struct {
-		Stories     []types.WireStory `json:"stories"`
-		Source      string            `json:"source"`
-		Diagnostics *struct {
-			Status     string `json:"status"`
-			Substrates []struct {
-				Substrate      string `json:"substrate"`
-				State          string `json:"state"`
-				CandidateCount int    `json:"candidate_count"`
-				StoryCount     int    `json:"story_count"`
-				Reason         string `json:"reason"`
-			} `json:"substrates"`
-		} `json:"diagnostics"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &wireResp); err != nil {
-		t.Fatalf("decode Universal Wire stories response: %v", err)
-	}
-	if wireResp.Source != "universal-wire-texture-index" {
-		t.Fatalf("Universal Wire source = %q, want Texture article feed", wireResp.Source)
-	}
-	if len(wireResp.Stories) != 0 {
-		t.Fatalf("Universal Wire stories = %d, want no raw graph captures published as articles: %+v", len(wireResp.Stories), wireResp.Stories)
-	}
-	if wireResp.Diagnostics == nil {
-		t.Fatal("Universal Wire diagnostics = nil, want diagnostic-only graph capture substrate")
-	}
-	var graphDiag struct {
-		Substrate      string
-		State          string
-		CandidateCount int
-		StoryCount     int
-		Reason         string
-	}
-	for _, diag := range wireResp.Diagnostics.Substrates {
-		if diag.Substrate == "web_capture_graph" {
-			graphDiag.Substrate = diag.Substrate
-			graphDiag.State = diag.State
-			graphDiag.CandidateCount = diag.CandidateCount
-			graphDiag.StoryCount = diag.StoryCount
-			graphDiag.Reason = diag.Reason
-			break
-		}
-	}
-	if graphDiag.State != "diagnostic_only" ||
-		graphDiag.CandidateCount != 1 ||
-		graphDiag.StoryCount != 1 ||
-		!strings.Contains(graphDiag.Reason, "does not publish raw capture projections") {
-		t.Fatalf("Universal Wire graph diagnostic = %+v, want diagnostic-only sourcecycled graph capture", graphDiag)
-	}
-}
-
 func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testing.T) {
 	t.Setenv("SOURCECYCLED_VMCTL_PROXY_SOCK", "")
 	t.Setenv("VMCTL_SANDBOX_PROXY_SOCK", "")
@@ -310,10 +165,7 @@ func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testi
 	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", runtimeServer.URL)
 	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
 
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open sourcecycled storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 	cycleID, err := store.StartCycle(context.Background())
 	if err != nil {
@@ -360,71 +212,9 @@ func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testi
 	}
 }
 
-func TestRunCycleBackfillsStoredSourceItemsToEmptyObjectGraph(t *testing.T) {
-	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", "")
-	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
-	runtimeStorePath := filepath.Join(t.TempDir(), "runtime-store.db")
-	graphPath := filepath.Join(filepath.Dir(runtimeStorePath), filepath.Base(runtimeStorePath)+".objectgraph.db")
-	t.Setenv("RUNTIME_STORE_PATH", runtimeStorePath)
-	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID", "universal-wire-platform")
-	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "computer-universal-wire-platform")
-
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
-	defer store.Close()
-	published := time.Date(2026, 6, 26, 12, 30, 0, 0, time.UTC)
-	if err := store.SaveItems([]sources.Item{{
-		ID:           "srcitem_backfill_wire_1",
-		SourceID:     "rss:stored-wire",
-		SourceType:   sources.SourceTypeRSS,
-		FetchID:      "fetch-stored-wire",
-		OriginalID:   "stored-wire-1",
-		Title:        "Stored wire story",
-		Body:         "Stored sourcecycled item should become a graph-backed web capture after an empty cycle.",
-		URL:          "https://example.com/stored-wire#fragment",
-		CanonicalURL: "https://example.com/stored-wire",
-		Published:    published,
-		FetchedAt:    published.Add(2 * time.Minute),
-		Verticals:    []string{"wire"},
-		Language:     "en",
-		Region:       "global",
-	}}); err != nil {
-		t.Fatalf("save stored source item: %v", err)
-	}
-
-	registry := &sources.Registry{UserAgent: "ChoirTest/1.0"}
-	engine = nil
-	t.Cleanup(func() { engine = nil })
-
-	runCycle(context.Background(), registry, store, "")
-	captures := listTestWebCaptures(t, graphPath)
-	if len(captures) != 1 {
-		t.Fatalf("captures after empty-cycle backfill = %d, want 1: %+v", len(captures), captures)
-	}
-	meta, err := objectgraph.WebCaptureMetadataFromObject(captures[0])
-	if err != nil {
-		t.Fatalf("decode backfilled capture metadata: %v", err)
-	}
-	if meta.Title != "Stored wire story" || meta.CanonicalURL != "https://example.com/stored-wire" ||
-		!strings.Contains(string(captures[0].Body), "Stored sourcecycled item should become") {
-		t.Fatalf("backfilled capture metadata/body = %+v body=%q", meta, captures[0].Body)
-	}
-
-	runCycle(context.Background(), registry, store, "")
-	captures = listTestWebCaptures(t, graphPath)
-	if len(captures) != 1 {
-		t.Fatalf("captures after second empty cycle = %d, want existing graph to skip backfill: %+v", len(captures), captures)
-	}
-}
-
 func TestSourceServiceIngestionHandoffLatestIncludesCycleEvents(t *testing.T) {
 	ctx := context.Background()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open sourcecycled storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	cycleID, err := store.StartCycle(ctx)
@@ -462,31 +252,8 @@ func TestSourceServiceIngestionHandoffLatestIncludesCycleEvents(t *testing.T) {
 	}
 }
 
-func listTestWebCaptures(t *testing.T, graphPath string) []objectgraph.Object {
-	t.Helper()
-	graphStore, err := objectgraph.NewSQLiteStore(graphPath)
-	if err != nil {
-		t.Fatalf("open objectgraph store: %v", err)
-	}
-	graph := objectgraph.NewService(objectgraph.Config{Durable: graphStore})
-	defer graph.Close()
-	notTombstoned := false
-	captures, err := graph.ListObjects(context.Background(), objectgraph.ListFilter{
-		Kind:      objectgraph.WebCaptureObjectKind,
-		OwnerID:   "universal-wire-platform",
-		Tombstone: &notTombstoned,
-	})
-	if err != nil {
-		t.Fatalf("list web captures: %v", err)
-	}
-	return captures
-}
-
 func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
@@ -594,10 +361,7 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 }
 
 func TestSourceServiceAPIHealthReportsLedgerCounts(t *testing.T) {
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
@@ -640,10 +404,7 @@ func TestSourceServiceAPIHealthReportsLedgerCounts(t *testing.T) {
 
 func TestSourceServiceAPIIngestionHandoffLatestReportsAgentHandoffs(t *testing.T) {
 	ctx := context.Background()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	cycleID, err := store.StartCycle(ctx)
@@ -703,10 +464,7 @@ func TestSourceServiceAPIIngestionHandoffLatestReportsAgentHandoffs(t *testing.T
 
 func TestSourceServiceAPIIngestionHandoffLatestTreatsNotModifiedAsSuccessfulFetch(t *testing.T) {
 	ctx := context.Background()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	cycleID, err := store.StartCycle(ctx)
@@ -780,10 +538,7 @@ func TestSourceServiceAPIIngestionHandoffLatestTreatsNotModifiedAsSuccessfulFetc
 
 func TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly(t *testing.T) {
 	ctx := context.Background()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	cycleID, err := store.StartCycle(ctx)
@@ -895,10 +650,7 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly(t *testing.T) {
 
 func TestIngestionRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testing.T) {
 	ctx := context.Background()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)
@@ -987,10 +739,7 @@ func TestIngestionRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing
 
 func TestIngestionRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t *testing.T) {
 	ctx := context.Background()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := newTestCycleStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 8, 7, 40, 0, 0, time.UTC)
@@ -1074,11 +823,7 @@ func newDispatcherReconcileFixture(t *testing.T, slug string, liveStatus string)
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	store, err := cycle.NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := newTestCycleStorage(t)
 
 	cycleID, err := store.StartCycle(ctx)
 	if err != nil {

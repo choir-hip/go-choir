@@ -2,7 +2,6 @@ package cycle
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,13 +9,10 @@ import (
 )
 
 func TestSaveIngestionEventsRejectsPromptBarOrigin(t *testing.T) {
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
-	err = store.SaveIngestionEvents(context.Background(), []IngestionEvent{{
+	err := store.SaveIngestionEvents(context.Background(), []IngestionEvent{{
 		EventID:    "ingestionevt_prompt",
 		CycleID:    "cycle_prompt",
 		ArtifactID: "srcitem_prompt",
@@ -51,10 +47,7 @@ func TestBuildIngestionHandoffRequiresIngestionEvents(t *testing.T) {
 
 func TestValidateProcessorRequestIngestionEvents(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	cycleID := "cycle_validate"
@@ -81,10 +74,7 @@ func TestValidateProcessorRequestIngestionEvents(t *testing.T) {
 
 func TestRSSGDELTCurriculumEmitsIngestionEventsAndProcessorHandoff(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("new storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)

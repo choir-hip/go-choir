@@ -21,7 +21,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
 	"github.com/yusefmosiah/go-choir/internal/health"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
@@ -135,9 +134,23 @@ func main() {
 	}
 	log.Printf("Loaded %d sources from registry", len(registry.Sources))
 
-	store, err := cycle.NewStorage(sourceServiceDBPath())
-	if err != nil {
-		log.Fatalf("Failed to initialize source service storage: %v", err)
+	// sourcecycled now depends on the corpusd Dolt SQL server (a TCP
+	// service) instead of a local SQLite file. Retry the connection for
+	// up to ~100s so boot/deploy races against platform-dolt don't make
+	// the daemon exit immediately. Mirrors cmd/platformd's retry loop.
+	dsn := sourceServiceDBDSN()
+	var store *cycle.Storage
+	var storeErr error
+	for attempt := 1; attempt <= 20; attempt++ {
+		store, storeErr = cycle.NewStorage(dsn)
+		if storeErr == nil {
+			break
+		}
+		log.Printf("sourcecycled store: attempt %d/20: %v", attempt, storeErr)
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+	}
+	if storeErr != nil {
+		log.Fatalf("Failed to initialize source service storage: %v", storeErr)
 	}
 	defer store.Close()
 	if err := store.SaveSources(&registry); err != nil {
@@ -220,14 +233,23 @@ func main() {
 	}
 }
 
-func sourceServiceDBPath() string {
-	if dbPath := os.Getenv("SOURCE_SERVICE_DB_PATH"); strings.TrimSpace(dbPath) != "" {
-		return strings.TrimSpace(dbPath)
+func sourceServiceDBDSN() string {
+	if dsn := strings.TrimSpace(os.Getenv("SOURCECYCLED_DOLT_DSN")); dsn != "" {
+		return dsn
 	}
-	if dbPath := os.Getenv("SOURCECYCLED_DB_PATH"); strings.TrimSpace(dbPath) != "" {
-		return strings.TrimSpace(dbPath)
+	if dsn := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_DOLT_DSN")); dsn != "" {
+		return dsn
 	}
-	return "var/sourcecycled.db"
+	// Warn if the legacy SQLite env vars are still set. Per the store-
+	// consolidation mission, pre-launch data is not precious and no
+	// migration is provided — but the ignored env vars must be visible
+	// (invariant I1: no silent failures).
+	for _, key := range []string{"SOURCE_SERVICE_DB_PATH", "SOURCECYCLED_DB_PATH"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			log.Printf("Warning: %s=%s is ignored — sourcecycled now uses corpusd Dolt SQL server (set SOURCECYCLED_DOLT_DSN instead)", key, v)
+		}
+	}
+	return "root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
 }
 
 func sourceServiceAddr() string {
@@ -250,20 +272,6 @@ func sourceServiceConfigPath() string {
 	return filepath.Join("configs", "sources.json")
 }
 
-func sourceServiceObjectGraphDBPath() string {
-	if dbPath := firstEnv("SOURCE_SERVICE_OBJECTGRAPH_DB_PATH", "SOURCECYCLED_OBJECTGRAPH_DB_PATH"); strings.TrimSpace(dbPath) != "" {
-		return strings.TrimSpace(dbPath)
-	}
-	runtimeStorePath := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_STORE_PATH", "RUNTIME_STORE_PATH"))
-	if runtimeStorePath == "" {
-		return ""
-	}
-	if runtimeStorePath == ":memory:" {
-		return ":memory:"
-	}
-	return filepath.Join(filepath.Dir(runtimeStorePath), filepath.Base(runtimeStorePath)+".objectgraph.db")
-}
-
 func sourceServiceObjectGraphOwnerID() string {
 	ownerID := strings.TrimSpace(firstEnv(
 		"SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID",
@@ -283,21 +291,6 @@ func sourceServiceObjectGraphComputerID() string {
 
 func sourceServiceObjectGraphBackfillLimit() int {
 	return parsePositiveInt(firstEnv("SOURCE_SERVICE_OBJECTGRAPH_BACKFILL_LIMIT", "SOURCECYCLED_OBJECTGRAPH_BACKFILL_LIMIT"), defaultObjectGraphBackfillLimit)
-}
-
-func sourcecycledObjectGraphServiceFromEnv() (*objectgraph.Service, string, error) {
-	dbPath := sourceServiceObjectGraphDBPath()
-	if strings.TrimSpace(dbPath) == "" {
-		return nil, "", nil
-	}
-	sqliteStore, err := objectgraph.NewSQLiteStore(dbPath)
-	if err != nil {
-		return nil, dbPath, err
-	}
-	return objectgraph.NewService(objectgraph.Config{
-		Memory: objectgraph.NewMemoryStore(),
-		Durable: sqliteStore,
-	}), dbPath, nil
 }
 
 func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cycleID string, items []sources.Item, now time.Time, eventType, message string) error {
@@ -322,33 +315,7 @@ func projectSourceItemsToObjectGraph(ctx context.Context, items []sources.Item, 
 	if dispatcher := ingestionRuntimeDispatcherFromEnv(); dispatcher != nil && strings.TrimSpace(dispatcher.baseURL) != "" {
 		return dispatcher.projectWebCaptures(ctx, items, now)
 	}
-	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
-	if err != nil {
-		return webCaptureProjectionSummary{}, err
-	}
-	if graph == nil {
-		return webCaptureProjectionSummary{}, nil
-	}
-	result, writeErr := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
-		OwnerID:    sourceServiceObjectGraphOwnerID(),
-		ComputerID: sourceServiceObjectGraphComputerID(),
-		Now:        now,
-	})
-	closeErr := graph.Close()
-	if writeErr != nil {
-		return webCaptureProjectionSummary{}, writeErr
-	}
-	if closeErr != nil {
-		return webCaptureProjectionSummary{}, closeErr
-	}
-	return webCaptureProjectionSummary{
-		Mode:              "sqlite_sidecar",
-		Target:            graphPath,
-		CaptureCount:      len(result.Captures),
-		SourceEntityCount: len(result.SourceEntities),
-		CapturedFromEdges: result.EdgeCount,
-		SkippedItemCount:  result.Skipped,
-	}, nil
+	return webCaptureProjectionSummary{}, nil
 }
 
 func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store *cycle.Storage, cycleID string, now time.Time) error {
@@ -383,73 +350,6 @@ func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store *cycle.S
 		})
 		return nil
 	}
-	graph, graphPath, err := sourcecycledObjectGraphServiceFromEnv()
-	if err != nil {
-		return err
-	}
-	if graph == nil {
-		return nil
-	}
-	closeGraph := true
-	defer func() {
-		if closeGraph {
-			_ = graph.Close()
-		}
-	}()
-	notTombstoned := false
-	existing, err := graph.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:      objectgraph.WebCaptureObjectKind,
-		OwnerID:   sourceServiceObjectGraphOwnerID(),
-		Limit:     1,
-		Tombstone: &notTombstoned,
-	})
-	if err != nil {
-		return err
-	}
-	if len(existing) > 0 {
-		if store != nil {
-			_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfill_skipped", "objectgraph already has Universal Wire web captures", map[string]any{
-				"objectgraph_db_path": graphPath,
-				"existing_count":      len(existing),
-			})
-		}
-		return nil
-	}
-	if store == nil {
-		return nil
-	}
-	items, err := store.SearchItems(ctx, "", sourceServiceObjectGraphBackfillLimit())
-	if err != nil {
-		return err
-	}
-	if len(items) == 0 {
-		_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfill_empty", "no stored source items available for graph backfill", map[string]any{
-			"objectgraph_db_path": graphPath,
-		})
-		return nil
-	}
-	result, err := cycle.WriteWebCaptureGraphObjects(ctx, graph, items, cycle.WebCaptureGraphProjectionConfig{
-		OwnerID:    sourceServiceObjectGraphOwnerID(),
-		ComputerID: sourceServiceObjectGraphComputerID(),
-		Now:        now,
-	})
-	closeErr := graph.Close()
-	closeGraph = false
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	_ = store.RecordCycleEvent(ctx, cycleID, "", "web_captures_graph_backfilled", "stored source items projected to empty objectgraph web captures", map[string]any{
-		"objectgraph_db_path": graphPath,
-		"backfill_limit":      sourceServiceObjectGraphBackfillLimit(),
-		"backfill_item_count": len(items),
-		"capture_count":       len(result.Captures),
-		"source_entity_count": len(result.SourceEntities),
-		"captured_from_edges": result.EdgeCount,
-		"skipped_item_count":  result.Skipped,
-	})
 	return nil
 }
 
@@ -501,9 +401,9 @@ func ingestionQueueDrainIntervalFromEnv() time.Duration {
 }
 
 const (
-	defaultSourceCycledRSSInterval     = 5 * time.Minute
+	defaultSourceCycledRSSInterval      = 5 * time.Minute
 	defaultSourceCycledTelegramInterval = 5 * time.Minute
-	defaultSourceCycledGDELTInterval   = 15 * time.Minute
+	defaultSourceCycledGDELTInterval    = 15 * time.Minute
 )
 
 // sourceCycledRSSIntervalFromEnv resolves the RSS poll interval. Accepts
