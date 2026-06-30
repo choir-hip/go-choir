@@ -1124,3 +1124,58 @@ nodes:
   enables: []
   sources:
   - docs/mission-portfolio-2026-06-11.md
+- id: news-live-pr-merge-model-default-v0
+  title: 'Mission: News Live — PR Merge Model Default v0'
+  path: docs/mission-news-live-pr-merge-model-default-v0.md
+  ledger: docs/mission-news-live-pr-merge-model-default-v0.ledger.md
+  status: working
+  kind: spine
+  depends_on:
+  - portfolio-2026-06-11
+  enables:
+  - store-consolidation-v0
+  sources:
+  - docs/choir-doctrine.md
+  - docs/computer-ontology.md
+  - AGENTS.md
+- id: bootstrap-admin-api-key-v0
+  title: 'Mission: Bootstrap Admin API Key v0'
+  path: docs/mission-bootstrap-admin-api-key-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on:
+  - news-live-pr-merge-model-default-v0
+  enables: []
+  sources:
+  - docs/mission-news-live-pr-merge-model-default-v0.md
+- id: platform-vm-unhealthy-no-new-articles-v0
+  title: 'Problem: Platform VM Unhealthy — No New Articles v0'
+  path: docs/problem-platform-vm-unhealthy-no-new-articles-v0.md
+  ledger: ''
+  status: settled
+  kind: side
+  depends_on:
+  - news-live-pr-merge-model-default-v0
+  enables:
+  - store-consolidation-v0
+  sources:
+  - docs/mission-news-live-pr-merge-model-default-v0.md
+- id: store-consolidation-v0
+  title: 'Mission: Store Consolidation, Host Sandbox Deletion, and corpusd Rename v0'
+  path: docs/mission-store-consolidation-v0.md
+  ledger: docs/mission-store-consolidation-v0.ledger.md
+  status: working
+  kind: spine
+  depends_on:
+  - news-live-pr-merge-model-default-v0
+  - platform-vm-unhealthy-no-new-articles-v0
+  enables: []
+  sources:
+  - docs/computer-ontology.md
+  - docs/naming-rectification-2026-06-27.md
+  - docs/vision-choir-category-texture-transclusion-v0.md
+  - docs/choir-architecture-review-next-moves-2026-06-11.md
+  - docs/production-readiness-checklist.md
+  - docs/plan-store-consolidation-and-host-sandbox-deletion-v0.md
+  - AGENTS.md

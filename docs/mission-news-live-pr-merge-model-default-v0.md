@@ -202,10 +202,14 @@ invariants / qualities / domain ramp (I/Q/D):
   Q: CI passes before merge, model policy tests pass, news diagnosis is
      definitive, doc cleanup recorded
   D: staging (choir.news) is the acceptance environment
-variant (conjecture descent) V: 4 undecided conjectures (C2, C4, C5, C6, C7
-  landing pending); C1 settled (PRs #19/#20/#21/#23/#26/#28 on main, CI
-  green); C3 settled (model policy on main 22270323, tests pass);
-  last ΔV: -2 (C1, C3 settled by landing on main)
+variant (conjecture descent) V: 1 undecided conjecture (C2 deferred); C1
+  settled (PRs #19/#20/#21/#23/#26/#28 on main, CI green); C3 settled
+  (model policy on main 22270323, tests pass); C4 settled (diagnosis
+  definitive: edition alias not bootstrapped); C5 settled (41 real articles
+  on choir.news via CLI, edition bootstrapped, PR #31 deployed 11ef013e);
+  C6 settled (51 docs deleted, doccheck clean); C7 settled (155 docs
+  archived, doccheck clean); last ΔV: -5 (C4, C5, C6, C7 settled by
+  landing + staging proof)
 budget: granted=8h overnight; spent=partial; remaining=solvent for landing + CLI
 authority / bounds: see Authority section above; extended to build the
   graph-native /api/v1/ surface and the choir CLI (new Track D, see below)
