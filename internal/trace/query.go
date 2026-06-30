@@ -36,6 +36,14 @@ func NewQueries(s Store) *Queries {
 // guard against cycles. The returned slice is ordered root-first. If the event
 // has no parent, the slice contains only the event itself.
 func (q *Queries) ParentChain(ctx context.Context, id string, maxDepth int) ([]Event, error) {
+	return q.parentChain(ctx, "", id, maxDepth)
+}
+
+func (q *Queries) parentChainForOwner(ctx context.Context, ownerID, id string, maxDepth int) ([]Event, error) {
+	return q.parentChain(ctx, strings.TrimSpace(ownerID), id, maxDepth)
+}
+
+func (q *Queries) parentChain(ctx context.Context, ownerID, id string, maxDepth int) ([]Event, error) {
 	if maxDepth <= 0 {
 		maxDepth = 64
 	}
@@ -47,7 +55,7 @@ func (q *Queries) ParentChain(ctx context.Context, id string, maxDepth int) ([]E
 			return nil, fmt.Errorf("trace query: parent chain cycle at %s", current)
 		}
 		visited[current] = struct{}{}
-		ev, err := q.store.Get(ctx, current)
+		ev, err := q.getEvent(ctx, ownerID, current)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				if i == 0 {
@@ -68,6 +76,13 @@ func (q *Queries) ParentChain(ctx context.Context, id string, maxDepth int) ([]E
 	return chain, nil
 }
 
+func (q *Queries) getEvent(ctx context.Context, ownerID, id string) (*Event, error) {
+	if ownerID != "" {
+		return q.store.GetForOwner(ctx, ownerID, id)
+	}
+	return q.store.Get(ctx, id)
+}
+
 // OwnerResolver extracts the authenticated owner id from a request. The runtime
 // supplies its own resolver (wrapping authenticateUser). The default resolver
 // reads the owner_id query parameter, which is suitable for tests and internal
@@ -86,9 +101,9 @@ func DefaultOwnerResolver(r *http.Request) string {
 //   - GET /api/trace/events?run_id=...[&limit=N]   list events for a run
 //   - GET /api/trace/events/{id}                   single event with parent chain
 type HTTPHandler struct {
-	queries   *Queries
-	owner     OwnerResolver
-	maxLimit  int
+	queries      *Queries
+	owner        OwnerResolver
+	maxLimit     int
 	defaultLimit int
 }
 
@@ -145,16 +160,21 @@ func (h *HTTPHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		limit = h.maxLimit
 	}
 
-	events, err := h.queries.store.ListByRun(r.Context(), runID, limit)
+	events, err := h.queries.store.ListByRunForOwner(r.Context(), ownerID, runID, limit)
 	if err != nil {
 		writeTraceJSON(w, http.StatusInternalServerError, traceAPIError{Error: "failed to list trace events"})
 		return
 	}
-	// Owner scoping: ListByRun is run-scoped; verify the first event belongs to
-	// the authenticated owner. If the run has no events, return an empty list.
-	if len(events) > 0 && strings.TrimSpace(events[0].OwnerID) != ownerID {
-		writeTraceJSON(w, http.StatusNotFound, traceAPIError{Error: "trace events not found"})
-		return
+	if len(events) == 0 {
+		anyEvents, err := h.queries.store.ListByRun(r.Context(), runID, 1)
+		if err != nil {
+			writeTraceJSON(w, http.StatusInternalServerError, traceAPIError{Error: "failed to list trace events"})
+			return
+		}
+		if len(anyEvents) > 0 {
+			writeTraceJSON(w, http.StatusNotFound, traceAPIError{Error: "trace events not found"})
+			return
+		}
 	}
 	writeTraceJSON(w, http.StatusOK, traceEventListResponse{Events: events})
 }
@@ -170,7 +190,7 @@ func (h *HTTPHandler) handleSingle(w http.ResponseWriter, r *http.Request, id st
 		writeTraceJSON(w, http.StatusBadRequest, traceAPIError{Error: "event id is required"})
 		return
 	}
-	ev, err := h.queries.store.Get(r.Context(), id)
+	ev, err := h.queries.store.GetForOwner(r.Context(), ownerID, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeTraceJSON(w, http.StatusNotFound, traceAPIError{Error: "trace event not found"})
@@ -179,11 +199,7 @@ func (h *HTTPHandler) handleSingle(w http.ResponseWriter, r *http.Request, id st
 		writeTraceJSON(w, http.StatusInternalServerError, traceAPIError{Error: "failed to load trace event"})
 		return
 	}
-	if strings.TrimSpace(ev.OwnerID) != ownerID {
-		writeTraceJSON(w, http.StatusNotFound, traceAPIError{Error: "trace event not found"})
-		return
-	}
-	chain, err := h.queries.ParentChain(r.Context(), id, 64)
+	chain, err := h.queries.parentChainForOwner(r.Context(), ownerID, id, 64)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		// A chain walk failure should not mask the event itself; return the
 		// event with an empty chain and surface the error in the response.
@@ -201,7 +217,7 @@ type traceEventListResponse struct {
 }
 
 type traceEventDetailResponse struct {
-	Event      *Event  `json:"event"`
+	Event       *Event  `json:"event"`
 	ParentChain []Event `json:"parent_chain,omitempty"`
 }
 

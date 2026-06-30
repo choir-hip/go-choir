@@ -180,8 +180,15 @@ type Store interface {
 	// Get returns a single trace event by id. Returns ErrNotFound when absent.
 	Get(ctx context.Context, id string) (*Event, error)
 
+	// GetForOwner returns a single trace event owned by ownerID.
+	GetForOwner(ctx context.Context, ownerID, id string) (*Event, error)
+
 	// ListByRun returns events for the given run, ordered by seq ascending.
 	ListByRun(ctx context.Context, runID string, limit int) ([]Event, error)
+
+	// ListByRunForOwner returns events for the given owner and run, ordered by
+	// seq ascending.
+	ListByRunForOwner(ctx context.Context, ownerID, runID string, limit int) ([]Event, error)
 
 	// ListByOwner returns events for the given owner, ordered by created_at
 	// descending.
@@ -316,6 +323,31 @@ func (s *SQLStore) Get(ctx context.Context, id string) (*Event, error) {
 	return ev, nil
 }
 
+// GetForOwner returns a single trace event by id and owner.
+func (s *SQLStore) GetForOwner(ctx context.Context, ownerID, id string) (*Event, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return nil, fmt.Errorf("trace store: owner_id is required")
+	}
+	if strings.TrimSpace(id) == "" {
+		return nil, fmt.Errorf("trace store: id is required")
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, run_id, parent_id, event_type, actor, tool, owner_id, trajectory_id, seq, stream_seq, payload, created_at
+		   FROM trace_events
+		  WHERE owner_id = ? AND id = ?`,
+		ownerID,
+		id,
+	)
+	ev, err := scanTraceEvent(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("trace store: get owner event: %w", err)
+	}
+	return ev, nil
+}
+
 // ListByRun returns events for the given run, ordered by seq ascending.
 func (s *SQLStore) ListByRun(ctx context.Context, runID string, limit int) ([]Event, error) {
 	if strings.TrimSpace(runID) == "" {
@@ -335,6 +367,34 @@ func (s *SQLStore) ListByRun(ctx context.Context, runID string, limit int) ([]Ev
 	)
 	if err != nil {
 		return nil, fmt.Errorf("trace store: query by run: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return collectTraceEvents(rows)
+}
+
+// ListByRunForOwner returns events for the given owner and run, ordered by seq ascending.
+func (s *SQLStore) ListByRunForOwner(ctx context.Context, ownerID, runID string, limit int) ([]Event, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return nil, fmt.Errorf("trace store: owner_id is required")
+	}
+	if strings.TrimSpace(runID) == "" {
+		return nil, fmt.Errorf("trace store: run_id is required")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, run_id, parent_id, event_type, actor, tool, owner_id, trajectory_id, seq, stream_seq, payload, created_at
+		   FROM trace_events
+		  WHERE owner_id = ? AND run_id = ?
+		  ORDER BY seq ASC, created_at ASC
+		  LIMIT ?`,
+		ownerID,
+		runID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("trace store: query by owner run: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return collectTraceEvents(rows)

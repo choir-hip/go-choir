@@ -17,10 +17,10 @@ import (
 // records appended events and can be configured to fail on Append to exercise
 // graceful degradation.
 type stubTraceStore struct {
-	appended []trace.Event
+	appended  []trace.Event
 	appendErr error
-	getErr   error
-	closed   bool
+	getErr    error
+	closed    bool
 }
 
 func (s *stubTraceStore) Append(_ context.Context, e *trace.Event) error {
@@ -44,7 +44,22 @@ func (s *stubTraceStore) Get(_ context.Context, id string) (*trace.Event, error)
 	return nil, trace.ErrNotFound
 }
 
+func (s *stubTraceStore) GetForOwner(ctx context.Context, ownerID, id string) (*trace.Event, error) {
+	ev, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ev.OwnerID != ownerID {
+		return nil, trace.ErrNotFound
+	}
+	return ev, nil
+}
+
 func (s *stubTraceStore) ListByRun(context.Context, string, int) ([]trace.Event, error) {
+	return nil, nil
+}
+
+func (s *stubTraceStore) ListByRunForOwner(context.Context, string, string, int) ([]trace.Event, error) {
 	return nil, nil
 }
 
@@ -111,14 +126,14 @@ func TestEmitEventProjectsToTraceStore(t *testing.T) {
 	defer cleanup()
 
 	rec := &types.RunRecord{
-		RunID:      "run-trace-1",
-		AgentID:    "agent-trace",
-		ChannelID:  "chan-trace",
-		OwnerID:    "user-alice",
-		SandboxID:  "sandbox-trace-test",
-		State:      types.RunRunning,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		RunID:     "run-trace-1",
+		AgentID:   "agent-trace",
+		ChannelID: "chan-trace",
+		OwnerID:   "user-alice",
+		SandboxID: "sandbox-trace-test",
+		State:     types.RunRunning,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -293,6 +308,26 @@ func TestPersistSubmittedRunProjectsToTraceStore(t *testing.T) {
 	}
 	if ts.appended[0].RunID != "run-sub-1" {
 		t.Fatalf("trace run id mismatch: %s", ts.appended[0].RunID)
+	}
+}
+
+func TestEmitProductEventProjectsToTraceStore(t *testing.T) {
+	ts := &stubTraceStore{}
+	rt, cleanup := newTraceWiringRuntime(t, ts)
+	defer cleanup()
+
+	_, err := rt.EmitProductEvent(context.Background(), "user-alice", "desktop-a", types.EventFileChanged, map[string]any{
+		"path": "notes.txt",
+	})
+	if err != nil {
+		t.Fatalf("EmitProductEvent: %v", err)
+	}
+	if len(ts.appended) != 1 {
+		t.Fatalf("expected 1 trace event, got %d", len(ts.appended))
+	}
+	got := ts.appended[0]
+	if got.EventType != string(types.EventFileChanged) || got.OwnerID != "user-alice" {
+		t.Fatalf("trace event mismatch: %+v", got)
 	}
 }
 

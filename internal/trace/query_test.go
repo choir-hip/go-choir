@@ -15,9 +15,9 @@ func seedChain(t *testing.T, s *SQLStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
 	events := []struct {
-		id       string
-		kind     string
-		parent   string
+		id        string
+		kind      string
+		parent    string
 		offsetMin int
 	}{
 		{"root", "tool.invoked", "", 0},
@@ -176,6 +176,40 @@ func TestHTTPHandlerListOwnerScopedNotFound(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerListByRunFiltersMixedOwnerEvents(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
+
+	alice := sampleEvent("alice-root", "run-mixed", "tool.invoked", base)
+	alice.Seq = 1
+	if err := s.Append(ctx, &alice); err != nil {
+		t.Fatalf("Append alice: %v", err)
+	}
+	bob := sampleEvent("bob-leaf", "run-mixed", "tool.result", base.Add(time.Minute))
+	bob.OwnerID = "user-bob"
+	bob.Seq = 2
+	if err := s.Append(ctx, &bob); err != nil {
+		t.Fatalf("Append bob: %v", err)
+	}
+
+	h := NewHTTPHandler(s, func(*http.Request) string { return "user-alice" })
+	req := httptest.NewRequest(http.MethodGet, "/api/trace/events?run_id=run-mixed", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: %d body: %s", rec.Code, rec.Body.String())
+	}
+	var resp traceEventListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Events) != 1 || resp.Events[0].ID != "alice-root" {
+		t.Fatalf("mixed owner list leaked or omitted events: %+v", resp.Events)
+	}
+}
+
 func TestHTTPHandlerSingleWithChain(t *testing.T) {
 	s := newTestStore(t)
 	seedChain(t, s)
@@ -200,6 +234,39 @@ func TestHTTPHandlerSingleWithChain(t *testing.T) {
 	}
 	if resp.ParentChain[0].ID != "root" || resp.ParentChain[2].ID != "leaf" {
 		t.Fatalf("chain order mismatch: %+v", resp.ParentChain)
+	}
+}
+
+func TestHTTPHandlerSingleParentChainOmitsCrossOwnerParent(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
+
+	parent := sampleEvent("bob-parent", "run-cross-parent", "tool.invoked", base)
+	parent.OwnerID = "user-bob"
+	if err := s.Append(ctx, &parent); err != nil {
+		t.Fatalf("Append parent: %v", err)
+	}
+	child := sampleEvent("alice-child", "run-cross-parent", "tool.result", base.Add(time.Minute))
+	child.ParentID = parent.ID
+	if err := s.Append(ctx, &child); err != nil {
+		t.Fatalf("Append child: %v", err)
+	}
+
+	h := NewHTTPHandler(s, func(*http.Request) string { return "user-alice" })
+	req := httptest.NewRequest(http.MethodGet, "/api/trace/events/alice-child", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: %d body: %s", rec.Code, rec.Body.String())
+	}
+	var resp traceEventDetailResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.ParentChain) != 1 || resp.ParentChain[0].ID != "alice-child" {
+		t.Fatalf("cross-owner parent leaked in chain: %+v", resp.ParentChain)
 	}
 }
 

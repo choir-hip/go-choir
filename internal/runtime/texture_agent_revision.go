@@ -28,9 +28,10 @@ import (
 // creates a new canonical revision attributable to the appagent
 // (VAL-ETEXT-003).
 type textureAgentRevisionRequest struct {
-	Intent         string                `json:"intent,omitempty"`
-	Prompt         string                `json:"prompt,omitempty"`
-	SourceEntities []textureSourceEntity `json:"-"`
+	Intent           string                `json:"intent,omitempty"`
+	Prompt           string                `json:"prompt,omitempty"`
+	RequestedByRunID string                `json:"-"`
+	SourceEntities   []textureSourceEntity `json:"-"`
 }
 
 // textureAgentRevisionResponse is the JSON response for agent revision
@@ -399,8 +400,17 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 	}
 
+	var recentWorkerMessages []ChannelMessage
+	if workerWake {
+		messages, err := rt.recentWorkerMessages(ctx, ownerID, doc.DocID, 12)
+		if err != nil {
+			log.Printf("texture api: load recent worker messages for doc %s: %v", doc.DocID, err)
+		} else {
+			recentWorkerMessages = messages
+		}
+	}
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, nil, nil)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, recentWorkerMessages, nil)
 
 	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -418,6 +428,20 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		"original_prompt":      strings.TrimSpace(req.Prompt),
 		"texture_context_mode": contextMode,
 		"texture_prompt_chars": len(agentPrompt),
+	}
+	requestedByRunID := strings.TrimSpace(req.RequestedByRunID)
+	if requestedByRunID == "" {
+		requestedByRunID = metadataString(metadata, "requested_by_run_id")
+	}
+	if requestedByRunID == "" {
+		if conductorLoopID := metadataString(metadata, "conductor_loop_id"); conductorLoopID != "" {
+			if _, err := rt.Store().GetRun(ctx, conductorLoopID); err == nil {
+				requestedByRunID = conductorLoopID
+			}
+		}
+	}
+	if requestedByRunID != "" {
+		runMetadata["requested_by_run_id"] = requestedByRunID
 	}
 	if rt != nil && rt.cfg.TextureActorParkIdle > 0 {
 		runMetadata["actor_park_on_idle"] = true
@@ -457,6 +481,13 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	for _, key := range durableMetadataKeys {
 		if val, ok := metadata[key]; ok && val != nil && val != "" {
 			runMetadata[key] = val
+		}
+	}
+	if requestedByRunID != "" && metadataStringValue(runMetadata, runMetadataTrajectoryID) == "" {
+		if parentRun, err := rt.Store().GetRun(ctx, requestedByRunID); err == nil {
+			if trajectoryID := trajectoryIDForRun(&parentRun); trajectoryID != "" {
+				runMetadata[runMetadataTrajectoryID] = trajectoryID
+			}
 		}
 	}
 	promoteCanonicalTextureSourcePath(runMetadata, metadata)
@@ -1155,7 +1186,7 @@ func (rt *Runtime) emitTextureAgentEvent(ctx context.Context, rec *types.RunReco
 		Kind:         kind,
 		Payload:      payload,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist texture agent event: %v", err)
 		return
 	}
@@ -1183,7 +1214,7 @@ func (rt *Runtime) emitTextureDocumentRevisionEvent(ctx context.Context, ownerID
 		Kind:      types.EventTextureDocumentRevisionCreated,
 		Payload:   payload,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist texture document revision event: %v", err)
 		return
 	}
@@ -1220,7 +1251,7 @@ func (rt *Runtime) emitTextureDocumentRevisionEventForRun(ctx context.Context, r
 		Kind:         types.EventTextureDocumentRevisionCreated,
 		Payload:      payload,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist texture document revision event: %v", err)
 		return
 	}
@@ -1262,7 +1293,7 @@ func (rt *Runtime) emitTextureDecisionRecordedEvent(ctx context.Context, rec *ty
 		Kind:         types.EventTextureDecisionRecorded,
 		Payload:      payload,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		log.Printf("runtime: persist Texture decision event: %v", err)
 		return
 	}

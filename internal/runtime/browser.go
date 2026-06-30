@@ -500,7 +500,7 @@ func (rt *Runtime) emitBrowserSessionEvent(ctx context.Context, rec types.Browse
 		Phase:        phase,
 		Payload:      raw,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := rt.appendEventRecord(ctx, evRec); err != nil {
 		return
 	}
 	rt.bus.Publish(events.RuntimeEvent{
