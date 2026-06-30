@@ -867,7 +867,18 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 			return cpu, mem
 		}
 	}
+	if own != nil && isPlatformOwnership(own) {
+		return platformVMCPUCount, platformVMMemSizeMib
+	}
 	return interactiveVMCPUCount, interactiveVMMemSizeMib
+}
+
+func isPlatformOwnership(own *VMOwnership) bool {
+	if own == nil {
+		return false
+	}
+	return own.WarmnessClass == WarmnessClassPublicPlatform ||
+		(own.UserID == UniversalWirePlatformOwnerID && normalizeDesktopID(own.DesktopID) == UniversalWirePlatformDesktopID)
 }
 
 func computerKindForOwnership(own *VMOwnership) string {
@@ -877,8 +888,7 @@ func computerKindForOwnership(own *VMOwnership) string {
 	if own.Kind == VMKindWorker {
 		return "worker"
 	}
-	if own.WarmnessClass == WarmnessClassPublicPlatform ||
-		(own.UserID == UniversalWirePlatformOwnerID && normalizeDesktopID(own.DesktopID) == UniversalWirePlatformDesktopID) {
+	if isPlatformOwnership(own) {
 		return "platform"
 	}
 	if own.ParentVMID != "" || own.ParentDesktopID != "" || normalizeDesktopID(own.DesktopID) != PrimaryDesktopID || own.WarmnessClass == WarmnessClassCandidate {
@@ -1122,6 +1132,8 @@ const (
 	activeResolvePendingRouteGrace         = 3 * time.Minute
 	interactiveVMCPUCount                  = 2
 	interactiveVMMemSizeMib                = 2048
+	platformVMCPUCount                     = 2
+	platformVMMemSizeMib                   = 4096
 )
 
 func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {

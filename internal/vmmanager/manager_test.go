@@ -78,7 +78,12 @@ func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) 
 	if got.SourceVMID != "" {
 		t.Fatalf("refresh config kept stale source VM copy request: %+v", got)
 	}
-	if got.VMID != old.VMID || got.PersistentDir != old.PersistentDir || got.GuestPort != old.GuestPort || got.MachineMemSizeMib != old.MachineMemSizeMib || got.ComputerKind != old.ComputerKind || got.OwnerID != old.OwnerID {
+	// Machine shape (CPU/mem) is cleared so refresh picks up current manager
+	// defaults (e.g., when VM_MEM_MIB changes between deploys).
+	if got.MachineCPUCount != 0 || got.MachineMemSizeMib != 0 {
+		t.Fatalf("refresh config kept stale machine shape: %+v", got)
+	}
+	if got.VMID != old.VMID || got.PersistentDir != old.PersistentDir || got.GuestPort != old.GuestPort || got.ComputerKind != old.ComputerKind || got.OwnerID != old.OwnerID {
 		t.Fatalf("refresh config did not preserve VM identity and mutable state fields: %+v", got)
 	}
 }
