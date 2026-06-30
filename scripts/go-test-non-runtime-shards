@@ -3,7 +3,7 @@
 #
 # Splits all non-runtime packages across TOTAL_SHARDS runners. Each runner
 # builds and tests only its assigned packages, reducing wall-clock CI time
-# versus running all 51 non-runtime packages in a single serial job.
+# versus running all non-runtime packages in a single serial job.
 #
 # Usage in CI:
 #   env:
@@ -27,13 +27,38 @@ if (( ${#all_packages[@]} == 0 )); then
   exit 0
 fi
 
+store_package="github.com/yusefmosiah/go-choir/internal/store"
+duration_balanced=0
+if (( total_shards == 3 )); then
+  for package in "${all_packages[@]}"; do
+    if [[ "$package" == "$store_package" ]]; then
+      duration_balanced=1
+      break
+    fi
+  done
+fi
+
 run_shard() {
   local shard_index="$1"
   shift
   local -a selected=()
+  local non_store_index=0
   for i in "${!all_packages[@]}"; do
-    if (( i % total_shards == shard_index )); then
-      selected+=("${all_packages[$i]}")
+    local package="${all_packages[$i]}"
+    local package_shard
+    if (( duration_balanced )); then
+      if [[ "$package" == "$store_package" ]]; then
+        package_shard=0
+      else
+        package_shard=$(( (non_store_index % (total_shards - 1)) + 1 ))
+        non_store_index=$((non_store_index + 1))
+      fi
+    else
+      package_shard=$(( i % total_shards ))
+    fi
+
+    if (( package_shard == shard_index )); then
+      selected+=("$package")
     fi
   done
 
@@ -42,6 +67,9 @@ run_shard() {
     return 0
   fi
 
+  if (( duration_balanced )); then
+    echo "Using duration-aware non-runtime split: ${store_package} isolated in shard 0"
+  fi
   echo "Running ${#selected[@]} of ${#all_packages[@]} non-runtime packages in shard ${shard_index}/${total_shards}"
   "$(dirname "$0")/go-test-with-timing" -count=1 "${selected[@]}" "$@"
 }
