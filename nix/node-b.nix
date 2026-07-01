@@ -634,6 +634,28 @@ in
   # All runtime work happens in VMs via vmctl. The proxy's SandboxURL
   # fallback (PROXY_SANDBOX_URL) will fail with a visible connection error
   # if vmctl is unavailable (I3: no silent failures).
+  #
+  # The sandbox binary is still built and packaged (goChoirPackages.sandbox)
+  # because it runs inside Firecracker VMs (nix/sandbox-vm.nix). vmctl serves
+  # it to VMs from /var/lib/go-choir/services/sandbox. Since the systemd
+  # service is gone, node-b-sync-service-pointers can no longer discover the
+  # package via systemctl show. This activation script installs the pointer
+  # directly from the Nix closure on every NixOS switch.
+  system.activationScripts.go-choir-sandbox-package-pointer = ''
+    mkdir -p /var/lib/go-choir/services
+    src="${goChoirPackages.sandbox}"
+    if [ -x "$src/bin/sandbox" ]; then
+      rm -rf /var/lib/go-choir/services/.sandbox-next
+      mkdir -p /var/lib/go-choir/services/.sandbox-next
+      cp -a "$src/." /var/lib/go-choir/services/.sandbox-next/
+      rm -rf /var/lib/go-choir/services/sandbox-previous
+      if [ -e /var/lib/go-choir/services/sandbox ]; then
+        mv /var/lib/go-choir/services/sandbox /var/lib/go-choir/services/sandbox-previous
+      fi
+      mv /var/lib/go-choir/services/.sandbox-next /var/lib/go-choir/services/sandbox
+      echo "go-choir sandbox package pointer updated from NixOS closure"
+    fi
+  '';
 
   # Workspace directory (for CI git pull deploys) and runtime paths.
   # Auth persistence and signing material must live in writable runtime

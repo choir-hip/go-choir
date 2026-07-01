@@ -497,7 +497,7 @@ jobs:
             dump_deploy_service_diagnostics() {
               local reason="$1"
               echo "==> Deploy service diagnostics: ${reason}" >&2
-              for service in go-choir-vmctl go-choir-sandbox go-choir-proxy; do
+              for service in go-choir-vmctl go-choir-proxy; do
                 echo "-- systemctl status ${service}" >&2
                 systemctl --no-pager --full status "$service" >&2 || true
                 echo "-- journalctl -u ${service} -n 80" >&2
@@ -810,7 +810,7 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sandbox sourcecycled vmctl
+              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sourcecycled vmctl
             else
               echo "    Skipping host service pointer install"
             fi
@@ -824,7 +824,6 @@ jobs:
                 go-choir-maild \
                 go-choir-platformd \
                 go-choir-sourcecycled \
-                go-choir-sandbox \
                 go-choir-gateway \
                 go-choir-proxy
               if systemctl is-active --quiet caddy; then
@@ -1024,7 +1023,7 @@ jobs:
             note_phase "active computer refresh"
 
             echo "==> Smoke test: health endpoints"
-            for port in 8081 8082 8083 8084 8085 8086 8087; do
+            for port in 8081 8082 8083 8084 8086 8087; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done
@@ -1034,7 +1033,10 @@ jobs:
               dump_deploy_service_diagnostics "proxy health probe wrong service"
               exit 1
             fi
-            if ! echo "$proxy_health" | grep -q '"upstream":"ok"'; then
+            # Proxy upstream is "ok" (static routing) or "vmctl" (vmctl routing).
+            # With the host sandbox deleted (PR 5), vmctl routing is the steady
+            # state, so "vmctl" is the healthy upstream status.
+            if ! echo "$proxy_health" | grep -qE '"upstream":"(ok|vmctl)"'; then
               echo "Proxy upstream is not ok: $proxy_health" >&2
               dump_deploy_service_diagnostics "proxy upstream unhealthy"
               exit 1

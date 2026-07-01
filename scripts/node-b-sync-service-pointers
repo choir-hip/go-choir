@@ -39,8 +39,11 @@ for service in "$@"; do
       head -n 1
   )"
   if [ -z "$wrapper" ] || [ ! -r "$wrapper" ]; then
-    echo "Could not find readable ExecStart wrapper for $unit" >&2
-    exit 1
+    # Service unit may be intentionally deleted (e.g. go-choir-sandbox was
+    # removed in PR 5 of store-consolidation). Skip with a warning so the
+    # deploy does not fail, but the package pointer is not updated.
+    echo "    No ExecStart wrapper for $unit — skipping (service may be deleted)" >&2
+    continue
   fi
 
   bin="$(sed -n 's|^exec "\([^"]*\)".*|\1|p' "$wrapper" | tail -n 1)"

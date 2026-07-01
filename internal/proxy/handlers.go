@@ -1132,22 +1132,33 @@ func (h *Handler) relayFrames(src *websocket.Conn, dst *wsWriter, direction stri
 //     the proxy is up but the upstream is unreachable
 //   - upstream: "ok" or "unreachable"
 //   - vmctl_routing: "enabled" or omitted when using static routing
+//
+// When vmctl routing is enabled, the static sandbox upstream probe is
+// skipped (the host sandbox was deleted in PR 5; per-user VMs are the
+// real upstream and vmctl health is the authoritative signal).
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	// Check upstream sandbox health.
-	upstreamStatus := "ok"
-	upstreamHealthy, upstreamBuild := h.probeUpstreamHealth()
-	if !upstreamHealthy {
-		upstreamStatus = "unreachable"
-	}
-
 	status := "ok"
-	if !upstreamHealthy {
-		status = "degraded"
+	upstreamStatus := "ok"
+	var upstreamBuild *buildinfo.Info
+
+	if h.cfg.VmctlRoutingEnabled() {
+		// vmctl routing: vmctl health is the authoritative upstream signal.
+		// The static sandbox URL probe is skipped because the host sandbox
+		// was deleted (PR 5) and per-user VMs are the real upstream.
+		upstreamStatus = "vmctl"
+	} else {
+		// Static routing fallback: probe the configured sandbox URL.
+		upstreamHealthy, build := h.probeUpstreamHealth()
+		upstreamBuild = build
+		if !upstreamHealthy {
+			upstreamStatus = "unreachable"
+			status = "degraded"
+		}
 	}
 
 	resp := proxyHealthResponse{
@@ -1164,6 +1175,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		resp.VMctlRouting = "enabled"
 		if vmctlHealth, ok := h.probeVMctlHealth(); ok {
 			resp.VMctlStatus = vmctlHealth.Status
+			if vmctlHealth.Status != "ok" {
+				resp.Status = "degraded"
+			}
 		} else {
 			resp.VMctlStatus = "unavailable"
 			resp.Status = "degraded"
