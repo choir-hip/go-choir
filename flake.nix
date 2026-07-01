@@ -227,7 +227,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = "sha256-5HMFsj1+qk+vm3ZbbkXoUGJgYnZrEU+frWfRsWHXsao=";
+          vendorHash = "sha256-1PECBS1qDS7COSOIoYuNqqRvTbBr8epH9HNMYWqSANg=";
           internalDirs = [
             "internal/auth"
             "internal/buildinfo"
@@ -315,7 +315,7 @@
         corpusd = mkGoService {
           pname = "corpusd";
           subPackage = "cmd/corpusd";
-          vendorHash = "sha256-SkFulx4Hco5jk94EQ9np+LCqCyCnOTFNanFlY80TeLE=";
+          vendorHash = "sha256-A0LB5SCE0xfeI/I4NbwMmAHBIWgNOP9Nf4gAKQ7SZGQ=";
           internalDirs = [
             "internal/buildinfo"
             "internal/markdownstructure"
