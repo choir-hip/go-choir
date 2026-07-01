@@ -256,8 +256,18 @@ func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
 	}))
 	defer runtime.Close()
 
+	// vmctl mock that resolves user-root to the runtime test server.
+	vmctl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/vmctl/resolve" {
+			t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sandbox_url":"` + runtime.URL + `","desktop_id":"primary"}`))
+	}))
+	defer vmctl.Close()
+
 	cfg.ResendBaseURL = resend.URL
-	cfg.RuntimeURL = runtime.URL
+	cfg.VmctlURL = vmctl.URL
 	h := NewHandler(cfg, store)
 	h.resend = newResendClient(cfg, resend.Client())
 
@@ -327,13 +337,6 @@ func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
 	}))
 	defer resend.Close()
 
-	wrongRuntimeCalled := false
-	wrongRuntime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wrongRuntimeCalled = true
-		http.Error(w, "wrong runtime", http.StatusNotFound)
-	}))
-	defer wrongRuntime.Close()
-
 	var mu sync.Mutex
 	var tracePosts []map[string]any
 	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -375,7 +378,6 @@ func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
 	defer vmctlServer.Close()
 
 	cfg.ResendBaseURL = resend.URL
-	cfg.RuntimeURL = wrongRuntime.URL
 	cfg.VmctlURL = vmctlServer.URL
 	h := NewHandler(cfg, store)
 	h.resend = newResendClient(cfg, resend.Client())
@@ -397,9 +399,6 @@ func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
 	}
 	if _, err := h.sendApprovedDraft(nilSafeContext(), "user-root", draft.ID, draft.VersionHash, "owner_click_approved", "approval-notice-1"); err != nil {
 		t.Fatalf("sendApprovedDraft: %v", err)
-	}
-	if wrongRuntimeCalled {
-		t.Fatalf("maild posted trace evidence to static MAILD_RUNTIME_URL despite vmctl owner resolution")
 	}
 
 	mu.Lock()

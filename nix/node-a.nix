@@ -67,7 +67,6 @@
     "MAILD_DB_PATH=/var/lib/go-choir/mail/mail.db"
     "MAILD_STORAGE_ROOT=/var/lib/go-choir/mail"
     "MAILD_PRIMARY_DOMAIN=choir-ip.com"
-    "MAILD_RUNTIME_URL=http://127.0.0.1:8085"
     "MAILD_VMCTL_URL=http://127.0.0.1:8083"
   ];
 }

@@ -958,10 +958,11 @@ func protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (owner
 }
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
-// When vmctl routing is enabled, it consults the vmctl ownership registry
-// to route the user to their assigned VM (VAL-VM-001). When vmctl is not
-// configured, it falls back to the static SandboxURL for backward
-// compatibility.
+// It consults the vmctl ownership registry to route the user to their
+// assigned VM (VAL-VM-001). When vmctl is not configured, it falls back
+// to the static SandboxURL — but with the host sandbox deleted (PR 5),
+// this fallback will fail with a visible connection error (I3: no silent
+// failures).
 func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID string) (string, error) {
 	if h.vmctlClient == nil {
 		return h.cfg.SandboxURL, nil

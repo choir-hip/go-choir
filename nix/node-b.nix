@@ -336,9 +336,8 @@ in
         "MAILD_DB_PATH=${mailDir}/mail.db"
         "MAILD_STORAGE_ROOT=${mailDir}"
         "MAILD_PRIMARY_DOMAIN=choir.news"
-        "MAILD_RUNTIME_URL=http://127.0.0.1:8085"
-        # Required for maild to append Email appagent send evidence to the
-        # owner active computer runtime instead of the host fallback runtime.
+        # Maild routes trace events through vmctl to user VMs. The host
+        # sandbox fallback (MAILD_RUNTIME_URL) was removed in PR 5.
         "MAILD_VMCTL_URL=http://127.0.0.1:8083"
       ];
     };
@@ -631,89 +630,10 @@ in
     };
   };
 
-  # Host-process sandbox — routes LLM calls through the gateway.
-  # NOT exposed through Caddy or the firewall; reachable only on
-  # 127.0.0.1:8085. Deployed authenticated routing is expected to use
-  # vmctl-resolved Firecracker sandboxes; node-b disables vmctl's
-  # host-process fallback so this service is not the steady-state app path.
-  # The proxy's /health endpoint reports upstream reachability, making
-  # sandbox health observable through the proxy (VAL-DEPLOY-008).
-  #
-  # Gateway integration (VAL-GATEWAY-001):
-  # - RUNTIME_GATEWAY_URL tells the sandbox to route LLM calls through
-  #   the host-side gateway instead of resolving providers directly.
-  # - A sandbox credential token is obtained from the gateway at startup
-  #   via ExecStartPre and written to an EnvironmentFile.
-  # - This ensures provider credentials stay host-side (VAL-GATEWAY-004).
-  systemd.services.go-choir-sandbox = {
-    description = "go-choir Sandbox Runtime (gateway-routed)";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-gateway.service" "go-choir-sourcecycled.service" ];
-    wants = [ "network-online.target" "go-choir-gateway.service" "go-choir-sourcecycled.service" ];
-    path = with pkgs; [ bash coreutils git gnugrep gnused goChoirPackages.zot ];
-    serviceConfig = commonServiceHardening // {
-      # Obtain a gateway credential token before starting the sandbox.
-      # The gateway's credential issuance endpoint is localhost-only
-      # (VAL-GATEWAY-004). We retry with backoff because the gateway
-      # may still be initializing when this ExecStartPre runs.
-      # Uses a wrapper script to avoid NixOS systemd dollar-sign escaping
-      # conflicts with JSON in the curl body.
-      ExecStartPre = let
-        bootstrapScript = pkgs.writeShellScript "sandbox-gateway-bootstrap" ''
-          set -euo pipefail
-          for i in 1 2 3 4 5; do
-            token=$(${pkgs.curl}/bin/curl -sf -X POST \
-              http://127.0.0.1:8084/provider/v1/credentials/issue \
-              -H "Content-Type: application/json" \
-              -H "X-Internal-Caller: true" \
-              -d '{"sandbox_id":"sandbox-m1"}' 2>/dev/null \
-              | ${pkgs.jq}/bin/jq -r .RawToken 2>/dev/null) || true
-            if [ -n "$token" ] && [ "$token" != "null" ]; then
-              echo "RUNTIME_GATEWAY_TOKEN=$token" > /var/lib/go-choir/sandbox-gateway-token.env
-              exit 0
-            fi
-            sleep $((i * 2))
-          done
-          exit 1
-        '';
-      in "${bootstrapScript}";
-      ExecStart = "${serviceExec "sandbox" goChoirPackages.sandbox}";
-      Restart = "on-failure";
-      RestartSec = 3;
-      # Read the gateway token obtained by ExecStartPre.
-      EnvironmentFile = [
-        "-/var/lib/go-choir/sandbox-gateway-token.env"
-        "-/var/lib/go-choir/deploy.env"
-      ];
-      ReadWritePaths = [ "/var/lib/go-choir" ];
-      Environment = [
-        "SANDBOX_PORT=8085"
-        "SANDBOX_ID=sandbox-m1"
-        "SANDBOX_FILES_ROOT=${sandboxFilesDir}"
-        "RUNTIME_STORE_PATH=${sandboxRuntimeDir}/runtime.db"
-        "SOURCE_SERVICE_BASE_URL=http://127.0.0.1:8787"
-        "RUNTIME_SKILLS_ROOT=${goChoirPackages.sandbox}/share/go-choir/skills"
-        "RUNTIME_WORKER_REPO_REMOTE=${sourceRepoRemote}"
-        "RUNTIME_WORKER_REPO_BASE_SHA=${buildCommit}"
-        "RUNTIME_PROMOTION_SOURCE_REPO=${sourceRepoRemote}"
-        "RUNTIME_SOURCE_LEDGER_REPO=https://github.com/yusefmosiah/choir-source-ledger.git"
-        "RUNTIME_PROMOTION_WORKSPACE_ROOT=/var/lib/go-choir/promotion-workspaces"
-        "PKG_CONFIG_PATH=${pkgs.icu.dev}/lib/pkgconfig"
-        "CHOIR_ZOT_PATH=${goChoirPackages.zot}/bin/zot"
-        # Route LLM calls through the host-side gateway instead of
-        # resolving providers directly (VAL-GATEWAY-001).
-        "RUNTIME_GATEWAY_URL=http://127.0.0.1:8084"
-        # Email appagent draft persistence goes to maild as draft-only
-        # infrastructure. Runtime agents still have no raw send route.
-        "RUNTIME_MAILD_URL=http://127.0.0.1:8087"
-        # Explicit runtime-selected model. The gateway does not infer a
-        # fallback provider/model.
-        "RUNTIME_LLM_PROVIDER=chatgpt"
-        "RUNTIME_LLM_MODEL=gpt-5.5"
-        "RUNTIME_LLM_REASONING_EFFORT=low"
-      ];
-    };
-  };
+  # Host sandbox service deleted in PR 5 of store-consolidation mission.
+  # All runtime work happens in VMs via vmctl. The proxy's SandboxURL
+  # fallback (PROXY_SANDBOX_URL) will fail with a visible connection error
+  # if vmctl is unavailable (I3: no silent failures).
 
   # Workspace directory (for CI git pull deploys) and runtime paths.
   # Auth persistence and signing material must live in writable runtime

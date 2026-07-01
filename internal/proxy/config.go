@@ -20,9 +20,9 @@ type Config struct {
 	// Port is the TCP port the proxy service listens on.
 	Port string
 
-	// SandboxURL is the base URL of the fallback sandbox upstream, used when
-	// vmctl routing is not configured. When vmctl is configured, this is only
-	// used as the vmctl sandbox URL base parameter.
+	// SandboxURL is the base URL of the sandbox upstream. It is used to
+	// initialize the reverse proxy. When vmctl routing is enabled, per-user
+	// URLs resolved through vmctl override this for actual request routing.
 	SandboxURL string
 
 	// AuthPublicKeyPath is the path to the Ed25519 public key used to verify
