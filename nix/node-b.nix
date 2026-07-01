@@ -228,6 +228,44 @@ in
     };
   };
 
+  # SearXNG self-hosted meta-search engine (localhost-only, free unlimited queries).
+  # Aggregates Google, Bing, DuckDuckGo, and 70+ engines. JSON API enabled for
+  # the gateway's SearXNGProvider. No API key, no credits. The limiter is
+  # disabled because this is an internal API endpoint, not a public-facing
+  # search UI — only the gateway (127.0.0.1) can reach it.
+  services.searx = {
+    enable = true;
+    package = pkgs.searxng;
+    environmentFile = "/var/lib/go-choir/searxng.env";
+    settings = {
+      use_default_settings = true;
+      general = {
+        instance_name = "Choir Search";
+        debug = false;
+      };
+      search = {
+        safe_search = 0;
+        autocomplete = "";
+        formats = [ "html" "json" ];
+        default_range = "";
+      };
+      server = {
+        secret_key = "$SEARXNG_SECRET";
+        bind_address = "127.0.0.1";
+        port = 8888;
+        limiter = false;
+        image_proxy = false;
+      };
+      ui = {
+        static_use_hash = true;
+      };
+      outgoing = {
+        request_timeout = 10;
+        max_request_timeout = 15;
+      };
+    };
+  };
+
   # ── Systemd services ──────────────────────────────────────────────────
   # Host services: auth, proxy, vmctl, gateway, sandbox, maild, corpusd,
   # and sourcecycled.
@@ -570,8 +608,8 @@ in
   systemd.services.go-choir-gateway = {
     description = "go-choir Gateway Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "searx.service" ];
+    wants = [ "network-online.target" "searx.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "gateway" goChoirPackages.gateway}";
       Restart = "on-failure";
@@ -590,6 +628,8 @@ in
       #   FIREWORKS_API_KEY=...
       #   CHATGPT_AUTH_PATH=/var/lib/go-choir/codex-auth.json
       #   # Search Provider Keys
+      #   # (SearXNG is free and self-hosted — no key needed, just SEARXNG_URL
+      #   #  which is set in the Environment block below)
       #   TAVILY_API_KEY=...
       #   BRAVE_API_KEY=...
       #   EXA_API_KEY=...
@@ -613,9 +653,25 @@ in
         # proactively rotated. Use a longer TTL in staging to avoid
         # authentication lapses during normal multi-hour sessions.
         "GATEWAY_SANDBOX_TOKEN_TTL=720h"
+        # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider
+        # is first in the provider list, so this absorbs the majority of
+        # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
+        "SEARXNG_URL=http://127.0.0.1:8888"
       ];
     };
   };
+
+  # Generate SearXNG secret key on first deploy (or reuse existing).
+  # The environmentFile substitutes $SEARXNG_SECRET into settings.yml via envsubst.
+  system.activationScripts.go-choir-searxng-secret = ''
+    if [ ! -f /var/lib/go-choir/searxng.env ]; then
+      secret="$(${pkgs.openssl}/bin/openssl rand -hex 32)"
+      umask 077
+      echo "SEARXNG_SECRET=$secret" > /var/lib/go-choir/searxng.env
+      chmod 600 /var/lib/go-choir/searxng.env
+      echo "go-choir SearXNG secret key generated"
+    fi
+  '';
 
   # Host sandbox service deleted in PR 5 of store-consolidation mission.
   # All runtime work happens in VMs via vmctl. The proxy's SandboxURL
@@ -679,6 +735,8 @@ in
     "d ${platformDoltDBDir} 0750 root root -"
     "d ${platformArtifactsDir} 0750 root root -"
     "d ${platformArtifactsDir}/sha256 0750 root root -"
+    # SearXNG secret key file directory (writable by the searx service)
+    "d /var/lib/searx 0750 searx searx -"
   ];
 
   # Nix settings

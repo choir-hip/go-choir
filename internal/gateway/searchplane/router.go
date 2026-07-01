@@ -186,7 +186,6 @@ func (r *Router) eligibleProviders(health map[string]ProviderHealth, now time.Ti
 			names = append(names, p.Name())
 		}
 	}
-	sort.Strings(names)
 	return names
 }
 
@@ -313,7 +312,6 @@ func appendUniqueStrings(list []string, values ...string) []string {
 	}
 	return list
 }
-
 
 func (r *Router) appendCoolingSkipAttempts(attempts []Attempt, health map[string]ProviderHealth, now time.Time) []Attempt {
 	for _, provider := range r.providers {
