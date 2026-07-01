@@ -409,6 +409,7 @@ func TestParseSearXNGResults_EmptyURL(t *testing.T) {
 func TestSearXNGProvider_IsAvailable(t *testing.T) {
 	p := &SearXNGProvider{}
 
+	t.Setenv("SEARXNG_URL", "")
 	if p.IsAvailable() {
 		t.Fatal("expected not available when SEARXNG_URL unset")
 	}
