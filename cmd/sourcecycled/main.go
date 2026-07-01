@@ -134,24 +134,12 @@ func main() {
 	}
 	log.Printf("Loaded %d sources from registry", len(registry.Sources))
 
-	// sourcecycled now depends on the corpusd Dolt SQL server (a TCP
-	// service) instead of a local SQLite file. Retry the connection for
-	// up to ~100s so boot/deploy races against platform-dolt don't make
-	// the daemon exit immediately. Mirrors cmd/corpusd's retry loop.
-	dsn := sourceServiceDBDSN()
-	var store *cycle.Storage
-	var storeErr error
-	for attempt := 1; attempt <= 20; attempt++ {
-		store, storeErr = cycle.NewStorage(dsn)
-		if storeErr == nil {
-			break
-		}
-		log.Printf("sourcecycled store: attempt %d/20: %v", attempt, storeErr)
-		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
-	}
-	if storeErr != nil {
-		log.Fatalf("Failed to initialize source service storage: %v", storeErr)
-	}
+	// sourcecycled uses an in-memory store — no relational database dependency.
+	// Source items are projected to the object graph via the runtime API; the
+	// queue/cycle state here is ephemeral and lost on restart (acceptable: the
+	// daemon re-fetches sources on restart and the runtime tracks its own run
+	// state).
+	store := cycle.NewMemoryStore()
 	defer store.Close()
 	if err := store.SaveSources(&registry); err != nil {
 		log.Fatalf("Failed to save source registry: %v", err)
@@ -233,25 +221,6 @@ func main() {
 	}
 }
 
-func sourceServiceDBDSN() string {
-	if dsn := strings.TrimSpace(os.Getenv("SOURCECYCLED_DOLT_DSN")); dsn != "" {
-		return dsn
-	}
-	if dsn := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_DOLT_DSN")); dsn != "" {
-		return dsn
-	}
-	// Warn if the legacy SQLite env vars are still set. Per the store-
-	// consolidation mission, pre-launch data is not precious and no
-	// migration is provided — but the ignored env vars must be visible
-	// (invariant I1: no silent failures).
-	for _, key := range []string{"SOURCE_SERVICE_DB_PATH", "SOURCECYCLED_DB_PATH"} {
-		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-			log.Printf("Warning: %s=%s is ignored — sourcecycled now uses corpusd Dolt SQL server (set SOURCECYCLED_DOLT_DSN instead)", key, v)
-		}
-	}
-	return "root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
-}
-
 func sourceServiceAddr() string {
 	if addr := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_ADDR")); addr != "" {
 		return addr
@@ -293,7 +262,7 @@ func sourceServiceObjectGraphBackfillLimit() int {
 	return parsePositiveInt(firstEnv("SOURCE_SERVICE_OBJECTGRAPH_BACKFILL_LIMIT", "SOURCECYCLED_OBJECTGRAPH_BACKFILL_LIMIT"), defaultObjectGraphBackfillLimit)
 }
 
-func writeSourceItemsToObjectGraph(ctx context.Context, store *cycle.Storage, cycleID string, items []sources.Item, now time.Time, eventType, message string) error {
+func writeSourceItemsToObjectGraph(ctx context.Context, store cycle.Store, cycleID string, items []sources.Item, now time.Time, eventType, message string) error {
 	summary, err := projectSourceItemsToObjectGraph(ctx, items, now)
 	if err != nil {
 		return err
@@ -318,7 +287,7 @@ func projectSourceItemsToObjectGraph(ctx context.Context, items []sources.Item, 
 	return webCaptureProjectionSummary{}, nil
 }
 
-func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store *cycle.Storage, cycleID string, now time.Time) error {
+func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store cycle.Store, cycleID string, now time.Time) error {
 	if dispatcher := ingestionRuntimeDispatcherFromEnv(); dispatcher != nil && strings.TrimSpace(dispatcher.baseURL) != "" {
 		if store == nil {
 			return nil
@@ -455,7 +424,7 @@ func firstEnv(keys ...string) string {
 	return ""
 }
 
-func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Server {
+func startSourceServiceAPI(ctx context.Context, store cycle.Store) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
@@ -489,7 +458,7 @@ func startSourceServiceAPI(ctx context.Context, store *cycle.Storage) *http.Serv
 	return server
 }
 
-func handleSourceServiceHealth(store *cycle.Storage) http.HandlerFunc {
+func handleSourceServiceHealth(store cycle.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -510,7 +479,7 @@ func handleSourceServiceHealth(store *cycle.Storage) http.HandlerFunc {
 	}
 }
 
-func handleSourceServiceSearch(store *cycle.Storage) http.HandlerFunc {
+func handleSourceServiceSearch(store cycle.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -536,7 +505,7 @@ func handleSourceServiceSearch(store *cycle.Storage) http.HandlerFunc {
 	}
 }
 
-func handleSourceServiceIngestionHandoffLatest(store *cycle.Storage) http.HandlerFunc {
+func handleSourceServiceIngestionHandoffLatest(store cycle.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -561,7 +530,7 @@ func handleSourceServiceIngestionHandoffLatest(store *cycle.Storage) http.Handle
 	}
 }
 
-func handleSourceServiceItem(store *cycle.Storage) http.HandlerFunc {
+func handleSourceServiceItem(store cycle.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -878,7 +847,7 @@ func (d *ingestionRuntimeDispatcher) getRunStatus(ctx context.Context, runID str
 	return out, nil
 }
 
-func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx context.Context, store *cycle.Storage) error {
+func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx context.Context, store cycle.Store) error {
 	if d == nil || store == nil {
 		return nil
 	}
@@ -916,7 +885,7 @@ func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx con
 	return nil
 }
 
-func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store *cycle.Storage, handoff cycle.IngestionHandoff) ingestionDispatchResult {
+func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store cycle.Store, handoff cycle.IngestionHandoff) ingestionDispatchResult {
 	var result ingestionDispatchResult
 	if d == nil || strings.TrimSpace(d.baseURL) == "" {
 		result.ProcessorSkipped = len(handoff.ProcessorRequests)
@@ -1259,7 +1228,7 @@ func formatSourceTime(value time.Time) string {
 
 var engine *cycle.Engine
 
-func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Storage, sourceType sources.SourceType) {
+func runCycle(ctx context.Context, registry *sources.Registry, store cycle.Store, sourceType sources.SourceType) {
 	if engine == nil {
 		engine = cycle.NewEngine(registry)
 	}
@@ -1386,7 +1355,7 @@ func runCycle(ctx context.Context, registry *sources.Registry, store *cycle.Stor
 	log.Printf("Queued %d processor request(s) and %d reconciler request(s)", len(handoff.ProcessorRequests), len(handoff.ReconcilerRequests))
 }
 
-func dispatchQueuedIngestionHandoffs(ctx context.Context, store *cycle.Storage) {
+func dispatchQueuedIngestionHandoffs(ctx context.Context, store cycle.Store) {
 	if store == nil {
 		return
 	}

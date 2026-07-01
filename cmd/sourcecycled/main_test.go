@@ -20,9 +20,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
-// newTestCycleStorage creates an embedded Dolt-backed cycle.Storage for
+// newTestCycleStorage creates an embedded Dolt-backed cycle.Store for
 // sourcecycled tests, mirroring the platform package's openTestPlatformStore.
-func newTestCycleStorage(t *testing.T) *cycle.Storage {
+func newTestCycleStorage(t *testing.T) cycle.Store {
 	t.Helper()
 	root := t.TempDir()
 	rootDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)
@@ -807,7 +807,7 @@ func TestIngestionRuntimeDispatcherKeepsQueuedRequestOnTransientRuntimeFailure(t
 // admission, and one live request already submitted to the runtime whose
 // status projection drives the test.
 type dispatcherReconcileFixture struct {
-	store   *cycle.Storage
+	store   cycle.Store
 	cycleID string
 	queued  cycle.ProcessorRequest
 	live    cycle.ProcessorRequest
