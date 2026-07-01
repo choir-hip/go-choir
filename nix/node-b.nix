@@ -662,7 +662,7 @@ in
   };
 
   # Generate SearXNG secret key on first deploy (or reuse existing).
-  # The environmentFile substitutes @SEARXNG_SECRET@ into settings.yml.
+  # The environmentFile substitutes $SEARXNG_SECRET into settings.yml via envsubst.
   system.activationScripts.go-choir-searxng-secret = ''
     if [ ! -f /var/lib/go-choir/searxng.env ]; then
       secret="$(${pkgs.openssl}/bin/openssl rand -hex 32)"
