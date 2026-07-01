@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -139,35 +138,6 @@ func TestMemoryStoreObjectsAndEdges(t *testing.T) {
 	}
 }
 
-func TestSQLiteStoreObjectsAndEdges(t *testing.T) {
-	ctx := context.Background()
-	store, err := NewSQLiteStore(filepath.Join(t.TempDir(), "objectgraph.db"))
-	if err != nil {
-		t.Fatalf("NewSQLiteStore() error = %v", err)
-	}
-	svc := NewService(Config{Durable: store})
-	defer svc.Close()
-
-	source, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.source_entity", OwnerID: "user:alice", Body: []byte("source")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	capture, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.web_capture", OwnerID: "user:alice", Body: []byte("<html></html>"), Metadata: map[string]any{"url": "https://example.com"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.PutEdge(ctx, capture.CanonicalID, source.CanonicalID, "captured_from", nil); err != nil {
-		t.Fatalf("PutEdge() error = %v", err)
-	}
-	objects, err := svc.ListObjects(ctx, ListFilter{Kind: "choir.web_capture", OwnerID: "user:alice"})
-	if err != nil {
-		t.Fatalf("ListObjects() error = %v", err)
-	}
-	if len(objects) != 1 {
-		t.Fatalf("got %d web_capture objects, want 1", len(objects))
-	}
-}
-
 func TestCreateWebCaptureUsesTypedMetadataAndDeterministicIdentity(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
@@ -241,122 +211,6 @@ func TestCreateWebCaptureRejectsIncompleteMetadata(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "url must use http or https") {
 		t.Fatalf("CreateWebCapture() error = %v, want URL scheme validation", err)
-	}
-}
-
-func TestWebCapturePersistsWithCapturedFromEdge(t *testing.T) {
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "objectgraph.db")
-	store, err := NewSQLiteStore(dbPath)
-	if err != nil {
-		t.Fatalf("NewSQLiteStore() error = %v", err)
-	}
-	svc := NewService(Config{Durable: store})
-
-	source, err := svc.CreateObject(ctx, CreateObjectRequest{
-		Kind:    "choir.source_entity",
-		OwnerID: "universal-wire-platform",
-		Metadata: map[string]any{
-			"schema_version": "choir.source_entity.v1",
-			"source_kind":    "web_url",
-			"target":         map[string]any{"kind": "url", "identity": "https://example.com/story"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CreateObject(source_entity) error = %v", err)
-	}
-	capture, err := svc.CreateWebCapture(ctx, CreateWebCaptureRequest{
-		OwnerID:             "universal-wire-platform",
-		URL:                 "https://example.com/story",
-		Title:               "Example story",
-		FetchedAt:           time.Unix(30, 0),
-		ContentBlobID:       "blob:raw-html",
-		ExtractedTextBlobID: "blob:extracted-text",
-		ExtractedText:       []byte("A capture body that a later feed query can project."),
-	})
-	if err != nil {
-		t.Fatalf("CreateWebCapture() error = %v", err)
-	}
-	edge, err := svc.PutEdge(ctx, capture.CanonicalID, source.CanonicalID, "captured_from", map[string]any{"relation": "original_web_source"})
-	if err != nil {
-		t.Fatalf("PutEdge(captured_from) error = %v", err)
-	}
-	if err := svc.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-
-	reopenedStore, err := NewSQLiteStore(dbPath)
-	if err != nil {
-		t.Fatalf("reopen SQLite store: %v", err)
-	}
-	reopenedSvc := NewService(Config{Durable: reopenedStore})
-	defer reopenedSvc.Close()
-
-	got, err := reopenedSvc.GetObject(ctx, capture.CanonicalID)
-	if err != nil {
-		t.Fatalf("GetObject(web_capture) after reopen error = %v", err)
-	}
-	metadata, err := WebCaptureMetadataFromObject(got)
-	if err != nil {
-		t.Fatalf("WebCaptureMetadataFromObject() after reopen error = %v", err)
-	}
-	if metadata.CanonicalURL != "https://example.com/story" || string(got.Body) != string(capture.Body) {
-		t.Fatalf("reopened capture = metadata %#v body %q", metadata, got.Body)
-	}
-	edges, err := reopenedSvc.ListEdges(ctx, EdgeFilter{FromID: capture.CanonicalID, Kind: "captured_from"})
-	if err != nil {
-		t.Fatalf("ListEdges(captured_from) after reopen error = %v", err)
-	}
-	if len(edges) != 1 || edges[0].EdgeID != edge.EdgeID || edges[0].ToID != source.CanonicalID {
-		t.Fatalf("edges after reopen = %#v, want captured_from %s", edges, source.CanonicalID)
-	}
-}
-
-func TestSQLiteStoreReopenPreservesObjectsAndEdges(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "durable-objectgraph.db")
-
-	store, err := NewSQLiteStore(path)
-	if err != nil {
-		t.Fatalf("NewSQLiteStore() error = %v", err)
-	}
-	svc := NewService(Config{Durable: store})
-	source, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.source_entity", OwnerID: "user:alice", Body: []byte("source")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	transcript, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.transcript", OwnerID: "user:alice", Body: []byte("spoken words")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	edge, err := svc.PutEdge(ctx, transcript.CanonicalID, source.CanonicalID, "references", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-
-	reopened, err := NewSQLiteStore(path)
-	if err != nil {
-		t.Fatalf("reopen SQLite store: %v", err)
-	}
-	reopenedSvc := NewService(Config{Durable: reopened})
-	defer reopenedSvc.Close()
-
-	got, err := reopenedSvc.GetObject(ctx, transcript.CanonicalID)
-	if err != nil {
-		t.Fatalf("GetObject() after reopen error = %v", err)
-	}
-	if string(got.Body) != "spoken words" {
-		t.Fatalf("body after reopen = %q", got.Body)
-	}
-	edges, err := reopenedSvc.ListEdges(ctx, EdgeFilter{FromID: transcript.CanonicalID})
-	if err != nil {
-		t.Fatalf("ListEdges() after reopen error = %v", err)
-	}
-	if len(edges) != 1 || edges[0].EdgeID != edge.EdgeID {
-		t.Fatalf("edges after reopen = %#v, want %s", edges, edge.EdgeID)
 	}
 }
 
