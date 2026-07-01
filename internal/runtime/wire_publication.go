@@ -187,11 +187,11 @@ func wirePublicationTrajectoryRef(pub *wirepublish.PublishTextureResponse) strin
 	routePath := strings.TrimSpace(pub.RoutePath)
 	switch {
 	case publicationID != "" && publicationVersionID != "":
-		return "platformd_publication:" + publicationID + "/" + publicationVersionID
+		return "corpusd_publication:" + publicationID + "/" + publicationVersionID
 	case publicationID != "":
-		return "platformd_publication:" + publicationID
+		return "corpusd_publication:" + publicationID
 	case routePath != "":
-		return "platformd_route:" + routePath
+		return "corpusd_route:" + routePath
 	default:
 		return ""
 	}

@@ -32,7 +32,7 @@ type wirePlatformPublishRequest struct {
 
 // HandleInternalWirePlatformPublish is the host-mediated choke point for autonomous
 // Universal Wire publication. Platform sandboxes call this route; proxy re-reads
-// the revision from the platform sandbox and forwards to platformd.
+// the revision from the platform sandbox and forwards to corpusd.
 func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -161,7 +161,7 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {
-		log.Printf("proxy: wire publish post platformd: %v", err)
+		log.Printf("proxy: wire publish post corpusd: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to publish wire article"})
 		return
 	}
@@ -170,9 +170,9 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Sync the full Texture (all revisions) to platformd so published articles
+	// Sync the full Texture (all revisions) to corpusd so published articles
 	// carry their complete revision history.
-	go h.syncTextureToPlatformd(r, sandboxURL, platformOwner, req.DocID, doc.Title, []sandboxRevisionEntry{{
+	go h.syncTextureToCorpusd(r, sandboxURL, platformOwner, req.DocID, doc.Title, []sandboxRevisionEntry{{
 		RevisionID:       rev.RevisionID,
 		ParentRevisionID: rev.ParentRevisionID,
 		AuthorKind:       rev.AuthorKind,
@@ -212,26 +212,26 @@ type sandboxTextureRevisionListResponse struct {
 	Revisions []sandboxRevisionEntry `json:"revisions"`
 }
 
-// syncTextureToPlatformd fetches all revisions of a Texture document from the
-// platform sandbox and syncs them to platformd's DoltDB. This runs
+// syncTextureToCorpusd fetches all revisions of a Texture document from the
+// platform sandbox and syncs them to corpusd's DoltDB. This runs
 // asynchronously after a successful publication so the publish response is
 // not delayed.
-func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, docID, title string, fallbackRevisions []sandboxRevisionEntry) {
+func (h *Handler) syncTextureToCorpusd(r *http.Request, sandboxURL, ownerID, docID, title string, fallbackRevisions []sandboxRevisionEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var list sandboxTextureRevisionListResponse
 	if err := h.fetchSandboxJSONWithContext(ctx, sandboxURL, "/api/texture/documents/"+url.PathEscape(docID)+"/revisions", ownerID, &list); err != nil {
 		if len(fallbackRevisions) == 0 || !sandboxRevisionEntriesHaveContent(fallbackRevisions) {
-			log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v", docID, err)
+			log.Printf("proxy: sync texture to corpusd: fetch revisions for %s: %v", docID, err)
 			return
 		}
-		log.Printf("proxy: sync texture to platformd: fetch revisions for %s: %v; syncing supplied current revision", docID, err)
+		log.Printf("proxy: sync texture to corpusd: fetch revisions for %s: %v; syncing supplied current revision", docID, err)
 		list.Revisions = fallbackRevisions
 	}
 	revisions := list.Revisions
 	if len(revisions) == 0 {
-		log.Printf("proxy: sync texture to platformd: no revisions for %s", docID)
+		log.Printf("proxy: sync texture to corpusd: no revisions for %s", docID)
 		return
 	}
 
@@ -254,35 +254,35 @@ func (h *Handler) syncTextureToPlatformd(r *http.Request, sandboxURL, ownerID, d
 		})
 	}
 
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/texture/sync")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/texture/sync")
 	if err != nil {
-		log.Printf("proxy: sync texture to platformd: build URL: %v", err)
+		log.Printf("proxy: sync texture to corpusd: build URL: %v", err)
 		return
 	}
 	data, err := json.Marshal(syncReq)
 	if err != nil {
-		log.Printf("proxy: sync texture to platformd: marshal: %v", err)
+		log.Printf("proxy: sync texture to corpusd: marshal: %v", err)
 		return
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(string(data)))
 	if err != nil {
-		log.Printf("proxy: sync texture to platformd: build request: %v", err)
+		log.Printf("proxy: sync texture to corpusd: build request: %v", err)
 		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Internal-Caller", "true")
 
-	resp, err := h.platformd.Do(httpReq)
+	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
-		log.Printf("proxy: sync texture to platformd: call: %v", err)
+		log.Printf("proxy: sync texture to corpusd: call: %v", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Printf("proxy: sync texture to platformd: status %d for doc %s", resp.StatusCode, docID)
+		log.Printf("proxy: sync texture to corpusd: status %d for doc %s", resp.StatusCode, docID)
 		return
 	}
-	log.Printf("proxy: synced %d revisions for doc %s to platformd", len(revisions), docID)
+	log.Printf("proxy: synced %d revisions for doc %s to corpusd", len(revisions), docID)
 }
 
 func sandboxRevisionEntriesHaveContent(revisions []sandboxRevisionEntry) bool {

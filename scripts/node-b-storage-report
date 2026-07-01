@@ -798,7 +798,7 @@ for my $vm (sort keys %state_dir_bytes) {
 my @known_roots = qw(
   /run/current-system
   /opt/go-choir/result
-  /tmp/go-choir-service-platformd-result
+  /tmp/go-choir-service-corpusd-result
   /tmp/go-choir-guest-image-new
   /tmp/go-choir-service-proxy-result
   /tmp/go-choir-frontend-result

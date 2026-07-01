@@ -123,11 +123,11 @@ If capsules are allowed to become semantically authoritative rather than executi
 
 ---
 
-### Conjecture C — `platformd` is the wrong name for the durable corpus service
+### Conjecture C — `corpusd` is the wrong name for the durable corpus service
 
 **Claim**
 
-`platformd` should be renamed `corpusd`.
+`corpusd` should be renamed `corpusd`.
 
 **Why we think this**
 
@@ -145,7 +145,7 @@ But these are different things.
 **Implication**
 
 Rename:
-- `platformd` -> `corpusd`
+- `corpusd` -> `corpusd`
 
 **Hyperthesis edge**
 
@@ -169,7 +169,7 @@ processor
 -> processor completes
 -> super-owned continuation on same channel
    -> vtext
--> platformd still zero
+-> corpusd still zero
 ```
 
 That means:

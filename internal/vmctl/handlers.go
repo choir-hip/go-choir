@@ -1100,7 +1100,7 @@ func runtimePackageServiceEnv(r *http.Request) map[string]string {
 		wireHost = net.JoinHostPort(host, "8082")
 	}
 	out["RUNTIME_WIRE_PUBLISH_URL"] = "http://" + wireHost
-	out["RUNTIME_PLATFORMD_URL"] = "http://" + wireHost
+	out["RUNTIME_CORPUSD_URL"] = "http://" + wireHost
 	return out
 }
 
@@ -1171,7 +1171,7 @@ func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info
 	if deployedAt != "" {
 		env += fmt.Sprintf("CHOIR_DEPLOYED_AT=%s\n", shellEnvValue(deployedAt))
 	}
-	for _, key := range []string{"RUNTIME_WIRE_PUBLISH_URL", "RUNTIME_PLATFORMD_URL"} {
+	for _, key := range []string{"RUNTIME_WIRE_PUBLISH_URL", "RUNTIME_CORPUSD_URL"} {
 		if value := strings.TrimSpace(serviceEnv[key]); value != "" {
 			env += fmt.Sprintf("%s=%s\n", key, shellEnvValue(value))
 		}

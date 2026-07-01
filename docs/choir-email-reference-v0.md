@@ -92,12 +92,12 @@ Current service boundary:
 
 ```text
 gateway   = model/search/provider egress
-platformd = platform Dolt publication/retrieval/citation service
+corpusd = platform Dolt publication/retrieval/citation service
 maild     = mail transport, mailbox state, policy, source packets
 sandbox   = user computer, conductor, VText, researcher, super, orchestration
 ```
 
-The Resend API key belongs to `maild`, not `gateway` or `platformd`.
+The Resend API key belongs to `maild`, not `gateway` or `corpusd`.
 
 ## Host State And Config
 

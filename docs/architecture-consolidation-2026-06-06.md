@@ -32,7 +32,7 @@ The valid signal was folded into
 [current-architecture.md](current-architecture.md):
 
 - Caddy is the edge/static router.
-- `auth`, `proxy`, `gateway`, `vmctl`, and `platformd` are narrow host/platform
+- `auth`, `proxy`, `gateway`, `vmctl`, and `corpusd` are narrow host/platform
   services.
 - Per-user computer runtime owns private conductor, appagent, VText, Trace, run
   memory, app state, source metadata, and candidate-control product state.

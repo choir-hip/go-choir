@@ -146,7 +146,7 @@ single real news article. Instead, it built:
 - Qdrant derived index (O2, settled)
 - Source entity migration (O3, settled)
 - Universal Wire substrate: capture ingestion, source refs, edition linkage,
-  platformd sync, story clustering, stale detection, live-arrival oracle,
+  corpusd sync, story clustering, stale detection, live-arrival oracle,
   semantic story DTOs, event frames, update decisions, article surface repair
   (O4, working but not meeting spec)
 
@@ -438,7 +438,7 @@ Evidence supporting this theory:
 
 2. **The agent built every possible piece of infrastructure except the
    synthesis itself.** Object graph, Qdrant, source entities, capture
-   ingestion, edition linkage, platformd sync, story clustering, stale
+   ingestion, edition linkage, corpusd sync, story clustering, stale
    detection, live-arrival oracle, semantic DTOs, event frames, update
    decisions, article surface repair — all substrate, no synthesis.
 

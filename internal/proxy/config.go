@@ -39,9 +39,9 @@ type Config struct {
 	// through normal readiness probing.
 	VmctlTimeout time.Duration
 
-	// PlatformdURL is the internal platform service URL. The proxy uses it
+	// CorpusdURL is the internal platform service URL. The proxy uses it
 	// for controlled private-computer to platform-publication transitions.
-	PlatformdURL string
+	CorpusdURL string
 
 	// MaildURL is the internal mail service URL. The proxy uses it for
 	// authenticated mailbox APIs and proxy-owned mail source handoff.
@@ -72,8 +72,8 @@ const (
 	// VM_BOOT_READY_TIMEOUT=150s deployment setting.
 	DefaultVmctlTimeout = 180 * time.Second
 
-	// DefaultPlatformdURL is the localhost-only platform service endpoint.
-	DefaultPlatformdURL = "http://127.0.0.1:8086"
+	// DefaultCorpusdURL is the localhost-only platform service endpoint.
+	DefaultCorpusdURL = "http://127.0.0.1:8086"
 
 	// DefaultMaildURL is the localhost-only mail service endpoint.
 	DefaultMaildURL = "http://127.0.0.1:8087"
@@ -89,7 +89,7 @@ func LoadConfig() (*Config, error) {
 		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
 		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
 		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
-		PlatformdURL:      envOr("PROXY_PLATFORMD_URL", DefaultPlatformdURL),
+		CorpusdURL:      envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
 		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
 		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
 	}
@@ -115,8 +115,8 @@ func (c *Config) validate() error {
 	if c.VmctlTimeout <= 0 {
 		return fmt.Errorf("proxy config: PROXY_VMCTL_TIMEOUT must be positive")
 	}
-	if c.PlatformdURL == "" {
-		return fmt.Errorf("proxy config: PROXY_PLATFORMD_URL must not be empty")
+	if c.CorpusdURL == "" {
+		return fmt.Errorf("proxy config: PROXY_CORPUSD_URL must not be empty")
 	}
 	if c.MaildURL == "" {
 		return fmt.Errorf("proxy config: PROXY_MAILD_URL must not be empty")

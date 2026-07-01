@@ -219,7 +219,7 @@ GET /api/platform/publications/export?route=/pub/vtext/staging-long-compare-merg
 -> 502 {"error":"failed to export publication"}
 ```
 
-The proxy was forwarding to platformd correctly; platformd rejected the format
+The proxy was forwarding to corpusd correctly; corpusd rejected the format
 because `normalizeExportFormat` only accepts text-like exports. The durable fix
 belongs in the platform publication export service, with canonical
 publication-bundle bytes and compact provenance metadata, not in a frontend

@@ -7,7 +7,7 @@ Source: `README.md`, `docs/README.md`, `docs/current-architecture.md`,
 `docs/mission-heresy-detectors-ci-v0.md`,
 `docs/mission-doc-heresy-checker-v0.md`, and the 2026-06-13 observation that the
 README still claims "five Go services" while current architecture already names
-`auth`, `proxy`, `gateway`, `vmctl`, `platformd`, `maild`, `sourcecycled`, plus
+`auth`, `proxy`, `gateway`, `vmctl`, `corpusd`, `maild`, `sourcecycled`, plus
 per-computer runtimes.
 
 ## Problem Record
@@ -16,7 +16,7 @@ The doctrine sweep repaired framing, but it did not give Choir a durable docs
 truth-maintenance system. High-read docs can still drift behind code and
 architecture. The README is the live example: it presents a stale five-service
 topology and does not clearly distinguish current service names from target or
-planned renames such as `platformd -> corpusd` and the `sourcecycled` /
+planned renames such as `corpusd -> corpusd` and the `sourcecycled` /
 Source Cycle / source-service boundary.
 
 Manual sweeps are not enough. A human can prompt agents to "update all docs,"

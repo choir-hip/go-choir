@@ -237,7 +237,7 @@ differ — and the budget is declared, checked, and spent visibly.
              settle     decide the conjecture, or accept-and-name the edge
              Each move must produce a strong, clear, definitive statement
              about the system. "The code works" is not a statement;
-             "platformd returns bare arrays for revision lists, breaking
+             "corpusd returns bare arrays for revision lists, breaking
              the Texture editor's revision selection" is.
 4. BOUND     smallest substrate that can carry the move; stay inside the
              authority envelope; mutations reversible (candidate/capsule

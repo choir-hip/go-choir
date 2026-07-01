@@ -31,7 +31,7 @@ stopped the gateway:
 
 ```text
 2026-05-29T17:16:57Z activating NixOS config
-2026-05-29T17:16:57Z stopping the following units: go-choir-auth.service, go-choir-gateway.service, go-choir-maild.service, go-choir-platformd.service, go-choir-proxy.service, go-choir-sandbox.service, go-choir-vmctl.service
+2026-05-29T17:16:57Z stopping the following units: go-choir-auth.service, go-choir-gateway.service, go-choir-maild.service, go-choir-corpusd.service, go-choir-proxy.service, go-choir-sandbox.service, go-choir-vmctl.service
 2026/05/29 17:16:57 gateway: received terminated, shutting down gracefully
 ```
 

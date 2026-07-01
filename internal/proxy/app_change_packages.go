@@ -103,7 +103,7 @@ func (h *Handler) HandleAppChangePackageReviewEvidence(w http.ResponseWriter, r 
 		return
 	}
 	req.Header.Set("X-Authenticated-User", authResult.UserID)
-	resp, err := h.platformd.Do(req)
+	resp, err := h.corpusd.Do(req)
 	if err != nil {
 		log.Printf("proxy app package review evidence: fetch package=%s source_owner=%s: %v", packageID, sourceOwnerID, err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to fetch package review evidence"})
@@ -385,7 +385,7 @@ func (h *Handler) fetchSourceAppChangePackage(r *http.Request, sandboxBase, view
 	req.Header.Set("X-Internal-Caller", "true")
 	req.Header.Set("X-Authenticated-User", viewerID)
 
-	resp, err := h.platformd.Do(req)
+	resp, err := h.corpusd.Do(req)
 	if err != nil {
 		return types.AppChangePackageRecord{}, fmt.Errorf("call source sandbox: %w", err)
 	}
@@ -423,7 +423,7 @@ func (h *Handler) importAppChangePackage(r *http.Request, sandboxBase string, re
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
 
-	resp, err := h.platformd.Do(req)
+	resp, err := h.corpusd.Do(req)
 	if err != nil {
 		return types.AppChangePackageRecord{}, fmt.Errorf("call target sandbox: %w", err)
 	}

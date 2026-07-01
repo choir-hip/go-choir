@@ -48,7 +48,7 @@ Compare the two loops:
 | Propose a code/schema change | Propose a story, edition, or publication |
 | Execute in a candidate VM / capsule | Execute in a processor pipeline / capsule |
 | Verify with tests and verifiers | Verify with source checks, fact checks, and editorial review |
-| Promote via mutation transaction | Publish via platformd / publication object |
+| Promote via mutation transaction | Publish via corpusd / publication object |
 | Rollback if harmful | Retract or supersede the edition |
 
 Both are **24/7 agentic object graphs** that process, produce, and analyze information. The difference is only the kind of information: code objects vs. news objects.

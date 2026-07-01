@@ -845,12 +845,12 @@ Nix package builds could not resolve
 `github.com/yusefmosiah/go-choir/internal/texturedoc` under the filtered source
 archive. The local repair evidence for the follow-up fix is filtered-source
 inspection of the `packages.x86_64-linux` service source outputs for proxy,
-platformd, sandbox, gateway, and sourcecycled plus `nix flake check --no-build`;
+corpusd, sandbox, gateway, and sourcecycled plus `nix flake check --no-build`;
 full x86_64 package compilation is deferred to CI because this Mac has no
 available `x86_64-linux` builder. CI run `27922834186` completed successfully
 for `d77e0457806d6a9de27657b7ffb5f8f3a7862922`; the deploy job built selected
 Nix services and guest images, restarted services, refreshed active computers,
-and health checks reported proxy/sandbox/platformd deployed commit
+and health checks reported proxy/sandbox/corpusd deployed commit
 `d77e0457806d6a9de27657b7ffb5f8f3a7862922`. Deployed acceptance used
 `https://choir.news` with a virtual passkey account and passed publication,
 source expansion, multimedia/no-clickable-source-link, edit-preservation, and
@@ -1256,7 +1256,7 @@ source links and Texture metadata source sidecars:
   `body_doc` before reader snapshot enrichment can fetch content items or import
   URLs.
 - Wire direct-payload publication rejects non-empty `source_entities` without
-  `body_doc` before forwarding to platformd.
+  `body_doc` before forwarding to corpusd.
 - Published version history validates each revision with the same structured
   `body_doc`/`source_entities` rule before the manifest can persist
   source-entity JSON.
@@ -1279,7 +1279,7 @@ only trigger for `normalizePublishTextureStructuredInput`, while
 direct-payload path had the same shape. First repair: `source_entities` now
 require `body_doc` at platform structured input normalization and source
 metadata normalization, and the wire direct payload choke point returns 400
-before forwarding detached source entities to platformd. Regression tests cover
+before forwarding detached source entities to corpusd. Regression tests cover
 `PublishTexture`, `buildPublicationSourceMetadata`, and the wire direct-payload
 path. Independent re-review accepted this repair.
 
@@ -1651,16 +1651,16 @@ Required repair:
 
 - Add `internal/texturedoc` to every Nix Go service source filter whose
   transitive imports can reach structured Texture code: at minimum proxy,
-  platformd, gateway, sourcecycled, and sandbox.
+  corpusd, gateway, sourcecycled, and sandbox.
 - Prove with focused `nix build` package checks before pushing the repair, then
   rerun CI/deploy and staging acceptance.
 
 Repair:
 
 - `flake.nix` now includes `internal/texturedoc` in the `internalDirs`
-  allow-list for proxy, platformd, gateway, sourcecycled, and sandbox.
+  allow-list for proxy, corpusd, gateway, sourcecycled, and sandbox.
 - Local proof inspected the evaluated filtered source outputs for
-  `packages.x86_64-linux.proxy`, `.platformd`, `.sandbox`, `.gateway`, and
+  `packages.x86_64-linux.proxy`, `.corpusd`, `.sandbox`, `.gateway`, and
   `.sourcecycled`; each now contains `internal/texturedoc/schema.go` and
   `internal/texturedoc/projection.go`.
 - Local x86_64 package compilation could not run on this Mac because no
@@ -1670,7 +1670,7 @@ Repair:
 Local evidence:
 
 - `nix eval --raw .#packages.x86_64-linux.<service>.src` plus `find` over
-  `internal/texturedoc` for proxy, platformd, sandbox, gateway, and
+  `internal/texturedoc` for proxy, corpusd, sandbox, gateway, and
   sourcecycled.
 - `rg -o 'github.com/yusefmosiah/go-choir/internal/[A-Za-z0-9_/-]+'` over the
   evaluated filtered source outputs confirmed the `internal/texturedoc` import
@@ -1689,9 +1689,9 @@ CI/deploy:
 - Staging deploy job `82619778958` built the selected Nix services, ordinary
   guest image, and Playwright guest image. Health checks reported deployed
   commit `d77e0457806d6a9de27657b7ffb5f8f3a7862922` for proxy, sandbox, and
-  platformd.
+  corpusd.
 - Deploy job health log lines reported proxy build commit, upstream sandbox
-  build commit, and platformd build commit
+  build commit, and corpusd build commit
   `d77e0457806d6a9de27657b7ffb5f8f3a7862922`.
 
 Deployed product-path acceptance:

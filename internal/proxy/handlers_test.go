@@ -3039,12 +3039,12 @@ func TestProtectedAPIResolveTarget_UniversalWireStoriesUsePlatformComputer(t *te
 
 func TestProtectedAPIResolveTarget_TextureReadsNotRoutedThroughSandbox(t *testing.T) {
 	// Texture reads with read_owner=universal-wire-platform are intercepted
-	// by isPlatformTextureReadRequest in HandleAPI and served from platformd.
+	// by isPlatformTextureReadRequest in HandleAPI and served from corpusd.
 	// They should NOT route through protectedAPIResolveTarget to the sandbox.
 	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
 	ownerID, desktopID := protectedAPIResolveTarget(req, "user-alice", vmctl.PrimaryDesktopID)
 	if ownerID != "user-alice" {
-		t.Fatalf("ownerID = %q, want %q (platformd intercepts before this)", ownerID, "user-alice")
+		t.Fatalf("ownerID = %q, want %q (corpusd intercepts before this)", ownerID, "user-alice")
 	}
 	if desktopID != vmctl.PrimaryDesktopID {
 		t.Fatalf("desktopID = %q, want %q", desktopID, vmctl.PrimaryDesktopID)
@@ -3089,9 +3089,9 @@ func TestIsPlatformTextureReadRequest(t *testing.T) {
 func TestHandlePlatformTextureReadForwardsCurrentRevisionID(t *testing.T) {
 	handler, priv, _ := testProxyEnv(t)
 
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/platform/texture/documents/doc-wire-1" {
-			t.Fatalf("platformd path = %q, want document read", r.URL.Path)
+			t.Fatalf("corpusd path = %q, want document read", r.URL.Path)
 		}
 		if r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("missing internal caller header")
@@ -3104,8 +3104,8 @@ func TestHandlePlatformTextureReadForwardsCurrentRevisionID(t *testing.T) {
 			"current_revision_id": "rev-wire-head",
 		})
 	}))
-	t.Cleanup(platformd.Close)
-	handler.cfg.PlatformdURL = platformd.URL
+	t.Cleanup(corpusd.Close)
+	handler.cfg.CorpusdURL = corpusd.URL
 
 	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1?read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "reader-1")})
@@ -3128,9 +3128,9 @@ func TestHandlePlatformTextureReadForwardsCurrentRevisionID(t *testing.T) {
 func TestHandlePlatformTextureReadForwardsRevisionListEnvelope(t *testing.T) {
 	handler, priv, _ := testProxyEnv(t)
 
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/platform/texture/documents/doc-wire-1/revisions" {
-			t.Fatalf("platformd path = %q, want revision list read", r.URL.Path)
+			t.Fatalf("corpusd path = %q, want revision list read", r.URL.Path)
 		}
 		if r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("missing internal caller header")
@@ -3146,8 +3146,8 @@ func TestHandlePlatformTextureReadForwardsRevisionListEnvelope(t *testing.T) {
 			}},
 		})
 	}))
-	t.Cleanup(platformd.Close)
-	handler.cfg.PlatformdURL = platformd.URL
+	t.Cleanup(corpusd.Close)
+	handler.cfg.CorpusdURL = corpusd.URL
 
 	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents/doc-wire-1/revisions?limit=10000&read_owner="+vmctl.UniversalWirePlatformOwnerID, nil)
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "reader-1")})

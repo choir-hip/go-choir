@@ -11,7 +11,7 @@
 
 Node A (choir-ip.com, 51.81.93.94) is a full Choir mirror deployed from the
 `codex/redesign-hard-cutover-node-a` branch (commit `870d4d48`). It runs all
-8 host services (auth, gateway, maild, platformd, platform-dolt, proxy,
+8 host services (auth, gateway, maild, corpusd, platform-dolt, proxy,
 sandbox, vmctl) plus Caddy serving `choir-ip.com`.
 
 The Node A NixOS config files (`nix/node-a.nix`, `nix/node-a-hardware.nix`,

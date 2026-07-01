@@ -240,7 +240,7 @@ Choir already has a real publication skeleton:
   blame, and owner scoping;
 - a limited VText Markdown renderer;
 - inline Source Entity refs like `[label](source:id)`;
-- platform publish proxy from private VText to platformd;
+- platform publish proxy from private VText to corpusd;
 - platform publication/version/routes/artifacts/retrieval/citation/provenance
   rows;
 - public publication bundle resolution;

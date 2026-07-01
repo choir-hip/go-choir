@@ -385,17 +385,17 @@ frontend build, aggregate gate, and staging deploy. FlakeHub run
 `27104452597` also passed for the same SHA.
 
 staging identity proof: deploy job `79989704732` completed successfully and
-reported proxy, sandbox upstream, and platformd build/deployed commit
+reported proxy, sandbox upstream, and corpusd build/deployed commit
 `4629811947f803a1104b33706186cb9e032ca83e`, deployed at
 `2026-06-07T20:32:11Z`. Node B `/opt/go-choir` also reports that exact git
 HEAD with a clean worktree. The deploy job verified service health and public
 frontend asset graph.
 Follow-up deploy job `79991079599` completed successfully for `e6a634c1`.
-Deploy logs reported proxy, sandbox upstream, and platformd build/deployed
+Deploy logs reported proxy, sandbox upstream, and corpusd build/deployed
 commit `e6a634c1c4866f151244a7ac6379e44f7e4bdde6`, deployed at
 `2026-06-07T20:52:55Z`. Node B `/opt/go-choir` reports that exact git HEAD
 with a clean worktree, and direct health checks on ports 8082 and 8086 returned
-that commit for proxy/sandbox/platformd.
+that commit for proxy/sandbox/corpusd.
 
 staging product-path proof: unauthenticated `https://choir.news` browser proof
 loaded the deployed signed-out desktop preview with no console errors, no
@@ -494,7 +494,7 @@ staging, not merely in constructors or tests.
 what changed: commits through `e09895ea64557bb7564fe2b5dd77ff2c34cb1042`
 were pushed and deployed. CI run `27105344630` passed all Go/runtime/frontend
 gates and completed Node B staging deploy. Deploy log reports proxy, sandbox,
-and platformd build/deployed commit
+and corpusd build/deployed commit
 `e09895ea64557bb7564fe2b5dd77ff2c34cb1042`; public frontend serves asset
 `index-DyjtbGv3.js`.
 
@@ -536,7 +536,7 @@ integration-tagged smoke, non-runtime tests, all four runtime shards, and the
 aggregate gate. Staging deploy job `79995032501` completed successfully.
 Node B `/opt/go-choir` reports git HEAD
 `8524ea3676b706b6fbe1195293b288498467c032`; direct health checks on
-platformd port 8086 and proxy/sandbox port 8082 returned that same deployed
+corpusd port 8086 and proxy/sandbox port 8082 returned that same deployed
 commit.
 
 product-path evidence: authenticated Comet browser proof opened
@@ -613,7 +613,7 @@ what shipped: commit `13b0f6bf709b6f40fb765ccf0a1a706c9504769e` was pushed
 to `origin/main`. CI run `27106447613` passed Go vet/build,
 integration-tagged smoke, non-runtime tests, all four runtime shards, frontend
 build, aggregate gate, and Node B deploy job `79996448462`. Node B health
-checks confirmed proxy, sandbox, and platformd deployed commit
+checks confirmed proxy, sandbox, and corpusd deployed commit
 `13b0f6bf709b6f40fb765ccf0a1a706c9504769e`.
 
 product-path evidence: authenticated Comet reload of `https://choir.news/`

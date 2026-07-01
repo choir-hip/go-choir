@@ -98,9 +98,9 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 		t.Fatalf("reload story revision after publish: %v", err)
 	}
 	meta := decodeRevisionMetadata(rev.Metadata)
-	ref, _ := meta["platformd_publication_ref"].(map[string]any)
+	ref, _ := meta["corpusd_publication_ref"].(map[string]any)
 	if ref == nil || ref["route_path"] != "wire/madrid-dispatch" {
-		t.Fatalf("expected platformd_publication_ref on revision metadata, got %+v", meta)
+		t.Fatalf("expected corpusd_publication_ref on revision metadata, got %+v", meta)
 	}
 	trajectory, err := handler.rt.Store().GetTrajectory(ctx, universalWirePlatformOwnerID(), "traj-publish-slice")
 	if err != nil {
@@ -109,7 +109,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	if trajectory.Status != types.TrajectorySettled || trajectory.SettledAt == nil {
 		t.Fatalf("publication trajectory = %+v, want settled with settled_at", trajectory)
 	}
-	if trajectory.SubjectRefs["publish_ref"] != "platformd_publication:pub-wire-test/pubver-wire-test" {
+	if trajectory.SubjectRefs["publish_ref"] != "corpusd_publication:pub-wire-test/pubver-wire-test" {
 		t.Fatalf("publish_ref = %q, want platform publication ref; trajectory=%+v", trajectory.SubjectRefs["publish_ref"], trajectory)
 	}
 	if !strings.HasPrefix(trajectory.SubjectRefs["edition_ref"], "texture_edition:") {
@@ -131,7 +131,7 @@ func TestWireAutonomousPublishTranscludesEditionAndDebounces(t *testing.T) {
 	}
 }
 
-func TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails(t *testing.T) {
+func TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails(t *testing.T) {
 	_, handler := testAPISetup(t)
 	seedUniversalWireEditionFixture(t, handler)
 	story := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-publish-fail")

@@ -102,9 +102,9 @@ Receipts:
   route at `/internal/wire/platform/publications/vtext`.
 - `internal/proxy/platform_publish.go`,
   `internal/proxy/wire_platform_publish.go`, `internal/wirepublish/client.go`,
-  and `internal/runtime/wire_platform_publish.go` still call platformd or proxy
+  and `internal/runtime/wire_platform_publish.go` still call corpusd or proxy
   publication endpoints ending in `/vtext`.
-- `internal/platform/handlers.go` still registers platformd internal publish,
+- `internal/platform/handlers.go` still registers corpusd internal publish,
   sync, document-read, and revision-read routes under
   `/internal/platform/publications/vtext` and `/internal/platform/vtext/...`.
 - `/pub/vtext/...` public publication routes remain the live published URL
@@ -147,7 +147,7 @@ Receipts:
   `database=vtext`, `.vtext`, and `go-choir-vtext`.
 - Metadata/tool search found 791 hits for symbols such as `edit_vtext`,
   `vtext_ref`, `vtext_doc`, `vtext_revision`, `source_vtext`,
-  `platformd_route_path`, `related_vtext`, `transcluded_vtext`, and `vtext_`.
+  `corpusd_route_path`, `related_vtext`, `transcluded_vtext`, and `vtext_`.
 - `frontend/src/lib/apps/registry.ts` exposes the current visible Texture app
   under the old app id; `frontend/src/App.svelte`,
   `frontend/src/lib/Desktop.svelte`, `frontend/src/lib/UniversalWireApp.svelte`,
@@ -376,7 +376,7 @@ Local evidence on 2026-06-16:
   now finds only the explicit legacy route prefix/helper, legacy route tests or
   fixtures, and frontend dual-prefix acceptance.
 - Local Playwright was attempted, but the local service harness could not reach
-  platformd because the existing `/tmp/go-choir-m2/platform-dolt` state reported
+  corpusd because the existing `/tmp/go-choir-m2/platform-dolt` state reported
   missing `.dolt/repo_state.json`. The controlled foreground service session
   was stopped and health checks for local service ports returned down.
 
@@ -1204,7 +1204,7 @@ Local evidence on 2026-06-16:
   `universal-wire-edition-texture` as the edition payload and asserts
   `story_texture_doc_id` is present while `story_vtext_doc_id` is absent.
 - Focused runtime test:
-  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestResolveUniversalWireTextureReadOwner|TestNormalizeWireArticleSourceServiceProse|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails' -count=1`
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestResolveUniversalWireTextureReadOwner|TestNormalizeWireArticleSourceServiceProse|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails' -count=1`
   passed.
 - Runtime shard coverage:
   `nix develop -c scripts/go-test-runtime-shards` passed.
@@ -1639,7 +1639,7 @@ partly active outside historical evidence:
   route row and asserts backend bundle resolution still works;
 - `internal/proxy/platform_public_test.go` verifies public resolve/export
   return 404 for an unresolved `/pub/vtext/private` route, which proves the
-  proxy forwards the route to platformd instead of rejecting old public route
+  proxy forwards the route to corpusd instead of rejecting old public route
   spelling at the proxy boundary.
 
 This residue is narrower than storage table names, durable `vtext:` actor ids,
@@ -1648,7 +1648,7 @@ frontend string cleanup because `/pub/...` paths are user-visible publication
 URLs and route compatibility can affect existing stored publication rows.
 
 Conjecture delta: current user-facing browser/UI route recognition can stop
-canonizing arbitrary `/pub/vtext/...` paths while backend platformd keeps a
+canonizing arbitrary `/pub/vtext/...` paths while backend corpusd keeps a
 small, explicitly documented legacy-row read shim until a later storage/public
 route migration decides whether to rewrite or delete those rows. New
 publication minting already uses `/pub/texture/...`; this slice should move
@@ -1913,7 +1913,7 @@ Local evidence on 2026-06-16:
   run `27598505265` passed.
 - `nix develop -c go test ./internal/platform ./internal/proxy
   ./internal/wirepublish ./internal/runtime -run
-  'TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestHandleTexturePublication|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestWirePlatform|TestWirePublication|TestPostPlatformPublication|TestBuildAutonomousPublishRequest'
+  'TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestHandleTexturePublication|TestHandleInternalWirePlatformPublishPostsToCorpusd|TestWirePlatform|TestWirePublication|TestPostPlatformPublication|TestBuildAutonomousPublishRequest'
   -count=1` passed.
 - `npm --prefix frontend run build` passed with only the pre-existing
   Universal Wire warnings for the unused `currentUser` export and unused
@@ -3040,7 +3040,7 @@ Deployed evidence on 2026-06-16:
   `/api/texture/documents/c42-missing-doc-...?read_owner=universal-wire-platform`
   and `/api/texture/revisions/c42-missing-rev-...?read_owner=universal-wire-platform`.
   Both returned controlled `404` responses instead of platform store or missing
-  table errors, proving the deployed proxy -> platformd Texture read path can
+  table errors, proving the deployed proxy -> corpusd Texture read path can
   query the current platform tables after bootstrap.
 - Deployed Universal Wire staging acceptance
   `GO_CHOIR_RUN_UNIVERSAL_WIRE_STAGING=1 CHOIR_DEPLOYED_BASE_URL=https://choir.news npm --prefix frontend run e2e -- --project=chromium tests/universal-wire-staging-acceptance.spec.js`

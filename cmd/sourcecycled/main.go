@@ -137,7 +137,7 @@ func main() {
 	// sourcecycled now depends on the corpusd Dolt SQL server (a TCP
 	// service) instead of a local SQLite file. Retry the connection for
 	// up to ~100s so boot/deploy races against platform-dolt don't make
-	// the daemon exit immediately. Mirrors cmd/platformd's retry loop.
+	// the daemon exit immediately. Mirrors cmd/corpusd's retry loop.
 	dsn := sourceServiceDBDSN()
 	var store *cycle.Storage
 	var storeErr error

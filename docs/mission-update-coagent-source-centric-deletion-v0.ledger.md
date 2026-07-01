@@ -66,7 +66,7 @@ Probe path on node-b (`choiros-b`, root):
   this owner — it mirrors only published artifacts, not live runtime state.
 - Host runtime Dolt workspaces (`runtime.texture/texture`, `runtime.vtext`):
   empty — per-user runtime lives inside each owner's VM.
-- Host platformd/sandbox service logs: zero texture-agent lines — confirms the
+- Host corpusd/sandbox service logs: zero texture-agent lines — confirms the
   runtime executes inside the VM, not on the host.
 - VM mapping: owner `5bd6de97-...` → firecracker VM
   `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` (running, epoch 659, data.img 17GB,

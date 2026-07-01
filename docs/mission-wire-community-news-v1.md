@@ -41,7 +41,7 @@ Requirements contract:
 - **Platform computer uptime:** Universal Wire platform computer is **always-on**
   (100% uptime target); scale out to multiple or larger VMs later.
 - **Cutover policy:** hard cutovers acceptable — no external users; negotiate
-  boundaries explicitly between platform computer Dolt, platformd, and future
+  boundaries explicitly between platform computer Dolt, corpusd, and future
   platform vector store.
 - **Source fetch credentials:** MTProto (Telegram), ATProto, and similar adapter
   configs are **post-core** — after ingestion → processor → VText → auto-publish
@@ -64,15 +64,15 @@ platform computer VM — embedded Dolt (universal-wire-platform)
         transclusion refs to source items (by ID via sourcecycled API)
   NOT: raw RSS bodies as canonical truth without artifact rows; public routes
 
-platformd (host) — separate Dolt sql-server primary
+corpusd (host) — separate Dolt sql-server primary
   WHAT: published snapshot projections, slugs/routes, access policy,
         sanitized bundles for /pub/vtext and proxy read APIs
   NOT: live private editing; never write authority over platform-computer VTexts
 ```
 
 **Publish flow:** processors/VText agents commit on platform-computer Dolt →
-automatic publication step posts **selected public projection** to platformd →
-proxy/browser reads platformd for signed-out and cross-user surfaces.
+automatic publication step posts **selected public projection** to corpusd →
+proxy/browser reads corpusd for signed-out and cross-user surfaces.
 
 **Future platform vector DB (Qdrant):** embeddings and similarity search over
 ingested source spans and/or article chunks. Indexes are caches; Dolt VTexts +
@@ -97,9 +97,9 @@ Selected transforms:
    verifier. Load-bearing variable: every published revision must trace to a
    fetch event no test/prompt/seed created.
 2. **Commutative diagram (publish path)** — two paths must agree: edition truth
-   on platform-computer Dolt and public projection on platformd. Today
+   on platform-computer Dolt and public projection on corpusd. Today
    `HandleVTextPublication` is user-JWT proxy publish; Wire auto-publish needs
-   a **platform-internal** publish step (platform computer → platformd).
+   a **platform-internal** publish step (platform computer → corpusd).
 3. **Gradient hacking** — mission passes if one pretty RSS story appears while
    legacy seeds, prompt articles, or StoryGraph shims remain in agent context.
    Verifier must include negative prompt check **and** Deletion Ledger grep-clean.
@@ -113,7 +113,7 @@ Selected transforms:
 Route-changing insights:
 
 - Auto-publish is **not implemented** for Wire; it must be an explicit slice
-  (platform-internal projection to platformd after VText revision), not assumed.
+  (platform-internal projection to corpusd after VText revision), not assumed.
 - Telegram HTML scraping stays forbidden, but **Telegram API proof is deferred**
   until RSS/GDELT auto-publish chain works (MTProto credentials post-core).
 - Slice 0.5 platform VM must prove dispatch lands on platform sandbox URL, not
@@ -124,7 +124,7 @@ Changed plan:
 - **Implementation:** PROBLEM 0 → Slice 0 → Slice 0.5 → Slice 1 → RSS+GDELT
   curriculum → platform auto-publish → then MTProto/Telegram/Qdrant.
 - **Verifier/evidence:** per-class matrix row requires fetch_id → ingestion event
-  → processor run → VText revision → platformd publication ref; prompt negative
+  → processor run → VText revision → corpusd publication ref; prompt negative
   proof on every row.
 - **Scope:** Phase A completion = RSS/Atom, GDELT, HN-via-RSS — not Telegram.
 - **Stopping condition:** do not claim Phase A complete with Telegram stub,
@@ -217,9 +217,9 @@ Document and execute migration for:
 - platform computer VM owns all Wire VTexts and agent semantic state (embedded Dolt);
 - `SOURCE_SERVICE_RUNTIME_BASE_URL` must target platform-computer sandbox, not
   host `sandbox-m1`;
-- auto-publish from platform computer → platformd via **platform-internal**
+- auto-publish from platform computer → corpusd via **platform-internal**
   publish (not user JWT proxy path); no operator approval gate;
-- public Wire app reads published edition via platformd/proxy, not private Dolt.
+- public Wire app reads published edition via corpusd/proxy, not private Dolt.
 
 Slice 0.5 (platform-computer migration) has its own evidence row before Slice 1
 claims ingestion proof on platform authority.
@@ -389,7 +389,7 @@ Current codebase (post-v0, pre-v1):
 
 Highest-impact uncertainty:
 
-- Platform-internal auto-publish path (platform computer → platformd) is not
+- Platform-internal auto-publish path (platform computer → corpusd) is not
   proven to exist; user JWT proxy publish is a different topology.
 - Where Universal Wire platform-computer authority lands in the current
   deployment (see Deployment Scope).
@@ -440,7 +440,7 @@ start (c) before (b) is grep-clean, etc. Full matrix:
    loop (researcher/super via VText) → Article VTexts with native source
    transclusions → autonomous publish → debounced reconciler → VText wake on
    edition `universal-wire/Wire.vtext` (after migration (c)).
-6. **Slice 3b:** Autonomous platform publish to platformd on Community Cloud —
+6. **Slice 3b:** Autonomous platform publish to corpusd on Community Cloud —
    **no operator gate**; procedural guards (article-before-edition, fidelity)
    are load-bearing acceptance, not human approval. Folded into Workstream 2
    staging proof (e), not a separate operator workflow.
@@ -484,7 +484,7 @@ Completion requires named evidence for:
 - source registry count and source classes after expansion;
 - per-source-class ingestion-triggered proof for **Phase A rows only** (RSS/Atom,
   GDELT; Hacker News via proven RSS path), one row each, with full ID chain,
-  platformd publication ref, and negative prompt check;
+  corpusd publication ref, and negative prompt check;
 - Telegram/MTProto and ATProto rows are **post-core**, not Phase A completion;
 - provenance audit of the v0 published article;
 - Deletion Ledger per named legacy symbol (see Downloads v1 list — unchanged);

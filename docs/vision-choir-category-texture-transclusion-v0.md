@@ -337,7 +337,7 @@ types. Just objects and arrows.
 
 - Texture documents, revisions, transclusion links ✓
 - Object graph with entity nodes and edges ✓
-- Corpusd publication store (currently `platformd` — rename pending per
+- Corpusd publication store (currently `corpusd` — rename pending per
   `docs/naming-rectification-2026-06-27.md`) ✓
 - Cycle infrastructure (sourcecycled) ✓
 - Qdrant vector DB (standing up) ✓
@@ -408,7 +408,7 @@ traversal.
 
 The naming rectification plan (`docs/naming-rectification-2026-06-27.md`)
 already identifies "cycle" as the canonical term for the fundamental tick.
-Editions map directly to cycles. The plan also aligns `platformd → corpusd`
+Editions map directly to cycles. The plan also aligns `corpusd → corpusd`
 and `sandbox → computer` with the vision's functors and ontology.
 
 ## Not an Implementation Plan

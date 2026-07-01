@@ -59,24 +59,24 @@ everywhere as the primary name.
 **Note:** The user has mentioned `sandbox → autoputer` as a possible name. This
 needs a decision: `computer` (doctrine term) vs `autoputer` (new coinage). The
 doctrine already says `computer` is the product term. `autoputer` might be the
-service/binary name (like `sourcecycled`, `platformd`).
+service/binary name (like `sourcecycled`, `corpusd`).
 
-### 2. `platformd` → `corpusd` (service rename)
+### 2. `corpusd` → `corpusd` (service rename)
 
-**Current:** `cmd/platformd/`, `internal/platform/`, referenced across proxy,
+**Current:** `cmd/corpusd/`, `internal/platform/`, referenced across proxy,
 provider, runtime.
 
-**Problem:** The rearchitecture doc planned `platformd → corpusd` as a side PR.
+**Problem:** The rearchitecture doc planned `corpusd → corpusd` as a side PR.
 The service publishes Texture articles to the platform. `corpusd` better
 describes what it does — managing the published corpus.
 
 **Target:**
-- `cmd/platformd/` → `cmd/corpusd/`
+- `cmd/corpusd/` → `cmd/corpusd/`
 - `internal/platform/` → `internal/corpus/`
-- Code symbols: `Platform*` → `Corpus*`, `platformd` → `corpusd`
-- Config/env vars: `RUNTIME_PLATFORMD_URL` → `RUNTIME_CORPUSD_URL`,
-  `PROXY_PLATFORMD_URL` → `PROXY_CORPUSD_URL`
-- Docs: `platformd` → `corpusd`
+- Code symbols: `Platform*` → `Corpus*`, `corpusd` → `corpusd`
+- Config/env vars: `RUNTIME_CORPUSD_URL` → `RUNTIME_CORPUSD_URL`,
+  `PROXY_CORPUSD_URL` → `PROXY_CORPUSD_URL`
+- Docs: `corpusd` → `corpusd`
 
 ### 3. `internal/sourcegraph/` → fold into `internal/cycle/` (delete package)
 
@@ -181,7 +181,7 @@ future code converges on the right terms:
 | `schedule texture` | (does not exist yet) | New — when to publish |
 | `context texture` | (does not exist yet) | New — background, previous coverage, entity profiles |
 | `cycle` | `cycle` | Aligned ✓ — the vision confirms cycle as the fundamental tick |
-| `corpus` | `platform` / `platformd` | Aligns with rename #2 (`platformd → corpusd`) — the vision's Publish functor maps to Corpus |
+| `corpus` | `platform` / `corpusd` | Aligns with rename #2 (`corpusd → corpusd`) — the vision's Publish functor maps to Corpus |
 | `computer` | `sandbox` | Aligns with rename #1 (`sandbox → computer`) — the vision's user VM is a computer |
 
 **Action:** No immediate renames. Track these terms. When the vision's

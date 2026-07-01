@@ -26,7 +26,7 @@ HN as a separate class, operator approval gates).
 2. **Universal Wire** is platform-computer authority (`universal-wire-platform`),
    always-on, with hard cutover off host `sandbox-m1` stubs.
 3. **Fetch ledger** may stay host SQLite for v1; **semantic truth** lives in
-   platform-computer embedded Dolt; **public read surface** is platformd
+   platform-computer embedded Dolt; **public read surface** is corpusd
    publication projections.
 4. MTProto, ATProto, Qdrant, and Postgres migration are **post-core** — after
    the ingestion → processor → VText → auto-publish chain is proven.

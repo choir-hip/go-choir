@@ -64,7 +64,7 @@ func (h *Handler) HandlePlatformPublicationResolve(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "route is required"})
 		return
 	}
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/resolve")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/publications/resolve")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
 		return
@@ -104,7 +104,7 @@ func (h *Handler) HandlePlatformPublicationExport(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "route is required"})
 		return
 	}
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/export")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/publications/export")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
 		return
@@ -140,7 +140,7 @@ func (h *Handler) HandlePlatformRetrievalSearch(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/retrieval/search")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/retrieval/search")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
 		return
@@ -246,7 +246,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		Citations:            rev.Citations,
 		RequestedBy:          authResult.UserID,
 	}
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/"+url.PathEscape(publicationID)+"/proposals")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/publications/"+url.PathEscape(publicationID)+"/proposals")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
 		return
@@ -263,9 +263,9 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Internal-Caller", "true")
-	resp, err := h.platformd.Do(httpReq)
+	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
-		log.Printf("proxy: platform proposal post platformd: %v", err)
+		log.Printf("proxy: platform proposal post corpusd: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to submit publication proposal"})
 		return
 	}
@@ -311,7 +311,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	if err := json.Unmarshal(body, &out); err != nil || out.Error == "" {
 		out.Error = strings.TrimSpace(string(body))
 		if out.Error == "" {
-			out.Error = fmt.Sprintf("platformd status %d", resp.StatusCode)
+			out.Error = fmt.Sprintf("corpusd status %d", resp.StatusCode)
 		}
 	}
 	writeJSON(w, resp.StatusCode, out)
@@ -377,7 +377,7 @@ func (h *Handler) recordPublicationProposalDeliveryState(r *http.Request, propos
 	if state == "" || proposal.ProposalID == "" || proposal.DeliveryID == "" {
 		return nil
 	}
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/proposal-deliveries/state")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/proposal-deliveries/state")
 	if err != nil {
 		return err
 	}
@@ -398,7 +398,7 @@ func (h *Handler) recordPublicationProposalDeliveryState(r *http.Request, propos
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := h.platformd.Do(req)
+	resp, err := h.corpusd.Do(req)
 	if err != nil {
 		return fmt.Errorf("call platform delivery update: %w", err)
 	}
@@ -416,7 +416,7 @@ type platformStatusError struct {
 }
 
 func (e *platformStatusError) Error() string {
-	return fmt.Sprintf("platformd status %d: %s", e.status, strings.TrimSpace(e.body))
+	return fmt.Sprintf("corpusd status %d: %s", e.status, strings.TrimSpace(e.body))
 }
 
 func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int, error) {
@@ -425,20 +425,20 @@ func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int,
 		return 0, fmt.Errorf("build platform request: %w", err)
 	}
 	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := h.platformd.Do(req)
+	resp, err := h.corpusd.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("call platformd: %w", err)
+		return 0, fmt.Errorf("call corpusd: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return resp.StatusCode, fmt.Errorf("read platformd response: %w", err)
+		return resp.StatusCode, fmt.Errorf("read corpusd response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return resp.StatusCode, &platformStatusError{status: resp.StatusCode, body: string(body)}
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return resp.StatusCode, fmt.Errorf("decode platformd response: %w", err)
+		return resp.StatusCode, fmt.Errorf("decode corpusd response: %w", err)
 	}
 	return resp.StatusCode, nil
 }

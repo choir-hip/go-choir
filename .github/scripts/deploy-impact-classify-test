@@ -42,7 +42,7 @@ assert_contains "$sourcecontract_runtime_output" "deploy_host=true"
 assert_contains "$sourcecontract_runtime_output" "deploy_host_service=true"
 assert_contains "$sourcecontract_runtime_output" "deploy_vmctl_restart=true"
 assert_contains "$sourcecontract_runtime_output" "deploy_active_vm_refresh=true"
-assert_contains "$sourcecontract_runtime_output" "host_services=gateway,platformd,proxy,sandbox,sourcecycled"
+assert_contains "$sourcecontract_runtime_output" "host_services=gateway,corpusd,proxy,sandbox,sourcecycled"
 assert_contains "$sourcecontract_runtime_output" "internal/sourcecontract/evidence.go -> shared source contract dependency: runtime/platform service pointers + active VM refresh"
 
 doccheck_tooling_output="$(

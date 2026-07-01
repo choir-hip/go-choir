@@ -181,7 +181,7 @@ func seedPlatformSourceNetworkTextureFixtureWithPublishState(t *testing.T, handl
 		"source_item_ids":                []string{"srcitem_live_1", "srcitem_live_2"},
 	}
 	if published {
-		metaMap["platformd_route_path"] = "/pub/texture/madrid-dispatch"
+		metaMap["corpusd_route_path"] = "/pub/texture/madrid-dispatch"
 	}
 	meta, _ := json.Marshal(metaMap)
 	content := strings.Join([]string{
@@ -276,10 +276,10 @@ func seedUniversalWireWebCaptureFixture(t *testing.T, handler *APIHandler, title
 	return capture
 }
 
-func TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd(t *testing.T) {
+func TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd(t *testing.T) {
 	for _, key := range []string{
-		"RUNTIME_PLATFORMD_URL",
-		"PROXY_PLATFORMD_URL",
+		"RUNTIME_CORPUSD_URL",
+		"PROXY_CORPUSD_URL",
 		"RUNTIME_VMCTL_URL",
 		"PROXY_VMCTL_URL",
 		"RUNTIME_GATEWAY_URL",
@@ -288,19 +288,19 @@ func TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd(t *tes
 		t.Setenv(key, "")
 	}
 
-	t.Setenv("RUNTIME_PLATFORMD_URL", "http://10.203.154.1:8082")
-	if got := platformdReadBaseURL(); got != "http://10.203.154.1:8086" {
-		t.Fatalf("sibling runtime platformd URL = %q, want derived :8086", got)
+	t.Setenv("RUNTIME_CORPUSD_URL", "http://10.203.154.1:8082")
+	if got := corpusdReadBaseURL(); got != "http://10.203.154.1:8086" {
+		t.Fatalf("sibling runtime corpusd URL = %q, want derived :8086", got)
 	}
 
-	t.Setenv("RUNTIME_PLATFORMD_URL", "http://127.0.0.1:8086")
-	if got := platformdReadBaseURL(); got != "http://127.0.0.1:8086" {
-		t.Fatalf("direct runtime platformd URL = %q, want direct :8086", got)
+	t.Setenv("RUNTIME_CORPUSD_URL", "http://127.0.0.1:8086")
+	if got := corpusdReadBaseURL(); got != "http://127.0.0.1:8086" {
+		t.Fatalf("direct runtime corpusd URL = %q, want direct :8086", got)
 	}
 
-	t.Setenv("RUNTIME_PLATFORMD_URL", "")
+	t.Setenv("RUNTIME_CORPUSD_URL", "")
 	t.Setenv("RUNTIME_VMCTL_URL", "http://10.203.154.1:8083")
-	if got := platformdReadBaseURL(); got != "http://10.203.154.1:8086" {
+	if got := corpusdReadBaseURL(); got != "http://10.203.154.1:8086" {
 		t.Fatalf("vmctl URL = %q, want derived :8086", got)
 	}
 }
@@ -744,7 +744,7 @@ func TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkMani
 		"ingestion_handoff_request_id":   "reconciler-scoped",
 		"ingestion_handoff_request_kind": "reconciler",
 		"selected_style_sources":         []map[string]any{{"title": "Style.texture: Universal Wire"}},
-		"platformd_route_path":           "/pub/texture/scoped-sources",
+		"corpusd_route_path":           "/pub/texture/scoped-sources",
 		"source_item_ids":                []string{"srcitem_cycle_1", "srcitem_cycle_2", "srcitem_cycle_3", "srcitem_cycle_4"},
 	})
 	rev := types.Revision{

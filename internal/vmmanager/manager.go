@@ -2181,7 +2181,7 @@ func tapReachableHostServicePorts() []string {
 		"8083", // vmctl
 		"8084", // gateway
 		"8085", // host sandbox runtime lifecycle evidence
-		"8086", // platformd durable Texture verification
+		"8086", // corpusd durable Texture verification
 		"8087", // maild draft persistence
 		"8787", // source service retrieval
 	}

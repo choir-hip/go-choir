@@ -241,7 +241,7 @@ by this pass.
     publication trajectory `status=settled` / `settled_at`
     (`internal/runtime/wire_publication.go`,
     `internal/runtime/wire_publication_test.go`). Focused tests passed:
-    `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails'`.
+    `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails'`.
 18. The sibling explicit no-story branch now also has bounded terminal
     semantics instead of hanging forever behind a completed processor run.
     Explicit per-item `not_newsworthy` / `insufficient_evidence` decisions
@@ -252,7 +252,7 @@ by this pass.
     (`internal/runtime/wire_publication.go`,
     `internal/runtime/wire_processor_decision_test.go`,
     `internal/runtime/api_test.go`). Focused tests passed:
-    `nix develop -c go test ./internal/runtime -run 'TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict|TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch|TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen|TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch|TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails'`.
+    `nix develop -c go test ./internal/runtime -run 'TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict|TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch|TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen|TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch|TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails'`.
 
 Blind spots from this position:
 - **substrate_choice:** the repo now has one explicit two-phase publication
@@ -697,7 +697,7 @@ Blind spots from this position:
   Update: landed the runtime-side settlement stamp in
   `internal/runtime/wire_publication.go` with focused proof in
   `internal/runtime/wire_publication_test.go`:
-  `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails'`.
+  `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails'`.
   Exit: open_handoff.
 
 - 2026-06-12 CONSTRUCT (explicit no-story terminal semantics; code + focused tests).
@@ -720,7 +720,7 @@ Blind spots from this position:
   `internal/runtime/wire_publication.go` with focused proof in
   `internal/runtime/wire_processor_decision_test.go` and
   `internal/runtime/api_test.go`:
-  `nix develop -c go test ./internal/runtime -run 'TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict|TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch|TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen|TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch|TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails'`.
+  `nix develop -c go test ./internal/runtime -run 'TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict|TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch|TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen|TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch|TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails'`.
   Exit: open_handoff.
 
 **version / lineage:** v0. Predecessors:

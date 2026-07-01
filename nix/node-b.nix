@@ -229,7 +229,7 @@ in
   };
 
   # ── Systemd services ──────────────────────────────────────────────────
-  # Host services: auth, proxy, vmctl, gateway, sandbox, maild, platformd,
+  # Host services: auth, proxy, vmctl, gateway, sandbox, maild, corpusd,
   # and sourcecycled.
   # Sandbox workloads for authenticated traffic are expected to run inside
   # Firecracker microVMs managed by vmctl. Node B disables vmctl's
@@ -284,8 +284,8 @@ in
   systemd.services.go-choir-proxy = {
     description = "go-choir Proxy Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-auth.service" "go-choir-sandbox.service" "go-choir-platformd.service" "go-choir-maild.service" ];
-    wants = [ "network-online.target" "go-choir-sandbox.service" "go-choir-platformd.service" "go-choir-maild.service" ];
+    after = [ "network-online.target" "go-choir-auth.service" "go-choir-corpusd.service" "go-choir-maild.service" ];
+    wants = [ "network-online.target" "go-choir-corpusd.service" "go-choir-maild.service" ];
     requires = [ "go-choir-auth.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "proxy" goChoirPackages.proxy}";
@@ -307,7 +307,7 @@ in
         # Must exceed VM_BOOT_READY_TIMEOUT so cold user-computer boots can
         # finish readiness probing instead of timing out in the proxy first.
         "PROXY_VMCTL_TIMEOUT=180s"
-        "PROXY_PLATFORMD_URL=http://127.0.0.1:8086"
+        "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
       ];
     };
@@ -362,23 +362,23 @@ in
     };
   };
 
-  systemd.services.go-choir-platformd = {
+  systemd.services.go-choir-corpusd = {
     description = "go-choir Platform Service";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-platform-dolt.service" ];
     wants = [ "network-online.target" ];
     requires = [ "go-choir-platform-dolt.service" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${serviceExec "platformd" goChoirPackages.platformd}";
+      ExecStart = "${serviceExec "corpusd" goChoirPackages.corpusd}";
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/platform-artifacts";
       ReadWritePaths = [ platformArtifactsDir ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
-        "PLATFORMD_PORT=8086"
-        "PLATFORMD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
-        "PLATFORMD_ARTIFACTS_ROOT=${platformArtifactsDir}"
+        "CORPUSD_PORT=8086"
+        "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+        "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
       ];
     };
   };

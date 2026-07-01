@@ -368,7 +368,7 @@
 - CI/deploy evidence: run `27504321847` completed successfully; deploy job
   `81292841840` fetched and deployed
   `32e754208e2a332165f3bce13ecbdf2ab17c5d97`; deploy health output reported
-  proxy/platformd `deployed_commit` as the same SHA; staging deploy completed
+  proxy/corpusd `deployed_commit` as the same SHA; staging deploy completed
   at `2026-06-14T16:07:29Z`.
 - Runtime evidence: `scripts/node-b-storage-proof --host node-b --top 10
   --out-dir /tmp/node-b-storage-proof-20260614T160853Z` completed in 7.160

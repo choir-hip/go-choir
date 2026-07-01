@@ -253,7 +253,7 @@ jobs:
           set -euo pipefail
           mkdir -p sboms
           sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths 2>/dev/null)
-          required_packages=" auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend zot "
+          required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
           failed=0
           required_failed=0
           manifest="sboms/manifest.jsonl"
@@ -268,7 +268,7 @@ jobs:
             local reason="$4"
             printf '{"package":"%s","required":%s,"status":"%s","reason":"%s"}\n' "$pkg" "$required" "$status" "$reason" >> "$manifest"
           }
-          for pkg in auth proxy gateway maild maildctl platformd sandbox sourcecycled vmctl frontend obscura zot; do
+          for pkg in auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot; do
             echo "==> Building SBOM for ${pkg}"
             required=false
             if is_required "$pkg"; then
@@ -568,7 +568,7 @@ jobs:
             fast_build_host_service() {
               local service="$1"
               case "$service" in
-                auth|gateway|maild|platformd|proxy|sandbox|sourcecycled|vmctl)
+                auth|gateway|maild|corpusd|proxy|sandbox|sourcecycled|vmctl)
                   ;;
                 *)
                   echo "    Fast host service build unsupported for ${service}; using Nix package build"
@@ -810,7 +810,7 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sourcecycled vmctl
+              scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy sourcecycled vmctl
             else
               echo "    Skipping host service pointer install"
             fi
@@ -822,7 +822,7 @@ jobs:
               systemctl restart \
                 go-choir-auth \
                 go-choir-maild \
-                go-choir-platformd \
+                go-choir-corpusd \
                 go-choir-sourcecycled \
                 go-choir-gateway \
                 go-choir-proxy

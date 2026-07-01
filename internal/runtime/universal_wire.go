@@ -200,8 +200,8 @@ func (h *APIHandler) universalWireEditionTextureStories(ctx context.Context, sty
 		if !ok {
 			continue
 		}
-		if h.platformdStoryVerificationEnabled() &&
-			!h.platformdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
+		if h.corpusdStoryVerificationEnabled() &&
+			!h.corpusdHasPublishedTexture(ctx, story.StoryTextureDoc, doc.CurrentRevisionID) {
 			continue
 		}
 		story.Prominence = 100 - len(stories)
@@ -517,11 +517,11 @@ func firstWireCaptureParagraph(content string) string {
 	return strings.TrimSpace(content)
 }
 
-func (h *APIHandler) platformdStoryVerificationEnabled() bool {
+func (h *APIHandler) corpusdStoryVerificationEnabled() bool {
 	if h == nil || h.rt == nil {
 		return false
 	}
-	return strings.TrimSpace(platformdReadBaseURL()) != ""
+	return strings.TrimSpace(corpusdReadBaseURL()) != ""
 }
 
 func wireRevisionIsUniversalWireSynthesis(rev types.Revision) bool {
@@ -530,8 +530,8 @@ func wireRevisionIsUniversalWireSynthesis(rev types.Revision) bool {
 	return ok && value
 }
 
-func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {
-	base := strings.TrimRight(strings.TrimSpace(platformdReadBaseURL()), "/")
+func (h *APIHandler) corpusdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {
+	base := strings.TrimRight(strings.TrimSpace(corpusdReadBaseURL()), "/")
 	if base == "" || strings.TrimSpace(docID) == "" {
 		return false
 	}
@@ -558,15 +558,15 @@ func (h *APIHandler) platformdHasPublishedTexture(ctx context.Context, docID, re
 	return true
 }
 
-func platformdReadBaseURL() string {
-	if url := directPlatformdBaseURL([]string{
-		strings.TrimSpace(os.Getenv("RUNTIME_PLATFORMD_URL")),
-		strings.TrimSpace(os.Getenv("PROXY_PLATFORMD_URL")),
+func corpusdReadBaseURL() string {
+	if url := directCorpusdBaseURL([]string{
+		strings.TrimSpace(os.Getenv("RUNTIME_CORPUSD_URL")),
+		strings.TrimSpace(os.Getenv("PROXY_CORPUSD_URL")),
 	}); url != "" {
 		return url
 	}
 	bases := []string{
-		strings.TrimSpace(getenvFirst("RUNTIME_PLATFORMD_URL", "PROXY_PLATFORMD_URL")),
+		strings.TrimSpace(getenvFirst("RUNTIME_CORPUSD_URL", "PROXY_CORPUSD_URL")),
 		strings.TrimSpace(getenvFirst("RUNTIME_VMCTL_URL", "PROXY_VMCTL_URL")),
 		strings.TrimSpace(getenvFirst("RUNTIME_GATEWAY_URL")),
 		strings.TrimSpace(getenvFirst("RUNTIME_MAILD_URL")),
@@ -594,7 +594,7 @@ func platformdReadBaseURL() string {
 	return ""
 }
 
-func directPlatformdBaseURL(bases []string) string {
+func directCorpusdBaseURL(bases []string) string {
 	for _, raw := range bases {
 		base := strings.TrimRight(strings.TrimSpace(raw), "/")
 		if base == "" {
@@ -1135,10 +1135,10 @@ func sourceNetworkCycleID(meta map[string]any) string {
 }
 
 func wirePlatformRoutePath(meta map[string]any) string {
-	if route := metadataString(meta, "platformd_route_path"); route != "" {
+	if route := metadataString(meta, "corpusd_route_path"); route != "" {
 		return route
 	}
-	if ref, ok := meta["platformd_publication_ref"].(map[string]any); ok {
+	if ref, ok := meta["corpusd_publication_ref"].(map[string]any); ok {
 		return metadataString(ref, "route_path")
 	}
 	return ""

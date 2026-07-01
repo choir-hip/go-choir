@@ -899,7 +899,7 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA=") ||
 		!strings.Contains(env, "CHOIR_DEPLOYED_COMMIT=") ||
 		!strings.Contains(env, "RUNTIME_WIRE_PUBLISH_URL=http://10.203.154.1:8082") ||
-		!strings.Contains(env, "RUNTIME_PLATFORMD_URL=http://10.203.154.1:8082") {
+		!strings.Contains(env, "RUNTIME_CORPUSD_URL=http://10.203.154.1:8082") {
 		t.Fatalf("runtime env missing deployment/service refs: %q", env)
 	}
 }

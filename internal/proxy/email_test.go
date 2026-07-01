@@ -18,7 +18,7 @@ func newEmailTestHandler(t *testing.T, maildURL, sandboxURL string) (*Handler, e
 		Port:              "0",
 		SandboxURL:        sandboxURL,
 		AuthPublicKeyPath: "/unused",
-		PlatformdURL:      DefaultPlatformdURL,
+		CorpusdURL:      DefaultCorpusdURL,
 		MaildURL:          maildURL,
 	}, pub)
 	if err != nil {

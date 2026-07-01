@@ -13,8 +13,8 @@ import (
 // APIs do not open another database handle.
 //
 // In production the durable store is an HTTPStore that queries corpusd (the
-// platform Dolt SQL server) through platformd. Tests may inject an in-memory
-// store via Config.ObjectGraphStore to avoid requiring a running platformd.
+// platform Dolt SQL server) through corpusd. Tests may inject an in-memory
+// store via Config.ObjectGraphStore to avoid requiring a running corpusd.
 func (rt *Runtime) ObjectGraph() *objectgraph.Service {
 	if rt == nil {
 		return nil
@@ -53,14 +53,14 @@ func (rt *Runtime) closeObjectGraph() {
 }
 
 // newRuntimeObjectGraphService builds the runtime objectgraph Service. The
-// durable store defaults to an HTTPStore backed by platformd (via the proxy)
+// durable store defaults to an HTTPStore backed by corpusd (via the proxy)
 // so object graph data persists in corpusd. When cfg.ObjectGraphStore is set
 // (a test seam), it is used directly instead of constructing an HTTPStore.
 //
 // URL precedence: WirePublishURL is preferred because it is always set
-// correctly in deployed VMs (derived from vmctl_url). PlatformdURL is used as
+// correctly in deployed VMs (derived from vmctl_url). CorpusdURL is used as
 // a fallback (it defaults to http://127.0.0.1:8082 for local dev). The proxy
-// routes /internal/platform/objects and /internal/platform/edges to platformd.
+// routes /internal/platform/objects and /internal/platform/edges to corpusd.
 func newRuntimeObjectGraphService(cfg Config) (*objectgraph.Service, error) {
 	if cfg.ObjectGraphStore != nil {
 		return objectgraph.NewService(objectgraph.Config{
@@ -69,13 +69,13 @@ func newRuntimeObjectGraphService(cfg Config) (*objectgraph.Service, error) {
 		}), nil
 	}
 	// Prefer WirePublishURL — in VMs it's derived from vmctl_url and points
-	// to the host proxy. PlatformdURL defaults to localhost for local dev.
+	// to the host proxy. CorpusdURL defaults to localhost for local dev.
 	baseURL := strings.TrimSpace(cfg.WirePublishURL)
 	if baseURL == "" {
-		baseURL = strings.TrimSpace(cfg.PlatformdURL)
+		baseURL = strings.TrimSpace(cfg.CorpusdURL)
 	}
 	if baseURL == "" {
-		return nil, fmt.Errorf("runtime: platformd URL is required for objectgraph (set RUNTIME_PLATFORMD_URL or RUNTIME_WIRE_PUBLISH_URL)")
+		return nil, fmt.Errorf("runtime: corpusd URL is required for objectgraph (set RUNTIME_CORPUSD_URL or RUNTIME_WIRE_PUBLISH_URL)")
 	}
 	httpStore := objectgraph.NewHTTPStore(baseURL)
 	return objectgraph.NewService(objectgraph.Config{

@@ -89,7 +89,7 @@ reconciliation, trajectory cancellation.
 ### Publication Pipeline
 
 `wire_publication.go:maybeAutonomousPublishWireArticle`: publishes to
-platformd, adds to Wire edition, records trajectory refs, completes work
+corpusd, adds to Wire edition, records trajectory refs, completes work
 items, settles trajectory.
 
 ### Reconciler
@@ -176,10 +176,10 @@ The processor agent (mimo-v2.5) receives source items and should call
 ### 3. Verify Publication Pipeline
 
 Once the Texture agent produces a real article revision,
-`maybeAutonomousPublishWireArticle` should publish it to platformd and
+`maybeAutonomousPublishWireArticle` should publish it to corpusd and
 add it to the Wire edition. Verify:
 - The eligibility check passes for the platform owner
-- The platformd publish succeeds
+- The corpusd publish succeeds
 - The article appears in the Wire edition
 
 ### 4. Extract Handoff Builder (Optional, Can Defer to Mission 3)
@@ -194,7 +194,7 @@ Deploy to `https://choir.news`. Trigger a sourcecycled cycle. Verify:
 - Processor run is dispatched
 - Processor routes to Texture agent
 - Texture agent produces an article using gpt-5.5
-- Article is published to platformd
+- Article is published to corpusd
 - Article appears in the Wire edition
 - Article headline is about the event
 - Article body is English prose
@@ -232,7 +232,7 @@ The models are already configured and paid for:
 - [ ] Trigger a sourcecycled cycle on staging
 - [ ] Verify processor run is dispatched
 - [ ] Verify Texture agent produces an article using gpt-5.5
-- [ ] Verify article is published to platformd
+- [ ] Verify article is published to corpusd
 - [ ] Verify article appears in the Wire edition
 - [ ] Run authenticated staging acceptance: load Universal Wire, open an
       article, verify headline and body are about the event
@@ -259,7 +259,7 @@ code.
 
 witness/spec (A/S): fixed prompt with source body text (DONE commit
 d38d3afd), processor run with typed decisions, Texture agent revision
-with LLM-synthesized content, platformd publication, Wire edition entry,
+with LLM-synthesized content, corpusd publication, Wire edition entry,
 authenticated staging product replay.
 
 invariants / qualities / domain ramp (I/Q/D): Do not reintroduce
@@ -291,7 +291,7 @@ May not touch Texture core, O1-O3, or delete agent pipeline code.
 
 mutation class / protected surfaces: Orange/Red — fixing agent prompts,
 wiring runtime behavior, deploying to staging. Protected: Texture revision
-creation, platformd sync contract, source entity graph.
+creation, corpusd sync contract, source entity graph.
 
 evidence packet: commit d38d3afd (prompt diff + tests), local test output,
 staging commit SHA (pending), CI/deploy status (pending), authenticated

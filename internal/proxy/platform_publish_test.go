@@ -84,12 +84,12 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	}
 
 	var gotPlatformReq platform.PublishTextureRequest
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/platform/publications/texture" {
-			t.Fatalf("platformd path: got %s", r.URL.Path)
+			t.Fatalf("corpusd path: got %s", r.URL.Path)
 		}
 		if r.Header.Get("X-Internal-Caller") != "true" {
-			t.Fatalf("platformd missing internal caller header")
+			t.Fatalf("corpusd missing internal caller header")
 		}
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
 			t.Fatalf("decode platform request: %v", err)
@@ -105,7 +105,7 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 			State:                "published",
 		})
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != "user-1" {
@@ -159,7 +159,7 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -223,12 +223,12 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	platformdCalled := false
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		platformdCalled = true
-		t.Fatalf("platformd should not be called for detached source_entities")
+	corpusdCalled := false
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		corpusdCalled = true
+		t.Fatalf("corpusd should not be called for detached source_entities")
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	contentFetches := 0
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -270,7 +270,7 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -288,8 +288,8 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 	if !strings.Contains(w.Body.String(), "source_entities require body_doc") {
 		t.Fatalf("body = %s, want body_doc requirement", w.Body.String())
 	}
-	if platformdCalled {
-		t.Fatalf("platformd was called for detached source_entities")
+	if corpusdCalled {
+		t.Fatalf("corpusd was called for detached source_entities")
 	}
 	if contentFetches != 0 {
 		t.Fatalf("source import was called for detached source_entities: %d", contentFetches)
@@ -302,17 +302,17 @@ func TestHandleTexturePublicationRejectsMalformedPolicy(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	platformdCalled := false
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		platformdCalled = true
+	corpusdCalled := false
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		corpusdCalled = true
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -330,8 +330,8 @@ func TestHandleTexturePublicationRejectsMalformedPolicy(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "access_policy must be a JSON object") {
 		t.Fatalf("error body = %s", w.Body.String())
 	}
-	if platformdCalled {
-		t.Fatalf("platformd was called for malformed policy")
+	if corpusdCalled {
+		t.Fatalf("corpusd was called for malformed policy")
 	}
 }
 
@@ -342,9 +342,9 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 	}
 
 	var gotPlatformReq platform.PublishTextureRequest
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/platform/publications/texture" {
-			t.Fatalf("platformd path: got %s", r.URL.Path)
+			t.Fatalf("corpusd path: got %s", r.URL.Path)
 		}
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
 			t.Fatalf("decode platform request: %v", err)
@@ -360,7 +360,7 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 			State:                "published",
 		})
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	var importCalled bool
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -430,7 +430,7 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -488,7 +488,7 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 	}
 
 	var gotPlatformReq platform.PublishTextureRequest
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
 			t.Fatalf("decode platform request: %v", err)
 		}
@@ -502,7 +502,7 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 			State:                "published",
 		})
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -540,7 +540,7 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -578,7 +578,7 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 	}
 
 	var gotPlatformReq platform.PublishTextureRequest
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&gotPlatformReq); err != nil {
 			t.Fatalf("decode platform request: %v", err)
 		}
@@ -591,7 +591,7 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 			State:                "published",
 		})
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	contentFetches := 0
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -635,7 +635,7 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -720,16 +720,16 @@ func TestHandleAPIDispatchesTexturePublication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("platformd should not be reached for a malformed policy")
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("corpusd should not be reached for a malformed policy")
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)

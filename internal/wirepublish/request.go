@@ -8,7 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// BuildAutonomousPublishRequest shapes a platformd publish request from re-loaded
+// BuildAutonomousPublishRequest shapes a corpusd publish request from re-loaded
 // Dolt state. Access and export policies are forced server-side.
 func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *types.RunRecord, enrichedMetadata json.RawMessage) PublishTextureRequest {
 	meta := decodeMetadata(enrichedMetadata)

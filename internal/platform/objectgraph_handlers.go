@@ -77,7 +77,7 @@ func (h *ObjectGraphHandler) HandleObjectByID(w http.ResponseWriter, r *http.Req
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: get object %s: %v", id, err)
+		log.Printf("corpusd: get object %s: %v", id, err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get object"})
 		return
 	}
@@ -142,7 +142,7 @@ func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request
 		Now:         now,
 	})
 	if err != nil {
-		log.Printf("platformd: create object: %v", err)
+		log.Printf("corpusd: create object: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -170,7 +170,7 @@ func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.PutObject(r.Context(), obj); err != nil {
-		log.Printf("platformd: put object %s: %v", obj.CanonicalID, err)
+		log.Printf("corpusd: put object %s: %v", obj.CanonicalID, err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -194,7 +194,7 @@ func (h *ObjectGraphHandler) listObjects(w http.ResponseWriter, r *http.Request)
 	}
 	objs, err := h.service.ListObjects(r.Context(), filter)
 	if err != nil {
-		log.Printf("platformd: list objects: %v", err)
+		log.Printf("corpusd: list objects: %v", err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list objects"})
 		return
 	}
@@ -220,7 +220,7 @@ func (h *ObjectGraphHandler) createEdge(w http.ResponseWriter, r *http.Request) 
 	}
 	edge, err := h.service.PutEdge(r.Context(), req.FromID, req.ToID, objectgraph.EdgeKind(req.Kind), req.Metadata)
 	if err != nil {
-		log.Printf("platformd: create edge: %v", err)
+		log.Printf("corpusd: create edge: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -247,7 +247,7 @@ func (h *ObjectGraphHandler) putEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.PutEdge(r.Context(), edge); err != nil {
-		log.Printf("platformd: put edge %s: %v", edge.EdgeID, err)
+		log.Printf("corpusd: put edge %s: %v", edge.EdgeID, err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -272,7 +272,7 @@ func (h *ObjectGraphHandler) listEdges(w http.ResponseWriter, r *http.Request) {
 	}
 	edges, err := h.service.ListEdges(r.Context(), filter)
 	if err != nil {
-		log.Printf("platformd: list edges: %v", err)
+		log.Printf("corpusd: list edges: %v", err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list edges"})
 		return
 	}

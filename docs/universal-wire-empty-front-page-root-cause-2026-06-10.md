@@ -45,10 +45,10 @@ Staging checks on 2026-06-10 after the platform VM disk expansion and stale env-
    - `17:05:39`: `processor_submitted=32 ... errors=0`
    - later attempts timed out through the UDS proxy: `Post "http://unix/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`.
 
-7. Platformd has no synced/published VText rows:
+7. Corpusd has no synced/published VText rows:
    - `SELECT COUNT(*) FROM platform_vtext_documents` returned `0`.
    - `SELECT COUNT(*) FROM platform_vtext_revisions` returned `0`.
-   - platformd logs show restarts only; no publish/sync activity.
+   - corpusd logs show restarts only; no publish/sync activity.
 
 ## Root causes
 
@@ -61,13 +61,13 @@ sourcecycled fetches items
 -> queues processor handoffs
 -> platform sandbox accepts runtime runs
 -> processor/VText work creates canonical article revisions
--> autonomous publication posts through proxy/platformd
+-> autonomous publication posts through proxy/corpusd
 -> edition `universal-wire/Wire.vtext` transcludes article doc ids
 -> `/api/universal-wire/stories` reads the edition and article heads
 -> Universal Wire app renders cards
 ```
 
-The prior verification stopped at `processor_submitted=32`. That only proves the sandbox accepted run requests. It does not prove article revisions, platformd sync, edition mutation, or `/api/universal-wire/stories` visibility.
+The prior verification stopped at `processor_submitted=32`. That only proves the sandbox accepted run requests. It does not prove article revisions, corpusd sync, edition mutation, or `/api/universal-wire/stories` visibility.
 
 ### Root cause 2 — The processor dispatch limit is a per-drain batch size, not a concurrency/backpressure limit
 
@@ -97,14 +97,14 @@ The status model needs a user/product-facing distinction between:
 
 ### Root cause 4 — Platform publication never happened
 
-Platformd DoltDB contains zero `platform_vtext_documents` and zero `platform_vtext_revisions`. That means no successful autonomous publication/sync completed after the recent runs. The empty front page is therefore not a frontend-only issue.
+Corpusd DoltDB contains zero `platform_vtext_documents` and zero `platform_vtext_revisions`. That means no successful autonomous publication/sync completed after the recent runs. The empty front page is therefore not a frontend-only issue.
 
 Potential explanations still requiring deeper inspection after the VM is recovered:
 
 - the 64 processor runs are still hung and never reached VText article edits;
 - VText article edits happened but did not meet `wirepublish.EligibleForAutonomousPublish` metadata/content gates;
-- publish attempts failed inside the wedged guest before reaching proxy/platformd;
-- edition mutation failed after platform publish, though platformd zero rows makes this less likely for the current incident.
+- publish attempts failed inside the wedged guest before reaching proxy/corpusd;
+- edition mutation failed after platform publish, though corpusd zero rows makes this less likely for the current incident.
 
 ## Miswired architecture
 
@@ -128,7 +128,7 @@ The currently miswired part is **backpressure and completion semantics**, not ju
 3. After recovery, verify the complete chain, not just run submission:
    - sandbox `/health` returns quickly;
    - `/api/universal-wire/stories` returns non-empty `stories` or a precise empty source;
-   - platformd `platform_vtext_documents` and `platform_vtext_revisions` counts increase after article publication;
+   - corpusd `platform_vtext_documents` and `platform_vtext_revisions` counts increase after article publication;
    - Universal Wire app shows article cards.
 
 4. If no article rows appear after recovery, inspect platform runtime run records/revisions for the submitted processor run IDs and classify them as:
@@ -157,16 +157,16 @@ The currently miswired part is **backpressure and completion semantics**, not ju
    - expose counters: submitted, running, completed, article_created, published, edition_visible, failed.
 
 4. Split read path from wedged write path:
-   - `/api/universal-wire/stories` should read the durable platformd edition/index once publication sync is the invariant;
+   - `/api/universal-wire/stories` should read the durable corpusd edition/index once publication sync is the invariant;
    - write-side platform sandbox saturation should not make the public front page empty or unavailable;
-   - if platformd has no current edition, report a diagnostic source such as `universal-wire-platformd-empty`, not a generic honest empty state.
+   - if corpusd has no current edition, report a diagnostic source such as `universal-wire-corpusd-empty`, not a generic honest empty state.
 
 5. Add a deployed acceptance test that fails on the exact false positive:
    - start from sourcecycled dispatch;
-   - wait for at least one article publication to platformd;
+   - wait for at least one article publication to corpusd;
    - assert `/api/universal-wire/stories` returns `source=universal-wire-edition-vtext` and `stories.length > 0`;
    - assert the Universal Wire app renders `[data-universal-wire-story]` cards;
-   - assert platformd has synced full VText revision history for the first story.
+   - assert corpusd has synced full VText revision history for the first story.
 
 6. Add vmctl health semantics for `active_but_unhealthy`:
    - ownership should not report an operator-usable `active` state when guest health has failed for many consecutive checks;
@@ -177,8 +177,8 @@ The currently miswired part is **backpressure and completion semantics**, not ju
 1. **Backpressure guard:** enforce `maxProcessorRequests` as active concurrency in sourcecycled/runtime. This prevents the recurring VM wedge.
 2. **Runtime overload response:** return 429 from sandbox when active run limit is reached.
 3. **Completion ledger:** connect sourcecycled processor requests to runtime completion and publish/edition evidence.
-4. **Read-path cutover:** serve Universal Wire stories from platformd durable state once platformd edition sync is complete.
-5. **Acceptance proof:** staging Playwright/API test that requires visible article cards and platformd VText revision history.
+4. **Read-path cutover:** serve Universal Wire stories from corpusd durable state once corpusd edition sync is complete.
+5. **Acceptance proof:** staging Playwright/API test that requires visible article cards and corpusd VText revision history.
 
 ## Open questions for follow-up inspection
 

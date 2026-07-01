@@ -61,7 +61,7 @@ PDF metadata should use XMP metadata, synchronized with the legacy DocumentInfo 
 
 ## Recommended Architecture
 
-1. Add a structured export service boundary in platformd:
+1. Add a structured export service boundary in corpusd:
    - Input: publication route, requested format, caller policy, optional export profile.
    - Output: bytes, media type, filename, content hash, export metadata.
    - Formats: `txt`, `md`, `html`, `docx`, `pdf`.

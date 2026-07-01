@@ -17,7 +17,7 @@ Host/service binaries present in `cmd/`:
 - `proxy`
 - `gateway`
 - `vmctl`
-- `platformd`
+- `corpusd`
 - `maild`
 - `maildctl`
 - `sourcecycled`
@@ -55,7 +55,7 @@ Route registration confirms product/public API surfaces for:
 - proxy bootstrap, websocket, authenticated `/api/*` forwarding, provider deny,
   and browser-public `vmctl` deny;
 - platform-public publication publish/resolve/export/retrieval/proposal
-  internals behind `platformd` and proxy routes;
+  internals behind `corpusd` and proxy routes;
 - `sourcecycled` `/internal/source-service/health`, search, and item resolution.
 
 ## Reconciliation Changes Made

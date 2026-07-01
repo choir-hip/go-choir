@@ -84,12 +84,12 @@ const (
 	// DefaultQdrantURL is the node-b Qdrant instance URL.
 	DefaultQdrantURL = "http://127.0.0.1:6333"
 
-	// DefaultPlatformdURL is the default platformd/proxy URL used when
-	// neither RUNTIME_PLATFORMD_URL nor PROXY_PLATFORMD_URL is set. In
+	// DefaultCorpusdURL is the default corpusd/proxy URL used when
+	// neither RUNTIME_CORPUSD_URL nor PROXY_CORPUSD_URL is set. In
 	// deployed VMs this is the proxy port (8082); in local dev it's the
 	// same. The proxy routes /internal/platform/objects and
-	// /internal/platform/edges to platformd.
-	DefaultPlatformdURL = "http://127.0.0.1:8082"
+	// /internal/platform/edges to corpusd.
+	DefaultCorpusdURL = "http://127.0.0.1:8082"
 
 	// DefaultOllamaURL is the local Ollama instance URL for embeddings.
 	DefaultOllamaURL = "http://localhost:11434"
@@ -125,7 +125,7 @@ func LoadConfig() Config {
 		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),
 		WirePublishURL:     os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
-		PlatformdURL:       envOr("RUNTIME_PLATFORMD_URL", envOr("PROXY_PLATFORMD_URL", DefaultPlatformdURL)),
+		CorpusdURL:       envOr("RUNTIME_CORPUSD_URL", envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL)),
 		LLMProvider:        os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:           os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort: os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),

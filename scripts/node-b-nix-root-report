@@ -268,7 +268,7 @@ for my $path (grep { m{^/nix/store/} } @dead_lines) {
     $name =~ /closure-info/ ? "closure-info" :
     $name =~ /nixos-system/ ? "nixos-system" :
     $name =~ /go-choir-frontend/ ? "go-choir-frontend" :
-    $name =~ /(proxy|sandbox|vmctl|gateway|platformd|sourcecycled|maild|auth)-0\.1\.0/ ? "go-choir-service" :
+    $name =~ /(proxy|sandbox|vmctl|gateway|corpusd|sourcecycled|maild|auth)-0\.1\.0/ ? "go-choir-service" :
     $name =~ /\.drv$/ ? "derivation" :
     "other";
   $dead_name_counts{$bucket}++;

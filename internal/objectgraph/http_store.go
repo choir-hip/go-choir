@@ -12,19 +12,19 @@ import (
 )
 
 // HTTPStore implements the Store interface by querying corpusd (the platform
-// Dolt SQL server) through the platformd HTTP API. It is the durable store
+// Dolt SQL server) through the corpusd HTTP API. It is the durable store
 // used by runtimes that derive object identity locally and only need remote
 // persistence/querying.
 //
-// All requests carry the X-Internal-Caller: true header so platformd treats
+// All requests carry the X-Internal-Caller: true header so corpusd treats
 // them as trusted internal callers.
 type HTTPStore struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewHTTPStore returns an HTTPStore that talks to platformd at baseURL.
-// baseURL is the platformd root (e.g. "http://127.0.0.1:7421"); trailing
+// NewHTTPStore returns an HTTPStore that talks to corpusd at baseURL.
+// baseURL is the corpusd root (e.g. "http://127.0.0.1:7421"); trailing
 // slashes are trimmed.
 func NewHTTPStore(baseURL string) *HTTPStore {
 	return &HTTPStore{

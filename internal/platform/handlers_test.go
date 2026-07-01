@@ -66,7 +66,7 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	publicW := httptest.NewRecorder()
 	handler.HandlePublicTexture(publicW, httptest.NewRequest(http.MethodGet, resp.RoutePath, nil))
 	if publicW.Code != http.StatusNotFound {
-		t.Fatalf("platformd public HTML route should be disabled, got %d", publicW.Code)
+		t.Fatalf("corpusd public HTML route should be disabled, got %d", publicW.Code)
 	}
 }
 

@@ -48,5 +48,5 @@ Use [source-external-data-publication.md](source-external-data-publication.md)
 for source ingestion, source entities, transclusion, publication, export,
 retrieval, and citation requirements.
 
-Use [current-architecture.md](current-architecture.md) for the platformd and
+Use [current-architecture.md](current-architecture.md) for the corpusd and
 Platform Dolt boundary.
