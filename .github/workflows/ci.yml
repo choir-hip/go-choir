@@ -532,7 +532,13 @@ jobs:
             current_commit=$(git rev-parse HEAD)
             deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             install -d -m 0750 /var/lib/go-choir
-            printf "CHOIR_DEPLOYED_AT=%s\nCHOIR_DEPLOYED_COMMIT=%s\n" "$deployed_at" "$current_commit" > /var/lib/go-choir/deploy.env
+            printf "CHOIR_DEPLOYED_AT=%s\nCHOIR_DEPLOYED_COMMIT=%s\n" "$deployed_at" "$current_commit" > /var/lib/go-choir/deploy.env.tmp
+            # Preserve operator-added keys (e.g. CHOIR_BOOTSTRAP_ADMIN_API_KEY)
+            # that were appended to deploy.env by the operator. Merge them in.
+            if [ -f /var/lib/go-choir/deploy.env ]; then
+              grep -v -E '^CHOIR_DEPLOYED_(AT|COMMIT)=' /var/lib/go-choir/deploy.env >> /var/lib/go-choir/deploy.env.tmp || true
+            fi
+            mv /var/lib/go-choir/deploy.env.tmp /var/lib/go-choir/deploy.env
             chmod 0644 /var/lib/go-choir/deploy.env
             note_phase "checkout"
 
