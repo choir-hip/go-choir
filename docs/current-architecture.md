@@ -170,7 +170,7 @@ browser
 host services
   -> vmctl owns computer lifecycle, warmness, hibernation, and reclaim policy
   -> gateway owns provider credentials and provider request mediation
-  -> platformd owns platform/public publication ledger writes
+  -> corpusd owns platform/public publication ledger writes
   -> maild owns email ingress/drafts/notifications where configured
   -> sourcecycled owns the current experimental source-service daemon
 
@@ -194,7 +194,7 @@ Important boundary rules:
 - Caddy is edge/static routing infrastructure, not semantic authority.
 - The browser talks to product APIs, not raw agent, prompt, event, vmctl, Dolt,
   provider, or platform-internal mutation endpoints.
-- `auth`, `proxy`, `gateway`, `vmctl`, `platformd`, `maild`, and `sourcecycled`
+- `auth`, `proxy`, `gateway`, `vmctl`, `corpusd`, `maild`, and `sourcecycled`
   are host/platform or sidecar services in the current codebase. They should
   stay narrow and should not become private document, appagent, or user-computer
   semantic owners.
@@ -245,7 +245,7 @@ per-computer policy -> per-run/task override -> modality requirement, with
 owner and `super` edits flowing through product state rather than Node B config
 patches.
 
-Platform publication now has a first service boundary. A host-side `platformd`
+Platform publication now has a first service boundary. A host-side `corpusd`
 service writes to a separate localhost-only `dolt sql-server` primary and owns
 platform-visible publication, route, artifact manifest/blob, retrieval source/
 span, citation edge, provenance, consent/review, verifier, and rollback rows.
@@ -253,13 +253,13 @@ The browser never talks to Dolt. A signed-in user calls the proxy product API to
 publish a Texture; the proxy reads the head revision and the full revision chain
 from the user's resolved computer and submits the public projection plus a
 canonical `version_history` manifest — per-revision content/citations/typed
-provenance and a content-addressed hash chain — to `platformd`. A published
+provenance and a content-addressed hash chain — to `corpusd`. A published
 Texture IS its full versioned history, not only the head projection; the
 manifest is the signable spine a reader/verifier can independently replay and
 check. Public published snapshots now resolve through the Svelte Choir
 shell and Texture app at the current `/pub/texture/...` compatibility route (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
 surface, signed-in users can create private derivatives and proposals, and proxy
-read APIs fetch sanitized publication bundles from internal-only `platformd`
+read APIs fetch sanitized publication bundles from internal-only `corpusd`
 endpoints. Platform services still never gain write access to the live private
 document.
 
@@ -290,7 +290,7 @@ Code-present/current foundations:
    ContentViewer-style source surfaces exist at varying quality levels. Current
    app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
-5. Platform publication has `platformd`, proxy publish/read APIs, public
+5. Platform publication has `corpusd`, proxy publish/read APIs, public
    `/pub/texture/...` compatibility routes (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized publication
    bundles, export, retrieval search, proposal delivery state, and
    private-derivative/proposal flows.
@@ -687,10 +687,10 @@ Private user computers may later expose selected public routes, like personal
 websites or personal newspapers, but that must be explicit projection with
 visibility, provenance, and rollback. It must not expose the whole computer.
 Near term, automatic newspaper work should be built in user/candidate computers
-and promoted to the platform computer or published through platformd where
+and promoted to the platform computer or published through corpusd where
 possible. Platform host deploys remain necessary for shared substrate changes
 such as gateway APIs, vmctl/runtime protocol, auth/routing/security, and
-platformd service behavior.
+corpusd service behavior.
 
 The algebraic question for either path is whether active and candidate deltas
 from the same base have a valid join. The VM/runtime ledger is usually not

@@ -10,7 +10,7 @@ Related:
 - [mission-wire-community-news-v1.md](mission-wire-community-news-v1.md) (Slice 3b, evidence matrix)
 - `internal/proxy/platform_publish.go` (owner JWT path, today)
 - `internal/platform/handlers.go` (`/internal/platform/publications/vtext`)
-- `internal/runtime/wire_publication.go` (edition transclusion only — **not** platformd)
+- `internal/runtime/wire_publication.go` (edition transclusion only — **not** corpusd)
 
 ---
 
@@ -18,9 +18,9 @@ Related:
 
 This review covers **autonomous Wire publish**: after an eligible canonical
 `edit_vtext` on the `universal-wire-platform` computer, the runtime must project
-a **public platformd publication** without a human operator gate (Community
+a **public corpusd publication** without a human operator gate (Community
 Cloud policy). It does **not** re-litigate the owner JWT proxy publish path
-except where shared platformd behavior matters.
+except where shared corpusd behavior matters.
 
 ---
 
@@ -33,7 +33,7 @@ except where shared platformd behavior matters.
 | **T3. Model-prior article without ingestion provenance** | Untraceable “news” violating mission contract | Medium — VText can draft from priors |
 | **T4. Unsafe source entity projection** (private content_item snapshots in public bundle) | Reader-visible leak of non-public source text | Medium — metadata carries `source_entities` |
 | **T5. Policy override via revision metadata** (`access_policy` / `route_policy` in metadata) | Intended public wire article published with wrong visibility | Low today (defaults public); autonomous must not widen |
-| **T6. Spoofed internal publish caller** | Arbitrary `owner_id` + content → platformd | Low on Node B if platformd stays localhost-only; **high** if port exposed or header-only auth |
+| **T6. Spoofed internal publish caller** | Arbitrary `owner_id` + content → corpusd | Low on Node B if corpusd stays localhost-only; **high** if port exposed or header-only auth |
 | **T7. Edition index without platform record** (current code) | Wire UI shows stories that are not publicly published | **Current** — edition transclusion alone |
 | **T8. Prompt-bar / user path triggers autonomous publish** | User drafts become wire front page | Low if policy is owner + run-intent gated |
 | **T9. Replay / duplicate publish storms** | Retrieval spam, reconciler noise, storage cost | Medium — publish-then-correct is allowed |
@@ -47,25 +47,25 @@ It is **not** a new agent tool and **not** a browser-public API.
 
 ## Current controls (what we already have)
 
-### User owner publish (proxy → platformd)
+### User owner publish (proxy → corpusd)
 
 - JWT authentication (`validateAccessJWT`).
 - Re-reads doc + revision from **user sandbox**; enforces `owner_id` match.
 - Strips `X-Internal-Caller` from client requests before sandbox forward
   (`internal/proxy/handlers.go`).
 - Optional explicit `access_policy` / `export_policy` on request; forwards to
-  platformd.
+  corpusd.
 - Source metadata enrichment with publication-safety gates
   (`enrichVTextPublicationMetadata`, `sourcecontract` reader snapshot states).
 
-### platformd internal API
+### corpusd internal API
 
 - Routes under `/internal/platform/*` require `X-Internal-Caller: true`.
 - `PublishVText` builds immutable publication ledger (consent/review/attestation
   rows, retrieval spans, rollback ref).
 - Default access policy is **public** unless overridden
   (`defaultPublicationAccessPolicy`).
-- platformd binds **127.0.0.1** by default (`internal/server/server.go`).
+- corpusd binds **127.0.0.1** by default (`internal/server/server.go`).
 
 ### Wire publication policy (runtime, partial)
 
@@ -77,7 +77,7 @@ It is **not** a new agent tool and **not** a browser-public API.
 - Non-empty content; not seed/brief heuristics
 
 **Gap:** eligible publish today only updates **edition VText** in embedded Dolt;
-it does **not** call platformd.
+it does **not** call corpusd.
 
 ### Agent capability enforcement
 
@@ -96,30 +96,30 @@ edit_vtext success (platform wire article run)
        -> reload doc + revision from Dolt (do not trust tool args alone)
        -> eligibility guards (existing + tests)
        -> build platform.PublishVTextRequest (server-side only)
-       -> call platformd (host-local trusted caller)
+       -> call corpusd (host-local trusted caller)
        -> on success: edition transclusion + debounced reconciler event
 ```
 
-**Invariant:** nothing browser-public may call platformd publish for Wire.
+**Invariant:** nothing browser-public may call corpusd publish for Wire.
 
-### 2. Trusted caller to platformd
+### 2. Trusted caller to corpusd
 
 `X-Internal-Caller: true` alone is **not** a security boundary if any host
-process or misbound listener can reach platformd.
+process or misbound listener can reach corpusd.
 
 **Minimum for v1 (Node B):**
 
-- platformd remains **127.0.0.1** only (already default).
+- corpusd remains **127.0.0.1** only (already default).
 - Only **proxy** or a **dedicated host-side publisher** may call
   `/internal/platform/publications/vtext`.
-- Platform VM sandbox runtime must **not** call platformd directly with a
+- Platform VM sandbox runtime must **not** call corpusd directly with a
   spoofable header; it should call a **host-mediated** path (e.g. proxy internal
   route or sidecar) that checks publication policy **before** forwarding.
 
 **Stretch (document, not blocking v1 if localhost holds):**
 
 - HMAC/mTLS internal credential per caller class (`owner_proxy` vs `wire_policy`).
-- platformd rejects publish unless `publication_kind` + caller credential match.
+- corpusd rejects publish unless `publication_kind` + caller credential match.
 
 ### 3. Server-side request shaping (autonomous path)
 
@@ -149,7 +149,7 @@ The autonomous builder must **set**, not inherit blindly:
 }
 ```
 
-platformd provenance should record `authority: wire_autonomous_publish_v1`, not
+corpusd provenance should record `authority: wire_autonomous_publish_v1`, not
 `owner_publish_v0`.
 
 ### 4. Eligibility guards (authorization logic, not prompts)
@@ -174,32 +174,32 @@ Keep and test all of:
 
 Autonomous path must reuse the same enrichment/safety pipeline as owner publish:
 
-- `enrichVTextPublicationMetadata` logic (or shared package) before platformd.
+- `enrichVTextPublicationMetadata` logic (or shared package) before corpusd.
 - No raw `reader_snapshot` for blocked / non-public content items.
 - Transclusion display modes respect `sourcecontract` publication rules.
 
 **Do not** duplicate a weaker enrichment path inside runtime.
 
-### 6. Ordering: platformd before edition index
+### 6. Ordering: corpusd before edition index
 
 Today edition transclusion can make a story appear in
-`/api/universal-wire/stories` **without** a platformd record.
+`/api/universal-wire/stories` **without** a corpusd record.
 
 **Required order:**
 
-1. platformd publish succeeds (returns `route_path`, `publication_version_id`)
+1. corpusd publish succeeds (returns `route_path`, `publication_version_id`)
 2. persist publication ref on revision metadata or durable publish ledger
 3. edition transclusion
 4. debounced reconciler
 
-On platformd failure: **no** edition transclusion, **no** debouncer fire.
+On corpusd failure: **no** edition transclusion, **no** debouncer fire.
 
 ### 7. Idempotency and publish-then-correct
 
-Multiple platformd publications per doc revision are **allowed** (corrections).
+Multiple corpusd publications per doc revision are **allowed** (corrections).
 Still:
 
-- Record `source_revision_hash` from platformd response on success.
+- Record `source_revision_hash` from corpusd response on success.
 - Edition transclusion should be idempotent per `doc_id` (already checks `included`).
 - Debouncer should key on publish events, not raw edits.
 
@@ -211,7 +211,7 @@ Still:
 
 ---
 
-## platformd hardening backlog (shared with owner path)
+## corpusd hardening backlog (shared with owner path)
 
 | Issue | Risk | Recommendation |
 |-------|------|----------------|
@@ -226,8 +226,8 @@ Still:
 
 Staging acceptance **must** include:
 
-1. Canonical platform wire article → platformd `route_path` resolvable via proxy
-2. Input/seed revision → **no** platformd row, **no** edition line
+1. Canonical platform wire article → corpusd `route_path` resolvable via proxy
+2. Input/seed revision → **no** corpusd row, **no** edition line
 3. User-owned doc `edit_vtext` on platform VM → **no** autonomous publish
 4. Prompt-bar conductor route → **no** ingestion event → **no** wire publish
 5. Processor spawn researcher → denied (registry)
@@ -236,7 +236,7 @@ Staging acceptance **must** include:
 8. Attempt to set `access_policy: private` in revision metadata → autonomous publish still **public** (forced server-side)
 
 Evidence per Phase A row (mission v1):  
-`fetch_id → ingestion_event → processor_run → vtext_revision → platformd_publication_ref`  
+`fetch_id → ingestion_event → processor_run → vtext_revision → corpusd_publication_ref`  
 plus negative prompt check.
 
 ---
@@ -246,11 +246,11 @@ plus negative prompt check.
 1. **This doc** (checkpoint) ✓
 2. Extract shared `buildPlatformPublishRequest` + enrichment from proxy into
    `internal/platformpublish` or reuse from proxy with runtime caller
-3. Add `publishPolicy.PublishWireArticleIfEligible` calling platformd via
+3. Add `publishPolicy.PublishWireArticleIfEligible` calling corpusd via
    **host-trusted** HTTP client (proxy internal route preferred)
-4. Reorder `maybeAutonomousPublishWireArticle`: platformd → edition → debouncer
-5. Tests: unit eligibility + integration with fake platformd + negative proofs
-6. Node B: platform VM + platformd + staging matrix row with publication ref
+4. Reorder `maybeAutonomousPublishWireArticle`: corpusd → edition → debouncer
+5. Tests: unit eligibility + integration with fake corpusd + negative proofs
+6. Node B: platform VM + corpusd + staging matrix row with publication ref
 
 ---
 
@@ -260,14 +260,14 @@ plus negative prompt check.
   mitigated by reconciler + correction VText wakes, not pre-publish human gate.
 - **LLM quality:** not a traditional infosec boundary; provenance and source
   handles are the verifier.
-- **platformd localhost trust:** any host root process can publish; acceptable on
+- **corpusd localhost trust:** any host root process can publish; acceptable on
   single-tenant Node B with hardened deploy, revisit for multi-tenant.
 
 ---
 
 ## Belief state
 
-Autonomous Wire publish is **not live** until platformd projection lands with the
+Autonomous Wire publish is **not live** until corpusd projection lands with the
 controls above. Edition-only transclusion is an internal editorial index, not
-publication. **(e) staging proofs should fail** if `platformd_publication_ref` is
+publication. **(e) staging proofs should fail** if `corpusd_publication_ref` is
 missing from the evidence chain.

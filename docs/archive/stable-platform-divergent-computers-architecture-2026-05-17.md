@@ -36,7 +36,7 @@ This is especially important for the automatic newspaper. Much of it should be
 built in user land: develop apps, ingestion paths, app change packages, VText
 workflows, and reader surfaces inside user/candidate computers; then promote
 selected results to the platform computer or publish records/artifacts through
-platformd. Host substrate changes are still needed for new shared capabilities,
+corpusd. Host substrate changes are still needed for new shared capabilities,
 such as gateway APIs or VM/runtime protocols, but they should be the exception,
 not the default way newspaper work ships.
 
@@ -52,7 +52,7 @@ Use this matrix before choosing an implementation path:
 
 | Change | Correct path |
 | --- | --- |
-| Host, security, auth, vmctl, provider boundary, platformd service shape | Platform substrate deploy |
+| Host, security, auth, vmctl, provider boundary, corpusd service shape | Platform substrate deploy |
 | One user's runtime/UI/source | User-computer candidate promotion |
 | Share an app/change with others | App change package publication |
 | Install another user's app/change | Recipient candidate adoption and rebuild |
@@ -172,7 +172,7 @@ build -> promote/rollback.
 The platform substrate is the stable shared host layer:
 
 - NixOS host configuration;
-- Caddy, auth, proxy, gateway, vmctl, platformd, platform Dolt service shape;
+- Caddy, auth, proxy, gateway, vmctl, corpusd, platform Dolt service shape;
 - Firecracker/guest image construction and VM lifecycle protocol;
 - provider credential boundary;
 - public API contracts and authority boundaries;
@@ -279,7 +279,7 @@ Useful future modes:
 - organization/team public surface;
 - invite-only or paid public projection.
 
-Short-term, use platformd publication and platform-computer promotion instead
+Short-term, use corpusd publication and platform-computer promotion instead
 of building arbitrary public personal-computer hosting. The invariant to
 preserve is selective projection, not whole-computer exposure.
 
@@ -464,7 +464,7 @@ admin/user computer
   -> candidate computer
   -> build ingestion/app/VText/publication capability
   -> verify in user land
-  -> promote to platform computer or publish to platformd
+  -> promote to platform computer or publish to corpusd
 ```
 
 Examples that can live mostly in user/platform-computer land:
@@ -480,7 +480,7 @@ Examples that still require platform substrate deploy:
 
 - new gateway APIs or provider credential boundaries;
 - vmctl/candidate-computer protocol changes;
-- platformd schema or service behavior changes;
+- corpusd schema or service behavior changes;
 - auth/session/routing/security changes;
 - base APIs needed by all computers.
 
@@ -499,7 +499,7 @@ to shared substrate:
 - auth/session and signing-key behavior;
 - provider gateway and credential isolation;
 - vmctl protocol and VM lifecycle semantics;
-- platformd schema/service boundaries;
+- corpusd schema/service boundaries;
 - base app/runtime contracts that all computers rely on;
 - default platform release artifacts;
 - security fixes that must become universal immediately.

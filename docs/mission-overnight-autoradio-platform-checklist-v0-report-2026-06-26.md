@@ -111,7 +111,7 @@ Texture canonical writes remained protected throughout — source graph writes h
 - Sourcecycled to objectgraph ingestion pipeline (`sourcecycled_web_captures.go`, 303 lines)
 - Wire synthesis engine (`wire_synthesis.go`, 459 lines) that clusters sources and creates English synthesis Texture articles
 - Story cluster update state for same-article revision over time
-- Platformd Texture sync (document + revision rows)
+- Corpusd Texture sync (document + revision rows)
 - Source Viewer/reader artifact opening from Wire cards
 - Wire processor decision tools (`tools_wire_processor.go`, 95 lines)
 - Wire publication pipeline (`wire_publication.go`, 761 lines)
@@ -128,9 +128,9 @@ The O4 work reveals a critical recurring loop that repeated 9 times:
 | 2 | `d15ef3fb` | Copy repaired | Headline 404s on Texture document load |
 | 3 | `d4bd1c65` | Ordinary Texture loads | Universal Wire renders 0 articles (all filtered) |
 | 4 | `690284db` | Verifier handoff repaired | Legacy graph captures lack `captured_from` edges |
-| 5 | `54742969` | Captures eligible | Platformd sync envelope mismatch (bare array vs `{revisions}`) |
-| 6 | `432ecd5a` | 1 article renders | Platformd document DTO missing `current_revision_id` |
-| 7 | `7e8138e6` | Current-head repaired | Platformd revision-list returns bare array, not envelope |
+| 5 | `54742969` | Captures eligible | Corpusd sync envelope mismatch (bare array vs `{revisions}`) |
+| 6 | `432ecd5a` | 1 article renders | Corpusd document DTO missing `current_revision_id` |
+| 7 | `7e8138e6` | Current-head repaired | Corpusd revision-list returns bare array, not envelope |
 | 8 | `cb79fa39` | Revision-list repaired | Proxy platform sync drops supplied revision on full-history fetch |
 | 9 | `430ac93e` | Proxy fallback repaired | Single deterministic cluster, not semantic multi-article |
 
@@ -169,7 +169,7 @@ The 124 "Record" commits reflect the thread-native harness: every worker launch,
 
 ### 5.1 Centralized Service Pattern in Wire Code
 
-The overnight run landed ~6,974 lines of Universal Wire logic as direct methods on the `Runtime` struct. This is a centralized service architecture — Universal Wire is not an agent, it's a library of runtime methods that directly mutate the store, publish through runtime-owned callbacks, and sync to platformd through runtime internals. The 9 deploy cycles discovering new failures happened because there is no appagent that owns the Wire's health.
+The overnight run landed ~6,974 lines of Universal Wire logic as direct methods on the `Runtime` struct. This is a centralized service architecture — Universal Wire is not an agent, it's a library of runtime methods that directly mutate the store, publish through runtime-owned callbacks, and sync to corpusd through runtime internals. The 9 deploy cycles discovering new failures happened because there is no appagent that owns the Wire's health.
 
 **Successor pattern:** Service-as-appagent. Universal Wire becomes an appagent that owns its artifact domain, coordinates through channels, and is supervised by the trajectory supervisor.
 
@@ -200,7 +200,7 @@ V = open obligations without a typed record
   + driving conjectures still undecided
 ```
 
-This counted obligations. The problem: discovering a new failure mode (e.g., "platformd returns bare arrays for revision lists") is real cognitive progress, but it increased V because it added a new obligation. The variant oscillated rather than monotonically descending.
+This counted obligations. The problem: discovering a new failure mode (e.g., "corpusd returns bare arrays for revision lists") is real cognitive progress, but it increased V because it added a new obligation. The variant oscillated rather than monotonically descending.
 
 ### 6.2 The Updated Variant
 
@@ -214,7 +214,7 @@ V = driving conjectures still undecided
 
 Key changes:
 
-- **Each pass must produce a strong, clear, definitive statement** about the system. "The code works" is not a statement; "platformd returns bare arrays for revision lists, breaking the Texture editor's revision selection" is.
+- **Each pass must produce a strong, clear, definitive statement** about the system. "The code works" is not a statement; "corpusd returns bare arrays for revision lists, breaking the Texture editor's revision selection" is.
 - **Discovery of a new conjecture advances the cognitive state** even when V increases. The agent now knows something it did not know before.
 - **Conjecture verdicts are typed**: `supported`, `weakened`, `falsified`, `superseded`, `discovered`.
 - **The forcing rule** now triggers on "no decided conjecture and no observer evidence" rather than "no ΔV."
@@ -277,7 +277,7 @@ This is itself a Choir-in-Choir proof: the agent received an updated cognitive p
 | `internal/runtime/universal_wire_test.go` | 1,518 | Universal Wire test suite |
 | `internal/runtime/sourcecycled_web_captures.go` | 303 | Sourcecycled to objectgraph ingestion |
 | `internal/runtime/wire_publication.go` | 761 | Wire article publication pipeline |
-| `internal/runtime/wire_platform_publish.go` | 260 | Platformd publication integration |
+| `internal/runtime/wire_platform_publish.go` | 260 | Corpusd publication integration |
 | `internal/runtime/wire_reconciler_debounce.go` | 222 | Reconciler debounce and dispatch |
 | `internal/runtime/tools_wire_processor.go` | 95 | Wire processor decision tools |
 
@@ -318,7 +318,7 @@ Approximately 6,974 lines of new code across 12 files for the Wire system, plus 
 3. Qdrant is a rebuildable derived index — enables semantic search without coupling to source-of-truth
 4. Universal Wire synthesis exists — can cluster sources into English Texture articles with source refs
 5. Same-article identity over time — new source information can revise existing articles
-6. Platform publication path is mapped — proxy-mediated and direct-platformd sync paths both understood
+6. Platform publication path is mapped — proxy-mediated and direct-corpusd sync paths both understood
 7. Choir-in-Choir product path exists — prompt bar to Texture to `request_super_execution` works for creating mission artifacts
 8. The Parallax skill was updated mid-mission and the running agent applied it — this is itself a Choir-in-Choir proof
 

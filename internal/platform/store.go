@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -336,6 +337,35 @@ CREATE TABLE IF NOT EXISTS platform_texture_revisions (
 	PRIMARY KEY (revision_id),
 	INDEX idx_platform_texture_revisions_doc (doc_id, created_at)
 );
+
+CREATE TABLE IF NOT EXISTS og_objects (
+	canonical_id  VARCHAR(255) NOT NULL PRIMARY KEY,
+	object_kind   VARCHAR(128) NOT NULL,
+	owner_id      VARCHAR(255) NOT NULL,
+	computer_id   VARCHAR(255) NOT NULL DEFAULT '',
+	version_id    VARCHAR(255) NOT NULL DEFAULT '',
+	content_hash  VARCHAR(128) NOT NULL,
+	body          LONGBLOB,
+	metadata      LONGTEXT NOT NULL,
+	created_at    DATETIME NOT NULL,
+	updated_at    DATETIME NOT NULL,
+	tombstone     BOOLEAN NOT NULL DEFAULT FALSE,
+	superseded_by VARCHAR(255) NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_og_objects_kind_owner ON og_objects(object_kind, owner_id);
+CREATE INDEX IF NOT EXISTS idx_og_objects_updated ON og_objects(updated_at);
+
+CREATE TABLE IF NOT EXISTS og_edges (
+	edge_id    VARCHAR(255) NOT NULL PRIMARY KEY,
+	from_id    VARCHAR(255) NOT NULL,
+	to_id      VARCHAR(255) NOT NULL,
+	kind       VARCHAR(128) NOT NULL,
+	metadata   LONGTEXT NOT NULL,
+	created_at DATETIME NOT NULL,
+	tombstone  BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_og_edges_from ON og_edges(from_id);
+CREATE INDEX IF NOT EXISTS idx_og_edges_to ON og_edges(to_id);
 `
 
 func OpenStore(dsn string) (*Store, error) {
@@ -427,6 +457,13 @@ func (s *Store) commitDolt(ctx context.Context, message string) error {
 		message = "platform change"
 	}
 	if _, err := s.db.ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
+		// Dolt returns "nothing to commit" when the working set has no changes
+		// relative to the current commit (e.g. an idempotent upsert that did
+		// not alter any row values). This is not a failure — the data is
+		// already in the desired state — so treat it as success.
+		if strings.Contains(err.Error(), "nothing to commit") {
+			return nil
+		}
 		return fmt.Errorf("platform store: dolt commit: %w", err)
 	}
 	return nil

@@ -539,7 +539,7 @@ Changes:
 - SBOM package-build failures now print a bounded first 40 stderr lines and last 80 stderr lines.
 - This keeps logs bounded while preserving the trailing Nix error that usually carries the actionable hash, missing source, or fetch failure.
 - The SBOM loop now writes `sboms/manifest.jsonl` with one machine-readable status row per package.
-- Required packages are `auth`, `proxy`, `gateway`, `maild`, `maildctl`, `platformd`, `sandbox`, `sourcecycled`, `vmctl`, `frontend`, and `zot`.
+- Required packages are `auth`, `proxy`, `gateway`, `maild`, `maildctl`, `corpusd`, `sandbox`, `sourcecycled`, `vmctl`, `frontend`, and `zot`.
 - Optional `obscura` may still skip with a warning; any skipped required package increments `required_failed` and fails the SBOM step after the loop.
 - SBOM artifact upload now runs with `if: always()` and includes both generated `sbom.json` files and the manifest, with `if-no-files-found: error`.
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -17,10 +18,10 @@ import (
 // records appended events and can be configured to fail on Append to exercise
 // graceful degradation.
 type stubTraceStore struct {
-	appended []trace.Event
+	appended  []trace.Event
 	appendErr error
-	getErr   error
-	closed   bool
+	getErr    error
+	closed    bool
 }
 
 func (s *stubTraceStore) Append(_ context.Context, e *trace.Event) error {
@@ -87,6 +88,7 @@ func newTraceWiringRuntime(t *testing.T, traceStore trace.Store) (*Runtime, func
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
+		ObjectGraphStore:    objectgraph.NewMemoryStore(),
 	}, s, events.NewEventBus(), NewStubProvider(0), opts...)
 	setTestDispatch(rt, s)
 
@@ -94,9 +96,6 @@ func newTraceWiringRuntime(t *testing.T, traceStore trace.Store) (*Runtime, func
 		rt.Stop()
 		_ = s.Close()
 		_ = os.Remove(dbPath)
-		if wsPath, _, err := runtimeObjectGraphDoltWorkspace(rt.cfg, s); err == nil {
-			_ = os.RemoveAll(wsPath)
-		}
 		_ = os.RemoveAll(promptRoot)
 	}
 	return rt, cleanup
@@ -111,14 +110,14 @@ func TestEmitEventProjectsToTraceStore(t *testing.T) {
 	defer cleanup()
 
 	rec := &types.RunRecord{
-		RunID:      "run-trace-1",
-		AgentID:    "agent-trace",
-		ChannelID:  "chan-trace",
-		OwnerID:    "user-alice",
-		SandboxID:  "sandbox-trace-test",
-		State:      types.RunRunning,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		RunID:     "run-trace-1",
+		AgentID:   "agent-trace",
+		ChannelID: "chan-trace",
+		OwnerID:   "user-alice",
+		SandboxID: "sandbox-trace-test",
+		State:     types.RunRunning,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
 		t.Fatalf("create run: %v", err)

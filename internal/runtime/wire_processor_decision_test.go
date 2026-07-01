@@ -389,8 +389,8 @@ func seedPublishedCoverageDoc(t *testing.T, s interface {
 		t.Fatalf("create published coverage doc: %v", err)
 	}
 	meta, _ := json.Marshal(map[string]any{
-		"platformd_route_path": routePath,
-		"platformd_publication_ref": map[string]any{
+		"corpusd_route_path": routePath,
+		"corpusd_publication_ref": map[string]any{
 			"route_path": routePath,
 		},
 	})

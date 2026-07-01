@@ -838,7 +838,7 @@ behavior commit:
 repair implemented:
 
 - `internal/proxy/platform_publish.go` now enriches VText publication metadata
-  before posting to platformd. For source entities that target owner
+  before posting to corpusd. For source entities that target owner
   `ContentItem`s and are permitted for publication by source provenance or
   explicit publication policy, the proxy fetches the owner content item through
   the authenticated sandbox path and embeds a bounded `reader_snapshot` in the
@@ -871,13 +871,13 @@ local limitation:
 
 - `pnpm --dir frontend e2e
   tests/vtext-source-service-publication.spec.js` failed locally before UI
-  assertions because `start-services.sh` does not launch platformd or the
+  assertions because `start-services.sh` does not launch corpusd or the
   platform Dolt SQL server. Proxy logged
   `dial tcp 127.0.0.1:8086: connect: connection refused` for both the existing
   source-service publication test and the new content-item reader-snapshot
   publication test. This does not falsify the code path; it records that full
   publication-route proof must be staging/deployed unless the local harness is
-  expanded to include platformd.
+  expanded to include corpusd.
 
 remaining error field:
 
@@ -2731,7 +2731,7 @@ implementation:
 
 - Commit `559a72a60bedcfa7b33d0380004477fa3a572718` (`fix: publish content
   source reader snapshots`) enriches VText publication metadata before calling
-  platformd. Public/publishable `ContentItem` source entities now carry a
+  corpusd. Public/publishable `ContentItem` source entities now carry a
   `reader_snapshot` with cleaned reader Markdown, source URLs, content hash,
   media type, and publication-reader access scope.
 - The inline transclusion snapshot remains bounded to the selected quote. The
@@ -2753,7 +2753,7 @@ local verification:
   bounded table edit coverage.
 - `pnpm --dir frontend e2e tests/vtext-source-service-publication.spec.js`
   could not complete locally because the local service harness does not start
-  platformd on `127.0.0.1:8086`. The proxy logged `connect: connection refused`.
+  corpusd on `127.0.0.1:8086`. The proxy logged `connect: connection refused`.
   This remains a local harness limitation, not a staging acceptance failure.
 
 deployment evidence:
@@ -2814,7 +2814,7 @@ residual risks:
   pass, with confirming/refuting citations rather than placeholders.
 - The mission-wide hard review report, PDF export to iCloud Drive, and
   simplification/dead-code pass remain incomplete.
-- The local service harness still lacks platformd startup, which prevents local
+- The local service harness still lacks corpusd startup, which prevents local
   end-to-end publication-source E2E from replacing staging proof.
 - Publication-source policy needs broader review for private, licensed, and
   client-confidential sources before the legal-cloud document uses non-public
@@ -4698,9 +4698,9 @@ local harness limitation:
 - `pnpm --dir frontend exec playwright test
   frontend/tests/vtext-source-service-publication.spec.js --project=chromium`
   could not be used as the local verifier because the ad hoc local service
-  stack did not include `platformd` backed by a platform Dolt SQL server, so
+  stack did not include `corpusd` backed by a platform Dolt SQL server, so
   `/api/platform/vtext/publications` returned `502 failed to publish vtext`.
-  This is a local harness/platformd availability limitation, not evidence about
+  This is a local harness/corpusd availability limitation, not evidence about
   the Source viewer rendering path.
 - During the first attempt, persisted local VText windows from earlier test
   runs caused a launched Source window to remain at `Opening Source...` until
@@ -5755,7 +5755,7 @@ local evidence:
   desktop icon|url input bar is visible" --project=chromium --timeout=90000`
   passed: `2 passed (5.4s)`.
 - The publication E2E could not run locally because the current local service
-  harness does not start platformd on `127.0.0.1:8086`; proxy publication calls
+  harness does not start corpusd on `127.0.0.1:8086`; proxy publication calls
   returned `connect: connection refused`. This is a local harness limitation,
   not proof about guest source-window behavior.
 

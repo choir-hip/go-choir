@@ -203,24 +203,24 @@ for path in "${changed[@]}"; do
       add_host_service "sandbox"
       add_explanation "$path -> gateway/sandbox shared runtime dependency"
       ;;
-    cmd/platformd/*|internal/promotion/*)
-      add_host_service "platformd"
-      add_explanation "$path -> platformd host service"
+    cmd/corpusd/*|internal/promotion/*)
+      add_host_service "corpusd"
+      add_explanation "$path -> corpusd host service"
       ;;
     internal/platform/*)
-      add_host_service "platformd"
+      add_host_service "corpusd"
       add_host_service "proxy"
       add_explanation "$path -> platform/proxy shared dependency"
       ;;
     internal/wirepublish/*)
-      add_host_service "platformd"
+      add_host_service "corpusd"
       add_host_service "proxy"
       add_host_service "sandbox"
-      add_explanation "$path -> wire autonomous publish: platformd/proxy choke point + sandbox runtime"
+      add_explanation "$path -> wire autonomous publish: corpusd/proxy choke point + sandbox runtime"
       ;;
     internal/sourcecontract/*)
       add_host_service "gateway"
-      add_host_service "platformd"
+      add_host_service "corpusd"
       add_host_service "proxy"
       add_host_service "sandbox"
       add_host_service "sourcecycled"
@@ -238,7 +238,7 @@ for path in "${changed[@]}"; do
       ;;
     internal/markdownstructure/*)
       add_host_service "gateway"
-      add_host_service "platformd"
+      add_host_service "corpusd"
       add_host_service "proxy"
       add_host_service "sandbox"
       add_explanation "$path -> shared Markdown structure dependency for runtime/platform publication exports"
@@ -277,10 +277,10 @@ for path in "${changed[@]}"; do
     internal/buildinfo/*)
       add_host_service "gateway"
       add_host_service "maild"
-      add_host_service "platformd"
+      add_host_service "corpusd"
       add_host_service "proxy"
       add_host_service "sandbox"
-      add_explanation "$path -> build identity users: gateway/maild/platformd/proxy/sandbox"
+      add_explanation "$path -> build identity users: gateway/maild/corpusd/proxy/sandbox"
       ;;
     internal/events/*)
       add_host_service "gateway"
@@ -291,7 +291,7 @@ for path in "${changed[@]}"; do
       add_host_service "auth"
       add_host_service "gateway"
       add_host_service "maild"
-      add_host_service "platformd"
+      add_host_service "corpusd"
       add_host_service "proxy"
       add_host_service "sandbox"
       add_host_service "vmctl"

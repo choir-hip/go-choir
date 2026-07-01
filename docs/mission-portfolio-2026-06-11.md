@@ -493,7 +493,7 @@ surface proof.
 
 **Kind:** side track / naming.
 
-`platformd → corpusd` with config-key aliases; zero behavior change;
+`corpusd → corpusd` with config-key aliases; zero behavior change;
 SMALL-MEDIUM radius per review v2. Promote "canonical publication_id minted
 at candidate selection" from open question to a design note inside this
 mission. **Dependencies:** none. **Size:** half a session.

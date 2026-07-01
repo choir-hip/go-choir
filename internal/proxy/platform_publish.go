@@ -205,15 +205,15 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {
-		log.Printf("proxy: platform publish post platformd: %v", err)
+		log.Printf("proxy: platform publish post corpusd: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to publish texture"})
-		h.lifecycle.record("platform_publish.platformd", "error", time.Since(started))
+		h.lifecycle.record("platform_publish.corpusd", "error", time.Since(started))
 		h.lifecycle.record("platform_publish.total", "platform_error", time.Since(started))
 		return
 	}
 	if status < 200 || status >= 300 {
 		writeJSON(w, status, platformResp)
-		h.lifecycle.record("platform_publish.platformd", lifecycleHTTPStatus(status), time.Since(started))
+		h.lifecycle.record("platform_publish.corpusd", lifecycleHTTPStatus(status), time.Since(started))
 		h.lifecycle.record("platform_publish.total", lifecycleHTTPStatus(status), time.Since(started))
 		return
 	}
@@ -221,7 +221,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		resp.PublicURL = publicURLForRoute(r, resp.RoutePath)
 	}
 	writeJSON(w, status, platformResp)
-	h.lifecycle.record("platform_publish.platformd", lifecycleHTTPStatus(status), time.Since(started))
+	h.lifecycle.record("platform_publish.corpusd", lifecycleHTTPStatus(status), time.Since(started))
 	h.lifecycle.record("platform_publish.total", "published", time.Since(started))
 }
 
@@ -671,7 +671,7 @@ func (h *Handler) importSandboxURLContent(r *http.Request, sandboxBase, userID, 
 }
 
 func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishTextureRequest) (any, int, error) {
-	target, err := joinBasePath(h.cfg.PlatformdURL, "/internal/platform/publications/texture")
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/publications/texture")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -685,19 +685,19 @@ func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishT
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Internal-Caller", "true")
-	resp, err := h.platformd.Do(httpReq)
+	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
-		return nil, 0, fmt.Errorf("call platformd: %w", err)
+		return nil, 0, fmt.Errorf("call corpusd: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("read platformd response: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("read corpusd response: %w", err)
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var out platform.PublishTextureResponse
 		if err := json.Unmarshal(body, &out); err != nil {
-			return nil, resp.StatusCode, fmt.Errorf("decode platformd response: %w", err)
+			return nil, resp.StatusCode, fmt.Errorf("decode corpusd response: %w", err)
 		}
 		return &out, resp.StatusCode, nil
 	}
@@ -705,7 +705,7 @@ func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishT
 	if err := json.Unmarshal(body, &out); err != nil || out.Error == "" {
 		out.Error = strings.TrimSpace(string(body))
 		if out.Error == "" {
-			out.Error = fmt.Sprintf("platformd status %d", resp.StatusCode)
+			out.Error = fmt.Sprintf("corpusd status %d", resp.StatusCode)
 		}
 	}
 	return out, resp.StatusCode, nil

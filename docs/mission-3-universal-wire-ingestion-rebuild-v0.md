@@ -48,7 +48,7 @@ dispatch. Verified state of the pipeline:
 - Processor → Texture agent → LLM provider pipeline (Path C from heresy deletion)
 - `cycle/synthesize.go` — original LLM synthesizer (user's prototype)
 - O1-O3 settled code: objectgraph, qdrant schema/pipeline/projection, texture source graph
-- Publication, reconciler debounce, platformd sync
+- Publication, reconciler debounce, corpusd sync
 - Source body text in Texture prompts (fixed in prior session)
 
 ## Spike Evidence (All Complete)

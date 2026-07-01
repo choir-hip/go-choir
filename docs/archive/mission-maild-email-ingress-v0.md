@@ -85,7 +85,7 @@ clearly, covered by focused tests, deployable, observable, and rollback-safe.
 
 Current beliefs:
 
-- `platformd` is scoped to platform Dolt publication/retrieval/citation and is
+- `corpusd` is scoped to platform Dolt publication/retrieval/citation and is
   not the right home for mail.
 - `gateway` is scoped to model/search provider egress and is not the right home
   for mail.
@@ -438,7 +438,7 @@ unproven or partial claims:
   - GitHub Actions run 26543202795 deployed 56ad514 after passing all Go gates; Deploy to Staging job 78189403049 succeeded; deploy impact selected HOST_SERVICES=maild, updated the maild host service pointer, and restarted go-choir-maild; Node B deploy.env and /opt/go-choir HEAD match 56ad514435dc10d27eef4fac7c2db08199946045 with clean status; public /health reports proxy and upstream build deployed_commit 56ad514435dc10d27eef4fac7c2db08199946045; Node B maild health is ok; scripts/mail-provider-readiness still reports Resend restricted_api_key, Gandi mail records/public DNS on Gandi defaults, no DMARC, and public webhook HTTP 503 webhook_secret_not_configured with no counter mutation
 belief-state changes:
   - maild as separate microservice remains the right boundary
-  - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or platformd
+  - Resend credentials belong in /var/lib/go-choir/maild.env, not gateway-provider.env or corpusd
   - 000@choir.news must be seeded to the real auth user id through MAILD_ROOT_OWNER_ID; Nix must not bake in a placeholder owner
   - plus aliases should not implicitly fall back to 000 because that weakens secret-alias policy
   - outbound reaches Resend, but the current Resend account state rejects 000@choir.news because choir.news is not verified

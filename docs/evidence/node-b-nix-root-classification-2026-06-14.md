@@ -51,7 +51,7 @@
 
 | root record |
 | --- |
-| `/tmp/go-choir-service-platformd-result	/nix/store/0wbic0glg8dspxb5ravpxlkgil0kaddb-platformd-0.1.0	2026-06-10T07:44:31.2805019980Z` |
+| `/tmp/go-choir-service-corpusd-result	/nix/store/0wbic0glg8dspxb5ravpxlkgil0kaddb-corpusd-0.1.0	2026-06-10T07:44:31.2805019980Z` |
 | `/tmp/go-choir-service-sourcecycled-result		2026-06-10T18:58:17.8061642640Z` |
 | `/tmp/go-choir-guest-image-new	/nix/store/1w0ym05w71cg9w94hp882ch2ywpjcjl8-go-choir-guest-image	2026-06-10T20:05:12.0335341820Z` |
 | `/tmp/guest-image-result	/nix/store/6d9f24qi8ij02ikfy2kavsrdk1qbh0d0-go-choir-guest-image	2026-06-14T16:06:54.7957782520Z` |

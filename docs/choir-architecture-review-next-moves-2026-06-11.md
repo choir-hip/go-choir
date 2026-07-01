@@ -139,13 +139,13 @@ pruned per `legacy-promotion-experiments-learnings.md`). Follow hybrid handoff
 Milestones 0–8; the research backlog (Nucleus audit, effect capture, snapshot
 strategy, Qdrant placement) is design work that doesn't block §5.
 
-### C (platformd → corpusd) — RIGHT, milder than conjectured
+### C (corpusd → corpusd) — RIGHT, milder than conjectured
 
-`platformd` is already cleanly corpus-scoped (publication lifecycle, 19 tables,
+`corpusd` is already cleanly corpus-scoped (publication lifecycle, 19 tables,
 no VM/lifecycle ownership; internal routes auth-gated). Rename is SMALL-MEDIUM
 and safe now. The real finding: **no canonical `publication_id` in the
 runtime's model** — publication identity is post-hoc metadata strings on
-revisions (`platformd_publication_ref`). Promote publication identity to a
+revisions (`corpusd_publication_ref`). Promote publication identity to a
 design item; it keys the trajectory model (§3).
 
 ### D (parent/child wrong as primary causality) — STRONGLY SUPPORTED; upgraded from demote to REPLACE
@@ -335,7 +335,7 @@ slice).
    → by-trajectory; co-super slots → slot registry; `ParentRunID` →
    `spawned_by_run_id` provenance-only; delete `CountActiveChildRuns` control
    reads.
-6. **Side PR, anytime**: `platformd → corpusd` rename with config aliases.
+6. **Side PR, anytime**: `corpusd → corpusd` rename with config aliases.
 
 Parallel design track (does not block 1–5): capsule layer per hybrid handoff
 research backlog; MutationTransaction as generalization of AppAdoption;
@@ -374,7 +374,7 @@ research backlog; MutationTransaction as generalization of AppAdoption;
 2. Where the trajectory record lives — likely the runtime store (it must answer
    "is this live?" on every reconcile), with sourcecycled reading via the
    existing status API.
-3. `publication_id` minting point — platformd's `PublishVTextResponse` ID,
+3. `publication_id` minting point — corpusd's `PublishVTextResponse` ID,
    minted earlier at candidate selection?
 4. Cross-level invalidation (grand synthesis §1.3): which existing assertions
    about Wire accounting, made under the run-tree regime, get explicit

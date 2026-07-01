@@ -21,10 +21,10 @@ type Config struct {
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:           envOr("PLATFORMD_PORT", DefaultPort),
-		DoltDSN:        envOr("PLATFORMD_DOLT_DSN", DefaultDoltDSN),
-		ArtifactsRoot:  envOr("PLATFORMD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
-		SigningKeyPath: envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("PLATFORMD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
+		Port:           envOr("CORPUSD_PORT", DefaultPort),
+		DoltDSN:        envOr("CORPUSD_DOLT_DSN", DefaultDoltDSN),
+		ArtifactsRoot:  envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
+		SigningKeyPath: envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -34,13 +34,13 @@ func LoadConfig() (*Config, error) {
 
 func (c *Config) validate() error {
 	if c.Port == "" {
-		return fmt.Errorf("platform config: PLATFORMD_PORT must not be empty")
+		return fmt.Errorf("platform config: CORPUSD_PORT must not be empty")
 	}
 	if c.DoltDSN == "" {
-		return fmt.Errorf("platform config: PLATFORMD_DOLT_DSN must not be empty")
+		return fmt.Errorf("platform config: CORPUSD_DOLT_DSN must not be empty")
 	}
 	if c.ArtifactsRoot == "" {
-		return fmt.Errorf("platform config: PLATFORMD_ARTIFACTS_ROOT must not be empty")
+		return fmt.Errorf("platform config: CORPUSD_ARTIFACTS_ROOT must not be empty")
 	}
 	return nil
 }

@@ -627,7 +627,7 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 	}
 	publishedClause := ""
 	if publishedOnly {
-		publishedClause = " AND EXISTS (SELECT 1 FROM texture_revisions rp WHERE rp.doc_id = d.doc_id AND rp.revision_id = d.current_revision_id AND rp.metadata_json LIKE '%\"platformd_route_path\"%')"
+		publishedClause = " AND EXISTS (SELECT 1 FROM texture_revisions rp WHERE rp.doc_id = d.doc_id AND rp.revision_id = d.current_revision_id AND (rp.metadata_json LIKE '%\"corpusd_route_path\"%' OR rp.metadata_json LIKE '%\"platformd_route_path\"%'))"
 	}
 	titleArgs := append([]any(nil), args...)
 	titleSQL := fmt.Sprintf(
@@ -682,7 +682,7 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 	}
 	publishedContentClause := ""
 	if publishedOnly {
-		publishedContentClause = " AND r.metadata_json LIKE '%\"platformd_route_path\"%'"
+		publishedContentClause = " AND (r.metadata_json LIKE '%\"corpusd_route_path\"%' OR r.metadata_json LIKE '%\"platformd_route_path\"%')"
 	}
 	// Exclude already-found docs.
 	excludeClause := ""

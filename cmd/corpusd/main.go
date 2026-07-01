@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -11,10 +12,10 @@ import (
 func main() {
 	cfg, err := platform.LoadConfig()
 	if err != nil {
-		log.Fatalf("platformd config: %v", err)
+		log.Fatalf("corpusd config: %v", err)
 	}
 	if err := cfg.EnsureDirs(); err != nil {
-		log.Fatalf("platformd dirs: %v", err)
+		log.Fatalf("corpusd dirs: %v", err)
 	}
 
 	var store *platform.Store
@@ -24,11 +25,11 @@ func main() {
 		if storeErr == nil {
 			break
 		}
-		log.Printf("platformd store: attempt %d/20: %v", attempt, storeErr)
+		log.Printf("corpusd store: attempt %d/20: %v", attempt, storeErr)
 		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
 	}
 	if storeErr != nil {
-		log.Fatalf("platformd store: %v", storeErr)
+		log.Fatalf("corpusd store: %v", storeErr)
 	}
 	defer func() {
 		_ = store.Close()
@@ -36,7 +37,17 @@ func main() {
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
 	handler := platform.NewHandler(svc)
-	s := server.NewServer("platformd", cfg.Port)
+	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
+
+	// Object graph API: allows sourcecycled and VMs to project and query
+	// object graph data stored in the platform Dolt SQL server (corpusd).
+	ogStore := platform.NewObjectGraphStore(store)
+	ogService := objectgraph.NewService(objectgraph.Config{
+		Durable: ogStore,
+	})
+	ogHandler := platform.NewObjectGraphHandler(ogService, ogStore)
+	platform.RegisterObjectGraphRoutes(s, ogHandler)
+
 	s.Start()
 }

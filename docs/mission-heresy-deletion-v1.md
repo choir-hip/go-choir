@@ -52,7 +52,7 @@ This bypasses the agent loop entirely.
   to Texture agent, which starts a revision run using the LLM provider
 - `wire_reconciler_debounce.go` — debounced dispatch of reconciler agent
   after batch of publications
-- `wire_platform_publish.go` — platformd publication + Texture sync
+- `wire_platform_publish.go` — corpusd publication + Texture sync
 - `model_policy.go` — processor uses Xiaomi mimo-v2.5, reconciler uses
   DeepSeek v4-flash, texture uses ChatGPT gpt-5.5
 
@@ -92,7 +92,7 @@ because Path B short-circuited it.
 
 - `wire_publication.go` (761 lines) — work item lifecycle, trajectory
   tracking. Real, tested, but centralized on Runtime.
-- `wire_platform_publish.go` (260 lines) — platformd sync. Real but
+- `wire_platform_publish.go` (260 lines) — corpusd sync. Real but
   centralized.
 - `wire_reconciler_debounce.go` (222 lines) — debounced reconciler
   dispatch. Real but centralized.

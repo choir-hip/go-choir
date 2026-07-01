@@ -291,7 +291,7 @@ inventory. Predecessors: none. Successors gated on this: M2 (messaging), M5
   on the baseline run (27384348346, commit 52e6baef, before this
   session): `TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly`
   (cmd/sourcecycled) and
-  `TestHandleInternalWirePlatformPublishPostsToPlatformd`
+  `TestHandleInternalWirePlatformPublishPostsToCorpusd`
   (internal/proxy). **No new failures introduced — the zero-behavior-
   change claim holds at CI scope.**
 

@@ -1458,7 +1458,7 @@ whose transitive imports reach structured Texture code includes
 `internal/texturedoc` in its filtered Nix package source.
 
 Move: construct + probe. Added `internal/texturedoc` to `flake.nix`
-`internalDirs` for proxy, platformd, gateway, sourcecycled, and sandbox.
+`internalDirs` for proxy, corpusd, gateway, sourcecycled, and sandbox.
 Evaluated each affected `packages.x86_64-linux.<service>.src` filtered source
 output and inspected it for `internal/texturedoc/schema.go` and
 `internal/texturedoc/projection.go`.
@@ -1477,7 +1477,7 @@ Receipts:
 
 Local evidence:
 `nix eval --raw .#packages.x86_64-linux.<service>.src` plus `find` over
-`internal/texturedoc` for proxy, platformd, sandbox, gateway, and sourcecycled;
+`internal/texturedoc` for proxy, corpusd, sandbox, gateway, and sourcecycled;
 `rg -o 'github.com/yusefmosiah/go-choir/internal/[A-Za-z0-9_/-]+'` over the
 evaluated filtered sources;
 `git diff --check && nix flake check --no-build`.
@@ -1521,7 +1521,7 @@ publication version `pubver-ef87a710-f7e8-4bb0-9ec6-8be8547afd4b`.
 
 Evidence:
 `gh run view 27922834186 --json conclusion,status,headSha,url,updatedAt`;
-deploy health log lines reporting proxy/sandbox/platformd commit
+deploy health log lines reporting proxy/sandbox/corpusd commit
 `d77e0457806d6a9de27657b7ffb5f8f3a7862922`;
 `BASE_URL=https://choir.news ... npx playwright test tests/texture-source-service-publication.spec.js --workers=1`;
 `BASE_URL=https://choir.news ... npx playwright test tests/texture-source-entities.spec.js --grep "raw markdown|structured revisions|multimedia source entities|source selectors|source evidence states|legacy texture" --workers=1`;

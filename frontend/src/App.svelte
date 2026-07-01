@@ -259,7 +259,7 @@
   async function loadUniversalWirePublicLink(token) {
     if (!token) return;
     universalWirePublicStatus = 'error';
-    universalWirePublicError = 'Legacy publication links were removed. Universal Wire will publish through platformd after auto-publish lands.';
+    universalWirePublicError = 'Legacy publication links were removed. Universal Wire will publish through corpusd after auto-publish lands.';
     universalWirePublicLink = null;
   }
 

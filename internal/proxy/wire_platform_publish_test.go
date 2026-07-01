@@ -14,7 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
-func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
+func TestHandleInternalWirePlatformPublishPostsToCorpusd(t *testing.T) {
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -60,11 +60,11 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 	}))
 	defer sandbox.Close()
 
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/internal/platform/publications/texture":
 			if r.Header.Get("X-Internal-Caller") != "true" {
-				t.Fatalf("platformd internal header missing")
+				t.Fatalf("corpusd internal header missing")
 			}
 			var req platform.PublishTextureRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -87,16 +87,16 @@ func TestHandleInternalWirePlatformPublishPostsToPlatformd(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": "test", "revision_count": 0})
 		default:
-			t.Fatalf("platformd path = %s", r.URL.Path)
+			t.Fatalf("corpusd path = %s", r.URL.Path)
 		}
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -149,7 +149,7 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 		"source":                     "edit_texture",
 		"revision_role":              wirepublish.RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-proxy-fallback",
-		"platformd_route_path":       "/pub/texture/proxy-fallback",
+		"corpusd_route_path":       "/pub/texture/proxy-fallback",
 	})
 	bodyDoc := json.RawMessage(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Fallback story "},{"type":"source_ref","attrs":{"source_entity_id":"src-fallback"}}]}]}}`)
 	sourceEntities := json.RawMessage(`[{"source_entity_id":"src-fallback","target":{"kind":"url","uri":"https://example.com/fallback"},"display":{"mode":"numbered_ref","title":"Fallback source"},"evidence":{"state":"available","open_surface":"source"}}]`)
@@ -165,7 +165,7 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 	}))
 	defer sandbox.Close()
 
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/internal/platform/publications/texture":
 			var req platform.PublishTextureRequest
@@ -189,16 +189,16 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{"doc_id": req.DocID, "revision_count": len(req.Revisions)})
 		default:
-			t.Fatalf("platformd path = %s", r.URL.Path)
+			t.Fatalf("corpusd path = %s", r.URL.Path)
 		}
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -257,17 +257,17 @@ func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t 
 	defer sandbox.Close()
 
 	platformCalled := false
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		platformCalled = true
-		t.Fatalf("platformd should not be called for detached source_entities")
+		t.Fatalf("corpusd should not be called for detached source_entities")
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -300,6 +300,6 @@ func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t 
 		t.Fatalf("body = %s, want body_doc requirement", w.Body.String())
 	}
 	if platformCalled {
-		t.Fatalf("platformd was called for detached source_entities")
+		t.Fatalf("corpusd was called for detached source_entities")
 	}
 }

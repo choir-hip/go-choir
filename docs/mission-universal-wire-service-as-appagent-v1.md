@@ -35,7 +35,7 @@ cross-shard corpus review.
 
 The Wire service is ~5,600 lines of direct methods on the `Runtime` struct:
 - `wire_publication.go` (761 lines) — work item lifecycle, trajectory
-- `wire_platform_publish.go` (260 lines) — platformd sync
+- `wire_platform_publish.go` (260 lines) — corpusd sync
 - `wire_reconciler_debounce.go` (222 lines) — debounced reconciler
 - `sourcecycled_web_captures.go` (~300 lines basic) — capture ingestion
 - `tools_wire_processor.go` (95 lines) — processor tool
@@ -44,7 +44,7 @@ The Wire service is ~5,600 lines of direct methods on the `Runtime` struct:
   edition management
 
 These run on the host Runtime, not in a platform VM. The platform computer
-exists but is only used for proxy routing and platformd publication — the
+exists but is only used for proxy routing and corpusd publication — the
 actual Wire logic runs in the host process.
 
 ## Target Architecture
@@ -104,7 +104,7 @@ Instead of direct runtime method calls:
 sourcecycled → shardRouter.Route(key) → channel message to VM
   → VM's processor agent receives message
   → processor routes to Texture agent (same VM or channel to another VM)
-  → Texture agent writes article, publishes to platformd
+  → Texture agent writes article, publishes to corpusd
   → publication event → channel message to reconciler VM
   → reconciler reviews corpus across shards
 ```
@@ -130,7 +130,7 @@ The Wire edition document (`universal-wire/Wire.texture`) is the product
 surface — it lists all published articles. Currently, a single Runtime
 appends to it. With multiple VMs, edition updates need coordination:
 
-Option A: Each VM publishes its articles to platformd. A dedicated
+Option A: Each VM publishes its articles to corpusd. A dedicated
 edition aggregator (could be the reconciler VM) reads all published
 articles and builds the edition document.
 
@@ -169,7 +169,7 @@ For the appagent architecture:
    b. Records typed decisions (opened_texture, already_covered, etc.)
    c. Routes newsworthy items to Texture agent
    d. Texture agent synthesizes article using gpt-5.5
-   e. Publication pipeline publishes to platformd
+   e. Publication pipeline publishes to corpusd
    f. Publication event → channel message to reconciler VM
 5. Reconciler VM:
    a. Batches publication events (debouncer)
@@ -307,7 +307,7 @@ the agent pipeline's provider calls.
 
 mutation class / protected surfaces: Orange/Red — refactoring runtime
 architecture, changing service coordination, deleting code, adding VM
-management. Protected: Texture revision creation, platformd sync contract,
+management. Protected: Texture revision creation, corpusd sync contract,
 source entity graph, public API contract (`/api/universal-wire/stories`).
 
 evidence packet: ShardRouter code, multi-VM management code, channel

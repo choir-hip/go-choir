@@ -1792,9 +1792,9 @@ Receipts:
 - Worker-reported commands/results: the new focused browser proof passed; the
   adjacent Phase 5 helper/source-entity regression filter plus the new test
   passed; whitespace/diff validation passed; local services were stopped.
-- Harness boundary: the worker used `CHOIR_ENABLE_PLATFORMD=0` after a local
+- Harness boundary: the worker used `CHOIR_ENABLE_CORPUSD=0` after a local
   `/tmp/go-choir-m2/platform-dolt` readiness failure because the proof does
-  not exercise publication/platformd. Dependency/log artifacts stayed in the
+  not exercise publication/corpusd. Dependency/log artifacts stayed in the
   worker worktree and are not root-tracked mission changes.
 
 Evidence boundary: candidate worker proof only. No worker final report,
@@ -1916,8 +1916,8 @@ Receipts:
   and
   `npx playwright test tests/texture-source-entities.spec.js -g "revisions do not synthesize source entities from legacy media refs|revision source entities|Texture renders and opens graph-wrapper sources when legacy revision source entities are absent" --timeout=120000`.
 - Verifier stack boundary: local stack started with
-  `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`; this caps proof to the non-publication local
-  Texture/browser harness and does not exercise platformd.
+  `CHOIR_ENABLE_CORPUSD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh`; this caps proof to the non-publication local
+  Texture/browser harness and does not exercise corpusd.
 - Incorporated root commit:
   `9eeb5115 test O3 phase6 graph wrapper source open path`.
 - Root checks passed from `/Users/wiz/go-choir/frontend`:
@@ -4801,10 +4801,10 @@ Receipts:
   first it lacked `@playwright/test`, then failed without a server at
   `localhost:4173`, then timed out on missing shared Playwright auth state.
   `npm run build` passed with existing Svelte/a11y/chunk warnings. Full
-  `nix develop -c ./start-services.sh` failed at `platformd failed` because
-  platformd could not read
+  `nix develop -c ./start-services.sh` failed at `corpusd failed` because
+  corpusd could not read
   `/tmp/go-choir-m2/platform-dolt/platform/.dolt/repo_state.json`.
-  `CHOIR_ENABLE_PLATFORMD=0 nix develop -c ./start-services.sh` reached
+  `CHOIR_ENABLE_CORPUSD=0 nix develop -c ./start-services.sh` reached
   auth/sandbox/proxy but failed frontend startup because pnpm refused ignored
   build scripts for `esbuild@0.21.5`.
 - Orchestration cleanup:
@@ -4845,7 +4845,7 @@ Receipts:
 - The checkpoint records the Phase 10 and 10b no-candidate evidence, the
   plausible test-tightening observation, the local harness failures
   (`@playwright/test` absent, no `4173` server, preview-only auth/proxy
-  failure, platformd/Dolt state failure, and pnpm/esbuild build-script refusal),
+  failure, corpusd/Dolt state failure, and pnpm/esbuild build-script refusal),
   protected surfaces, belief state, remaining error field, and rollback.
 - Live Parallax State now points to an O4 Phase 10c harness-focused worker
   rather than another broad native Texture citation proof worker.
@@ -4936,7 +4936,7 @@ Receipts:
   the worker read the required mission/checkpoint context, reproduced the
   missing `@playwright/test` failure, installed frontend dependencies from the
   checked-in lockfile, reproduced the missing `4173` server failure, started
-  the `CHOIR_ENABLE_PLATFORMD=0` stack, and observed the frontend phase fail
+  the `CHOIR_ENABLE_CORPUSD=0` stack, and observed the frontend phase fail
   because pnpm refuses the ignored `esbuild` build script.
 - Worker dirty state at orchestration inspection:
   tracked status has untracked `frontend/pnpm-workspace.yaml`; ignored
@@ -4990,7 +4990,7 @@ Receipts:
 - Worker-reported proof:
   reproduced missing `@playwright/test`, missing `4173`, and pnpm/esbuild
   startup failures; repaired pnpm approval config; from cleaned generated
-  artifacts, `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop
+  artifacts, `CHOIR_ENABLE_CORPUSD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop
   -c ./start-services.sh` reached `Services started successfully`; exact
   focused Playwright proof passed; `npm run build` passed with existing
   warnings; `git diff --check`, `git show --check HEAD`, clean
@@ -5057,16 +5057,16 @@ Receipts:
   `git status --short --ignored`, `git show --check --oneline 6995feb8`,
   `git diff --check 83fcbdef..6995feb8`, diff name-status/patch inspection,
   `npm ci`, `npm run build`, `pnpm install --frozen-lockfile`,
-  `CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  `CHOIR_ENABLE_CORPUSD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
   ./start-services.sh`, the exact focused Playwright proof, service stop, and
   no listeners on `4173`, `8081`, `8082`, or `8083`.
 - Root checks:
   `git show --check --oneline HEAD` passed;
   `git diff --check HEAD~1..HEAD` passed;
   `npm run build` passed with existing Svelte/a11y/chunk warnings;
-  initial root `CHOIR_ENABLE_PLATFORMD=0` stack rerun exposed a local
+  initial root `CHOIR_ENABLE_CORPUSD=0` stack rerun exposed a local
   noninteractive pnpm purge issue because root already had
-  `frontend/node_modules/`; retry with `CI=true CHOIR_ENABLE_PLATFORMD=0
+  `frontend/node_modules/`; retry with `CI=true CHOIR_ENABLE_CORPUSD=0
   CHOIR_SERVICES_FOREGROUND=1 nix develop -c ./start-services.sh` reached
   `Services started successfully`;
   `npx playwright test tests/texture-source-entities.spec.js -g "Texture
@@ -5087,7 +5087,7 @@ environment/log/dependency artifacts: `.DS_Store`, `.direnv/`, `.env`,
 
 Evidence boundary: local branch-level harness/dependency repair, verifier
 acceptance, and root rerun evidence only. No push, PR, CI, deploy, staging
-product acceptance, platformd/Dolt proof, native Texture body `source_ref`
+product acceptance, corpusd/Dolt proof, native Texture body `source_ref`
 assertion-tightening, publication/export, Qdrant, provider/search,
 auth/session renewal, promotion/rollback, or run-acceptance claim.
 
@@ -5258,7 +5258,7 @@ Receipts:
   the inline quote, and preserves the existing native `source_ref`, Web Lens,
   and legacy absence assertions.
 - Worker-reported proof:
-  `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  `CI=true CHOIR_ENABLE_CORPUSD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
   ./start-services.sh` reached `Services started successfully`; exact focused
   Playwright proof passed; adjacent six-test regression filter passed;
   `git diff --check`, `git show --check --oneline HEAD`, and
@@ -5362,7 +5362,7 @@ Receipts:
   `accept`, no blocking findings. The verifier reran/read governing docs,
   Parallax State, latest O4 ledger entries, worker diff, `git status
   --short --ignored`, `git show --check --oneline 5cc0457f`, patch/name-status
-  inspection, `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix
+  inspection, `CI=true CHOIR_ENABLE_CORPUSD=0 CHOIR_SERVICES_FOREGROUND=1 nix
   develop -c ./start-services.sh`, the exact focused Playwright proof, the
   adjacent six-test regression filter, service stop, and no-listener checks for
   `4173`, `8081`, `8082`, and `8083`. The requested base-range SHA
@@ -5372,7 +5372,7 @@ Receipts:
 - Root checks:
   `git show --check --oneline HEAD` passed;
   `git diff --check HEAD~1..HEAD` passed;
-  `CI=true CHOIR_ENABLE_PLATFORMD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
+  `CI=true CHOIR_ENABLE_CORPUSD=0 CHOIR_SERVICES_FOREGROUND=1 nix develop -c
   ./start-services.sh` reached `Services started successfully`;
   `npx playwright test tests/texture-source-entities.spec.js -g "Texture
   renders and opens graph-wrapper sources when legacy revision source entities
@@ -7713,11 +7713,11 @@ Chrome QA after refresh showed:
 Belief state: the read-time materialization transition now creates
 `universal-wire/Wire.texture` and transcludes one article candidate on staging,
 but the story-read path filters that candidate. The leading code-path hypothesis
-is the staging-only platformd publication verification gate inside
+is the staging-only corpusd publication verification gate inside
 `universalWireEditionTextureStories`: local branch tests run without that gate,
-while staging appears to require platformd visibility before returning a
+while staging appears to require corpusd visibility before returning a
 platform-owned Texture story. If the synthesized Universal Wire article is
-canonical in the runtime store but not mirrored into platformd, the public feed
+canonical in the runtime store but not mirrored into corpusd, the public feed
 will remain empty despite successful materialization.
 
 Conjecture delta: O4 now needs a publishability repair for runtime-owned
@@ -7728,7 +7728,7 @@ articles linked through `universal-wire/Wire.texture` to render as Wire stories.
 
 Mutation class / protected surfaces for the next repair: orange runtime
 behavior. Candidate protected surfaces are Universal Wire edition story
-filtering, platform-owned Texture read semantics, runtime/platformd boundary,
+filtering, platform-owned Texture read semantics, runtime/corpusd boundary,
 and source_ref/source entity projection. Do not touch auth/session renewal,
 vmctl, provider/gateway credentials, Qdrant, promotion/rollback, run
 acceptance, or publication/export outside existing Wire edition helpers.
@@ -7751,7 +7751,7 @@ Verifier verdict: `accept`; findings: none requiring revision.
 
 Verifier evidence:
 
-- The platformd publication check now skips only revisions whose metadata has
+- The corpusd publication check now skips only revisions whose metadata has
   `universal_wire_synthesis=true`.
 - That metadata is stamped by the existing synthesis path.
 - Non-synthesis unpublished platform Textures remain filtered by
@@ -7832,13 +7832,13 @@ Mutation class / protected surfaces touched: orange runtime behavior, yellow
 tests, green docs. Touched Universal Wire read/materialization semantics,
 runtime-owned objectgraph capture selection, Texture canonical revision creation
 through the existing synthesis helper, source entity/source_ref projection,
-existing Wire edition linkage, and the platformd verification filter for
+existing Wire edition linkage, and the corpusd verification filter for
 runtime-owned `universal_wire_synthesis` revisions. Did not touch auth/session
 renewal, vmctl, provider/gateway credentials, Qdrant, promotion/rollback, run
 acceptance, or publication/export outside existing Wire edition helpers.
 
 Heresy delta: `repaired` for the deployed backfill/materialization gap and the
-deployed platformd verification filter gap that hid runtime-owned synthesis
+deployed corpusd verification filter gap that hid runtime-owned synthesis
 stories. `discovered` remains for semantic multi-story clustering, provider or
 model synthesis quality, live world-model maintenance, and update-existing
 article semantics.
@@ -8354,17 +8354,17 @@ Root cause:
 - The frontend had carried a process-global Texture read-owner stack. Opening a
   Universal Wire platform-read Texture window could leak
   `read_owner=universal-wire-platform` onto ordinary Texture reads, causing the
-  proxy to route normal documents to platformd and 404.
+  proxy to route normal documents to corpusd and 404.
 - Universal Wire synthesis created/revised a platform-owned Texture article and
   linked it into `Wire.texture`, but did not publish/sync the article into
-  platformd before `/api/universal-wire/stories` advertised its
+  corpusd before `/api/universal-wire/stories` advertised its
   `story_texture_doc_id`.
-- The story filter exempted synthesis revisions from platformd readability
+- The story filter exempted synthesis revisions from corpusd readability
   verification, so the card could render from embedded story text while headline
   open failed.
 - The proxy's asynchronous full-Texture sync used the publish request context;
   once the handler returned, the background sync could inherit a canceled
-  context and fail to populate platformd.
+  context and fail to populate corpusd.
 
 Local repair:
 
@@ -8374,8 +8374,8 @@ Local repair:
   Universal Wire windows.
 - `internal/runtime/wire_synthesis.go` now publishes synthesis article
   revisions to the configured platform publish path and persists the
-  platformd publication ref before the story cluster is advertised.
-- `internal/runtime/universal_wire.go` now applies platformd readability checks
+  corpusd publication ref before the story cluster is advertised.
+- `internal/runtime/universal_wire.go` now applies corpusd readability checks
   to synthesis stories too, and re-materializes from sourcecycled graph captures
   when an existing edition has no readable stories.
 - `internal/proxy/wire_platform_publish.go` now runs the background Texture sync
@@ -8397,7 +8397,7 @@ Commands/results:
   -count=1`: passed, `ok github.com/yusefmosiah/go-choir/internal/runtime
   3.947s`.
 - `nix develop -c go test ./internal/proxy -run
-  'TestHandleInternalWirePlatformPublishPostsToPlatformd' -count=1`: passed,
+  'TestHandleInternalWirePlatformPublishPostsToCorpusd' -count=1`: passed,
   `ok github.com/yusefmosiah/go-choir/internal/proxy 0.472s`.
 - `nix develop -c go test ./internal/runtime -run
   'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed,
@@ -8411,11 +8411,11 @@ Post-deploy refinement: after `378ab05b8f9d28a37ce9d20178180c28c8250c95`
 deployed, authenticated staging proof showed ordinary Texture reads were
 repaired (`GET /api/texture/documents/48853696-ac1d-481a-9232-af134effac71`
 returned 200), but Universal Wire intentionally rendered no stories because all
-edition candidates were filtered as not platformd-readable. This narrowed the
-remaining gap further: staging runtime was using the direct `RUNTIME_PLATFORMD_URL`
+edition candidates were filtered as not corpusd-readable. This narrowed the
+remaining gap further: staging runtime was using the direct `RUNTIME_CORPUSD_URL`
 publication path, which published the public article record but still did not
 sync the Texture document/revision rows that `/api/texture/documents/{id}` reads.
-Root added runtime-side direct platformd Texture sync after successful direct
+Root added runtime-side direct corpusd Texture sync after successful direct
 publication. Follow-up commands:
 
 - `nix develop -c go test ./internal/runtime -run
@@ -8449,10 +8449,10 @@ monitor CI and Node B deploy, verify health identity, remove the temporary auth
 header file, then run deployed authenticated product proof for ordinary Texture
 document loading and Universal Wire headline-to-Texture readability.
 
-## 2026-06-27 - O4 Direct Platformd Texture Sync Deployed, Product Replay Still Open
+## 2026-06-27 - O4 Direct Corpusd Texture Sync Deployed, Product Replay Still Open
 
 Claim: the O4 Texture-read regression repair sequence is deployed through the
-latest direct-platformd sync commit, but final authenticated Universal Wire
+latest direct-corpusd sync commit, but final authenticated Universal Wire
 headline-to-Texture product acceptance remains unproven.
 
 Move: update Parallax State after the landing loop for
@@ -8475,7 +8475,7 @@ Evidence:
   point.
 - Prior authenticated API proof after `378ab05b` showed Universal Wire returned
   `story_count=0` instead of advertising unreadable stories, narrowing the
-  remaining gap to staging's direct `RUNTIME_PLATFORMD_URL` publication path.
+  remaining gap to staging's direct `RUNTIME_CORPUSD_URL` publication path.
 - Post-`d4bd1c65` authenticated replay did not complete: the saved Chrome cookie
   had expired; macOS keychain extraction hung; Chrome extension control of the
   logged-in Choir tab was blocked by another extension UI; and a clean
@@ -8511,7 +8511,7 @@ the deployed repairs is to revert `d4bd1c65`, `378ab05b`, and/or `3ea24284`
 individually depending on which deployed replay regresses.
 
 Heresy delta: `repaired` at code/deploy-identity scope for the read-owner leak
-and direct-platformd sync gap; `discovered` remains for missing final
+and direct-corpusd sync gap; `discovered` remains for missing final
 authenticated product replay and the broader O4 product target.
 
 ## 2026-06-27 - O4 Post-Direct-Sync Product Replay Shows Zero Wire Articles
@@ -8634,7 +8634,7 @@ Evidence:
 - Worker worktree: `/Users/wiz/.codex/worktrees/1c45/go-choir`.
 - The worker is active and has not yet returned `ready_for_verifier`.
 - Its current investigation is within the assigned boundary: Universal Wire
-  filtered-edition/readiness behavior after direct `RUNTIME_PLATFORMD_URL`,
+  filtered-edition/readiness behavior after direct `RUNTIME_CORPUSD_URL`,
   while preserving raw `choir.web_capture` diagnostic-only semantics and
   requiring real sourcecycled/source provenance for synthesis eligibility.
 
@@ -8664,9 +8664,9 @@ Worker result:
 
 - Worktree: `/Users/wiz/.codex/worktrees/1c45/go-choir`.
 - Branch: `codex/o4-zero-wire-direct-readiness`.
-- Docs-first checkpoint: `e76932c2` (`Document O4 direct platformd readiness
+- Docs-first checkpoint: `e76932c2` (`Document O4 direct corpusd readiness
   mismatch`).
-- Code/test repair: `640e7540` (`Repair Universal Wire direct platformd
+- Code/test repair: `640e7540` (`Repair Universal Wire direct corpusd
   readiness`).
 - Changed files:
   - `docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md`
@@ -8675,21 +8675,21 @@ Worker result:
 
 Worker claim:
 
-- Direct platformd publication already accepted direct `RUNTIME_PLATFORMD_URL`
-  / runtime config, but `platformdReadBaseURL()` did not use that same direct
+- Direct corpusd publication already accepted direct `RUNTIME_CORPUSD_URL`
+  / runtime config, but `corpusdReadBaseURL()` did not use that same direct
   URL for readiness filtering.
-- The repair makes direct `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL`
-  participate in platformd readiness probing, so direct publication and direct
+- The repair makes direct `RUNTIME_CORPUSD_URL` / `PROXY_CORPUSD_URL`
+  participate in corpusd readiness probing, so direct publication and direct
   readiness filtering agree.
 - A focused regression covers filtered edition candidates plus sourcecycled
   graph captures with source-entity provenance, repairing to one
-  platformd-readable synthesis Texture article while raw `choir.web_capture`
+  corpusd-readable synthesis Texture article while raw `choir.web_capture`
   projections remain diagnostic-only.
 
 Worker-reported commands/results:
 
 - `git diff --check`: passed.
-- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesRepairsFilteredEditionWithDirectPlatformdReadiness|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesRepairsFilteredEditionWithDirectCorpusdReadiness|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
 - `nix develop -c go test ./internal/proxy -run 'WirePlatform|PlatformTextureRead' -count=1`: passed.
 - `/Users/wiz/vm-images` was inspected read-only; no DB/JSON state files were
@@ -8712,7 +8712,7 @@ Next move: create independent verifier thread
 
 ## 2026-06-27 - O4 Direct Readiness Verifier Requested
 
-Claim: the branch-local direct platformd readiness worker candidate now has an
+Claim: the branch-local direct corpusd readiness worker candidate now has an
 independent verifier request queued through Codex thread tools.
 
 Move: created a project worktree verifier thread from branch `main` with a
@@ -8743,12 +8743,12 @@ until a verifier thread id or verdict is available.
 ## 2026-06-27 - O4 Direct Readiness Revision And Structured Sync Problem Documented
 
 Mutation class: red. Protected surfaces: Universal Wire staging read selection,
-platform-owned Texture document/revision sync, platformd read store schema, and
+platform-owned Texture document/revision sync, corpusd read store schema, and
 Texture source/citation preservation for platform articles.
 
 Conjecture delta: the zero-article and unreadable-headline failures are not
-fully explained by "use `RUNTIME_PLATFORMD_URL` directly." The read side must
-distinguish true direct platformd endpoints from sibling service endpoints, and
+fully explained by "use `RUNTIME_CORPUSD_URL` directly." The read side must
+distinguish true direct corpusd endpoints from sibling service endpoints, and
 the write/sync side must preserve the structured Texture revision fields that
 make a Universal Wire article a native source-backed Texture article.
 
@@ -8762,11 +8762,11 @@ Problem record:
 - Verifier accepted the worker's Problem Documentation First ordering, changed
   file scope, branch-local test hygiene, and focused regression intent.
 - Verifier rejected repair commit `640e7540` because it returned direct
-  `RUNTIME_PLATFORMD_URL` / `PROXY_PLATFORMD_URL` before
+  `RUNTIME_CORPUSD_URL` / `PROXY_CORPUSD_URL` before
   `rewriteHostServicePort`. Runtime package generation still sets
-  `RUNTIME_PLATFORMD_URL=http://<host>:8082`, guarded by
+  `RUNTIME_CORPUSD_URL=http://<host>:8082`, guarded by
   `internal/vmctl/vmctl_test.go`, and the prior implementation rewrote that
-  sibling proxy/wire URL to direct platformd `:8086`.
+  sibling proxy/wire URL to direct corpusd `:8086`.
 - Proxy does not serve `/internal/platform/texture/...` readiness reads on
   `:8082`, so `640e7540` would make package-generated runtimes probe the wrong
   service.
@@ -8788,10 +8788,10 @@ Admissible evidence for repair:
   survive `SyncTextureDocument`, list, and get.
 - A proxy Wire platform publish test that proves async sync forwards structured
   revision fields.
-- A runtime Universal Wire/direct platformd test that proves direct sync sends
+- A runtime Universal Wire/direct corpusd test that proves direct sync sends
   structured revision fields.
 - A runtime readiness test that proves package-generated `:8082` URLs are still
-  rewritten to `:8086`, while true direct `:8086` platformd URLs are accepted.
+  rewritten to `:8086`, while true direct `:8086` corpusd URLs are accepted.
 - Deployed authenticated product proof remains required after landing.
 
 Rollback path: revert the code repair commit(s) and redeploy the previous known
@@ -8815,27 +8815,27 @@ Move: committed the code repair after docs-first commit `e7ca44a6`.
 
 Repair scope:
 
-- `internal/runtime/universal_wire.go` now accepts only true direct platformd
+- `internal/runtime/universal_wire.go` now accepts only true direct corpusd
   `:8086` URLs before sibling derivation. Package-generated
-  `RUNTIME_PLATFORMD_URL=http://<host>:8082` still derives to
+  `RUNTIME_CORPUSD_URL=http://<host>:8082` still derives to
   `http://<host>:8086`.
 - `internal/platform/types.go`, `internal/platform/store.go`, and
   `internal/platform/service.go` add additive platform persistence for
   `body_doc` and `source_entities` on synced Texture revisions.
 - `internal/runtime/wire_platform_publish.go` sends structured revision fields
-  in direct runtime-to-platformd sync.
+  in direct runtime-to-corpusd sync.
 - `internal/proxy/wire_platform_publish.go` forwards structured revision
   fields in proxy-mediated async sync.
 - Tests cover old platform schema migration, structured sync persistence,
-  proxy async sync forwarding, direct runtime sync forwarding, and platformd
+  proxy async sync forwarding, direct runtime sync forwarding, and corpusd
   readiness URL derivation.
 
 Commands/results:
 
 - `git diff --check`: passed.
 - `nix develop -c go test ./internal/platform -run 'TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
-- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
-- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToCorpusd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
 
 Actual Delta V: 0. The repair is local and unverified. V remains 28.
@@ -8860,9 +8860,9 @@ Verifier evidence:
 - It verified docs-first ordering: `e7ca44a6` documents the structured platform
   Texture sync problem before repair commit `3d2afccb`, and `dfb39f41` records
   local repair evidence.
-- It verified that `platformdReadBaseURL()` preserves package-generated
+- It verified that `corpusdReadBaseURL()` preserves package-generated
   sibling derivation from `:8082`, `:8083`, `:8084`, and `:8087` to `:8086`,
-  while accepting true direct `:8086` platformd URLs.
+  while accepting true direct `:8086` corpusd URLs.
 - It verified that platform sync DTOs/types/store/service, runtime direct sync,
   and proxy async sync carry `body_doc` and `source_entities`.
 - It verified that raw `choir.web_capture` diagnostic behavior and Universal
@@ -8876,8 +8876,8 @@ Commands/results from corrected verifier:
 - `git show --check --oneline dfb39f41`: passed.
 - `git diff --check ca5ec83f..HEAD`: passed.
 - `nix develop -c go test ./internal/platform -run 'TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
-- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
-- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToCorpusd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
 
 Additional handoff repair:
@@ -8973,15 +8973,15 @@ Actual Delta V: 0. This is documentation-first only; V remains 27.
 
 ## 2026-06-27 - O4 Deployed Proxy Platform Sync Misses Runtime-Owned Wire Article
 
-Mutation class: red documentation-first checkpoint for proxy/platformd Texture
+Mutation class: red documentation-first checkpoint for proxy/corpusd Texture
 sync repair.
 
-Problem: deployed `376086de` includes the platformd revision-list envelope
+Problem: deployed `376086de` includes the corpusd revision-list envelope
 repair and passes CI/deploy/health identity, but a clean authenticated Universal
 Wire tab still renders zero publishable articles. The currently materialized
 runtime-owned Universal Wire synthesis article exists in the sandbox runtime,
-but platformd never receives the corresponding Texture document/revision rows,
-so `/api/universal-wire/stories` filters the edition candidate at the platformd
+but corpusd never receives the corresponding Texture document/revision rows,
+so `/api/universal-wire/stories` filters the edition candidate at the corpusd
 verification gate.
 
 Evidence:
@@ -9008,12 +9008,12 @@ Evidence:
   `d3661377-4731-4617-a351-63236b08597d` under owner
   `universal-wire-platform` show current revision
   `efbf6dda-3c86-43d4-9e13-b15172dfbd09`, `body_doc`, native
-  `source_ref` nodes, source entities, and `platformd_publication_ref`.
-- Direct platformd diagnostics for the same doc return 404 for
+  `source_ref` nodes, source entities, and `corpusd_publication_ref`.
+- Direct corpusd diagnostics for the same doc return 404 for
   `/internal/platform/texture/documents/d3661377-4731-4617-a351-63236b08597d`
   and `{"revisions":null}` for the document revision list.
 - Node B proxy logs show:
-  `proxy: sync texture to platformd: fetch revisions for d3661377-4731-4617-a351-63236b08597d: sandbox status 404: {"error":"document not found"}`
+  `proxy: sync texture to corpusd: fetch revisions for d3661377-4731-4617-a351-63236b08597d: sandbox status 404: {"error":"document not found"}`
   at `2026-06-27T02:56:40Z` and again at `2026-06-27T02:56:49Z`.
 
 Diagnosis:
@@ -9021,31 +9021,31 @@ Diagnosis:
 - The proxy-mediated autonomous Wire publish path accepts a request that already
   includes the current Texture document title, revision content, structured
   `body_doc`, source entities, citations, and metadata.
-- Publication to platformd succeeds enough for runtime to persist
-  `platformd_publication_ref`.
-- The asynchronous full-history platformd sync then calls
+- Publication to corpusd succeeds enough for runtime to persist
+  `corpusd_publication_ref`.
+- The asynchronous full-history corpusd sync then calls
   `fetchSandboxJSONWithContext` against the resolved platform sandbox for
   `/api/texture/documents/{doc}/revisions`.
 - For runtime-owned Universal Wire synthesis articles, that resolved sandbox can
   return 404 even though the publishing runtime owns and can read the document.
 - Because the async sync has no fallback to the already supplied current
-  revision payload, platformd keeps no document/revision rows for the published
+  revision payload, corpusd keeps no document/revision rows for the published
   article and the public Universal Wire route filters it.
 
 Conjecture delta: proxy-mediated autonomous Wire publication should still
 prefer full revision-history sync from the platform sandbox, but when that read
 misses for a runtime-owned article and the publish request supplied a structured
-current revision, proxy should sync at least that current revision to platformd.
-The public route should continue to require platformd verification and should
+current revision, proxy should sync at least that current revision to corpusd.
+The public route should continue to require corpusd verification and should
 not expose raw `choir.web_capture` projections as articles.
 
-Protected surfaces: proxy autonomous Wire publish/sync, platformd Texture sync,
+Protected surfaces: proxy autonomous Wire publish/sync, corpusd Texture sync,
 Universal Wire platform verification, Texture canonical write/read shape,
 source_ref/source entity preservation.
 
 Admissible evidence:
 
-- Focused proxy test proving a supplied current revision is synced to platformd
+- Focused proxy test proving a supplied current revision is synced to corpusd
   when the full-history sandbox fetch returns 404.
 - Existing proxy test still proves full-history sync when sandbox revisions are
   available.
@@ -9055,7 +9055,7 @@ Admissible evidence:
 - Post-landing CI/deploy/health plus authenticated product replay showing one
   readable Universal Wire synthesis article and headline-to-Texture content.
 
-Rollback path: revert the proxy fallback sync repair; the platformd verification
+Rollback path: revert the proxy fallback sync repair; the corpusd verification
 gate remains conservative and Universal Wire returns to empty diagnostics rather
 than exposing raw capture cards.
 
@@ -9078,22 +9078,22 @@ Repair scope:
   revision history from the resolved platform sandbox.
 - When that history fetch fails and the already-authorized publish request
   carries a current revision with content, proxy now syncs that supplied current
-  revision to platformd instead of abandoning the sync.
+  revision to corpusd instead of abandoning the sync.
 - The fallback carries `body_doc`, enriched `source_entities`, citations, and
   metadata, preserving native `source_ref` article structure.
-- The repair does not bypass the platformd verification gate and does not turn
+- The repair does not bypass the corpusd verification gate and does not turn
   raw `choir.web_capture` graph objects into public article cards.
 
 Commands/results:
 
-- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistoryMisses|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToCorpusd|TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistoryMisses|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
 - `nix develop -c go test ./internal/platform -run 'TestInternalListTextureRevisionsUsesTextureEnvelope|TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed. Nix emitted an ignored eval-cache SQLite busy warning.
-- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
 - `git diff --check`: passed.
 
 Evidence boundary/non-claims: local repair only. No independent verifier yet,
-no push, CI, deploy, health identity, authenticated product replay, platformd
+no push, CI, deploy, health identity, authenticated product replay, corpusd
 row verification on staging, run acceptance, provider/search freshness,
 semantic clustering, Qdrant, or promotion/rollback execution is claimed.
 
@@ -9112,7 +9112,7 @@ Findings: none.
 Verifier conclusions:
 
 - Docs-first ordering is satisfied: `7c9db378` is documentation-only and records
-  the deployed proxy/platformd sync miss before code repair.
+  the deployed proxy/corpusd sync miss before code repair.
 - The repair remains behind existing internal-caller, platform-owner,
   source/body consistency, and `wirepublish.EligibleForAutonomousPublish`
   checks.
@@ -9120,11 +9120,11 @@ Verifier conclusions:
 - The supplied-current-revision fallback is used only after the full-history
   fetch fails and the fallback revision has non-empty revision id and content.
 - The fallback carries `body_doc`, enriched `source_entities`, citations, and
-  metadata into platformd sync.
-- The repair does not bypass platformd verification and does not publish raw
+  metadata into corpusd sync.
+- The repair does not bypass corpusd verification and does not publish raw
   graph captures as articles.
 - Regression coverage includes the 404 history-miss fallback and asserts one
-  supplied revision reaches platformd with content, `body_doc`, and source
+  supplied revision reaches corpusd with content, `body_doc`, and source
   entities.
 
 Verifier commands/results:
@@ -9142,7 +9142,7 @@ Verifier commands/results:
   selector: passed.
 
 Evidence boundary/non-claims: verifier acceptance is local only. No CI, deploy
-identity, staging platformd row verification, authenticated product replay, run
+identity, staging corpusd row verification, authenticated product replay, run
 acceptance, provider/search freshness, or promotion/rollback execution is
 claimed yet.
 
@@ -9156,7 +9156,7 @@ push/deploy after incorporating this verdict.
 ## 2026-06-27 - O4 Proxy Fallback Sync Deployed Acceptance
 
 Claim: deployed `cb79fa39284ad11ad2da211f500b11ecf3747dd0` repairs the
-immediate Universal Wire zero-article regression caused by proxy/platformd sync
+immediate Universal Wire zero-article regression caused by proxy/corpusd sync
 dropping the runtime-owned current revision when full-history sandbox fetch
 missed.
 
@@ -9170,7 +9170,7 @@ Landing evidence:
 - Public health reports proxy and sandbox deployed commit
   `cb79fa39284ad11ad2da211f500b11ecf3747dd0`, deployed at
   `2026-06-27T03:17:44Z`.
-- Platformd direct health on Node B reports deployed commit
+- Corpusd direct health on Node B reports deployed commit
   `cb79fa39284ad11ad2da211f500b11ecf3747dd0`.
 - Public unauthenticated `/api/universal-wire/stories` returns 401.
 
@@ -9192,13 +9192,13 @@ Node B diagnostic replay:
   `d3661377-4731-4617-a351-63236b08597d`.
 - The story carried `story_texture_doc_id`, `texture_content`, a platform route,
   source manifests, source-service ids, canonical URLs, and reader snapshots.
-- Platformd direct document read for
+- Corpusd direct document read for
   `d3661377-4731-4617-a351-63236b08597d` returned 200 with owner
   `universal-wire-platform`, title
   `Multiple reports converge on Cory Doctorow on the Right – and Wrong – Way to
   Criticize AI.texture`, and current revision
   `1d9069d3-ead8-4dc7-8434-6405c7ffa9ef`.
-- Platformd direct revision list for that doc returned one revision with content
+- Corpusd direct revision list for that doc returned one revision with content
   length 733, `body_doc`, and 24 source entities.
 - Runtime public Texture read with
   `read_owner=universal-wire-platform` returned the same document and current
@@ -9226,10 +9226,10 @@ headline-open blank-v0 failure.
 
 Claim: root found and locally repaired the next deployed Universal Wire
 headline-to-Texture readability gap. The platform document read now exposes a
-current head, but the sibling platformd revision-list endpoint returned a bare
+current head, but the sibling corpusd revision-list endpoint returned a bare
 JSON array while the Texture frontend client expects the owner-scoped Texture API
 shape `{ "revisions": [...] }`. The editor therefore saw zero revisions and
-rendered blank v0 even though platformd had synced article revision rows.
+rendered blank v0 even though corpusd had synced article revision rows.
 
 Repair scope:
 
@@ -9238,7 +9238,7 @@ Repair scope:
 - `internal/platform/handlers.go` now returns
   `{ "revisions": [...] }` from
   `/internal/platform/texture/documents/{doc}/revisions`.
-- `internal/platform/handlers_test.go` proves platformd's direct internal list
+- `internal/platform/handlers_test.go` proves corpusd's direct internal list
   endpoint uses the Texture revision-list envelope.
 - `internal/proxy/handlers_test.go` proves the browser-facing
   `/api/texture/documents/{doc}/revisions?read_owner=universal-wire-platform`
@@ -9247,17 +9247,17 @@ Repair scope:
 Commands/results:
 
 - `nix develop -c go test ./internal/platform -run 'TestInternalListTextureRevisionsUsesTextureEnvelope|TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
-- `nix develop -c go test ./internal/proxy -run 'TestHandlePlatformTextureReadForwardsCurrentRevisionID|TestHandlePlatformTextureReadForwardsRevisionListEnvelope|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed. Nix emitted a non-fatal FlakeHub 401 warning and fetched from cache.nixos.org.
-- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandlePlatformTextureReadForwardsCurrentRevisionID|TestHandlePlatformTextureReadForwardsRevisionListEnvelope|TestHandleInternalWirePlatformPublishPostsToCorpusd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed. Nix emitted a non-fatal FlakeHub 401 warning and fetched from cache.nixos.org.
+- `nix develop -c go test ./internal/runtime -run 'TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
 - `git diff --check`: passed.
 
-Protected surfaces: platformd Texture revision-list DTO, proxy read-only
+Protected surfaces: corpusd Texture revision-list DTO, proxy read-only
 platform Texture pass-through, Universal Wire headline-to-Texture readability,
 and source_ref/source entity preservation through the existing revision read
 path.
 
-Rollback path: revert the revision-list envelope repair commit; platformd
+Rollback path: revert the revision-list envelope repair commit; corpusd
 revision lists will again be shape-incompatible with the Texture editor, so the
 deployed headline may continue opening blank v0.
 
@@ -9279,12 +9279,12 @@ Verifier conclusions:
 
 - Problem Documentation First is satisfied: `992dce9c` is docs-only and
   precedes repair commit `af417087`.
-- The repair is narrow: platformd's successful internal Texture revision-list
+- The repair is narrow: corpusd's successful internal Texture revision-list
   response now uses `PlatformTextureRevisionListResponse`, while the method,
   internal-caller, doc-id, proxy authentication, read-owner routing, and
   read-only platform pass-through gates are unchanged.
 - Proxy routing still requires authenticated `GET`/`HEAD` Texture requests with
-  `read_owner=universal-wire-platform` before platformd pass-through.
+  `read_owner=universal-wire-platform` before corpusd pass-through.
 - Raw Universal Wire diagnostic filtering was not modified; graph-backed
   captures remain diagnostic-only when no publishable Texture synthesis article
   exists.
@@ -9295,8 +9295,8 @@ Verifier commands/results:
 - `git show --check --oneline 992dce9c`: passed.
 - `git show --check --oneline af417087`: passed.
 - `nix develop -c go test ./internal/platform -run 'TestInternalListTextureRevisionsUsesTextureEnvelope|TestSyncTextureDocumentPersistsDocumentAndRevisions|TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows|TestPlatformTextureStoreWritesCurrentTables' -count=1`: passed.
-- `nix develop -c go test ./internal/proxy -run 'TestHandlePlatformTextureReadForwardsCurrentRevisionID|TestHandlePlatformTextureReadForwardsRevisionListEnvelope|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
-- `nix develop -c go test ./internal/runtime -run 'TestPlatformdReadBaseURLPreservesSiblingDerivationAndDirectPlatformd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandlePlatformTextureReadForwardsCurrentRevisionID|TestHandlePlatformTextureReadForwardsRevisionListEnvelope|TestHandleInternalWirePlatformPublishPostsToCorpusd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/runtime -run 'TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesRepairsLegacyMetaCopyAndReadsStoryTexture' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed.
 
 Dirty/generated artifact classification: verifier worktree clean; no dirty
@@ -9329,8 +9329,8 @@ Verifier conclusions:
 - Platform sync/store tests cover one revision and two synced revisions with
   `rev-2` as current.
 - Proxy read-only platform Texture pass-through preserves `current_revision_id`.
-- Universal Wire/platformd filtering was not bypassed; runtime code is
-  unchanged and still requires platformd document/revision verification.
+- Universal Wire/corpusd filtering was not bypassed; runtime code is
+  unchanged and still requires corpusd document/revision verification.
 
 Verifier commands/results:
 
@@ -9530,9 +9530,9 @@ Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
 the accepted repair stack to `origin/main`, monitor CI/deploy, verify health
 identity, and run authenticated Universal Wire product acceptance.
 
-## 2026-06-27 - O4 Deployed Platformd Texture Sync Envelope Gap
+## 2026-06-27 - O4 Deployed Corpusd Texture Sync Envelope Gap
 
-Mutation class: red documentation-first checkpoint for a proxy/platformd
+Mutation class: red documentation-first checkpoint for a proxy/corpusd
 Texture publication repair.
 
 Problem: deployed `54742969` still returns zero Universal Wire stories even
@@ -9551,36 +9551,36 @@ Evidence:
   both returned `{"stories":[]}` for `/api/universal-wire/stories`.
 - The response still shows five transcluded Wire Texture candidate docs, twelve
   graph-capture diagnostic cards, and no source provenance story.
-- Direct platformd checks for all five transcluded doc ids returned 404.
+- Direct corpusd checks for all five transcluded doc ids returned 404.
 - Proxy logs show repeated failures:
-  `proxy: sync texture to platformd: fetch revisions for
+  `proxy: sync texture to corpusd: fetch revisions for
   4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf: decode sandbox response:
   json: cannot unmarshal object into Go value of type []proxy.sandboxRevisionEntry`.
 
 Diagnosis:
 
-- Proxy `syncTextureToPlatformd` fetches
+- Proxy `syncTextureToCorpusd` fetches
   `/api/texture/documents/{doc_id}/revisions` from the platform sandbox.
 - That runtime API returns the documented object envelope
   `{"revisions":[...]}`.
 - Proxy decodes the response as a bare `[]sandboxRevisionEntry`, so the sync
   fails before posting `/internal/platform/texture/sync`.
-- Platformd never receives the Texture document/revision rows, so
-  `platformdHasPublishedTexture` filters every edition candidate and Universal
+- Corpusd never receives the Texture document/revision rows, so
+  `corpusdHasPublishedTexture` filters every edition candidate and Universal
   Wire remains empty.
 
 Conjecture delta: the proxy should accept the runtime Texture revision-list
-envelope when syncing platform-owned Universal Wire Texture docs to platformd.
-This repair should preserve platformd as the public readable Texture store and
-should not bypass the platformd verification gate.
+envelope when syncing platform-owned Universal Wire Texture docs to corpusd.
+This repair should preserve corpusd as the public readable Texture store and
+should not bypass the corpusd verification gate.
 
-Protected surfaces: proxy internal wire publication path, platformd Texture
+Protected surfaces: proxy internal wire publication path, corpusd Texture
 sync, platform-owned Texture reads, Universal Wire route filtering, and
 source_ref/source entity persistence.
 
 Admissible evidence:
 
-- Focused proxy test proving `syncTextureToPlatformd` accepts the
+- Focused proxy test proving `syncTextureToCorpusd` accepts the
   `{"revisions":[...]}` runtime response shape and posts the full structured
   sync payload.
 - Existing proxy platform publish tests still pass.
@@ -9588,20 +9588,20 @@ Admissible evidence:
 - CI/deploy/health identity and authenticated staging replay showing non-empty
   Universal Wire plus headline-to-Texture readability.
 
-Rollback path: revert the proxy sync response-shape repair; platformd will
+Rollback path: revert the proxy sync response-shape repair; corpusd will
 continue filtering unsynced Wire Texture docs rather than exposing unreadable
 articles.
 
 Heresy delta: discovered. The prior repair preserved structured fields in sync
 payloads, but did not verify that the proxy could decode the runtime revision
-list response envelope on the asynchronous platformd sync path.
+list response envelope on the asynchronous corpusd sync path.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
 
-## 2026-06-27 - O4 Platformd Texture Sync Envelope Local Repair
+## 2026-06-27 - O4 Corpusd Texture Sync Envelope Local Repair
 
-Claim: root repaired the proxy/platformd sync envelope mismatch that kept
-Universal Wire Texture documents absent from platformd after publication.
+Claim: root repaired the proxy/corpusd sync envelope mismatch that kept
+Universal Wire Texture documents absent from corpusd after publication.
 
 Repair scope:
 
@@ -9611,13 +9611,13 @@ Repair scope:
 - `internal/proxy/wire_platform_publish_test.go` now uses the same envelope
   shape in the async sync fixture, so the regression fails if proxy expects a
   bare array again.
-- The repair does not bypass platformd verification; it restores the sync path
-  required for platformd to make published Texture docs readable.
+- The repair does not bypass corpusd verification; it restores the sync path
+  required for corpusd to make published Texture docs readable.
 
 Commands/results:
 
 - `git diff --check`: passed.
-- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToPlatformd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
+- `nix develop -c go test ./internal/proxy -run 'TestHandleInternalWirePlatformPublishPostsToCorpusd|TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc|WirePlatform|PlatformTextureRead' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStoriesMaterializesLegacyGraphCapturesWithoutSourceEdges|TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles|TestHandleUniversalWireStoriesMaterializesExistingSourcecycledGraphCaptures|TestHandleInternalSourcecycledWebCapturesTriggersTextureSynthesisAndUpdatesCluster' -count=1`: passed.
 - `nix develop -c go test ./internal/runtime -run 'UniversalWire|WireProcessor|WireStory|WirePublication' -count=1`: passed. Nix emitted an ignored eval-cache SQLite busy warning.
 
@@ -9628,23 +9628,23 @@ promotion/rollback execution is claimed.
 
 Actual Delta V: 0 until verifier and deployed product proof. V remains 27.
 
-## 2026-06-27 - O4 Platformd Texture Sync Envelope Verifier Accepts
+## 2026-06-27 - O4 Corpusd Texture Sync Envelope Verifier Accepts
 
 Verifier thread `019f06be-3066-7110-acc6-40223efdc15d` returned
-`accept` for the platformd Texture sync envelope repair.
+`accept` for the corpusd Texture sync envelope repair.
 
 Findings: no blocking findings.
 
 Verifier conclusions:
 
 - Problem Documentation First is satisfied: `491a0db1` documents the deployed
-  platformd sync envelope gap before code commit `095b0d36`.
-- `syncTextureToPlatformd` now decodes the runtime revision-list envelope
-  `{"revisions":[...]}` before building the platformd sync request.
+  corpusd sync envelope gap before code commit `095b0d36`.
+- `syncTextureToCorpusd` now decodes the runtime revision-list envelope
+  `{"revisions":[...]}` before building the corpusd sync request.
 - The proxy test fixture now returns the same enveloped shape and would fail on
   the old bare-array decoder.
-- The repair preserves the platformd verification gate; Universal Wire still
-  filters through `platformdHasPublishedTexture`.
+- The repair preserves the corpusd verification gate; Universal Wire still
+  filters through `corpusdHasPublishedTexture`.
 - Diff scope is limited to mission docs/ledger plus
   `internal/proxy/wire_platform_publish.go` and its test.
 
@@ -9661,12 +9661,12 @@ Verifier commands/results:
   selector: passed.
 
 Evidence boundary/non-claims: verifier acceptance is local only. No push,
-deploy, staging mutation, browser acceptance, platformd row verification, or
+deploy, staging mutation, browser acceptance, corpusd row verification, or
 product acceptance is claimed yet.
 
 Actual Delta V: 0 until deployed product proof. V remains 27. Next move: push
 the accepted repair stack to `origin/main`, monitor CI/deploy, verify health
-identity, verify platformd document presence, and run authenticated Universal
+identity, verify corpusd document presence, and run authenticated Universal
 Wire product acceptance.
 
 ## 2026-06-27 - O4 Deployed Platform Texture Current-Head Gap
@@ -9675,7 +9675,7 @@ Mutation class: red documentation-first checkpoint for a platform Texture read
 repair.
 
 Problem: deployed `432ecd5a` makes Universal Wire non-empty and syncs the lead
-story document into platformd, but the visible headline-to-Texture path still
+story document into corpusd, but the visible headline-to-Texture path still
 opens a blank v0 Texture instead of the article content.
 
 Evidence:
@@ -9692,32 +9692,32 @@ Evidence:
   `source-network-texture-4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`.
 - The visible Universal Wire app renders `1 article` with reader-facing card
   text rather than zero stories or raw capture cards.
-- Direct platformd diagnostic returns 200 for lead story doc
+- Direct corpusd diagnostic returns 200 for lead story doc
   `4a3e8f1e-6f90-46cf-8e3e-a46ab985f0bf`.
 - Clicking the headline opens a Texture window titled
   `Multiple reports converge on Meloni and Trump: A very public fall-out that
   is proving very hard to fix`, but the editor shows `v0`,
   `Start typing the document...`, and `Blank document ready`.
-- Direct platformd document read returns only `doc_id`, `owner_id`, and
+- Direct corpusd document read returns only `doc_id`, `owner_id`, and
   `title`.
-- Direct platformd revision list for the same doc contains revision content,
+- Direct corpusd revision list for the same doc contains revision content,
   `body_doc`, and source entities.
 
 Diagnosis:
 
 - The Texture editor reads `/api/texture/documents/{doc_id}` first and stores
   `current_revision_id` from that document DTO before refreshing revisions.
-- Platformd's `PlatformTextureDocument` currently has no current-head field, so
+- Corpusd's `PlatformTextureDocument` currently has no current-head field, so
   platform-owned document reads cannot expose `current_revision_id`.
 - The editor therefore treats the platform-owned article as a document with no
-  selected head and initializes as blank v0 even though platformd has revision
+  selected head and initializes as blank v0 even though corpusd has revision
   rows.
 
 Conjecture delta: platform-owned Texture document reads should expose the
 latest synced revision as `current_revision_id` so the existing Texture editor
 can load the article through the same public read path.
 
-Protected surfaces: platformd Texture document DTO/store/service, proxy
+Protected surfaces: corpusd Texture document DTO/store/service, proxy
 read-only platform Texture pass-through, Universal Wire headline-to-Texture
 readability, and source_ref/source entity preservation.
 
@@ -9727,16 +9727,16 @@ Admissible evidence:
   latest revision as `current_revision_id`.
 - Proxy platform Texture read tests proving document reads forward the field.
 - Focused Universal Wire runtime tests proving platform-readable stories still
-  filter through platformd.
+  filter through corpusd.
 - Staging deploy and authenticated product replay showing headline click loads
   article content instead of blank v0.
 
-Rollback path: revert the current-head platform read repair; platformd will
+Rollback path: revert the current-head platform read repair; corpusd will
 continue to avoid exposing malformed current-head data but Universal Wire
 headline Texture windows will remain blank.
 
-Heresy delta: discovered. The prior envelope repair restored platformd row sync
-and non-empty stories, but did not prove that platformd's document DTO had the
+Heresy delta: discovered. The prior envelope repair restored corpusd row sync
+and non-empty stories, but did not prove that corpusd's document DTO had the
 head pointer required by the Texture editor.
 
 Actual Delta V: 0. This is documentation-first only; V remains 27.
@@ -13698,7 +13698,7 @@ Deployed evidence:
 - FlakeHub run `28286893648` passed.
 - Staging health at `https://choir.news/health` reported proxy and sandbox
   deployed commit `06d5ba4e73069d0b14b6094fa5a245d43fc2f255`; deploy logs also
-  reported platformd at the same commit and `go-choir-sourcecycled.service`
+  reported corpusd at the same commit and `go-choir-sourcecycled.service`
   restarted at `2026-06-27T10:51:14Z`.
 - Temporary authenticated user
   `qa-live-arrival-1782557571@example.com` proved unauthenticated

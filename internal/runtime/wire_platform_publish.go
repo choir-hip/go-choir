@@ -63,14 +63,14 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 	if wireURL != "" {
 		return rt.postWirePublishProxy(ctx, wireURL, doc, rev, rec)
 	}
-	platformdURL := strings.TrimSpace(rt.cfg.PlatformdURL)
-	if platformdURL != "" {
+	corpusdURL := strings.TrimSpace(rt.cfg.CorpusdURL)
+	if corpusdURL != "" {
 		req := wirepublish.BuildAutonomousPublishRequest(doc, rev, rec, rev.Metadata)
-		resp, err := wirepublish.PostPlatformPublication(ctx, nil, platformdURL, req)
+		resp, err := wirepublish.PostPlatformPublication(ctx, nil, corpusdURL, req)
 		if err != nil {
 			return nil, err
 		}
-		if err := rt.syncWireTextureDocumentToPlatformd(ctx, platformdURL, doc); err != nil {
+		if err := rt.syncWireTextureDocumentToCorpusd(ctx, corpusdURL, doc); err != nil {
 			return nil, err
 		}
 		return resp, nil
@@ -78,13 +78,13 @@ func (rt *Runtime) publishWireArticleToPlatform(ctx context.Context, doc types.D
 	return nil, fmt.Errorf("wire publish is not configured")
 }
 
-func (rt *Runtime) syncWireTextureDocumentToPlatformd(ctx context.Context, platformdURL string, doc types.Document) error {
+func (rt *Runtime) syncWireTextureDocumentToCorpusd(ctx context.Context, corpusdURL string, doc types.Document) error {
 	if rt == nil || rt.store == nil {
 		return fmt.Errorf("runtime store unavailable")
 	}
-	platformdURL = strings.TrimRight(strings.TrimSpace(platformdURL), "/")
-	if platformdURL == "" {
-		return fmt.Errorf("platformd URL is required")
+	corpusdURL = strings.TrimRight(strings.TrimSpace(corpusdURL), "/")
+	if corpusdURL == "" {
+		return fmt.Errorf("corpusd URL is required")
 	}
 	revs, err := rt.store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10000)
 	if err != nil {
@@ -116,7 +116,7 @@ func (rt *Runtime) syncWireTextureDocumentToPlatformd(ctx context.Context, platf
 	if err != nil {
 		return fmt.Errorf("marshal wire texture sync: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, platformdURL+"/internal/platform/texture/sync", bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, corpusdURL+"/internal/platform/texture/sync", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("build wire texture sync request: %w", err)
 	}
@@ -254,7 +254,7 @@ func (rt *Runtime) persistWirePlatformPublicationRef(ctx context.Context, ownerI
 		"publication_kind":       wirepublish.PublicationKind,
 	}
 	return rt.store.PatchRevisionMetadata(ctx, ownerID, rev.RevisionID, map[string]any{
-		"platformd_publication_ref": ref,
-		"platformd_route_path":      pub.RoutePath,
+		"corpusd_publication_ref": ref,
+		"corpusd_route_path":      pub.RoutePath,
 	})
 }

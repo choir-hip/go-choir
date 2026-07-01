@@ -91,7 +91,7 @@ func TestTrajectorySubjectRefsMergePatch(t *testing.T) {
 		t.Fatalf("create trajectory: %v", err)
 	}
 	updated, err := s.UpdateTrajectorySubjectRefs(ctx, "user-alice", "traj-refs", map[string]string{
-		"publish_ref": "platformd_publication:pub-1/ver-1",
+		"publish_ref": "corpusd_publication:pub-1/ver-1",
 		"edition_ref": "texture_edition:wire/rev-1",
 		"":            "ignored",
 	})
@@ -101,7 +101,7 @@ func TestTrajectorySubjectRefsMergePatch(t *testing.T) {
 	if updated.SubjectRefs["processor_key"] != "processor:global" {
 		t.Fatalf("existing subject ref lost: %+v", updated.SubjectRefs)
 	}
-	if updated.SubjectRefs["publish_ref"] != "platformd_publication:pub-1/ver-1" {
+	if updated.SubjectRefs["publish_ref"] != "corpusd_publication:pub-1/ver-1" {
 		t.Fatalf("publish_ref missing: %+v", updated.SubjectRefs)
 	}
 	if updated.SubjectRefs["edition_ref"] != "texture_edition:wire/rev-1" {

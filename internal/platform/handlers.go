@@ -43,9 +43,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, healthResponse{
 		Status:  status,
-		Service: "platformd",
+		Service: "corpusd",
 		Store:   storeStatus,
-		Build:   buildinfo.Snapshot("platformd"),
+		Build:   buildinfo.Snapshot("corpusd"),
 	})
 }
 
@@ -65,7 +65,7 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 	}
 	resp, err := h.service.PublishTexture(r.Context(), req)
 	if err != nil {
-		log.Printf("platformd: publish texture: %v", err)
+		log.Printf("corpusd: publish texture: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -73,7 +73,7 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handler) HandlePublicTexture(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotFound, apiError{Error: "platformd does not render public HTML"})
+	writeJSON(w, http.StatusNotFound, apiError{Error: "corpusd does not render public HTML"})
 }
 
 func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +96,7 @@ func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *htt
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: resolve publication %s: %v", routePath, err)
+		log.Printf("corpusd: resolve publication %s: %v", routePath, err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve publication"})
 		return
 	}
@@ -124,7 +124,7 @@ func (h *Handler) HandleInternalExportPublication(w http.ResponseWriter, r *http
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: export publication %s: %v", routePath, err)
+		log.Printf("corpusd: export publication %s: %v", routePath, err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -142,7 +142,7 @@ func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.R
 	}
 	resp, err := h.service.SearchPublished(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
-		log.Printf("platformd: retrieval search: %v", err)
+		log.Printf("corpusd: retrieval search: %v", err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to search published retrieval sources"})
 		return
 	}
@@ -171,7 +171,7 @@ func (h *Handler) HandleInternalPublicationProposal(w http.ResponseWriter, r *ht
 	req.PublicationID = publicationID
 	resp, err := h.service.SubmitPublicationProposal(r.Context(), req)
 	if err != nil {
-		log.Printf("platformd: submit publication proposal: %v", err)
+		log.Printf("corpusd: submit publication proposal: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -194,7 +194,7 @@ func (h *Handler) HandleInternalProposalDeliveryState(w http.ResponseWriter, r *
 	}
 	resp, err := h.service.UpdateProposalDeliveryState(r.Context(), req)
 	if err != nil {
-		log.Printf("platformd: update proposal delivery: %v", err)
+		log.Printf("corpusd: update proposal delivery: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -217,7 +217,7 @@ func (h *Handler) HandleInternalSyncTextureDocument(w http.ResponseWriter, r *ht
 	}
 	resp, err := h.service.SyncTextureDocument(r.Context(), req)
 	if err != nil {
-		log.Printf("platformd: sync texture document: %v", err)
+		log.Printf("corpusd: sync texture document: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
@@ -250,7 +250,7 @@ func (h *Handler) HandleInternalGetTextureDocument(w http.ResponseWriter, r *htt
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: get texture document %s: %v", docID, err)
+		log.Printf("corpusd: get texture document %s: %v", docID, err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get texture document"})
 		return
 	}
@@ -280,7 +280,7 @@ func (h *Handler) HandleInternalListTextureRevisions(w http.ResponseWriter, r *h
 	}
 	revisions, err := h.service.ListPlatformTextureRevisions(r.Context(), docID)
 	if err != nil {
-		log.Printf("platformd: list texture revisions %s: %v", docID, err)
+		log.Printf("corpusd: list texture revisions %s: %v", docID, err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list texture revisions"})
 		return
 	}
@@ -309,7 +309,7 @@ func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *htt
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("platformd: get texture revision %s: %v", revisionID, err)
+		log.Printf("corpusd: get texture revision %s: %v", revisionID, err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get texture revision"})
 		return
 	}
@@ -334,7 +334,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("platformd: json encode: %v", err)
+		log.Printf("corpusd: json encode: %v", err)
 	}
 }
 

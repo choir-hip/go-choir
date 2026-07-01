@@ -17,7 +17,7 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 	var gotInternal string
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotInternal = r.Header.Get("X-Internal-Caller")
 		switch r.URL.Path {
 		case "/internal/platform/publications/resolve":
@@ -45,16 +45,16 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 				ContentHash:          "hash",
 			})
 		default:
-			t.Fatalf("platformd path: got %s", r.URL.Path)
+			t.Fatalf("corpusd path: got %s", r.URL.Path)
 		}
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -89,24 +89,24 @@ func TestPlatformPublicationResolveAndExportPropagateNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Internal-Caller") != "true" {
-			t.Fatalf("platformd missing internal caller header")
+			t.Fatalf("corpusd missing internal caller header")
 		}
 		switch r.URL.Path {
 		case "/internal/platform/publications/resolve", "/internal/platform/publications/export":
 			http.NotFound(w, r)
 		default:
-			t.Fatalf("platformd path: got %s", r.URL.Path)
+			t.Fatalf("corpusd path: got %s", r.URL.Path)
 		}
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	h, err := NewHandler(&Config{
 		Port:              "0",
 		SandboxURL:        "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -135,9 +135,9 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 
 	var gotPlatformReq platform.SubmitPublicationProposalRequest
 	var gotDeliveryUpdate platform.UpdateProposalDeliveryStateRequest
-	platformd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Internal-Caller") != "true" {
-			t.Fatalf("platformd missing internal caller header")
+			t.Fatalf("corpusd missing internal caller header")
 		}
 		switch r.URL.Path {
 		case "/internal/platform/publications/pub-1/proposals":
@@ -166,10 +166,10 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				DeliveryState: gotDeliveryUpdate.DeliveryState,
 			})
 		default:
-			t.Fatalf("platformd path: got %s", r.URL.Path)
+			t.Fatalf("corpusd path: got %s", r.URL.Path)
 		}
 	}))
-	defer platformd.Close()
+	defer corpusd.Close()
 
 	delivered := false
 	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +216,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 		Port:              "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		PlatformdURL:      platformd.URL,
+		CorpusdURL:      corpusd.URL,
 	}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)

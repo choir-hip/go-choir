@@ -978,7 +978,7 @@ Docs checkpoint `a4165abb` records the publication export metadata gap before
 code. Behavior commit `53dd9b34` includes publication access/export policy and
 retrieval source/span context in Markdown/HTML/DOCX/PDF export metadata. Dev
 harness commit `a7e7e821` answers the local startup question by starting
-platformd and local Platform Dolt from `start-services.sh`, with Dolt declared
+corpusd and local Platform Dolt from `start-services.sh`, with Dolt declared
 in the dev shell. Docs checkpoint `bb9d1614` records the frontend source
 contract drift before behavior commit `41b2135f` extracted a frontend
 source-contract helper module and aligned evidence/open-surface aliases with
@@ -1103,7 +1103,7 @@ what was proven:
   `nix develop -c go test ./internal/platform -run 'TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestPublicationMarkdownExportNormalizesMalformedTableTailRows|TestPublishVTextCreatesImmutablePublicRecords' -count=1`
   and `npm --prefix frontend run build`.
 - Local product-path browser proof passed after the local startup harness was
-  repaired to launch platformd:
+  repaired to launch corpusd:
   `npm --prefix frontend run e2e -- tests/vtext-source-service-publication.spec.js -g "publishes source-service source entities as expandable transclusions and canonical exports"`.
 - GitHub Actions CI run
   `https://github.com/choir-hip/go-choir/actions/runs/27066359739`
@@ -4136,9 +4136,9 @@ Fix evidence:
 documentation checkpoint: 9dda47a7 docs: record source contract deploy packaging gap
 fix commit: 81eb39964a769f39b977c20ef73f18333960ac87
 local classifier check:
-  internal/sourcecontract/evidence.go -> gateway,platformd,proxy,sandbox,sourcecycled
+  internal/sourcecontract/evidence.go -> gateway,corpusd,proxy,sandbox,sourcecycled
 local filtered source closure check:
-  platformd/proxy/gateway/sourcecycled/sandbox source closures contain internal/sourcecontract/evidence.go
+  corpusd/proxy/gateway/sourcecycled/sandbox source closures contain internal/sourcecontract/evidence.go
 local full package build limitation:
   x86_64-linux Nix packages could not be built from this aarch64-darwin workspace because the configured remote builder was aarch64-linux only
 local Go regression:
@@ -5087,7 +5087,7 @@ guest-readable artifact, and the owner-authenticated publish endpoint created
 one successfully. The proof also confirmed a policy-control gap: the proxy
 owner publish request currently accepts only `doc_id`, `revision_id`, and
 `slug`, then forwards no explicit `access_policy` or `export_policy` to
-platformd. Platform publication therefore falls back to public route/public
+corpusd. Platform publication therefore falls back to public route/public
 visibility and broad export defaults unless the private VText revision metadata
 already carries overriding policy.
 
@@ -5137,7 +5137,7 @@ planned proof:
 
 - extend the owner publish API to accept validated `access_policy` and
   `export_policy` objects;
-- forward those policy objects to platformd;
+- forward those policy objects to corpusd;
 - preserve existing behavior for callers that omit policy, so current public
   publication tests stay valid until UI defaults are deliberately changed;
 - add proxy tests proving explicit policy is forwarded and malformed policy is
@@ -5150,7 +5150,7 @@ fix and local proof:
 - `internal/proxy/platform_publish.go` now accepts optional `access_policy` and
   `export_policy` JSON objects on `POST /api/platform/vtext/publications`,
   rejects non-object policy values at the owner proxy boundary, and forwards
-  valid policy JSON to platformd.
+  valid policy JSON to corpusd.
 - `frontend/src/lib/vtext.js` `publishVText` now accepts `accessPolicy` and
   `exportPolicy` options and includes them in the product publish request when
   provided.
@@ -5418,7 +5418,7 @@ classification result:
   deploy_host_service=true
   deploy_vmctl_restart=true
   deploy_active_vm_refresh=true
-  host_services=gateway,platformd,proxy,sandbox,sourcecycled
+  host_services=gateway,corpusd,proxy,sandbox,sourcecycled
 
 deploy result:
   Node B deploy job 79897420194 completed successfully.
@@ -5463,7 +5463,7 @@ fix and proof:
 - Control proof for `internal/sourcecontract/evidence.go` still returns
   `deploy_needed=true`, `deploy_vmctl_restart=true`,
   `deploy_active_vm_refresh=true`, and
-  `host_services=gateway,platformd,proxy,sandbox,sourcecycled`.
+  `host_services=gateway,corpusd,proxy,sandbox,sourcecycled`.
 
 remaining error field: this fixes the verifier-only testdata
 overclassification for direct `internal/*/testdata/*` paths and adds CI
@@ -5568,7 +5568,7 @@ deploy_playwright_guest=false
 deploy_host_os=false
 deploy_vmctl_restart=true
 deploy_active_vm_refresh=true
-host_services=gateway,platformd,proxy,sandbox,sourcecycled
+host_services=gateway,corpusd,proxy,sandbox,sourcecycled
 ```
 
 remaining error field: this converts the current source-contract canonical
@@ -5620,7 +5620,7 @@ FlakeHub:
 failed deploy job:
   Deploy to Staging (Node B), job 79898478253
 
-platformd/proxy Nix package failure:
+corpusd/proxy Nix package failure:
   internal/sourcecontract/schema.go:11:12:
   pattern source_contract_schema.json: no matching files found
 
@@ -5675,14 +5675,14 @@ npm --prefix frontend run build
 
 nix develop -c go test ./internal/sourcecontract ./internal/platform ./internal/proxy -run 'TestNormalize|TestBuildPublication|TestHandleVTextPublication|TestExport|TestSourceContractSchema' -count=1
 
-nix eval --raw .#packages.x86_64-linux.platformd.src.outPath
+nix eval --raw .#packages.x86_64-linux.corpusd.src.outPath
   -> /nix/store/rz54kj95lggldm8znz5f0i7lqdks1asa-source
 
 test -f /nix/store/rz54kj95lggldm8znz5f0i7lqdks1asa-source/internal/sourcecontract/source_contract_schema.json
-  -> platformd-schema-present
+  -> corpusd-schema-present
 
 test ! -f /nix/store/rz54kj95lggldm8znz5f0i7lqdks1asa-source/internal/sourcecontract/testdata/source_contract_matrix.json
-  -> platformd-testdata-absent
+  -> corpusd-testdata-absent
 
 nix eval --raw .#packages.x86_64-linux.frontend.src.outPath
   -> /nix/store/crjajz2mipffkzaj2m65gcm9rfz9giaf-source
@@ -5739,7 +5739,7 @@ terminal Node B deploy evidence:
   Deploy to Staging (Node B), job 79898767522 -> success
   deploy started=2026-06-06T18:34:29Z
   deploy completed=2026-06-06T18:41:22Z
-  host service pointers updated for gateway, platformd, proxy, sandbox,
+  host service pointers updated for gateway, corpusd, proxy, sandbox,
     sourcecycled, vmctl
   ordinary guest image deployed
   playwright guest image deployed
@@ -6028,7 +6028,7 @@ deploy-impact:
   deploy_needed=true
   deploy_host=true
   deploy_host_service=true
-  host_services=platformd,proxy
+  host_services=corpusd,proxy
   frontend/guest/vmctl/host_os deploy flags=false
 ```
 
@@ -6120,7 +6120,7 @@ internal/platform/service.go:
 
 internal/proxy/platform_public.go:
   /api/platform/publications/resolve, /export, and retrieval search are public
-  proxy handlers; they forward to platformd without an authenticated subject or
+  proxy handlers; they forward to corpusd without an authenticated subject or
   policy decision.
 ```
 
@@ -6180,7 +6180,7 @@ deploy-impact:
   deploy_needed=true
   deploy_host=true
   deploy_host_service=true
-  host_services=platformd,proxy
+  host_services=corpusd,proxy
   frontend/guest/vmctl/host_os deploy flags=false
 ```
 
@@ -6214,17 +6214,17 @@ resolve/export/search acceptance could be unambiguous.
 
 Status: `fixed_and_accepted_on_staging`.
 
-problem: after Problem 36, platformd can return `sql.ErrNoRows`/404 for
+problem: after Problem 36, corpusd can return `sql.ErrNoRows`/404 for
 publication routes that are inactive, nonexistent, or no longer public according
 to `access_policy.visibility`. The public proxy helper
-`getPlatformJSON` treats every non-2xx platformd response as an upstream error,
+`getPlatformJSON` treats every non-2xx corpusd response as an upstream error,
 so `/api/platform/publications/resolve` and `/api/platform/publications/export`
 would return `502 failed to resolve/export publication` for expected public
 policy misses. That hides the policy decision behind an infrastructure-shaped
 failure.
 
 affected contract/invariant: a public reader should see a not-found or typed
-policy-denial response when a route is not public. A 502 implies platformd or
+policy-denial response when a route is not public. A 502 implies corpusd or
 gateway degradation, which is false for a deliberate private/unlisted
 publication policy miss and makes staging acceptance ambiguous.
 
@@ -6236,7 +6236,7 @@ internal/platform/handlers.go:
   sql.ErrNoRows to http.NotFound.
 
 internal/proxy/platform_public.go:
-  getPlatformJSON returns an error for any platformd response outside 2xx.
+  getPlatformJSON returns an error for any corpusd response outside 2xx.
 
 internal/proxy/platform_public.go:
   HandlePlatformPublicationResolve and HandlePlatformPublicationExport map that
@@ -6247,8 +6247,8 @@ internal/proxy/platform_public.go:
 acceptance for fix:
 
 - preserve existing successful 2xx proxy behavior;
-- propagate platformd 404 as public 404 for publication resolve/export;
-- keep genuine platformd transport/decode failures as 502;
+- propagate corpusd 404 as public 404 for publication resolve/export;
+- keep genuine corpusd transport/decode failures as 502;
 - add proxy handler tests for publication resolve/export not-found propagation;
 - rerun deployed public/private/unlisted publication proof after deploy.
 
@@ -6259,9 +6259,9 @@ fix and proof:
 
 ```text
 behavior:
-  internal/proxy/platform_public.go now wraps non-2xx platformd responses in a
+  internal/proxy/platform_public.go now wraps non-2xx corpusd responses in a
   typed platformStatusError. Public publication resolve/export handlers
-  propagate platformd 404 as public 404 and continue to map genuine transport
+  propagate corpusd 404 as public 404 and continue to map genuine transport
   or decode failures to 502.
 
 verifier:
@@ -6270,9 +6270,9 @@ verifier:
 
 assertions:
   successful public resolve/export behavior is unchanged;
-  platformd 404 from /internal/platform/publications/resolve becomes public
+  corpusd 404 from /internal/platform/publications/resolve becomes public
   404 from /api/platform/publications/resolve;
-  platformd 404 from /internal/platform/publications/export becomes public 404
+  corpusd 404 from /internal/platform/publications/export becomes public 404
   from /api/platform/publications/export.
 
 local checks:

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Fix Universal Wire production end-to-end: sourcecycled must not overload the platform computer, processor handoffs must complete into VText article revisions, platform publication must sync full VText revision history into platformd, the durable Wire edition must expose non-empty stories, and the authenticated Universal Wire app must render article cards on staging.
+Fix Universal Wire production end-to-end: sourcecycled must not overload the platform computer, processor handoffs must complete into VText article revisions, platform publication must sync full VText revision history into corpusd, the durable Wire edition must expose non-empty stories, and the authenticated Universal Wire app must render article cards on staging.
 
 ## Timeline
 
@@ -10,7 +10,7 @@ Fix Universal Wire production end-to-end: sourcecycled must not overload the pla
 |---|---|
 | ~17:05 | Prior operator confirmed 32+32 processor runs submitted, concluded news was producing (false positive) |
 | ~17:42+ | vmctl repeatedly marked platform VM unhealthy; sandbox health timing out |
-| ~18:00 | Investigation: platformd has 0 VText docs/revisions; platform Firecracker at ~240% CPU |
+| ~18:00 | Investigation: corpusd has 0 VText docs/revisions; platform Firecracker at ~240% CPU |
 | ~18:15 | Root cause doc written: submission ≠ completion; backpressure missing |
 | ~18:30 | Cognitive transform review (state machine, backpressure, commutative diagram, contrapositive, prototype honesty) |
 | ~18:40 | MissionGradient control doc written |
@@ -42,7 +42,7 @@ Fix Universal Wire production end-to-end: sourcecycled must not overload the pla
 
 - sourcecycled source fetch is not the blocker (198 successful fetches, 4241 items per cycle)
 - Platform VM wedged under 64 concurrent processor runs
-- Platformd had zero VText documents/revisions — no publication ever completed
+- Corpusd had zero VText documents/revisions — no publication ever completed
 - Missing backpressure is the causal root of the wedge
 - `processor_submitted` ≠ article published
 
@@ -50,7 +50,7 @@ Fix Universal Wire production end-to-end: sourcecycled must not overload the pla
 
 - Whether deployed backpressure prevents re-wedge (need production proof)
 - Whether VText article creation and autonomous publication work once VM is healthy (need end-to-end proof)
-- Whether Wire edition transclusion and platformd sync work after publication (need end-to-end proof)
+- Whether Wire edition transclusion and corpusd sync work after publication (need end-to-end proof)
 - Whether the 64 submitted processor runs produced any VText docs inside the wedged guest (need disk inspection)
 
 ## Residual Risks
@@ -66,7 +66,7 @@ Fix Universal Wire production end-to-end: sourcecycled must not overload the pla
 2. Confirm Node B deploy of new commit
 3. Resume platform VM
 4. Verify sandbox healthy and backpressure prevents re-wedge
-5. Verify processor → VText → publish → platformd sync → edition → stories chain
+5. Verify processor → VText → publish → corpusd sync → edition → stories chain
 6. Verify authenticated Universal Wire app renders article cards
 7. If articles still don't appear, inspect VM disk for processor run states
 
@@ -105,7 +105,7 @@ Observed current state:
 - Fresh processor batches admit under the 4-run cap.
 - Guest creates article revisions and attempts publish.
 - Current guest logs now fail with `revision is not eligible for autonomous wire publish` instead of network timeout.
-- platformd still shows `0` documents / `0` revisions.
+- corpusd still shows `0` documents / `0` revisions.
 - sourcecycled still has no completion feedback loop, so it keeps 4 requests marked `submitted` after the guest becomes idle.
 
 ### Best current theory
@@ -119,7 +119,7 @@ There are two live issues left:
 
 1. Inspect one current rejected revision's exact metadata and its correlated run metadata, then compare that against the successful manual replay payload.
 2. Patch sourcecycled to poll submitted runtime run states and release in-flight budget on terminal states.
-3. Once a fresh revision is publish-eligible, verify platformd rows increase, then verify Wire edition ordering and headline-open behavior from the UI.
+3. Once a fresh revision is publish-eligible, verify corpusd rows increase, then verify Wire edition ordering and headline-open behavior from the UI.
 
 
 ## Scientific Update — 2026-06-11 03:30 UTC
@@ -141,7 +141,7 @@ The investigation moved from infrastructure failures into the semantic decision 
 - Another later processor returned: "VText spawning deferred — blocked on wire corpus search restoration for dedup verification."
 - `search_wire_corpus` previously searched guest-local unpublished docs; that has now been cut over to published-only docs.
 - Universal Wire list honesty was repaired so guest-local unpublished stories should no longer surface as canonical list items.
-- platformd still remains at `0` docs / `0` revisions.
+- corpusd still remains at `0` docs / `0` revisions.
 
 ### Best current theory
 
@@ -152,7 +152,7 @@ The current bottleneck is semantic/agentic: the processor still carries stale co
 1. Treat the processor channel/continuity as suspect and test one run on the new `processor-v2:*` channel.
 2. If the stale belief persists, bypass continuity for one clean run.
 3. Capture the live child-run topology of a single admitted processor.
-4. Verify that the first truly clean processor run either creates one platformd row or yields a single exact semantic blocker.
+4. Verify that the first truly clean processor run either creates one corpusd row or yields a single exact semantic blocker.
 
 
 ## Conjecture Ledger Snapshot
@@ -162,8 +162,8 @@ The current bottleneck is semantic/agentic: the processor still carries stale co
 - **C3 queue bookkeeping:** improved enough that it is no longer the dominant blocker.
 - **C4 unpublished corpus poisoning:** confirmed and fixed by constraining `search_wire_corpus` to published-only docs.
 - **C5 stale processor continuity:** current leading conjecture. Completed processors still express old beliefs such as `wire corpus search restoration blocked`.
-- **C6 single-run destabilization:** still active. One admitted processor can still drive the guest unhealthy before durable publish reaches platformd.
-- **C7 primary mission frontier:** on a fresh guest and fresh processor identity, one admitted processor must either yield one durable platformd publication or expose the exact child-run / coverage-decision reason it does not.
+- **C6 single-run destabilization:** still active. One admitted processor can still drive the guest unhealthy before durable publish reaches corpusd.
+- **C7 primary mission frontier:** on a fresh guest and fresh processor identity, one admitted processor must either yield one durable corpusd publication or expose the exact child-run / coverage-decision reason it does not.
 
 
 ## Architectural Conjecture: Realest Decoupled Pipeline
@@ -178,7 +178,7 @@ source fetch
 -> coverage / dedup against published corpus only
 -> publication-candidate selection
 -> VText article spawn or revision
--> autonomous publish to platformd
+-> autonomous publish to corpusd
 -> durable Wire edition update
 -> public stories list / headline open
 ```
@@ -186,7 +186,7 @@ source fetch
 This does **not** create a second article truth. It keeps:
 - candidate ledger = pre-article planning state
 - VText = article truth
-- platformd = public durable publication truth
+- corpusd = public durable publication truth
 
 The conjecture is that the current monolithic processor run is over-coupled and can suppress the whole pipeline with a local semantic decision ("already covered", "need dedup verification", "need publication direction"). The decoupled version would make those states durable and explicit instead of burying them in one processor completion result.
 
@@ -206,7 +206,7 @@ processor 9a2606ee...
 -> sourcecycled admits next processor dbc6478a... before the super/vtext continuation is finished
 ```
 
-platformd still remained at `0 docs / 0 revs`.
+corpusd still remained at `0 docs / 0 revs`.
 
 ### Updated best theory
 
@@ -219,7 +219,7 @@ The narrowed semantic-frontier objective was satisfied on the **expose exact rea
 
 ### What was proven
 
-On a fresh platform guest and fresh `processor-v2:*` identity, one admitted processor did not produce a durable platformd publication. The exact reason is now exposed:
+On a fresh platform guest and fresh `processor-v2:*` identity, one admitted processor did not produce a durable corpusd publication. The exact reason is now exposed:
 
 ```text
 processor run completes
@@ -280,14 +280,14 @@ Planned effect:
 - rename product/runtime terminology from sandbox -> autoputer in docs, architecture, and later implementation.
 - this should be done carefully to avoid conflating ephemeral nucleus sandboxes with persistent autoputers.
 
-### 5. Rename `platformd` to `corpusd`
+### 5. Rename `corpusd` to `corpusd`
 
 Reason:
-- `platformd` is too easily confused with platform computers / platform VM ownership.
+- `corpusd` is too easily confused with platform computers / platform VM ownership.
 - `corpusd` makes the durable publication/corpus role explicit and distinct.
 
 Planned effect:
-- rename service/docs/API references from platformd -> corpusd.
+- rename service/docs/API references from corpusd -> corpusd.
 - keep the semantic distinction clear: corpusd is durable publication state, not the platform computer itself.
 
 ### 6. Upgrade MissionGradient around conjectures

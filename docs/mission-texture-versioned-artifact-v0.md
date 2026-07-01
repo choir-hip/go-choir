@@ -93,7 +93,7 @@ Dependency order; each item earns its keep.
   is soft.
 - **D5 Full-history publish.** Evolve the publish path so a published Texture is
   the **chain + per-revision provenance + transclusions**, not the head only:
-  `PublishTextureRequest` (and platformd internal publish, the public `/pub`
+  `PublishTextureRequest` (and corpusd internal publish, the public `/pub`
   reader, export) carry version history + metadata + transcluded sources. Orange/
   red, touches the platform; design the reader so the latest is prominent while
   the lineage and per-version sources are inspectable.

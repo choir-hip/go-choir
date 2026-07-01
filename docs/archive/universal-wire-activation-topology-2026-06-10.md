@@ -127,7 +127,7 @@ next step, not parallel authors.
 | `ingestion_event` | sourcecycled after `SaveItems` | processor run(s) | Only lawful story-creation entry |
 | `vtext_wake_request` | processor, reconciler | VText agent revision run | Carries `doc_id`, brief, source handles |
 | `vtext_revision` | VText `edit_vtext` | (internal) next loop or publish eligibility | Provenance recorded at write time |
-| `publish` | autonomous publish path (Community Cloud policy) | platformd projection; debounced reconciler | No operator approval gate on Community Cloud |
+| `publish` | autonomous publish path (Community Cloud policy) | corpusd projection; debounced reconciler | No operator approval gate on Community Cloud |
 | `corpus_change` | publish; user fork/edit on published platform doc; promotion | reconciler (debounced) | Idempotent reconciler key TBD in implementation |
 | `reconciler_sweep` | scheduler | reconciler | Periodic corpus review |
 
@@ -168,7 +168,7 @@ tool and not “every revision automatically.”
 ```text
 edit_vtext completes on platform computer
   -> runtime evaluates publication policy (owner + revision metadata + content)
-  -> if eligible: platform-internal publish (Dolt -> platformd projection)
+  -> if eligible: platform-internal publish (Dolt -> corpusd projection)
   -> emit publish event -> debounced reconciler (N=10 or T=300s)
 ```
 
@@ -361,7 +361,7 @@ Plus Phase A negative proofs (prompt bar cannot create Wire stories) per Slice 4
 | Prior text | Resolution |
 |------------|------------|
 | Slice 3: processor → researcher/VText | processor → **VText only**; VText owns researchers |
-| Slice 3b separate from autonomous publish | Community Cloud autonomous publish is in Workstream 2 acceptance; platform-internal platformd projection remains implementation detail |
+| Slice 3b separate from autonomous publish | Community Cloud autonomous publish is in Workstream 2 acceptance; platform-internal corpusd projection remains implementation detail |
 | Reconciler per-cycle on handoff | **Removed** — violates feed-forward |
 | Spec: processor requests researchers | **Request via VText wake brief**, not processor spawn |
 | Slice 0 marked done while SourceMaxx active | **False** — Workstream 1 reopens Slice 0 until grep-clean |

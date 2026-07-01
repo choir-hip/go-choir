@@ -588,7 +588,7 @@ Mac host
 | Computer VM | Firecracker on Node B | Apple Virtualization on Mac |
 | Dolt | embedded in cloud VM | embedded in local VM |
 | File sync | staging Base API | local Base (if Phase 3-6 complete) |
-| Publication | platformd on staging | optional local publication or staging relay |
+| Publication | corpusd on staging | optional local publication or staging relay |
 
 ### Dependencies
 

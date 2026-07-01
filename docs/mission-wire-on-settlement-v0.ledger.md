@@ -104,7 +104,7 @@ build, integration smoke, TLA+, and deploy-impact passed, but non-runtime Go
 tests failed in `internal/proxy`.
 
 Receipt: GitHub Actions run `27447982144`, job `81137136114`,
-`TestHandleInternalWirePlatformPublishPostsToPlatformd`:
+`TestHandleInternalWirePlatformPublishPostsToCorpusd`:
 `status = 502 body = {"error":"failed to load wire document"}` after the
 handler logged `proxy: wire publish fetch document: sandbox status 404`.
 
@@ -119,7 +119,7 @@ The handler reads the platform owner's document and revision through sandbox
 `/internal/vtext/...` paths; the post-publish async sync still reads the public
 document revisions list.
 
-Move: construct. Update `TestHandleInternalWirePlatformPublishPostsToPlatformd`
+Move: construct. Update `TestHandleInternalWirePlatformPublishPostsToCorpusd`
 to serve the handler's internal document/revision paths while preserving the
 public revisions-list fixture used by sync.
 
@@ -129,7 +129,7 @@ Actual ΔV: local non-runtime package blocker removed; deploy/staging evidence
 still pending on the next pushed CI run.
 
 Receipt:
-- `nix develop -c go test ./internal/proxy -run TestHandleInternalWirePlatformPublishPostsToPlatformd` passed.
+- `nix develop -c go test ./internal/proxy -run TestHandleInternalWirePlatformPublishPostsToCorpusd` passed.
 - `nix develop -c go test ./internal/proxy` passed in `10.628s`.
 
 Open edge: push the fix commit, monitor CI/deploy, then verify staging build
@@ -213,11 +213,11 @@ internal routes.
 ## 2026-06-12 — Public Surface Probe: Publication Corpus Live, Cycle Predicate Still Auth-Gated
 
 Claim/scope: unauthenticated staging can still provide product-path observer
-evidence about public platformd publication health, but it cannot by itself
+evidence about public corpusd publication health, but it cannot by itself
 settle M5 because the Universal Wire edition/cycle predicate is auth-gated.
 
 Move: shift observer from prompt-bar/authenticated owner APIs to public
-platformd publication, retrieval, and export APIs on deployed staging commit
+corpusd publication, retrieval, and export APIs on deployed staging commit
 `b8f33087ce099d11054447d852e788453379a787`.
 
 Expected ΔV: 0-1. Either discover a public product predicate that can reduce
@@ -286,8 +286,8 @@ Receipt:
   unmarshals `metadata_json`, merges patch keys, and writes the whole JSON
   object back without taking `s.jsonPatchMu`.
 - `internal/runtime/wire_platform_publish.go:169` uses
-  `PatchRevisionMetadata` to persist `platformd_route_path` and
-  `platformd_publication_ref`, so a concurrent metadata patch can lose the
+  `PatchRevisionMetadata` to persist `corpusd_route_path` and
+  `corpusd_publication_ref`, so a concurrent metadata patch can lose the
   publication ref or the other patch key.
 
 Open edge: fix `PatchRevisionMetadata` with the same Store-instance
@@ -402,7 +402,7 @@ Receipt:
 
 Blocked obligation: owner must open or provide an authenticated
 `https://choir.news` session, then run one real product-path Universal Wire
-cycle. Public platformd corpus health and signed-out preview state remain
+cycle. Public corpusd corpus health and signed-out preview state remain
 insufficient for M5 settlement.
 
 ## 2026-06-12 — Portfolio Sequencing Correction: Defer Wire Product Gate

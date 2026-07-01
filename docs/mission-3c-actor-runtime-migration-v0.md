@@ -126,7 +126,7 @@ Run the deployed acceptance test:
 - sourcecycled dispatches
 - platform sandbox accepts runs via actor runtime
 - processor creates VText article revisions
-- autonomous publish to platformd
+- autonomous publish to corpusd
 - edition transclusion
 - `/api/universal-wire/stories` returns non-empty
 - Universal Wire app renders article cards

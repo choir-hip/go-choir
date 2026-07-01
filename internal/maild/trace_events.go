@@ -78,17 +78,11 @@ func (h *Handler) resolveTraceRuntimeURL(ctx context.Context, ownerID string) (s
 	if ownerID == "" {
 		return "", fmt.Errorf("owner_id is required")
 	}
-	if strings.TrimSpace(h.cfg.VmctlURL) != "" {
-		sandboxURL, err := resolveOwnerSandboxURL(ctx, h.cfg.VmctlURL, ownerID)
-		if err != nil {
-			return "", err
-		}
-		return sandboxURL, nil
+	sandboxURL, err := resolveOwnerSandboxURL(ctx, h.cfg.VmctlURL, ownerID)
+	if err != nil {
+		return "", err
 	}
-	if strings.TrimSpace(h.cfg.RuntimeURL) != "" {
-		return strings.TrimSpace(h.cfg.RuntimeURL), nil
-	}
-	return "", fmt.Errorf("MAILD_VMCTL_URL or MAILD_RUNTIME_URL is required")
+	return sandboxURL, nil
 }
 
 func resolveOwnerSandboxURL(ctx context.Context, vmctlURL, ownerID string) (string, error) {

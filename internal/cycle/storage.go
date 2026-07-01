@@ -5,32 +5,26 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/yusefmosiah/go-choir/internal/sources"
-	_ "modernc.org/sqlite"
 )
 
 type Storage struct {
 	DB *sql.DB
 }
 
-func NewStorage(dbPath string) (*Storage, error) {
-	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("create sourcecycled db dir: %w", err)
-		}
-	}
-	db, err := sql.Open("sqlite", dbPath)
+// NewStorage opens a cycle storage database using a MySQL/Dolt DSN.
+func NewStorage(dsn string) (*Storage, error) {
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
+		return nil, fmt.Errorf("failed to open mysql db: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping sqlite db: %w", err)
+		return nil, fmt.Errorf("failed to ping mysql db: %w", err)
 	}
 
 	if err := createTables(db); err != nil {
@@ -40,152 +34,180 @@ func NewStorage(dbPath string) (*Storage, error) {
 	return &Storage{DB: db}, nil
 }
 
+// NewStorageFromDB wraps an already-opened *sql.DB (used by tests with the
+// embedded Dolt driver) and bootstraps the cycle schema.
+func NewStorageFromDB(db *sql.DB) (*Storage, error) {
+	if err := createTables(db); err != nil {
+		return nil, fmt.Errorf("failed to create tables: %w", err)
+	}
+	return &Storage{DB: db}, nil
+}
+
+// commitDolt commits the current working set to the Dolt repository. "Nothing
+// to commit" (e.g. an idempotent upsert that did not change any row values) is
+// treated as success because the data is already in the desired state.
+func (s *Storage) commitDolt(ctx context.Context, message string) error {
+	if s == nil || s.DB == nil {
+		return fmt.Errorf("cycle storage: nil database")
+	}
+	if message == "" {
+		message = "sourcecycled change"
+	}
+	if _, err := s.DB.ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
+		if strings.Contains(err.Error(), "nothing to commit") {
+			return nil
+		}
+		return fmt.Errorf("cycle storage: dolt commit: %w", err)
+	}
+	return nil
+}
+
 func createTables(db *sql.DB) error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS sources (
-			id                         TEXT PRIMARY KEY,
-			type                       TEXT NOT NULL,
-			url                        TEXT NOT NULL,
-			name                       TEXT NOT NULL,
-			verticals                  TEXT NOT NULL DEFAULT '[]',
-			languages                  TEXT NOT NULL DEFAULT '[]',
-			regions                    TEXT NOT NULL DEFAULT '[]',
-			jurisdictions              TEXT NOT NULL DEFAULT '[]',
-			tier                       TEXT NOT NULL DEFAULT '',
-			poll_interval_seconds      INTEGER NOT NULL DEFAULT 900,
-			max_items_per_poll         INTEGER NOT NULL DEFAULT 0,
-			rate_limit                 TEXT NOT NULL DEFAULT '',
-			conditional_request_mode   TEXT NOT NULL DEFAULT '',
-			user_agent                 TEXT NOT NULL DEFAULT '',
-			tos_class                  TEXT NOT NULL DEFAULT '',
-			robots_policy              TEXT NOT NULL DEFAULT '',
-			auth_policy                TEXT NOT NULL DEFAULT '',
-			store_body_policy          TEXT NOT NULL DEFAULT '',
-			retention_days             INTEGER NOT NULL DEFAULT 0,
-			official                   INTEGER NOT NULL DEFAULT 0,
-			source_standing            TEXT NOT NULL DEFAULT '',
-			status                     TEXT NOT NULL DEFAULT 'active',
-			last_polled                TEXT NOT NULL DEFAULT '',
-			last_etag                  TEXT NOT NULL DEFAULT '',
-			last_modified              TEXT NOT NULL DEFAULT '',
-			last_aux_cursor            TEXT NOT NULL DEFAULT '',
-			updated_at                 TEXT NOT NULL
+			id                         VARCHAR(255) PRIMARY KEY,
+			type                       VARCHAR(255) NOT NULL,
+			url                        LONGTEXT NOT NULL,
+			name                       VARCHAR(255) NOT NULL,
+			verticals                  LONGTEXT NOT NULL DEFAULT '[]',
+			languages                  LONGTEXT NOT NULL DEFAULT '[]',
+			regions                    LONGTEXT NOT NULL DEFAULT '[]',
+			jurisdictions              LONGTEXT NOT NULL DEFAULT '[]',
+			tier                       VARCHAR(64) NOT NULL DEFAULT '',
+			poll_interval_seconds      INT NOT NULL DEFAULT 900,
+			max_items_per_poll         INT NOT NULL DEFAULT 0,
+			rate_limit                 VARCHAR(255) NOT NULL DEFAULT '',
+			conditional_request_mode   VARCHAR(64) NOT NULL DEFAULT '',
+			user_agent                 LONGTEXT NOT NULL DEFAULT '',
+			tos_class                  VARCHAR(64) NOT NULL DEFAULT '',
+			robots_policy              VARCHAR(64) NOT NULL DEFAULT '',
+			auth_policy                VARCHAR(64) NOT NULL DEFAULT '',
+			store_body_policy          VARCHAR(64) NOT NULL DEFAULT '',
+			retention_days             INT NOT NULL DEFAULT 0,
+			official                   TINYINT NOT NULL DEFAULT 0,
+			source_standing            VARCHAR(64) NOT NULL DEFAULT '',
+			status                     VARCHAR(64) NOT NULL DEFAULT 'active',
+			last_polled                VARCHAR(64) NOT NULL DEFAULT '',
+			last_etag                  LONGTEXT NOT NULL DEFAULT '',
+			last_modified              LONGTEXT NOT NULL DEFAULT '',
+			last_aux_cursor            LONGTEXT NOT NULL DEFAULT '',
+			updated_at                 VARCHAR(64) NOT NULL DEFAULT ''
 		)`,
 		`CREATE TABLE IF NOT EXISTS fetches (
-			fetch_id          TEXT PRIMARY KEY,
-			cycle_id          TEXT NOT NULL DEFAULT '',
-			source_id         TEXT NOT NULL,
-			source_type       TEXT NOT NULL,
-			request_url       TEXT NOT NULL,
-			canonical_url     TEXT NOT NULL DEFAULT '',
-			status_code       INTEGER NOT NULL DEFAULT 0,
-			status            TEXT NOT NULL,
-			started_at        TEXT NOT NULL,
-			ended_at          TEXT NOT NULL DEFAULT '',
-			response_etag     TEXT NOT NULL DEFAULT '',
-			response_modified TEXT NOT NULL DEFAULT '',
-			content_hash      TEXT NOT NULL DEFAULT '',
-			raw_snapshot_ref  TEXT NOT NULL DEFAULT '',
-			error_class       TEXT NOT NULL DEFAULT '',
-			error             TEXT NOT NULL DEFAULT '',
-			item_count        INTEGER NOT NULL DEFAULT 0
+			fetch_id          VARCHAR(255) PRIMARY KEY,
+			cycle_id          VARCHAR(255) NOT NULL DEFAULT '',
+			source_id         VARCHAR(255) NOT NULL,
+			source_type       VARCHAR(255) NOT NULL,
+			request_url       LONGTEXT NOT NULL,
+			canonical_url     LONGTEXT NOT NULL DEFAULT '',
+			status_code       INT NOT NULL DEFAULT 0,
+			status            VARCHAR(64) NOT NULL,
+			started_at        VARCHAR(64) NOT NULL,
+			ended_at          VARCHAR(64) NOT NULL DEFAULT '',
+			response_etag     LONGTEXT NOT NULL DEFAULT '',
+			response_modified LONGTEXT NOT NULL DEFAULT '',
+			content_hash      VARCHAR(128) NOT NULL DEFAULT '',
+			raw_snapshot_ref  LONGTEXT NOT NULL DEFAULT '',
+			error_class       VARCHAR(64) NOT NULL DEFAULT '',
+			error             LONGTEXT NOT NULL DEFAULT '',
+			item_count        INT NOT NULL DEFAULT 0
 		)`,
 		`CREATE TABLE IF NOT EXISTS items (
-			id               TEXT PRIMARY KEY,
-			source_id        TEXT NOT NULL,
-			source_type      TEXT NOT NULL DEFAULT '',
-			fetch_id         TEXT NOT NULL DEFAULT '',
-			original_id      TEXT NOT NULL DEFAULT '',
-			title            TEXT NOT NULL DEFAULT '',
-			body             TEXT NOT NULL DEFAULT '',
-			url              TEXT NOT NULL DEFAULT '',
-			canonical_url    TEXT NOT NULL DEFAULT '',
-			published        TEXT NOT NULL DEFAULT '',
-			fetched_at       TEXT NOT NULL DEFAULT '',
-			verticals        TEXT NOT NULL DEFAULT '[]',
-			language         TEXT NOT NULL DEFAULT '',
-			region           TEXT NOT NULL DEFAULT '',
-			content_hash      TEXT NOT NULL DEFAULT '',
-			body_kind         TEXT NOT NULL DEFAULT '',
-			body_length       INTEGER NOT NULL DEFAULT 0,
-			reader_snapshot   INTEGER NOT NULL DEFAULT 0,
-			raw_json          TEXT NOT NULL DEFAULT '',
-			evidence_level    TEXT NOT NULL DEFAULT '',
-			vintage_policy    TEXT NOT NULL DEFAULT '',
-			lookahead_status  TEXT NOT NULL DEFAULT '',
-			release_date      TEXT NOT NULL DEFAULT '',
-			created_at        TEXT NOT NULL
+			id               VARCHAR(255) PRIMARY KEY,
+			source_id        VARCHAR(255) NOT NULL,
+			source_type      VARCHAR(255) NOT NULL DEFAULT '',
+			fetch_id         VARCHAR(255) NOT NULL DEFAULT '',
+			original_id      LONGTEXT NOT NULL DEFAULT '',
+			title            LONGTEXT NOT NULL DEFAULT '',
+			body             LONGTEXT NOT NULL DEFAULT '',
+			url              LONGTEXT NOT NULL DEFAULT '',
+			canonical_url    LONGTEXT NOT NULL DEFAULT '',
+			published        VARCHAR(64) NOT NULL DEFAULT '',
+			fetched_at       VARCHAR(64) NOT NULL DEFAULT '',
+			verticals        LONGTEXT NOT NULL DEFAULT '[]',
+			language         VARCHAR(64) NOT NULL DEFAULT '',
+			region           VARCHAR(64) NOT NULL DEFAULT '',
+			content_hash      VARCHAR(128) NOT NULL DEFAULT '',
+			body_kind         VARCHAR(64) NOT NULL DEFAULT '',
+			body_length       INT NOT NULL DEFAULT 0,
+			reader_snapshot   TINYINT NOT NULL DEFAULT 0,
+			raw_json          LONGTEXT NOT NULL DEFAULT '',
+			evidence_level    VARCHAR(64) NOT NULL DEFAULT '',
+			vintage_policy    VARCHAR(64) NOT NULL DEFAULT '',
+			lookahead_status  VARCHAR(64) NOT NULL DEFAULT '',
+			release_date      VARCHAR(32) NOT NULL DEFAULT '',
+			created_at        VARCHAR(64) NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_items_source_published ON items(source_id, published)`,
 		`CREATE INDEX IF NOT EXISTS idx_items_content_hash ON items(content_hash)`,
 		`CREATE TABLE IF NOT EXISTS cycles (
-			cycle_id      TEXT PRIMARY KEY,
-			started_at    TEXT NOT NULL,
-			ended_at      TEXT NOT NULL DEFAULT '',
-			status        TEXT NOT NULL,
-			item_count    INTEGER NOT NULL DEFAULT 0,
-			fetch_count   INTEGER NOT NULL DEFAULT 0,
-			error         TEXT NOT NULL DEFAULT ''
+			cycle_id      VARCHAR(255) PRIMARY KEY,
+			started_at    VARCHAR(64) NOT NULL,
+			ended_at      VARCHAR(64) NOT NULL DEFAULT '',
+			status        VARCHAR(64) NOT NULL,
+			item_count    INT NOT NULL DEFAULT 0,
+			fetch_count   INT NOT NULL DEFAULT 0,
+			error         LONGTEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE TABLE IF NOT EXISTS cycle_events (
-			event_id      TEXT PRIMARY KEY,
-			cycle_id      TEXT NOT NULL,
-			source_id     TEXT NOT NULL DEFAULT '',
-			kind          TEXT NOT NULL,
-			message       TEXT NOT NULL DEFAULT '',
-			metadata_json TEXT NOT NULL DEFAULT '{}',
-			created_at    TEXT NOT NULL
+			event_id      VARCHAR(255) PRIMARY KEY,
+			cycle_id      VARCHAR(255) NOT NULL,
+			source_id     VARCHAR(255) NOT NULL DEFAULT '',
+			kind          VARCHAR(128) NOT NULL,
+			message       LONGTEXT NOT NULL DEFAULT '',
+			metadata_json LONGTEXT NOT NULL DEFAULT '{}',
+			created_at    VARCHAR(64) NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS issues (
-			id          TEXT PRIMARY KEY,
-			timestamp   TEXT,
-			content     TEXT,
-			item_ids    TEXT,
-			citation_map_json TEXT NOT NULL DEFAULT '{}',
-			model       TEXT,
-			tokens      INTEGER
+			id          VARCHAR(255) PRIMARY KEY,
+			timestamp   LONGTEXT,
+			content     LONGTEXT,
+			item_ids    LONGTEXT,
+			citation_map_json LONGTEXT NOT NULL DEFAULT '{}',
+			model       VARCHAR(255),
+			tokens      INT
 		)`,
 		`CREATE TABLE IF NOT EXISTS processor_requests (
-			request_id       TEXT PRIMARY KEY,
-			cycle_id         TEXT NOT NULL,
-			processor_key    TEXT NOT NULL,
-			status           TEXT NOT NULL,
-			runtime_run_id   TEXT NOT NULL DEFAULT '',
-			runtime_status   TEXT NOT NULL DEFAULT '',
-			source_item_ids   TEXT NOT NULL DEFAULT '[]',
-			source_count      INTEGER NOT NULL DEFAULT 0,
-			source_types_json TEXT NOT NULL DEFAULT '[]',
-			verticals_json    TEXT NOT NULL DEFAULT '[]',
-			regions_json      TEXT NOT NULL DEFAULT '[]',
-			continuity_ref    TEXT NOT NULL DEFAULT '',
-			prompt            TEXT NOT NULL DEFAULT '',
-			created_at        TEXT NOT NULL,
-			updated_at        TEXT NOT NULL
+			request_id       VARCHAR(255) PRIMARY KEY,
+			cycle_id         VARCHAR(255) NOT NULL,
+			processor_key    VARCHAR(255) NOT NULL,
+			status           VARCHAR(64) NOT NULL,
+			runtime_run_id   VARCHAR(255) NOT NULL DEFAULT '',
+			runtime_status   VARCHAR(64) NOT NULL DEFAULT '',
+			source_item_ids   LONGTEXT NOT NULL DEFAULT '[]',
+			source_count      INT NOT NULL DEFAULT 0,
+			source_types_json LONGTEXT NOT NULL DEFAULT '[]',
+			verticals_json    LONGTEXT NOT NULL DEFAULT '[]',
+			regions_json      LONGTEXT NOT NULL DEFAULT '[]',
+			continuity_ref    LONGTEXT NOT NULL DEFAULT '',
+			prompt            LONGTEXT NOT NULL DEFAULT '',
+			created_at        VARCHAR(64) NOT NULL,
+			updated_at        VARCHAR(64) NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_processor_requests_cycle ON processor_requests(cycle_id, processor_key)`,
 		`CREATE TABLE IF NOT EXISTS reconciler_requests (
-			request_id                 TEXT PRIMARY KEY,
-			cycle_id                   TEXT NOT NULL,
-			status                     TEXT NOT NULL,
-			runtime_run_id             TEXT NOT NULL DEFAULT '',
-			scope                      TEXT NOT NULL,
-			source_item_ids            TEXT NOT NULL DEFAULT '[]',
-			processor_request_ids      TEXT NOT NULL DEFAULT '[]',
-			prompt                     TEXT NOT NULL DEFAULT '',
-			created_at                 TEXT NOT NULL,
-			updated_at                 TEXT NOT NULL
+			request_id                 VARCHAR(255) PRIMARY KEY,
+			cycle_id                   VARCHAR(255) NOT NULL,
+			status                     VARCHAR(64) NOT NULL,
+			runtime_run_id             VARCHAR(255) NOT NULL DEFAULT '',
+			scope                      VARCHAR(255) NOT NULL,
+			source_item_ids            LONGTEXT NOT NULL DEFAULT '[]',
+			processor_request_ids      LONGTEXT NOT NULL DEFAULT '[]',
+			prompt                     LONGTEXT NOT NULL DEFAULT '',
+			created_at                 VARCHAR(64) NOT NULL,
+			updated_at                 VARCHAR(64) NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_reconciler_requests_cycle ON reconciler_requests(cycle_id, scope)`,
 		`CREATE TABLE IF NOT EXISTS ingestion_events (
-			event_id       TEXT PRIMARY KEY,
-			cycle_id       TEXT NOT NULL,
-			artifact_id    TEXT NOT NULL,
-			source_id      TEXT NOT NULL,
-			fetch_id       TEXT NOT NULL DEFAULT '',
-			content_hash   TEXT NOT NULL DEFAULT '',
-			dedupe_key     TEXT NOT NULL DEFAULT '',
-			origin         TEXT NOT NULL,
-			created_at     TEXT NOT NULL
+			event_id       VARCHAR(255) PRIMARY KEY,
+			cycle_id       VARCHAR(255) NOT NULL,
+			artifact_id    VARCHAR(255) NOT NULL,
+			source_id      VARCHAR(255) NOT NULL,
+			fetch_id       VARCHAR(255) NOT NULL DEFAULT '',
+			content_hash   VARCHAR(128) NOT NULL DEFAULT '',
+			dedupe_key     VARCHAR(255) NOT NULL DEFAULT '',
+			origin         VARCHAR(64) NOT NULL,
+			created_at     VARCHAR(64) NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ingestion_events_cycle ON ingestion_events(cycle_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_ingestion_events_artifact ON ingestion_events(artifact_id)`,
@@ -201,48 +223,51 @@ func createTables(db *sql.DB) error {
 
 func migrateTables(db *sql.DB) error {
 	alterStatements := []string{
-		`ALTER TABLE sources ADD COLUMN languages TEXT NOT NULL DEFAULT '[]'`,
-		`ALTER TABLE sources ADD COLUMN regions TEXT NOT NULL DEFAULT '[]'`,
-		`ALTER TABLE sources ADD COLUMN jurisdictions TEXT NOT NULL DEFAULT '[]'`,
-		`ALTER TABLE sources ADD COLUMN tier TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN poll_interval_seconds INTEGER NOT NULL DEFAULT 900`,
-		`ALTER TABLE sources ADD COLUMN max_items_per_poll INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE sources ADD COLUMN rate_limit TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN conditional_request_mode TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN user_agent TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN tos_class TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN robots_policy TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN auth_policy TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN store_body_policy TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN retention_days INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE sources ADD COLUMN official INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE sources ADD COLUMN source_standing TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sources ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN source_type TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN fetch_id TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN canonical_url TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN language TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN region TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN body_kind TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN body_length INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE items ADD COLUMN reader_snapshot INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE items ADD COLUMN evidence_level TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN vintage_policy TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN lookahead_status TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN release_date TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE items ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE issues ADD COLUMN citation_map_json TEXT NOT NULL DEFAULT '{}'`,
-		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE processor_requests ADD COLUMN runtime_status TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE processor_requests ADD COLUMN ingestion_event_ids_json TEXT NOT NULL DEFAULT '[]'`,
-		`ALTER TABLE sources ADD COLUMN last_aux_cursor TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE fetches ADD COLUMN cycle_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN languages LONGTEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE sources ADD COLUMN regions LONGTEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE sources ADD COLUMN jurisdictions LONGTEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE sources ADD COLUMN tier VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN poll_interval_seconds INT NOT NULL DEFAULT 900`,
+		`ALTER TABLE sources ADD COLUMN max_items_per_poll INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE sources ADD COLUMN rate_limit VARCHAR(255) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN conditional_request_mode VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN user_agent LONGTEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN tos_class VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN robots_policy VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN auth_policy VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN store_body_policy VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN retention_days INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE sources ADD COLUMN official TINYINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE sources ADD COLUMN source_standing VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sources ADD COLUMN updated_at VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN source_type VARCHAR(255) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN fetch_id VARCHAR(255) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN canonical_url LONGTEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN language VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN region VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN content_hash VARCHAR(128) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN body_kind VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN body_length INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE items ADD COLUMN reader_snapshot TINYINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE items ADD COLUMN evidence_level VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN vintage_policy VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN lookahead_status VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN release_date VARCHAR(32) NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN created_at VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE issues ADD COLUMN citation_map_json LONGTEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE processor_requests ADD COLUMN runtime_run_id VARCHAR(255) NOT NULL DEFAULT ''`,
+		`ALTER TABLE processor_requests ADD COLUMN runtime_status VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE processor_requests ADD COLUMN ingestion_event_ids_json LONGTEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE sources ADD COLUMN last_aux_cursor LONGTEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE reconciler_requests ADD COLUMN runtime_run_id VARCHAR(255) NOT NULL DEFAULT ''`,
+		`ALTER TABLE fetches ADD COLUMN cycle_id VARCHAR(255) NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range alterStatements {
-		if _, err := db.Exec(stmt); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return err
+		if _, err := db.Exec(stmt); err != nil {
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "duplicate column") && !strings.Contains(lower, "already exists") {
+				return err
+			}
 		}
 	}
 	return nil
@@ -326,18 +351,18 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 		tos_class, robots_policy, auth_policy, store_body_policy, retention_days,
 		official, source_standing, status, last_polled, last_etag, last_modified, updated_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(id) DO UPDATE SET
-		type=excluded.type, url=excluded.url, name=excluded.name,
-		verticals=excluded.verticals, languages=excluded.languages,
-		regions=excluded.regions, jurisdictions=excluded.jurisdictions,
-		tier=excluded.tier, poll_interval_seconds=excluded.poll_interval_seconds,
-		max_items_per_poll=excluded.max_items_per_poll, rate_limit=excluded.rate_limit, conditional_request_mode=excluded.conditional_request_mode,
-		user_agent=excluded.user_agent, tos_class=excluded.tos_class,
-		robots_policy=excluded.robots_policy, auth_policy=excluded.auth_policy,
-		store_body_policy=excluded.store_body_policy, retention_days=excluded.retention_days,
-		official=excluded.official, source_standing=excluded.source_standing,
-		status=excluded.status,
-		updated_at=excluded.updated_at`)
+	ON DUPLICATE KEY UPDATE
+		type=VALUES(type), url=VALUES(url), name=VALUES(name),
+		verticals=VALUES(verticals), languages=VALUES(languages),
+		regions=VALUES(regions), jurisdictions=VALUES(jurisdictions),
+		tier=VALUES(tier), poll_interval_seconds=VALUES(poll_interval_seconds),
+		max_items_per_poll=VALUES(max_items_per_poll), rate_limit=VALUES(rate_limit), conditional_request_mode=VALUES(conditional_request_mode),
+		user_agent=VALUES(user_agent), tos_class=VALUES(tos_class),
+		robots_policy=VALUES(robots_policy), auth_policy=VALUES(auth_policy),
+		store_body_policy=VALUES(store_body_policy), retention_days=VALUES(retention_days),
+		official=VALUES(official), source_standing=VALUES(source_standing),
+		status=VALUES(status),
+		updated_at=VALUES(updated_at)`)
 	if err != nil {
 		return err
 	}
@@ -362,10 +387,13 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(context.Background(), "save sources")
 }
 
-// ApplySourcePollState overlays durable poll cursors from SQLite onto the in-memory registry.
+// ApplySourcePollState overlays durable poll cursors from storage onto the in-memory registry.
 func (s *Storage) ApplySourcePollState(registry *sources.Registry) error {
 	if registry == nil {
 		return nil
@@ -434,7 +462,10 @@ func (s *Storage) SaveSourcePollState(registry *sources.Registry) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(context.Background(), "save source poll state")
 }
 
 func (s *Storage) SaveFetches(fetches []sources.FetchRecord) error {
@@ -447,11 +478,18 @@ func (s *Storage) SaveCycleFetches(cycleID string, fetches []sources.FetchRecord
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO fetches (
+	stmt, err := tx.Prepare(`INSERT INTO fetches (
 		fetch_id, cycle_id, source_id, source_type, request_url, canonical_url, status_code,
 		status, started_at, ended_at, response_etag, response_modified,
 		content_hash, raw_snapshot_ref, error_class, error, item_count
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON DUPLICATE KEY UPDATE
+		cycle_id=VALUES(cycle_id), source_id=VALUES(source_id), source_type=VALUES(source_type),
+		request_url=VALUES(request_url), canonical_url=VALUES(canonical_url), status_code=VALUES(status_code),
+		status=VALUES(status), started_at=VALUES(started_at), ended_at=VALUES(ended_at),
+		response_etag=VALUES(response_etag), response_modified=VALUES(response_modified),
+		content_hash=VALUES(content_hash), raw_snapshot_ref=VALUES(raw_snapshot_ref),
+		error_class=VALUES(error_class), error=VALUES(error), item_count=VALUES(item_count)`)
 	if err != nil {
 		return err
 	}
@@ -467,7 +505,10 @@ func (s *Storage) SaveCycleFetches(cycleID string, fetches []sources.FetchRecord
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(context.Background(), "save cycle fetches")
 }
 
 func (s *Storage) SaveItems(items []sources.Item) error {
@@ -477,7 +518,7 @@ func (s *Storage) SaveItems(items []sources.Item) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO items (
+	stmt, err := tx.Prepare(`INSERT IGNORE INTO items (
 		id, source_id, source_type, fetch_id, original_id, title, body, url,
 		canonical_url, published, fetched_at, verticals, language, region,
 		content_hash, body_kind, body_length, reader_snapshot, raw_json, evidence_level, vintage_policy,
@@ -508,7 +549,10 @@ func (s *Storage) SaveItems(items []sources.Item) error {
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(context.Background(), "save items")
 }
 
 func (s *Storage) SaveIssue(content string, itemIDs []string, model string, tokens int) error {
@@ -524,14 +568,20 @@ func (s *Storage) SaveIssueManifest(content string, itemIDs []string, citationMa
 	}
 	_, err := s.DB.Exec(`INSERT INTO issues (id, timestamp, content, item_ids, citation_map_json, model, tokens) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		id, time.Now().UTC().Format(time.RFC3339), content, string(itemIDsJSON), string(citationMapJSON), model, tokens)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.commitDolt(context.Background(), "save issue manifest")
 }
 
 func (s *Storage) StartCycle(ctx context.Context) (string, error) {
 	now := time.Now().UTC()
 	cycleID := "cycle_" + sources.ContentHash(now.Format(time.RFC3339Nano))[:24]
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO cycles (cycle_id, started_at, status) VALUES (?, ?, 'running')`, cycleID, formatTime(now))
-	return cycleID, err
+	if err != nil {
+		return cycleID, err
+	}
+	return cycleID, s.commitDolt(ctx, "start cycle")
 }
 
 func (s *Storage) FinishCycle(ctx context.Context, cycleID, status string, itemCount, fetchCount int, cycleErr error) error {
@@ -544,7 +594,10 @@ func (s *Storage) FinishCycle(ctx context.Context, cycleID, status string, itemC
 	}
 	_, err := s.DB.ExecContext(ctx, `UPDATE cycles SET ended_at = ?, status = ?, item_count = ?, fetch_count = ?, error = ? WHERE cycle_id = ?`,
 		formatTime(time.Now().UTC()), status, itemCount, fetchCount, errText, cycleID)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.commitDolt(ctx, "finish cycle")
 }
 
 func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind, message string, metadata map[string]any) error {
@@ -552,7 +605,10 @@ func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind,
 	eventID := "cycleevt_" + sources.ContentHash(cycleID, sourceID, kind, message, now.Format(time.RFC3339Nano))[:24]
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO cycle_events (event_id, cycle_id, source_id, kind, message, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		eventID, cycleID, sourceID, kind, message, mustJSON(metadata), formatTime(now))
-	return err
+	if err != nil {
+		return err
+	}
+	return s.commitDolt(ctx, "record cycle event")
 }
 
 func (s *Storage) ListCycleEvents(ctx context.Context, cycleID string, limit int) ([]CycleEvent, error) {
@@ -593,7 +649,7 @@ func (s *Storage) SaveIngestionEvents(ctx context.Context, events []IngestionEve
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO ingestion_events (
+	stmt, err := tx.PrepareContext(ctx, `INSERT IGNORE INTO ingestion_events (
 		event_id, cycle_id, artifact_id, source_id, fetch_id, content_hash, dedupe_key, origin, created_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -616,7 +672,10 @@ func (s *Storage) SaveIngestionEvents(ctx context.Context, events []IngestionEve
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(ctx, "save ingestion events")
 }
 
 func (s *Storage) CountIngestionEvents(ctx context.Context) (int, error) {
@@ -669,10 +728,18 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO processor_requests (
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO processor_requests (
 		request_id, cycle_id, processor_key, status, runtime_run_id, runtime_status, source_item_ids, ingestion_event_ids_json, source_count,
 		source_types_json, verticals_json, regions_json, continuity_ref, prompt, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON DUPLICATE KEY UPDATE
+		cycle_id=VALUES(cycle_id), processor_key=VALUES(processor_key), status=VALUES(status),
+		runtime_run_id=VALUES(runtime_run_id), runtime_status=VALUES(runtime_status),
+		source_item_ids=VALUES(source_item_ids), ingestion_event_ids_json=VALUES(ingestion_event_ids_json),
+		source_count=VALUES(source_count), source_types_json=VALUES(source_types_json),
+		verticals_json=VALUES(verticals_json), regions_json=VALUES(regions_json),
+		continuity_ref=VALUES(continuity_ref), prompt=VALUES(prompt),
+		created_at=VALUES(created_at), updated_at=VALUES(updated_at)`)
 	if err != nil {
 		return err
 	}
@@ -708,7 +775,10 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(ctx, "save processor requests")
 }
 
 func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestID, status, runtimeRunID string) error {
@@ -720,7 +790,7 @@ func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestI
 	if err != nil {
 		return fmt.Errorf("update processor request status: %w", err)
 	}
-	return nil
+	return s.commitDolt(ctx, "update processor request runtime run")
 }
 
 func (s *Storage) UpdateProcessorRequestRuntimeStatus(ctx context.Context, requestID, runtimeStatus, runtimeRunID string) error {
@@ -732,7 +802,7 @@ func (s *Storage) UpdateProcessorRequestRuntimeStatus(ctx context.Context, reque
 	if err != nil {
 		return fmt.Errorf("update processor request runtime status: %w", err)
 	}
-	return nil
+	return s.commitDolt(ctx, "update processor request runtime status")
 }
 
 func (s *Storage) UpdateProcessorRequestVerdictStatus(ctx context.Context, requestID, status string) error {
@@ -744,7 +814,7 @@ func (s *Storage) UpdateProcessorRequestVerdictStatus(ctx context.Context, reque
 	if err != nil {
 		return fmt.Errorf("update processor request verdict status: %w", err)
 	}
-	return nil
+	return s.commitDolt(ctx, "update processor request verdict status")
 }
 
 func (s *Storage) SupersedeQueuedProcessorRequests(ctx context.Context, replacements []ProcessorRequest) (int, error) {
@@ -775,6 +845,11 @@ func (s *Storage) SupersedeQueuedProcessorRequests(ctx context.Context, replacem
 		}
 		total += int(affected)
 	}
+	if total > 0 {
+		if err := s.commitDolt(ctx, "supersede queued processor requests"); err != nil {
+			return total, err
+		}
+	}
 	return total, nil
 }
 
@@ -784,9 +859,14 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO reconciler_requests (
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO reconciler_requests (
 		request_id, cycle_id, status, runtime_run_id, scope, source_item_ids, processor_request_ids, prompt, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON DUPLICATE KEY UPDATE
+		cycle_id=VALUES(cycle_id), status=VALUES(status), runtime_run_id=VALUES(runtime_run_id),
+		scope=VALUES(scope), source_item_ids=VALUES(source_item_ids),
+		processor_request_ids=VALUES(processor_request_ids), prompt=VALUES(prompt),
+		created_at=VALUES(created_at), updated_at=VALUES(updated_at)`)
 	if err != nil {
 		return err
 	}
@@ -814,7 +894,10 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.commitDolt(ctx, "save reconciler requests")
 }
 
 func (s *Storage) UpdateReconcilerRequestStatus(ctx context.Context, requestID, status string) error {
@@ -831,14 +914,14 @@ func (s *Storage) UpdateReconcilerRequestRuntimeRun(ctx context.Context, request
 		if err != nil {
 			return fmt.Errorf("update reconciler request status: %w", err)
 		}
-		return nil
+		return s.commitDolt(ctx, "update reconciler request status")
 	}
 	_, err := s.DB.ExecContext(ctx, `UPDATE reconciler_requests SET status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
 		strings.TrimSpace(status), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
 	if err != nil {
 		return fmt.Errorf("update reconciler request status: %w", err)
 	}
-	return nil
+	return s.commitDolt(ctx, "update reconciler request status")
 }
 
 func (s *Storage) SupersedeQueuedReconcilersWithSupersededProcessors(ctx context.Context) (int, error) {
@@ -942,17 +1025,20 @@ func (s *Storage) CountRecentlySubmittedProcessorRequests(ctx context.Context, s
 func (s *Storage) ResetProcessorRequestSubmission(ctx context.Context, requestID string) error {
 	_, err := s.DB.ExecContext(ctx,
 		`UPDATE processor_requests
-		    SET status = CASE WHEN status = 'submitted' THEN 'queued' ELSE status END,
-		        runtime_status = CASE
+		    SET runtime_status = CASE
 		          WHEN status = 'submitted' THEN 'queued'
 		          WHEN status = 'dispatch_failed' THEN 'failed'
 		          ELSE 'completed'
 		        END,
+		        status = CASE WHEN status = 'submitted' THEN 'queued' ELSE status END,
 		        runtime_run_id = '',
 		        updated_at = ?
 		  WHERE request_id = ?`,
 		time.Now().UTC().Format(time.RFC3339), requestID)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.commitDolt(ctx, "reset processor request submission")
 }
 
 // ResetStaleSubmittedProcessorRequests recovers runtime-capacity state after a
@@ -961,12 +1047,12 @@ func (s *Storage) ResetProcessorRequestSubmission(ctx context.Context, requestID
 func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cutoff time.Time) (int, error) {
 	result, err := s.DB.ExecContext(ctx,
 		`UPDATE processor_requests
-		    SET status = CASE WHEN status = 'submitted' THEN 'queued' ELSE status END,
-		        runtime_status = CASE
+		    SET runtime_status = CASE
 		          WHEN status = 'submitted' THEN 'queued'
 		          WHEN status = 'dispatch_failed' THEN 'failed'
 		          ELSE 'completed'
 		        END,
+		        status = CASE WHEN status = 'submitted' THEN 'queued' ELSE status END,
 		        runtime_run_id = '',
 		        updated_at = ?
 		  WHERE runtime_status = 'submitted' AND updated_at < ?`,
@@ -977,6 +1063,11 @@ func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cuto
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return 0, err
+	}
+	if affected > 0 {
+		if err := s.commitDolt(ctx, "reset stale submitted processor requests"); err != nil {
+			return 0, err
+		}
 	}
 	return int(affected), nil
 }

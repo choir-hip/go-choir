@@ -740,7 +740,7 @@ classification boundaries before deeper Nix work:
 - `internal/provider`, `internal/gateway`, `internal/modelcatalog`,
   `internal/sandbox`, and shared runtime/store/type/event/server/search changes
   select the gateway and sandbox service pointers plus the ordinary guest image.
-- `internal/platform` selects `platformd` and `proxy`.
+- `internal/platform` selects `corpusd` and `proxy`.
 - `internal/vmctl` selects `gateway`, `proxy`, `sandbox`, and `vmctl`, plus the
   ordinary guest image and a vmctl restart.
 - `internal/buildinfo` selects host service pointers plus ordinary guest, not a
@@ -760,7 +760,7 @@ commits:
 | --- | --- | --- |
 | `e7b98b9` | `auth` | `sha256-5lI1eHUCgp1pIEAQxrMXGlZTdGy9l/fIyElT1FilUWA=` |
 | `62266ad` | `gateway`, `sandbox` | `sha256-dcaVDKz/yHrr173nTDgVffcuD2rtjEx418J5VcZ7br0=` |
-| `17d3ba4` | `platformd` | `sha256-LHIXwcHctefXm9MrSfqWB/4O+p8HXQi0VDT4NXt9xlg=` |
+| `17d3ba4` | `corpusd` | `sha256-LHIXwcHctefXm9MrSfqWB/4O+p8HXQi0VDT4NXt9xlg=` |
 | `1a86be0` | `proxy` | `sha256-+qN6OZMZuzyZeCmwdnQyzH3teNOY/ChJP1yRsEEiULQ=` |
 | `52d64ee` | `vmctl` | `sha256-Zi7CIbMdCmTj2ZhP0J+kNARQAG24v/88KlN5l3S7urE=` |
 
@@ -804,12 +804,12 @@ Commit `63b8771410ebc3fd436f62bc4eadc4ed3d66fa47` added a harmless comment to
   - `DEPLOY_ORDINARY_GUEST=false`
   - `DEPLOY_PLAYWRIGHT_GUEST=false`
   - `DEPLOY_HOST_OS=false`
-  - `HOST_SERVICES=platformd,proxy`
+  - `HOST_SERVICES=corpusd,proxy`
 - GitHub runner selected no deploy roots and skipped prebuild/copy.
 - Node B skipped frontend build, host NixOS closure build, ordinary guest image,
   Playwright guest image, NixOS switch, vmctl restart, and active computer
   refresh.
-- Node B built `platformd` and `proxy` service roots in parallel; both completed
+- Node B built `corpusd` and `proxy` service roots in parallel; both completed
   in about `11s`.
 - Node B nix build phase: `11s`
 - remote deploy script total: `18s`

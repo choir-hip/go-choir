@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -197,12 +198,12 @@ type Config struct {
 
 	// WirePublishURL is the host-mediated proxy route for autonomous Universal
 	// Wire platform publication. Platform VM sandboxes call this instead of
-	// platformd directly.
+	// corpusd directly.
 	WirePublishURL string
 
-	// PlatformdURL is an optional direct platformd endpoint for local publish
+	// CorpusdURL is an optional direct corpusd endpoint for local publish
 	// tests or host-colocated sandboxes when WirePublishURL is unset.
-	PlatformdURL string
+	CorpusdURL string
 
 	// LLMProvider is the explicitly selected provider for runtime LLM calls.
 	// Empty means no provider is selected by this runtime config.
@@ -284,4 +285,11 @@ type Config struct {
 	// default), no trace store is mounted and events are not projected into the
 	// observability schema. Enabled via RUNTIME_TRACE_PERSISTENCE_ENABLED.
 	TracePersistenceEnabled bool
+
+	// ObjectGraphStore is a test-only override for the runtime objectgraph
+	// durable store. When set, the runtime uses it directly instead of
+	// constructing an HTTPStore from CorpusdURL. Production configs leave
+	// this nil so the runtime queries corpusd via corpusd over HTTP. The
+	// json:"-" tag keeps it out of any serialized config.
+	ObjectGraphStore objectgraph.Store `json:"-"`
 }

@@ -361,7 +361,7 @@ made the published manifest internally consistent; D6 adds the missing
 authenticity/attestation layer so a reader knows the platform — not a third
 party — produced the record.
 
-platformd signs each revision at publish time:
+corpusd signs each revision at publish time:
 `signature = ed25519.Sign(platformKey, canonical_attestation(revision_hash))`.
 Because `revision_hash` commits to body + citations + provenance (timestamp +
 authoring model) + parent hash, signing it attests exactly the owner's spec.

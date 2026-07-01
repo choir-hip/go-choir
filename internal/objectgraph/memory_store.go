@@ -39,7 +39,7 @@ func (m *MemoryStore) GetObject(_ context.Context, id string) (Object, error) {
 func (m *MemoryStore) ListObjects(_ context.Context, filter ListFilter) ([]Object, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	limit := normalizedLimit(filter.Limit)
+	limit := NormalizedLimit(filter.Limit)
 	out := make([]Object, 0, len(m.objects))
 	for _, obj := range m.objects {
 		if !objectMatches(obj, filter) {
@@ -66,7 +66,7 @@ func (m *MemoryStore) PutEdge(_ context.Context, edge Edge) error {
 func (m *MemoryStore) ListEdges(_ context.Context, filter EdgeFilter) ([]Edge, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	limit := normalizedLimit(filter.Limit)
+	limit := NormalizedLimit(filter.Limit)
 	out := make([]Edge, 0, len(m.edges))
 	for _, edge := range m.edges {
 		if !edgeMatches(edge, filter) {
@@ -85,7 +85,7 @@ func (m *MemoryStore) ListEdges(_ context.Context, filter EdgeFilter) ([]Edge, e
 
 func (m *MemoryStore) Close() error { return nil }
 
-func normalizedLimit(limit int) int {
+func NormalizedLimit(limit int) int {
 	if limit <= 0 {
 		return 50
 	}

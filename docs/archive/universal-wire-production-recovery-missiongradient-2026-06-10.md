@@ -15,7 +15,7 @@ This document controls the recovery trajectory, belief state, evidence, rollback
 ## Short `/goal` String
 
 ```text
-Use MissionGradient. Complete docs/universal-wire-production-recovery-missiongradient-2026-06-10.md by fixing Universal Wire production end-to-end: sourcecycled must not overload the platform computer, processor handoffs must complete into VText article revisions, platform publication must sync full VText revision history into platformd, the durable Wire edition must expose non-empty stories, and the authenticated Universal Wire app must render article cards on staging. Preserve platform/user computer authority boundaries, avoid fake/manual seeded articles, maintain an evidence ledger, update the incident and mission docs, commit/push/deploy behavior-changing fixes, verify CI/deploy/staging identity, and stop only on complete proof or a hard blocker after root-cause probes plus cognitive reframing. If the stopping condition is not reached, do not call the mission complete; land and report only checkpoint_incomplete or blocked_incomplete with a resumable next executable probe.
+Use MissionGradient. Complete docs/universal-wire-production-recovery-missiongradient-2026-06-10.md by fixing Universal Wire production end-to-end: sourcecycled must not overload the platform computer, processor handoffs must complete into VText article revisions, platform publication must sync full VText revision history into corpusd, the durable Wire edition must expose non-empty stories, and the authenticated Universal Wire app must render article cards on staging. Preserve platform/user computer authority boundaries, avoid fake/manual seeded articles, maintain an evidence ledger, update the incident and mission docs, commit/push/deploy behavior-changing fixes, verify CI/deploy/staging identity, and stop only on complete proof or a hard blocker after root-cause probes plus cognitive reframing. If the stopping condition is not reached, do not call the mission complete; land and report only checkpoint_incomplete or blocked_incomplete with a resumable next executable probe.
 ```
 
 ## Real Artifact
@@ -23,19 +23,19 @@ Use MissionGradient. Complete docs/universal-wire-production-recovery-missiongra
 The production artifact is the **Universal Wire production loop**:
 
 ```text
-source fetch -> ingestion handoff -> bounded platform processor execution -> VText article revision -> autonomous platform publish -> platformd full-revision sync -> durable Wire edition/story index -> authenticated Universal Wire app cards
+source fetch -> ingestion handoff -> bounded platform processor execution -> VText article revision -> autonomous platform publish -> corpusd full-revision sync -> durable Wire edition/story index -> authenticated Universal Wire app cards
 ```
 
 The mission is not merely to restart a VM, make `/health` green, or submit runtime runs. The artifact works only when authenticated staging users see real Wire articles backed by VText revision history.
 
 ## Invariants
 
-1. **Published means platformd durable state.** Platform-published VText documents and revisions must be synced into platformd DoltDB. Do not define publication as transient sandbox state.
+1. **Published means corpusd durable state.** Platform-published VText documents and revisions must be synced into corpusd DoltDB. Do not define publication as transient sandbox state.
 2. **VText owns articles.** Processors may request/open/revise articles through VText/channel semantics; they must not manually create front-page rows or fake edition cards.
 3. **Platform computer owns Universal Wire production.** User computers read the published platform corpus; they do not own global Wire production state.
 4. **No product-path bypass.** Do not manually seed success rows, use browser-public internal/test routes as proof, or patch tracked files directly on Node B as source of truth.
 5. **Backpressure is mandatory.** Downstream platform runtime capacity must control upstream processor admission.
-6. **Completion evidence beats admission evidence.** `processor_submitted` is not production proof. Proof requires article revision, platformd sync, edition visibility, and rendered story cards.
+6. **Completion evidence beats admission evidence.** `processor_submitted` is not production proof. Proof requires article revision, corpusd sync, edition visibility, and rendered story cards.
 7. **Rollbackable platform changes.** Behavior-changing changes require commit, push, CI/deploy monitoring, deployed commit identity, staging acceptance proof, and rollback refs.
 8. **No fake islands.** Any simplified proof must preserve the same production interfaces, authority boundaries, persistence path, and verifier semantics.
 
@@ -46,9 +46,9 @@ Minimize divergence between the intended Universal Wire causal graph and the dep
 Penalize:
 
 - overload that admits more processor work than the platform computer can complete;
-- hidden queues or states not reflected in sourcecycled/runtime/platformd evidence;
-- frontend success without platformd-backed VText revisions;
-- platformd rows without edition/front-page visibility;
+- hidden queues or states not reflected in sourcecycled/runtime/corpusd evidence;
+- frontend success without corpusd-backed VText revisions;
+- corpusd rows without edition/front-page visibility;
 - local-only or manually seeded proof;
 - green health checks that do not imply article production;
 - fixes that couple the public read path to a wedged write-side platform VM.
@@ -71,29 +71,29 @@ Substandard/rushed work includes:
 
 ### Current uncertainty or obstacle
 
-Universal Wire shows zero articles even though sourcecycled fetches thousands of source items and submitted processors. The system accepted work but did not produce durable, visible published articles. The main uncertainty is where the accepted runs die: platform runtime overload, VText creation, publish eligibility, platformd sync, edition mutation, or public read path.
+Universal Wire shows zero articles even though sourcecycled fetches thousands of source items and submitted processors. The system accepted work but did not produce durable, visible published articles. The main uncertainty is where the accepted runs die: platform runtime overload, VText creation, publish eligibility, corpusd sync, edition mutation, or public read path.
 
 ### Selected transforms
 
-1. **State machine transform** — The system must be represented as states and transitions, not logs. This exposes impossible/stuck states such as `ownership_active` + `guest_unhealthy`, `processor_submitted` + no runtime completion, and `platformd_empty` + frontend honest-empty.
+1. **State machine transform** — The system must be represented as states and transitions, not logs. This exposes impossible/stuck states such as `ownership_active` + `guest_unhealthy`, `processor_submitted` + no runtime completion, and `corpusd_empty` + frontend honest-empty.
 2. **Backpressure transform** — The decisive variable is downstream capacity. A per-drain batch limit is not control; sourcecycled must sense live active processor count and runtime health before admitting more work.
-3. **Commutative diagram transform** — Two paths should agree: sandbox VText article state -> platformd sync -> public stories, and runtime/publish events -> sourcecycled completion ledger -> public stories. Today they do not commute because platformd is empty and sourcecycled only knows submission.
-4. **Contrapositive transform** — If platformd has zero VText documents/revisions, then no completed autonomous publication reached the durable published corpus, regardless of source counts or submitted processor runs.
-5. **Prototype honesty / homotopy transform** — The smallest useful fix must still use the real sourcecycled/runtime/VText/platformd/frontend path. A fake seeded article or alternate endpoint would solve a different object.
+3. **Commutative diagram transform** — Two paths should agree: sandbox VText article state -> corpusd sync -> public stories, and runtime/publish events -> sourcecycled completion ledger -> public stories. Today they do not commute because corpusd is empty and sourcecycled only knows submission.
+4. **Contrapositive transform** — If corpusd has zero VText documents/revisions, then no completed autonomous publication reached the durable published corpus, regardless of source counts or submitted processor runs.
+5. **Prototype honesty / homotopy transform** — The smallest useful fix must still use the real sourcecycled/runtime/VText/corpusd/frontend path. A fake seeded article or alternate endpoint would solve a different object.
 
 ### Route-changing insights
 
 - Implementation must start by preventing overload and exposing completion state; otherwise restarts only recreate the wedge.
-- Verifier must wait for platformd VText rows and story cards, not merely accepted runtime runs.
-- Scope must include read-side durability: the public Universal Wire stories endpoint should not depend on a wedged write-side sandbox once platformd is the publication store.
-- Stopping condition must be “visible platformd-backed article cards on staging,” not “processors submitted” or “health ready.”
+- Verifier must wait for corpusd VText rows and story cards, not merely accepted runtime runs.
+- Scope must include read-side durability: the public Universal Wire stories endpoint should not depend on a wedged write-side sandbox once corpusd is the publication store.
+- Stopping condition must be “visible corpusd-backed article cards on staging,” not “processors submitted” or “health ready.”
 
 ### Changed plan
 
 - **Implementation:** add live active-run/backpressure guard; add runtime overload rejection; add completion/publish/edition evidence; repair publish/edition chain only after the VM is no longer self-wedging.
-- **Verifier/evidence:** record sourcecycled queue state, runtime active/completed runs, platformd doc/revision counts, edition doc/transclusion state, `/api/universal-wire/stories` response, and browser-rendered cards.
+- **Verifier/evidence:** record sourcecycled queue state, runtime active/completed runs, corpusd doc/revision counts, edition doc/transclusion state, `/api/universal-wire/stories` response, and browser-rendered cards.
 - **Scope:** fix production loop end-to-end; avoid UI-only empty-state changes unless they expose diagnostics without hiding the bug.
-- **Stopping condition:** require deployed staging article cards backed by platformd full VText revision history.
+- **Stopping condition:** require deployed staging article cards backed by corpusd full VText revision history.
 
 ### Next high-information action
 
@@ -105,7 +105,7 @@ Increase realism continuously along these axes:
 
 1. **Processor concurrency:** 1 active processor -> bounded small N -> production target capacity.
 2. **Source volume:** one eligible source item -> one processor route -> all active source classes.
-3. **Persistence proof:** sandbox VText revision -> platformd full revision sync -> durable edition/story index.
+3. **Persistence proof:** sandbox VText revision -> corpusd full revision sync -> durable edition/story index.
 4. **Read proof:** internal API -> authenticated `/api/universal-wire/stories` -> Universal Wire UI cards.
 5. **Failure pressure:** healthy VM -> overload rejection -> retry/drain recovery -> no wedge under burst.
 6. **Deployment realism:** local/focused tests -> staging deploy -> authenticated product-path proof.
@@ -119,7 +119,7 @@ Each low-resolution step must use the same production interface family. No mocks
 - sourcecycled source fetch is healthy and produces thousands of candidate items.
 - platform VM ownership reports active, but direct sandbox requests hang and vmctl health marks it unhealthy.
 - platform Firecracker process is CPU-saturated.
-- platformd has zero synced VText documents/revisions.
+- corpusd has zero synced VText documents/revisions.
 - Universal Wire UI honestly renders zero articles.
 
 ### Evidence for state
@@ -128,7 +128,7 @@ Each low-resolution step must use the same production interface family. No mocks
 - sourcecycled logs: `processor_submitted=32` twice, then UDS proxy timeout errors.
 - vmctl logs: repeated health check failures for `vm-universal-wire-platform`.
 - direct curl to sandbox health/story endpoint: timeout/no headers.
-- platformd Dolt SQL: `platform_vtext_documents=0`, `platform_vtext_revisions=0`.
+- corpusd Dolt SQL: `platform_vtext_documents=0`, `platform_vtext_revisions=0`.
 
 ### Main uncertainties
 
@@ -136,7 +136,7 @@ Each low-resolution step must use the same production interface family. No mocks
 - Whether any VText article docs were created before the VM wedged.
 - Whether autonomous publish eligibility rejected generated revisions.
 - Whether edition mutation/transclusion is also broken after publication is repaired.
-- Whether read path already supports platformd-backed stories or still depends on sandbox state.
+- Whether read path already supports corpusd-backed stories or still depends on sandbox state.
 
 ### Highest-impact uncertainty
 
@@ -153,10 +153,10 @@ This mission is now best understood as conjecture control rather than a flat pla
 
 ### C1 — Split-brain list/open state
 - **Status:** confirmed, mitigated
-- **Claim:** Universal Wire list was surfacing guest-local platform-VM article revisions before durable platformd publication existed, while headline-open expected the durable published doc path.
-- **Evidence:** users observed 0 ↔ 12 oscillation and `Get document failed (404)` on click; platformd remained at `0 docs / 0 revs`; runtime list path read guest-local store.
+- **Claim:** Universal Wire list was surfacing guest-local platform-VM article revisions before durable corpusd publication existed, while headline-open expected the durable published doc path.
+- **Evidence:** users observed 0 ↔ 12 oscillation and `Get document failed (404)` on click; corpusd remained at `0 docs / 0 revs`; runtime list path read guest-local store.
 - **Action taken:** list indexing now requires durable publication markers.
-- **Next falsifier:** if list still shows stories while platformd is zero, the new list guard is incomplete.
+- **Next falsifier:** if list still shows stories while corpusd is zero, the new list guard is incomplete.
 
 ### C2 — Transport / host publish path was the blocker
 - **Status:** ruled out as current blocker
@@ -168,7 +168,7 @@ This mission is now best understood as conjecture control rather than a flat pla
 ### C3 — Queue accounting alone caused the stall
 - **Status:** ruled out as sole blocker
 - **Claim:** sourcecycled stale `submitted` rows were the main reason progress stopped.
-- **Evidence:** queue accounting fixes improved progression, but processors still completed without platformd rows.
+- **Evidence:** queue accounting fixes improved progression, but processors still completed without corpusd rows.
 - **Action taken:** submitted-row reconciliation, missing-run requeue, stale-row resets.
 - **Next falsifier:** if queue freezes again with no guest work, inspect sourcecycled reconciliation first.
 
@@ -188,15 +188,15 @@ This mission is now best understood as conjecture control rather than a flat pla
 
 ### C6 — Single admitted processor still destabilizes the guest before durable publish
 - **Status:** active
-- **Claim:** even one admitted processor can push the platform VM into an unhealthy state before platformd sync occurs.
-- **Evidence:** one-at-a-time admission works; guest often becomes unhealthy with `running_processor_runs` around 1 while platformd remains zero.
+- **Claim:** even one admitted processor can push the platform VM into an unhealthy state before corpusd sync occurs.
+- **Evidence:** one-at-a-time admission works; guest often becomes unhealthy with `running_processor_runs` around 1 while corpusd remains zero.
 - **Action taken:** lowered concurrency to 1 and added `running_processor_runs` health instrumentation.
 - **Next falsifier:** capture the exact child-run topology and terminal state of one clean admitted processor. If it completes without unhealthy periods, then the main issue is semantic, not capacity.
 
 ### C7 — Current semantic frontier
 - **Status:** active primary conjecture
-- **Claim:** on a fresh platform guest and fresh processor continuity channel, one admitted processor should either (a) produce one durable platformd publication, or (b) expose the exact child-run / coverage-decision reason it does not.
-- **Strongest evidence:** latest clean processor completed and explicitly decided not to spawn VText because it believed no new VText work was required. Platformd stayed zero.
+- **Claim:** on a fresh platform guest and fresh processor continuity channel, one admitted processor should either (a) produce one durable corpusd publication, or (b) expose the exact child-run / coverage-decision reason it does not.
+- **Strongest evidence:** latest clean processor completed and explicitly decided not to spawn VText because it believed no new VText work was required. Corpusd stayed zero.
 - **Next falsifier:** run one clean processor on the fresh `processor-v2:*` identity and inspect its full terminal reasoning, child runs, and any publish attempt.
 
 ### C8 — Ingestion and publication are over-coupled inside a single processor run
@@ -218,7 +218,7 @@ source fetch
 -> coverage / dedup pass against published corpus only
 -> publication-candidate selection / ranking
 -> VText article spawn or revision
--> autonomous publish to platformd
+-> autonomous publish to corpusd
 -> durable Wire edition update
 -> public stories list / headline open
 ```
@@ -226,7 +226,7 @@ source fetch
 ### Why this is the realest cut
 
 - **Preserves platform VM ownership** of live article creation and editorial state.
-- **Preserves platformd** as the durable public publication surface.
+- **Preserves corpusd** as the durable public publication surface.
 - **Preserves VText ownership** of article bodies and revision history.
 - **Preserves sourcecycled** as ingestion/orchestration substrate, but removes the demand that one processor run must perform ingestion, dedup, editorial triage, and publication control all at once.
 - **Preserves current topology**: no fake side stores, no manual seed path, no alternate article substrate.
@@ -253,7 +253,7 @@ source fetch
    - output must carry durable lineage required for autonomous publish
 
 5. **Autonomous publish / sync**
-   - platform VM -> platformd
+   - platform VM -> corpusd
    - only after this step is a story eligible for the canonical Wire list
 
 ### Why this helps the current failure mode
@@ -279,31 +279,31 @@ The decoupled pipeline must not create a second article truth.
 
 - candidate ledger = pre-article planning state
 - VText = article truth
-- platformd = public durable publication truth
+- corpusd = public durable publication truth
 
 Any design that lets candidate records or sourcecycled rows stand in for VText articles is a regression.
 
 ### C9 — Publication chain escapes the root processor run
 - **Status:** confirmed, active
 - **Claim:** a processor may spawn a VText child that completes, yet the effective publication work continues under a super-owned branch on the same document channel. If sourcecycled only tracks the root processor run (or even its direct children), it can admit the next processor while the prior publication chain is still active.
-- **Evidence:** clean lifecycle trace on 2026-06-11: processor `9a2606ee...` spawned VText `ffaa48da...` and completed; then a super-owned parent `f653e2b6...` spawned VText `42eda5a8...` on the same channel; sourcecycled admitted the next processor `dbc6478a...` before that super/vtext continuation finished; platformd remained zero.
+- **Evidence:** clean lifecycle trace on 2026-06-11: processor `9a2606ee...` spawned VText `ffaa48da...` and completed; then a super-owned parent `f653e2b6...` spawned VText `42eda5a8...` on the same channel; sourcecycled admitted the next processor `dbc6478a...` before that super/vtext continuation finished; corpusd remained zero.
 - **Action taken:** child-run-aware sourcecycled reconciliation was added for direct descendants, but this result shows that root-child tracking alone is insufficient when the chain continues through another supervising run on the same document channel.
 - **Next falsifier:** account for active publication chains by shared channel / trajectory / candidate-ledger state rather than only by direct root-child relationships, then re-run one-at-a-time admission and see whether a second processor is still admitted before the first document channel settles.
 
-- **Current strongest evidence:** clean lifecycle trace showed `processor 9a2606ee -> vtext ffaa48da (completed) -> processor completes -> super f653e2b6 continues on same channel -> vtext 42eda5a8 (completed)` while platformd stayed zero. This is sufficient to falsify the simpler root-run completion invariant for Universal Wire.
+- **Current strongest evidence:** clean lifecycle trace showed `processor 9a2606ee -> vtext ffaa48da (completed) -> processor completes -> super f653e2b6 continues on same channel -> vtext 42eda5a8 (completed)` while corpusd stayed zero. This is sufficient to falsify the simpler root-run completion invariant for Universal Wire.
 
 ### Outside current experimental envelope
 These are not conjectures but known blind spots in the current experimental program:
 - exact live child-run topology inside the platform guest after one processor admission;
 - exact continuity contents influencing the new `processor-v2:*` identity;
 - whether any remaining coverage decisions are bypassing `search_wire_corpus`;
-- whether platformd sync will succeed once a processor actually chooses to spawn VText again.
+- whether corpusd sync will succeed once a processor actually chooses to spawn VText again.
 
 ## Investigation & Cognitive Reframing Loop
 
 Before declaring blocked:
 
-1. Observe the live state at all boundaries: sourcecycled queue, vmctl health, platform sandbox health, runtime runs, VText docs/revisions, platformd sync tables, edition/story API, UI.
+1. Observe the live state at all boundaries: sourcecycled queue, vmctl health, platform sandbox health, runtime runs, VText docs/revisions, corpusd sync tables, edition/story API, UI.
 2. Identify the earliest transition whose precondition is true and postcondition is false.
 3. Patch or instrument only that transition.
 4. Verify the next transition before widening scope.
@@ -315,7 +315,7 @@ Tactical blockers that should trigger another autonomous probe:
 - missing runtime run records;
 - publish eligibility failure;
 - sourcecycled queue status ambiguity;
-- platformd sync failure;
+- corpusd sync failure;
 - edition alias/transclusion mismatch.
 
 Invariant-level or external blockers requiring escalation:
@@ -354,7 +354,7 @@ Loop:
 - platform sandbox health: `running_runs`, disk usage, commit identity, runtime status.
 - runtime run records/traces: processor states and tool calls.
 - VText store: article docs/revisions and metadata required for autonomous publish.
-- platformd DoltDB: `platform_vtext_documents`, `platform_vtext_revisions`, publication/sync evidence.
+- corpusd DoltDB: `platform_vtext_documents`, `platform_vtext_revisions`, publication/sync evidence.
 - public API: authenticated `/api/universal-wire/stories` returns non-empty stories from expected source.
 - browser proof: Universal Wire app renders story cards and headline click opens full VText revision history.
 - CI/deploy: GitHub Actions, deployed commit identity, rollback refs.
@@ -373,7 +373,7 @@ uncertainty/caveat:
 promotion relevance:
 ```
 
-Do not claim article production from run admission. Do not claim publication without platformd rows and story API visibility. Do not claim UI success without browser/product-path proof.
+Do not claim article production from run admission. Do not claim publication without corpusd rows and story API visibility. Do not claim UI success without browser/product-path proof.
 
 ## Mission Report
 
@@ -399,7 +399,7 @@ Evidence linking policy: keep logs/large command output in artifacts or named co
 status: `checkpoint_incomplete`
 last checkpoint: Transport, backpressure, queue accounting, and guest-local ghost-story listing were repaired enough to isolate the remaining semantic frontier.
 
-current artifact state: Universal Wire should no longer surface unpublished guest-local stories as canonical list items; platformd still has zero docs/revisions; one-at-a-time processor admission works; the strongest current evidence is that admitted processors often decide not to spawn VText because of stale/incorrect coverage beliefs, or they spawn child work that does not converge into durable publication.
+current artifact state: Universal Wire should no longer surface unpublished guest-local stories as canonical list items; corpusd still has zero docs/revisions; one-at-a-time processor admission works; the strongest current evidence is that admitted processors often decide not to spawn VText because of stale/incorrect coverage beliefs, or they spawn child work that does not converge into durable publication.
 
 what shipped:
 
@@ -413,7 +413,7 @@ what shipped:
 what was proven:
 
 - the ghost 12-card list was guest-local platform VM state, not manual mocks;
-- platformd remains the durable source of truth and is still empty;
+- corpusd remains the durable source of truth and is still empty;
 - host publish endpoint can succeed on full replay payloads;
 - guest can reach host proxy on TAP 8082;
 - sourcecycled can now admit exactly one processor at a time and self-heal submitted rows much better than before;
@@ -423,7 +423,7 @@ unproven or partial claims:
 
 - whether the published-only corpus-search fix has been observed through a truly clean processor run free of stale continuity;
 - whether live processor child-run topology converges to VText spawn and publish;
-- whether any current live processor-generated revision can produce the first non-zero platformd document/revision row without manual replay.
+- whether any current live processor-generated revision can produce the first non-zero corpusd document/revision row without manual replay.
 
 belief-state changes:
 
@@ -434,13 +434,13 @@ remaining error field:
 
 - processor continuity poisoning or stale coverage beliefs;
 - possible child-run non-convergence after a single admitted processor;
-- no durable platformd publication yet.
+- no durable corpusd publication yet.
 
 highest-impact remaining uncertainty: when a single clean processor run is admitted on a fresh guest and fresh processor channel, does it spawn VText and publish durably, or does it still suppress itself because of stale continuity / false coverage?
 
 next executable probe: run one fresh processor on the new `processor-v2:*` channel, inspect its channel memory and terminal result, and if needed clear/bypass continuity for one trial to test whether VText spawn reappears.
 
-suggested resume goal string: Use MissionGradient. Complete docs/universal-wire-production-recovery-missiongradient-2026-06-10.md by proving or falsifying the current semantic frontier: on a fresh platform guest and fresh processor continuity channel, one admitted processor must either produce one durable platformd publication or expose the exact child-run / coverage-decision reason it does not. Keep Universal Wire list honesty (published-only), preserve platform/user authority boundaries, maintain evidence-ledger updates in the mission report, and stop only on durable platformd proof or a hard blocker after root-cause probes.
+suggested resume goal string: Use MissionGradient. Complete docs/universal-wire-production-recovery-missiongradient-2026-06-10.md by proving or falsifying the current semantic frontier: on a fresh platform guest and fresh processor continuity channel, one admitted processor must either produce one durable corpusd publication or expose the exact child-run / coverage-decision reason it does not. Keep Universal Wire list honesty (published-only), preserve platform/user authority boundaries, maintain evidence-ledger updates in the mission report, and stop only on durable corpusd proof or a hard blocker after root-cause probes.
 
 evidence artifact refs:
 
@@ -461,12 +461,12 @@ These notes are intentionally outside the current proof branch but should guide 
 - VText should only route to super for real coding/execution/privileged work, not vague continuation/orchestration;
 - supers will use nucleus sandboxes for ephemeral execution;
 - rename sandbox -> autoputer for persistent computers;
-- rename platformd -> corpusd for durable publication service;
+- rename corpusd -> corpusd for durable publication service;
 - evolve MissionGradient so conjecture ledgers are first-class rather than manually appended.
 
 ## Forbidden Shortcuts
 
-- Do not seed platformd docs/revisions manually and call that production.
+- Do not seed corpusd docs/revisions manually and call that production.
 - Do not create a frontend-only sample card or alternate endpoint.
 - Do not treat `processor_submitted`, `running_runs`, or source fetch counts as article-production proof.
 - Do not bypass VText ownership or edition transclusion.
@@ -480,7 +480,7 @@ These notes are intentionally outside the current proof branch but should guide 
 - Git rollback: every behavior-changing fix lands as a commit on main; rollback target is prior deployed commit SHA.
 - Deploy rollback: record GitHub Actions run, deployed commit identity, and Node B health for each deploy.
 - VM rollback: before destructive data-image or database repair, stop the VM and preserve/snapshot rollback refs where available.
-- Database rollback: platformd/sandbox Dolt commits or data-image backups must be named before mutation.
+- Database rollback: corpusd/sandbox Dolt commits or data-image backups must be named before mutation.
 - Queue rollback: avoid deleting sourcecycled processor requests unless their state and replay consequences are documented.
 - Runtime rollback: overload/backpressure changes must fail closed by leaving work queued, not by dropping handoffs.
 
@@ -501,7 +501,7 @@ Report `complete` only when all are true:
 1. sourcecycled cannot overload the platform computer under normal drain cadence;
 2. platform runtime rejects/defers overload instead of wedging;
 3. at least one processor completes through VText article revision creation;
-4. platformd contains the article document plus full revision history;
+4. corpusd contains the article document plus full revision history;
 5. durable Wire edition/story API returns non-empty stories;
 6. authenticated Universal Wire app renders article cards on staging;
 7. clicking a headline opens the VText article with revision history;

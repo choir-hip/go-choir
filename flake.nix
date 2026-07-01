@@ -311,9 +311,9 @@
             "internal/wirepublish"
           ];
         };
-        platformd = mkGoService {
-          pname = "platformd";
-          subPackage = "cmd/platformd";
+        corpusd = mkGoService {
+          pname = "corpusd";
+          subPackage = "cmd/corpusd";
           vendorHash = "sha256-SkFulx4Hco5jk94EQ9np+LCqCyCnOTFNanFlY80TeLE=";
           internalDirs = [
             "internal/buildinfo"

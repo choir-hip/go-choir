@@ -293,7 +293,7 @@ State 8: Verify wire works end-to-end
           - sourcecycled dispatches
           - platform sandbox accepts runs via actor runtime
           - processor creates Texture article revisions
-          - autonomous publish to platformd
+          - autonomous publish to corpusd
           - edition transclusion
           - /api/universal-wire/stories returns non-empty
           - Universal Wire app renders article cards
@@ -333,7 +333,7 @@ State 6 is the highest-risk, highest-value state. It's where the wire bugs get f
 After the substrate is replaced, some wire bugs may persist — these would be genuine logic bugs in the wire pipeline, not substrate symptoms. The root cause doc listed candidates:
 - Texture edits created but ineligible for autonomous publish (metadata gates)
 - Edition transclusion failures
-- Platformd sync failures
+- Corpusd sync failures
 
 These are real bugs that were invisible while the substrate was broken. After State 6, debug them as individual wire logic bugs, not as substrate symptoms. The substrate-vs-symptom classification should be re-applied: if 3+ wire logic bugs cluster in the same wire component, apply root cause clustering again.
 

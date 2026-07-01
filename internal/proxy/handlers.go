@@ -116,7 +116,7 @@ type Handler struct {
 	reverseProxy    *httputil.ReverseProxy
 	upgrader        websocket.Upgrader
 	dialer          *websocket.Dialer
-	platformd       *http.Client
+	corpusd       *http.Client
 	maild           *http.Client
 	sandboxHTTP     *http.Client
 	sandboxURL      *url.URL      // parsed sandbox URL for WS dial derivation
@@ -134,8 +134,8 @@ type Handler struct {
 // through vmctl instead of falling back to the static host sandbox URL
 // (VAL-VM-001, VAL-VM-002).
 func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
-	if strings.TrimSpace(cfg.PlatformdURL) == "" {
-		cfg.PlatformdURL = DefaultPlatformdURL
+	if strings.TrimSpace(cfg.CorpusdURL) == "" {
+		cfg.CorpusdURL = DefaultCorpusdURL
 	}
 	if strings.TrimSpace(cfg.MaildURL) == "" {
 		cfg.MaildURL = DefaultMaildURL
@@ -267,7 +267,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 			},
 		},
 		dialer:      websocket.DefaultDialer,
-		platformd:   &http.Client{Timeout: 30 * time.Second},
+		corpusd:   &http.Client{Timeout: 30 * time.Second},
 		maild:       &http.Client{Timeout: 30 * time.Second},
 		sandboxHTTP: &http.Client{Timeout: 30 * time.Second},
 		sandboxURL:  sandboxURL,
@@ -974,10 +974,11 @@ func protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (owner
 }
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
-// When vmctl routing is enabled, it consults the vmctl ownership registry
-// to route the user to their assigned VM (VAL-VM-001). When vmctl is not
-// configured, it falls back to the static SandboxURL for backward
-// compatibility.
+// It consults the vmctl ownership registry to route the user to their
+// assigned VM (VAL-VM-001). When vmctl is not configured, it falls back
+// to the static SandboxURL — but with the host sandbox deleted (PR 5),
+// this fallback will fail with a visible connection error (I3: no silent
+// failures).
 func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID string) (string, error) {
 	if h.vmctlClient == nil {
 		return h.cfg.SandboxURL, nil
@@ -1147,22 +1148,33 @@ func (h *Handler) relayFrames(src *websocket.Conn, dst *wsWriter, direction stri
 //     the proxy is up but the upstream is unreachable
 //   - upstream: "ok" or "unreachable"
 //   - vmctl_routing: "enabled" or omitted when using static routing
+//
+// When vmctl routing is enabled, the static sandbox upstream probe is
+// skipped (the host sandbox was deleted in PR 5; per-user VMs are the
+// real upstream and vmctl health is the authoritative signal).
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	// Check upstream sandbox health.
-	upstreamStatus := "ok"
-	upstreamHealthy, upstreamBuild := h.probeUpstreamHealth()
-	if !upstreamHealthy {
-		upstreamStatus = "unreachable"
-	}
-
 	status := "ok"
-	if !upstreamHealthy {
-		status = "degraded"
+	upstreamStatus := "ok"
+	var upstreamBuild *buildinfo.Info
+
+	if h.cfg.VmctlRoutingEnabled() {
+		// vmctl routing: vmctl health is the authoritative upstream signal.
+		// The static sandbox URL probe is skipped because the host sandbox
+		// was deleted (PR 5) and per-user VMs are the real upstream.
+		upstreamStatus = "vmctl"
+	} else {
+		// Static routing fallback: probe the configured sandbox URL.
+		upstreamHealthy, build := h.probeUpstreamHealth()
+		upstreamBuild = build
+		if !upstreamHealthy {
+			upstreamStatus = "unreachable"
+			status = "degraded"
+		}
 	}
 
 	resp := proxyHealthResponse{
@@ -1179,6 +1191,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		resp.VMctlRouting = "enabled"
 		if vmctlHealth, ok := h.probeVMctlHealth(); ok {
 			resp.VMctlStatus = vmctlHealth.Status
+			if vmctlHealth.Status != "ok" {
+				resp.Status = "degraded"
+			}
 		} else {
 			resp.VMctlStatus = "unavailable"
 			resp.Status = "degraded"
@@ -1263,8 +1278,8 @@ func (h *Handler) HandleVMctlDeny(w http.ResponseWriter, r *http.Request) {
 // override the default server health handler with one that reports
 // upstream sandbox reachability.
 // HandlePlatformTextureRead serves published Texture document and revision reads
-// from platformd's DoltDB for Universal Wire articles. Published articles
-// carry their full revision history in platformd, not the platform sandbox.
+// from corpusd's DoltDB for Universal Wire articles. Published articles
+// carry their full revision history in corpusd, not the platform sandbox.
 func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Request) {
 	authResult, err := h.authenticate(r)
 	if err != nil {
@@ -1276,16 +1291,16 @@ func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Reque
 	}
 
 	path := r.URL.Path
-	var platformdPath string
+	var corpusdPath string
 	switch {
 	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/revisions"):
 		docID := strings.TrimPrefix(path, "/api/texture/documents/")
 		docID = strings.TrimSuffix(docID, "/revisions")
-		platformdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
+		corpusdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
 	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/history"):
 		docID := strings.TrimPrefix(path, "/api/texture/documents/")
 		docID = strings.TrimSuffix(docID, "/history")
-		platformdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
+		corpusdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
 	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/stream"):
 		// Published articles don't need live SSE; return empty event stream
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -1295,32 +1310,32 @@ func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Reque
 		return
 	case strings.HasPrefix(path, "/api/texture/documents/"):
 		docID := strings.TrimPrefix(path, "/api/texture/documents/")
-		platformdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID)
+		corpusdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID)
 	case strings.HasPrefix(path, "/api/texture/revisions/"):
 		revisionID := strings.TrimPrefix(path, "/api/texture/revisions/")
-		platformdPath = "/internal/platform/texture/revisions/" + url.PathEscape(revisionID)
+		corpusdPath = "/internal/platform/texture/revisions/" + url.PathEscape(revisionID)
 	default:
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
 
-	target, err := joinBasePath(h.cfg.PlatformdURL, platformdPath)
+	target, err := joinBasePath(h.cfg.CorpusdURL, corpusdPath)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platformd URL"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd URL"})
 		return
 	}
 
 	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platformd request"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd request"})
 		return
 	}
 	httpReq.Header.Set("X-Internal-Caller", "true")
 
-	resp, err := h.platformd.Do(httpReq)
+	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
-		log.Printf("proxy: platformd texture read: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read from platformd"})
+		log.Printf("proxy: corpusd texture read: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read from corpusd"})
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -1328,12 +1343,69 @@ func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("proxy: platformd texture read copy: %v", err)
+		log.Printf("proxy: corpusd texture read copy: %v", err)
+	}
+}
+
+// HandlePlatformObjectGraph forwards object graph API requests from the
+// runtime (inside a VM) to corpusd. The runtime's objectgraph.HTTPStore
+// sets X-Internal-Caller: true; the proxy checks this header on the incoming
+// request and then sets its own X-Internal-Caller header when forwarding to
+// corpusd, so the caller cannot forge arbitrary header values.
+//
+// Security model: this route uses the same X-Internal-Caller trust signal as
+// HandleInternalWirePlatformPublish. The Caddy edge (nix/node-b.nix) blocks
+// all /internal/* routes from the public internet with a 403, so this handler
+// is only reachable from inside VMs via the VM-to-host network. VM processes
+// are already trusted to run runtime code. A hard cryptographic boundary
+// (shared secret between proxy and corpusd) is out of scope for this PR.
+// Both /internal/platform/objects and /internal/platform/edges (with optional
+// sub-paths and query strings) are forwarded as-is.
+func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Request) {
+	// Require the internal-caller header on the incoming request, matching
+	// the HandleInternalWirePlatformPublish pattern.
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "internal caller required"})
+		return
+	}
+	target, err := joinBasePath(h.cfg.CorpusdURL, r.URL.Path)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd URL"})
+		return
+	}
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	httpReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd request"})
+		return
+	}
+	// The proxy is the trusted internal caller to corpusd. Strip any
+	// caller-supplied X-Internal-Caller header and set it ourselves so a
+	// VM process cannot forge internal-caller privileges.
+	httpReq.Header.Set("X-Internal-Caller", "true")
+	if v := r.Header.Get("Content-Type"); v != "" {
+		httpReq.Header.Set("Content-Type", v)
+	}
+
+	resp, err := h.corpusd.Do(httpReq)
+	if err != nil {
+		log.Printf("proxy: corpusd objectgraph: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to reach corpusd"})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("proxy: corpusd objectgraph copy: %v", err)
 	}
 }
 
 // isPlatformTextureReadRequest returns true for read-only Texture requests that
-// should be served from platformd's published store rather than the sandbox.
+// should be served from corpusd's published store rather than the sandbox.
 func isPlatformTextureReadRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
@@ -1366,4 +1438,11 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// exposed as public browser-facing routes.
 	s.HandleFunc("/internal/vmctl/", h.HandleVMctlDeny)
 	s.HandleFunc("/internal/wire/platform/publications/texture", h.HandleInternalWirePlatformPublish)
+	// Object graph API: forward runtime objectgraph HTTPStore calls to
+	// corpusd. The runtime (inside a VM) reaches corpusd through the
+	// proxy; these routes pass through /internal/platform/objects and
+	// /internal/platform/edges to corpusd's object graph handler.
+	s.HandleFunc("/internal/platform/objects", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/objects/", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/edges", h.HandlePlatformObjectGraph)
 }

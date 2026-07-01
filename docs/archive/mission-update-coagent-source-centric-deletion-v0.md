@@ -182,7 +182,7 @@ un-deployed baseline strands the cutover") is exactly H_deploy.
    `texture_controller.go`, `super_controller.go`, `runtime.go`, `toolloop.go`,
    `internal/store/texture.go`).
 2. Read-only probe of node-b (`choiros-b`): the platform Dolt, the host runtime
-   Dolt workspaces, platformd/sandbox service logs, and the running firecracker
+   Dolt workspaces, corpusd/sandbox service logs, and the running firecracker
    VM state for the owner's computer
    `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`.
 3. Read-only queries of the live VM runtime API at `10.200.233.2:8085` using
@@ -626,7 +626,7 @@ Initial failing-test family reported from the E5 run:
   `TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest`,
   `TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists`,
   `TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformTextures`,
-  `TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails`,
+  `TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails`,
   `TestEditTextureGroundedEmailArtifactRequiresEmailAppagentContinuation`,
   `TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformTextures`,
   `TestWireAutonomousPublishTranscludesEditionAndDebounces`.

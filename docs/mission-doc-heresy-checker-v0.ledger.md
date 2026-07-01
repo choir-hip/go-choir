@@ -23,7 +23,7 @@ Receipts:
 - YAML frontmatter files found: 3, all skill files.
 - Markdown links found: 463 across 71 files.
 - Bare Markdown filename mentions found: 1396 across 137 files.
-- Current command directories include `auth`, `gateway`, `maild`, `platformd`,
+- Current command directories include `auth`, `gateway`, `maild`, `corpusd`,
   `proxy`, `sandbox`, `sourcecycled`, `vmctl`, and `zot`.
 - CI and FlakeHub workflows ignore `docs/**` and top-level `*.md`.
 

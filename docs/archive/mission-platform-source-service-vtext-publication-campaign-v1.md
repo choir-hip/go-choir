@@ -78,7 +78,7 @@ copy/download remain unproven.
 **Problem observed:** the platform publication path can publish a VText
 projection, but it does not yet carry the revision's hidden source metadata
 through the platform boundary. The proxy reads the private VText revision and
-posts `content` plus `citations` to `platformd`; `metadata_json` is not part of
+posts `content` plus `citations` to `corpusd`; `metadata_json` is not part of
 the request. Platform records therefore cannot preserve `source_entities`,
 default transclusion display policy, route/access policy, or export policy as
 canonical publication data.
@@ -92,13 +92,13 @@ or export-policy fields on `PublishVTextRequest` / `PublicationBundle`.
 but no source-entity or transclusion records derived from VText metadata.
 
 **Fix direction:** extend the internal publication contract so the proxy passes
-revision metadata; platformd extracts/preserves `source_entities` and display
+revision metadata; corpusd extracts/preserves `source_entities` and display
 policy; publication bundles expose source entities, transclusion records,
 access policy, and export policy; copy/download endpoints can later read the
 same canonical artifact and policy records instead of scraping rendered DOM.
 
 **Checkpoint change:** proxy now forwards private VText revision metadata to
-platformd during publication. Platformd stores publication source entities,
+corpusd during publication. Corpusd stores publication source entities,
 transclusion records, and publication access/export policy in durable platform
 tables, includes the source metadata hash and policy in the artifact manifest,
 and returns source entities, transclusions, and policy in publication bundles.
@@ -108,7 +108,7 @@ and returns source entities, transclusions, and policy in publication bundles.
 ```text
 nix develop -c go test ./internal/platform ./internal/proxy -run 'TestPublishVTextCreatesImmutablePublicRecords|TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection'
 nix develop -c go test ./internal/platform ./internal/proxy
-nix develop -c go build ./cmd/platformd ./cmd/proxy
+nix develop -c go build ./cmd/corpusd ./cmd/proxy
 ```
 
 **Result:** local platform/proxy tests and command builds pass. This proves the
@@ -126,17 +126,17 @@ published text. Download formats are not exposed as publication artifacts.
 
 **Evidence recorded before fix:** proxy exposes publication publish, resolve,
 retrieval search, and proposal routes, but no `/api/platform/publications/...`
-export or download route. Platformd exposes internal publish/resolve/search and
+export or download route. Corpusd exposes internal publish/resolve/search and
 proposal routes, but no internal export route. The VText UI has
 `data-vtext-copy-public` for copying the route URL, not canonical text export.
 
-**Fix direction:** add a platformd export operation that resolves a publication
+**Fix direction:** add a corpusd export operation that resolves a publication
 route, reads the stored artifact blob, checks export policy, and emits
 canonical `.txt`, `.md`, or `.html` bytes with a content hash. Proxy should
 expose that as a public product API so the frontend can implement copy full
 text and download without scraping rendered DOM.
 
-**Checkpoint change:** platformd now exposes an internal publication export
+**Checkpoint change:** corpusd now exposes an internal publication export
 operation over the canonical artifact blob and publication export policy.
 Proxy exposes `/api/platform/publications/export`, and VText's publication UI
 uses that API for copy-full-text and Markdown download actions.
@@ -145,7 +145,7 @@ uses that API for copy-full-text and Markdown download actions.
 
 ```text
 nix develop -c go test ./internal/platform ./internal/proxy
-nix develop -c go build ./cmd/platformd ./cmd/proxy
+nix develop -c go build ./cmd/corpusd ./cmd/proxy
 npm --prefix frontend run build
 ```
 
@@ -212,7 +212,7 @@ nix develop -c go test ./cmd/sourcecycled ./internal/cycle ./internal/sources ./
 nix develop -c go test ./internal/runtime -run 'TestResearcherSourceSearch|TestShouldRequireResearchFindingsAfterResearchToolBatches'
 nix develop -c go test ./internal/vmmanager -run 'TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams|TestGuestInitScript_NoProviderCredentials'
 nix develop -c go test ./internal/platform ./internal/proxy
-nix develop -c go build ./cmd/sourcecycled ./cmd/sandbox ./cmd/gateway ./cmd/platformd ./cmd/proxy
+nix develop -c go build ./cmd/sourcecycled ./cmd/sandbox ./cmd/gateway ./cmd/corpusd ./cmd/proxy
 npm --prefix frontend run build
 npm --prefix frontend run e2e -- vtext-source-entities.spec.js
 git diff --check

@@ -151,7 +151,7 @@ available and the owner observed Universal Wire showing no articles; that
 observation is now parked because the corrected portfolio route defers
 Universal Wire product proof until after M2-M4. Open edge: product-path cycle
 proof remains unrun by choice, not because current owner auth is the active
-blocker. Public platformd corpus health cannot settle the production
+blocker. Public corpusd corpus health cannot settle the production
 route-switch conjecture.
 
 **next move:** do not chase the Universal Wire empty-state now. Advance M2,
@@ -169,7 +169,7 @@ append-only Parallax pass entries. Historical passes before this checkpoint
 remain embedded below under `ledger / move log` and should not be
 transcribed unless auditing requires it.
 
-**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current status is deferred, V=6: the revision-metadata JSON merge serialization gap found by independent review is fixed, pushed, CI-green, and deployed at 4b4562a2e01549291a3ff2080ec2a187ef5f365f; staging /health identity is proven; public platformd publication search/export works; an authenticated browser session can be supplied and the owner observed Universal Wire showing no articles, but the owner corrected the portfolio route: do not spend attention on Universal Wire product completeness until durable actors are working and old coordination/continuation code has been removed. First complete M2-M4, then return here. When M5 resumes, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof after M2-M4, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
+**suggested resume goal string:** `Use Parallax on docs/mission-wire-on-settlement-v0.md. Treat it as the M5 paradoc and source program. Resume from the Parallax State and append to docs/mission-wire-on-settlement-v0.ledger.md. Current status is deferred, V=6: the revision-metadata JSON merge serialization gap found by independent review is fixed, pushed, CI-green, and deployed at 4b4562a2e01549291a3ff2080ec2a187ef5f365f; staging /health identity is proven; public corpusd publication search/export works; an authenticated browser session can be supplied and the owner observed Universal Wire showing no articles, but the owner corrected the portfolio route: do not spend attention on Universal Wire product completeness until durable actors are working and old coordination/continuation code has been removed. First complete M2-M4, then return here. When M5 resumes, run only browser-public product paths to observe the smallest Universal Wire cycle evidence available: session/provenance proof, trace/vtext/publication/front-page receipts, sourcecycled cycle timing, duplicate/stale-publication interpretation, and whether a real multi-story cycle at maxProc>1 can be observed. Do not use /api/agent, /internal, /api/test, raw event mutation, or manual success seeding. If auth, source traffic, or instrumentation blocks the proof after M2-M4, update the paradoc/ledger with exact blocker receipts and next discriminator. Do not call M5 settled without production multi-story maxProc>1 evidence, honest-and-full front-page proof, rollback refs, and a verdict on the durable-actors core claim.`
 
 ### Position — code inventory (compiled 2026-06-12, post-M1)
 
@@ -1259,7 +1259,7 @@ Blind spots from this position (edge classes named):
   `cmd/sourcecycled/main.go` with focused proof in
   `internal/runtime/wire_publication_test.go` and
   `cmd/sourcecycled/main_test.go`:
-  `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails'`
+  `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails'`
   and
   `nix develop -c go test ./cmd/sourcecycled -run 'TestIngestionRuntimeDispatcherKeepsPollingSubmittedVerdictAfterRuntimeCompletes|TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageWithoutReleasingBudget|TestIngestionRuntimeDispatcherKeepsRuntimeSubmittedRequestsInFlightAfterVerdictCompletion'`.
   Exit: open_handoff.
@@ -1286,7 +1286,7 @@ Blind spots from this position (edge classes named):
   request-projection branch in `cmd/sourcecycled/main.go` with focused proof
   in `internal/runtime/wire_processor_decision_test.go`,
   `internal/runtime/api_test.go`, and `cmd/sourcecycled/main_test.go`:
-  `nix develop -c go test ./internal/runtime -run 'TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict|TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch|TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen|TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch|TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails'`
+  `nix develop -c go test ./internal/runtime -run 'TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict|TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch|TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen|TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch|TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails'`
   and
   `nix develop -c go test ./cmd/sourcecycled -run 'TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageWithoutReleasingBudget|TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalWithoutReleasingBudget|TestIngestionRuntimeDispatcherKeepsPollingSubmittedVerdictAfterRuntimeCompletes|TestIngestionRuntimeDispatcherKeepsRuntimeSubmittedRequestsInFlightAfterVerdictCompletion'`.
   Exit: open_handoff.

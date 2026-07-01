@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -84,6 +85,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
+		ObjectGraphStore:    objectgraph.NewMemoryStore(),
 	}, s, events.NewEventBus(), NewStubProvider(0))
 	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
@@ -92,9 +94,6 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		rt.Stop()
 		_ = s.Close()
 		_ = os.Remove(dbPath)
-		if wsPath, _, err := runtimeObjectGraphDoltWorkspace(rt.cfg, s); err == nil {
-			_ = os.RemoveAll(wsPath)
-		}
 		_ = os.RemoveAll(promptRoot)
 	})
 
@@ -185,6 +184,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
+		ObjectGraphStore:    objectgraph.NewMemoryStore(),
 	}, s, events.NewEventBus(), NewStubProvider(0))
 
 	setTestDispatch(rt, s)

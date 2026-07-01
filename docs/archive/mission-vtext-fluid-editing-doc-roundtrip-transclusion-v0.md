@@ -776,7 +776,7 @@ what shipped:
   DOCX, and PDF, while leaving unsupported backend formats as explicit
   failures rather than fake exports.
 - `52379bec` documented that staging commit `19f41da9` still returned a public
-  export failure for DOCX on the prior public route because platformd only
+  export failure for DOCX on the prior public route because corpusd only
   accepted text-like formats and that route's immutable export policy allowed
   only `txt`, `md`, and `html`.
 - `631acb58` adds platform-owned DOCX and PDF export generation from canonical

@@ -435,7 +435,7 @@ Push to main, monitor CI, verify staging:
 - sourcecycled dispatches
 - sandbox accepts runs via actor runtime
 - processor creates Texture article revisions
-- autonomous publish to platformd
+- autonomous publish to corpusd
 - `/api/universal-wire/stories` returns non-empty
 - Article cards visible on staging
 

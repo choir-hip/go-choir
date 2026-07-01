@@ -1057,8 +1057,8 @@ See full analysis in
 
 | Insight | Action |
 |---|---|
-| Auto-publish ≠ removing approval UI | Build platform-internal publish to platformd; provenance is the verifier |
-| User JWT proxy publish ≠ Wire newspaper | Slice 3b: platform computer → platformd without prompt/proxy |
+| Auto-publish ≠ removing approval UI | Build platform-internal publish to corpusd; provenance is the verifier |
+| User JWT proxy publish ≠ Wire newspaper | Slice 3b: platform computer → corpusd without prompt/proxy |
 | SQLite OK for v1 if API boundary holds | Invariant 24: no direct SQLite reads from platform runtime |
 | Always-on platform VM shares disk failure class with operator | Platform VM needs disk headroom + reclaim policy |
 | Phase A curriculum | One RSS+GDELT chain before Telegram/MTProto/Qdrant |
@@ -1068,7 +1068,7 @@ Belief-state update after operator decisions + transforms:
 - Fetch ledger: SQLite on host for v1; Qdrant post-core for embeddings only.
 - Telegram HTML scraping forbidden long-term; Telegram proof deferred post-core.
 - Hard cutovers acceptable; three-store boundaries (SQLite / platform Dolt /
-  platformd) are load-bearing.
+  corpusd) are load-bearing.
 
 ## Incident: operator primary computer boot blocked (2026-06-09)
 

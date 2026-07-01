@@ -62,7 +62,7 @@ Actual repo facts from 2026-06-13:
   with 463 Markdown links and 1396 bare Markdown filename mentions in the
   current corpus.
 - Current Go command/service directories include `auth`, `gateway`, `maild`,
-  `maildctl`, `platformd`, `proxy`, `purge-vtext-owner-aliases`, `sandbox`,
+  `maildctl`, `corpusd`, `proxy`, `purge-vtext-owner-aliases`, `sandbox`,
   `sourcecycled`, `vmctl`, and `zot`.
 - CI and FlakeHub workflows intentionally ignore `docs/**` and top-level
   `*.md`. `AGENTS.md` says not to weaken those filters just to force docs-only
@@ -518,7 +518,7 @@ Known seed:
 
 - README service topology: "five Go services" is stale relative to
   `docs/current-architecture.md` and `.github/workflows/ci.yml`.
-- `platformd -> corpusd` is target rename, not current code.
+- `corpusd -> corpusd` is target rename, not current code.
 - `sourcecycled` is current daemon name; Source Cycle/source service is target
   or product vocabulary depending on context.
 

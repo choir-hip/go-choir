@@ -9,12 +9,12 @@ import (
 func TestLoadConfigDefaults(t *testing.T) {
 	// Clear all PROXY_* env vars to test defaults.
 	origAuthKey := os.Getenv("AUTH_JWT_PRIVATE_KEY_PATH")
-	origPlatformdURL := os.Getenv("PROXY_PLATFORMD_URL")
+	origCorpusdURL := os.Getenv("PROXY_CORPUSD_URL")
 	origMaildURL := os.Getenv("PROXY_MAILD_URL")
 	_ = os.Unsetenv("PROXY_PORT")
 	_ = os.Unsetenv("PROXY_SANDBOX_URL")
 	_ = os.Unsetenv("PROXY_AUTH_PUBLIC_KEY_PATH")
-	_ = os.Unsetenv("PROXY_PLATFORMD_URL")
+	_ = os.Unsetenv("PROXY_CORPUSD_URL")
 	_ = os.Unsetenv("PROXY_MAILD_URL")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	t.Cleanup(func() {
@@ -23,10 +23,10 @@ func TestLoadConfigDefaults(t *testing.T) {
 		} else {
 			_ = os.Setenv("PROXY_MAILD_URL", origMaildURL)
 		}
-		if origPlatformdURL == "" {
-			_ = os.Unsetenv("PROXY_PLATFORMD_URL")
+		if origCorpusdURL == "" {
+			_ = os.Unsetenv("PROXY_CORPUSD_URL")
 		} else {
-			_ = os.Setenv("PROXY_PLATFORMD_URL", origPlatformdURL)
+			_ = os.Setenv("PROXY_CORPUSD_URL", origCorpusdURL)
 		}
 		if origAuthKey == "" {
 			_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
@@ -49,8 +49,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.AuthPublicKeyPath != "/tmp/go-choir-m2/auth-signing-key.pub" {
 		t.Errorf("AuthPublicKeyPath: got %q, want %q", cfg.AuthPublicKeyPath, "/tmp/go-choir-m2/auth-signing-key.pub")
 	}
-	if cfg.PlatformdURL != DefaultPlatformdURL {
-		t.Errorf("PlatformdURL: got %q, want %q", cfg.PlatformdURL, DefaultPlatformdURL)
+	if cfg.CorpusdURL != DefaultCorpusdURL {
+		t.Errorf("CorpusdURL: got %q, want %q", cfg.CorpusdURL, DefaultCorpusdURL)
 	}
 	if cfg.MaildURL != DefaultMaildURL {
 		t.Errorf("MaildURL: got %q, want %q", cfg.MaildURL, DefaultMaildURL)
@@ -59,12 +59,12 @@ func TestLoadConfigDefaults(t *testing.T) {
 
 func TestLoadConfigFromEnv(t *testing.T) {
 	origAuthKey := os.Getenv("AUTH_JWT_PRIVATE_KEY_PATH")
-	origPlatformdURL := os.Getenv("PROXY_PLATFORMD_URL")
+	origCorpusdURL := os.Getenv("PROXY_CORPUSD_URL")
 	origMaildURL := os.Getenv("PROXY_MAILD_URL")
 	_ = os.Setenv("PROXY_PORT", "9999")
 	_ = os.Setenv("PROXY_SANDBOX_URL", "http://example.com:8085")
 	_ = os.Setenv("PROXY_AUTH_PUBLIC_KEY_PATH", "/tmp/test-pub.key")
-	_ = os.Setenv("PROXY_PLATFORMD_URL", "http://example.com:8086")
+	_ = os.Setenv("PROXY_CORPUSD_URL", "http://example.com:8086")
 	_ = os.Setenv("PROXY_MAILD_URL", "http://example.com:8087")
 	_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
 	defer func() {
@@ -76,10 +76,10 @@ func TestLoadConfigFromEnv(t *testing.T) {
 		} else {
 			_ = os.Setenv("PROXY_MAILD_URL", origMaildURL)
 		}
-		if origPlatformdURL == "" {
-			_ = os.Unsetenv("PROXY_PLATFORMD_URL")
+		if origCorpusdURL == "" {
+			_ = os.Unsetenv("PROXY_CORPUSD_URL")
 		} else {
-			_ = os.Setenv("PROXY_PLATFORMD_URL", origPlatformdURL)
+			_ = os.Setenv("PROXY_CORPUSD_URL", origCorpusdURL)
 		}
 		if origAuthKey == "" {
 			_ = os.Unsetenv("AUTH_JWT_PRIVATE_KEY_PATH")
@@ -102,8 +102,8 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	if cfg.AuthPublicKeyPath != "/tmp/test-pub.key" {
 		t.Errorf("AuthPublicKeyPath: got %q, want %q", cfg.AuthPublicKeyPath, "/tmp/test-pub.key")
 	}
-	if cfg.PlatformdURL != "http://example.com:8086" {
-		t.Errorf("PlatformdURL: got %q, want %q", cfg.PlatformdURL, "http://example.com:8086")
+	if cfg.CorpusdURL != "http://example.com:8086" {
+		t.Errorf("CorpusdURL: got %q, want %q", cfg.CorpusdURL, "http://example.com:8086")
 	}
 	if cfg.MaildURL != "http://example.com:8087" {
 		t.Errorf("MaildURL: got %q, want %q", cfg.MaildURL, "http://example.com:8087")

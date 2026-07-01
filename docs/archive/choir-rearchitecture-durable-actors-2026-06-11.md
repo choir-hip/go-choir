@@ -447,7 +447,7 @@ substrate it can actually work on.
   Bound: slots get their own migration step and test; historical
   `parent_loop_id` data is frozen, never migrated.
 - **Scope:** internal/runtime + internal/store + sourcecycled reconcile.
-  platformd/corpusd, gateway, vmctl untouched.
+  corpusd/corpusd, gateway, vmctl untouched.
 
 ---
 
@@ -492,7 +492,7 @@ This program is also the §15 ConjectureRecord proof mission (review v2, N5).
    raise `maxProc`; run the multi-story falsifier cycle. **This run is the
    evidence gate for the route switch.**
 
-Side PRs (independent): `platformd → corpusd` rename; docs/glossary update
+Side PRs (independent): `corpusd → corpusd` rename; docs/glossary update
 (actor, mailbox, activation, passivation, rewarm, trajectory, work item,
 settlement; retire "continuation", disambiguate "channel" → *mailbox* for
 delivery, *document/trajectory channel* for the product concept — the word
@@ -518,7 +518,7 @@ fingerprints (→ message/work-item idempotency); bounded authority profiles
 (→ spawn/activation policy); channel_messages table
 (→ durable log behind delivery, replay-only); submit_coagent_update's design
 (→ the one primitive, renamed); VText tool-scope enforcement (untouched —
-already correct); all of platformd, sources, vmctl, gateway.
+already correct); all of corpusd, sources, vmctl, gateway.
 
 **Becomes possible:** processor parallelism on evidence; honest liveness
 ("what is this trajectory waiting on?" is a query); rewarming month-old

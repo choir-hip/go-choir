@@ -74,10 +74,10 @@ Observed harness failures:
   out because backend/proxy endpoints were unavailable; Vite logged
   `ECONNREFUSED 127.0.0.1:8082` for `/api/shell/bootstrap` and
   `/api/preferences/theme`.
-- Full `nix develop -c ./start-services.sh` failed at `platformd failed`;
-  logs showed platformd could not read
+- Full `nix develop -c ./start-services.sh` failed at `corpusd failed`;
+  logs showed corpusd could not read
   `/tmp/go-choir-m2/platform-dolt/platform/.dolt/repo_state.json`.
-- `CHOIR_ENABLE_PLATFORMD=0 nix develop -c ./start-services.sh` reached
+- `CHOIR_ENABLE_CORPUSD=0 nix develop -c ./start-services.sh` reached
   auth/sandbox/proxy startup but failed the frontend phase because the script's
   pnpm install refused ignored build scripts for `esbuild@0.21.5`.
 - Manual repair attempts were not committed; worker-local generated artifacts

@@ -866,7 +866,7 @@ Error 1072: key column 'delivered_at' doesn't exist in table
 ```
 
 The same diagnostic block showed local health at the failed deploy point:
-auth, vmctl, gateway, platformd, and maild were healthy; proxy was degraded
+auth, vmctl, gateway, corpusd, and maild were healthy; proxy was degraded
 because upstream sandbox was unreachable. Public `https://choir.news/health`
 after the failed deploy reported `status=degraded`, `upstream=unreachable`,
 `vmctl_status=ok`, and proxy build/deployed commit
@@ -918,7 +918,7 @@ at `2026-06-13T08:19:46Z` showed:
   timed out after 5 seconds.
 - `go-choir-sandbox.service`: `activating/auto-restart`,
   `ExecMainStatus=1`.
-- auth, gateway, platformd, and maild health endpoints were healthy; platformd
+- auth, gateway, corpusd, and maild health endpoints were healthy; corpusd
   reported build/deployed commit
   `a08076eda2ac6ca9ebcacb27e466d0399e6a1db2`.
 - the sandbox journal, both for the host service and freshly refreshed guest

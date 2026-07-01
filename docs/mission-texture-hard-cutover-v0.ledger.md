@@ -163,7 +163,7 @@ Runtime shard 2 failed
 `TestWireAutonomousPublishTranscludesEditionAndDebounces` because the edition
 content stayed `"# Wire\n\nUniversal Wire edition."` instead of transcluding
 `doc-publish-slice`. Runtime shard 3 failed
-`TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails` because
+`TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails` because
 only the story-resolution work item remained open, not the expected
 story-resolution plus in-flight publication pair.
 
@@ -204,7 +204,7 @@ Actual ΔV: 0. V remains 7 until pushed CI and staging proof pass.
 
 Receipts:
 - `nix develop -c go test ./internal/wirepublish`: pass.
-- `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts|TestNormalizeWireArticleSourceServiceProseRewritesBareLabels'`: pass.
+- `nix develop -c go test ./internal/runtime -run 'TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts|TestNormalizeWireArticleSourceServiceProseRewritesBareLabels'`: pass.
 - `scripts/doccheck --report /tmp/choir-doccheck-report.md --json /tmp/choir-doccheck.json`: report-only complete, 212 docs, 1,146 warnings.
 - `/tmp/choir-doccheck.json` warning counts after the repair: H1=724, H3=15,
   H4=3, H5=347, R3=57.
@@ -806,7 +806,7 @@ routes remain a distinct old-name route family that can be cut over without
 renaming live public article URLs.
 
 Move: read-only route inventory and Problem Documentation First checkpoint
-before touching proxy, platformd, Wire autonomous publication, or frontend
+before touching proxy, corpusd, Wire autonomous publication, or frontend
 publish behavior.
 
 Expected ΔV: 0 against V=2, but it selects the next bounded descent on the
@@ -819,7 +819,7 @@ identity until a redirect/rollback policy exists.
 Conjecture delta: publication control routes can stop teaching the retired
 artifact name while preserving existing public route identity.
 
-Protected surfaces: public proxy API routing, platformd internal routing, Wire
+Protected surfaces: public proxy API routing, corpusd internal routing, Wire
 autonomous publication, publication read/sync paths, and deployment routing.
 
 Admissible evidence class: focused proxy/platform/runtime route tests,
@@ -836,7 +836,7 @@ Receipts:
 - Read-only search:
   `rg -n 'api/platform/vtext|internal/platform/(publications/vtext|vtext)|internal/wire/platform/publications/vtext|/pub/vtext|HandleVTextPublication|HandlePlatformVTextRead|isPlatformVTextReadRequest|PublishVText|SyncVText|PlatformVText' internal/proxy internal/platform internal/wirepublish internal/runtime frontend/src/lib/vtext.js frontend/src/App.svelte frontend/src/lib/Desktop.svelte`
   showed the old-name platform publish route, internal wire publish route,
-  platformd publish/sync/read routes, and `/pub/vtext/...` public reader URL
+  corpusd publish/sync/read routes, and `/pub/vtext/...` public reader URL
   shape.
 
 Open edge: implement and land the platform publication control-route cutover,
@@ -850,7 +850,7 @@ reader URLs as live route identity for a separate migration plan.
 
 Move: rename the public platform publish caller and proxy dispatch to
 `/api/platform/texture/publications`; rename the internal Wire publish route to
-`/internal/wire/platform/publications/texture`; rename platformd publish, sync,
+`/internal/wire/platform/publications/texture`; rename corpusd publish, sync,
 document-read, and revision-read routes to `/internal/platform/texture...`;
 switch publication private reads to `/api/texture`; add explicit old-route
 absence checks.
@@ -867,7 +867,7 @@ Conjecture delta: supported for deployed route-control scope that publication
 control routes can move to Texture naming without renaming live public article
 URLs.
 
-Protected surfaces: public proxy API routing, platformd internal routing, Wire
+Protected surfaces: public proxy API routing, corpusd internal routing, Wire
 autonomous publication, publication read/sync paths, frontend publish caller,
 and deployment routing.
 
@@ -878,7 +878,7 @@ route probe.
 
 Receipts:
 - Focused local route tests passed:
-  `nix develop -c go test ./internal/proxy ./internal/platform ./internal/wirepublish ./internal/runtime -run 'TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection|TestHandleVTextPublicationRejectsMalformedPolicy|TestHandleVTextPublicationPublishesPublicURLSourceSnapshots|TestHandleVTextPublicationRecordsURLSnapshotImportFailureState|TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestIsPlatformVTextReadRequest|TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox|TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts|TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc|TestPublishWireArticleToPlatform|TestPostPlatformPublication'`.
+  `nix develop -c go test ./internal/proxy ./internal/platform ./internal/wirepublish ./internal/runtime -run 'TestHandleVTextPublicationReadsPrivateRevisionAndPostsProjection|TestHandleVTextPublicationRejectsMalformedPolicy|TestHandleVTextPublicationPublishesPublicURLSourceSnapshots|TestHandleVTextPublicationRecordsURLSnapshotImportFailureState|TestHandleVTextPublicationDoesNotPublishPrivateSourceSnapshots|TestHandleInternalWirePlatformPublishPostsToCorpusd|TestIsPlatformVTextReadRequest|TestProtectedAPIResolveTarget_VTextReadsNotRoutedThroughSandbox|TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformVTexts|TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformVTexts|TestResolveUniversalWireVTextReadOwnerAllowsEditionTranscludedPlatformDoc|TestPublishWireArticleToPlatform|TestPostPlatformPublication'`.
 - Full touched-package tests passed:
   `nix develop -c go test ./internal/proxy ./internal/platform ./internal/wirepublish`.
 - Local runtime shard script passed:
@@ -892,7 +892,7 @@ Receipts:
   `rg -n "api/platform/vtext|platformPath\\('/vtext|internal/platform/(publications/vtext|vtext)|internal/wire/platform/publications/vtext|/api/vtext" frontend/src/lib/vtext.js internal/proxy internal/platform internal/wirepublish internal/runtime/wire_platform_publish.go internal/runtime/universal_wire.go`
   returned only explicit deletion receipts or negative tests:
   the proxy 404 branch for `/api/platform/vtext/publications`, legacy publish
-  route 404 test, old platformd registered-route absence tests, and old
+  route 404 test, old corpusd registered-route absence tests, and old
   `/api/vtext` platform-read negative cases.
 - `git diff --check`: pass.
 - Pushed behavior commit:
@@ -969,7 +969,7 @@ Receipts:
   `rg -n 'vtext_documents|vtext_revisions|vtext_document_aliases|vtext_agent_mutations|vtext_controller_checkpoints|vtext_decisions|CREATE DATABASE IF NOT EXISTS vtext|database=vtext|\\.vtext|go-choir-vtext' internal cmd frontend/src frontend/tests specs docs -g '!docs/why-texture-background-2026-06-15.md' -g '!docs/mission-texture-hard-cutover-v0.ledger.md' | rg -v '^frontend/dist/' | wc -l`
   returned 1,009.
 - Metadata/tool search:
-  `rg -n -e 'edit_vtext' -e 'vtext_ref' -e 'vtext_doc' -e 'vtext_revision' -e 'source_vtext' -e 'platformd_route_path' -e 'related_vtext' -e 'transcluded_vtext' -e 'vtext_' internal frontend/src frontend/tests cmd specs docs -g '!docs/why-texture-background-2026-06-15.md' -g '!docs/mission-texture-hard-cutover-v0.ledger.md' | rg -v '^frontend/dist/' | wc -l`
+  `rg -n -e 'edit_vtext' -e 'vtext_ref' -e 'vtext_doc' -e 'vtext_revision' -e 'source_vtext' -e 'corpusd_route_path' -e 'related_vtext' -e 'transcluded_vtext' -e 'vtext_' internal frontend/src frontend/tests cmd specs docs -g '!docs/why-texture-background-2026-06-15.md' -g '!docs/mission-texture-hard-cutover-v0.ledger.md' | rg -v '^frontend/dist/' | wc -l`
   returned 791.
 - Selected app-id files:
   `frontend/src/lib/apps/registry.ts`, `frontend/src/App.svelte`,
@@ -1454,7 +1454,7 @@ Receipts:
   warnings for unused `currentUser` and `.wire-state` selectors.
 - Route residue search found only explicit legacy route support, route tests or
   fixtures, and frontend dual-prefix acceptance.
-- Local Playwright proof was blocked by pre-existing local platformd Dolt state
+- Local Playwright proof was blocked by pre-existing local corpusd Dolt state
   under `/tmp/go-choir-m2/platform-dolt`; the foreground service session was
   stopped and local service health checks returned down.
 
@@ -2183,7 +2183,7 @@ discovered residue outside this slice.
 
 Receipts:
 - Focused runtime test passed:
-  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestResolveUniversalWireTextureReadOwner|TestNormalizeWireArticleSourceServiceProse|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenPlatformdFails' -count=1`.
+  `nix develop -c go test ./internal/runtime -run 'TestHandleUniversalWireStories|TestResolveUniversalWireTextureReadOwner|TestNormalizeWireArticleSourceServiceProse|TestWireAutonomousPublishTranscludesEditionAndDebounces|TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails' -count=1`.
 - Runtime shard coverage passed:
   `nix develop -c scripts/go-test-runtime-shards`.
 - Frontend build passed:
@@ -2838,7 +2838,7 @@ Claim: C26 is supported for deployed reachable product scope plus CI-covered
 platform fallback defaults. The empty-title platform fallback writer paths are
 not directly reachable through the browser-public publication API because
 Texture document creation requires a title and proxy publication forwards that
-document title to platformd.
+document title to corpusd.
 
 Move: monitor the C26 behavior commit through CI and Node B deploy, verify
 staging health reports the pushed SHA, then run a temporary deployed Playwright
@@ -3498,7 +3498,7 @@ Receipts:
   callsite now use Texture-named publication helpers.
 - `nix develop -c go test ./internal/platform ./internal/proxy
   ./internal/wirepublish ./internal/runtime -run
-  'TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestHandleTexturePublication|TestHandleInternalWirePlatformPublishPostsToPlatformd|TestWirePlatform|TestWirePublication|TestPostPlatformPublication|TestBuildAutonomousPublishRequest'
+  'TestInternalPublishRequiresInternalCallerAndBundleResolve|TestRegisteredTextureRoutesExcludeLegacyVTextPlatformPrefix|TestPublishTextureCreatesImmutablePublicRecords|TestPublicationFallbackDefaultsUseTextureLabels|TestPublicationPersistedDefaultTitlesUseTextureLabels|TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes|TestHandleTexturePublication|TestHandleInternalWirePlatformPublishPostsToCorpusd|TestWirePlatform|TestWirePublication|TestPostPlatformPublication|TestBuildAutonomousPublishRequest'
   -count=1` passed.
 - `npm --prefix frontend run build` passed with only pre-existing Universal
   Wire warnings.
@@ -3797,7 +3797,7 @@ Receipts:
 - `rg "vtext:|AgentProfileVText|role=vtext|spawn_agent.*vtext|ToAgentID.*vtext|AgentID.*vtext" internal/runtime internal/store internal/types -n`
   found durable actor/profile/addressing residue around `AgentProfileVText`,
   `vtext_agent_revision`, and `vtext:<doc_id>`.
-- `rg '"/pub/vtext|/pub/vtext|platformd_route_path|published_vtext|published_texture|/pub/texture|route_path' internal frontend/src frontend/tests -n --glob '!frontend/dist/**'`
+- `rg '"/pub/vtext|/pub/vtext|corpusd_route_path|published_vtext|published_texture|/pub/texture|route_path' internal frontend/src frontend/tests -n --glob '!frontend/dist/**'`
   showed new publication minting on `/pub/texture/...` and explicit stored
   `/pub/vtext/...` row compatibility in platform tests.
 - `curl -fsS 'https://choir.news/api/platform/publications/resolve?route=%2Fpub%2Fvtext%2Fprivate'`

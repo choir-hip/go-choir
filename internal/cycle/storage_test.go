@@ -2,7 +2,6 @@ package cycle
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,7 +10,7 @@ import (
 
 func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "sourcecycled.db")
+	root := t.TempDir()
 	registry := &sources.Registry{
 		UserAgent: "ChoirTest/1.0",
 		Sources: []sources.Source{{
@@ -60,10 +59,7 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 	fetch.ItemCount = 1
 	item.FetchID = fetch.FetchID
 
-	store, err := NewStorage(dbPath)
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorageAtRoot(t, root)
 	if err := store.SaveSources(registry); err != nil {
 		t.Fatalf("save sources: %v", err)
 	}
@@ -80,10 +76,7 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 		t.Fatalf("close storage: %v", err)
 	}
 
-	reopened, err := NewStorage(dbPath)
-	if err != nil {
-		t.Fatalf("reopen storage: %v", err)
-	}
+	reopened := openTestStorageAtRoot(t, root)
 	defer reopened.Close()
 	count, err := reopened.CountItems(ctx)
 	if err != nil {
@@ -119,10 +112,7 @@ func TestStoragePersistsFetchItemsAndDedupsAcrossRestart(t *testing.T) {
 
 func TestStorageDerivesBodyClassificationForLegacyRows(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC)
@@ -153,10 +143,7 @@ func TestStorageDerivesBodyClassificationForLegacyRows(t *testing.T) {
 
 func TestSearchItemsTokenizesNaturalQueriesAndRanksMatches(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
@@ -196,10 +183,7 @@ func TestSearchItemsTokenizesNaturalQueriesAndRanksMatches(t *testing.T) {
 
 func TestSearchItemsResolvesDurableSourceItemHandles(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
@@ -242,10 +226,7 @@ func TestSearchItemsResolvesDurableSourceItemHandles(t *testing.T) {
 
 func TestStorageRecordsCycleEvents(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 	cycleID, err := store.StartCycle(ctx)
 	if err != nil {
@@ -268,10 +249,7 @@ func TestStorageRecordsCycleEvents(t *testing.T) {
 
 func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	oldCycle, err := store.StartCycle(ctx)
@@ -461,10 +439,7 @@ func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsOnly(t *testing.T) {
 
 func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	cycleID, err := store.StartCycle(ctx)
@@ -538,10 +513,7 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 
 func TestProcessorRequestRuntimeStatusCanDivergeFromVerdictStatus(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
@@ -603,10 +575,7 @@ func TestProcessorRequestRuntimeStatusCanDivergeFromVerdictStatus(t *testing.T) 
 
 func TestResetProcessorRequestSubmissionPreservesProjectedVerdict(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	req := ProcessorRequest{
@@ -642,10 +611,7 @@ func TestResetProcessorRequestSubmissionPreservesProjectedVerdict(t *testing.T) 
 
 func TestResetStaleSubmittedProcessorRequestsPreservesProjectedVerdicts(t *testing.T) {
 	ctx := context.Background()
-	store, err := NewStorage(filepath.Join(t.TempDir(), "sourcecycled.db"))
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	defer store.Close()
 
 	old := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
@@ -721,7 +687,6 @@ func TestResetStaleSubmittedProcessorRequestsPreservesProjectedVerdicts(t *testi
 }
 
 func TestApplySourcePollStatePreservesCursorsAcrossUpsert(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "poll-state.db")
 	registry := &sources.Registry{
 		UserAgent: "ChoirTest/1.0",
 		Sources: []sources.Source{{
@@ -732,10 +697,7 @@ func TestApplySourcePollStatePreservesCursorsAcrossUpsert(t *testing.T) {
 			ConditionalMode: "etag_last_modified",
 		}},
 	}
-	store, err := NewStorage(dbPath)
-	if err != nil {
-		t.Fatalf("open storage: %v", err)
-	}
+	store := openTestStorage(t)
 	if err := store.SaveSources(registry); err != nil {
 		t.Fatalf("save sources: %v", err)
 	}

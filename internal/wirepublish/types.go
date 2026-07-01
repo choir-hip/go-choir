@@ -2,7 +2,7 @@ package wirepublish
 
 import "encoding/json"
 
-// PublishTextureRequest is the platformd internal publish payload shape used by
+// PublishTextureRequest is the corpusd internal publish payload shape used by
 // autonomous Wire publication. Kept in wirepublish so sandbox runtime does not
 // import internal/platform.
 type PublishTextureRequest struct {
@@ -22,7 +22,7 @@ type PublishTextureRequest struct {
 	RequestedBy      string          `json:"requested_by,omitempty"`
 }
 
-// PublishTextureResponse is the platformd publish response subset persisted on
+// PublishTextureResponse is the corpusd publish response subset persisted on
 // wire article revisions for staging evidence.
 type PublishTextureResponse struct {
 	PublicationID        string `json:"publication_id"`
