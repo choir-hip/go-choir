@@ -174,8 +174,71 @@ func (o *ObjectGraphStore) Close() error {
 	return nil
 }
 
-// Compile-time assertion that ObjectGraphStore satisfies objectgraph.Store.
-var _ objectgraph.Store = (*ObjectGraphStore)(nil)
+// PutBatch writes a batch of objects and edges atomically in a single
+// transaction with one Dolt commit at the end.
+func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch) error {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return fmt.Errorf("platform objectgraph: nil store")
+	}
+	tx, err := o.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("platform objectgraph: begin batch tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, obj := range batch.Objects {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
+			(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				object_kind = VALUES(object_kind),
+				owner_id = VALUES(owner_id),
+				computer_id = VALUES(computer_id),
+				version_id = VALUES(version_id),
+				content_hash = VALUES(content_hash),
+				body = VALUES(body),
+				metadata = VALUES(metadata),
+				updated_at = VALUES(updated_at),
+				tombstone = VALUES(tombstone),
+				superseded_by = VALUES(superseded_by)`,
+			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
+			obj.VersionID, obj.ContentHash, obj.Body, string(obj.Metadata),
+			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+			obj.SupersededBy); err != nil {
+			return fmt.Errorf("platform objectgraph: batch put object %s: %w", obj.CanonicalID, err)
+		}
+	}
+
+	for _, edge := range batch.Edges {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO og_edges
+			(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				from_id = VALUES(from_id),
+				to_id = VALUES(to_id),
+				kind = VALUES(kind),
+				metadata = VALUES(metadata),
+				tombstone = VALUES(tombstone)`,
+			edge.EdgeID, edge.FromID, edge.ToID, string(edge.Kind), string(edge.Metadata),
+			edge.CreatedAt.UTC(), edge.Tombstone); err != nil {
+			return fmt.Errorf("platform objectgraph: batch put edge %s: %w", edge.EdgeID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("platform objectgraph: batch commit: %w", err)
+	}
+	if err := o.store.commitDolt(ctx, fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges))); err != nil {
+		return fmt.Errorf("platform objectgraph: batch dolt commit: %w", err)
+	}
+	return nil
+}
+
+// Compile-time assertion that ObjectGraphStore satisfies objectgraph interfaces.
+var (
+	_ objectgraph.Store       = (*ObjectGraphStore)(nil)
+	_ objectgraph.BatchStore  = (*ObjectGraphStore)(nil)
+)
 
 type ogRowScanner interface {
 	Scan(dest ...any) error

@@ -33,6 +33,7 @@ type Service struct {
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex
+	graphStore    *PublicationGraphStore // graph-native dual-write target
 }
 
 type citationInput struct {
@@ -57,6 +58,10 @@ func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
 		if key, err := LoadOrCreateSigningKey(signingKeyPath); err == nil {
 			svc.signingKey = key
 		}
+	}
+	// Wire graph-native dual-write if the store supports batch writes.
+	if ogStore := NewObjectGraphStore(store); ogStore != nil {
+		svc.graphStore = NewPublicationGraphStore(ogStore)
 	}
 	return svc
 }
@@ -349,6 +354,111 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	}
 	if err := s.store.commitDolt(ctx, "publish texture revision "+req.SourceRevisionID); err != nil {
 		return nil, err
+	}
+
+	// Dual-write to the object graph. Failures are logged but do not
+	// fail the publish — the relational data is already committed.
+	if s.graphStore != nil {
+		graphParams := PublishGraphParams{
+			OwnerID:              req.OwnerID,
+			RequestedBy:          req.RequestedBy,
+			SourceDocID:          req.SourceDocID,
+			SourceRevisionID:     req.SourceRevisionID,
+			SourceRevisionHash:   sourceRevisionHash,
+			SourceTraceID:        req.SourceTraceID,
+			Title:                req.Title,
+			Slug:                 strings.TrimPrefix(routePath, publicTexturePrefix),
+			Content:              req.Content,
+			ContentHash:          contentHash,
+			ContentSize:          len([]byte(req.Content)),
+			ProjectionHash:       projectionHash,
+			WholeSelector:        wholeSelector,
+			PublicURI:            publicURI,
+			RoutePath:            routePath,
+			StorageRef:           storageRef,
+			ManifestJSON:         manifestJSON,
+			ManifestHash:         manifestHash,
+			TokenCount:           len(strings.Fields(req.Content)),
+			SelectedRefsJSON:     json.RawMessage(retrievalSelectedRefs),
+			PublicationID:        publicationID,
+			ProposalID:           proposalID,
+			PublicationVersionID: versionID,
+			ArtifactManifestID:   manifestID,
+			ConsentID:            consentID,
+			ReviewID:             reviewID,
+			RetrievalSourceID:    sourceID,
+			RetrievalSpanID:      spanID,
+			RetrievalManifestID:  retrievalManifestID,
+			ActivityID:           activityID,
+			AttestationID:        attestationID,
+			AttestationEvidenceJSON: json.RawMessage(mustJSON(map[string]string{
+				"route_path":           routePath,
+				"source_revision_hash": sourceRevisionHash,
+			})),
+			AccessPolicy:  sourceMetadata.AccessPolicy,
+			ExportPolicy:  sourceMetadata.ExportPolicy,
+			Now:           now,
+		}
+		for _, se := range sourceMetadata.SourceEntities {
+			graphParams.SourceEntities = append(graphParams.SourceEntities, GraphSourceEntity{
+				SourceEntityID: se.SourceEntityID,
+				Kind:           se.Kind,
+				TargetKind:     se.TargetKind,
+				TargetID:       se.TargetID,
+				DisplayPolicy:  se.DisplayPolicy,
+				OpenSurface:    se.OpenSurface,
+				EntityJSON:     se.EntityJSON,
+			})
+		}
+		for _, tr := range sourceMetadata.Transclusions {
+			graphParams.Transclusions = append(graphParams.Transclusions, GraphTransclusion{
+				SourceEntityID:     tr.SourceEntityID,
+				HostSelector:       tr.HostSelector,
+				SourceSelector:     tr.SourceSelector,
+				RelationType:       tr.RelationType,
+				DefaultDisplayMode: tr.DefaultDisplayMode,
+				SnapshotText:       tr.SnapshotText,
+				ContentHash:        tr.ContentHash,
+				EntityJSON:         tr.EntityJSON,
+			})
+		}
+		for _, cite := range externalCitations {
+			toID, ok := publicCitationTarget(cite)
+			if !ok {
+				continue
+			}
+			selector := "{}"
+			if len(cite.Selector) > 0 && json.Valid(cite.Selector) {
+				selector = string(cite.Selector)
+			}
+			state := strings.TrimSpace(cite.State)
+			if state == "" {
+				state = "candidate"
+			}
+			graphParams.Citations = append(graphParams.Citations, GraphCitation{
+				ToID:         toID,
+				RelationType: "references",
+				FromSelector: wholeSelector,
+				ToSelector:   selector,
+				State:        state,
+				EvidenceRef:  firstNonEmpty(cite.Title, toID),
+				Confidence:   0.5,
+			})
+		}
+		// Source citation edge (is_version_of)
+		graphParams.Citations = append(graphParams.Citations, GraphCitation{
+			ToID:         req.SourceRevisionID,
+			RelationType: "is_version_of",
+			FromSelector: wholeSelector,
+			ToSelector:   wholeSelector,
+			State:        "accepted",
+			EvidenceRef:  "source_revision_hash:" + sourceRevisionHash,
+			Confidence:   1.0,
+		})
+		if err := s.graphStore.PublishTextureToGraph(ctx, graphParams); err != nil {
+			// Log but don't fail — relational data is committed.
+			fmt.Fprintf(os.Stderr, "platform publish: graph dual-write failed (non-fatal): %v\n", err)
+		}
 	}
 
 	return &PublishTextureResponse{

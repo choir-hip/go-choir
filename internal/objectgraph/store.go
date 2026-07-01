@@ -15,3 +15,16 @@ type Store interface {
 	ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, error)
 	Close() error
 }
+
+// Batch is a list of object and edge mutations to apply atomically.
+type Batch struct {
+	Objects []Object
+	Edges   []Edge
+}
+
+// BatchStore is an optional interface for stores that support atomic
+// batch writes of multiple objects and edges in a single transaction.
+type BatchStore interface {
+	Store
+	PutBatch(ctx context.Context, batch Batch) error
+}
