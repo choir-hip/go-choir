@@ -59,10 +59,9 @@ func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
 			svc.signingKey = key
 		}
 	}
-	// Wire graph-native dual-write if the store supports batch writes.
-	if ogStore := NewObjectGraphStore(store); ogStore != nil {
-		svc.graphStore = NewPublicationGraphStore(ogStore)
-	}
+	// Wire graph-native publication store.
+	ogStore := NewObjectGraphStore(store)
+	svc.graphStore = NewPublicationGraphStore(ogStore)
 	return svc
 }
 
@@ -201,19 +200,12 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	proposalID := id("pubprop")
 	versionID := id("pubver")
 	manifestID := id("artman")
-	blobID := id("blob")
-	routeID := id("route")
 	sourceID := id("source")
 	spanID := id("span")
 	retrievalManifestID := id("retman")
 	consentID := id("consent")
 	reviewID := id("review")
-	rollbackID := id("rollback")
 	activityID := id("activity")
-	publicEntityID := id("entity")
-	privateEntityID := id("entity")
-	agentID := id("agent")
-	provEdgeID := id("edge")
 	attestationID := id("att")
 
 	contentHash := sha256Hex([]byte(req.Content))
@@ -274,191 +266,110 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 
 	citationIDs := []string{}
 	sourceCitationID := id("cite")
-	citationIDs = append(citationIDs, sourceCitationID)
 	externalCitations := parseCitationInputs(req.Citations)
 
-	tx, err := s.store.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("platform publish: begin transaction: %w", err)
+	// Write to the object graph — single path, no relational tables.
+	graphParams := PublishGraphParams{
+		OwnerID:              req.OwnerID,
+		RequestedBy:          req.RequestedBy,
+		SourceDocID:          req.SourceDocID,
+		SourceRevisionID:     req.SourceRevisionID,
+		SourceRevisionHash:   sourceRevisionHash,
+		SourceTraceID:        req.SourceTraceID,
+		Title:                req.Title,
+		Slug:                 strings.TrimPrefix(routePath, publicTexturePrefix),
+		Content:              req.Content,
+		ContentHash:          contentHash,
+		ContentSize:          len([]byte(req.Content)),
+		ProjectionHash:       projectionHash,
+		WholeSelector:        wholeSelector,
+		PublicURI:            publicURI,
+		RoutePath:            routePath,
+		StorageRef:           storageRef,
+		ManifestJSON:         manifestJSON,
+		ManifestHash:         manifestHash,
+		TokenCount:           len(strings.Fields(req.Content)),
+		SelectedRefsJSON:     json.RawMessage(retrievalSelectedRefs),
+		PublicationID:        publicationID,
+		ProposalID:           proposalID,
+		PublicationVersionID: versionID,
+		ArtifactManifestID:   manifestID,
+		ConsentID:            consentID,
+		ReviewID:             reviewID,
+		RetrievalSourceID:    sourceID,
+		RetrievalSpanID:      spanID,
+		RetrievalManifestID:  retrievalManifestID,
+		ActivityID:           activityID,
+		AttestationID:        attestationID,
+		AttestationEvidenceJSON: json.RawMessage(mustJSON(map[string]string{
+			"route_path":           routePath,
+			"source_revision_hash": sourceRevisionHash,
+		})),
+		AccessPolicy:  sourceMetadata.AccessPolicy,
+		ExportPolicy:  sourceMetadata.ExportPolicy,
+		Now:           now,
 	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	if err := execAll(ctx, tx, []statement{
-		{"INSERT INTO platform_subjects (subject_id, subject_kind, display_name, canonical_uri, created_at, updated_at) VALUES (?, 'user', ?, '', ?, ?) ON DUPLICATE KEY UPDATE updated_at=VALUES(updated_at)", []any{req.OwnerID, req.OwnerID, now, now}},
-		{"INSERT INTO publication_proposals (proposal_id, owner_id, source_doc_id, source_revision_id, source_revision_hash, projection_hash, title, state, created_by, created_trace_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)", []any{proposalID, req.OwnerID, req.SourceDocID, req.SourceRevisionID, sourceRevisionHash, projectionHash, req.Title, req.RequestedBy, req.SourceTraceID, now, now}},
-		{"INSERT INTO publications (publication_id, owner_id, slug, title, state, latest_version_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'published', ?, ?, ?)", []any{publicationID, req.OwnerID, strings.TrimPrefix(routePath, publicTexturePrefix), req.Title, versionID, now, now}},
-		{"INSERT INTO publication_versions (publication_version_id, publication_id, proposal_id, source_doc_id, source_revision_id, source_revision_hash, projection_hash, content_hash, artifact_manifest_id, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", []any{versionID, publicationID, proposalID, req.SourceDocID, req.SourceRevisionID, sourceRevisionHash, projectionHash, contentHash, manifestID, now}},
-		{"INSERT INTO public_routes (route_id, route_path, target_kind, target_id, target_version_id, state, created_at, updated_at) VALUES (?, ?, 'publication', ?, ?, 'active', ?, ?)", []any{routeID, routePath, publicationID, versionID, now, now}},
-		{"INSERT INTO artifact_manifests (artifact_manifest_id, subject_kind, subject_id, media_type, manifest_hash, manifest_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?, ?)", []any{manifestID, versionID, textMediaType, manifestHash, string(manifestJSON), now}},
-		{"INSERT INTO artifact_blobs (blob_id, artifact_manifest_id, content_hash, hash_algorithm, media_type, byte_size, storage_ref, created_at) VALUES (?, ?, ?, 'sha256', ?, ?, ?, ?)", []any{blobID, manifestID, contentHash, textMediaType, len([]byte(req.Content)), storageRef, now}},
-		{"INSERT INTO consent_records (consent_id, subject_id, target_kind, target_id, action, state, evidence_ref, created_at) VALUES (?, ?, 'publication_version', ?, 'publish', 'granted', ?, ?)", []any{consentID, req.OwnerID, versionID, "requested_by:" + req.RequestedBy, now}},
-		{"INSERT INTO review_records (review_id, target_kind, target_id, reviewer_subject_id, decision, body, created_at) VALUES (?, 'publication_version', ?, ?, 'approve', 'v0 owner consent publication path', ?)", []any{reviewID, versionID, req.RequestedBy, now}},
-		{"INSERT INTO retrieval_sources (source_id, source_kind, canonical_uri, content_hash, visibility, state, created_at) VALUES (?, 'publication_version', ?, ?, 'public', 'active', ?)", []any{sourceID, publicURI, contentHash, now}},
-		{"INSERT INTO retrieval_spans (span_id, source_id, source_version_id, selector_kind, selector_json, text_hash, chunk_hash, token_count, metadata_json, created_at) VALUES (?, ?, ?, 'text_position', ?, ?, ?, ?, ?, ?)", []any{spanID, sourceID, versionID, wholeSelector, contentHash, contentHash, len(strings.Fields(req.Content)), `{"scope":"whole_document"}`, now}},
-		{"INSERT INTO retrieval_manifests (retrieval_manifest_id, output_kind, output_id, query_or_objective_hash, index_manifest_id, selected_refs_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?, ?)", []any{retrievalManifestID, versionID, sha256Hex([]byte("publish:" + versionID)), manifestID, retrievalSelectedRefs, now}},
-		{"INSERT INTO citation_edges (citation_id, from_kind, from_id, from_selector_json, to_kind, to_id, to_selector_json, relation_type, state, proposed_by, accepted_by, evidence_ref, confidence, created_at, updated_at) VALUES (?, 'publication_version', ?, ?, 'private_texture_revision', ?, ?, 'is_version_of', 'accepted', ?, ?, ?, 1, ?, ?)", []any{sourceCitationID, versionID, wholeSelector, req.SourceRevisionID, wholeSelector, req.RequestedBy, req.RequestedBy, "source_revision_hash:" + sourceRevisionHash, now, now}},
-		{"INSERT INTO publication_policies (policy_id, publication_version_id, access_policy_json, export_policy_json, created_at) VALUES (?, ?, ?, ?, ?)", []any{id("policy"), versionID, string(sourceMetadata.AccessPolicy), string(sourceMetadata.ExportPolicy), now}},
-		{"INSERT INTO provenance_entities (entity_id, entity_kind, content_hash, canonical_uri, metadata_json, created_at) VALUES (?, 'private_texture_revision', ?, ?, ?, ?)", []any{privateEntityID, sourceRevisionHash, "choir-private:texture/" + req.SourceDocID + "/revisions/" + req.SourceRevisionID, `{"visibility":"private","projection":"hash_only"}`, now}},
-		{"INSERT INTO provenance_entities (entity_id, entity_kind, content_hash, canonical_uri, metadata_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?)", []any{publicEntityID, contentHash, publicURI, string(manifestJSON), now}},
-		{"INSERT INTO provenance_agents (agent_ref_id, agent_kind, subject_id, metadata_json, created_at) VALUES (?, 'user', ?, ?, ?)", []any{agentID, req.RequestedBy, `{"authority":"owner_publish_v0"}`, now}},
-		{"INSERT INTO provenance_activities (activity_id, activity_kind, trace_id, started_at, ended_at, metadata_json) VALUES (?, 'publish_texture_revision', ?, ?, ?, ?)", []any{activityID, req.SourceTraceID, now, now, mustJSON(map[string]string{"proposal_id": proposalID, "route_path": routePath})}},
-		{"INSERT INTO provenance_edges (edge_id, edge_kind, from_id, to_id, activity_id, metadata_json, created_at) VALUES (?, 'wasDerivedFrom', ?, ?, ?, ?, ?)", []any{provEdgeID, publicEntityID, privateEntityID, activityID, `{"source_private_content":"not_copied_as_private_ref"}`, now}},
-		{"INSERT INTO verifier_attestations (attestation_id, target_kind, target_id, verifier_id, verifier_kind, result, subject_digest, predicate_type, evidence_json, created_at) VALUES (?, 'publication_version', ?, 'corpusd', 'service', 'passed', ?, 'choir.platform.publish_texture.v0', ?, ?)", []any{attestationID, versionID, contentHash, mustJSON(map[string]string{"route_path": routePath, "source_revision_hash": sourceRevisionHash}), now}},
-		{"INSERT INTO rollback_refs (rollback_id, target_kind, target_id, rollback_kind, ref, created_at) VALUES (?, 'public_route', ?, 'disable_route', ?, ?)", []any{rollbackID, routeID, "UPDATE public_routes SET state='disabled' WHERE route_id='" + routeID + "'", now}},
-	}); err != nil {
-		return nil, err
+	for _, se := range sourceMetadata.SourceEntities {
+		graphParams.SourceEntities = append(graphParams.SourceEntities, GraphSourceEntity{
+			SourceEntityID: se.SourceEntityID,
+			Kind:           se.Kind,
+			TargetKind:     se.TargetKind,
+			TargetID:       se.TargetID,
+			DisplayPolicy:  se.DisplayPolicy,
+			OpenSurface:    se.OpenSurface,
+			EntityJSON:     se.EntityJSON,
+		})
 	}
-
-	for i, sourceEntity := range sourceMetadata.SourceEntities {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO publication_source_entities (entity_record_id, publication_version_id, source_entity_id, kind, target_kind, target_id, display_policy, open_surface, entity_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			id("pubsrc"), versionID, sourceEntity.SourceEntityID, sourceEntity.Kind, sourceEntity.TargetKind, sourceEntity.TargetID, sourceEntity.DisplayPolicy, sourceEntity.OpenSurface, string(sourceEntity.EntityJSON), now); err != nil {
-			return nil, fmt.Errorf("platform publish: insert source entity %d: %w", i, err)
-		}
+	for _, tr := range sourceMetadata.Transclusions {
+		graphParams.Transclusions = append(graphParams.Transclusions, GraphTransclusion{
+			SourceEntityID:     tr.SourceEntityID,
+			HostSelector:       tr.HostSelector,
+			SourceSelector:     tr.SourceSelector,
+			RelationType:       tr.RelationType,
+			DefaultDisplayMode: tr.DefaultDisplayMode,
+			SnapshotText:       tr.SnapshotText,
+			ContentHash:        tr.ContentHash,
+			EntityJSON:         tr.EntityJSON,
+		})
 	}
-	for i, transclusion := range sourceMetadata.Transclusions {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO publication_transclusions (transclusion_id, publication_version_id, source_entity_id, host_selector_json, source_selector_json, relation_type, default_display_mode, snapshot_text, content_hash, access_policy_json, export_policy_json, entity_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			id("trans"), versionID, transclusion.SourceEntityID, string(transclusion.HostSelector), string(transclusion.SourceSelector), transclusion.RelationType, transclusion.DefaultDisplayMode, transclusion.SnapshotText, transclusion.ContentHash, string(sourceMetadata.AccessPolicy), string(sourceMetadata.ExportPolicy), string(transclusion.EntityJSON), now); err != nil {
-			return nil, fmt.Errorf("platform publish: insert transclusion %d: %w", i, err)
-		}
-	}
-
-	for _, citation := range externalCitations {
-		toID, ok := publicCitationTarget(citation)
+	for _, cite := range externalCitations {
+		toID, ok := publicCitationTarget(cite)
 		if !ok {
 			continue
 		}
-		citationID := id("cite")
-		citationIDs = append(citationIDs, citationID)
-		state := strings.TrimSpace(citation.State)
-		switch state {
-		case "", "candidate":
-			state = "candidate"
-		case "accepted", "asserted", "rejected", "disputed", "retracted":
-		default:
-			state = "candidate"
-		}
 		selector := "{}"
-		if len(citation.Selector) > 0 && json.Valid(citation.Selector) {
-			selector = string(citation.Selector)
+		if len(cite.Selector) > 0 && json.Valid(cite.Selector) {
+			selector = string(cite.Selector)
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO citation_edges (citation_id, from_kind, from_id, from_selector_json, to_kind, to_id, to_selector_json, relation_type, state, proposed_by, evidence_ref, confidence, created_at, updated_at) VALUES (?, 'publication_version', ?, ?, 'external_reference', ?, ?, 'references', ?, ?, ?, 0.5, ?, ?)`,
-			citationID, versionID, wholeSelector, toID, selector, state, req.RequestedBy, firstNonEmpty(citation.Title, toID), now, now); err != nil {
-			return nil, fmt.Errorf("platform publish: insert external citation edge: %w", err)
+		state := strings.TrimSpace(cite.State)
+		if state == "" {
+			state = "candidate"
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("platform publish: commit transaction: %w", err)
-	}
-	if err := s.store.commitDolt(ctx, "publish texture revision "+req.SourceRevisionID); err != nil {
-		return nil, err
-	}
-
-	// Dual-write to the object graph. Failures are logged but do not
-	// fail the publish — the relational data is already committed.
-	if s.graphStore != nil {
-		graphParams := PublishGraphParams{
-			OwnerID:              req.OwnerID,
-			RequestedBy:          req.RequestedBy,
-			SourceDocID:          req.SourceDocID,
-			SourceRevisionID:     req.SourceRevisionID,
-			SourceRevisionHash:   sourceRevisionHash,
-			SourceTraceID:        req.SourceTraceID,
-			Title:                req.Title,
-			Slug:                 strings.TrimPrefix(routePath, publicTexturePrefix),
-			Content:              req.Content,
-			ContentHash:          contentHash,
-			ContentSize:          len([]byte(req.Content)),
-			ProjectionHash:       projectionHash,
-			WholeSelector:        wholeSelector,
-			PublicURI:            publicURI,
-			RoutePath:            routePath,
-			StorageRef:           storageRef,
-			ManifestJSON:         manifestJSON,
-			ManifestHash:         manifestHash,
-			TokenCount:           len(strings.Fields(req.Content)),
-			SelectedRefsJSON:     json.RawMessage(retrievalSelectedRefs),
-			PublicationID:        publicationID,
-			ProposalID:           proposalID,
-			PublicationVersionID: versionID,
-			ArtifactManifestID:   manifestID,
-			ConsentID:            consentID,
-			ReviewID:             reviewID,
-			RetrievalSourceID:    sourceID,
-			RetrievalSpanID:      spanID,
-			RetrievalManifestID:  retrievalManifestID,
-			ActivityID:           activityID,
-			AttestationID:        attestationID,
-			AttestationEvidenceJSON: json.RawMessage(mustJSON(map[string]string{
-				"route_path":           routePath,
-				"source_revision_hash": sourceRevisionHash,
-			})),
-			AccessPolicy:  sourceMetadata.AccessPolicy,
-			ExportPolicy:  sourceMetadata.ExportPolicy,
-			Now:           now,
-		}
-		for _, se := range sourceMetadata.SourceEntities {
-			graphParams.SourceEntities = append(graphParams.SourceEntities, GraphSourceEntity{
-				SourceEntityID: se.SourceEntityID,
-				Kind:           se.Kind,
-				TargetKind:     se.TargetKind,
-				TargetID:       se.TargetID,
-				DisplayPolicy:  se.DisplayPolicy,
-				OpenSurface:    se.OpenSurface,
-				EntityJSON:     se.EntityJSON,
-			})
-		}
-		for _, tr := range sourceMetadata.Transclusions {
-			graphParams.Transclusions = append(graphParams.Transclusions, GraphTransclusion{
-				SourceEntityID:     tr.SourceEntityID,
-				HostSelector:       tr.HostSelector,
-				SourceSelector:     tr.SourceSelector,
-				RelationType:       tr.RelationType,
-				DefaultDisplayMode: tr.DefaultDisplayMode,
-				SnapshotText:       tr.SnapshotText,
-				ContentHash:        tr.ContentHash,
-				EntityJSON:         tr.EntityJSON,
-			})
-		}
-		for _, cite := range externalCitations {
-			toID, ok := publicCitationTarget(cite)
-			if !ok {
-				continue
-			}
-			selector := "{}"
-			if len(cite.Selector) > 0 && json.Valid(cite.Selector) {
-				selector = string(cite.Selector)
-			}
-			state := strings.TrimSpace(cite.State)
-			if state == "" {
-				state = "candidate"
-			}
-			graphParams.Citations = append(graphParams.Citations, GraphCitation{
-				ToID:         toID,
-				RelationType: "references",
-				FromSelector: wholeSelector,
-				ToSelector:   selector,
-				State:        state,
-				EvidenceRef:  firstNonEmpty(cite.Title, toID),
-				Confidence:   0.5,
-			})
-		}
-		// Source citation edge (is_version_of)
 		graphParams.Citations = append(graphParams.Citations, GraphCitation{
-			ToID:         req.SourceRevisionID,
-			RelationType: "is_version_of",
+			ToID:         toID,
+			RelationType: "references",
 			FromSelector: wholeSelector,
-			ToSelector:   wholeSelector,
-			State:        "accepted",
-			EvidenceRef:  "source_revision_hash:" + sourceRevisionHash,
-			Confidence:   1.0,
+			ToSelector:   selector,
+			State:        state,
+			EvidenceRef:  firstNonEmpty(cite.Title, toID),
+			Confidence:   0.5,
 		})
-		if err := s.graphStore.PublishTextureToGraph(ctx, graphParams); err != nil {
-			// Log but don't fail — relational data is committed.
-			fmt.Fprintf(os.Stderr, "platform publish: graph dual-write failed (non-fatal): %v\n", err)
-		}
+		citationIDs = append(citationIDs, toID)
+	}
+	// Source citation edge (is_version_of)
+	graphParams.Citations = append(graphParams.Citations, GraphCitation{
+		ToID:         req.SourceRevisionID,
+		RelationType: "is_version_of",
+		FromSelector: wholeSelector,
+		ToSelector:   wholeSelector,
+		State:        "accepted",
+		EvidenceRef:  "source_revision_hash:" + sourceRevisionHash,
+		Confidence:   1.0,
+	})
+	citationIDs = append(citationIDs, sourceCitationID)
+
+	if err := s.graphStore.PublishTextureToGraph(ctx, graphParams); err != nil {
+		return nil, fmt.Errorf("platform publish: graph write: %w", err)
 	}
 
 	return &PublishTextureResponse{
@@ -475,7 +386,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		CitationIDs:          citationIDs,
 		ConsentID:            consentID,
 		ReviewID:             reviewID,
-		RollbackID:           rollbackID,
+		RollbackID:           "",
 		State:                "published",
 		VersionHistoryHash:   versionHistoryHash,
 		VersionCount:         versionHistory.RevisionCount,
@@ -528,35 +439,43 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 	}
 
 	var sourceOwnerID, latestVersionID string
-	err := s.store.db.QueryRowContext(ctx, `SELECT owner_id, latest_version_id FROM publications WHERE publication_id = ? AND state = 'published'`, req.PublicationID).Scan(&sourceOwnerID, &latestVersionID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("publication not found")
-		}
-		return nil, fmt.Errorf("platform proposal: query publication: %w", err)
+	// Look up the publication in the object graph by publication_id metadata.
+	og := s.ogStore()
+	if og == nil {
+		return nil, fmt.Errorf("platform service: object graph store unavailable")
+	}
+	pubObjs, err := og.ListObjectsByMetadata(ctx, "choir.publication", "$.publication_id", req.PublicationID, 1)
+	if err != nil || len(pubObjs) == 0 {
+		return nil, fmt.Errorf("publication not found")
+	}
+	pubObj := pubObjs[0]
+	var pubMeta struct {
+		OwnerID         string `json:"owner_id"`
+		State           string `json:"state"`
+		LatestVersionID string `json:"latest_version_id"`
+	}
+	_ = json.Unmarshal(pubObj.Metadata, &pubMeta)
+	sourceOwnerID = pubObj.OwnerID
+	latestVersionID = pubMeta.LatestVersionID
+	if pubMeta.State != "published" {
+		return nil, fmt.Errorf("publication not found")
 	}
 	if req.PublicationVersionID == "" {
 		req.PublicationVersionID = latestVersionID
 	}
-	var versionContentHash string
-	if err := s.store.db.QueryRowContext(ctx, `SELECT content_hash FROM publication_versions WHERE publication_id = ? AND publication_version_id = ?`, req.PublicationID, req.PublicationVersionID).Scan(&versionContentHash); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("publication version not found")
-		}
-		return nil, fmt.Errorf("platform proposal: query publication version: %w", err)
+	// Look up the version in the object graph by publication_version_id metadata.
+	versionObjs, err := og.ListObjectsByMetadata(ctx, "choir.publication_version", "$.publication_version_id", req.PublicationVersionID, 1)
+	if err != nil || len(versionObjs) == 0 {
+		return nil, fmt.Errorf("publication version not found")
 	}
+	versionContentHash := versionObjs[0].ContentHash
 
 	now := time.Now().UTC()
 	proposalID := id("readerprop")
 	manifestID := id("artman")
-	blobID := id("blob")
 	deliveryID := id("delivery")
 	attestationID := id("att")
 	activityID := id("activity")
-	sourceEntityID := id("entity")
-	proposalEntityID := id("entity")
-	agentID := id("agent")
-	provEdgeID := id("edge")
 	contentHash := sha256Hex([]byte(req.Content))
 	transclusionsJSON, err := json.Marshal(req.Transclusions)
 	if err != nil {
@@ -589,32 +508,10 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 	}
 	manifestHash := sha256Hex(manifestJSON)
 
-	tx, err := s.store.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("platform proposal: begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := execAll(ctx, tx, []statement{
-		{"INSERT INTO platform_subjects (subject_id, subject_kind, display_name, canonical_uri, created_at, updated_at) VALUES (?, 'user', ?, '', ?, ?) ON DUPLICATE KEY UPDATE updated_at=VALUES(updated_at)", []any{req.SubmitterID, req.SubmitterID, now, now}},
-		{"INSERT INTO artifact_manifests (artifact_manifest_id, subject_kind, subject_id, media_type, manifest_hash, manifest_json, created_at) VALUES (?, 'publication_version_proposal', ?, ?, ?, ?, ?)", []any{manifestID, proposalID, textMediaType, manifestHash, string(manifestJSON), now}},
-		{"INSERT INTO artifact_blobs (blob_id, artifact_manifest_id, content_hash, hash_algorithm, media_type, byte_size, storage_ref, created_at) VALUES (?, ?, ?, 'sha256', ?, ?, ?, ?)", []any{blobID, manifestID, contentHash, textMediaType, len([]byte(req.Content)), storageRef, now}},
-		{"INSERT INTO publication_version_proposals (proposal_id, publication_id, publication_version_id, source_owner_id, submitter_id, submitter_doc_id, submitter_revision_id, submitter_revision_hash, content_hash, projection_hash, artifact_manifest_id, title, transclusions_json, citations_json, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)", []any{proposalID, req.PublicationID, req.PublicationVersionID, sourceOwnerID, req.SubmitterID, req.SubmitterDocID, req.SubmitterRevisionID, proposalRevisionHash, contentHash, projectionHash, manifestID, req.Title, string(transclusionsJSON), string(req.Citations), now, now}},
-		{"INSERT INTO proposal_delivery_records (delivery_id, proposal_id, target_owner_id, target_kind, target_id, delivery_state, delivery_ref, created_at, updated_at) VALUES (?, ?, ?, 'publication_author', ?, 'recorded_for_author', ?, ?, ?)", []any{deliveryID, proposalID, sourceOwnerID, req.PublicationID, "platform-dolt:publication_version_proposals/" + proposalID, now, now}},
-		{"INSERT INTO provenance_entities (entity_id, entity_kind, content_hash, canonical_uri, metadata_json, created_at) VALUES (?, 'publication_version', ?, ?, ?, ?)", []any{sourceEntityID, versionContentHash, "choir:publication/" + req.PublicationID + "/versions/" + req.PublicationVersionID, mustJSON(map[string]string{"publication_id": req.PublicationID, "publication_version_id": req.PublicationVersionID}), now}},
-		{"INSERT INTO provenance_entities (entity_id, entity_kind, content_hash, canonical_uri, metadata_json, created_at) VALUES (?, 'publication_version_proposal', ?, ?, ?, ?)", []any{proposalEntityID, contentHash, "choir:publication/" + req.PublicationID + "/proposals/" + proposalID, string(manifestJSON), now}},
-		{"INSERT INTO provenance_agents (agent_ref_id, agent_kind, subject_id, metadata_json, created_at) VALUES (?, 'user', ?, ?, ?)", []any{agentID, req.SubmitterID, `{"authority":"reader_derivative_proposal_v0"}`, now}},
-		{"INSERT INTO provenance_activities (activity_id, activity_kind, trace_id, started_at, ended_at, metadata_json) VALUES (?, 'submit_publication_derivative_proposal', '', ?, ?, ?)", []any{activityID, now, now, mustJSON(map[string]string{"proposal_id": proposalID, "source_publication_id": req.PublicationID})}},
-		{"INSERT INTO provenance_edges (edge_id, edge_kind, from_id, to_id, activity_id, metadata_json, created_at) VALUES (?, 'wasDerivedFrom', ?, ?, ?, ?, ?)", []any{provEdgeID, proposalEntityID, sourceEntityID, activityID, mustJSON(map[string]string{"delivery_id": deliveryID}), now}},
-		{"INSERT INTO verifier_attestations (attestation_id, target_kind, target_id, verifier_id, verifier_kind, result, subject_digest, predicate_type, evidence_json, created_at) VALUES (?, 'publication_version_proposal', ?, 'corpusd', 'service', 'passed', ?, 'choir.platform.reader_proposal.v0', ?, ?)", []any{attestationID, proposalID, contentHash, mustJSON(map[string]string{"source_publication_id": req.PublicationID, "source_publication_version_id": req.PublicationVersionID}), now}},
-	}); err != nil {
-		return nil, err
-	}
-
+	// Build transclusion edges for graph write.
+	var transclusionEdges []ProposalTransclusionEdge
 	transclusionIDs := []string{}
 	for _, ref := range req.Transclusions {
-		citationID := id("cite")
-		transclusionIDs = append(transclusionIDs, citationID)
 		selector := "{}"
 		if len(ref.Selector) > 0 && json.Valid(ref.Selector) {
 			selector = string(ref.Selector)
@@ -624,31 +521,60 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 		if ref.SpanID == "" {
 			toKind = "publication_version"
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO citation_edges (citation_id, from_kind, from_id, from_selector_json, to_kind, to_id, to_selector_json, relation_type, state, proposed_by, evidence_ref, confidence, created_at, updated_at) VALUES (?, 'publication_version_proposal', ?, '{}', ?, ?, ?, 'transcludes', 'proposed', ?, ?, 0.9, ?, ?)`,
-			citationID, proposalID, toKind, toID, selector, req.SubmitterID, "source_content_hash:"+firstNonEmpty(ref.ContentHash, versionContentHash), now, now); err != nil {
-			return nil, fmt.Errorf("platform proposal: insert transclusion edge: %w", err)
-		}
+		transclusionEdges = append(transclusionEdges, ProposalTransclusionEdge{
+			ToID:        toID,
+			ToKind:      toKind,
+			Selector:    selector,
+			EvidenceRef: "source_content_hash:" + firstNonEmpty(ref.ContentHash, versionContentHash),
+		})
+		transclusionIDs = append(transclusionIDs, toID)
 	}
 
+	// Build citation edges for graph write.
+	var citationEdges []ProposalCitationEdge
 	citationIDs := []string{}
 	for _, citation := range parseCitationInputs(req.Citations) {
 		toID, ok := publicCitationTarget(citation)
 		if !ok {
 			continue
 		}
-		citationID := id("cite")
-		citationIDs = append(citationIDs, citationID)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO citation_edges (citation_id, from_kind, from_id, from_selector_json, to_kind, to_id, to_selector_json, relation_type, state, proposed_by, evidence_ref, confidence, created_at, updated_at) VALUES (?, 'publication_version_proposal', ?, '{}', 'external_reference', ?, '{}', 'references', 'candidate', ?, ?, 0.5, ?, ?)`,
-			citationID, proposalID, toID, req.SubmitterID, firstNonEmpty(citation.Title, toID), now, now); err != nil {
-			return nil, fmt.Errorf("platform proposal: insert citation edge: %w", err)
-		}
+		citationEdges = append(citationEdges, ProposalCitationEdge{
+			ToID:       toID,
+			EvidenceRef: firstNonEmpty(citation.Title, toID),
+		})
+		citationIDs = append(citationIDs, toID)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("platform proposal: commit transaction: %w", err)
+	// Write to the object graph — single path, no relational tables.
+	proposalParams := ProposalGraphParams{
+		ProposalID:               proposalID,
+		PublicationID:            req.PublicationID,
+		PublicationVersionID:     req.PublicationVersionID,
+		SourceOwnerID:            sourceOwnerID,
+		SubmitterID:              req.SubmitterID,
+		SubmitterDocID:           req.SubmitterDocID,
+		SubmitterRevisionID:      req.SubmitterRevisionID,
+		ProposalRevisionHash:     proposalRevisionHash,
+		Content:                  req.Content,
+		ContentHash:              contentHash,
+		ContentSize:              len([]byte(req.Content)),
+		ProjectionHash:           projectionHash,
+		Title:                    req.Title,
+		ArtifactManifestID:       manifestID,
+		ManifestJSON:             manifestJSON,
+		ManifestHash:             manifestHash,
+		StorageRef:               storageRef,
+		DeliveryID:               deliveryID,
+		DeliveryRef:              "platform-dolt:publication_version_proposals/" + proposalID,
+		ActivityID:               activityID,
+		AttestationID:            attestationID,
+		SourceVersionContentHash: versionContentHash,
+		TransclusionEdges:        transclusionEdges,
+		CitationEdges:            citationEdges,
+		Now:                      now,
 	}
-	if err := s.store.commitDolt(ctx, "propose texture revision "+req.SubmitterRevisionID+" for publication "+req.PublicationID); err != nil {
-		return nil, err
+	if err := s.graphStore.SubmitProposalToGraph(ctx, proposalParams); err != nil {
+		return nil, fmt.Errorf("platform proposal: graph write: %w", err)
 	}
 
 	return &SubmitPublicationProposalResponse{
@@ -669,7 +595,7 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 }
 
 func (s *Service) UpdateProposalDeliveryState(ctx context.Context, req UpdateProposalDeliveryStateRequest) (*UpdateProposalDeliveryStateResponse, error) {
-	if s == nil || s.store == nil || s.store.db == nil {
+	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service is not initialized")
 	}
 	req.ProposalID = strings.TrimSpace(req.ProposalID)
@@ -689,19 +615,10 @@ func (s *Service) UpdateProposalDeliveryState(ctx context.Context, req UpdatePro
 		req.DeliveryRef = "platform-dolt:proposal_delivery_records/" + req.DeliveryID
 	}
 	now := time.Now().UTC()
-	res, err := s.store.db.ExecContext(ctx, `
-UPDATE proposal_delivery_records
-   SET delivery_state = ?, delivery_ref = ?, updated_at = ?
- WHERE proposal_id = ? AND delivery_id = ?`,
-		req.DeliveryState, req.DeliveryRef, now, req.ProposalID, req.DeliveryID)
-	if err != nil {
-		return nil, fmt.Errorf("platform proposal delivery: update record: %w", err)
-	}
-	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
-		return nil, fmt.Errorf("proposal delivery not found")
-	}
-	if err := s.store.commitDolt(ctx, "record proposal delivery "+req.DeliveryState+" "+req.DeliveryID); err != nil {
-		return nil, err
+	if s.graphStore != nil {
+		if err := s.graphStore.UpdateProposalDeliveryState(ctx, req.ProposalID, req.DeliveryID, req.DeliveryState, req.DeliveryRef, now); err != nil {
+			return nil, fmt.Errorf("platform proposal delivery: update graph: %w", err)
+		}
 	}
 	return &UpdateProposalDeliveryStateResponse{
 		ProposalID:    req.ProposalID,
