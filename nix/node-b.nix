@@ -250,7 +250,7 @@ in
         default_range = "";
       };
       server = {
-        secret_key = "@SEARXNG_SECRET@";
+        secret_key = "$SEARXNG_SECRET";
         bind_address = "127.0.0.1";
         port = 8888;
         limiter = false;
