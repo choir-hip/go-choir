@@ -1,6 +1,6 @@
 // Package gateway implements web search functionality with multi-provider
-// rotation and fallback. Supports Tavily, Brave, Parallel, Exa, Serper, and
-// SerpAPI search APIs.
+// rotation and fallback. Supports SearXNG (self-hosted, free), Tavily, Brave,
+// Parallel, Exa, Serper, and SerpAPI search APIs.
 //
 // The SearchClient uses round-robin rotation across available providers and
 // queries more than one provider per request by default for result diversity.
@@ -129,6 +129,7 @@ type SearchClient struct {
 // providers if one fails.
 func NewSearchClient() *SearchClient {
 	providers := []SearchProvider{
+		&SearXNGProvider{},
 		&TavilyProvider{},
 		&BraveProvider{},
 		&ParallelProvider{},
@@ -169,7 +170,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 		return nil, fmt.Errorf("query is required")
 	}
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, or SERPAPI_API_KEY)")
+		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, or SERPAPI_API_KEY)")
 	}
 	return c.searchViaPlane(ctx, req)
 }
@@ -201,6 +202,8 @@ func normalizeSearchResultURL(raw string) string {
 
 func searchProviderEndpoint(provider string) string {
 	switch strings.TrimSpace(provider) {
+	case "searxng":
+		return os.Getenv("SEARXNG_URL")
 	case "tavily":
 		return "https://api.tavily.com/search"
 	case "brave":
@@ -224,6 +227,99 @@ func truncateSearchAttemptError(err error) string {
 		return msg[:240] + "..."
 	}
 	return msg
+}
+
+// --- SearXNG Provider ---
+
+// SearXNGProvider implements search using a self-hosted SearXNG instance.
+// SearXNG is a free meta-search engine that aggregates results from Google,
+// Bing, DuckDuckGo, and 70+ other engines. It requires no API key — only a
+// SEARXNG_URL env var pointing to the instance (e.g. http://localhost:8888).
+// The instance must have JSON format enabled in settings.yml.
+type SearXNGProvider struct {
+	httpClient *http.Client
+}
+
+func (p *SearXNGProvider) Name() string { return "searxng" }
+
+func (p *SearXNGProvider) IsAvailable() bool {
+	return strings.TrimSpace(os.Getenv("SEARXNG_URL")) != ""
+}
+
+func (p *SearXNGProvider) http() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
+func (p *SearXNGProvider) Search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("SEARXNG_URL")), "/")
+	if baseURL == "" {
+		return nil, fmt.Errorf("SEARXNG_URL not set")
+	}
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+
+	u := fmt.Sprintf("%s/search?q=%s&format=json&pageno=1", baseURL, url.QueryEscape(query))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := p.http().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %s: %s", resp.Status, truncateError(bodyBytes))
+	}
+
+	return parseSearXNGResults(bodyBytes, maxResults)
+}
+
+func parseSearXNGResults(data []byte, maxResults int) ([]SearchResult, error) {
+	var result struct {
+		Results []struct {
+			URL           string   `json:"url"`
+			Title         string   `json:"title"`
+			Content       string   `json:"content"`
+			PublishedDate string   `json:"publishedDate"`
+			Engines       []string `json:"engines"`
+			Score         float64  `json:"score"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	results := make([]SearchResult, 0, len(result.Results))
+	for _, r := range result.Results {
+		if r.URL == "" {
+			continue
+		}
+		results = append(results, SearchResult{
+			Title:       r.Title,
+			URL:         r.URL,
+			Snippet:     r.Content,
+			PublishedAt: r.PublishedDate,
+			Score:       r.Score,
+		})
+		if len(results) >= maxResults {
+			break
+		}
+	}
+	return results, nil
 }
 
 // --- Parallel Provider ---
@@ -760,7 +856,7 @@ func (p *SerpAPIProvider) Search(ctx context.Context, query string, maxResults i
 
 func parseSerpAPIResults(data []byte) ([]SearchResult, error) {
 	var envelope struct {
-		Error string `json:"error"`
+		Error   string `json:"error"`
 		Organic []struct {
 			Title   string `json:"title"`
 			Link    string `json:"link"`
