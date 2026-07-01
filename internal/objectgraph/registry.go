@@ -162,6 +162,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "reviews"},
 		{Kind: "contains_span"},
 		{Kind: "has_retrieval_manifest"},
+		{Kind: "has_retrieval_source"},
 		{Kind: "references_entity"},
 		{Kind: "transcludes"},
 		{Kind: "transcludes_from"},

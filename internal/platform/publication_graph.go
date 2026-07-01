@@ -11,18 +11,15 @@ import (
 
 // PublicationGraphStore writes publication data as objects + edges in the
 // object graph, replacing the relational publication tables. It is the
-// graph-native implementation of the publication layer.
-//
-// During the migration period, the Service dual-writes to both the
-// relational tables and the object graph. Once verified, the relational
-// tables will be dropped.
+// graph-native implementation of the publication layer — the single write
+// and read path for all publication data.
 type PublicationGraphStore struct {
-	store objectgraph.BatchStore
+	store *ObjectGraphStore
 }
 
 // NewPublicationGraphStore creates a graph-native publication store backed
-// by the given BatchStore (typically the platform ObjectGraphStore).
-func NewPublicationGraphStore(s objectgraph.BatchStore) *PublicationGraphStore {
+// by the given ObjectGraphStore.
+func NewPublicationGraphStore(s *ObjectGraphStore) *PublicationGraphStore {
 	return &PublicationGraphStore{store: s}
 }
 
@@ -111,7 +108,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			"title":   params.Title,
 			"state":   "published",
 		})),
-		Metadata:  mustJSONRaw(map[string]any{"handle": "", "slug": params.Slug, "title": params.Title, "state": "published", "latest_version_id": params.PublicationVersionID}),
+		Metadata:  mustJSONRaw(map[string]any{"handle": "", "publication_id": params.PublicationID, "slug": params.Slug, "title": params.Title, "state": "published", "latest_version_id": params.PublicationVersionID}),
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
@@ -130,6 +127,8 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		ContentHash: params.ContentHash,
 		Metadata: mustJSONRaw(map[string]any{
 			"edition_label":          "v1",
+			"publication_id":         params.PublicationID,
+			"publication_version_id": params.PublicationVersionID,
 			"source_doc_id":          params.SourceDocID,
 			"source_revision_id":     params.SourceRevisionID,
 			"source_revision_hash":   params.SourceRevisionHash,
@@ -196,7 +195,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		Metadata: mustJSONRaw(map[string]any{
 			"hash_algorithm":       "sha256",
 			"media_type":           "text/plain",
-			"byte_size":            fmt.Sprintf("%d", params.ContentSize),
+			"byte_size":            params.ContentSize,
 			"storage_ref":          params.StorageRef,
 			"artifact_manifest_id": params.ArtifactManifestID,
 		}),
@@ -259,6 +258,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		OwnerID:     params.OwnerID,
 		ContentHash: params.ContentHash,
 		Metadata: mustJSONRaw(map[string]any{
+			"source_id":      params.RetrievalSourceID,
 			"source_kind":    "publication_version",
 			"canonical_uri":  params.PublicURI,
 			"visibility":     "public",
@@ -286,7 +286,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			"selector_json":     params.WholeSelector,
 			"text_hash":         params.ContentHash,
 			"chunk_hash":        params.ContentHash,
-			"token_count":       fmt.Sprintf("%d", params.TokenCount),
+			"token_count":       params.TokenCount,
 			"scope":             "whole_document",
 		}),
 		CreatedAt: now,
@@ -466,11 +466,12 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			ContentHash: objectgraph.SHA256(se.EntityJSON),
 			Body:        se.EntityJSON,
 			Metadata: mustJSONRaw(map[string]any{
-				"kind":           se.Kind,
-				"target_kind":    se.TargetKind,
-				"target_id":      se.TargetID,
-				"display_policy": se.DisplayPolicy,
-				"open_surface":   se.OpenSurface,
+				"source_entity_id": se.SourceEntityID,
+				"kind":             se.Kind,
+				"target_kind":      se.TargetKind,
+				"target_id":        se.TargetID,
+				"display_policy":   se.DisplayPolicy,
+				"open_surface":     se.OpenSurface,
 			}),
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -526,7 +527,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		// version -> manifest
 		makeEdge(versionID, manifestID, "has_manifest", now, mustJSONRaw(map[string]any{"media_type": "text/plain"})),
 		// manifest -> blob
-		makeEdge(manifestID, blobID, "contains_blob", now, mustJSONRaw(map[string]any{"media_type": "text/plain", "byte_size": fmt.Sprintf("%d", params.ContentSize)})),
+		makeEdge(manifestID, blobID, "contains_blob", now, mustJSONRaw(map[string]any{"media_type": "text/plain", "byte_size": params.ContentSize})),
 		// subject -> consent
 		makeEdge(subjectID, consentID, "granted_consent", now, mustJSONRaw(map[string]any{"action": "publish", "state": "granted"})),
 		// consent -> version
@@ -536,7 +537,11 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		// review -> version
 		makeEdge(reviewID, versionID, "reviews", now, mustJSONRaw(map[string]any{"decision": "approve"})),
 		// source -> span
-		makeEdge(retrievalSourceID, retrievalSpanID, "contains_span", now, mustJSONRaw(map[string]any{"selector_kind": "text_position", "token_count": fmt.Sprintf("%d", params.TokenCount)})),
+		makeEdge(retrievalSourceID, retrievalSpanID, "contains_span", now, mustJSONRaw(map[string]any{"selector_kind": "text_position", "token_count": params.TokenCount})),
+		// version -> span (so read path can find spans from the version)
+		makeEdge(versionID, retrievalSpanID, "contains_span", now, mustJSONRaw(map[string]any{"selector_kind": "text_position", "token_count": params.TokenCount})),
+		// version -> retrieval source
+		makeEdge(versionID, retrievalSourceID, "has_retrieval_source", now, mustJSONRaw(map[string]any{})),
 		// version -> retrieval manifest
 		makeEdge(versionID, retrievalManifestID, "has_retrieval_manifest", now, mustJSONRaw(map[string]any{})),
 		// subject -> provenance agent
@@ -561,7 +566,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			"state":              cite.State,
 			"proposed_by":        params.RequestedBy,
 			"evidence_ref":       cite.EvidenceRef,
-			"confidence":         fmt.Sprintf("%.1f", cite.Confidence),
+			"confidence":         cite.Confidence,
 		}))
 		batch.Edges = append(batch.Edges, citeEdge)
 	}
@@ -671,6 +676,318 @@ func makeEdge(fromID, toID string, kind objectgraph.EdgeKind, now time.Time, met
 		Metadata:  metadata,
 		CreatedAt: now,
 	}
+}
+
+// SubmitProposalToGraph writes a reader-submitted publication proposal
+// as objects + edges in the object graph.
+func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, params ProposalGraphParams) error {
+	if p == nil || p.store == nil {
+		return fmt.Errorf("publication graph: nil store")
+	}
+
+	now := params.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+
+	batch := objectgraph.Batch{}
+
+	// --- Subject (submitter) ---
+	subjectID, _ := objectgraph.BuildCanonicalID("choir.subject", params.SubmitterID, "self")
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: subjectID,
+		ObjectKind:  "choir.subject",
+		OwnerID:     params.SubmitterID,
+		ContentHash: objectgraph.ContentHash("choir.subject", nil, mustJSONRaw(map[string]any{
+			"subject_kind":  "user",
+			"display_name":  params.SubmitterID,
+		})),
+		Metadata:  mustJSONRaw(map[string]any{"subject_kind": "user", "display_name": params.SubmitterID}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Proposal ---
+	proposalSuffix := objectgraph.StableSuffixFromKey(params.ProposalID)
+	proposalID, _ := objectgraph.BuildCanonicalID("choir.publication_proposal", params.SubmitterID, proposalSuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: proposalID,
+		ObjectKind:  "choir.publication_proposal",
+		OwnerID:     params.SubmitterID,
+		ContentHash: params.ContentHash,
+		Body:        []byte(params.Content),
+		Metadata: mustJSONRaw(map[string]any{
+			"proposal_id":                  params.ProposalID,
+			"publication_id":               params.PublicationID,
+			"publication_version_id":       params.PublicationVersionID,
+			"source_owner_id":              params.SourceOwnerID,
+			"submitter_id":                 params.SubmitterID,
+			"submitter_doc_id":             params.SubmitterDocID,
+			"submitter_revision_id":        params.SubmitterRevisionID,
+			"submitter_revision_hash":      params.ProposalRevisionHash,
+			"content_hash":                 params.ContentHash,
+			"projection_hash":              params.ProjectionHash,
+			"artifact_manifest_id":         params.ArtifactManifestID,
+			"title":                        params.Title,
+			"state":                        "proposed",
+			"delivery_id":                  params.DeliveryID,
+			"delivery_state":               "recorded_for_author",
+			"delivery_ref":                 params.DeliveryRef,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Artifact manifest ---
+	manifestSuffix := objectgraph.StableSuffixFromKey(params.ArtifactManifestID)
+	manifestID, _ := objectgraph.BuildCanonicalID("choir.artifact_manifest", params.SubmitterID, manifestSuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: manifestID,
+		ObjectKind:  "choir.artifact_manifest",
+		OwnerID:     params.SubmitterID,
+		ContentHash: params.ManifestHash,
+		Body:        params.ManifestJSON,
+		Metadata: mustJSONRaw(map[string]any{
+			"subject_kind": "publication_version_proposal",
+			"subject_id":   params.ProposalID,
+			"media_type":   "text/plain",
+			"manifest_hash": params.ManifestHash,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Artifact blob ---
+	blobSuffix := objectgraph.StableSuffixFromContent(params.ContentHash)
+	blobID, _ := objectgraph.BuildCanonicalID("choir.artifact_blob", params.SubmitterID, blobSuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: blobID,
+		ObjectKind:  "choir.artifact_blob",
+		OwnerID:     params.SubmitterID,
+		ContentHash: params.ContentHash,
+		Metadata: mustJSONRaw(map[string]any{
+			"hash_algorithm":       "sha256",
+			"media_type":           "text/plain",
+			"byte_size":            params.ContentSize,
+			"storage_ref":          params.StorageRef,
+			"artifact_manifest_id": params.ArtifactManifestID,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Provenance: source entity (the publication version being proposed against) ---
+	sourceEntitySuffix := objectgraph.StableSuffixFromContent(params.SourceVersionContentHash)
+	sourceEntityID, _ := objectgraph.BuildCanonicalID("choir.provenance_entity", params.SubmitterID, sourceEntitySuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: sourceEntityID,
+		ObjectKind:  "choir.provenance_entity",
+		OwnerID:     params.SubmitterID,
+		ContentHash: params.SourceVersionContentHash,
+		Metadata: mustJSONRaw(map[string]any{
+			"entity_kind":   "publication_version",
+			"canonical_uri": "choir:publication/" + params.PublicationID + "/versions/" + params.PublicationVersionID,
+			"publication_id": params.PublicationID,
+			"publication_version_id": params.PublicationVersionID,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Provenance: proposal entity ---
+	proposalEntitySuffix := objectgraph.StableSuffixFromContent(params.ContentHash)
+	proposalEntityID, _ := objectgraph.BuildCanonicalID("choir.provenance_entity", params.SubmitterID, proposalEntitySuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: proposalEntityID,
+		ObjectKind:  "choir.provenance_entity",
+		OwnerID:     params.SubmitterID,
+		ContentHash: params.ContentHash,
+		Body:        params.ManifestJSON,
+		Metadata: mustJSONRaw(map[string]any{
+			"entity_kind":   "publication_version_proposal",
+			"canonical_uri": "choir:publication/" + params.PublicationID + "/proposals/" + params.ProposalID,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Provenance: agent ---
+	agentSuffix := objectgraph.StableSuffixFromKey(params.SubmitterID)
+	provenanceAgentID, _ := objectgraph.BuildCanonicalID("choir.provenance_agent", params.SubmitterID, agentSuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: provenanceAgentID,
+		ObjectKind:  "choir.provenance_agent",
+		OwnerID:     params.SubmitterID,
+		ContentHash: objectgraph.ContentHash("choir.provenance_agent", nil, mustJSONRaw(map[string]any{
+			"agent_kind": "user",
+			"subject_id": params.SubmitterID,
+			"authority":  "reader_derivative_proposal_v0",
+		})),
+		Metadata:  mustJSONRaw(map[string]any{"agent_kind": "user", "subject_id": params.SubmitterID, "authority": "reader_derivative_proposal_v0"}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Provenance: activity ---
+	activitySuffix := objectgraph.StableSuffixFromKey(params.ActivityID)
+	provenanceActivityID, _ := objectgraph.BuildCanonicalID("choir.provenance_activity", params.SubmitterID, activitySuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: provenanceActivityID,
+		ObjectKind:  "choir.provenance_activity",
+		OwnerID:     params.SubmitterID,
+		ContentHash: objectgraph.ContentHash("choir.provenance_activity", nil, mustJSONRaw(map[string]any{
+			"activity_kind":         "submit_publication_derivative_proposal",
+			"started_at":            now.Format(time.RFC3339),
+			"ended_at":              now.Format(time.RFC3339),
+			"proposal_id":           params.ProposalID,
+			"source_publication_id": params.PublicationID,
+		})),
+		Metadata: mustJSONRaw(map[string]any{
+			"activity_kind":         "submit_publication_derivative_proposal",
+			"started_at":            now.Format(time.RFC3339),
+			"ended_at":              now.Format(time.RFC3339),
+			"proposal_id":           params.ProposalID,
+			"source_publication_id": params.PublicationID,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Verifier attestation ---
+	attSuffix := objectgraph.StableSuffixFromKey(params.AttestationID)
+	attestationID, _ := objectgraph.BuildCanonicalID("choir.verifier_attestation", params.SubmitterID, attSuffix)
+	batch.Objects = append(batch.Objects, objectgraph.Object{
+		CanonicalID: attestationID,
+		ObjectKind:  "choir.verifier_attestation",
+		OwnerID:     "corpusd",
+		ContentHash: params.ContentHash,
+		Metadata: mustJSONRaw(map[string]any{
+			"target_kind":      "publication_version_proposal",
+			"target_id":        params.ProposalID,
+			"verifier_id":      "corpusd",
+			"verifier_kind":    "service",
+			"result":           "passed",
+			"predicate_type":   "choir.platform.reader_proposal.v0",
+			"subject_digest":   params.ContentHash,
+			"source_publication_id":         params.PublicationID,
+			"source_publication_version_id": params.PublicationVersionID,
+		}),
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	// --- Edges ---
+	batch.Edges = append(batch.Edges,
+		// proposal -> manifest
+		makeEdge(proposalID, manifestID, "has_manifest", now, mustJSONRaw(map[string]any{"media_type": "text/plain"})),
+		// manifest -> blob
+		makeEdge(manifestID, blobID, "contains_blob", now, mustJSONRaw(map[string]any{"media_type": "text/plain", "byte_size": params.ContentSize})),
+		// subject -> proposal (owns)
+		makeEdge(subjectID, proposalID, "owns", now, mustJSONRaw(map[string]any{})),
+		// proposal entity -> source entity (was_derived_from)
+		makeEdge(proposalEntityID, sourceEntityID, "was_derived_from", now, mustJSONRaw(map[string]any{"activity_id": params.ActivityID, "delivery_id": params.DeliveryID})),
+		// activity -> agent (was_associated_with)
+		makeEdge(provenanceActivityID, provenanceAgentID, "was_associated_with", now, mustJSONRaw(map[string]any{})),
+		// activity -> proposal entity (generated)
+		makeEdge(provenanceActivityID, proposalEntityID, "generated", now, mustJSONRaw(map[string]any{})),
+		// agent -> attestation (attested)
+		makeEdge(provenanceAgentID, attestationID, "attested", now, mustJSONRaw(map[string]any{"verifier_kind": "service", "result": "passed"})),
+		// attestation -> proposal (attests_to)
+		makeEdge(attestationID, proposalID, "attests_to", now, mustJSONRaw(map[string]any{"predicate_type": "choir.platform.reader_proposal.v0", "result": "passed"})),
+	)
+
+	// --- Transclusion edges ---
+	for _, tr := range params.TransclusionEdges {
+		batch.Edges = append(batch.Edges, makeEdge(proposalID, tr.ToID, "transcludes", now, mustJSONRaw(map[string]any{
+			"to_kind":        tr.ToKind,
+			"to_selector":    tr.Selector,
+			"state":          "proposed",
+			"proposed_by":    params.SubmitterID,
+			"evidence_ref":   tr.EvidenceRef,
+			"confidence":     "0.9",
+		})))
+	}
+
+	// --- Citation edges ---
+	for _, cite := range params.CitationEdges {
+		batch.Edges = append(batch.Edges, makeEdge(proposalID, cite.ToID, "references", now, mustJSONRaw(map[string]any{
+			"state":        "candidate",
+			"proposed_by":  params.SubmitterID,
+			"evidence_ref": cite.EvidenceRef,
+			"confidence":   "0.5",
+		})))
+	}
+
+	return p.store.PutBatch(ctx, batch)
+}
+
+// UpdateProposalDeliveryState updates the delivery_state metadata on a
+// proposal object in the graph.
+func (p *PublicationGraphStore) UpdateProposalDeliveryState(ctx context.Context, proposalID, deliveryID, deliveryState, deliveryRef string, now time.Time) error {
+	if p == nil || p.store == nil {
+		return fmt.Errorf("publication graph: nil store")
+	}
+	// Find the proposal object by metadata proposal_id.
+	// We don't know the owner, so we search by metadata.
+	objs, err := p.store.ListObjectsByMetadata(ctx, "choir.publication_proposal", "$.proposal_id", proposalID, 1)
+	if err != nil || len(objs) == 0 {
+		return fmt.Errorf("publication graph: proposal not found: %s", proposalID)
+	}
+	obj := objs[0]
+	// Update metadata with new delivery state.
+	var meta map[string]any
+	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+		return fmt.Errorf("publication graph: parse proposal metadata: %w", err)
+	}
+	meta["delivery_state"] = deliveryState
+	meta["delivery_ref"] = deliveryRef
+	updatedMeta, _ := json.Marshal(meta)
+	obj.Metadata = json.RawMessage(updatedMeta)
+	obj.UpdatedAt = now
+	return p.store.PutObject(ctx, obj)
+}
+
+// ProposalGraphParams holds parameters for writing a publication proposal
+// to the object graph.
+type ProposalGraphParams struct {
+	ProposalID              string
+	PublicationID           string
+	PublicationVersionID    string
+	SourceOwnerID           string
+	SubmitterID             string
+	SubmitterDocID          string
+	SubmitterRevisionID     string
+	ProposalRevisionHash    string
+	Content                 string
+	ContentHash             string
+	ContentSize             int
+	ProjectionHash          string
+	Title                   string
+	ArtifactManifestID      string
+	ManifestJSON            []byte
+	ManifestHash            string
+	StorageRef              string
+	DeliveryID              string
+	DeliveryRef             string
+	ActivityID              string
+	AttestationID           string
+	SourceVersionContentHash string
+	TransclusionEdges       []ProposalTransclusionEdge
+	CitationEdges           []ProposalCitationEdge
+	Now                     time.Time
+}
+
+type ProposalTransclusionEdge struct {
+	ToID       string
+	ToKind     string
+	Selector   string
+	EvidenceRef string
+}
+
+type ProposalCitationEdge struct {
+	ToID       string
+	EvidenceRef string
 }
 
 // Compile-time assertion that PublicationGraphStore is usable.

@@ -174,6 +174,105 @@ func (o *ObjectGraphStore) Close() error {
 	return nil
 }
 
+// GetObjectByMetadata finds a single object by kind + a metadata JSON path
+// equality check. Uses JSON_EXTRACT (supported by Dolt/MySQL).
+// Example: GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", "/pub/texture/foo")
+func (o *ObjectGraphStore) GetObjectByMetadata(ctx context.Context, kind, jsonPath, value string) (objectgraph.Object, error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")
+	}
+	return scanObjectGraphObject(o.store.db.QueryRowContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
+		 LIMIT 1`, kind, jsonPath, value))
+}
+
+// ListObjectsByMetadata finds objects by kind + a metadata JSON path
+// equality check.
+func (o *ObjectGraphStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, value string, limit int) ([]objectgraph.Object, error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	rows, err := o.store.db.QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
+		 ORDER BY updated_at DESC LIMIT ?`,
+		kind, jsonPath, value, objectgraph.NormalizedLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: list by metadata: %w", err)
+	}
+	defer rows.Close()
+	var out []objectgraph.Object
+	for rows.Next() {
+		obj, err := scanObjectGraphObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
+// GetEdge finds a single edge by from_id + kind.
+func (o *ObjectGraphStore) GetEdge(ctx context.Context, fromID string, kind objectgraph.EdgeKind) (objectgraph.Edge, error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return objectgraph.Edge{}, fmt.Errorf("platform objectgraph: nil store")
+	}
+	return scanObjectGraphEdge(o.store.db.QueryRowContext(ctx,
+		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
+		 FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE
+		 LIMIT 1`, fromID, string(kind)))
+}
+
+// ListEdgesFrom lists all non-tombstoned edges from a given object ID.
+func (o *ObjectGraphStore) ListEdgesFrom(ctx context.Context, fromID string) ([]objectgraph.Edge, error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	rows, err := o.store.db.QueryContext(ctx,
+		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
+		 FROM og_edges WHERE from_id = ? AND tombstone = FALSE ORDER BY created_at`, fromID)
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: list edges from: %w", err)
+	}
+	defer rows.Close()
+	var out []objectgraph.Edge
+	for rows.Next() {
+		edge, err := scanObjectGraphEdge(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, edge)
+	}
+	return out, rows.Err()
+}
+
+// ListEdgesByKind lists all non-tombstoned edges of a given kind from a given object.
+func (o *ObjectGraphStore) ListEdgesByKind(ctx context.Context, fromID string, kind objectgraph.EdgeKind) ([]objectgraph.Edge, error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	rows, err := o.store.db.QueryContext(ctx,
+		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
+		 FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE ORDER BY created_at`,
+		fromID, string(kind))
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: list edges by kind: %w", err)
+	}
+	defer rows.Close()
+	var out []objectgraph.Edge
+	for rows.Next() {
+		edge, err := scanObjectGraphEdge(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, edge)
+	}
+	return out, rows.Err()
+}
+
 // PutBatch writes a batch of objects and edges atomically in a single
 // transaction with one Dolt commit at the end.
 func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch) error {
