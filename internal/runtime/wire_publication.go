@@ -86,23 +86,9 @@ func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, st
 	if strings.TrimSpace(storyDoc.OwnerID) != ownerID {
 		return "", nil
 	}
-	editionDocID, err := rt.store.GetDocumentAlias(ctx, ownerID, universalWireEditionSourcePath)
+	editionDoc, editionRev, err := rt.ensureUniversalWireEdition(ctx, ownerID)
 	if err != nil {
-		if err == store.ErrNotFound {
-			return "", nil
-		}
-		return "", fmt.Errorf("resolve wire edition alias: %w", err)
-	}
-	editionDoc, err := rt.store.GetDocument(ctx, editionDocID, ownerID)
-	if err != nil {
-		return "", fmt.Errorf("load wire edition document: %w", err)
-	}
-	if strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
-		return "", fmt.Errorf("wire edition document has no current revision")
-	}
-	editionRev, err := rt.store.GetRevision(ctx, editionDoc.CurrentRevisionID, ownerID)
-	if err != nil {
-		return "", fmt.Errorf("load wire edition revision: %w", err)
+		return "", err
 	}
 	included := universalWireEditionIncludedDocIDs(editionRev.Content, editionDoc.DocID)
 	if slices.Contains(included, storyDoc.DocID) {
@@ -156,6 +142,89 @@ func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, st
 		return "", fmt.Errorf("update wire edition document head: %w", err)
 	}
 	return wireEditionTrajectoryRef(editionDoc.DocID, newEditionRev.RevisionID), nil
+}
+
+// ensureUniversalWireEdition resolves the Universal Wire edition document
+// (alias "universal-wire/Wire.texture") for the platform owner, bootstrapping
+// it on first use when the alias does not yet exist. The edition is the
+// transclusion index that HandleUniversalWireStories reads to render the wire
+// feed; without it, every published article is orphaned from the feed and the
+// API returns zero stories. The wire publication policy is the canonical
+// writer for the edition, so creating it here on first eligible publication is
+// the self-healing bootstrap that was missing in production.
+func (rt *Runtime) ensureUniversalWireEdition(ctx context.Context, ownerID string) (types.Document, types.Revision, error) {
+	if rt == nil || rt.store == nil {
+		return types.Document{}, types.Revision{}, fmt.Errorf("runtime store unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return types.Document{}, types.Revision{}, fmt.Errorf("wire edition owner id is required")
+	}
+	editionDocID, err := rt.store.GetDocumentAlias(ctx, ownerID, universalWireEditionSourcePath)
+	if err == nil {
+		editionDoc, err := rt.store.GetDocument(ctx, editionDocID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, fmt.Errorf("load wire edition document: %w", err)
+		}
+		if strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
+			return types.Document{}, types.Revision{}, fmt.Errorf("wire edition document has no current revision")
+		}
+		editionRev, err := rt.store.GetRevision(ctx, editionDoc.CurrentRevisionID, ownerID)
+		if err != nil {
+			return types.Document{}, types.Revision{}, fmt.Errorf("load wire edition revision: %w", err)
+		}
+		return editionDoc, editionRev, nil
+	}
+	if err != store.ErrNotFound {
+		return types.Document{}, types.Revision{}, fmt.Errorf("resolve wire edition alias: %w", err)
+	}
+	// Bootstrap the edition document, its initial revision, and the alias.
+	now := time.Now().UTC()
+	editionDoc := types.Document{
+		DocID:     uuid.NewString(),
+		OwnerID:   ownerID,
+		Title:     "Wire.texture",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := rt.store.CreateDocument(ctx, editionDoc); err != nil {
+		return types.Document{}, types.Revision{}, fmt.Errorf("create wire edition document: %w", err)
+	}
+	seedContent := "# Wire\n\nUniversal Wire edition."
+	revisionID := uuid.NewString()
+	bodyDoc, sourceEntitiesJSON, projectedContent, err := markdownLineageStructuredRevision(editionDoc.DocID, revisionID, seedContent, nil, nil)
+	if err != nil {
+		return types.Document{}, types.Revision{}, fmt.Errorf("create wire edition body_doc: %w", err)
+	}
+	editionMeta, _ := json.Marshal(map[string]any{
+		"source":           "universal_wire_edition",
+		"revision_role":    textureRevisionRoleCanonical,
+		"published_doc_ids": []string{},
+	})
+	seedRev := types.Revision{
+		RevisionID:      revisionID,
+		DocID:           editionDoc.DocID,
+		OwnerID:         ownerID,
+		AuthorKind:      types.AuthorAppAgent,
+		AuthorLabel:     "wire_publication_policy",
+		Content:         projectedContent,
+		BodyDoc:         bodyDoc,
+		SourceEntities:  sourceEntitiesJSON,
+		Citations:       json.RawMessage("[]"),
+		Metadata:        editionMeta,
+		CreatedAt:       now,
+	}
+	if err := rt.store.CreateRevision(ctx, seedRev); err != nil {
+		return types.Document{}, types.Revision{}, fmt.Errorf("create wire edition seed revision: %w", err)
+	}
+	editionDoc.CurrentRevisionID = revisionID
+	if err := rt.store.UpdateDocument(ctx, editionDoc); err != nil {
+		return types.Document{}, types.Revision{}, fmt.Errorf("advance wire edition document head: %w", err)
+	}
+	if err := rt.store.UpsertDocumentAlias(ctx, ownerID, universalWireEditionSourcePath, editionDoc.DocID, now); err != nil {
+		return types.Document{}, types.Revision{}, fmt.Errorf("register wire edition alias: %w", err)
+	}
+	return editionDoc, seedRev, nil
 }
 
 func (rt *Runtime) recordWirePublicationTrajectoryRef(ctx context.Context, rec *types.RunRecord, key, value string) error {

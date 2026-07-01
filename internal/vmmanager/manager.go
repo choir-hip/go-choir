@@ -1176,6 +1176,8 @@ func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfi
 	cfg.StoreDiskPath = ""
 	cfg.KernelParams = ""
 	cfg.SourceVMID = ""
+	cfg.MachineMemSizeMib = 0
+	cfg.MachineCPUCount = 0
 	return cfg
 }
 

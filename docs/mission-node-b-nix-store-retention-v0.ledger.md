@@ -4,7 +4,7 @@
 
 - Claim: Node B needs a separate Nix-store retention mission rather than
   folding Nix GC policy into the completed VM-state cleanup mission.
-- Move: created `docs/mission-node-b-nix-store-retention-v0.md` as the next
+- Move: created `docs/archive/mission-node-b-nix-store-retention-v0.md` as the next
   Parallax source program.
 - Evidence: read-only probes showed 476G root filesystem with 357G used and
   117G free, `/nix/store` at 243G, `/var/lib/go-choir/vm-state` at 127G,

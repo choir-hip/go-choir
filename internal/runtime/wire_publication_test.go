@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -226,6 +227,100 @@ func TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails(t *testing
 	}
 	if obligations.SettlementReady {
 		t.Fatalf("failed publish should not be settlement-ready: %+v", obligations)
+	}
+}
+
+func TestWireAutonomousPublishBootstrapsEditionWhenAliasMissing(t *testing.T) {
+	_, handler := testAPISetup(t)
+	// Deliberately do NOT seed the Universal Wire edition fixture: the
+	// publication path must bootstrap the edition alias on first use.
+	story := seedPlatformSourceNetworkTextureFixture(t, handler, "doc-bootstrap-edition")
+	ctx := context.Background()
+
+	story, err := handler.rt.Store().GetDocument(ctx, story.DocID, story.OwnerID)
+	if err != nil {
+		t.Fatalf("reload story document: %v", err)
+	}
+	rev, err := handler.rt.Store().GetRevision(ctx, story.CurrentRevisionID, story.OwnerID)
+	if err != nil {
+		t.Fatalf("load story revision: %v", err)
+	}
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   "traj-bootstrap-edition",
+		OwnerID:        universalWirePlatformOwnerID(),
+		Kind:           types.TrajectoryKindPublication,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindPublication),
+	}); err != nil {
+		t.Fatalf("create publication trajectory: %v", err)
+	}
+	if _, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              universalWirePlatformOwnerID(),
+		TrajectoryID:         "traj-bootstrap-edition",
+		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
+		Reason:               "processor opened a wire story Texture route",
+		AuthorityProfile:     AgentProfileTexture,
+		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-bootstrap-edition", story.DocID),
+		CreatedByRunID:       "run-bootstrap-edition",
+		Details: map[string]any{
+			"kind":   "wire_story_resolution",
+			"doc_id": story.DocID,
+		},
+	}); err != nil {
+		t.Fatalf("create story-resolution work item: %v", err)
+	}
+	rec := &types.RunRecord{
+		OwnerID: universalWirePlatformOwnerID(),
+		RunID:   "run-bootstrap-edition",
+		Metadata: map[string]any{
+			"type":           "texture_agent_revision",
+			"request_intent": "universal_wire_processor_article_revision",
+			"trajectory_id":  "traj-bootstrap-edition",
+		},
+	}
+	handler.rt.wirePlatformPublisher = func(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
+		return &wirepublish.PublishTextureResponse{
+			PublicationID:        "pub-bootstrap",
+			PublicationVersionID: "pubver-bootstrap",
+			RoutePath:            "wire/bootstrap-dispatch",
+			SourceRevisionHash:   "revhash-bootstrap",
+		}, nil
+	}
+	handler.rt.maybeAutonomousPublishWireArticle(ctx, story, rev, rec)
+
+	// The edition alias must now exist and transclude the story.
+	editionDocID, err := handler.rt.Store().GetDocumentAlias(ctx, universalWirePlatformOwnerID(), universalWireEditionSourcePath)
+	if err != nil {
+		t.Fatalf("edition alias was not bootstrapped: %v", err)
+	}
+	editionDoc, err := handler.rt.Store().GetDocument(ctx, editionDocID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load bootstrapped edition document: %v", err)
+	}
+	editionRev, err := handler.rt.Store().GetRevision(ctx, editionDoc.CurrentRevisionID, universalWirePlatformOwnerID())
+	if err != nil {
+		t.Fatalf("load bootstrapped edition revision: %v", err)
+	}
+	if !strings.Contains(editionRev.Content, "texture:"+story.DocID) {
+		t.Fatalf("bootstrapped edition content missing transclusion for %s: %q", story.DocID, editionRev.Content)
+	}
+
+	// The Universal Wire API must now return the story.
+	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "user-universal-wire")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp universalWireStoriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode stories response: %v", err)
+	}
+	if resp.Source != "universal-wire-edition-texture" {
+		t.Fatalf("source = %q, want edition texture source after bootstrap", resp.Source)
+	}
+	if len(resp.Stories) != 1 {
+		t.Fatalf("stories length = %d, want bootstrapped edition to expose the published story: %+v", len(resp.Stories), resp.Stories)
+	}
+	if resp.Stories[0].StoryTextureDoc != story.DocID {
+		t.Fatalf("first story texture doc = %q, want %s", resp.Stories[0].StoryTextureDoc, story.DocID)
 	}
 }
 

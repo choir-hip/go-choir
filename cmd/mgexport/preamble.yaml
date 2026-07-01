@@ -1,0 +1,36 @@
+---
+schema_version: 0
+generated: false
+status: indexed
+description: >-
+  Machine-readable mission DAG and mission-corpus index. This file is an index, not a second
+  mission ledger. Parallax State in each paradoc remains the source of current mission state;
+  this graph records discoverability, dependency, portfolio ordering, and historical mission
+  evidence classification.
+rules:
+- id: graph-is-dag
+  text: Mission dependency edges must remain acyclic.
+- id: paradoc-updates-graph
+  text: >-
+    Creating or materially re-scoping a repo paradoc must add or update its node here in the
+    same pass unless the mission is explicitly scratch or outside-repo.
+- id: no-double-ledger
+  text: Do not transcribe Parallax ledgers into this graph. Link the paradoc and ledger only.
+- id: doctrine-apex
+  text: >-
+    This graph inherits docs/choir-doctrine.md and AGENTS.md. It does not override doctrine,
+    operating contract, or mission Parallax State.
+- id: historical-evidence-preserved
+  text: >-
+    Historical MissionGradient documents and mission reports are indexed for discovery without
+    rewriting their state into current Parallax doctrine.
+node_fields:
+  id: stable mission id
+  title: human-readable mission title
+  path: paradoc path, if one exists
+  ledger: Parallax ledger path, if one exists
+  status: planned | working | open_handoff | settled | superseded | blocked
+  kind: spine | side | docs_truth | evidence | superseded
+  depends_on: mission ids that must settle first
+  enables: mission ids this node directly unlocks
+  sources: high-authority docs or specs the mission executes against

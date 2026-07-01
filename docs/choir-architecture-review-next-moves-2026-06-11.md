@@ -63,7 +63,7 @@ Lifecycle:
    (proposed → verify, verified → promote/rollback, blocked → recover;
    continuation.go:238-318) beats the fallback, which is open-ended
    mission-gradient continuation against a mission doc — **hardcoded default
-   `docs/mission-choir-grand-deformation-v0.md`** (continuation.go:48).
+   `docs/archive/mission-choir-grand-deformation-v0.md`** (continuation.go:48).
 2. **Select** (continuation.go:77) — requires source run state
    Completed/Blocked (line 85: the run-tree entanglement), runs a
    run-memory **compaction checkpoint** so the successor has operational

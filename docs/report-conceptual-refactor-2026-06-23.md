@@ -306,16 +306,16 @@ This is the personal mainframe. This is the future of software architecture.
 
 The following documents were produced during the refactor:
 
-- `@/Users/wiz/go-choir/docs/object-graph-synthesis-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-philosophy-object-graph-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/object-graph-schema-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-conductor-supervision-protocol-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-mutation-transaction-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-object-graph-versioning-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-self-developing-software-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-virtual-agentic-graph-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-attention-unifying-layer-2026-06-23.md`
-- `@/Users/wiz/go-choir/docs/design-observer-hierarchy-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/object-graph-synthesis-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-philosophy-object-graph-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/object-graph-schema-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-conductor-supervision-protocol-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-mutation-transaction-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-object-graph-versioning-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-self-developing-software-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-virtual-agentic-graph-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-attention-unifying-layer-2026-06-23.md`
+- `@/Users/wiz/go-choir/docs/archive/design-observer-hierarchy-2026-06-23.md`
 - `@/Users/wiz/go-choir/docs/report-conceptual-refactor-2026-06-23.md`
 
 This report is the synthesis of that docset.

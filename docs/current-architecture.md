@@ -91,7 +91,7 @@ gates is the named anti-pattern.
 
 Choir is a durable learning control system over versioned artifacts. The web
 desktop is the current general-purpose projection of that substrate, not the
-whole ontology. Read [docs/mission-geometry.md](mission-geometry.md) for the
+whole ontology. Read [docs/archive/mission-geometry.md](mission-geometry.md) for the
 higher-level frame and [glossary.md](glossary.md) for the current
 Community Cloud / Private Cloud / Wire vocabulary.
 

@@ -16,10 +16,10 @@ blocked-by relationships, detector-count target when countable, and heresy
 delta split into `discovered`, `introduced`, and `repaired`.
 
 Sources of truth these missions execute against:
-`docs/choir-rearchitecture-durable-actors-2026-06-11.md` (the cutover
+`docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md` (the cutover
 program), `docs/choir-promotion-protocol-conjecture-2026-06-11.md`,
 `docs/conjecture-learning-proof-theory-2026-06-11.md`, the four green specs
-in `specs/`, and `docs/mission-geometry.md` (the layer each mission serves).
+in `specs/`, and `docs/archive/mission-geometry.md` (the layer each mission serves).
 
 Already done (not missions): specs 0–4 + CI; actor core package
 (`internal/actor`, cutover step 1); promotion P2 guards (approval gate +
@@ -67,7 +67,7 @@ reopening the same failure mode. Side missions do not decrease this V unless
 they remove a heresy that blocks the spine.
 
 **next move:** M3.2 Texture prompt register and decision notes
-(`docs/mission-vtext-prompt-decision-notes-m3.2-v0.md`; old v-name mission path), then M3 proper. Do
+(`docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md`; old v-name mission path), then M3 proper. Do
 not spend owner attention on Universal Wire completeness or review UI polish
 until M3.2 and M3 protect Texture delegation semantics and remove the old
 lifecycle/continuation mechanisms.
@@ -89,7 +89,7 @@ cleanup.
 Historical mentions of Trace/Terminal/Browser in this portfolio are evidence
 labels or successor-scope handles, not target product ontology.
 
-**source-intake product wedge:** `docs/mission-conductor-url-source-routing-h029-v0.md`
+**source-intake product wedge:** `docs/archive/mission-conductor-url-source-routing-h029-v0.md`
 now carries the H029 Conductor URL repair plus the broader owner workflow:
 URLs/files become durable source artifacts transcluded into Texture, with
 YouTube transcript import as the first personal-use slice and podcasts/PDFs/
@@ -97,7 +97,7 @@ EPUBs/uploads staged after that. This is a side product wedge and future
 product falsifier, not architecture-spine descent, except when it removes a concrete
 Browser-as-source blocker for M3-M5.
 
-**Texture structured-document substrate:** `docs/mission-texture-structured-document-transclusion-cutover-v0.md`
+**Texture structured-document substrate:** `docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`
 now carries the planned hard cutover from markdown-ish Texture bodies plus
 source/media sidecars to a ProseMirror/Tiptap-style structured document with
 Texture-native source/transclusion nodes and multimedia source entities. This
@@ -235,7 +235,7 @@ that stops progressing while showing zero open obligations kills the design.
 **Settlement:** grep-level zero callers of the deleted mechanisms; a vsuper
 coordinating two co-supers sees every result exactly once across a process
 restart; prompts updated (co-super.md, vsuper.md, vtext.md; old v-name prompt path). Settled by
-`docs/mission-messaging-cutover-v0.md` after post-review repairs and staging
+`docs/archive/mission-messaging-cutover-v0.md` after post-review repairs and staging
 landing at `794d28dd76ff00a2ae27c98a14dbce9e34834695`.
 
 **Dependencies:** M1. **Size:** 1–2 overnight missions; the slot registry is
@@ -512,7 +512,7 @@ mission. **Dependencies:** none. **Size:** half a session.
 - **Slides/computational cinematography, vector index service, new source
   families** — per the conjecture program §5; substrate first.
 - **Doc truth / context packet CI** —
-  `docs/mission-doc-truth-drift-ci-context-packet-v0.md` is the successor for
+  `docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md` is the successor for
   executable heresy detectors, docs drift checks, and a generated
   `docs/choir-context-packet.md`. It is a process side mission, not
   architecture-spine descent, unless stale docs block M3-M5 execution.

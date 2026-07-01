@@ -144,7 +144,7 @@ aggregator runs as a periodic job on the reconciler VM.
 ### Supervision Protocol
 
 The conductor supervision design
-(`docs/design-conductor-supervision-protocol-2026-06-23.md`) defines
+(`docs/archive/design-conductor-supervision-protocol-2026-06-23.md`) defines
 read-only observation (Phase 1) and protocol nudge (Phase 2).
 
 For the appagent architecture:

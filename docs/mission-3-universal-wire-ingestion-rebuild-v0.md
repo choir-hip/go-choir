@@ -85,7 +85,6 @@ Completed:
 
 ### 3b: New Ingestion Path (E2E) ✅ Settled
 
-**Paradoc:** `docs/mission-3b-ingestion-path-v0.md` (settled, V=0)  
 **Deploy commit:** `a0776488`  
 **Confidence:** Medium — real captures, dynamic threshold, synthesis quality, cadence change  
 **Risk:** Medium — E2E flow may reveal integration issues, staging deploy required  

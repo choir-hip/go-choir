@@ -2,7 +2,7 @@
 
 ## 2026-06-18 — Mission carved out of the durable-thread mission
 
-While starting R0 of `docs/mission-texture-long-running-agent-v0.md` (the durable
+While starting R0 of `docs/archive/mission-texture-long-running-agent-v0.md` (the durable
 deep-research thread mission), a grounding read of the store contradicted the
 paradoc's framing and an owner design pass re-scoped the work.
 
@@ -342,7 +342,7 @@ mounted in the published-readonly reader branch (`TextureEditor.svelte`): shows
 author, when, typed-provenance summary, per-revision hash). Read-only; renders
 only when `version_history` is present, so head-only publications are
 unaffected. This is Option A of
-`docs/texture-versioned-reader-ux-options-2026-06-19.md` — the minimal lineage
+`docs/archive/texture-versioned-reader-ux-options-2026-06-19.md` — the minimal lineage
 disclosure and a strict prerequisite for the revision-browser (B) and diff (C)
 options, both still deferred pending an owner design pick.
 
@@ -408,5 +408,5 @@ citation-gate + reader-legibility + tamperproof-signature claim is met at
 staging-smoke-level; promotion-level awaits AppChangePackage adoption + owner
 review. Open: reader UX options B (revision browser) and C (diff + per-revision
 sources) deferred pending an owner design pick
-(`docs/texture-versioned-reader-ux-options-2026-06-19.md`); prod signing-key
+(`docs/archive/texture-versioned-reader-ux-options-2026-06-19.md`); prod signing-key
 provisioning via `PLATFORM_SIGNING_KEY_PATH`.

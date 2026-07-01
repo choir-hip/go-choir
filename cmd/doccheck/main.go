@@ -21,6 +21,7 @@ const (
 	defaultAssertionRegister = "docs/conjecture-assertion-ledger-2026-06.md"
 	defaultReport            = "doccheck-report.md"
 	defaultJSON              = "doccheck.json"
+	defaultBeadsStore        = ".beads/issues.jsonl"
 )
 
 var highRead = map[string]bool{
@@ -336,6 +337,7 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 
 	graph, graphWarnings := validateMissionGraph(graphPath, docs)
 	warnings = append(warnings, graphWarnings...)
+	warnings = append(warnings, validateBeadsStore(defaultBeadsStore, graph.NodeCount)...)
 	assertions, assertionWarnings := validateAssertionRegister(assertionPath)
 	warnings = append(warnings, assertionWarnings...)
 	heresyScan, err := scanCodeHeresy(detectors, docs)

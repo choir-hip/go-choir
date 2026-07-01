@@ -492,10 +492,10 @@ in
         "VM_STATE_DIR=/var/lib/go-choir/vm-state"
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
-        "VM_MEM_MIB=2048"
+        "VM_MEM_MIB=4096"
         "VM_HEALTH_CHECK_INTERVAL=15s"
-        "VM_HEALTH_CHECK_TIMEOUT=3s"
-        "VM_BOOT_READY_TIMEOUT=150s"
+        "VM_HEALTH_CHECK_TIMEOUT=10s"
+        "VM_BOOT_READY_TIMEOUT=180s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Staging runs many automated first-user/mobile acceptance probes. Keep
         # personal computers resident while the host is under capacity. The
@@ -510,7 +510,7 @@ in
         # host pressure crosses threshold.
         "VMCTL_PRESSURE_RECLAIM_MODE=active"
         "VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m"
-        "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=2048"
+        "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=4096"
         "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT=15"
         "VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_MIB=32768"
         "VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_PERCENT=10"

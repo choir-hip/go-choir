@@ -15,7 +15,7 @@ Expected delta V: initialize mission variant at 10 open obligations.
 
 Actual delta V: initialized; no execution obligations discharged.
 
-Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+Receipt: `docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: D0 still must decide raw ProseMirror vs Tiptap, exact schema/storage,
 and deletion targets before runtime mutation.
@@ -35,7 +35,7 @@ schema decision obligation.
 
 Actual delta V: 0. D0 remains open.
 
-Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+Receipt: `docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: create the Codex thread and record its id/verdict.
 
@@ -79,7 +79,7 @@ after a Problem Documentation First checkpoint, then implement the structured
 schema/write-path cutover. Runtime behavior unchanged.
 
 Receipt:
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md#d0-architecture-decision---2026-06-21`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md#d0-architecture-decision---2026-06-21`;
 code evidence includes `internal/store/texture.go:52`,
 `internal/runtime/texture.go:199`, `internal/runtime/tools_texture.go:73`,
 `frontend/src/lib/texture-markdown-serializer.ts:10`,
@@ -105,7 +105,7 @@ precondition for D1/D2.
 
 Actual delta V: 0. Current V remains 9.
 
-Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+Receipt: `docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: commit this checkpoint before any runtime/schema behavior change.
 
@@ -260,7 +260,7 @@ precondition for D2 runtime mutation.
 
 Actual delta V: 0. Current V remains 8. Runtime behavior unchanged by this pass.
 
-Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+Receipt: `docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: implement the D2 write-path cutover in the assigned worktree only,
 without bundling frontend editor saves, publication/export, staging/deploy, or
@@ -328,7 +328,7 @@ repair and tests land.
 Actual delta V: +1 reopen. Current V=8 pending repair. Runtime behavior unchanged
 by this documentation pass.
 
-Receipt: `docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+Receipt: `docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: implement the side-channel repair in the assigned worktree, add
 focused regressions, rerun focused tests plus `git diff --check`, and commit.
@@ -388,7 +388,7 @@ Actual delta V: 0. Current V remains 7. Runtime and frontend behavior unchanged
 by this pass.
 
 Receipt:
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: inspect the current frontend editor/source renderer and API contract,
 then implement the smallest D3 editor/user path without bundling Texture agent
@@ -492,7 +492,7 @@ precondition for D4 runtime/tool mutation.
 Actual delta V: 0. Current V remains 6. Runtime behavior unchanged by this pass.
 
 Receipt:
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Open edge: implement the bounded D4 runtime/tool cut with focused tests for
 source-ref preservation, explicit source deletion, source ref/embed insertion,
@@ -526,7 +526,7 @@ Receipts:
 `internal/runtime/texture_legacy_wire_normalization.go`;
 `internal/runtime/universal_wire.go`;
 `internal/runtime/universal_wire_test.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Evidence:
 `nix develop -c go test ./internal/runtime -run 'Texture.*(Structured|Tool|Agent|Source)|TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest'`;
@@ -563,7 +563,7 @@ Actual delta V: 0. Current V remains 5. Runtime/frontend behavior unchanged by
 this pass.
 
 Receipt:
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`.
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`.
 
 Evidence recorded:
 `internal/runtime/texture_agent_revision.go:375`;
@@ -708,7 +708,7 @@ Receipts:
 `internal/runtime/wire_platform_publish.go`;
 `internal/proxy/wire_platform_publish.go`;
 `internal/proxy/platform_publish.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Evidence:
@@ -807,7 +807,7 @@ Receipts:
 `frontend/src/lib/source-contract.ts`;
 `frontend/src/lib/texture-markdown-serializer.ts`;
 `frontend/tests/texture-source-entities.spec.js`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Evidence:
@@ -863,7 +863,7 @@ Receipts:
 `internal/runtime/tools_coagent.go`;
 `internal/runtime/texture_agent_revision.go`;
 `internal/runtime/agent_tools_test.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Evidence:
@@ -912,7 +912,7 @@ Receipts:
 `internal/runtime/texture_lineage.go`;
 `internal/runtime/texture_source_repairs.go`;
 `internal/runtime/texture_test.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Evidence:
@@ -968,7 +968,7 @@ Receipts:
 `frontend/src/lib/texture.js`;
 `frontend/tests/texture-markdown-lineage.spec.js`;
 `frontend/tests/texture-source-entities.spec.js`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1030,7 +1030,7 @@ Receipts:
 `internal/texturedoc/schema.go`;
 `frontend/tests/texture-source-service-publication.spec.js`;
 `frontend/tests/texture-source-ref-live-agent.spec.js`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1139,7 +1139,7 @@ Receipts:
 `internal/runtime/texture_evidence_sources_test.go`;
 `internal/runtime/agent_tools_test.go`;
 `internal/runtime/texture_test.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1218,7 +1218,7 @@ Receipts:
 `internal/runtime/texture_test.go`;
 `internal/runtime/textureprompts/overlays/revision_policy.yaml`;
 `internal/runtime/textureprompts/overlays/run_system.yaml`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1270,7 +1270,7 @@ Receipts:
 `internal/runtime/tools_texture.go`;
 `internal/runtime/texture_tool_unit_test.go`;
 `internal/runtime/texture_test.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1318,7 +1318,7 @@ Receipts:
 `internal/runtime/texture_test.go`;
 `internal/runtime/textureprompts/prompts.go`;
 `internal/runtime/textureprompts/overlays/revision_media_source_refs_intro.yaml`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1357,7 +1357,7 @@ regression introduced by this documentation checkpoint.
 Receipts:
 `frontend/src/lib/TextureEditor.svelte`;
 `frontend/tests/texture-source-service-publication.spec.js`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Evidence:
@@ -1400,7 +1400,7 @@ Receipts:
 `frontend/tests/texture-source-service-publication.spec.js`;
 `internal/platform/source_metadata.go`;
 `internal/platform/service_test.go`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1436,7 +1436,7 @@ the landing loop, not a product behavior repair.
 
 Receipts:
 `flake.nix`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`;
 GitHub Actions CI run `27922543313`, job `Deploy to Staging (Node B)`.
 
@@ -1472,7 +1472,7 @@ available `x86_64-linux` builder; CI remains the compilation oracle.
 
 Receipts:
 `flake.nix`;
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md`.
 
 Local evidence:
@@ -1569,7 +1569,7 @@ handles. Texture then wrote process/source-status prose into the canonical body
 instead of native citations.
 
 Receipts:
-`docs/mission-texture-structured-document-transclusion-cutover-v0.md`;
+`docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md`;
 `docs/runbook-staging-live-texture-debugging.md`;
 live document `5d89a835-41a6-49e0-8555-172a574ef317`;
 head revision `7fde6600-bea8-4fe6-9ef9-667be64131e8`;
