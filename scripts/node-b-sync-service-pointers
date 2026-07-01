@@ -33,11 +33,11 @@ install_service_pointer_from_src() {
 
 for service in "$@"; do
   unit="go-choir-${service}.service"
-  # Use || true so systemctl show doesn't abort under set -euo pipefail
-  # when the unit is intentionally absent (e.g. go-choir-sandbox, deleted
-  # in PR 5 of store-consolidation).
+  # Use a subshell with || true so systemctl show doesn't abort under
+  # set -euo pipefail when the unit is intentionally absent (e.g.
+  # go-choir-sandbox, deleted in PR 5 of store-consolidation).
   wrapper="$(
-    systemctl show "$unit" -p ExecStart --value 2>/dev/null || true |
+    { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
       sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
       head -n 1
   )"
