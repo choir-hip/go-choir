@@ -810,7 +810,7 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sandbox sourcecycled vmctl
+              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sourcecycled vmctl
             else
               echo "    Skipping host service pointer install"
             fi
