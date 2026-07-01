@@ -810,7 +810,7 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sourcecycled vmctl
+              scripts/node-b-sync-service-pointers auth gateway maild platformd proxy sandbox sourcecycled vmctl
             else
               echo "    Skipping host service pointer install"
             fi
@@ -1033,13 +1033,20 @@ jobs:
               dump_deploy_service_diagnostics "proxy health probe wrong service"
               exit 1
             fi
-            # Proxy upstream is "ok" (static routing) or "vmctl" (vmctl routing).
-            # With the host sandbox deleted (PR 5), vmctl routing is the steady
-            # state, so "vmctl" is the healthy upstream status.
-            if ! echo "$proxy_health" | grep -qE '"upstream":"(ok|vmctl)"'; then
-              echo "Proxy upstream is not ok: $proxy_health" >&2
-              dump_deploy_service_diagnostics "proxy upstream unhealthy"
+            # Proxy health must report status="ok". With vmctl routing (the
+            # steady state after PR 5), upstream="vmctl" and vmctl_status must
+            # also be "ok". With static routing, upstream="ok".
+            if ! echo "$proxy_health" | grep -q '"status":"ok"'; then
+              echo "Proxy status is not ok: $proxy_health" >&2
+              dump_deploy_service_diagnostics "proxy status unhealthy"
               exit 1
+            fi
+            if echo "$proxy_health" | grep -q '"vmctl_routing":"enabled"'; then
+              if ! echo "$proxy_health" | grep -q '"vmctl_status":"ok"'; then
+                echo "Proxy vmctl_status is not ok: $proxy_health" >&2
+                dump_deploy_service_diagnostics "proxy vmctl unhealthy"
+                exit 1
+              fi
             fi
             echo "    Proxy upstream: OK"
             note_phase "health checks"
