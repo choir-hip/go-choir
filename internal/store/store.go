@@ -2083,6 +2083,32 @@ func (s *Store) ListEventsByTrajectoryAfter(ctx context.Context, ownerID, trajec
 
 // AppendChannelMessage persists a message to a coordination channel and assigns the next cursor sequence.
 func (s *Store) AppendChannelMessage(ctx context.Context, message *types.ChannelMessage, ownerID string) error {
+	if s.og != nil && ownerID != "" {
+		// Compute the next sequence number from OG.
+		existing, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", message.ChannelID, 10000)
+		if err != nil {
+			return fmt.Errorf("append channel message: list existing: %w", err)
+		}
+		maxSeq := int64(0)
+		for _, obj := range existing {
+			if obj.OwnerID != ownerID {
+				continue
+			}
+			var msg types.ChannelMessage
+			if err := ogDecode(obj, &msg); err != nil {
+				continue
+			}
+			if msg.Seq > maxSeq {
+				maxSeq = msg.Seq
+			}
+		}
+		message.Seq = maxSeq + 1
+		if message.Timestamp.IsZero() {
+			message.Timestamp = time.Now().UTC()
+		}
+		return s.AppendChannelMessageOG(ctx, message, ownerID)
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin channel message transaction: %w", err)
@@ -2130,6 +2156,18 @@ func (s *Store) ListChannelMessages(ctx context.Context, ownerID, channelID stri
 	if limit <= 0 {
 		limit = 200
 	}
+	if s.og != nil && ownerID != "" {
+		msgs, err := s.ListChannelMessagesOG(ctx, ownerID, channelID, afterSeq, limit)
+		if err != nil {
+			return nil, fmt.Errorf("query channel messages: %w", err)
+		}
+		// Sort by seq ascending.
+		sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
+		// Fall back to SQL if OG returned nothing (legacy records).
+		if len(msgs) > 0 {
+			return msgs, nil
+		}
+	}
 	query := `SELECT channel_id, seq, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at
 		   FROM channel_messages
 		  WHERE channel_id = ?
@@ -2167,6 +2205,36 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 	if limit <= 0 {
 		limit = 500
 	}
+	if s.og != nil && ownerID != "" {
+		objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "trajectory_id", trajectoryID, limit*2)
+		if err != nil {
+			return nil, fmt.Errorf("query channel messages by trajectory: %w", err)
+		}
+		msgs := make([]types.ChannelMessage, 0, len(objs))
+		for _, obj := range objs {
+			if obj.OwnerID != ownerID {
+				continue
+			}
+			var msg types.ChannelMessage
+			if err := ogDecode(obj, &msg); err != nil {
+				return nil, err
+			}
+			msgs = append(msgs, msg)
+		}
+		sort.Slice(msgs, func(i, j int) bool {
+			if !msgs[i].Timestamp.Equal(msgs[j].Timestamp) {
+				return msgs[i].Timestamp.Before(msgs[j].Timestamp)
+			}
+			return msgs[i].Seq < msgs[j].Seq
+		})
+		if len(msgs) > limit {
+			msgs = msgs[:limit]
+		}
+		if len(msgs) > 0 {
+			return msgs, nil
+		}
+		// Fall through to SQL if OG returned nothing.
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT channel_id, seq, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at
 		   FROM channel_messages
@@ -2199,6 +2267,13 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 
 // GetWorkerUpdate returns a previously dispatched structured worker update.
 func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
+	if s.og != nil {
+		rec, err := s.GetWorkerUpdateOG(ctx, ownerID, updateID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.db.QueryRowContext(ctx,
 		workerUpdateSelectSQL()+` WHERE owner_id = ? AND update_id = ?`,
 		ownerID, updateID,
@@ -2211,6 +2286,13 @@ func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (
 func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 500
+	}
+	if s.og != nil {
+		updates, err := s.ListWorkerUpdatesByTrajectoryOG(ctx, ownerID, trajectoryID, limit)
+		if err == nil && len(updates) > 0 {
+			return updates, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.db.QueryContext(ctx,
 		workerUpdateSelectSQL()+` WHERE owner_id = ?
@@ -2246,6 +2328,13 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.CoagentSourcePacket, error) {
 	if limit <= 0 {
 		limit = 200
+	}
+	if s.og != nil {
+		updates, err := s.ListPendingWorkerUpdatesOG(ctx, ownerID, targetAgentID, limit)
+		if err == nil && len(updates) > 0 {
+			return updates, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.db.QueryContext(ctx,
 		workerUpdateSelectSQL()+` WHERE owner_id = ?
