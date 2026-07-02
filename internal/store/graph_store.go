@@ -524,6 +524,9 @@ func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.Trajec
 func (s *Store) GetTrajectoryOG(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.TrajectoryRecord{}, ErrNotFound
+		}
 		return types.TrajectoryRecord{}, err
 	}
 	var rec types.TrajectoryRecord
@@ -582,6 +585,12 @@ func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajector
 		rec.SettledAt = &now
 	}
 
+	return s.upsertTrajectoryOG(ctx, rec, obj)
+}
+
+// upsertTrajectoryOG writes the trajectory record back to the object graph,
+// preserving the existing object ID and created_at.
+func (s *Store) upsertTrajectoryOG(ctx context.Context, rec types.TrajectoryRecord, existing objectgraph.Object) (types.TrajectoryRecord, error) {
 	metadata := map[string]any{
 		"trajectory_id": rec.TrajectoryID,
 		"kind":          string(rec.Kind),
@@ -594,10 +603,10 @@ func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajector
 	}
 
 	bodyJSON, _ := json.Marshal(rec)
-	obj.Body = bodyJSON
-	obj.Metadata = mustMarshalMetadata(metadata)
-	obj.UpdatedAt = rec.UpdatedAt
-	if err := s.ogStore.PutObject(ctx, obj); err != nil {
+	existing.Body = bodyJSON
+	existing.Metadata = mustMarshalMetadata(metadata)
+	existing.UpdatedAt = rec.UpdatedAt
+	if err := s.ogStore.PutObject(ctx, existing); err != nil {
 		return types.TrajectoryRecord{}, err
 	}
 	return rec, nil

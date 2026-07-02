@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -39,6 +41,11 @@ func (s *Store) CreateTrajectoryIfAbsent(ctx context.Context, rec types.Trajecto
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
+
+	if s.og != nil {
+		return s.CreateTrajectoryIfAbsentOG(ctx, rec)
+	}
+
 	subjectRefsJSON, err := marshalJSON(rec.SubjectRefs)
 	if err != nil {
 		return types.TrajectoryRecord{}, fmt.Errorf("marshal trajectory subject refs: %w", err)
@@ -77,6 +84,13 @@ const selectTrajectoryByID = `SELECT trajectory_id, owner_id, kind, subject_refs
 
 // GetTrajectory returns the trajectory with the given ID, owner-scoped.
 func (s *Store) GetTrajectory(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+	if s.og != nil {
+		rec, err := s.GetTrajectoryOG(ctx, ownerID, trajectoryID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.queryDB().QueryRowContext(ctx, selectTrajectoryByID, trajectoryID, ownerID)
 	return scanTrajectory(row)
 }
@@ -86,6 +100,13 @@ func (s *Store) GetTrajectory(ctx context.Context, ownerID, trajectoryID string)
 func (s *Store) ListTrajectoriesByOwner(ctx context.Context, ownerID string, limit int) ([]types.TrajectoryRecord, error) {
 	if limit <= 0 {
 		limit = 100
+	}
+	if s.og != nil {
+		trajs, err := s.ListTrajectoriesByOwnerOG(ctx, ownerID, limit)
+		if err == nil && len(trajs) > 0 {
+			return trajs, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.queryDB().QueryContext(ctx,
 		`SELECT trajectory_id, owner_id, kind, subject_refs_json, status,
@@ -114,6 +135,9 @@ func (s *Store) ListTrajectoriesByOwner(ctx context.Context, ownerID string, lim
 // UpdateTrajectoryStatus transitions a trajectory's lifecycle status.
 // Settling stamps settled_at.
 func (s *Store) UpdateTrajectoryStatus(ctx context.Context, ownerID, trajectoryID string, status types.TrajectoryStatus) (types.TrajectoryRecord, error) {
+	if s.og != nil {
+		return s.UpdateTrajectoryStatusOG(ctx, ownerID, trajectoryID, status)
+	}
 	now := time.Now().UTC()
 	var settledAt any
 	if status == types.TrajectorySettled {
@@ -153,6 +177,42 @@ func (s *Store) UpdateTrajectorySubjectRefs(ctx context.Context, ownerID, trajec
 	}
 	s.jsonPatchMu.Lock()
 	defer s.jsonPatchMu.Unlock()
+
+	if s.og != nil {
+		// Fetch the existing OG object to preserve object ID and created_at.
+		obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
+		if err != nil {
+			return types.TrajectoryRecord{}, err
+		}
+		var rec types.TrajectoryRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return types.TrajectoryRecord{}, err
+		}
+		if rec.OwnerID != ownerID {
+			return types.TrajectoryRecord{}, ErrNotFound
+		}
+		if rec.SubjectRefs == nil {
+			rec.SubjectRefs = map[string]string{}
+		}
+		changed := false
+		for key, value := range patch {
+			key = strings.TrimSpace(key)
+			value = strings.TrimSpace(value)
+			if key == "" || value == "" {
+				continue
+			}
+			if rec.SubjectRefs[key] == value {
+				continue
+			}
+			rec.SubjectRefs[key] = value
+			changed = true
+		}
+		if !changed {
+			return rec, nil
+		}
+		rec.UpdatedAt = time.Now().UTC()
+		return s.upsertTrajectoryOG(ctx, rec, obj)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -244,6 +304,11 @@ func (s *Store) CreateWorkItem(ctx context.Context, rec types.WorkItemRecord) (t
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
+
+	if s.og != nil {
+		return s.CreateWorkItemOG(ctx, rec)
+	}
+
 	detailsJSON, err := marshalJSON(rec.Details)
 	if err != nil {
 		return types.WorkItemRecord{}, fmt.Errorf("marshal work item details: %w", err)
@@ -279,6 +344,33 @@ func (s *Store) CreateWorkItem(ctx context.Context, rec types.WorkItemRecord) (t
 }
 
 func (s *Store) findWorkItemByFingerprint(ctx context.Context, ownerID, trajectoryID, fingerprint string) (types.WorkItemRecord, bool, error) {
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "objective_fingerprint", fingerprint, 100)
+		if err != nil {
+			return types.WorkItemRecord{}, false, err
+		}
+		var earliest *types.WorkItemRecord
+		for i := range objs {
+			var rec types.WorkItemRecord
+			if err := ogDecode(objs[i], &rec); err != nil {
+				return types.WorkItemRecord{}, false, err
+			}
+			if rec.OwnerID != ownerID || rec.TrajectoryID != trajectoryID {
+				continue
+			}
+			if rec.Status != types.WorkItemOpen && rec.Status != types.WorkItemCompleted {
+				continue
+			}
+			if earliest == nil || rec.CreatedAt.Before(earliest.CreatedAt) {
+				recCopy := rec
+				earliest = &recCopy
+			}
+		}
+		if earliest == nil {
+			return types.WorkItemRecord{}, false, nil
+		}
+		return *earliest, true, nil
+	}
 	row := s.queryDB().QueryRowContext(ctx,
 		`SELECT `+workItemColumns+`
 		   FROM work_items
@@ -312,6 +404,13 @@ func (s *Store) FindWorkItemByFingerprint(ctx context.Context, ownerID, trajecto
 
 // GetWorkItem returns the work item with the given ID, owner-scoped.
 func (s *Store) GetWorkItem(ctx context.Context, ownerID, workItemID string) (types.WorkItemRecord, error) {
+	if s.og != nil {
+		rec, err := s.GetWorkItemOG(ctx, ownerID, workItemID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.queryDB().QueryRowContext(ctx,
 		`SELECT `+workItemColumns+`
 		   FROM work_items
@@ -325,6 +424,13 @@ func (s *Store) GetWorkItem(ctx context.Context, ownerID, workItemID string) (ty
 // filtered to open ones (the open-obligations query: "what is this
 // trajectory waiting on?").
 func (s *Store) ListWorkItemsByTrajectory(ctx context.Context, ownerID, trajectoryID string, openOnly bool) ([]types.WorkItemRecord, error) {
+	if s.og != nil {
+		items, err := s.ListWorkItemsByTrajectoryOG(ctx, ownerID, trajectoryID, openOnly)
+		if err == nil && len(items) > 0 {
+			return items, nil
+		}
+		// Fall through to SQL if OG returned nothing.
+	}
 	query := `SELECT ` + workItemColumns + `
 	   FROM work_items
 	  WHERE owner_id = ? AND trajectory_id = ?`
@@ -355,6 +461,55 @@ func (s *Store) ListWorkItemsByTrajectory(ctx context.Context, ownerID, trajecto
 func (s *Store) ListOpenAssignedWorkItems(ctx context.Context, limit int) ([]types.WorkItemRecord, error) {
 	if limit <= 0 {
 		limit = 100
+	}
+	if s.og != nil {
+		// Fetch all open work items from OG, filter for assigned + live trajectory.
+		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:  ogKindWorkItem,
+			Limit: 1000,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list open assigned work items: %w", err)
+		}
+		var candidates []types.WorkItemRecord
+		for _, obj := range objs {
+			var rec types.WorkItemRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			if rec.Status != types.WorkItemOpen {
+				continue
+			}
+			if strings.TrimSpace(rec.AssignedAgentID) == "" {
+				continue
+			}
+			// Check trajectory is live.
+			traj, err := s.GetTrajectoryOG(ctx, rec.OwnerID, rec.TrajectoryID)
+			if err != nil {
+				continue
+			}
+			if traj.Status != types.TrajectoryLive {
+				continue
+			}
+			candidates = append(candidates, rec)
+		}
+		// Sort by updated_at ASC, created_at ASC, work_item_id ASC.
+		sort.Slice(candidates, func(i, j int) bool {
+			if !candidates[i].UpdatedAt.Equal(candidates[j].UpdatedAt) {
+				return candidates[i].UpdatedAt.Before(candidates[j].UpdatedAt)
+			}
+			if !candidates[i].CreatedAt.Equal(candidates[j].CreatedAt) {
+				return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
+			}
+			return candidates[i].WorkItemID < candidates[j].WorkItemID
+		})
+		if len(candidates) > limit {
+			candidates = candidates[:limit]
+		}
+		if len(candidates) > 0 {
+			return candidates, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.queryDB().QueryContext(ctx,
 		`SELECT `+workItemColumns+`
@@ -389,6 +544,9 @@ func (s *Store) ListOpenAssignedWorkItems(ctx context.Context, limit int) ([]typ
 
 // UpdateWorkItemStatus transitions a work item's lifecycle status.
 func (s *Store) UpdateWorkItemStatus(ctx context.Context, ownerID, workItemID string, status types.WorkItemStatus) (types.WorkItemRecord, error) {
+	if s.og != nil {
+		return s.UpdateWorkItemStatusOG(ctx, ownerID, workItemID, status)
+	}
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE work_items
 		    SET status = ?, updated_at = ?
@@ -422,6 +580,41 @@ func (s *Store) UpdateWorkItemDetails(ctx context.Context, ownerID, workItemID s
 	}
 	s.jsonPatchMu.Lock()
 	defer s.jsonPatchMu.Unlock()
+
+	if s.og != nil {
+		rec, err := s.GetWorkItemOG(ctx, ownerID, workItemID)
+		if err != nil {
+			return types.WorkItemRecord{}, err
+		}
+		if rec.Details == nil {
+			rec.Details = map[string]any{}
+		}
+		changed := false
+		for key, value := range patch {
+			key = strings.TrimSpace(key)
+			if key == "" || value == nil {
+				continue
+			}
+			if existing, ok := rec.Details[key]; ok {
+				existingJSON, existingErr := marshalJSON(existing)
+				valueJSON, valueErr := marshalJSON(value)
+				if existingErr == nil && valueErr == nil && string(existingJSON) == string(valueJSON) {
+					continue
+				}
+			}
+			rec.Details[key] = value
+			changed = true
+		}
+		if !changed {
+			return rec, nil
+		}
+		rec.UpdatedAt = time.Now().UTC()
+		// Upsert back to OG.
+		if _, err := s.CreateWorkItemOG(ctx, rec); err != nil {
+			return types.WorkItemRecord{}, fmt.Errorf("update work item details: %w", err)
+		}
+		return s.GetWorkItemOG(ctx, ownerID, workItemID)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
