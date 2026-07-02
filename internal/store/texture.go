@@ -477,9 +477,6 @@ func (s *Store) EnsureTextureSchema() error {
 
 // CreateDocument inserts a new document record.
 func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
-	if s.og != nil {
-		return s.CreateTextureDocumentOG(ctx, doc)
-	}
 	_, err := s.textureHandle().ExecContext(ctx,
 		`INSERT INTO texture_documents (doc_id, owner_id, title, current_revision_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -492,6 +489,10 @@ func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
 	)
 	if err != nil {
 		return fmt.Errorf("insert texture document: %w", err)
+	}
+	// Dual-write to OG for OG-backed reads.
+	if s.og != nil {
+		_ = s.CreateTextureDocumentOG(ctx, doc)
 	}
 	return nil
 }
@@ -747,9 +748,6 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 
 // UpdateDocument updates an existing document record.
 func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
-	if s.og != nil {
-		return s.UpdateTextureDocumentOG(ctx, doc)
-	}
 	result, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_documents
 		    SET owner_id = ?,
@@ -773,6 +771,10 @@ func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
 	}
 	if rows == 0 {
 		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, doc.DocID, doc.OwnerID)
+	}
+	// Dual-write to OG for OG-backed reads.
+	if s.og != nil {
+		_ = s.UpdateTextureDocumentOG(ctx, doc)
 	}
 	return nil
 }
@@ -1033,6 +1035,15 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit texture revision: %w", err)
+	}
+	// Dual-write: update OG document head and write revision to OG.
+	if s.og != nil {
+		_ = s.CreateTextureRevisionOG(ctx, rev)
+		if doc, err := s.GetTextureDocumentOG(ctx, rev.OwnerID, rev.DocID); err == nil {
+			doc.CurrentRevisionID = rev.RevisionID
+			doc.UpdatedAt = rev.CreatedAt
+			_ = s.UpdateTextureDocumentOG(ctx, doc)
+		}
 	}
 	return nil
 }
@@ -2122,9 +2133,6 @@ func (s *Store) CreateTextureDecision(ctx context.Context, rec types.TextureDeci
 	if rec.CreatedAt.IsZero() {
 		rec.CreatedAt = time.Now().UTC()
 	}
-	if s.og != nil {
-		return s.CreateTextureDecisionOG(ctx, rec)
-	}
 	evidenceRefs, err := json.Marshal(rec.EvidenceRefs)
 	if err != nil {
 		return fmt.Errorf("marshal texture decision evidence refs: %w", err)
@@ -2149,6 +2157,10 @@ func (s *Store) CreateTextureDecision(ctx context.Context, rec types.TextureDeci
 	)
 	if err != nil {
 		return fmt.Errorf("insert texture decision: %w", err)
+	}
+	// Dual-write to OG for OG-backed reads.
+	if s.og != nil {
+		_ = s.CreateTextureDecisionOG(ctx, rec)
 	}
 	return nil
 }
