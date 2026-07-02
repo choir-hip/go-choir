@@ -856,6 +856,228 @@ func (s *Store) GetInboxDeliveryOG(ctx context.Context, ownerID, deliveryID stri
 	return rec, nil
 }
 
+// =========================================================================
+// Run Memory Entries — object graph implementation
+// =========================================================================
+
+// AppendRunMemoryEntryOG stores a run memory entry in the object graph.
+// Run memory entries use external-key identity (entry_id).
+func (s *Store) AppendRunMemoryEntryOG(ctx context.Context, rec types.RunMemoryEntry) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"entry_id":           rec.EntryID,
+		"run_id":             rec.RunID,
+		"agent_id":           rec.AgentID,
+		"parent_entry_id":    rec.ParentEntryID,
+		"seq":                rec.Seq,
+		"kind":               string(rec.Kind),
+		"role":               rec.Role,
+		"model":              rec.Model,
+		"tokens_before":      rec.TokensBefore,
+		"first_kept_entry_id": rec.FirstKeptEntryID,
+		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	_, err := s.ogPut(ctx, ogKindRunMemory, rec.OwnerID, rec.EntryID, rec, metadata, now)
+	return err
+}
+
+// ListRunMemoryEntriesOG lists memory entries for a run.
+func (s *Store) ListRunMemoryEntriesOG(ctx context.Context, ownerID, runID string, limit int) ([]types.RunMemoryEntry, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindRunMemory, "run_id", runID, limit)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]types.RunMemoryEntry, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunMemoryEntry
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		entries = append(entries, rec)
+	}
+	return entries, nil
+}
+
+// =========================================================================
+// Run Acceptances — object graph implementation
+// =========================================================================
+
+// CreateRunAcceptanceOG stores a run acceptance record in the object graph.
+// Acceptances use external-key identity (acceptance_id).
+func (s *Store) CreateRunAcceptanceOG(ctx context.Context, rec types.RunAcceptanceRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"acceptance_id":          rec.AcceptanceID,
+		"target_mission_id":      rec.TargetMissionID,
+		"trajectory_id":          rec.TrajectoryID,
+		"run_id":                 rec.RunID,
+		"desktop_id":             rec.DesktopID,
+		"authority_profile":      rec.AuthorityProfile,
+		"base_sha":               rec.BaseSHA,
+		"deployment_commit":      rec.DeploymentCommit,
+		"ci_run_id":              rec.CIRunID,
+		"deploy_run_id":          rec.DeployRunID,
+		"staging_url":            rec.StagingURL,
+		"health_commit":          rec.HealthCommit,
+		"acceptance_level":       string(rec.AcceptanceLevel),
+		"vm_mode":                rec.VMMode,
+		"state":                  string(rec.State),
+		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindRunAccept, rec.OwnerID, rec.AcceptanceID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge to run if set.
+	if rec.RunID != "" {
+		runSuffix := objectgraph.StableSuffixFromKey(rec.RunID)
+		runID, _ := objectgraph.BuildCanonicalID(ogKindRun, rec.OwnerID, runSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, runID, ogEdgeAcceptRun, nil)
+	}
+	// Write edge to trajectory.
+	if rec.TrajectoryID != "" {
+		trajSuffix := objectgraph.StableSuffixFromKey(rec.TrajectoryID)
+		trajID, _ := objectgraph.BuildCanonicalID(ogKindTrajectory, rec.OwnerID, trajSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, trajID, ogEdgeAcceptTraj, nil)
+	}
+	return nil
+}
+
+// GetRunAcceptanceOG retrieves a run acceptance by ID.
+func (s *Store) GetRunAcceptanceOG(ctx context.Context, ownerID, acceptanceID string) (types.RunAcceptanceRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindRunAccept, "acceptance_id", acceptanceID)
+	if err != nil {
+		return types.RunAcceptanceRecord{}, err
+	}
+	var rec types.RunAcceptanceRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.RunAcceptanceRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.RunAcceptanceRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListRunAcceptancesByTrajectoryOG lists acceptances for a trajectory.
+func (s *Store) ListRunAcceptancesByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.RunAcceptanceRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindRunAccept, "trajectory_id", trajectoryID, limit)
+	if err != nil {
+		return nil, err
+	}
+	accepts := make([]types.RunAcceptanceRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunAcceptanceRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		accepts = append(accepts, rec)
+	}
+	return accepts, nil
+}
+
+// =========================================================================
+// Run Continuations — object graph implementation
+// =========================================================================
+
+// CreateRunContinuationOG stores a run continuation record.
+// Continuations use external-key identity (continuation_id).
+func (s *Store) CreateRunContinuationOG(ctx context.Context, rec types.RunContinuationRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"continuation_id":    rec.ContinuationID,
+		"source_run_id":      rec.SourceRunID,
+		"next_run_id":        rec.NextRunID,
+		"authority_profile":  rec.AuthorityProfile,
+		"lease_seconds":      rec.LeaseSeconds,
+		"status":             string(rec.Status),
+		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":         rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindRunContin, rec.OwnerID, rec.ContinuationID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edges to source and next runs.
+	if rec.SourceRunID != "" {
+		runSuffix := objectgraph.StableSuffixFromKey(rec.SourceRunID)
+		runID, _ := objectgraph.BuildCanonicalID(ogKindRun, rec.OwnerID, runSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, runID, ogEdgeContinFromRun, nil)
+	}
+	if rec.NextRunID != "" {
+		runSuffix := objectgraph.StableSuffixFromKey(rec.NextRunID)
+		runID, _ := objectgraph.BuildCanonicalID(ogKindRun, rec.OwnerID, runSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, runID, ogEdgeContinToRun, nil)
+	}
+	return nil
+}
+
+// GetRunContinuationOG retrieves a run continuation by ID.
+func (s *Store) GetRunContinuationOG(ctx context.Context, ownerID, continuationID string) (types.RunContinuationRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindRunContin, "continuation_id", continuationID)
+	if err != nil {
+		return types.RunContinuationRecord{}, err
+	}
+	var rec types.RunContinuationRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.RunContinuationRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.RunContinuationRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListRunContinuationsBySourceRunOG lists continuations from a source run.
+func (s *Store) ListRunContinuationsBySourceRunOG(ctx context.Context, ownerID, sourceRunID string, limit int) ([]types.RunContinuationRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindRunContin, "source_run_id", sourceRunID, limit)
+	if err != nil {
+		return nil, err
+	}
+	contins := make([]types.RunContinuationRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunContinuationRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		contins = append(contins, rec)
+	}
+	return contins, nil
+}
+
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on
 // error. Used internally where the metadata map is known to be valid.
 func mustMarshalMetadata(m map[string]any) json.RawMessage {

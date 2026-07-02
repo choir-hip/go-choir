@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -654,5 +655,166 @@ func TestOGCreateAndGetInboxDelivery(t *testing.T) {
 	}
 	if got.Content != rec.Content {
 		t.Errorf("content: got %q", got.Content)
+	}
+}
+
+// =========================================================================
+// Run Memory Entry tests
+// =========================================================================
+
+func TestOGAppendAndListRunMemoryEntries(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	for i := range 3 {
+		rec := types.RunMemoryEntry{
+			EntryID:   "mem-og-" + string(rune('A'+i)),
+			RunID:     "run-og-mem",
+			OwnerID:   "owner-og",
+			Seq:       int64(i + 1),
+			Kind:      types.RunMemoryEntryMessage,
+			Message:   json.RawMessage(`{"role":"user"}`),
+			CreatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+		if err := s.AppendRunMemoryEntryOG(ctx, rec); err != nil {
+			t.Fatalf("append memory %d: %v", i, err)
+		}
+	}
+
+	entries, err := s.ListRunMemoryEntriesOG(ctx, "owner-og", "run-og-mem", 100)
+	if err != nil {
+		t.Fatalf("list memory: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+}
+
+// =========================================================================
+// Run Acceptance tests
+// =========================================================================
+
+func TestOGCreateAndGetRunAcceptance(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.RunAcceptanceRecord{
+		AcceptanceID:    "acc-og-1",
+		TargetMissionID: "mission-1",
+		OwnerID:         "owner-og",
+		TrajectoryID:    "traj-og-1",
+		RunID:           "run-og-1",
+		AcceptanceLevel: types.RunAcceptanceDocsLevel,
+		State:           types.RunAcceptanceSynthesized,
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+	}
+	if err := s.CreateRunAcceptanceOG(ctx, rec); err != nil {
+		t.Fatalf("create acceptance: %v", err)
+	}
+
+	got, err := s.GetRunAcceptanceOG(ctx, "owner-og", "acc-og-1")
+	if err != nil {
+		t.Fatalf("get acceptance: %v", err)
+	}
+	if got.AcceptanceID != rec.AcceptanceID {
+		t.Errorf("acceptance_id: got %q", got.AcceptanceID)
+	}
+	if got.TrajectoryID != rec.TrajectoryID {
+		t.Errorf("trajectory_id: got %q", got.TrajectoryID)
+	}
+}
+
+func TestOGListRunAcceptancesByTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 2 {
+		rec := types.RunAcceptanceRecord{
+			AcceptanceID:    "acc-og-list-" + string(rune('A'+i)),
+			TargetMissionID: "mission-1",
+			OwnerID:         "owner-og",
+			TrajectoryID:    "traj-og-list",
+			AcceptanceLevel: types.RunAcceptanceDocsLevel,
+			State:           types.RunAcceptanceSynthesized,
+			CreatedAt:       time.Now().UTC(),
+			UpdatedAt:       time.Now().UTC(),
+		}
+		if err := s.CreateRunAcceptanceOG(ctx, rec); err != nil {
+			t.Fatalf("create acceptance %d: %v", i, err)
+		}
+	}
+
+	accepts, err := s.ListRunAcceptancesByTrajectoryOG(ctx, "owner-og", "traj-og-list", 10)
+	if err != nil {
+		t.Fatalf("list acceptances: %v", err)
+	}
+	if len(accepts) != 2 {
+		t.Fatalf("expected 2 acceptances, got %d", len(accepts))
+	}
+}
+
+// =========================================================================
+// Run Continuation tests
+// =========================================================================
+
+func TestOGCreateAndGetRunContinuation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.RunContinuationRecord{
+		ContinuationID: "cont-og-1",
+		OwnerID:        "owner-og",
+		SourceRunID:    "run-og-1",
+		Objective:      "next objective",
+		Status:         types.RunContinuationSelected,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+	if err := s.CreateRunContinuationOG(ctx, rec); err != nil {
+		t.Fatalf("create continuation: %v", err)
+	}
+
+	got, err := s.GetRunContinuationOG(ctx, "owner-og", "cont-og-1")
+	if err != nil {
+		t.Fatalf("get continuation: %v", err)
+	}
+	if got.ContinuationID != rec.ContinuationID {
+		t.Errorf("continuation_id: got %q", got.ContinuationID)
+	}
+	if got.SourceRunID != rec.SourceRunID {
+		t.Errorf("source_run_id: got %q", got.SourceRunID)
+	}
+	if got.Objective != rec.Objective {
+		t.Errorf("objective: got %q", got.Objective)
+	}
+}
+
+func TestOGListRunContinuationsBySourceRun(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 2 {
+		rec := types.RunContinuationRecord{
+			ContinuationID: "cont-og-list-" + string(rune('A'+i)),
+			OwnerID:        "owner-og",
+			SourceRunID:    "run-og-source",
+			Objective:      "objective",
+			Status:         types.RunContinuationSelected,
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		}
+		if err := s.CreateRunContinuationOG(ctx, rec); err != nil {
+			t.Fatalf("create continuation %d: %v", i, err)
+		}
+	}
+
+	contins, err := s.ListRunContinuationsBySourceRunOG(ctx, "owner-og", "run-og-source", 10)
+	if err != nil {
+		t.Fatalf("list continuations: %v", err)
+	}
+	if len(contins) != 2 {
+		t.Fatalf("expected 2 continuations, got %d", len(contins))
 	}
 }
