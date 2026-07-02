@@ -818,3 +818,200 @@ func TestOGListRunContinuationsBySourceRun(t *testing.T) {
 		t.Fatalf("expected 2 continuations, got %d", len(contins))
 	}
 }
+
+// =========================================================================
+// Texture Document tests
+// =========================================================================
+
+func TestOGCreateAndGetTextureDocument(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.Document{
+		DocID:     "doc-og-1",
+		OwnerID:   "owner-og",
+		Title:     "Test Document",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateTextureDocumentOG(ctx, rec); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	got, err := s.GetTextureDocumentOG(ctx, "owner-og", "doc-og-1")
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	if got.DocID != rec.DocID {
+		t.Errorf("doc_id: got %q", got.DocID)
+	}
+	if got.Title != rec.Title {
+		t.Errorf("title: got %q", got.Title)
+	}
+}
+
+func TestOGListTextureDocumentsByOwner(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 3 {
+		rec := types.Document{
+			DocID:     "doc-og-list-" + string(rune('A'+i)),
+			OwnerID:   "owner-list",
+			Title:     "Test",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := s.CreateTextureDocumentOG(ctx, rec); err != nil {
+			t.Fatalf("create document %d: %v", i, err)
+		}
+	}
+
+	docs, err := s.ListTextureDocumentsByOwnerOG(ctx, "owner-list", 10)
+	if err != nil {
+		t.Fatalf("list documents: %v", err)
+	}
+	if len(docs) != 3 {
+		t.Fatalf("expected 3 documents, got %d", len(docs))
+	}
+}
+
+func TestOGUpdateTextureDocument(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.Document{
+		DocID:     "doc-og-update",
+		OwnerID:   "owner-og",
+		Title:     "Original",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateTextureDocumentOG(ctx, rec); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	rec.Title = "Updated"
+	rec.CurrentRevisionID = "rev-1"
+	rec.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateTextureDocumentOG(ctx, rec); err != nil {
+		t.Fatalf("update document: %v", err)
+	}
+
+	got, err := s.GetTextureDocumentOG(ctx, "owner-og", "doc-og-update")
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	if got.Title != "Updated" {
+		t.Errorf("title: got %q, want %q", got.Title, "Updated")
+	}
+	if got.CurrentRevisionID != "rev-1" {
+		t.Errorf("current_revision_id: got %q", got.CurrentRevisionID)
+	}
+}
+
+// =========================================================================
+// Texture Revision tests
+// =========================================================================
+
+func TestOGCreateAndGetTextureRevision(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	// Create a document first.
+	doc := types.Document{
+		DocID:     "doc-og-rev",
+		OwnerID:   "owner-og",
+		Title:     "Test",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateTextureDocumentOG(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	rec := types.Revision{
+		RevisionID: "rev-og-1",
+		DocID:      "doc-og-rev",
+		OwnerID:    "owner-og",
+		AuthorKind: types.AuthorUser,
+		AuthorLabel: "user",
+		VersionNumber: 0,
+		Content:    "test content",
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateTextureRevisionOG(ctx, rec); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+
+	got, err := s.GetTextureRevisionOG(ctx, "owner-og", "rev-og-1")
+	if err != nil {
+		t.Fatalf("get revision: %v", err)
+	}
+	if got.RevisionID != rec.RevisionID {
+		t.Errorf("revision_id: got %q", got.RevisionID)
+	}
+	if got.Content != rec.Content {
+		t.Errorf("content: got %q", got.Content)
+	}
+}
+
+func TestOGListTextureRevisionsByDoc(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 3 {
+		rec := types.Revision{
+			RevisionID: "rev-og-list-" + string(rune('A'+i)),
+			DocID:      "doc-og-list",
+			OwnerID:    "owner-og",
+			AuthorKind: types.AuthorUser,
+			AuthorLabel: "user",
+			VersionNumber: i,
+			Content:    "test",
+			CreatedAt:  time.Now().UTC(),
+		}
+		if err := s.CreateTextureRevisionOG(ctx, rec); err != nil {
+			t.Fatalf("create revision %d: %v", i, err)
+		}
+	}
+
+	revisions, err := s.ListTextureRevisionsByDocOG(ctx, "owner-og", "doc-og-list", 100)
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(revisions) != 3 {
+		t.Fatalf("expected 3 revisions, got %d", len(revisions))
+	}
+}
+
+// =========================================================================
+// Texture Decision tests
+// =========================================================================
+
+func TestOGCreateAndListTextureDecisions(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 2 {
+		rec := types.TextureDecisionRecord{
+			DecisionID:   "dec-og-" + string(rune('A'+i)),
+			OwnerID:      "owner-og",
+			DocID:        "doc-og-dec",
+			DecisionKind: "open",
+			Reason:       "test reason",
+			CreatedAt:    time.Now().UTC(),
+		}
+		if err := s.CreateTextureDecisionOG(ctx, rec); err != nil {
+			t.Fatalf("create decision %d: %v", i, err)
+		}
+	}
+
+	decisions, err := s.ListTextureDecisionsByDocOG(ctx, "owner-og", "doc-og-dec", 10)
+	if err != nil {
+		t.Fatalf("list decisions: %v", err)
+	}
+	if len(decisions) != 2 {
+		t.Fatalf("expected 2 decisions, got %d", len(decisions))
+	}
+}

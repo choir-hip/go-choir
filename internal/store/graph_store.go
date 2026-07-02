@@ -1078,6 +1078,248 @@ func (s *Store) ListRunContinuationsBySourceRunOG(ctx context.Context, ownerID, 
 	return contins, nil
 }
 
+// =========================================================================
+// Texture Documents — object graph implementation
+// =========================================================================
+
+// CreateTextureDocumentOG creates a texture document in the object graph.
+// Documents use external-key identity (doc_id).
+func (s *Store) CreateTextureDocumentOG(ctx context.Context, rec types.Document) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"doc_id":               rec.DocID,
+		"title":                rec.Title,
+		"current_revision_id":  rec.CurrentRevisionID,
+		"created_at":           rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":           rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	_, err := s.ogPut(ctx, ogKindTexDoc, rec.OwnerID, rec.DocID, rec, metadata, now)
+	return err
+}
+
+// GetTextureDocumentOG retrieves a texture document by ID.
+func (s *Store) GetTextureDocumentOG(ctx context.Context, ownerID, docID string) (types.Document, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)
+	if err != nil {
+		return types.Document{}, err
+	}
+	var rec types.Document
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.Document{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.Document{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListTextureDocumentsByOwnerOG lists documents by owner.
+func (s *Store) ListTextureDocumentsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.Document, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindTexDoc,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]types.Document, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.Document
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		docs = append(docs, rec)
+	}
+	return docs, nil
+}
+
+// UpdateTextureDocumentOG updates a texture document (e.g. to set
+// current_revision_id).
+func (s *Store) UpdateTextureDocumentOG(ctx context.Context, rec types.Document) error {
+	obj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", rec.DocID)
+	if err != nil {
+		return err
+	}
+	var existing types.Document
+	if err := ogDecode(obj, &existing); err != nil {
+		return err
+	}
+	if existing.OwnerID != rec.OwnerID {
+		return ErrNotFound
+	}
+
+	now := rec.UpdatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"doc_id":               rec.DocID,
+		"title":                rec.Title,
+		"current_revision_id":  rec.CurrentRevisionID,
+		"created_at":           existing.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":           now.UTC().Format(time.RFC3339Nano),
+	}
+
+	bodyJSON, _ := json.Marshal(rec)
+	obj.Body = bodyJSON
+	obj.Metadata = mustMarshalMetadata(metadata)
+	obj.UpdatedAt = now
+	return s.ogStore.PutObject(ctx, obj)
+}
+
+// =========================================================================
+// Texture Revisions — object graph implementation
+// =========================================================================
+
+// CreateTextureRevisionOG creates a texture revision in the object graph.
+// Revisions use external-key identity (revision_id).
+func (s *Store) CreateTextureRevisionOG(ctx context.Context, rec types.Revision) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"revision_id":       rec.RevisionID,
+		"doc_id":            rec.DocID,
+		"author_kind":       string(rec.AuthorKind),
+		"author_label":      rec.AuthorLabel,
+		"version_number":    rec.VersionNumber,
+		"parent_revision_id": rec.ParentRevisionID,
+		"revision_hash":     rec.RevisionHash,
+		"created_at":        rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindTexRev, rec.OwnerID, rec.RevisionID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge from revision to document.
+	if rec.DocID != "" {
+		docSuffix := objectgraph.StableSuffixFromKey(rec.DocID)
+		docID, _ := objectgraph.BuildCanonicalID(ogKindTexDoc, rec.OwnerID, docSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, docID, ogEdgeDocRevision, nil)
+	}
+	// Write edge to parent revision.
+	if rec.ParentRevisionID != "" {
+		parentSuffix := objectgraph.StableSuffixFromKey(rec.ParentRevisionID)
+		parentID, _ := objectgraph.BuildCanonicalID(ogKindTexRev, rec.OwnerID, parentSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, parentID, ogEdgeRevParent, nil)
+	}
+	return nil
+}
+
+// GetTextureRevisionOG retrieves a texture revision by ID.
+func (s *Store) GetTextureRevisionOG(ctx context.Context, ownerID, revisionID string) (types.Revision, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", revisionID)
+	if err != nil {
+		return types.Revision{}, err
+	}
+	var rec types.Revision
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.Revision{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.Revision{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListTextureRevisionsByDocOG lists revisions for a document.
+func (s *Store) ListTextureRevisionsByDocOG(ctx context.Context, ownerID, docID string, limit int) ([]types.Revision, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindTexRev, "doc_id", docID, limit)
+	if err != nil {
+		return nil, err
+	}
+	revisions := make([]types.Revision, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.Revision
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		revisions = append(revisions, rec)
+	}
+	return revisions, nil
+}
+
+// =========================================================================
+// Texture Decisions — object graph implementation
+// =========================================================================
+
+// CreateTextureDecisionOG creates a texture decision in the object graph.
+// Decisions use external-key identity (decision_id).
+func (s *Store) CreateTextureDecisionOG(ctx context.Context, rec types.TextureDecisionRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"decision_id":    rec.DecisionID,
+		"doc_id":         rec.DocID,
+		"run_id":         rec.RunID,
+		"trajectory_id":  rec.TrajectoryID,
+		"actor_id":       rec.ActorID,
+		"decision_kind":  rec.DecisionKind,
+		"created_at":     rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindTexDecision, rec.OwnerID, rec.DecisionID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge to document.
+	if rec.DocID != "" {
+		docSuffix := objectgraph.StableSuffixFromKey(rec.DocID)
+		docID, _ := objectgraph.BuildCanonicalID(ogKindTexDoc, rec.OwnerID, docSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, docID, ogEdgeDecisionDoc, nil)
+	}
+	// Write edge to run.
+	if rec.RunID != "" {
+		runSuffix := objectgraph.StableSuffixFromKey(rec.RunID)
+		runID, _ := objectgraph.BuildCanonicalID(ogKindRun, rec.OwnerID, runSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, runID, ogEdgeDecisionRun, nil)
+	}
+	return nil
+}
+
+// ListTextureDecisionsByDocOG lists decisions for a document.
+func (s *Store) ListTextureDecisionsByDocOG(ctx context.Context, ownerID, docID string, limit int) ([]types.TextureDecisionRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindTexDecision, "doc_id", docID, limit)
+	if err != nil {
+		return nil, err
+	}
+	decisions := make([]types.TextureDecisionRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.TextureDecisionRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		decisions = append(decisions, rec)
+	}
+	return decisions, nil
+}
+
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on
 // error. Used internally where the metadata map is known to be valid.
 func mustMarshalMetadata(m map[string]any) json.RawMessage {
