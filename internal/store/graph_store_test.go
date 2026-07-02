@@ -342,3 +342,221 @@ func TestOGGetRunNotFound(t *testing.T) {
 		t.Error("expected error for missing run")
 	}
 }
+
+// =========================================================================
+// Trajectory tests
+// =========================================================================
+
+func TestOGCreateTrajectoryIfAbsent(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.TrajectoryRecord{
+		TrajectoryID: "traj-og-1",
+		OwnerID:      "owner-og",
+		Kind:         types.TrajectoryKindTask,
+		Status:       types.TrajectoryLive,
+	}
+	created, err := s.CreateTrajectoryIfAbsentOG(ctx, rec)
+	if err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	if created.TrajectoryID != rec.TrajectoryID {
+		t.Errorf("trajectory_id: got %q", created.TrajectoryID)
+	}
+
+	// Second call should return the existing record.
+	rec.Status = types.TrajectorySettled
+	existing, err := s.CreateTrajectoryIfAbsentOG(ctx, rec)
+	if err != nil {
+		t.Fatalf("create trajectory (second): %v", err)
+	}
+	if existing.Status != types.TrajectoryLive {
+		t.Errorf("expected original status, got %q", existing.Status)
+	}
+}
+
+func TestOGGetTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.TrajectoryRecord{
+		TrajectoryID: "traj-og-2",
+		OwnerID:      "owner-og",
+		Kind:         types.TrajectoryKindTask,
+	}
+	_, err := s.CreateTrajectoryIfAbsentOG(ctx, rec)
+	if err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+
+	got, err := s.GetTrajectoryOG(ctx, "owner-og", "traj-og-2")
+	if err != nil {
+		t.Fatalf("get trajectory: %v", err)
+	}
+	if got.TrajectoryID != "traj-og-2" {
+		t.Errorf("trajectory_id: got %q", got.TrajectoryID)
+	}
+}
+
+func TestOGListTrajectoriesByOwner(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 3 {
+		rec := types.TrajectoryRecord{
+			TrajectoryID: "traj-og-list-" + string(rune('A'+i)),
+			OwnerID:      "owner-list",
+			Kind:         types.TrajectoryKindTask,
+		}
+		if _, err := s.CreateTrajectoryIfAbsentOG(ctx, rec); err != nil {
+			t.Fatalf("create trajectory %d: %v", i, err)
+		}
+	}
+
+	trajs, err := s.ListTrajectoriesByOwnerOG(ctx, "owner-list", 10)
+	if err != nil {
+		t.Fatalf("list trajectories: %v", err)
+	}
+	if len(trajs) != 3 {
+		t.Fatalf("expected 3 trajectories, got %d", len(trajs))
+	}
+}
+
+func TestOGUpdateTrajectoryStatus(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.TrajectoryRecord{
+		TrajectoryID: "traj-og-status",
+		OwnerID:      "owner-og",
+		Kind:         types.TrajectoryKindTask,
+	}
+	_, err := s.CreateTrajectoryIfAbsentOG(ctx, rec)
+	if err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+
+	updated, err := s.UpdateTrajectoryStatusOG(ctx, "owner-og", "traj-og-status", types.TrajectorySettled)
+	if err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+	if updated.Status != types.TrajectorySettled {
+		t.Errorf("status: got %q, want %q", updated.Status, types.TrajectorySettled)
+	}
+	if updated.SettledAt == nil {
+		t.Error("expected settled_at to be set")
+	}
+}
+
+// =========================================================================
+// Work Item tests
+// =========================================================================
+
+func TestOGCreateAndGetWorkItem(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.WorkItemRecord{
+		WorkItemID:   "wi-og-1",
+		TrajectoryID: "traj-og-1",
+		OwnerID:      "owner-og",
+		Objective:    "test objective",
+		Status:       types.WorkItemOpen,
+	}
+	created, err := s.CreateWorkItemOG(ctx, rec)
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+	if created.WorkItemID != rec.WorkItemID {
+		t.Errorf("work_item_id: got %q", created.WorkItemID)
+	}
+
+	got, err := s.GetWorkItemOG(ctx, "owner-og", "wi-og-1")
+	if err != nil {
+		t.Fatalf("get work item: %v", err)
+	}
+	if got.Objective != rec.Objective {
+		t.Errorf("objective: got %q, want %q", got.Objective, rec.Objective)
+	}
+}
+
+func TestOGListWorkItemsByTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 3 {
+		rec := types.WorkItemRecord{
+			WorkItemID:   "wi-og-list-" + string(rune('A'+i)),
+			TrajectoryID: "traj-og-list",
+			OwnerID:      "owner-og",
+			Objective:    "test",
+			Status:       types.WorkItemOpen,
+		}
+		if _, err := s.CreateWorkItemOG(ctx, rec); err != nil {
+			t.Fatalf("create work item %d: %v", i, err)
+		}
+	}
+	// Add a completed item.
+	completed := types.WorkItemRecord{
+		WorkItemID:   "wi-og-completed",
+		TrajectoryID: "traj-og-list",
+		OwnerID:      "owner-og",
+		Objective:    "done",
+		Status:       types.WorkItemCompleted,
+	}
+	if _, err := s.CreateWorkItemOG(ctx, completed); err != nil {
+		t.Fatalf("create completed work item: %v", err)
+	}
+
+	// List all.
+	all, err := s.ListWorkItemsByTrajectoryOG(ctx, "owner-og", "traj-og-list", false)
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if len(all) != 4 {
+		t.Fatalf("expected 4 work items, got %d", len(all))
+	}
+
+	// List open only.
+	open, err := s.ListWorkItemsByTrajectoryOG(ctx, "owner-og", "traj-og-list", true)
+	if err != nil {
+		t.Fatalf("list open: %v", err)
+	}
+	if len(open) != 3 {
+		t.Fatalf("expected 3 open work items, got %d", len(open))
+	}
+}
+
+func TestOGUpdateWorkItemStatus(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.WorkItemRecord{
+		WorkItemID:   "wi-og-update",
+		TrajectoryID: "traj-og-1",
+		OwnerID:      "owner-og",
+		Objective:    "test",
+		Status:       types.WorkItemOpen,
+	}
+	if _, err := s.CreateWorkItemOG(ctx, rec); err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+
+	updated, err := s.UpdateWorkItemStatusOG(ctx, "owner-og", "wi-og-update", types.WorkItemCompleted)
+	if err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+	if updated.Status != types.WorkItemCompleted {
+		t.Errorf("status: got %q, want %q", updated.Status, types.WorkItemCompleted)
+	}
+
+	// Verify by reading back.
+	got, err := s.GetWorkItemOG(ctx, "owner-og", "wi-og-update")
+	if err != nil {
+		t.Fatalf("get work item: %v", err)
+	}
+	if got.Status != types.WorkItemCompleted {
+		t.Errorf("status after read: got %q", got.Status)
+	}
+}

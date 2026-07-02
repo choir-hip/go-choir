@@ -418,7 +418,269 @@ func (s *Store) ListEventsByOwnerOG(ctx context.Context, ownerID string, limit i
 	return events, nil
 }
 
-// mustMarshalMetadata converts a map to json.RawMessage, panicking on
+// =========================================================================
+// Trajectories — object graph implementation
+// =========================================================================
+
+// CreateTrajectoryIfAbsentOG creates a trajectory if it doesn't exist.
+// Returns the stored record (existing or newly created).
+func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.TrajectoryRecord) (types.TrajectoryRecord, error) {
+	// Check if it already exists.
+	existing, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", rec.TrajectoryID)
+	if err == nil {
+		var existingRec types.TrajectoryRecord
+		if err := ogDecode(existing, &existingRec); err != nil {
+			return types.TrajectoryRecord{}, err
+		}
+		return existingRec, nil
+	}
+	if err != objectgraph.ErrNotFound {
+		return types.TrajectoryRecord{}, err
+	}
+
+	// Create new.
+	if rec.Kind == "" {
+		rec.Kind = types.TrajectoryKindTask
+	}
+	if rec.Status == "" {
+		rec.Status = types.TrajectoryLive
+	}
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	metadata := map[string]any{
+		"trajectory_id": rec.TrajectoryID,
+		"kind":          string(rec.Kind),
+		"status":        string(rec.Status),
+		"created_at":    rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":    rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if rec.SettledAt != nil {
+		metadata["settled_at"] = rec.SettledAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	_, err = s.ogPut(ctx, ogKindTrajectory, rec.OwnerID, rec.TrajectoryID, rec, metadata, now)
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	return rec, nil
+}
+
+// GetTrajectoryOG retrieves a trajectory by ID from the object graph.
+func (s *Store) GetTrajectoryOG(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	var rec types.TrajectoryRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	// Verify owner matches.
+	if rec.OwnerID != ownerID {
+		return types.TrajectoryRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListTrajectoriesByOwnerOG lists trajectories by owner.
+func (s *Store) ListTrajectoriesByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.TrajectoryRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindTrajectory,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	trajs := make([]types.TrajectoryRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.TrajectoryRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		trajs = append(trajs, rec)
+	}
+	return trajs, nil
+}
+
+// UpdateTrajectoryStatusOG updates the status of a trajectory.
+func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajectoryID string, status types.TrajectoryStatus) (types.TrajectoryRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	var rec types.TrajectoryRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.TrajectoryRecord{}, ErrNotFound
+	}
+
+	rec.Status = status
+	rec.UpdatedAt = time.Now().UTC()
+	if status == types.TrajectorySettled && rec.SettledAt == nil {
+		now := rec.UpdatedAt
+		rec.SettledAt = &now
+	}
+
+	metadata := map[string]any{
+		"trajectory_id": rec.TrajectoryID,
+		"kind":          string(rec.Kind),
+		"status":        string(rec.Status),
+		"created_at":    rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":    rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if rec.SettledAt != nil {
+		metadata["settled_at"] = rec.SettledAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	bodyJSON, _ := json.Marshal(rec)
+	obj.Body = bodyJSON
+	obj.Metadata = mustMarshalMetadata(metadata)
+	obj.UpdatedAt = rec.UpdatedAt
+	if err := s.ogStore.PutObject(ctx, obj); err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	return rec, nil
+}
+
+// =========================================================================
+// Work Items — object graph implementation
+// =========================================================================
+
+// CreateWorkItemOG creates a work item in the object graph.
+func (s *Store) CreateWorkItemOG(ctx context.Context, rec types.WorkItemRecord) (types.WorkItemRecord, error) {
+	if rec.WorkItemID == "" {
+		return types.WorkItemRecord{}, fmt.Errorf("create work item: work_item_id is required")
+	}
+	if rec.Status == "" {
+		rec.Status = types.WorkItemOpen
+	}
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
+	metadata := map[string]any{
+		"work_item_id":           rec.WorkItemID,
+		"trajectory_id":          rec.TrajectoryID,
+		"status":                 string(rec.Status),
+		"assigned_agent_id":      rec.AssignedAgentID,
+		"objective_fingerprint":  rec.ObjectiveFingerprint,
+		"created_by_run_id":      rec.CreatedByRunID,
+		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindWorkItem, rec.OwnerID, rec.WorkItemID, rec, metadata, now)
+	if err != nil {
+		return types.WorkItemRecord{}, err
+	}
+
+	// Write edge to trajectory.
+	if rec.TrajectoryID != "" {
+		trajSuffix := objectgraph.StableSuffixFromKey(rec.TrajectoryID)
+		trajID, _ := objectgraph.BuildCanonicalID(ogKindTrajectory, rec.OwnerID, trajSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, trajID, ogEdgeWorkItemTraj, nil)
+	}
+	// Write edge to assigned agent.
+	if rec.AssignedAgentID != "" {
+		agentSuffix := objectgraph.StableSuffixFromKey(rec.AssignedAgentID)
+		agentID, _ := objectgraph.BuildCanonicalID(ogKindAgent, rec.OwnerID, agentSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, agentID, ogEdgeWorkItemAgent, nil)
+	}
+	return rec, nil
+}
+
+// GetWorkItemOG retrieves a work item by ID.
+func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (types.WorkItemRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindWorkItem, "work_item_id", workItemID)
+	if err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	var rec types.WorkItemRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.WorkItemRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListWorkItemsByTrajectoryOG lists work items for a trajectory.
+func (s *Store) ListWorkItemsByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, openOnly bool) ([]types.WorkItemRecord, error) {
+	objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID, 500)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]types.WorkItemRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.WorkItemRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if openOnly && rec.Status != types.WorkItemOpen {
+			continue
+		}
+		items = append(items, rec)
+	}
+	return items, nil
+}
+
+// UpdateWorkItemStatusOG updates the status of a work item.
+func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID string, status types.WorkItemStatus) (types.WorkItemRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindWorkItem, "work_item_id", workItemID)
+	if err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	var rec types.WorkItemRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.WorkItemRecord{}, ErrNotFound
+	}
+
+	rec.Status = status
+	rec.UpdatedAt = time.Now().UTC()
+
+	metadata := map[string]any{
+		"work_item_id":           rec.WorkItemID,
+		"trajectory_id":          rec.TrajectoryID,
+		"status":                 string(rec.Status),
+		"assigned_agent_id":      rec.AssignedAgentID,
+		"objective_fingerprint":  rec.ObjectiveFingerprint,
+		"created_by_run_id":      rec.CreatedByRunID,
+		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	bodyJSON, _ := json.Marshal(rec)
+	obj.Body = bodyJSON
+	obj.Metadata = mustMarshalMetadata(metadata)
+	obj.UpdatedAt = rec.UpdatedAt
+	if err := s.ogStore.PutObject(ctx, obj); err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	return rec, nil
+}
+
+// mustMarshalMetadata converts a map to json.RawMessage, returning {} on
 // error. Used internally where the metadata map is known to be valid.
 func mustMarshalMetadata(m map[string]any) json.RawMessage {
 	out, err := json.Marshal(m)
@@ -427,3 +689,4 @@ func mustMarshalMetadata(m map[string]any) json.RawMessage {
 	}
 	return json.RawMessage(out)
 }
+
