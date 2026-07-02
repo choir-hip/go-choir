@@ -1,0 +1,397 @@
+package objectgraph
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
+
+	embedded "github.com/dolthub/driver"
+)
+
+func openTestDoltDB(t *testing.T) *sql.DB {
+	t.Helper()
+	root := t.TempDir()
+	rootDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)
+	rootCfg, err := embedded.ParseDSN(rootDSN)
+	if err != nil {
+		t.Fatalf("parse root dsn: %v", err)
+	}
+	rootConnector, err := embedded.NewConnector(rootCfg)
+	if err != nil {
+		t.Fatalf("new root connector: %v", err)
+	}
+	rootDB := sql.OpenDB(rootConnector)
+	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS testdb"); err != nil {
+		t.Fatalf("create database: %v", err)
+	}
+	_ = rootDB.Close()
+	_ = rootConnector.Close()
+
+	dbDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=testdb&multistatements=true&clientfoundrows=true", root)
+	dbCfg, err := embedded.ParseDSN(dbDSN)
+	if err != nil {
+		t.Fatalf("parse db dsn: %v", err)
+	}
+	dbConnector, err := embedded.NewConnector(dbCfg)
+	if err != nil {
+		t.Fatalf("new db connector: %v", err)
+	}
+	db := sql.OpenDB(dbConnector)
+	t.Cleanup(func() {
+		_ = db.Close()
+		_ = dbConnector.Close()
+	})
+	return db
+}
+
+func TestDoltStoreEnsureSchema(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	// Verify tables exist by inserting and reading back.
+	obj := Object{
+		CanonicalID:  "obj:choir.agent:test-owner:key-test",
+		ObjectKind:   "choir.agent",
+		OwnerID:      "test-owner",
+		ContentHash:  "sha256:abc123",
+		Body:         []byte(`{"name":"test"}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+	if err := store.PutObject(ctx, obj); err != nil {
+		t.Fatalf("put object: %v", err)
+	}
+
+	got, err := store.GetObject(ctx, obj.CanonicalID)
+	if err != nil {
+		t.Fatalf("get object: %v", err)
+	}
+	if got.CanonicalID != obj.CanonicalID {
+		t.Errorf("canonical_id: got %q, want %q", got.CanonicalID, obj.CanonicalID)
+	}
+	if got.ObjectKind != obj.ObjectKind {
+		t.Errorf("object_kind: got %q, want %q", got.ObjectKind, obj.ObjectKind)
+	}
+	if string(got.Body) != string(obj.Body) {
+		t.Errorf("body: got %q, want %q", got.Body, obj.Body)
+	}
+}
+
+func TestDoltStoreListObjects(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	now := time.Now().UTC()
+	for i := range 5 {
+		obj := Object{
+			CanonicalID:  fmt.Sprintf("obj:choir.agent:owner%d:key-%d", i, i),
+			ObjectKind:   "choir.agent",
+			OwnerID:      "owner0",
+			ContentHash:  fmt.Sprintf("sha256:hash%d", i),
+			Body:         []byte(`{}`),
+			Metadata:     json.RawMessage(`{}`),
+			CreatedAt:    now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:    now.Add(time.Duration(i) * time.Second),
+		}
+		if err := store.PutObject(ctx, obj); err != nil {
+			t.Fatalf("put object %d: %v", i, err)
+		}
+	}
+
+	// Add a different owner's object to verify filtering.
+	other := Object{
+		CanonicalID:  "obj:choir.agent:otherowner:key-other",
+		ObjectKind:   "choir.agent",
+		OwnerID:      "otherowner",
+		ContentHash:  "sha256:other",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := store.PutObject(ctx, other); err != nil {
+		t.Fatalf("put other object: %v", err)
+	}
+
+	// List by owner.
+	objs, err := store.ListObjects(ctx, ListFilter{Kind: "choir.agent", OwnerID: "owner0", Limit: 10})
+	if err != nil {
+		t.Fatalf("list objects: %v", err)
+	}
+	if len(objs) != 5 {
+		t.Fatalf("expected 5 objects, got %d", len(objs))
+	}
+	for _, o := range objs {
+		if o.OwnerID != "owner0" {
+			t.Errorf("unexpected owner_id %q", o.OwnerID)
+		}
+	}
+}
+
+func TestDoltStorePutAndListEdges(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	now := time.Now().UTC()
+	fromObj := Object{
+		CanonicalID:  "obj:choir.run:owner1:key-run1",
+		ObjectKind:   "choir.run",
+		OwnerID:      "owner1",
+		ContentHash:  "sha256:run1",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	toObj := Object{
+		CanonicalID:  "obj:choir.agent:owner1:key-agent1",
+		ObjectKind:   "choir.agent",
+		OwnerID:      "owner1",
+		ContentHash:  "sha256:agent1",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := store.PutObject(ctx, fromObj); err != nil {
+		t.Fatalf("put from object: %v", err)
+	}
+	if err := store.PutObject(ctx, toObj); err != nil {
+		t.Fatalf("put to object: %v", err)
+	}
+
+	edgeID, err := BuildEdgeID(fromObj.CanonicalID, toObj.CanonicalID, "run_agent", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("build edge id: %v", err)
+	}
+	edge := Edge{
+		EdgeID:    edgeID,
+		FromID:    fromObj.CanonicalID,
+		ToID:      toObj.CanonicalID,
+		Kind:      "run_agent",
+		Metadata:  json.RawMessage(`{}`),
+		CreatedAt: now,
+	}
+	if err := store.PutEdge(ctx, edge); err != nil {
+		t.Fatalf("put edge: %v", err)
+	}
+
+	// List edges from the run object.
+	edges, err := store.ListEdges(ctx, EdgeFilter{FromID: fromObj.CanonicalID, Limit: 10})
+	if err != nil {
+		t.Fatalf("list edges: %v", err)
+	}
+	if len(edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(edges))
+	}
+	if edges[0].ToID != toObj.CanonicalID {
+		t.Errorf("to_id: got %q, want %q", edges[0].ToID, toObj.CanonicalID)
+	}
+	if edges[0].Kind != "run_agent" {
+		t.Errorf("kind: got %q, want %q", edges[0].Kind, "run_agent")
+	}
+}
+
+func TestDoltStorePutBatch(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	now := time.Now().UTC()
+	obj1 := Object{
+		CanonicalID:  "obj:choir.run:owner2:key-run2",
+		ObjectKind:   "choir.run",
+		OwnerID:      "owner2",
+		ContentHash:  "sha256:run2",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	obj2 := Object{
+		CanonicalID:  "obj:choir.agent:owner2:key-agent2",
+		ObjectKind:   "choir.agent",
+		OwnerID:      "owner2",
+		ContentHash:  "sha256:agent2",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	edgeID, _ := BuildEdgeID(obj1.CanonicalID, obj2.CanonicalID, "run_agent", json.RawMessage(`{}`))
+	edge := Edge{
+		EdgeID:    edgeID,
+		FromID:    obj1.CanonicalID,
+		ToID:      obj2.CanonicalID,
+		Kind:      "run_agent",
+		Metadata:  json.RawMessage(`{}`),
+		CreatedAt: now,
+	}
+
+	batch := Batch{Objects: []Object{obj1, obj2}, Edges: []Edge{edge}}
+	if err := store.PutBatch(ctx, batch); err != nil {
+		t.Fatalf("put batch: %v", err)
+	}
+
+	// Verify all writes landed.
+	got1, _ := store.GetObject(ctx, obj1.CanonicalID)
+	if got1.CanonicalID != obj1.CanonicalID {
+		t.Errorf("obj1 canonical_id: got %q", got1.CanonicalID)
+	}
+	got2, _ := store.GetObject(ctx, obj2.CanonicalID)
+	if got2.CanonicalID != obj2.CanonicalID {
+		t.Errorf("obj2 canonical_id: got %q", got2.CanonicalID)
+	}
+	edges, _ := store.ListEdges(ctx, EdgeFilter{FromID: obj1.CanonicalID, Limit: 10})
+	if len(edges) != 1 {
+		t.Errorf("expected 1 edge, got %d", len(edges))
+	}
+}
+
+func TestDoltStoreGetObjectNotFound(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	_, err := store.GetObject(ctx, "obj:choir.agent:no-such-owner:key-missing")
+	if err != ErrNotFound {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDoltStoreListEdgesByKind(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	now := time.Now().UTC()
+	fromObj := Object{
+		CanonicalID:  "obj:choir.run:owner3:key-run3",
+		ObjectKind:   "choir.run",
+		OwnerID:      "owner3",
+		ContentHash:  "sha256:run3",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	agentObj := Object{
+		CanonicalID:  "obj:choir.agent:owner3:key-agent3",
+		ObjectKind:   "choir.agent",
+		OwnerID:      "owner3",
+		ContentHash:  "sha256:agent3",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	trajObj := Object{
+		CanonicalID:  "obj:choir.trajectory:owner3:key-traj3",
+		ObjectKind:   "choir.trajectory",
+		OwnerID:      "owner3",
+		ContentHash:  "sha256:traj3",
+		Body:         []byte(`{}`),
+		Metadata:     json.RawMessage(`{}`),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	for _, obj := range []Object{fromObj, agentObj, trajObj} {
+		if err := store.PutObject(ctx, obj); err != nil {
+			t.Fatalf("put object: %v", err)
+		}
+	}
+
+	edge1, _ := BuildEdgeID(fromObj.CanonicalID, agentObj.CanonicalID, "run_agent", json.RawMessage(`{}`))
+	edge2, _ := BuildEdgeID(fromObj.CanonicalID, trajObj.CanonicalID, "run_trajectory", json.RawMessage(`{}`))
+	for _, edge := range []Edge{
+		{EdgeID: edge1, FromID: fromObj.CanonicalID, ToID: agentObj.CanonicalID, Kind: "run_agent", Metadata: json.RawMessage(`{}`), CreatedAt: now},
+		{EdgeID: edge2, FromID: fromObj.CanonicalID, ToID: trajObj.CanonicalID, Kind: "run_trajectory", Metadata: json.RawMessage(`{}`), CreatedAt: now},
+	} {
+		if err := store.PutEdge(ctx, edge); err != nil {
+			t.Fatalf("put edge: %v", err)
+		}
+	}
+
+	// List only run_agent edges.
+	edges, err := store.ListEdgesByKind(ctx, fromObj.CanonicalID, "run_agent")
+	if err != nil {
+		t.Fatalf("list edges by kind: %v", err)
+	}
+	if len(edges) != 1 {
+		t.Fatalf("expected 1 run_agent edge, got %d", len(edges))
+	}
+	if edges[0].ToID != agentObj.CanonicalID {
+		t.Errorf("to_id: got %q, want %q", edges[0].ToID, agentObj.CanonicalID)
+	}
+}
+
+func TestDoltStoreWithService(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	svc := NewService(Config{Durable: store})
+	obj, err := svc.CreateObject(ctx, CreateObjectRequest{
+		Kind:        "choir.agent",
+		OwnerID:     "svc-owner",
+		IdentityKey: "agent-42",
+		Body:        []byte(`{"name":"agent-42"}`),
+		Metadata:    map[string]any{"role": "researcher"},
+	})
+	if err != nil {
+		t.Fatalf("create object: %v", err)
+	}
+
+	// Read it back through the store directly.
+	got, err := store.GetObject(ctx, obj.CanonicalID)
+	if err != nil {
+		t.Fatalf("get object: %v", err)
+	}
+	if got.OwnerID != "svc-owner" {
+		t.Errorf("owner_id: got %q", got.OwnerID)
+	}
+
+	// List through the service.
+	objs, err := svc.ListObjects(ctx, ListFilter{Kind: "choir.agent", OwnerID: "svc-owner", Limit: 10})
+	if err != nil {
+		t.Fatalf("list objects: %v", err)
+	}
+	if len(objs) != 1 {
+		t.Fatalf("expected 1 object, got %d", len(objs))
+	}
+}
