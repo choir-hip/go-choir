@@ -1192,3 +1192,184 @@ func TestOGListPodcastSubscriptionsByOwner(t *testing.T) {
 		t.Fatalf("expected 2 subscriptions, got %d", len(subs))
 	}
 }
+
+// =========================================================================
+// Browser Session tests
+// =========================================================================
+
+func TestOGCreateAndGetBrowserSession(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.BrowserSessionRecord{
+		SessionID: "bs-og-1",
+		OwnerID:   "owner-og",
+		Provider:  "playwright",
+		Mode:      "headless",
+		State:     "active",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := s.CreateBrowserSessionOG(ctx, rec); err != nil {
+		t.Fatalf("create browser session: %v", err)
+	}
+
+	got, err := s.GetBrowserSessionOG(ctx, "owner-og", "bs-og-1")
+	if err != nil {
+		t.Fatalf("get browser session: %v", err)
+	}
+	if got.SessionID != rec.SessionID {
+		t.Errorf("session_id: got %q", got.SessionID)
+	}
+	if got.State != rec.State {
+		t.Errorf("state: got %q", got.State)
+	}
+}
+
+func TestOGListBrowserSessionsByOwner(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 2 {
+		rec := types.BrowserSessionRecord{
+			SessionID: "bs-og-list-" + string(rune('A'+i)),
+			OwnerID:   "owner-list",
+			Provider:  "playwright",
+			Mode:      "headless",
+			State:     "active",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := s.CreateBrowserSessionOG(ctx, rec); err != nil {
+			t.Fatalf("create session %d: %v", i, err)
+		}
+	}
+
+	sessions, err := s.ListBrowserSessionsByOwnerOG(ctx, "owner-list", 10)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessions))
+	}
+}
+
+// =========================================================================
+// App Change Package tests
+// =========================================================================
+
+func TestOGCreateAndGetAppChangePackage(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.AppChangePackageRecord{
+		PackageID:             "pkg-og-1",
+		OwnerID:               "owner-og",
+		AppID:                 "app-1",
+		Status:                types.AppChangePackageDraft,
+		Visibility:            "private",
+		SourceComputerID:      "comp-1",
+		PackageManifestSHA256: "sha256:abc",
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
+	}
+	if err := s.CreateAppChangePackageOG(ctx, rec); err != nil {
+		t.Fatalf("create package: %v", err)
+	}
+
+	got, err := s.GetAppChangePackageOG(ctx, "owner-og", "pkg-og-1")
+	if err != nil {
+		t.Fatalf("get package: %v", err)
+	}
+	if got.PackageID != rec.PackageID {
+		t.Errorf("package_id: got %q", got.PackageID)
+	}
+	if got.AppID != rec.AppID {
+		t.Errorf("app_id: got %q", got.AppID)
+	}
+}
+
+// =========================================================================
+// App Adoption tests
+// =========================================================================
+
+func TestOGCreateAndGetAppAdoption(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	// Create a package first.
+	pkg := types.AppChangePackageRecord{
+		PackageID:             "pkg-og-adoption",
+		OwnerID:               "owner-og",
+		AppID:                 "app-1",
+		Status:                types.AppChangePackageDraft,
+		PackageManifestSHA256: "sha256:abc",
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
+	}
+	if err := s.CreateAppChangePackageOG(ctx, pkg); err != nil {
+		t.Fatalf("create package: %v", err)
+	}
+
+	rec := types.AppAdoptionRecord{
+		AdoptionID:         "adopt-og-1",
+		OwnerID:            "owner-og",
+		PackageID:          "pkg-og-adoption",
+		AppID:              "app-1",
+		TargetComputerID:   "comp-2",
+		TargetComputerKind: "user",
+		Status:             types.AppAdoptionProposed,
+		CreatedAt:          time.Now().UTC(),
+		UpdatedAt:          time.Now().UTC(),
+	}
+	if err := s.CreateAppAdoptionOG(ctx, rec); err != nil {
+		t.Fatalf("create adoption: %v", err)
+	}
+
+	got, err := s.GetAppAdoptionOG(ctx, "owner-og", "adopt-og-1")
+	if err != nil {
+		t.Fatalf("get adoption: %v", err)
+	}
+	if got.AdoptionID != rec.AdoptionID {
+		t.Errorf("adoption_id: got %q", got.AdoptionID)
+	}
+	if got.PackageID != rec.PackageID {
+		t.Errorf("package_id: got %q", got.PackageID)
+	}
+}
+
+// =========================================================================
+// Desktop State tests
+// =========================================================================
+
+func TestOGSaveAndGetDesktopState(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.DesktopState{
+		OwnerID:   "owner-og",
+		DesktopID: "desktop-og-1",
+		Windows: []types.WindowState{
+			{WindowID: "win-1", AppID: "texture", Title: "Test Window"},
+		},
+		ActiveWindowID: "win-1",
+		UpdatedAt:      time.Now().UTC(),
+	}
+	if err := s.SaveDesktopStateOG(ctx, rec); err != nil {
+		t.Fatalf("save desktop state: %v", err)
+	}
+
+	got, err := s.GetDesktopStateOG(ctx, "owner-og", "desktop-og-1")
+	if err != nil {
+		t.Fatalf("get desktop state: %v", err)
+	}
+	if got.DesktopID != rec.DesktopID {
+		t.Errorf("desktop_id: got %q", got.DesktopID)
+	}
+	if got.ActiveWindowID != rec.ActiveWindowID {
+		t.Errorf("active_window_id: got %q", got.ActiveWindowID)
+	}
+	if len(got.Windows) != 1 {
+		t.Fatalf("expected 1 window, got %d", len(got.Windows))
+	}
+}

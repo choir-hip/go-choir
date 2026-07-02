@@ -1540,6 +1540,276 @@ func (s *Store) ListPodcastSubscriptionsByOwnerOG(ctx context.Context, ownerID s
 	return subs, nil
 }
 
+// =========================================================================
+// Browser Sessions — object graph implementation
+// =========================================================================
+
+// CreateBrowserSessionOG stores a browser session record.
+// Sessions use external-key identity (session_id).
+func (s *Store) CreateBrowserSessionOG(ctx context.Context, rec types.BrowserSessionRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"session_id":         rec.SessionID,
+		"provider":           rec.Provider,
+		"mode":               rec.Mode,
+		"execution_scope":    rec.ExecutionScope,
+		"backend_session_id": rec.BackendSessionID,
+		"world_kind":         rec.WorldKind,
+		"vm_id":              rec.VMID,
+		"snapshot_id":        rec.SnapshotID,
+		"source_run_id":      rec.SourceRunID,
+		"candidate_trace_id": rec.CandidateTraceID,
+		"state":              rec.State,
+		"current_url":        rec.CurrentURL,
+		"title":              rec.Title,
+		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":         rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindBrowserSess, rec.OwnerID, rec.SessionID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge to source run if set.
+	if rec.SourceRunID != "" {
+		runSuffix := objectgraph.StableSuffixFromKey(rec.SourceRunID)
+		runID, _ := objectgraph.BuildCanonicalID(ogKindRun, rec.OwnerID, runSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, runID, ogEdgeBrowserRun, nil)
+	}
+	return nil
+}
+
+// GetBrowserSessionOG retrieves a browser session by ID.
+func (s *Store) GetBrowserSessionOG(ctx context.Context, ownerID, sessionID string) (types.BrowserSessionRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindBrowserSess, "session_id", sessionID)
+	if err != nil {
+		return types.BrowserSessionRecord{}, err
+	}
+	var rec types.BrowserSessionRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.BrowserSessionRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.BrowserSessionRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListBrowserSessionsByOwnerOG lists browser sessions by owner.
+func (s *Store) ListBrowserSessionsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.BrowserSessionRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindBrowserSess,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	sessions := make([]types.BrowserSessionRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.BrowserSessionRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, rec)
+	}
+	return sessions, nil
+}
+
+// =========================================================================
+// App Change Packages — object graph implementation
+// =========================================================================
+
+// CreateAppChangePackageOG stores an app change package.
+// Packages use external-key identity (package_id).
+func (s *Store) CreateAppChangePackageOG(ctx context.Context, rec types.AppChangePackageRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"package_id":             rec.PackageID,
+		"app_id":                 rec.AppID,
+		"status":                 string(rec.Status),
+		"visibility":             rec.Visibility,
+		"source_computer_id":     rec.SourceComputerID,
+		"source_candidate_id":    rec.SourceCandidateID,
+		"source_active_ref":      rec.SourceActiveRef,
+		"candidate_source_ref":   rec.CandidateSourceRef,
+		"package_manifest_sha256": rec.PackageManifestSHA256,
+		"trace_id":               rec.TraceID,
+		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	_, err := s.ogPut(ctx, ogKindAppPackage, rec.OwnerID, rec.PackageID, rec, metadata, now)
+	return err
+}
+
+// GetAppChangePackageOG retrieves an app change package by ID.
+func (s *Store) GetAppChangePackageOG(ctx context.Context, ownerID, packageID string) (types.AppChangePackageRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindAppPackage, "package_id", packageID)
+	if err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	var rec types.AppChangePackageRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.AppChangePackageRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.AppChangePackageRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListAppChangePackagesByOwnerOG lists packages by owner.
+func (s *Store) ListAppChangePackagesByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.AppChangePackageRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindAppPackage,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	packages := make([]types.AppChangePackageRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.AppChangePackageRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		packages = append(packages, rec)
+	}
+	return packages, nil
+}
+
+// =========================================================================
+// App Adoptions — object graph implementation
+// =========================================================================
+
+// CreateAppAdoptionOG stores an app adoption record.
+// Adoptions use external-key identity (adoption_id).
+func (s *Store) CreateAppAdoptionOG(ctx context.Context, rec types.AppAdoptionRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"adoption_id":           rec.AdoptionID,
+		"package_id":            rec.PackageID,
+		"app_id":                rec.AppID,
+		"target_computer_id":    rec.TargetComputerID,
+		"target_computer_kind":  rec.TargetComputerKind,
+		"target_candidate_id":   rec.TargetCandidateID,
+		"status":                string(rec.Status),
+		"candidate_source_ref":  rec.CandidateSourceRef,
+		"route_profile":         rec.RouteProfile,
+		"trace_id":              rec.TraceID,
+		"created_at":            rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":            rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindAppAdoption, rec.OwnerID, rec.AdoptionID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge to package.
+	if rec.PackageID != "" {
+		pkgSuffix := objectgraph.StableSuffixFromKey(rec.PackageID)
+		pkgID, _ := objectgraph.BuildCanonicalID(ogKindAppPackage, rec.OwnerID, pkgSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, pkgID, ogEdgeAdoptionPkg, nil)
+	}
+	return nil
+}
+
+// GetAppAdoptionOG retrieves an app adoption by ID.
+func (s *Store) GetAppAdoptionOG(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindAppAdoption, "adoption_id", adoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	var rec types.AppAdoptionRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.AppAdoptionRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListAppAdoptionsByOwnerOG lists adoptions by owner.
+func (s *Store) ListAppAdoptionsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.AppAdoptionRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindAppAdoption,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	adoptions := make([]types.AppAdoptionRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.AppAdoptionRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		adoptions = append(adoptions, rec)
+	}
+	return adoptions, nil
+}
+
+// =========================================================================
+// Desktop Sessions — object graph implementation
+// =========================================================================
+
+// SaveDesktopStateOG stores desktop state in the object graph.
+// Desktop state uses external-key identity (desktop_id).
+func (s *Store) SaveDesktopStateOG(ctx context.Context, state types.DesktopState) error {
+	now := state.UpdatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"desktop_id":      state.DesktopID,
+		"active_window_id": state.ActiveWindowID,
+		"updated_at":      now.UTC().Format(time.RFC3339Nano),
+	}
+
+	_, err := s.ogPut(ctx, ogKindDesktopSess, state.OwnerID, state.DesktopID, state, metadata, now)
+	return err
+}
+
+// GetDesktopStateOG retrieves desktop state by owner + desktop ID.
+func (s *Store) GetDesktopStateOG(ctx context.Context, ownerID, desktopID string) (types.DesktopState, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindDesktopSess, "desktop_id", desktopID)
+	if err != nil {
+		return types.DesktopState{}, err
+	}
+	var rec types.DesktopState
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.DesktopState{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.DesktopState{}, ErrNotFound
+	}
+	return rec, nil
+}
+
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on
 // error. Used internally where the metadata map is known to be valid.
 func mustMarshalMetadata(m map[string]any) json.RawMessage {
