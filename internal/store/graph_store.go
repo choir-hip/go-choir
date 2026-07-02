@@ -666,6 +666,9 @@ func (s *Store) CreateWorkItemOG(ctx context.Context, rec types.WorkItemRecord) 
 func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (types.WorkItemRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindWorkItem, "work_item_id", workItemID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.WorkItemRecord{}, ErrNotFound
+		}
 		return types.WorkItemRecord{}, err
 	}
 	var rec types.WorkItemRecord
@@ -804,6 +807,9 @@ func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID st
 func (s *Store) GetWorkerUpdateOG(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
 	obj, err := s.ogGetByKey(ctx, objectgraph.ObjectKind("choir.worker_update"), "update_id", updateID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.CoagentSourcePacket{}, ErrNotFound
+		}
 		return types.CoagentSourcePacket{}, err
 	}
 	var rec types.CoagentSourcePacket
@@ -1022,6 +1028,9 @@ func (s *Store) CreateRunAcceptanceOG(ctx context.Context, rec types.RunAcceptan
 func (s *Store) GetRunAcceptanceOG(ctx context.Context, ownerID, acceptanceID string) (types.RunAcceptanceRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindRunAccept, "acceptance_id", acceptanceID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.RunAcceptanceRecord{}, ErrNotFound
+		}
 		return types.RunAcceptanceRecord{}, err
 	}
 	var rec types.RunAcceptanceRecord
@@ -1102,6 +1111,9 @@ func (s *Store) CreateRunContinuationOG(ctx context.Context, rec types.RunContin
 func (s *Store) GetRunContinuationOG(ctx context.Context, ownerID, continuationID string) (types.RunContinuationRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindRunContin, "continuation_id", continuationID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.RunContinuationRecord{}, ErrNotFound
+		}
 		return types.RunContinuationRecord{}, err
 	}
 	var rec types.RunContinuationRecord
@@ -1164,6 +1176,9 @@ func (s *Store) CreateTextureDocumentOG(ctx context.Context, rec types.Document)
 func (s *Store) GetTextureDocumentOG(ctx context.Context, ownerID, docID string) (types.Document, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.Document{}, ErrNotFound
+		}
 		return types.Document{}, err
 	}
 	var rec types.Document
@@ -1280,6 +1295,9 @@ func (s *Store) CreateTextureRevisionOG(ctx context.Context, rec types.Revision)
 func (s *Store) GetTextureRevisionOG(ctx context.Context, ownerID, revisionID string) (types.Revision, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", revisionID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.Revision{}, ErrNotFound
+		}
 		return types.Revision{}, err
 	}
 	var rec types.Revision
@@ -1484,6 +1502,9 @@ func (s *Store) CreateContentItemOG(ctx context.Context, rec types.ContentItem) 
 func (s *Store) GetContentItemOG(ctx context.Context, ownerID, contentID string) (types.ContentItem, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindContentItem, "content_id", contentID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.ContentItem{}, ErrNotFound
+		}
 		return types.ContentItem{}, err
 	}
 	var rec types.ContentItem
@@ -1563,6 +1584,9 @@ func (s *Store) CreatePodcastSubscriptionOG(ctx context.Context, rec types.Podca
 func (s *Store) GetPodcastSubscriptionOG(ctx context.Context, ownerID, subscriptionID string) (types.PodcastSubscription, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindPodcastSub, "subscription_id", subscriptionID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.PodcastSubscription{}, ErrNotFound
+		}
 		return types.PodcastSubscription{}, err
 	}
 	var rec types.PodcastSubscription
@@ -1646,6 +1670,9 @@ func (s *Store) CreateBrowserSessionOG(ctx context.Context, rec types.BrowserSes
 func (s *Store) GetBrowserSessionOG(ctx context.Context, ownerID, sessionID string) (types.BrowserSessionRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindBrowserSess, "session_id", sessionID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.BrowserSessionRecord{}, ErrNotFound
+		}
 		return types.BrowserSessionRecord{}, err
 	}
 	var rec types.BrowserSessionRecord
