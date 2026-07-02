@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -127,6 +128,58 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, agentI
 	if agentID == "" {
 		return "", nil, fmt.Errorf("latest actor run memory: agent_id is required")
 	}
+
+	// When the object graph is active, find candidate runs from OG and
+	// check for run_memory_entries in SQL.
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 500)
+		if err != nil {
+			return "", nil, fmt.Errorf("query latest actor run memory: %w", err)
+		}
+		type candidate struct {
+			runID    string
+			priority time.Time
+		}
+		candidates := make([]candidate, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.RunRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				continue
+			}
+			if rec.OwnerID != ownerID {
+				continue
+			}
+			if rec.RunID == excludeRunID {
+				continue
+			}
+			if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
+				continue
+			}
+			priority := rec.UpdatedAt
+			if rec.FinishedAt != nil {
+				priority = *rec.FinishedAt
+			}
+			if priority.IsZero() {
+				priority = rec.CreatedAt
+			}
+			candidates = append(candidates, candidate{runID: rec.RunID, priority: priority})
+		}
+		// Sort by priority descending.
+		sort.Slice(candidates, func(i, j int) bool { return candidates[i].priority.After(candidates[j].priority) })
+
+		// Find the first candidate that has run_memory_entries in SQL.
+		for _, c := range candidates {
+			entries, err := s.ListRunMemoryEntries(ctx, ownerID, c.runID)
+			if err != nil {
+				return "", nil, err
+			}
+			if len(entries) > 0 {
+				return c.runID, entries, nil
+			}
+		}
+		return "", nil, ErrNotFound
+	}
+
 	args := []any{ownerID, agentID}
 	excludeClause := ""
 	if excludeRunID != "" {

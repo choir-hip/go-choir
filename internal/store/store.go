@@ -1132,6 +1132,33 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 	if limit <= 0 {
 		limit = 100
 	}
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindRun, "channel_id", channelID, limit*4)
+		if err != nil {
+			return nil, err
+		}
+		runs := make([]types.RunRecord, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.RunRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			if rec.OwnerID != ownerID {
+				continue
+			}
+			if rec.ChannelID != channelID {
+				continue
+			}
+			runs = append(runs, rec)
+			if len(runs) >= limit {
+				break
+			}
+		}
+		// Fall back to SQL if OG returned nothing (legacy records).
+		if len(runs) > 0 {
+			return runs, nil
+		}
+	}
 	return s.listRunsWhere(ctx, "owner_id = ? AND channel_id = ?", []any{ownerID, channelID}, limit)
 }
 
@@ -1156,7 +1183,13 @@ func (s *Store) ListActiveRunsByTrajectoryExcluding(ctx context.Context, ownerID
 	// When the object graph is active, fetch runs by trajectory from OG
 	// and filter in Go for state and exclusions.
 	if s.og != nil {
-		objs, err := s.ogListByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID, limit*4)
+		// Use a large limit to ensure we get all runs for the trajectory;
+		// the caller-side limit is applied after Go-side filtering.
+		fetchLimit := limit
+		if fetchLimit < 5000 {
+			fetchLimit = 5000
+		}
+		objs, err := s.ogListByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID, fetchLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -1556,6 +1589,33 @@ func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 // for an actor identity. Durable actor reactivation uses this before minting a
 // replacement run.
 func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
+		if err != nil {
+			return types.RunRecord{}, err
+		}
+		var latest *types.RunRecord
+		for i := range objs {
+			var rec types.RunRecord
+			if err := ogDecode(objs[i], &rec); err != nil {
+				return types.RunRecord{}, err
+			}
+			if rec.OwnerID != ownerID {
+				continue
+			}
+			if rec.State != types.RunPassivated {
+				continue
+			}
+			if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
+				recCopy := rec
+				latest = &recCopy
+			}
+		}
+		if latest == nil {
+			return types.RunRecord{}, ErrNotFound
+		}
+		return *latest, nil
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
