@@ -103,20 +103,30 @@ func (s *Store) ogPut(ctx context.Context, kind objectgraph.ObjectKind, ownerID,
 // ogGetByKey finds an object by kind + a metadata field equality check.
 // This enables point lookups by record ID (agent_id, run_id, etc.)
 // without knowing the owner. Uses JSON_EXTRACT on the og_objects table.
+// Uses the read connection pool when available to avoid blocking during
+// write transactions.
 func (s *Store) ogGetByKey(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string) (objectgraph.Object, error) {
-	if s.ogStore == nil {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
 		return objectgraph.Object{}, fmt.Errorf("store: object graph not initialized")
 	}
-	return s.ogStore.GetObjectByMetadata(ctx, string(kind), "$."+metadataField, value)
+	return store.GetObjectByMetadata(ctx, string(kind), "$."+metadataField, value)
 }
 
 // ogListByMetadata lists objects by kind + a metadata field equality
 // check, with an optional owner filter.
 func (s *Store) ogListByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, limit int) ([]objectgraph.Object, error) {
-	if s.ogStore == nil {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
 		return nil, fmt.Errorf("store: object graph not initialized")
 	}
-	return s.ogStore.ListObjectsByMetadata(ctx, string(kind), "$."+metadataField, value, limit)
+	return store.ListObjectsByMetadata(ctx, string(kind), "$."+metadataField, value, limit)
 }
 
 // ogPutEdge creates an edge between two objects.
@@ -166,6 +176,9 @@ func (s *Store) UpsertAgentOG(ctx context.Context, rec types.AgentRecord) error 
 func (s *Store) GetAgentOG(ctx context.Context, agentID string) (types.AgentRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindAgent, "agent_id", agentID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.AgentRecord{}, ErrNotFound
+		}
 		return types.AgentRecord{}, err
 	}
 	var rec types.AgentRecord
@@ -230,6 +243,9 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 func (s *Store) GetRunOG(ctx context.Context, runID string) (types.RunRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindRun, "run_id", runID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.RunRecord{}, ErrNotFound
+		}
 		return types.RunRecord{}, err
 	}
 	var rec types.RunRecord
@@ -246,6 +262,9 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 	// Fetch the existing object to preserve created_at.
 	existing, err := s.ogGetByKey(ctx, ogKindRun, "run_id", rec.RunID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return fmt.Errorf("%w: run %s", ErrNotFound, rec.RunID)
+		}
 		return fmt.Errorf("update run: %w", err)
 	}
 	var existingRec types.RunRecord
@@ -319,6 +338,37 @@ func (s *Store) ListRunsByStateOG(ctx context.Context, state types.RunState, lim
 		limit = 100
 	}
 	objs, err := s.ogListByMetadata(ctx, ogKindRun, "state", string(state), limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		runs = append(runs, rec)
+	}
+	return runs, nil
+}
+
+// ListAllRunsOG lists all runs from the object graph, ordered by
+// created_at descending.
+func (s *Store) ListAllRunsOG(ctx context.Context, limit int) ([]types.RunRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:  ogKindRun,
+		Limit: limit,
+	})
 	if err != nil {
 		return nil, err
 	}

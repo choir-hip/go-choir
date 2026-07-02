@@ -65,6 +65,7 @@ type Store struct {
 	jsonPatchMu   sync.Mutex
 	og            *objectgraph.Service
 	ogStore       *objectgraph.DoltStore
+	ogReadStore   *objectgraph.DoltStore
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -587,6 +588,11 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: bootstrap object graph: %w", err)
 	}
 	s.ogStore = ogDoltStore
+	// Create a read-only DoltStore using the read connection pool so OG
+	// reads don't block during write transactions on the main connection.
+	if readDB != nil {
+		s.ogReadStore = objectgraph.NewDoltStore(readDB)
+	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})
@@ -803,7 +809,11 @@ func (s *Store) TexturePath() string {
 }
 
 // UpsertAgent persists a durable agent record.
+// Delegates to the object graph when available, falling back to SQL.
 func (s *Store) UpsertAgent(ctx context.Context, rec types.AgentRecord) error {
+	if s.og != nil {
+		return s.UpsertAgentOG(ctx, rec)
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agents (agent_id, owner_id, sandbox_id, profile, role, channel_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -830,7 +840,16 @@ func (s *Store) UpsertAgent(ctx context.Context, rec types.AgentRecord) error {
 }
 
 // GetAgent returns the agent with the given ID.
+// Delegates to the object graph when available, falling back to SQL
+// for records that exist only in the relational tables.
 func (s *Store) GetAgent(ctx context.Context, agentID string) (types.AgentRecord, error) {
+	if s.og != nil {
+		rec, err := s.GetAgentOG(ctx, agentID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records not yet in the graph.
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT agent_id, owner_id, sandbox_id, profile, role, channel_id, created_at, updated_at
 		   FROM agents
@@ -841,7 +860,11 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (types.AgentRecord
 }
 
 // CreateRun inserts a new run record.
+// Delegates to the object graph when available, falling back to SQL.
 func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
+	if s.og != nil {
+		return s.CreateRunOG(ctx, rec)
+	}
 	metadata, err := marshalJSON(rec.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal run metadata: %w", err)
@@ -878,7 +901,17 @@ func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 }
 
 // GetRun returns the run with the given run ID.
+// Delegates to the object graph when available, falling back to SQL
+// for records that exist only in the relational tables (e.g. legacy
+// migrations).
 func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, error) {
+	if s.og != nil {
+		rec, err := s.GetRunOG(ctx, runID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records not yet in the graph.
+	}
 	row := s.queryDB().QueryRowContext(ctx,
 		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
@@ -889,7 +922,11 @@ func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, erro
 }
 
 // UpdateRun updates an existing run record.
+// Delegates to the object graph when available, falling back to SQL.
 func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
+	if s.og != nil {
+		return s.UpdateRunOG(ctx, rec)
+	}
 	metadata, err := marshalJSON(rec.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal run metadata: %w", err)
@@ -953,6 +990,29 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 func (s *Store) UpdateRunAndMarkWorkerUpdatesDelivered(ctx context.Context, rec types.RunRecord, ownerID string, updateIDs []string) error {
 	if len(updateIDs) == 0 {
 		return s.UpdateRun(ctx, rec)
+	}
+	// When the object graph is active, update the run via OG and mark
+	// worker updates via SQL. These are not atomic across the two stores,
+	// but the run update is idempotent and the worker update marking is
+	// a best-effort delivery acknowledgment.
+	if s.og != nil {
+		if err := s.UpdateRunOG(ctx, rec); err != nil {
+			return err
+		}
+		// Mark worker updates as delivered via SQL (worker updates are
+		// not yet wired to OG).
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin worker update delivery transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := markWorkerUpdatesDeliveredWithExec(ctx, tx, ownerID, rec.AgentID, updateIDs, rec.RunID); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit worker update delivery transaction: %w", err)
+		}
+		return nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1036,6 +1096,9 @@ func (s *Store) ListRunsByOwner(ctx context.Context, ownerID string, limit int) 
 	if limit <= 0 {
 		limit = 50
 	}
+	if s.og != nil {
+		return s.ListRunsByOwnerOG(ctx, ownerID, limit)
+	}
 	return s.listRunsWhere(ctx, "owner_id = ?", []any{ownerID}, limit)
 }
 
@@ -1045,6 +1108,9 @@ func (s *Store) ListRunsByState(ctx context.Context, state types.RunState, limit
 	if limit <= 0 {
 		limit = 50
 	}
+	if s.og != nil {
+		return s.ListRunsByStateOG(ctx, state, limit)
+	}
 	return s.listRunsWhere(ctx, "state = ?", []any{string(state)}, limit)
 }
 
@@ -1053,6 +1119,9 @@ func (s *Store) ListRunsByState(ctx context.Context, state types.RunState, limit
 func (s *Store) ListRuns(ctx context.Context, limit int) ([]types.RunRecord, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if s.og != nil {
+		return s.ListAllRunsOG(ctx, limit)
 	}
 	return s.listRunsWhere(ctx, "", nil, limit)
 }
@@ -1082,6 +1151,45 @@ func (s *Store) ListActiveRunsByTrajectoryExcluding(ctx context.Context, ownerID
 	}
 	if limit <= 0 {
 		limit = 200
+	}
+	// When the object graph is active, fetch runs by trajectory from OG
+	// and filter in Go for state and exclusions.
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID, limit*4)
+		if err != nil {
+			return nil, err
+		}
+		excludeSet := make(map[string]bool, len(excludeRunIDs))
+		for _, id := range excludeRunIDs {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				excludeSet[id] = true
+			}
+		}
+		runs := make([]types.RunRecord, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.RunRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			if rec.OwnerID != ownerID {
+				continue
+			}
+			if rec.TrajectoryID != trajectoryID {
+				continue
+			}
+			if rec.State != types.RunPending && rec.State != types.RunRunning && rec.State != types.RunBlocked {
+				continue
+			}
+			if excludeSet[rec.RunID] {
+				continue
+			}
+			runs = append(runs, rec)
+			if len(runs) >= limit {
+				break
+			}
+		}
+		return runs, nil
 	}
 	where := "owner_id = ? AND trajectory_id = ? AND state IN ('pending', 'running', 'blocked')"
 	args := []any{ownerID, trajectoryID}
@@ -1351,6 +1459,36 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 	if ownerID == "" || trajectoryID == "" {
 		return 0, nil
 	}
+	// When the object graph is active, fetch slot run IDs from SQL and
+	// check run state via OG.
+	if s.og != nil {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT run_id FROM co_super_slots WHERE owner_id = ? AND trajectory_id = ?`,
+			ownerID, trajectoryID,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("count active co-super slots: %w", err)
+		}
+		defer rows.Close()
+		count := 0
+		for rows.Next() {
+			var runID string
+			if err := rows.Scan(&runID); err != nil {
+				return 0, fmt.Errorf("count active co-super slots: scan: %w", err)
+			}
+			rec, err := s.GetRunOG(ctx, runID)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
+				return 0, fmt.Errorf("count active co-super slots: get run: %w", err)
+			}
+			if rec.State.Active() {
+				count++
+			}
+		}
+		return count, rows.Err()
+	}
 	var count int
 	row := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*)
@@ -1372,6 +1510,33 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
+		if err != nil {
+			return types.RunRecord{}, err
+		}
+		var latest *types.RunRecord
+		for i := range objs {
+			var rec types.RunRecord
+			if err := ogDecode(objs[i], &rec); err != nil {
+				return types.RunRecord{}, err
+			}
+			if rec.OwnerID != ownerID {
+				continue
+			}
+			if !rec.State.Active() {
+				continue
+			}
+			if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
+				recCopy := rec
+				latest = &recCopy
+			}
+		}
+		if latest == nil {
+			return types.RunRecord{}, ErrNotFound
+		}
+		return *latest, nil
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
 		   FROM runs
