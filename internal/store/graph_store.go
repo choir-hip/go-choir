@@ -680,6 +680,182 @@ func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID 
 	return rec, nil
 }
 
+// =========================================================================
+// Channel Messages — object graph implementation
+// =========================================================================
+
+// AppendChannelMessageOG stores a channel message in the object graph.
+// Channel messages use content-hash identity.
+func (s *Store) AppendChannelMessageOG(ctx context.Context, message *types.ChannelMessage, ownerID string) error {
+	now := message.Timestamp
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"channel_id":    message.ChannelID,
+		"seq":           message.Seq,
+		"from_agent_id": message.FromAgentID,
+		"from_run_id":   message.FromRunID,
+		"to_agent_id":   message.ToAgentID,
+		"to_run_id":     message.ToRunID,
+		"trajectory_id": message.TrajectoryID,
+		"role":          message.Role,
+		"timestamp":     message.Timestamp.UTC().Format(time.RFC3339Nano),
+	}
+
+	_, err := s.ogPut(ctx, ogKindChannelMsg, ownerID, "", message, metadata, now)
+	return err
+}
+
+// ListChannelMessagesOG lists messages for a channel after a sequence
+// number.
+func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID string, afterSeq int64, limit int) ([]types.ChannelMessage, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", channelID, limit*2)
+	if err != nil {
+		return nil, err
+	}
+	msgs := make([]types.ChannelMessage, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.ChannelMessage
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if obj.OwnerID != ownerID {
+			continue
+		}
+		if rec.Seq <= afterSeq {
+			continue
+		}
+		msgs = append(msgs, rec)
+		if len(msgs) >= limit {
+			break
+		}
+	}
+	return msgs, nil
+}
+
+// =========================================================================
+// Worker Updates — object graph implementation
+// =========================================================================
+
+// GetWorkerUpdateOG retrieves a worker update by ID.
+func (s *Store) GetWorkerUpdateOG(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
+	obj, err := s.ogGetByKey(ctx, objectgraph.ObjectKind("choir.worker_update"), "update_id", updateID)
+	if err != nil {
+		return types.CoagentSourcePacket{}, err
+	}
+	var rec types.CoagentSourcePacket
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.CoagentSourcePacket{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.CoagentSourcePacket{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListWorkerUpdatesByTrajectoryOG lists worker updates for a trajectory.
+func (s *Store) ListWorkerUpdatesByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.CoagentSourcePacket, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "trajectory_id", trajectoryID, limit)
+	if err != nil {
+		return nil, err
+	}
+	packets := make([]types.CoagentSourcePacket, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		packets = append(packets, rec)
+	}
+	return packets, nil
+}
+
+// ListPendingWorkerUpdatesOG lists pending (undelivered) worker updates
+// for a target agent.
+func (s *Store) ListPendingWorkerUpdatesOG(ctx context.Context, ownerID, targetAgentID string, limit int) ([]types.CoagentSourcePacket, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID, limit*2)
+	if err != nil {
+		return nil, err
+	}
+	packets := make([]types.CoagentSourcePacket, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if rec.DeliveredToRunID != "" {
+			continue
+		}
+		packets = append(packets, rec)
+		if len(packets) >= limit {
+			break
+		}
+	}
+	return packets, nil
+}
+
+// =========================================================================
+// Inbox Deliveries — object graph implementation
+// =========================================================================
+
+// CreateInboxDeliveryOG stores an inbox delivery in the object graph.
+func (s *Store) CreateInboxDeliveryOG(ctx context.Context, rec types.InboxDelivery) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"delivery_id":          rec.DeliveryID,
+		"to_agent_id":          rec.ToAgentID,
+		"to_run_id":            rec.ToRunID,
+		"from_agent_id":        rec.FromAgentID,
+		"from_run_id":          rec.FromRunID,
+		"channel_id":           rec.ChannelID,
+		"role":                 rec.Role,
+		"trajectory_id":        rec.TrajectoryID,
+		"delivered_to_run_id":  rec.DeliveredToLoopID,
+		"created_at":           rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if rec.DeliveredAt != nil {
+		metadata["delivered_at"] = rec.DeliveredAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	_, err := s.ogPut(ctx, ogKindInboxDeliv, rec.OwnerID, rec.DeliveryID, rec, metadata, now)
+	return err
+}
+
+// GetInboxDeliveryOG retrieves an inbox delivery by ID.
+func (s *Store) GetInboxDeliveryOG(ctx context.Context, ownerID, deliveryID string) (types.InboxDelivery, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindInboxDeliv, "delivery_id", deliveryID)
+	if err != nil {
+		return types.InboxDelivery{}, err
+	}
+	var rec types.InboxDelivery
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.InboxDelivery{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.InboxDelivery{}, ErrNotFound
+	}
+	return rec, nil
+}
+
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on
 // error. Used internally where the metadata map is known to be valid.
 func mustMarshalMetadata(m map[string]any) json.RawMessage {

@@ -560,3 +560,99 @@ func TestOGUpdateWorkItemStatus(t *testing.T) {
 		t.Errorf("status after read: got %q", got.Status)
 	}
 }
+
+// =========================================================================
+// Channel Message tests
+// =========================================================================
+
+func TestOGAppendAndListChannelMessages(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	for i := range 3 {
+		msg := &types.ChannelMessage{
+			ChannelID: "ch-og-1",
+			Seq:       int64(i + 1),
+			From:      "agent-1",
+			Role:      "worker",
+			Content:   "test message",
+			Timestamp: now.Add(time.Duration(i) * time.Second),
+		}
+		if err := s.AppendChannelMessageOG(ctx, msg, "owner-og"); err != nil {
+			t.Fatalf("append message %d: %v", i, err)
+		}
+	}
+
+	msgs, err := s.ListChannelMessagesOG(ctx, "owner-og", "ch-og-1", 0, 10)
+	if err != nil {
+		t.Fatalf("list messages: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	}
+}
+
+func TestOGListChannelMessagesAfterSeq(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	for i := range 5 {
+		msg := &types.ChannelMessage{
+			ChannelID: "ch-og-2",
+			Seq:       int64(i + 1),
+			From:      "agent-1",
+			Role:      "worker",
+			Content:   "test",
+			Timestamp: now.Add(time.Duration(i) * time.Second),
+		}
+		if err := s.AppendChannelMessageOG(ctx, msg, "owner-og"); err != nil {
+			t.Fatalf("append message %d: %v", i, err)
+		}
+	}
+
+	msgs, err := s.ListChannelMessagesOG(ctx, "owner-og", "ch-og-2", 2, 10)
+	if err != nil {
+		t.Fatalf("list messages: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages after seq 2, got %d", len(msgs))
+	}
+	for _, m := range msgs {
+		if m.Seq <= 2 {
+			t.Errorf("seq %d should be > 2", m.Seq)
+		}
+	}
+}
+
+// =========================================================================
+// Inbox Delivery tests
+// =========================================================================
+
+func TestOGCreateAndGetInboxDelivery(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.InboxDelivery{
+		DeliveryID: "del-og-1",
+		OwnerID:    "owner-og",
+		ToAgentID:  "agent-1",
+		Content:    "test delivery",
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateInboxDeliveryOG(ctx, rec); err != nil {
+		t.Fatalf("create delivery: %v", err)
+	}
+
+	got, err := s.GetInboxDeliveryOG(ctx, "owner-og", "del-og-1")
+	if err != nil {
+		t.Fatalf("get delivery: %v", err)
+	}
+	if got.DeliveryID != rec.DeliveryID {
+		t.Errorf("delivery_id: got %q", got.DeliveryID)
+	}
+	if got.Content != rec.Content {
+		t.Errorf("content: got %q", got.Content)
+	}
+}

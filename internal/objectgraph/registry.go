@@ -79,6 +79,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.app_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.desktop_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.desktop_app_instance", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
+		{Kind: "choir.worker_update", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 
 		// --- corpusd: publication layer ---
 		{Kind: "choir.subject", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
