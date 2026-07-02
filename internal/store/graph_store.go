@@ -1320,6 +1320,226 @@ func (s *Store) ListTextureDecisionsByDocOG(ctx context.Context, ownerID, docID 
 	return decisions, nil
 }
 
+// =========================================================================
+// Evidence — object graph implementation
+// =========================================================================
+
+// CreateEvidenceOG stores an evidence record in the object graph.
+// Evidence uses external-key identity (evidence_id).
+func (s *Store) CreateEvidenceOG(ctx context.Context, rec types.EvidenceRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"evidence_id": rec.EvidenceID,
+		"agent_id":    rec.AgentID,
+		"kind":        rec.Kind,
+		"source_uri":  rec.SourceURI,
+		"title":       rec.Title,
+		"created_at":  rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	obj, err := s.ogPut(ctx, ogKindEvidence, rec.OwnerID, rec.EvidenceID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge to agent.
+	if rec.AgentID != "" {
+		agentSuffix := objectgraph.StableSuffixFromKey(rec.AgentID)
+		agentID, _ := objectgraph.BuildCanonicalID(ogKindAgent, rec.OwnerID, agentSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, agentID, ogEdgeEvidenceAgent, nil)
+	}
+	return nil
+}
+
+// GetEvidenceOG retrieves an evidence record by ID.
+func (s *Store) GetEvidenceOG(ctx context.Context, ownerID, evidenceID string) (types.EvidenceRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindEvidence, "evidence_id", evidenceID)
+	if err != nil {
+		return types.EvidenceRecord{}, err
+	}
+	var rec types.EvidenceRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.EvidenceRecord{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.EvidenceRecord{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListEvidenceByAgentOG lists evidence for an agent.
+func (s *Store) ListEvidenceByAgentOG(ctx context.Context, ownerID, agentID string, limit int) ([]types.EvidenceRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindEvidence, "agent_id", agentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.EvidenceRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.EvidenceRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		records = append(records, rec)
+	}
+	return records, nil
+}
+
+// =========================================================================
+// Content Items — object graph implementation
+// =========================================================================
+
+// CreateContentItemOG stores a content item in the object graph.
+// Content items use external-key identity (content_id).
+func (s *Store) CreateContentItemOG(ctx context.Context, rec types.ContentItem) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"content_id":    rec.ContentID,
+		"source_type":   rec.SourceType,
+		"media_type":    rec.MediaType,
+		"app_hint":      rec.AppHint,
+		"title":         rec.Title,
+		"source_url":    rec.SourceURL,
+		"canonical_url": rec.CanonicalURL,
+		"content_hash":  rec.ContentHash,
+		"created_at":    rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":    rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	_, err := s.ogPut(ctx, ogKindContentItem, rec.OwnerID, rec.ContentID, rec, metadata, now)
+	return err
+}
+
+// GetContentItemOG retrieves a content item by ID.
+func (s *Store) GetContentItemOG(ctx context.Context, ownerID, contentID string) (types.ContentItem, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindContentItem, "content_id", contentID)
+	if err != nil {
+		return types.ContentItem{}, err
+	}
+	var rec types.ContentItem
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.ContentItem{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.ContentItem{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListContentItemsByOwnerOG lists content items by owner.
+func (s *Store) ListContentItemsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.ContentItem, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindContentItem,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]types.ContentItem, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.ContentItem
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		items = append(items, rec)
+	}
+	return items, nil
+}
+
+// =========================================================================
+// Podcast Subscriptions — object graph implementation
+// =========================================================================
+
+// CreatePodcastSubscriptionOG stores a podcast subscription.
+// Subscriptions use external-key identity (subscription_id).
+func (s *Store) CreatePodcastSubscriptionOG(ctx context.Context, rec types.PodcastSubscription) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"subscription_id": rec.SubscriptionID,
+		"feed_url":        rec.FeedURL,
+		"content_id":      rec.ContentID,
+		"title":           rec.Title,
+		"author":          rec.Author,
+		"artwork_url":     rec.ArtworkURL,
+		"created_at":      rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":      rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if !rec.LastFetchedAt.IsZero() {
+		metadata["last_fetched_at"] = rec.LastFetchedAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	obj, err := s.ogPut(ctx, ogKindPodcastSub, rec.OwnerID, rec.SubscriptionID, rec, metadata, now)
+	if err != nil {
+		return err
+	}
+
+	// Write edge to content item if set.
+	if rec.ContentID != "" {
+		contentSuffix := objectgraph.StableSuffixFromKey(rec.ContentID)
+		contentID, _ := objectgraph.BuildCanonicalID(ogKindContentItem, rec.OwnerID, contentSuffix)
+		_ = s.ogPutEdge(ctx, obj.CanonicalID, contentID, ogEdgeSubContent, nil)
+	}
+	return nil
+}
+
+// GetPodcastSubscriptionOG retrieves a podcast subscription by ID.
+func (s *Store) GetPodcastSubscriptionOG(ctx context.Context, ownerID, subscriptionID string) (types.PodcastSubscription, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindPodcastSub, "subscription_id", subscriptionID)
+	if err != nil {
+		return types.PodcastSubscription{}, err
+	}
+	var rec types.PodcastSubscription
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.PodcastSubscription{}, err
+	}
+	if rec.OwnerID != ownerID {
+		return types.PodcastSubscription{}, ErrNotFound
+	}
+	return rec, nil
+}
+
+// ListPodcastSubscriptionsByOwnerOG lists subscriptions by owner.
+func (s *Store) ListPodcastSubscriptionsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.PodcastSubscription, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindPodcastSub,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	subs := make([]types.PodcastSubscription, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.PodcastSubscription
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		subs = append(subs, rec)
+	}
+	return subs, nil
+}
+
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on
 // error. Used internally where the metadata map is known to be valid.
 func mustMarshalMetadata(m map[string]any) json.RawMessage {

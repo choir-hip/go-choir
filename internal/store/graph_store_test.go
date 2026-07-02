@@ -1015,3 +1015,180 @@ func TestOGCreateAndListTextureDecisions(t *testing.T) {
 		t.Fatalf("expected 2 decisions, got %d", len(decisions))
 	}
 }
+
+// =========================================================================
+// Evidence tests
+// =========================================================================
+
+func TestOGCreateAndGetEvidence(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.EvidenceRecord{
+		EvidenceID: "ev-og-1",
+		OwnerID:    "owner-og",
+		AgentID:    "agent-og-1",
+		Kind:       "observation",
+		Content:    "test evidence",
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateEvidenceOG(ctx, rec); err != nil {
+		t.Fatalf("create evidence: %v", err)
+	}
+
+	got, err := s.GetEvidenceOG(ctx, "owner-og", "ev-og-1")
+	if err != nil {
+		t.Fatalf("get evidence: %v", err)
+	}
+	if got.EvidenceID != rec.EvidenceID {
+		t.Errorf("evidence_id: got %q", got.EvidenceID)
+	}
+	if got.Content != rec.Content {
+		t.Errorf("content: got %q", got.Content)
+	}
+}
+
+func TestOGListEvidenceByAgent(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 3 {
+		rec := types.EvidenceRecord{
+			EvidenceID: "ev-og-list-" + string(rune('A'+i)),
+			OwnerID:    "owner-og",
+			AgentID:    "agent-og-list",
+			Kind:       "observation",
+			Content:    "test",
+			CreatedAt:  time.Now().UTC(),
+		}
+		if err := s.CreateEvidenceOG(ctx, rec); err != nil {
+			t.Fatalf("create evidence %d: %v", i, err)
+		}
+	}
+
+	records, err := s.ListEvidenceByAgentOG(ctx, "owner-og", "agent-og-list", 10)
+	if err != nil {
+		t.Fatalf("list evidence: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("expected 3 records, got %d", len(records))
+	}
+}
+
+// =========================================================================
+// Content Item tests
+// =========================================================================
+
+func TestOGCreateAndGetContentItem(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.ContentItem{
+		ContentID:  "content-og-1",
+		OwnerID:    "owner-og",
+		SourceType: "web",
+		MediaType:  "text/html",
+		Title:      "Test Content",
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateContentItemOG(ctx, rec); err != nil {
+		t.Fatalf("create content item: %v", err)
+	}
+
+	got, err := s.GetContentItemOG(ctx, "owner-og", "content-og-1")
+	if err != nil {
+		t.Fatalf("get content item: %v", err)
+	}
+	if got.ContentID != rec.ContentID {
+		t.Errorf("content_id: got %q", got.ContentID)
+	}
+	if got.Title != rec.Title {
+		t.Errorf("title: got %q", got.Title)
+	}
+}
+
+func TestOGListContentItemsByOwner(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 3 {
+		rec := types.ContentItem{
+			ContentID:  "content-og-list-" + string(rune('A'+i)),
+			OwnerID:    "owner-list",
+			SourceType: "web",
+			MediaType:  "text/html",
+			CreatedAt:  time.Now().UTC(),
+			UpdatedAt:  time.Now().UTC(),
+		}
+		if err := s.CreateContentItemOG(ctx, rec); err != nil {
+			t.Fatalf("create content item %d: %v", i, err)
+		}
+	}
+
+	items, err := s.ListContentItemsByOwnerOG(ctx, "owner-list", 10)
+	if err != nil {
+		t.Fatalf("list content items: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(items))
+	}
+}
+
+// =========================================================================
+// Podcast Subscription tests
+// =========================================================================
+
+func TestOGCreateAndGetPodcastSubscription(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	rec := types.PodcastSubscription{
+		SubscriptionID: "sub-og-1",
+		OwnerID:        "owner-og",
+		FeedURL:        "https://example.com/feed.xml",
+		Title:          "Test Podcast",
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+	if err := s.CreatePodcastSubscriptionOG(ctx, rec); err != nil {
+		t.Fatalf("create subscription: %v", err)
+	}
+
+	got, err := s.GetPodcastSubscriptionOG(ctx, "owner-og", "sub-og-1")
+	if err != nil {
+		t.Fatalf("get subscription: %v", err)
+	}
+	if got.SubscriptionID != rec.SubscriptionID {
+		t.Errorf("subscription_id: got %q", got.SubscriptionID)
+	}
+	if got.FeedURL != rec.FeedURL {
+		t.Errorf("feed_url: got %q", got.FeedURL)
+	}
+}
+
+func TestOGListPodcastSubscriptionsByOwner(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for i := range 2 {
+		rec := types.PodcastSubscription{
+			SubscriptionID: "sub-og-list-" + string(rune('A'+i)),
+			OwnerID:        "owner-list",
+			FeedURL:        "https://example.com/feed.xml",
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		}
+		if err := s.CreatePodcastSubscriptionOG(ctx, rec); err != nil {
+			t.Fatalf("create subscription %d: %v", i, err)
+		}
+	}
+
+	subs, err := s.ListPodcastSubscriptionsByOwnerOG(ctx, "owner-list", 10)
+	if err != nil {
+		t.Fatalf("list subscriptions: %v", err)
+	}
+	if len(subs) != 2 {
+		t.Fatalf("expected 2 subscriptions, got %d", len(subs))
+	}
+}
