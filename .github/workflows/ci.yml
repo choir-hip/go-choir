@@ -810,6 +810,13 @@ jobs:
               echo "==> Restarting selected host services"
               for service in "${service_roots[@]}"; do
                 [ -z "$service" ] && continue
+                # sandbox is a VM runtime package, not a host systemd service.
+                # The service pointer is installed above; VMs pick it up on
+                # refresh/restart. Skip systemd restart for sandbox.
+                if [ "$service" = "sandbox" ]; then
+                  echo "    Skipped sandbox restart (VM runtime package, not a host service)"
+                  continue
+                fi
                 systemctl restart "go-choir-${service}.service"
                 systemctl is-active --quiet "go-choir-${service}.service"
                 echo "    Restarted go-choir-${service}.service"
