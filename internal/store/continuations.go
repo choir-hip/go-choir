@@ -41,6 +41,14 @@ func (s *Store) CreateRunContinuation(ctx context.Context, rec types.RunContinua
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
+
+	if s.og != nil {
+		if err := s.CreateRunContinuationOG(ctx, rec); err != nil {
+			return types.RunContinuationRecord{}, fmt.Errorf("insert run continuation: %w", err)
+		}
+		return rec, nil
+	}
+
 	detailsJSON, err := marshalJSON(rec.Details)
 	if err != nil {
 		return types.RunContinuationRecord{}, fmt.Errorf("marshal run continuation details: %w", err)
@@ -89,6 +97,22 @@ func (s *Store) UpdateRunContinuation(ctx context.Context, rec types.RunContinua
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = time.Now().UTC()
 	}
+
+	if s.og != nil {
+		// Check it exists first.
+		if _, err := s.GetRunContinuationOG(ctx, rec.OwnerID, rec.ContinuationID); err != nil {
+			if err == ErrNotFound {
+				return types.RunContinuationRecord{}, ErrNotFound
+			}
+			return types.RunContinuationRecord{}, fmt.Errorf("update run continuation: %w", err)
+		}
+		// Upsert back to OG.
+		if err := s.CreateRunContinuationOG(ctx, rec); err != nil {
+			return types.RunContinuationRecord{}, fmt.Errorf("update run continuation: %w", err)
+		}
+		return rec, nil
+	}
+
 	detailsJSON, err := marshalJSON(rec.Details)
 	if err != nil {
 		return types.RunContinuationRecord{}, fmt.Errorf("marshal run continuation details: %w", err)
@@ -137,6 +161,13 @@ func (s *Store) GetRunContinuation(ctx context.Context, ownerID, continuationID 
 	if continuationID == "" {
 		return types.RunContinuationRecord{}, fmt.Errorf("get run continuation: continuation_id is required")
 	}
+	if s.og != nil {
+		rec, err := s.GetRunContinuationOG(ctx, ownerID, continuationID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT continuation_id, owner_id, source_loop_id, next_loop_id,
 		        objective, reason, authority_profile, lease_seconds, status,
@@ -156,6 +187,13 @@ func (s *Store) ListRunContinuationsBySource(ctx context.Context, ownerID, sourc
 	}
 	if sourceRunID == "" {
 		return nil, fmt.Errorf("list run continuations: source_loop_id is required")
+	}
+	if s.og != nil {
+		conts, err := s.ListRunContinuationsBySourceRunOG(ctx, ownerID, sourceRunID, 500)
+		if err == nil && len(conts) > 0 {
+			return conts, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT continuation_id, owner_id, source_loop_id, next_loop_id,

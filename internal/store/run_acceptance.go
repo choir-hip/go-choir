@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -41,6 +43,13 @@ func (s *Store) UpsertRunAcceptance(ctx context.Context, rec types.RunAcceptance
 		now = rec.CreatedAt
 	}
 	rec.UpdatedAt = now
+
+	if s.og != nil {
+		if err := s.CreateRunAcceptanceOG(ctx, rec); err != nil {
+			return types.RunAcceptanceRecord{}, fmt.Errorf("upsert run acceptance: %w", err)
+		}
+		return rec, nil
+	}
 
 	checkpoints, err := marshalAcceptanceJSON(rec.Checkpoints)
 	if err != nil {
@@ -142,6 +151,13 @@ func (s *Store) GetRunAcceptance(ctx context.Context, ownerID, acceptanceID stri
 	if acceptanceID == "" {
 		return types.RunAcceptanceRecord{}, fmt.Errorf("get run acceptance: acceptance_id is required")
 	}
+	if s.og != nil {
+		rec, err := s.GetRunAcceptanceOG(ctx, ownerID, acceptanceID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.db.QueryRowContext(ctx, runAcceptanceSelectSQL()+` WHERE owner_id = ? AND acceptance_id = ?`, ownerID, acceptanceID)
 	return scanRunAcceptance(row)
 }
@@ -160,6 +176,38 @@ func (s *Store) ListRunAcceptances(ctx context.Context, ownerID string, limit in
 	}
 	if limit <= 0 || limit > 500 {
 		limit = 100
+	}
+	if s.og != nil {
+		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:    ogKindRunAccept,
+			OwnerID: ownerID,
+			Limit:   limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("query run acceptances: %w", err)
+		}
+		acceptances := make([]types.RunAcceptanceRecord, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.RunAcceptanceRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			acceptances = append(acceptances, rec)
+		}
+		// Sort by updated_at DESC, created_at DESC.
+		sort.Slice(acceptances, func(i, j int) bool {
+			if !acceptances[i].UpdatedAt.Equal(acceptances[j].UpdatedAt) {
+				return acceptances[i].UpdatedAt.After(acceptances[j].UpdatedAt)
+			}
+			return acceptances[i].CreatedAt.After(acceptances[j].CreatedAt)
+		})
+		if len(acceptances) > limit {
+			acceptances = acceptances[:limit]
+		}
+		if len(acceptances) > 0 {
+			return acceptances, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.db.QueryContext(ctx,
 		runAcceptanceSelectSQL()+` WHERE owner_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT ?`,
@@ -182,6 +230,13 @@ func (s *Store) ListRunAcceptancesByTrajectory(ctx context.Context, ownerID, tra
 	}
 	if limit <= 0 || limit > 500 {
 		limit = 100
+	}
+	if s.og != nil {
+		acceptances, err := s.ListRunAcceptancesByTrajectoryOG(ctx, ownerID, trajectoryID, limit)
+		if err == nil && len(acceptances) > 0 {
+			return acceptances, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.db.QueryContext(ctx,
 		runAcceptanceSelectSQL()+` WHERE owner_id = ? AND trajectory_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT ?`,
