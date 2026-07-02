@@ -477,6 +477,9 @@ func (s *Store) EnsureTextureSchema() error {
 
 // CreateDocument inserts a new document record.
 func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
+	if s.og != nil {
+		return s.CreateTextureDocumentOG(ctx, doc)
+	}
 	_, err := s.textureHandle().ExecContext(ctx,
 		`INSERT INTO texture_documents (doc_id, owner_id, title, current_revision_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -497,6 +500,13 @@ func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
 // given owner. If the document does not exist or does not belong to the
 // owner, it returns ErrNotFound.
 func (s *Store) GetDocument(ctx context.Context, docID, ownerID string) (types.Document, error) {
+	if s.og != nil {
+		doc, err := s.GetTextureDocumentOG(ctx, ownerID, docID)
+		if err == nil || err != ErrNotFound {
+			return doc, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.textureHandle().QueryRowContext(ctx,
 		`SELECT doc_id, owner_id, title, current_revision_id, created_at, updated_at
 		   FROM texture_documents
@@ -511,6 +521,13 @@ func (s *Store) GetDocument(ctx context.Context, docID, ownerID string) (types.D
 func (s *Store) ListDocumentsByOwner(ctx context.Context, ownerID string, limit int) ([]types.Document, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if s.og != nil {
+		docs, err := s.ListTextureDocumentsByOwnerOG(ctx, ownerID, limit)
+		if err == nil && len(docs) > 0 {
+			return docs, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
 		`SELECT doc_id, owner_id, title, current_revision_id, created_at, updated_at
@@ -730,6 +747,9 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 
 // UpdateDocument updates an existing document record.
 func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
+	if s.og != nil {
+		return s.UpdateTextureDocumentOG(ctx, doc)
+	}
 	result, err := s.textureHandle().ExecContext(ctx,
 		`UPDATE texture_documents
 		    SET owner_id = ?,
@@ -1074,6 +1094,13 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 // GetRevision returns the revision with the given revision ID, scoped to
 // the given owner.
 func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (types.Revision, error) {
+	if s.og != nil {
+		rev, err := s.GetTextureRevisionOG(ctx, ownerID, revisionID)
+		if err == nil || err != ErrNotFound {
+			return rev, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.textureHandle().QueryRowContext(ctx,
 		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
 		   FROM texture_revisions
@@ -1102,6 +1129,13 @@ func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (typ
 func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, limit int) ([]types.Revision, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if s.og != nil {
+		revs, err := s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, limit)
+		if err == nil && len(revs) > 0 {
+			return revs, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
 		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
@@ -2085,15 +2119,18 @@ func (s *Store) ReactivateAgentMutation(ctx context.Context, runID string, sched
 
 // CreateTextureDecision inserts an off-document Texture decision note.
 func (s *Store) CreateTextureDecision(ctx context.Context, rec types.TextureDecisionRecord) error {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	if s.og != nil {
+		return s.CreateTextureDecisionOG(ctx, rec)
+	}
 	evidenceRefs, err := json.Marshal(rec.EvidenceRefs)
 	if err != nil {
 		return fmt.Errorf("marshal texture decision evidence refs: %w", err)
 	}
 	if len(evidenceRefs) == 0 || string(evidenceRefs) == "null" {
 		evidenceRefs = []byte("[]")
-	}
-	if rec.CreatedAt.IsZero() {
-		rec.CreatedAt = time.Now().UTC()
 	}
 	_, err = s.textureHandle().ExecContext(ctx,
 		`INSERT INTO texture_decisions (decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at)
@@ -2121,6 +2158,13 @@ func (s *Store) CreateTextureDecision(ctx context.Context, rec types.TextureDeci
 func (s *Store) ListTextureDecisionsByDocument(ctx context.Context, ownerID, docID string, limit int) ([]types.TextureDecisionRecord, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if s.og != nil {
+		decisions, err := s.ListTextureDecisionsByDocOG(ctx, ownerID, docID, limit)
+		if err == nil && len(decisions) > 0 {
+			return decisions, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
 		`SELECT decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at
