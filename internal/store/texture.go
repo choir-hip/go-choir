@@ -1099,6 +1099,11 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 	if rows == 0 {
 		return ErrNotFound
 	}
+	// Dual-write: update OG revision with patched metadata.
+	if s.og != nil {
+		rev.Metadata = json.RawMessage(merged)
+		_ = s.CreateTextureRevisionOG(ctx, rev)
+	}
 	return nil
 }
 
