@@ -137,6 +137,10 @@ func (s *Store) UpdateBrowserSession(ctx context.Context, rec types.BrowserSessi
 	if count == 0 {
 		return types.BrowserSessionRecord{}, ErrNotFound
 	}
+	// Dual-write: update OG with the new state.
+	if s.og != nil {
+		_ = s.CreateBrowserSessionOG(ctx, rec)
+	}
 	return rec, nil
 }
 

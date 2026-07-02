@@ -166,6 +166,13 @@ func (s *Store) GetRunAcceptanceByID(ctx context.Context, acceptanceID string) (
 	if acceptanceID == "" {
 		return types.RunAcceptanceRecord{}, fmt.Errorf("get run acceptance by id: acceptance_id is required")
 	}
+	if s.og != nil {
+		rec, err := s.GetRunAcceptanceByIDOG(ctx, acceptanceID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.db.QueryRowContext(ctx, runAcceptanceSelectSQL()+` WHERE acceptance_id = ?`, acceptanceID)
 	return scanRunAcceptance(row)
 }

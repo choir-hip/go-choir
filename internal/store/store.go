@@ -1784,7 +1784,11 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 	}
 
 	if s.og != nil {
-		objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, limit*4)
+		// Fetch all events for this run from OG, then filter by seq.
+		// Using a large fetch limit ensures we don't miss events that
+		// fall outside the "most recent N" window but still have
+		// seq > afterSeq.
+		objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, 10000)
 		if err != nil {
 			return nil, fmt.Errorf("query events: %w", err)
 		}
@@ -1913,10 +1917,15 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 	}
 
 	if s.og != nil {
+		// Fetch all owner events from OG (no limit on the fetch side,
+		// then filter by stream_seq and apply the caller's limit).
+		// Using a large fetch limit ensures we don't miss events that
+		// fall outside the "most recent N" window but still have
+		// stream_seq > afterSeq.
 		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
 			Kind:    ogKindEvent,
 			OwnerID: ownerID,
-			Limit:   limit * 4,
+			Limit:   10000,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("query events by owner after seq: %w", err)

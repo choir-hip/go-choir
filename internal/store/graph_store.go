@@ -1043,6 +1043,22 @@ func (s *Store) GetRunAcceptanceOG(ctx context.Context, ownerID, acceptanceID st
 	return rec, nil
 }
 
+// GetRunAcceptanceByIDOG retrieves a run acceptance by ID without owner scoping.
+func (s *Store) GetRunAcceptanceByIDOG(ctx context.Context, acceptanceID string) (types.RunAcceptanceRecord, error) {
+	obj, err := s.ogGetByKey(ctx, ogKindRunAccept, "acceptance_id", acceptanceID)
+	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.RunAcceptanceRecord{}, ErrNotFound
+		}
+		return types.RunAcceptanceRecord{}, err
+	}
+	var rec types.RunAcceptanceRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.RunAcceptanceRecord{}, err
+	}
+	return rec, nil
+}
+
 // ListRunAcceptancesByTrajectoryOG lists acceptances for a trajectory.
 func (s *Store) ListRunAcceptancesByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.RunAcceptanceRecord, error) {
 	if limit <= 0 {
