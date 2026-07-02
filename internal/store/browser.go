@@ -67,6 +67,10 @@ func (s *Store) CreateBrowserSession(ctx context.Context, rec types.BrowserSessi
 	if err != nil {
 		return types.BrowserSessionRecord{}, fmt.Errorf("create browser session: %w", err)
 	}
+	// Dual-write to OG.
+	if s.og != nil {
+		_ = s.CreateBrowserSessionOG(ctx, rec)
+	}
 	return rec, nil
 }
 
@@ -144,6 +148,13 @@ func (s *Store) GetBrowserSession(ctx context.Context, ownerID, sessionID string
 	if sessionID == "" {
 		return types.BrowserSessionRecord{}, fmt.Errorf("get browser session: session_id is required")
 	}
+	if s.og != nil {
+		rec, err := s.GetBrowserSessionOG(ctx, ownerID, sessionID)
+		if err == nil || err != ErrNotFound {
+			return rec, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT session_id, owner_id, provider, mode, execution_scope, backend_session_id,
 		        world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
@@ -164,6 +175,13 @@ func (s *Store) ListBrowserSessions(ctx context.Context, ownerID string, limit i
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
+	}
+	if s.og != nil {
+		sessions, err := s.ListBrowserSessionsByOwnerOG(ctx, ownerID, limit)
+		if err == nil && len(sessions) > 0 {
+			return sessions, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT session_id, owner_id, provider, mode, execution_scope, backend_session_id,

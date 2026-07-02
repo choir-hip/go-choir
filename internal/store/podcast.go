@@ -54,6 +54,10 @@ func (s *Store) UpsertPodcastSubscription(ctx context.Context, rec types.Podcast
 	if err != nil {
 		return types.PodcastSubscription{}, fmt.Errorf("upsert podcast subscription: %w", err)
 	}
+	// Dual-write to OG.
+	if s.og != nil {
+		_ = s.CreatePodcastSubscriptionOG(ctx, rec)
+	}
 	return rec, nil
 }
 
@@ -65,6 +69,13 @@ func (s *Store) ListPodcastSubscriptions(ctx context.Context, ownerID string, li
 	}
 	if limit <= 0 {
 		limit = 50
+	}
+	if s.og != nil {
+		subs, err := s.ListPodcastSubscriptionsByOwnerOG(ctx, ownerID, limit)
+		if err == nil && len(subs) > 0 {
+			return subs, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
 		`SELECT subscription_id, owner_id, feed_url, content_id, title, author,

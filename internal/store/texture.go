@@ -2333,11 +2333,22 @@ func (s *Store) CreateContentItem(ctx context.Context, rec types.ContentItem) er
 	if err != nil {
 		return fmt.Errorf("insert content item: %w", err)
 	}
+	// Dual-write to OG.
+	if s.og != nil {
+		_ = s.CreateContentItemOG(ctx, rec)
+	}
 	return nil
 }
 
 // GetContentItem returns a content item scoped to the authenticated owner.
 func (s *Store) GetContentItem(ctx context.Context, ownerID, contentID string) (types.ContentItem, error) {
+	if s.og != nil {
+		item, err := s.GetContentItemOG(ctx, ownerID, contentID)
+		if err == nil || err != ErrNotFound {
+			return item, err
+		}
+		// Fall through to SQL for legacy records.
+	}
 	row := s.textureHandle().QueryRowContext(ctx,
 		`SELECT content_id, owner_id, source_type, media_type, app_hint, title,
 		        source_url, canonical_url, file_path, text_content, content_hash,
@@ -2354,6 +2365,13 @@ func (s *Store) GetContentItem(ctx context.Context, ownerID, contentID string) (
 func (s *Store) ListContentItems(ctx context.Context, ownerID string, limit int) ([]types.ContentItem, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if s.og != nil {
+		items, err := s.ListContentItemsByOwnerOG(ctx, ownerID, limit)
+		if err == nil && len(items) > 0 {
+			return items, nil
+		}
+		// Fall through to SQL if OG returned nothing.
 	}
 	rows, err := s.textureHandle().QueryContext(ctx,
 		`SELECT content_id, owner_id, source_type, media_type, app_hint, title,
