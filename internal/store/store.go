@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1606,6 +1607,62 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		rec.Payload = json.RawMessage(`{}`)
 	}
 
+	// When the object graph is active, compute sequence numbers from OG
+	// and store the event there. We still compute stream_seq from SQL to
+	// maintain global ordering during the migration.
+	if s.og != nil && rec.OwnerID != "" {
+		// Compute the next sequence number for this run from OG.
+		existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
+		if err != nil {
+			return fmt.Errorf("append event: list existing: %w", err)
+		}
+		maxSeq := int64(0)
+		for _, obj := range existing {
+			var ev types.EventRecord
+			if err := ogDecode(obj, &ev); err != nil {
+				continue
+			}
+			if ev.OwnerID != rec.OwnerID {
+				continue
+			}
+			if ev.Seq > maxSeq {
+				maxSeq = ev.Seq
+			}
+		}
+		rec.Seq = maxSeq + 1
+
+		// Compute stream_seq: take the max of all OG events and SQL,
+		// then +1. This ensures global ordering even during migration.
+		allEvents, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:  ogKindEvent,
+			Limit: 100000,
+		})
+		if err != nil {
+			return fmt.Errorf("append event: list all events: %w", err)
+		}
+		maxStreamSeq := int64(0)
+		for _, obj := range allEvents {
+			var ev types.EventRecord
+			if err := ogDecode(obj, &ev); err != nil {
+				continue
+			}
+			if ev.StreamSeq > maxStreamSeq {
+				maxStreamSeq = ev.StreamSeq
+			}
+		}
+		sqlMaxStreamSeq := int64(0)
+		row := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(stream_seq), 0) FROM events`)
+		if err := row.Scan(&sqlMaxStreamSeq); err != nil {
+			return fmt.Errorf("query next event stream sequence: %w", err)
+		}
+		if sqlMaxStreamSeq > maxStreamSeq {
+			maxStreamSeq = sqlMaxStreamSeq
+		}
+		rec.StreamSeq = maxStreamSeq + 1
+
+		return s.AppendEventOG(ctx, rec)
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin event transaction: %w", err)
@@ -1666,6 +1723,33 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 		limit = 200
 	}
 
+	if s.og != nil {
+		objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, limit*4)
+		if err != nil {
+			return nil, fmt.Errorf("query events: %w", err)
+		}
+		events := make([]types.EventRecord, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.EventRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			if rec.Seq <= afterSeq {
+				continue
+			}
+			events = append(events, rec)
+		}
+		// Sort by seq ascending.
+		sort.Slice(events, func(i, j int) bool { return events[i].Seq < events[j].Seq })
+		if len(events) > limit {
+			events = events[:limit]
+		}
+		// Fall back to SQL if OG returned nothing (legacy records).
+		if len(events) > 0 {
+			return events, nil
+		}
+	}
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
 		   FROM events
@@ -1703,6 +1787,34 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 		limit = 200
 	}
 
+	if s.og != nil {
+		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:    ogKindEvent,
+			OwnerID: ownerID,
+			Limit:   limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("query events by owner: %w", err)
+		}
+		events := make([]types.EventRecord, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.EventRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			events = append(events, rec)
+		}
+		// Sort by timestamp descending.
+		sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.After(events[j].Timestamp) })
+		if len(events) > limit {
+			events = events[:limit]
+		}
+		// Fall back to SQL if OG returned nothing (legacy records).
+		if len(events) > 0 {
+			return events, nil
+		}
+	}
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
 		   FROM events
@@ -1738,6 +1850,37 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
 	if limit <= 0 {
 		limit = 200
+	}
+
+	if s.og != nil {
+		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+			Kind:    ogKindEvent,
+			OwnerID: ownerID,
+			Limit:   limit * 4,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("query events by owner after seq: %w", err)
+		}
+		events := make([]types.EventRecord, 0, len(objs))
+		for _, obj := range objs {
+			var rec types.EventRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			if rec.StreamSeq <= afterSeq {
+				continue
+			}
+			events = append(events, rec)
+		}
+		// Sort by stream_seq ascending.
+		sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
+		if len(events) > limit {
+			events = events[:limit]
+		}
+		// Fall back to SQL if OG returned nothing (legacy records).
+		if len(events) > 0 {
+			return events, nil
+		}
 	}
 
 	rows, err := s.db.QueryContext(ctx,
