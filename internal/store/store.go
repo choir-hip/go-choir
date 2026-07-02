@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -62,6 +63,8 @@ type Store struct {
 	texturePath   string
 	doltConnector doltConnector
 	jsonPatchMu   sync.Mutex
+	og            *objectgraph.Service
+	ogStore       *objectgraph.DoltStore
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -573,6 +576,20 @@ func Open(dbPath string) (*Store, error) {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
 	}
+
+	// Initialize the object graph service on the same Dolt workspace.
+	// The og_objects/og_edges tables coexist with the relational tables
+	// during the Phase 3 migration; converted methods use the object
+	// graph while unconverted methods continue using SQL.
+	ogDoltStore := objectgraph.NewDoltStore(db)
+	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("runtime store: bootstrap object graph: %w", err)
+	}
+	s.ogStore = ogDoltStore
+	s.og = objectgraph.NewService(objectgraph.Config{
+		Durable: ogDoltStore,
+	})
 
 	// Apply the texture schema to the embedded Dolt workspace.
 	if err := s.EnsureTextureSchema(); err != nil {
