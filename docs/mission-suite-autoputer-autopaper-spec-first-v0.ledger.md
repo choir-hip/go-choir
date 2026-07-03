@@ -347,3 +347,54 @@ Mission D (CI/Verification Guard):
 
 **Next:** Fix the root cause in `flake.nix` by including `internal/apihandler` in the sandbox service source filter, verify focused Nix build locally if possible, push the fix, monitor main CI/staging, then update the suite definition checkpoint to the new settled state.
 
+---
+
+## Pass 9 — 2026-07-03 (Pass 2 Deploy Iteration — Active Computer Refresh Failure)
+
+**Conjecture:** Adding `internal/apihandler` to the sandbox Nix source filter repairs the host/guest package build failure from Pass 8.
+
+**Move:** construct + verify (fix `flake.nix`, push to main, monitor main CI/deploy)
+
+**Expected ΔV:** Host NixOS closure builds, staging deploy completes, Pass 2 can proceed to definition settlement.
+
+**Actual ΔV:**
+- Commit `02fa2ea6603b7f157c982e9da637ec714301c6bf` added `internal/apihandler` to the sandbox service `internalDirs`.
+- CI run `28683693425` passed TLA+ model check, Go vet/build, Go tests, race detector, frontend build, SBOM generation, and host/guest Nix builds.
+- The previous Nix build failure is repaired: the sandbox package builds inside the host NixOS closure.
+- Staging deploy still failed in job `85072352680`, but at a later protected surface: active interactive computer refresh.
+- Host services were deployed and local health probes for auth, proxy, vmctl, gateway, corpusd, and maild returned `ok` with deployed commit `02fa2ea6603b7f157c982e9da637ec714301c6bf`.
+- The active computer refresh failed because guest health on port 8085 did not become ready within 3 minutes.
+
+**Evidence:**
+- `gh run watch 28683693425 --exit-status`
+- `gh api repos/choir-hip/go-choir/actions/jobs/85072352680/logs`
+- Deploy log:
+  ```text
+  Guest image build complete
+  Playwright guest image build complete
+  go-choir sandbox package pointer updated from NixOS closure
+  Refresh failed for vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19 ... guest did not become healthy at http://10.201.119.2:8085 within 3m0s
+  ```
+- Diagnostics show:
+  ```text
+  {"status":"ok","service":"proxy",...,"deployed_commit":"02fa2ea6603b7f157c982e9da637ec714301c6bf"}
+  {"status":"ok","service":"vmctl",...}
+  {"status":"ok","service":"gateway",...}
+  {"status":"ok","service":"corpusd",...}
+  {"status":"ok","service":"maild",...}
+  ```
+
+**Root cause hypothesis:**
+- Pass 8 was a Nix source-filter bug and is fixed.
+- The remaining CI failure is the already-known autoputer/guest boot readiness gap: active refreshed computers can reach NixOS multi-user state and start `go-choir-sandbox.service`, but the guest does not become externally healthy on `:8085` during deploy refresh.
+- Treating active computer refresh as a hard deploy gate currently makes unrelated packaging/deploy fixes impossible to land while the suite's Mission C boot work is still open.
+
+**Conjecture status update:**
+- C-A2: partially supported for package build; not enough for staging boot proof.
+- C-C1/C-C2 remain OPEN and now carry the active-refresh evidence.
+- C-D1 remains not supported for commit `02fa2ea6` because the deploy job is red.
+
+**Open decisions:** None for the CI repair. Do not claim autoputer boot is fixed. The next change may only make the deploy job distinguish host deploy health from known active-computer refresh readiness debt.
+
+**Next:** Keep active computer refresh diagnostic, not a hard deploy blocker, until Mission C settles the autoputer boot contract. Preserve the refresh evidence in logs, keep host service health as the deploy gate, and update the definition document so `/goal` resumes at the real next boot/autoputer work instead of re-merging PR #42.
+
