@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -111,7 +110,7 @@ func (b *BridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 // canned stub responses.
 func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	providerName := b.inner.Name()
-	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
+	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(task.Metadata)
 
 	// Emit a progress event showing we're about to call a real provider.
 	startPayload, _ := json.Marshal(map[string]string{
@@ -134,7 +133,7 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 				},
 			},
 		},
-		MaxTokens: runtime.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
+		MaxTokens: provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
 		Stream:    true,
 	}
 
@@ -444,7 +443,7 @@ func (g *GatewayBridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPo
 // streaming enabled, emitting incremental delta events for each text chunk.
 func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
-	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
+	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(task.Metadata)
 	providerName := firstNonEmpty(llmConfig.Provider, g.llmProvider)
 	model := firstNonEmpty(llmConfig.Model, g.llmModel)
 	reasoning := firstNonEmpty(llmConfig.ReasoningEffort, g.reasoningEffort)
@@ -457,7 +456,7 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 		Messages: []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: task.Prompt}}},
 		},
-		MaxTokens: runtime.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
+		MaxTokens: provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
 		Stream:    true,
 	}
 
