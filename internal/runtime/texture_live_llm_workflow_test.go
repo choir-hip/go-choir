@@ -92,7 +92,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	defer cancel()
 	rt.Start(ctx)
 	t.Cleanup(func() { rt.Stop() })
-	h := choirruntime.NewAPIHandler(rt)
+	h := apihandler.NewAPIHandler(rt)
 
 	conductorResp := postLiveJSON(t, h.HandlePromptBar, http.MethodPost, "/api/prompt-bar", map[string]any{
 		"text": "Research cellular automata as a toy model for biological evolution, then produce a concise working document that can later mention an artifact and verification result.",

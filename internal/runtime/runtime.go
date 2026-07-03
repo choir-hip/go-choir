@@ -1645,7 +1645,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
-	llmConfig := ResolvedLLMConfigFromMetadata(rec.Metadata)
+	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(rec.Metadata)
 	renderedSystemPrompt := systemPrompt
 	if registry != nil {
 		renderedSystemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
@@ -1683,7 +1683,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			}
 		}
 	}
-	maxOutputTokens := MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
+	maxOutputTokens := provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
 	terminalFallback := terminalProviderFallbackSelection()
 	preconditionFallbacks := providerPreconditionFallbackSelections(llmConfig)
 	if emit != nil {
@@ -1902,7 +1902,7 @@ func (rt *Runtime) CompactRunMemory(ctx context.Context, runID, ownerID, reason 
 		rt.emitEvent(ctx, rec, kind, events.CauseSupervisorRecovery, payload)
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit)
-	memory.withLLMCompactor(asToolLoopProvider(rt.provider), ResolvedLLMConfigFromMetadata(rec.Metadata), 0)
+	memory.withLLMCompactor(asToolLoopProvider(rt.provider), provideriface.ResolvedLLMConfigFromMetadata(rec.Metadata), 0)
 	compacted, err := memory.compactIfNeeded(ctx, reason, true)
 	if err != nil {
 		return err

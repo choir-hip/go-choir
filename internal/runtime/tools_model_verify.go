@@ -76,7 +76,7 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 		return "", fmt.Errorf("model %q is text-only in Choir model catalog; image input requires a multimodal model policy", selection.Model)
 	}
 	messages := []json.RawMessage{buildVerificationUserMessage(prompt, normalized)}
-	maxTokens := MaxInteractiveOutputTokensForSelection(selection, role)
+	maxTokens := provideriface.MaxInteractiveOutputTokensForSelection(selection, role)
 	resp, err := asToolLoopProvider(rt.provider).CallWithTools(ctx, ToolLoopRequest{
 		Provider:        selection.Provider,
 		Model:           selection.Model,

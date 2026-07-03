@@ -269,6 +269,10 @@ type APIHandler struct {
 }
 
 // NewAPIHandler creates an APIHandler for the given runtime.
+//
+// Deprecated: use apihandler.NewAPIHandler from internal/apihandler. This
+// runtime-level constructor remains only while the actor-runtime defactoring
+// migrates the handler methods out of the runtime package.
 func NewAPIHandler(rt *Runtime) *APIHandler {
 	return &APIHandler{rt: rt}
 }
@@ -1395,6 +1399,10 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 // RegisterRoutes registers runtime API routes on the given server.
 // The health handler overrides the default server health handler to
 // report runtime readiness.
+//
+// Deprecated: use apihandler.RegisterRoutes from internal/apihandler. This
+// runtime-level registration function remains only while the actor-runtime
+// defactoring migrates the handler methods out of the runtime package.
 func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
