@@ -73,3 +73,52 @@ explicitly, which changes the route if C2 fails.)
 
 **Next:** Fix the flaky test, push, monitor CI. In parallel, trigger
 workflow_dispatch to re-deploy staging. If C2 falsified, activate H1.
+
+## Pass 0c — 2026-07-03 03:30 EDT
+
+**Conjecture:** H1 and H2 were framed as conjectures (uncertain, to be
+tested) but they are actually definitions (established by observation
+of architecture history). They should be releveled from conjecture to
+definition, informing the approach from the start rather than
+conditionally. Additionally, the documentation itself needs the same
+constructive critique (D3).
+
+**Move:** shift (relevel H1→D1, H2→D2 from conjecture to definition; add
+D3 for documentation critique; update Parallax State, variant, and goal
+string to reflect the releveling)
+
+**Expected ΔV:** -2 (H1 and H2 removed from V as they are no longer
+conjectures)
+
+**Actual ΔV:** -2 (V decreased from 7 to 5; H1/H2 became D1/D2
+definitions, not conjectures; D3 added as a third definition)
+
+**Conjectures recorded:**
+- D1: Race-detector CI model is from a prior architecture — DEFINITION
+  (releveled from H1 conjecture; established by observation that the
+  runtime underwent OG migration, actor runtime migration, and wire
+  pipeline rewrite without rewriting tests for the new concurrency model)
+- D2: TLA+ specs are from a prior architecture — DEFINITION
+  (releveled from H2 conjecture; established by observation that specs
+  were written before the migrations)
+- D3: Documentation needs constructive critique — DEFINITION
+  (new; established by observation that docs accumulated through
+  multiple migrations without a composition and clarity pass)
+
+**Receipts:**
+- Owner input: "i realized that one needed relevling... not a refactor
+  but a releveling... is from conjecture to definition. yes, we are due
+  a constructive critique of composition and clarity of communication
+  in our documentation and systematic description"
+
+**Open edges:**
+- D1: How systemic is the event-polling race pattern? (informs whether
+  the first-pass fix is sufficient or the race detector model needs
+  releveling)
+- D2: What do the TLA+ specs actually model? (needs review of specs/)
+- D3: Which docs carry the most stale assumptions? (needs review of
+  mission docs, architecture docs, doctrine)
+
+**Next:** Fix the flaky test, push, monitor CI. In parallel, trigger
+workflow_dispatch to re-deploy staging. Begin D3 documentation critique.
+If C2 falsified, shift to D1: review race-detector CI model.

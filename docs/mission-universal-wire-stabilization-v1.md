@@ -147,55 +147,81 @@ Identify what needs to change to vastly increase sources and stories:
 - Edition/article storage
 - Reconciler cadence
 
-## Substrate-Level Hypotheses (Owner-Provided)
+## Substrate Definitions (Owner-Provided, Releveled from Conjecture)
 
-If the first-pass fix doesn't hold or CI keeps failing, do not keep
-patching symptoms. Step back and question the substrate:
+These are not hypotheses to test. They are definitions about the current
+state of the system, established by observation of the architecture's
+history. They inform the approach from the start, not conditionally.
 
-### H1: The race-detector CI model itself may be wrong
+### D1: The race-detector CI model is from a prior architecture
 
-The race detector slows execution 2-10x, which surfaces timing-sensitive
-test bugs that are not production data races. The current model shards
-runtime tests across 4 race-detector jobs with a 30-minute timeout each.
-If the tests are full of async-event-checks-after-terminal-state patterns,
-the race detector will keep finding "flaky" failures that are test bugs,
-not real races. **Simplify:** review whether the race detector is testing
-the right things. Maybe the race detector should run on a focused set of
-concurrency-specific tests, not the full runtime suite. Maybe tests that
-check event ordering need to be rewritten with proper synchronization, or
-removed if they're testing test-infrastructure rather than production
-behavior.
+The race detector runs the full runtime test suite (sharded across 4
+jobs, 30-minute timeout each) under -race, which slows execution 2-10x.
+The runtime has since undergone: OG migration (SQLite → Dolt), actor
+runtime migration (mutexes → Go-channel mailboxes), and wire pipeline
+rewrite (deterministic → agent pipeline). The tests were not rewritten
+for the actor runtime model. Tests that check event ordering by polling
+run state then immediately listing events race against async event
+persistence — this is a structural pattern, not a one-off bug. The race
+detector is surfacing test-infrastructure bugs from a prior concurrency
+model, not production data races.
 
-### H2: The TLA+ specs may not match the current architecture
+**Implication:** The first-pass fix (event polling) may quiet this one
+test, but the pattern is likely systemic. The constructive approach is
+to review what the race detector should be testing in the current
+architecture, not to patch each test individually. Simplify: focused
+concurrency tests on the actor runtime's actual invariants, not
+full-suite race sharding that finds test bugs.
 
-The TLA+ specs in `specs/` were written some time ago. The architecture
-has since undergone: OG migration (SQLite → Dolt), actor runtime
-migration (mutexes → Go-channel mailboxes), wire pipeline rewrite
-(deterministic → agent pipeline), and processor-key extraction. The
-probability that the TLA+ specs are well-formed, stable, and
-well-designed for the current architecture is drawn from a sparse base
-distribution. **Simplify:** review whether the TLA+ specs are still
-meaningful. If they're checking invariants that no longer hold or
-models that no longer match the code, they're noise. If they're
-meaningful but stale, they need updating. If they can't be updated
-cheaply, consider whether TLA+ is the right tool for this system's
-current complexity level.
+### D2: The TLA+ specs are from a prior architecture
 
-### Escalation Rule
+The TLA+ specs in `specs/` were written before the OG migration, actor
+runtime migration, and wire pipeline rewrite. The probability that they
+are well-formed, stable, and well-designed for the current architecture
+is drawn from a sparse base distribution. They are checking invariants
+for a system that no longer exists in the form modeled.
 
-If C2 (event polling fix makes CI green) is FALSIFIED — i.e., the fix
-doesn't work or another race test fails — do not patch the next test.
-Instead, activate H1: review the race-detector CI model. The question
-shifts from "fix this test" to "is this testing approach correct for the
-current architecture?"
+**Implication:** The TLA+ model check in CI is either (a) passing
+because the specs are abstract enough to still hold, (b) passing because
+the specs don't exercise the changed surfaces, or (c) not actually
+checking anything meaningful. Without a review, it's noise with a
+green-checkmark. The constructive approach is to review what the specs
+actually model, whether those invariants still hold, and whether TLA+ is
+the right tool for the current system's complexity level. If not,
+remove it from CI rather than carrying stale verification theater.
 
-If the TLA+ model check job fails or is found to be checking stale
-invariants, activate H2: review whether TLA+ belongs in CI at all right
-now.
+### D3: The documentation and systematic description need constructive critique
 
-Both hypotheses point toward **simplify** — the system has been through
-major migrations and the verification infrastructure may be carrying
-assumptions from a prior architecture.
+The project's documentation — mission docs, architecture docs, doctrine,
+agent operating contracts — has accumulated through multiple major
+migrations without a composition and clarity pass. Docs may describe a
+prior architecture, use vocabulary from a prior model, or carry
+assumptions that no longer hold. The systematic description of the
+system (how components connect, what the data flow is, what the
+invariants are) may be stale in the same way the TLA+ specs are.
+
+**Implication:** As part of stabilization, review the documentation for
+composition quality and clarity of communication. This is not a refactor
+— it's a releveling of how the system is described, matching the current
+architecture. The docs are the handoff artifact for tomorrow's scale-up;
+if they describe a prior system, the scale-up will be built on stale
+understanding.
+
+### Approach
+
+All three definitions point toward **simplify**. The system has been
+through major migrations. The verification infrastructure (race
+detector, TLA+) and the documentation (mission docs, architecture docs)
+are carrying assumptions from prior architectures. The constructive
+approach is to review and relevel them to match the current system, not
+to patch symptoms or carry stale verification.
+
+The first-pass fix (event polling for the flaky test) is still worth
+attempting — it's cheap and may unblock CI immediately. But if it fails
+or another race test flakes, the next move is D1 (review the race
+detector model), not patching the next test. And the documentation
+critique (D3) should run in parallel with the stabilization work, not
+after it.
 
 ## Parallax State
 
@@ -219,22 +245,41 @@ invariants / qualities / domain ramp (I/Q/D):
 - I: Do not reintroduce deterministic synthesis. Do not add story caps.
   Do not use source labels as headlines. Do not touch Texture core, O1-O3,
   or delete agent pipeline code. Do not weaken CI to make flaky tests
-  pass. Do not skip the race detector without an explicit conjecture
-  delta justifying the change.
+  pass. Do not skip the race detector without an explicit releveling of
+  what it should test.
 - Q: CI must be genuinely green (not flaky-green). Staging must be
   genuinely healthy (not degraded). Articles must be genuinely
-  LLM-synthesized (not template prose).
+  LLM-synthesized (not template prose). Documentation must describe the
+  current architecture, not a prior one.
 - D: local test fix → CI green → staging recovered → Wire publishing →
-  scale-up ready. Each domain embeds in the next.
+  scale-up ready. Each domain embeds in the next. D1/D2/D3 inform the
+  approach throughout, not conditionally.
+
+substrate definitions (releveled from conjecture, established by
+observation of architecture history):
+- D1: The race-detector CI model is from a prior architecture. The full
+  runtime test suite under -race surfaces test-infrastructure bugs from
+  the prior concurrency model, not production data races. The event-
+  polling pattern is likely systemic, not a one-off.
+- D2: The TLA+ specs are from a prior architecture. They model a system
+  that has since undergone OG migration, actor runtime migration, and
+  wire pipeline rewrite. Without review, the TLA+ check in CI is stale
+  verification theater.
+- D3: The documentation and systematic description need constructive
+  critique. Docs have accumulated through multiple migrations without a
+  composition and clarity pass. They may describe a prior architecture
+  and carry stale vocabulary and assumptions.
 
 variant (conjecture descent) V: count conjectures about the pipeline's
-stability, CI model, and publishing capability.
-Current: 7.
+stability and publishing capability. D1/D2/D3 are definitions, not
+conjectures — they don't count toward V but they inform move selection.
+Current: 5.
 - C1: The flaky test is a test bug (event polling race), not a production
   data race (SUPPORTED — local tests pass without -race, failure is
   "missing event kind" not "DATA RACE detected")
 - C2: Fixing the event polling in the test makes CI green (UNDICIDED —
-  need to push and verify)
+  need to push and verify; D1 suggests the pattern is systemic so this
+  may be one of many)
 - C3: Staging VMs can be recovered by re-running the deploy (UNDICIDED —
   VM refresh timed out, may need investigation)
 - C4: Sourcecycled is cycling and dispatching processor runs on staging
@@ -242,22 +287,19 @@ Current: 7.
   down so dispatch may be failing)
 - C5: The agent pipeline produces real LLM-synthesized articles on staging
   (UNDICIDED — requires healthy runtime + model calls)
-- H1: The race-detector CI model is wrong for the current architecture
-  (PROPOSED — owner hypothesis; activate if C2 is falsified)
-- H2: The TLA+ specs do not match the current architecture (PROPOSED —
-  owner hypothesis; probability of correctness drawn from a sparse base
-  distribution)
 Target: 0.
 
 budget: 5-8 passes. Pass 0 spent (analysis and mission doc). 5-7 remaining.
 
 authority / bounds: may modify test files, CI workflow, deploy scripts,
-TLA+ specs. May push to origin/main. May trigger workflow_dispatch. May
-investigate staging via API. May not touch Texture core, O1-O3, or
-delete agent pipeline code. May not SSH to Node B directly (no access).
+TLA+ specs, documentation. May push to origin/main. May trigger
+workflow_dispatch. May investigate staging via API. May not touch
+Texture core, O1-O3, or delete agent pipeline code. May not SSH to
+Node B directly (no access).
 
 mutation class / protected surfaces:
-- Green/Yellow: test fixes (no runtime behavior change)
+- Green/Yellow: test fixes, documentation critique (no runtime behavior
+  change)
 - Orange: CI workflow changes, deploy script changes, TLA+ spec changes
 - Red: staging deploy, VM lifecycle
 - Protected: Texture revision creation, corpusd sync contract, source
@@ -269,28 +311,34 @@ evidence packet:
 - CI green status (pending)
 - Staging health status (pending)
 - Wire feed with real articles (pending)
+- Documentation critique findings (pending)
 
 heresy delta: `discovered` for the flaky test race (test bug, not
 production race). `repaired` for H-WIRE-SOFT-GUARDRAIL if articles are
 publishing. `discovered` for any VM boot issues from OG migration.
-`discovered` if H1 or H2 are confirmed (substrate-level CI/verification
-debt).
+`discovered` for D1/D2/D3 (substrate-level CI/verification/documentation
+debt — these are definitions, not new findings, but recording them is
+epistemic progress).
 
 position / live conjectures / open edges:
 The flaky test is the immediate blocker — it fails CI which blocks
 clean deploys. The staging VMs are down from the last deploy attempt.
 The pipeline code is structurally complete (v1.1 settled the prompt
-fix), but cannot be verified end-to-end until staging is healthy. The
-open edge is whether the VM refresh timeout is a transient issue or a
-systemic boot failure from the OG migration. Two substrate-level
-hypotheses (H1: race detector model, H2: TLA+ specs) are proposed but
-not yet active — they activate if the first-pass fix fails or if the
-TLA+ check reveals stale invariants. The default direction if things
-need rethinking is **simplify**, not patch.
+fix), but cannot be verified end-to-end until staging is healthy. D1
+informs the test fix approach: the event-polling pattern is likely
+systemic, so the fix should be evaluated as either (a) a quick unblock
+that works, or (b) evidence that the race detector model needs
+releveling. D2 and D3 should be reviewed in parallel with the
+stabilization work — the TLA+ specs and documentation are carrying
+prior-architecture assumptions and the scale-up depends on current-
+architecture understanding.
 
 next move: Fix the flaky test (Phase 1), push, monitor CI. In parallel,
-trigger a workflow_dispatch to re-deploy and recover staging VMs. If C2
-is falsified, activate H1 and review the race-detector CI model.
+trigger a workflow_dispatch to re-deploy and recover staging VMs. Begin
+D3 documentation critique: review mission docs, architecture docs, and
+systematic description for stale vocabulary and prior-architecture
+assumptions. If C2 is falsified (another race test flakes), shift to D1:
+review the race-detector CI model rather than patching the next test.
 
 ledger file: `docs/mission-universal-wire-stabilization-v1.ledger.md`
 
@@ -300,14 +348,16 @@ done). Successor: scale-up mission (to be created tomorrow).
 
 learning state: retained here / promoted outward / successor links
 
-settlement: settled when CI is green, staging is healthy, and at least
-one real LLM-synthesized article is on the Wire feed. Open handoff if
-VMs cannot be recovered (document the boot failure for operator
-intervention). If H1 or H2 are confirmed, the mission may need to split
-into a CI/verification-infrastructure mission before continuing.
+settlement: settled when CI is green, staging is healthy, at least one
+real LLM-synthesized article is on the Wire feed, and the documentation
+critique (D3) has been started or scoped. Open handoff if VMs cannot be
+recovered (document the boot failure for operator intervention). If D1
+or D2 reveal that the CI/verification infrastructure needs releveling,
+the mission may split into a CI/verification-infrastructure mission
+before continuing.
 
 ## Suggested Goal String
 
 ```text
-Use Parallax on docs/mission-universal-wire-stabilization-v1.md. Mission: stabilize the Universal Wire pipeline so it is live, functional, and publishing real LLM-synthesized articles on staging. Four phases: (1) Fix the flaky race-detector test TestToolLoopEndToEndWithRuntime — it checks for EventRunCompleted immediately after run state becomes terminal, but event persistence is async; add event polling. (2) Push, monitor CI, verify all jobs green including race detector. (3) Recover staging VMs — they timed out during deploy (guest did not become healthy in 3m); re-run deploy via workflow_dispatch or investigate VM boot failure. (4) Verify Universal Wire is publishing: sourcecycled cycling, processor runs dispatching, Texture agents synthesizing with source body text, articles on Wire feed with event-grade headlines. This sets up tomorrow's scale-up of sources and stories. Substrate hypotheses if first-pass fails: H1 — the race-detector CI model itself may be wrong for the current architecture (review whether full-runtime race sharding is the right approach vs focused concurrency tests); H2 — TLA+ specs were written for a prior architecture and may not match the current system (probability of correctness drawn from a sparse base distribution). If C2 is falsified, activate H1 and simplify the CI model rather than patching the next test. If TLA+ checks stale invariants, activate H2. Default direction if rethinking is needed: simplify, not patch. Invariants: no deterministic synthesis, no story caps, no source-label headlines, do not touch Texture core or O1-O3, do not weaken CI or skip race detector without explicit conjecture delta. Budget: 5-8 passes. Exit: settled when CI green + staging healthy + one real article on Wire feed.
+Use Parallax on docs/mission-universal-wire-stabilization-v1.md. Mission: stabilize the Universal Wire pipeline so it is live, functional, and publishing real LLM-synthesized articles on staging. Four phases: (1) Fix the flaky race-detector test TestToolLoopEndToEndWithRuntime — it checks for EventRunCompleted immediately after run state becomes terminal, but event persistence is async; add event polling. (2) Push, monitor CI, verify all jobs green including race detector. (3) Recover staging VMs — they timed out during deploy (guest did not become healthy in 3m); re-run deploy via workflow_dispatch or investigate VM boot failure. (4) Verify Universal Wire is publishing: sourcecycled cycling, processor runs dispatching, Texture agents synthesizing with source body text, articles on Wire feed with event-grade headlines. This sets up tomorrow's scale-up of sources and stories. Substrate definitions (releveled from conjecture, established by observation): D1 — the race-detector CI model is from a prior architecture (full runtime suite under -race surfaces test-infrastructure bugs from the prior concurrency model, not production data races; the event-polling pattern is likely systemic); D2 — the TLA+ specs are from a prior architecture (written before OG migration, actor runtime migration, and wire pipeline rewrite; without review they are stale verification theater); D3 — the documentation and systematic description need constructive critique (docs have accumulated through multiple migrations without a composition and clarity pass; they may describe a prior architecture and carry stale vocabulary). These are definitions, not hypotheses — they inform the approach from the start. If C2 is falsified (another race test flakes), shift to D1: review the race-detector CI model rather than patching the next test. Run D3 documentation critique in parallel with stabilization. Default direction: simplify, not patch. Invariants: no deterministic synthesis, no story caps, no source-label headlines, do not touch Texture core or O1-O3, do not weaken CI or skip race detector without explicit releveling. Budget: 5-8 passes. Exit: settled when CI green + staging healthy + one real article on Wire feed + documentation critique started or scoped.
 ```
