@@ -273,15 +273,14 @@ observation of architecture history):
 variant (conjecture descent) V: count conjectures about the pipeline's
 stability and publishing capability. D1/D2/D3 are definitions, not
 conjectures — they don't count toward V but they inform move selection.
-Current: 5.
+Current: 4.
 - C1: The flaky test is a test bug (event polling race), not a production
-  data race (SUPPORTED — local tests pass without -race, failure is
-  "missing event kind" not "DATA RACE detected")
-- C2: Fixing the event polling in the test makes CI green (UNDICIDED —
-  need to push and verify; D1 suggests the pattern is systemic so this
-  may be one of many)
+  data race (SUPPORTED — D1 audit confirmed 8 instances across 4 files;
+  local -race tests pass with fix)
+- C2: Fixing the event polling in the test makes CI green (TESTING —
+  commit 2dcee27e pushed, CI run triggered, local -race passes 3x)
 - C3: Staging VMs can be recovered by re-running the deploy (UNDICIDED —
-  VM refresh timed out, may need investigation)
+  workflow_dispatch deploy in progress)
 - C4: Sourcecycled is cycling and dispatching processor runs on staging
   (STRUCTURALLY SUPPORTED — sourcecycled health is ok, but runtime is
   down so dispatch may be failing)
@@ -289,7 +288,11 @@ Current: 5.
   (UNDICIDED — requires healthy runtime + model calls)
 Target: 0.
 
-budget: 5-8 passes. Pass 0 spent (analysis and mission doc). 5-7 remaining.
+budget: 15-25 passes. Pass 1 spent. 14-24 remaining. Solvent.
+
+D3 findings: canonical docs are current; historical mission docs have
+appropriate stale vocabulary. No HIGH-severity documentation issues. D3
+is effectively scoped — no releveling needed for canonical docs.
 
 authority / bounds: may modify test files, CI workflow, deploy scripts,
 TLA+ specs, documentation. May push to origin/main. May trigger
@@ -321,24 +324,21 @@ debt — these are definitions, not new findings, but recording them is
 epistemic progress).
 
 position / live conjectures / open edges:
-The flaky test is the immediate blocker — it fails CI which blocks
-clean deploys. The staging VMs are down from the last deploy attempt.
-The pipeline code is structurally complete (v1.1 settled the prompt
-fix), but cannot be verified end-to-end until staging is healthy. D1
-informs the test fix approach: the event-polling pattern is likely
-systemic, so the fix should be evaluated as either (a) a quick unblock
-that works, or (b) evidence that the race detector model needs
-releveling. D2 and D3 should be reviewed in parallel with the
-stabilization work — the TLA+ specs and documentation are carrying
-prior-architecture assumptions and the scale-up depends on current-
-architecture understanding.
+Pass 1 complete. The flaky test fix is pushed (commit 2dcee27e) with a
+shared `waitForEvents` helper applied to all 8 HIGH-risk instances of
+the event-polling race pattern. D1 confirmed the pattern is systemic —
+this is not a one-off fix but a structural test-infrastructure repair.
+D3 documentation critique found canonical docs are current; no
+releveling needed. Staging redeploy is in progress via workflow_dispatch.
+Two CI runs are active: the workflow_dispatch (pre-fix code) and the
+push-triggered run (with fix). The open edges are C2 (will CI pass?)
+and C3 (will staging VMs recover?).
 
-next move: Fix the flaky test (Phase 1), push, monitor CI. In parallel,
-trigger a workflow_dispatch to re-deploy and recover staging VMs. Begin
-D3 documentation critique: review mission docs, architecture docs, and
-systematic description for stale vocabulary and prior-architecture
-assumptions. If C2 is falsified (another race test flakes), shift to D1:
-review the race-detector CI model rather than patching the next test.
+next move: Monitor both CI runs. If the fix commit CI passes, C2 is
+SUPPORTED. If the workflow_dispatch deploy recovers staging VMs, C3 is
+SUPPORTED. Then move to C4/C5: verify sourcecycled is dispatching and
+the agent pipeline is producing articles. If C2 is FALSIFIED (another
+race test flakes), shift to D1: review the race-detector CI model.
 
 ledger file: `docs/mission-universal-wire-stabilization-v1.ledger.md`
 

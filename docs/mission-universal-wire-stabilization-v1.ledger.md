@@ -122,3 +122,58 @@ definitions, not conjectures; D3 added as a third definition)
 **Next:** Fix the flaky test, push, monitor CI. In parallel, trigger
 workflow_dispatch to re-deploy staging. Begin D3 documentation critique.
 If C2 falsified, shift to D1: review race-detector CI model.
+
+## Pass 1 — 2026-07-03 03:50 EDT
+
+**Conjecture C2:** Fixing the event polling in the test makes CI green.
+
+**Move:** construct (fix flaky test + create waitForEvents helper + fix
+all HIGH-risk instances of the pattern + push + trigger staging redeploy)
+
+**Expected ΔV:** -2 (C1 already supported, C2 should be supported if CI
+passes)
+
+**Actual ΔV:** -1 (C1 confirmed supported; C2 moved from UNDECIDED to
+TESTING — pushed but CI not yet verified)
+
+**Conjectures decided:**
+- C1: SUPPORTED — D1 audit confirmed the pattern is systemic (8 instances
+  across 4 files), not a one-off. The fix uses a shared `waitForEvents`
+  helper applied to all HIGH-risk instances.
+- C2: TESTING — fix pushed (commit 2dcee27e), CI run triggered. Local
+  -race tests pass with 3 repetitions.
+
+**D1 findings (systemic pattern confirmed):**
+- `waitForToolLoopTask` + immediate `ListEvents`: 1 instance (fixed)
+- `waitForRunTerminalState` + immediate `ListEvents`: 3 instances (fixed)
+- `time.Sleep(200ms)` + `ListEvents`: 3 instances (2 fixed, 1 in
+  streaming_test.go:387 is a failure test — left for now since it checks
+  state not events)
+- `waitForStoredRunTerminalState` + immediate `ListEvents`: 1 instance
+  (fixed)
+- Created `waitForEvents` helper in test_helpers_test.go for reuse
+
+**D3 findings (documentation critique):**
+- Canonical docs (choir-doctrine, agent-product-doctrine, computer-ontology,
+  AGENTS.md) are current and accurate — no changes needed
+- Historical mission docs (3c, 3a) have stale vocabulary but it's
+  appropriate in context (describing what was migrated from)
+- No HIGH-severity findings — documentation is in better shape than
+  expected
+
+**Receipts:**
+- Local -race test pass: `go test -run "..." -count=3 -race` → ok 12.5s
+- Commit: 2dcee27e (test fix + helper)
+- CI run: 28643789940 (workflow_dispatch, in progress — running against
+  pre-fix code, next run will have the fix)
+- Staging redeploy: triggered via workflow_dispatch
+
+**Open edges:**
+- C2: will CI pass with the fix? (next CI run will tell)
+- C3: will staging VMs recover? (workflow_dispatch deploy in progress)
+- D2: TLA+ specs not yet reviewed (deferred — D3 showed docs are in
+  better shape than expected, TLA+ may be similar)
+
+**Next:** Monitor CI for the fix commit. Monitor staging deploy. If CI
+green, C2 is SUPPORTED. If staging recovers, C3 is SUPPORTED. Then move
+to C4/C5 (Wire publishing verification).
