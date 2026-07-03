@@ -152,3 +152,33 @@ Mission D (CI/Verification Guard):
 
 **Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
 
+---
+
+## Pass 3 — 2026-07-03 (Mission S: Promotion Protocol Gate — TLC iteration 2)
+
+**Conjecture:** The second CI TLC run revealed a TLA+ set-construction error in the `SystemProgress` liveness property. The fix is a pure spec correction.
+
+**Move:** correct (replace `{"verified", "approved", TerminalStates}` with `{"verified", "approved"} \cup TerminalStates`)
+
+**Expected ΔV:** Resolve the second TLC error and get closer to a green model check.
+
+**Actual ΔV:**
+- CI run `28648099200` executed TLC and reported:
+  ```
+  Error: TLC threw an unexpected exception.
+  Attempted to check equality of the set {"confirmed", "aborted", "reverted"}
+  with the value: "staging"
+  ```
+- Root cause: `SystemProgress` used `{"verified", "approved", TerminalStates}`, which is a set containing two strings and one set, instead of `{"verified", "approved"} \cup TerminalStates`.
+- Fixed in `specs/promotion_protocol.tla`.
+
+**Conjecture status update:**
+- C-S4: still TESTING (pending third CI TLC run after fix).
+- C-S5: still TESTING (pending third CI TLC run after fix).
+- C-D1: CI overall failed because of the TLA+ job; will re-evaluate after fix.
+- C-D2: still UNDECIDED (pending green TLC run).
+
+**Open decisions:** None.
+
+**Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
+

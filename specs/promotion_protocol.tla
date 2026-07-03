@@ -372,7 +372,7 @@ EveryCommittedPromotionSettles ==
 SystemProgress ==
   \A c \in CandidateComps :
     (promoStatus[c] = "staging" /\ promoBase[c] = activeBase[promoActive[c]])
-      ~> (promoStatus[c] \in {"verified", "approved", TerminalStates})
+      ~> (promoStatus[c] \in {"verified", "approved"} \cup TerminalStates)
 
 Fairness ==
   /\ \A c \in CandidateComps : WF_vars(Verify(c))
