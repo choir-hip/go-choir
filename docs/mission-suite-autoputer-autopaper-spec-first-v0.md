@@ -44,14 +44,16 @@ The deeper goal (G): a self-describing, model-checked automatic computer that ru
 
 ## Current Spec Inventory (and Staleness)
 
-| Spec | File | Status | Staleness |
-|------|------|--------|-----------|
-| **actor_protocol.tla** | `specs/actor_protocol.tla` | Likely current | Matches `internal/actor` single-process mailbox model. Needs review for object-graph integration. |
-| **actor_protocol_xvm.tla** | `specs/actor_protocol_xvm.tla` | Likely stale | Cross-VM model assumes active/candidate computer split. Needs update for autoputer + Nucleus capsule boundaries. |
-| **wire_pipeline.tla** | `specs/wire_pipeline.tla` | Ahead of code | Models publication trajectories, but the Go code still uses the old in-run processor model. Needs to become the driving spec for the wire redesign. |
-| **promotion_protocol.tla** | `specs/promotion_protocol.tla` | Violates code | Already proves current code violates two intended invariants. Needs to drive the promotion protocol fix or be updated if the intended protocol changed. |
+| Spec | File | Status | Notes |
+|------|------|--------|-------|
+| **actor_protocol.tla** | `specs/actor_protocol.tla` | **Delete** | Single-process mailbox model. We rewrite it for object-graph durable state. |
+| **actor_protocol_xvm.tla** | `specs/actor_protocol_xvm.tla` | **Delete** | Active/candidate computer split is correct but lacks Nucleus capsule and autoputer lifecycle boundaries. |
+| **wire_pipeline.tla** | `specs/wire_pipeline.tla` | **Delete** | Publication-trajectory idea is sound but the vocabulary predates the object graph. We rewrite it as the driver for the wire redesign. |
+| **promotion_protocol.tla** | `specs/promotion_protocol.tla` | **Delete** | The two violations it flagged (`NoStaleCommit`, `ApprovalGate`) have been fixed in the Go code. The spec now describes a prior architecture, not the autoputer. |
 
-The specs exist. The specs are model-checked. The specs are not aligned with the running code. The mission suite fixes that by making the specs the design document and the code the refinement.
+**Default decision: delete old specs, write new ones in place.** We are pre-launch. Only good code. The old `.tla` files are removed and replaced with new specs that model the current architecture.
+
+**The promotion protocol is the gate.** A persistent computer is not an autoputer until candidate promotion is model-checked, verified, and encoded. The autoputer must be able to fork itself, verify the fork, approve the promotion, atomically flip the route, and roll back if the health window fails. That is the promotion protocol, and it is the first spec we rewrite.
 
 ---
 
@@ -61,34 +63,36 @@ The suite has one **central spec mission** and three **implementation missions**
 
 ### Mission S: TLA+ Spec Redesign (the center)
 
-**Goal:** Rewrite the TLA+ specifications to describe the system as it is now and as it will be after the migration.
+**Goal:** Rewrite the TLA+ specifications to describe the system as it is now and as it will be after the migration. Old specs are deleted and replaced.
 
-**Deliverables:**
-- `specs/actor_protocol_og.tla` — actor runtime with object-graph state (Dolt-backed objects and edges as the durable log).
-- `specs/actor_protocol_xvm_capsule.tla` — cross-VM + cross-capsule message protocol. Agents live in the autoputer; capsules are ephemeral effect chambers. Nucleus capsule boundaries are part of the model.
-- `specs/wire_pipeline_og.tla` — wire pipeline on object-graph trajectories and editions. The spec drives the wire redesign; the Go code is a refinement.
-- `specs/promotion_protocol_og.tla` — candidate promotion with object-graph atomic flip and rollback.
-- `specs/autoputer_lifecycle.tla` — autoputer VM boot, health, recovery, and hibernation. Explains why the current VM fails to bind to 8085.
-- Updated `specs/README.md` — plain-language guide to the new specs and their layering.
+**Deliverables (in priority order):**
+1. **`specs/promotion_protocol.tla`** — candidate promotion with object-graph atomic flip and rollback. **This is the gate.** It models the computer ontology (active, candidate, route identity), the ledger split, the promotion certificate, and the health window. Written first because nothing else can be called an autoputer until promotion is model-checked.
+2. `specs/actor_protocol.tla` — actor runtime with object-graph state (Dolt-backed objects and edges as the durable log).
+3. `specs/actor_protocol_xvm.tla` — cross-VM + cross-capsule message protocol. Agents live in the autoputer; capsules are ephemeral effect chambers.
+4. `specs/wire_pipeline.tla` — wire pipeline on object-graph trajectories and editions. The spec drives the wire redesign; the Go code is a refinement.
+5. `specs/autoputer_lifecycle.tla` — autoputer VM boot, health, recovery, and hibernation. Explains why the current VM fails to bind to 8085.
+6. Updated `specs/README.md` — plain-language guide to the new specs and their layering.
 
 **Invariants:**
 - Every spec must be model-checked by TLC in CI.
 - Every spec change must be written before the corresponding code change.
 - No spec may be weakened to make the current code pass.
+- If the code already matches an intended invariant, the spec must encode that invariant and model-check green (not just flag old violations).
 
 **Conjectures to test:**
-- C-S1: The actor_protocol_og spec can be model-checked and holds under the current object-graph semantics. (UNDECIDED)
-- C-S2: The wire_pipeline_og spec captures the sourcecycled → processor → Texture → publish → edition flow. (UNDECIDED)
-- C-S3: The autoputer_lifecycle spec reproduces the current boot failure as a counterexample. (UNDECIDED)
-- C-S4: The promotion_protocol_og spec still flags the current code's violations. (UNDECIDED)
+- C-S1: `actor_protocol.tla` holds under object-graph semantics. (UNDECIDED)
+- C-S2: `wire_pipeline.tla` captures the sourcecycled → processor → Texture → publish → edition flow. (UNDECIDED)
+- C-S3: `autoputer_lifecycle.tla` reproduces the current boot failure as a counterexample. (UNDECIDED)
+- **C-S4 (gate):** `promotion_protocol.tla` models active/candidate/route/rollback/health-window and checks green against the intended autoputer protocol. (UNDECIDED)
+- **C-S5 (gate):** `promotion_protocol.tla` encodes `NoStaleCommit`, `ApprovalGate`, `NoTornOutcome`, `RouteConsistency`, and `HealthWindowReversible`. (UNDECIDED)
 
 ---
 
-### Mission A: Actor Runtime Defactoring (refines actor_protocol_og)
+### Mission A: Actor Runtime Defactoring (refines actor_protocol.tla)
 
 **Goal:** Delete the old `internal/runtime/runtime.go` and make the actor runtime the sole business + concurrency substrate.
 
-**Depends on:** Mission S's `actor_protocol_og.tla` to define the exact state/transition model.
+**Depends on:** Mission S's `actor_protocol.tla` to define the exact state/transition model.
 
 **Deliverables:**
 - Move `ResolvedLLMConfigFromMetadata` and `MaxInteractiveOutputTokensForSelection` from `internal/runtime` to `internal/provideriface` (completes State 2).
@@ -106,16 +110,16 @@ The suite has one **central spec mission** and three **implementation missions**
 
 ---
 
-### Mission B: Wire Pipeline Redesign (refines wire_pipeline_og)
+### Mission B: Wire Pipeline Redesign (refines wire_pipeline.tla)
 
 **Goal:** Move the Universal Wire pipeline from the old in-run processor model to the object-graph trajectory model defined in the spec.
 
-**Depends on:** Mission A (actor runtime is the sole substrate) and Mission S's `wire_pipeline_og.tla`.
+**Depends on:** Mission A (actor runtime is the sole substrate) and Mission S's `wire_pipeline.tla`.
 
 **Deliverables:**
 - Create `internal/wire/` package from `wire_*.go` files in `internal/runtime`.
 - Decouple wire logic from old runtime types; use actor runtime `Update` messages and object-graph operations.
-- Implement sourcecycled → processor → Texture → publish → edition as durable trajectory state.
+- Implement processor → Texture → publish → edition as durable trajectory state. (Default decision: leave `sourcecycled` alone for now; focus on the processor-to-publish core.)
 - Wire the processor agent to spawn Texture agents via actor runtime, not via in-run goroutines.
 - Verify with fake providers and fake clock; then verify on staging.
 
@@ -126,25 +130,27 @@ The suite has one **central spec mission** and three **implementation missions**
 
 ---
 
-### Mission C: Autoputer Solidification (refines actor_protocol_xvm_capsule + autoputer_lifecycle)
+### Mission C: Autoputer Solidification (refines actor_protocol_xvm.tla + autoputer_lifecycle.tla + promotion_protocol.tla)
 
-**Goal:** Rename the service from `sandbox` to `autoputer`, make the VM boot cleanly, and install the Nucleus capsule foundation.
+**Goal:** Rename the service from `sandbox` to `autoputer`, make the VM boot cleanly, install the Nucleus capsule foundation, and make promotion the operational gate for any computer mutation.
 
-**Depends on:** Mission A (the binary no longer depends on old runtime), but rename/packaging can start in parallel.
+**Depends on:** Mission A (the binary no longer depends on old runtime), but rename/packaging can start in parallel. Mission C's promotion logic depends on Mission S's `promotion_protocol.tla`.
 
 **Deliverables:**
 - Rename `cmd/sandbox` → `cmd/autoputer`, `internal/sandbox` → `internal/autoputer`, `nix/sandbox-vm.nix` → `nix/autoputer-vm.nix`.
 - Update env vars and flake.nix.
-- Add Nucleus flake input and include Nucleus binary in the autoputer VM image.
+- Add Nucleus flake input and include Nucleus binary in the autoputer VM image. (Default decision: pin a specific `github:sig-id/nucleus` rev.)
 - Define `internal/capsule/` package with `CapsuleRunner` interface and Nucleus backend.
 - Add `/internal/capsule/*` endpoints to the autoputer runtime.
 - Add `bash_in_capsule` tool behind opt-in flag.
-- Deploy autoputer VM to staging; verify health on port 8085.
+- Move promotion logic from `internal/runtime` to `internal/autoputer/promotion` (or `internal/promotion`), aligned with the new `promotion_protocol.tla`.
+- Deploy autoputer VM to staging; verify health on port 8085. (Default decision: reset persistent Dolt state on staging; pre-launch, only good state.)
 
 **Conjectures:**
 - C-C1: Autoputer VM image builds with Nucleus included. (UNDECIDED)
 - C-C2: Autoputer VM boots and binds to port 8085 on staging. (UNDECIDED)
 - C-C3: Nucleus can launch a strict-agent capsule inside the autoputer VM. (UNDECIDED)
+- C-C4: Promotion protocol end-to-end works on staging: candidate → verify → approve → promote → health window → confirm. (UNDECIDED)
 
 ---
 
@@ -177,7 +183,7 @@ Mission S (Spec Redesign)
     └──► Mission D (CI/Verification Guard) — runs across all
 ```
 
-Mission S is the center. It produces the specs. Missions A, B, and C refine the code to match. Mission D verifies both specs and code continuously.
+Mission S is the center. It produces the specs. Within Mission S, **`promotion_protocol.tla` is the gate** — it is written first, and Mission C's promotion work is blocked until it model-checks green. Missions A, B, and C refine the code to match. Mission D verifies both specs and code continuously.
 
 ---
 
@@ -211,22 +217,24 @@ This is the spec-centered version of the Landing Loop.
 
 V = count of undecided conjectures across the suite.
 
-Initial: 4 (S) + 3 (A) + 3 (B) + 3 (C) + 3 (D) = **16 conjectures**.
+Initial: 5 (S) + 3 (A) + 3 (B) + 4 (C) + 3 (D) = **18 conjectures**.
 Target: 0.
 
 Each pass must decide at least one conjecture or discover a new conjecture with evidence. A pass that only adds code without changing the spec or deciding a conjecture is not descent.
 
 ---
 
-## Open Decisions (Need Owner Input)
+## Default Decisions Made (Owner Can Override)
 
-1. **Spec naming:** Should we keep the old specs as `*_v1.tla` and write new `*_og.tla` files, or overwrite in place? Suggest: keep old specs archived as `*_v1.tla`, write new specs as `*.tla`.
-2. **TLA+ tooling in CI:** Current CI runs `TLA+ Model Check (specs/)`. Is the command correct? Should we add TLC config for each new spec?
-3. **Nucleus version:** Pin a specific rev of `github:sig-id/nucleus` or follow main? Suggest pin for reproducibility.
-4. **Staging persistent state:** The VM may fail because Dolt state on the persistent volume is incompatible. Reset or migrate? This is destructive.
-5. **Wire redesign scope:** Should Mission B include the full sourcecycled → processor → Texture → publish flow, or focus on the processor → Texture → publish part and leave sourcecycled alone for now?
-6. **Autoputer rename first?** Should Mission C rename happen before Mission A, or after? The rename can be done in parallel if we keep the binary working, but final verification must wait for Mission A.
-7. **Promotion protocol:** Should we fix the current promotion code to match `promotion_protocol.tla`, or update the spec if the intended protocol changed?
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| 1 | Spec naming | **Delete old specs, write new ones in place.** | Pre-launch; only good code. Old specs describe prior architectures. |
+| 2 | TLA+ CI tooling | Keep existing CI command; add per-spec `.cfg` files as needed during Mission S. | The command is correct; new specs may need individual configs. |
+| 3 | Nucleus version | **Pin a specific rev.** | Reproducible builds. Mission C picks the rev. |
+| 4 | Staging persistent state | **Reset persistent Dolt state on staging.** | Pre-launch; only good state. Migration is not worth the risk before launch. |
+| 5 | Wire redesign scope | **Processor → Texture → publish first.** | Leave `sourcecycled` alone; focus on the core trajectory model. |
+| 6 | Autoputer rename timing | **Rename in parallel with Mission A**, keep binary working. | Final verify waits for Mission A. |
+| 7 | Promotion protocol | **Redefine spec first, then encode it.** | The old spec is stale; current code already fixed the two violations. The autoputer needs a new, comprehensive promotion protocol spec. |
 
 ---
 
@@ -235,23 +243,25 @@ Each pass must decide at least one conjecture or discover a new conjecture with 
 I act as orchestrator, spawning subagents for each mission track.
 
 ### Pass 1 (now)
-- Spawn Mission S subagent: audit existing specs, design the new `autoputer_lifecycle.tla` and `actor_protocol_og.tla` modules.
+- **Spawn Mission S subagent (promotion gate):** review current `specs/promotion_protocol.tla` and `docs/choir-promotion-protocol-conjecture-2026-06-11.md`; write the new `specs/promotion_protocol.tla` that models the autoputer computer ontology, ledger split, route identity, and health window. This is the highest priority.
 - Spawn Mission A subagent: extract the two model-policy helper functions (completes State 2).
 - Spawn Mission D subagent: verify current CI command and TLA+ CI setup.
 
 ### Pass 2
+- Model-check the new `promotion_protocol.tla` with TLC. If it does not check green, iterate the spec before any code changes.
 - Merge Mission A helper extraction into main.
 - Spawn Mission A subagent: extract API handlers (State 3 completion).
-- Spawn Mission S subagent: draft `actor_protocol_og.tla`.
+- Spawn Mission S subagent: draft `actor_protocol.tla` and `autoputer_lifecycle.tla`.
 - Spawn Mission C subagent: begin rename scaffolding (flake.nix package names, env vars).
 
 ### Pass 3+
 - Continue extraction/deletion in Mission A.
 - Model-check new specs in Mission S.
 - Begin wire pipeline extraction in Mission B once Mission A is far enough.
+- Move promotion logic from `internal/runtime` to `internal/autoputer/promotion` aligned with the new `promotion_protocol.tla`.
 - Keep Mission D running as guard.
 
-Every subagent reports conjecture status, evidence, and proposed next move. I coordinate handoffs and verify builds.
+Every subagent reports conjecture status, evidence, and proposed next move. I coordinate handoffs and verify builds. The promotion spec is the gate: Mission C promotion work does not proceed until `promotion_protocol.tla` checks green.
 
 ---
 

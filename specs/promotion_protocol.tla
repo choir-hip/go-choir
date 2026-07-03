@@ -1,277 +1,389 @@
---------------------------- MODULE promotion_protocol ---------------------------
+---------------------------- MODULE promotion_protocol ----------------------------
 (***************************************************************************)
-(* Spec of the Choir mutation/promotion protocol (MutationTransaction).    *)
+(* Spec of the Choir autoputer promotion protocol.                         *)
 (*                                                                         *)
-(* One promotion of a candidate's changes into canonical state across      *)
-(* heterogeneous ledgers (source ref, app/Dolt data, derived index, ...),  *)
-(* with an owner-approval gate, a single atomic commit point, a            *)
-(* post-commit health window with auto-revert, and concurrent foreground   *)
-(* divergence (the active computer keeps living during candidacy).         *)
+(* A computer is a product of heterogeneous ledgers. A candidate computer  *)
+(* is a speculative fork of an active computer. Promotion is the atomic    *)
+(* flip of the route identity from the active computer to the candidate,   *)
+(* guarded by per-ledger prepare/verify, owner approval, and a freshness   *)
+(* CAS. After commit, a health window ends in confirmation or revert.    *)
 (*                                                                         *)
-(* Design synthesis (research 2026-06-11):                                 *)
-(*  - SINGLE COMMIT POINT (Percolator primary lock / route pointer):       *)
-(*    the `commit` variable is the linearization point AND the visibility  *)
-(*    gate. Secondary ledgers never determine the outcome; they follow it. *)
-(*  - PER-LEDGER 2PC SHAPE (Gray/Lamport TwoPhase): each ledger moves      *)
-(*    none -> prepared -> applied | rolled_back; prepare is durable and    *)
-(*    idempotent, so any reconciler can finish an interrupted promotion    *)
-(*    by reading the commit point alone (roll forward or roll back).       *)
-(*  - PIVOT (saga theory): Commit is the point of no return. Before it,    *)
-(*    backward recovery (Abort + compensation). After it, forward only —   *)
-(*    "revert" is a reverse promotion, not a compensation.                 *)
-(*  - FRESHNESS CAS (Dolt three-way / foreground tail): the active state   *)
-(*    keeps moving during candidacy; Commit requires the foreground tail   *)
-(*    to match what the candidate was prepared against, else restage.      *)
-(*    >>> Today's Go code RECORDS this and does not ENFORCE it             *)
-(*        (ForegroundTailMergeResult; PromoteAppAdoption has no check).    *)
-(*        Sabotage run 1 is therefore today's behavior. <<<                *)
-(*  - OWNER APPROVAL GATE: Commit requires owner approval after            *)
-(*    verification ("review authorizes a verified transition, doesn't      *)
-(*    replace verification" — legacy-promotion learnings).                 *)
-(*    >>> Today `owner_approved` is a dead status nothing produces;        *)
-(*        PromoteAppAdoption fires straight from `verified`.               *)
-(*        Sabotage run 2 is therefore today's behavior. <<<                *)
-(*  - TRY-THEN-CONFIRM + AUTO-REVERT (Android A/B, ChromeOS): after        *)
-(*    Commit, a health window ends in Confirm or AutoRevert.               *)
-(*  - N-1 ROLLBACK WINDOW (blue-green "poisoned writes"): once the new     *)
-(*    version writes data the old version cannot read, the rollback        *)
-(*    window is CLOSED — auto-revert is no longer safe. Reverting anyway   *)
-(*    is the torn-rollback / poisoned-write failure (sabotage run 3).      *)
+(* Source design:                                                            *)
+(*   docs/computer-ontology.md                                             *)
+(*   docs/promotion-protocol-spec-staleness-and-redefinition-2026-07-03.md   *)
+(*   docs/choir-promotion-protocol-conjecture-2026-06-11.md (historical)   *)
 (*                                                                         *)
-(* Out of scope v1 (own modules later): multiple concurrent/sequential     *)
-(* promotions (serialization), the merge itself (conflict resolution),     *)
-(* verifier independence, capsule effect capture.                          *)
+(* Invariants checked:                                                       *)
+(*   1. NoStaleCommit     — no commit if the active base moved since the    *)
+(*                          candidate was prepared and verified.          *)
+(*   2. ApprovalGate      — no commit without explicit owner approval.      *)
+(*   3. NoTornOutcome     — settled promotions are uniform across ledgers.  *)
+(*   4. RouteConsistency  — route points to exactly one committed computer. *)
+(*   5. HealthWindowReversible — revert only while rollback window is open. *)
+(*   6. CandidateIsolation — candidate mutations are not route-visible      *)
+(*                          before commit.                                  *)
+(*                                                                         *)
+(* Liveness checked:                                                         *)
+(*   EveryPromotionSettles — each promotion eventually aborts, reverts,   *)
+(*                           or is confirmed.                               *)
 (***************************************************************************)
 
-EXTENDS Integers, FiniteSets
+EXTENDS Integers, FiniteSets, Sequences, TLC
 
 CONSTANTS
-  Ledgers,      \* secondary ledgers, e.g. {source, data, index}
-  MaxTailMoves  \* bound on foreground divergence during candidacy
+  Slots,            \* user or cloud slots, e.g. {s1, s2}
+  ActiveComps,      \* active computer ids, e.g. {a1, a2}
+  CandidateComps,   \* candidate computer ids, e.g. {c1, c2}
+  Ledgers,          \* ledger types, e.g. {source, dolt, vm, blob, artifact}
+  MaxTailMoves      \* bound on active-base divergence during candidacy
 
 VARIABLES
-  ledger,    \* ledger[l] : "none" | "prepared" | "applied" | "rolled_back"
-  commit,    \* the commit point / visibility gate:
-             \*   "staging" | "verified" | "approved" | "committed"
-             \* | "confirmed" | "aborted" | "reverted"
-  tail,      \* foreground active-state version (moves during candidacy)
-  base,      \* tail version the candidate is prepared against (-1 = unset)
-  poisoned,  \* new version has written data the old version cannot read
-  staleCommit, \* history flag: a commit fired against a moved tail
-  approved   \* history flag: the owner actually approved this promotion
+  activeBase,       \* activeBase[a]  : version of active computer a
+  candidateBase,    \* candidateBase[c] : version of candidate c's fork point
+  candidateParent,  \* candidateParent[c] : active computer c forks from
+  route,            \* route[s] : computer currently serving slot s (active or candidate)
+  ledgerState,      \* ledgerState[p][l] : state of ledger l for promotion p
+  promoStatus,      \* promoStatus[p] : promotion lifecycle state
+  promoActive,      \* promoActive[p] : active computer owning promotion p
+  promoCandidate,   \* promoCandidate[p] : candidate computer of promotion p
+  promoBase,        \* promoBase[p] : active base version at candidate fork
+  approved,         \* approved[p] : owner approval recorded
+  poisoned,         \* poisoned[p] : new version wrote data old cannot read
+  healthWindow      \* healthWindow[p] : "open" | "failed" | "confirmed"
 
-vars == <<ledger, commit, tail, base, poisoned, staleCommit, approved>>
+vars == <<activeBase, candidateBase, candidateParent, route, ledgerState,
+          promoStatus, promoActive, promoCandidate, promoBase, approved,
+          poisoned, healthWindow>>
 
 LedgerStates == {"none", "prepared", "applied", "rolled_back"}
-CommitStates == {"staging", "verified", "approved", "committed",
+PromoStates  == {"staging", "verified", "approved", "committed",
                  "confirmed", "aborted", "reverted"}
+HealthStates == {"open", "failed", "confirmed"}
 
-CommittedFamily == {"committed", "confirmed"}
+\* A promotion is "settled" if it has reached a terminal state.
+TerminalStates == {"aborted", "confirmed", "reverted"}
+
+\* A promotion is "committed family" if it has passed the point of no return.
+CommittedFamily == {"committed", "confirmed", "reverted"}
 
 TypeOK ==
-  /\ ledger \in [Ledgers -> LedgerStates]
-  /\ commit \in CommitStates
-  /\ tail \in 0..MaxTailMoves
-  /\ base \in -1..MaxTailMoves
-  /\ poisoned \in BOOLEAN
-  /\ staleCommit \in BOOLEAN
-  /\ approved \in BOOLEAN
+  /\ activeBase \in [ActiveComps -> 0..MaxTailMoves]
+  /\ candidateBase \in [CandidateComps -> 0..MaxTailMoves]
+  /\ candidateParent \in [CandidateComps -> ActiveComps]
+  /\ route \in [Slots -> ActiveComps \cup CandidateComps]
+  /\ promoStatus \in [CandidateComps -> PromoStates]
+  /\ promoActive \in [CandidateComps -> ActiveComps]
+  /\ promoCandidate \in [CandidateComps -> CandidateComps]
+  /\ promoBase \in [CandidateComps -> 0..MaxTailMoves]
+  /\ approved \in [CandidateComps -> BOOLEAN]
+  /\ poisoned \in [CandidateComps -> BOOLEAN]
+  /\ healthWindow \in [CandidateComps -> HealthStates]
+  /\ ledgerState \in [CandidateComps -> [Ledgers -> LedgerStates]]
 
 Init ==
-  /\ ledger = [l \in Ledgers |-> "none"]
-  /\ commit = "staging"
-  /\ tail = 0
-  /\ base = -1
-  /\ poisoned = FALSE
-  /\ staleCommit = FALSE
-  /\ approved = FALSE
+  /\ activeBase = [a \in ActiveComps |-> 0]
+  /\ candidateBase = [c \in CandidateComps |-> 0]
+  /\ candidateParent = [c \in CandidateComps |-> CHOOSE a \in ActiveComps : TRUE]
+  /\ route = [s \in Slots |-> CHOOSE a \in ActiveComps : TRUE]
+  /\ promoStatus = [c \in CandidateComps |-> "aborted"]
+  /\ promoActive = [c \in CandidateComps |-> candidateParent[c]]
+  /\ promoCandidate = [c \in CandidateComps |-> c]
+  /\ promoBase = [c \in CandidateComps |-> 0]
+  /\ approved = [c \in CandidateComps |-> FALSE]
+  /\ poisoned = [c \in CandidateComps |-> FALSE]
+  /\ healthWindow = [c \in CandidateComps |-> "open"]
+  /\ ledgerState = [c \in CandidateComps |-> [l \in Ledgers |-> "none"]]
 
 --------------------------------------------------------------------------
-(* Candidacy: prepare each ledger durably and idempotently against the    *)
-(* current foreground tail. First prepare records the base.               *)
+(* Active computer divergence: the foreground keeps moving during candidacy. *)
 
-PrepareLedger(l) ==
-  /\ commit = "staging"
-  /\ ledger[l] = "none"
-  /\ ledger' = [ledger EXCEPT ![l] = "prepared"]
-  /\ base' = IF base = -1 THEN tail ELSE base
-  /\ UNCHANGED <<commit, tail, poisoned, staleCommit, approved>>
-
-(* The foreground keeps living: user/agents mutate active state during    *)
-(* candidacy. This is what makes promotion a three-way problem.           *)
-TailMove ==
-  /\ tail < MaxTailMoves
-  /\ commit \in {"staging", "verified", "approved"}
-  /\ tail' = tail + 1
-  /\ UNCHANGED <<ledger, commit, base, poisoned, staleCommit, approved>>
-
-(* Restage: the tail moved, so re-prepare against the new base. Ledgers   *)
-(* drop back to none (idempotent re-prepare); approval/verification are   *)
-(* invalidated — evidence about a stale base authorizes nothing.          *)
-Restage ==
-  /\ commit \in {"staging", "verified", "approved"}
-  /\ base # -1 /\ base # tail
-  /\ ledger' = [l \in Ledgers |-> "none"]
-  /\ base' = tail
-  /\ commit' = "staging"
-  /\ approved' = FALSE                        \* stale approval is void
-  /\ UNCHANGED <<tail, poisoned, staleCommit>>
-
-(* Verifier evidence: all ledgers prepared -> the candidate is verified.  *)
-Verify ==
-  /\ commit = "staging"
-  /\ \A l \in Ledgers : ledger[l] = "prepared"
-  /\ commit' = "verified"
-  /\ UNCHANGED <<ledger, tail, base, poisoned, staleCommit, approved>>
-
-(* The owner-approval gate. Review authorizes a verified transition; it   *)
-(* does not replace verification (and verification does not replace it).  *)
-Approve ==
-  /\ commit = "verified"
-  /\ commit' = "approved"
-  /\ approved' = TRUE
-  /\ UNCHANGED <<ledger, tail, base, poisoned, staleCommit>>
+MoveActiveTail(a) ==
+  /\ activeBase[a] < MaxTailMoves
+  /\ activeBase' = [activeBase EXCEPT ![a] = @ + 1]
+  /\ UNCHANGED <<candidateBase, candidateParent, route, ledgerState,
+                  promoStatus, promoActive, promoCandidate, promoBase,
+                  approved, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
-(* THE COMMIT POINT — the pivot, the linearization point, the visibility  *)
-(* gate (route pointer flip). Atomic, tiny, and guarded:                  *)
-(*   - approved (verification + owner review both happened)               *)
-(*   - all ledgers prepared                                               *)
-(*   - freshness CAS: the foreground tail has not moved since prepare     *)
+(* Fork a candidate from an active computer. This is the durable fork point. *)
 
-Commit ==
-  /\ commit = "approved"
-  /\ \A l \in Ledgers : ledger[l] = "prepared"
-  /\ base = tail                              \* freshness CAS
-  /\ commit' = "committed"
-  /\ staleCommit' = IF base # tail THEN TRUE ELSE staleCommit
-  /\ UNCHANGED <<ledger, tail, base, poisoned, approved>>
-
-(* Pre-pivot abandonment: backward recovery is always safe before commit. *)
-Abort ==
-  /\ commit \in {"staging", "verified", "approved"}
-  /\ commit' = "aborted"
-  /\ UNCHANGED <<ledger, tail, base, poisoned, staleCommit, approved>>
+ForkCandidate(c, a) ==
+  /\ promoStatus[c] = "aborted"
+  /\ candidateParent[c] = a
+  /\ promoActive' = [promoActive EXCEPT ![c] = a]
+  /\ promoCandidate' = [promoCandidate EXCEPT ![c] = c]
+  /\ candidateBase' = [candidateBase EXCEPT ![c] = activeBase[a]]
+  /\ promoBase' = [promoBase EXCEPT ![c] = activeBase[a]]
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "staging"]
+  /\ approved' = [approved EXCEPT ![c] = FALSE]
+  /\ poisoned' = [poisoned EXCEPT ![c] = FALSE]
+  /\ healthWindow' = [healthWindow EXCEPT ![c] = "open"]
+  /\ ledgerState' = [ledgerState EXCEPT ![c] = [l \in Ledgers |-> "none"]]
+  /\ UNCHANGED <<activeBase, route>>
 
 --------------------------------------------------------------------------
-(* Reconciliation: any secondary's fate is decided by the commit point    *)
-(* alone (Percolator's "any reader can finish the commit"). These are     *)
-(* the recovery actions after a coordinator crash, too — all state here   *)
-(* is durable, so crash is stutter and recovery is just these actions.    *)
+(* Per-ledger prepare: durable, idempotent, inert until commit.             *)
 
-ApplySecondary(l) ==
-  /\ commit \in CommittedFamily
-  /\ ledger[l] = "prepared"
-  /\ ledger' = [ledger EXCEPT ![l] = "applied"]
-  /\ UNCHANGED <<commit, tail, base, poisoned, staleCommit, approved>>
+PrepareLedger(c, l) ==
+  /\ promoStatus[c] \in {"staging", "verified", "approved"}
+  /\ ledgerState[c][l] = "none"
+  /\ ledgerState' = [ledgerState EXCEPT ![c][l] = "prepared"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  promoStatus, promoActive, promoCandidate, promoBase,
+                  approved, poisoned, healthWindow>>
 
-RollbackSecondary(l) ==
-  /\ commit \in {"aborted", "reverted"}
-  /\ ledger[l] \in {"prepared", "applied"}
-  /\ ledger' = [ledger EXCEPT ![l] = "rolled_back"]
-  /\ UNCHANGED <<commit, tail, base, poisoned, staleCommit, approved>>
+(* Restage: the active base moved, so the candidate must re-prepare.        *)
+(* Verification and approval are invalidated because evidence about a stale *)
+(* base authorizes nothing.                                                   *)
+
+Restage(c) ==
+  /\ promoStatus[c] \in {"staging", "verified", "approved"}
+  /\ promoBase[c] # activeBase[promoActive[c]]
+  /\ promoBase' = [promoBase EXCEPT ![c] = activeBase[promoActive[c]]]
+  /\ candidateBase' = [candidateBase EXCEPT ![c] = activeBase[promoActive[c]]]
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "staging"]
+  /\ approved' = [approved EXCEPT ![c] = FALSE]
+  /\ ledgerState' = [ledgerState EXCEPT ![c] = [l \in Ledgers |-> "none"]]
+  /\ UNCHANGED <<activeBase, candidateParent, route, promoActive,
+                  promoCandidate, poisoned, healthWindow>>
+
+(* Verifier evidence: all ledgers prepared -> candidate is verified.         *)
+
+Verify(c) ==
+  /\ promoStatus[c] = "staging"
+  /\ \A l \in Ledgers : ledgerState[c][l] = "prepared"
+  /\ promoBase[c] = activeBase[promoActive[c]]
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "verified"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoBase,
+                  approved, poisoned, healthWindow>>
+
+(* Owner approval gate. Review authorizes a verified transition.             *)
+
+Approve(c) ==
+  /\ promoStatus[c] = "verified"
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "approved"]
+  /\ approved' = [approved EXCEPT ![c] = TRUE]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoBase,
+                  poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
-(* Post-commit health window (try-then-confirm).                          *)
+(* The commit point: atomic route-pointer flip. Guards:                    *)
+(*   - approved                                                             *)
+(*   - all ledgers prepared                                                 *)
+(*   - freshness CAS: active base has not moved since the fork/verify       *)
 
-(* The promoted version writes data the OLD version cannot read. This is  *)
-(* legal — but it closes the rollback window (blue-green N-1 rule).       *)
-PoisonedWrite ==
-  /\ commit = "committed"
-  /\ poisoned' = TRUE
-  /\ UNCHANGED <<ledger, commit, tail, base, staleCommit, approved>>
+Commit(c) ==
+  /\ promoStatus[c] = "approved"
+  /\ \A l \in Ledgers : ledgerState[c][l] = "prepared"
+  /\ promoBase[c] = activeBase[promoActive[c]]
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "committed"]
+  /\ route' = [s \in Slots |->
+                IF route[s] = promoActive[c]
+                  THEN promoCandidate[c]
+                  ELSE route[s]]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, ledgerState,
+                  promoActive, promoCandidate, promoBase, approved,
+                  poisoned, healthWindow>>
 
-ConfirmHealthy ==
-  /\ commit = "committed"
-  /\ \A l \in Ledgers : ledger[l] = "applied"   \* fully reconciled first
-  /\ commit' = "confirmed"
-  /\ UNCHANGED <<ledger, tail, base, poisoned, staleCommit, approved>>
+(* Pre-pivot abandonment: backward recovery is always safe before commit.   *)
 
-(* Auto-revert on failed health checks — allowed ONLY while the rollback  *)
-(* window is open. After a poisoned write, reverting would hand the old   *)
-(* version data it cannot read: the torn-rollback failure. A poisoned     *)
-(* unhealthy promotion must roll FORWARD (a new corrective promotion),    *)
-(* which is outside this spec's single-promotion scope.                   *)
-AutoRevert ==
-  /\ commit = "committed"
-  /\ poisoned = FALSE                          \* rollback window open
-  /\ commit' = "reverted"
-  /\ UNCHANGED <<ledger, tail, base, poisoned, staleCommit, approved>>
+Abort(c) ==
+  /\ promoStatus[c] \in {"staging", "verified", "approved"}
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "aborted"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoBase,
+                  approved, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
+(* Reconciliation: secondaries follow the commit point.                    *)
+(* Any crashed coordinator can recover by reading the commit point.         *)
+
+ApplySecondary(c, l) ==
+  /\ promoStatus[c] = "committed"
+  /\ healthWindow[c] = "open"
+  /\ ledgerState[c][l] = "prepared"
+  /\ ledgerState' = [ledgerState EXCEPT ![c][l] = "applied"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  promoStatus, promoActive, promoCandidate, promoBase,
+                  approved, poisoned, healthWindow>>
+
+RollbackSecondary(c, l) ==
+  /\ promoStatus[c] \in {"aborted", "reverted"}
+  /\ ledgerState[c][l] \in {"prepared", "applied"}
+  /\ ledgerState' = [ledgerState EXCEPT ![c][l] = "rolled_back"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  promoStatus, promoActive, promoCandidate, promoBase,
+                  approved, poisoned, healthWindow>>
+
+--------------------------------------------------------------------------
+(* Post-commit health window (try-then-confirm).                             *)
+(* A poisoned write closes the rollback window.                             *)
+(* After poisoned, only forward recovery (a new promotion) is safe.         *)
+
+PoisonedWrite(c) ==
+  /\ promoStatus[c] = "committed"
+  /\ poisoned' = [poisoned EXCEPT ![c] = TRUE]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  ledgerState, promoStatus, promoActive, promoCandidate,
+                  promoBase, approved, healthWindow>>
+
+(* Health check fails while the window is open. This is the "try" half.     *)
+
+HealthCheckFail(c) ==
+  /\ promoStatus[c] = "committed"
+  /\ healthWindow[c] = "open"
+  /\ poisoned[c] = FALSE
+  /\ healthWindow' = [healthWindow EXCEPT ![c] = "failed"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  ledgerState, promoStatus, promoActive, promoCandidate,
+                  promoBase, approved, poisoned>>
+
+(* Confirm healthy: all secondaries applied and window not poisoned.        *)
+
+ConfirmHealthy(c) ==
+  /\ promoStatus[c] = "committed"
+  /\ healthWindow[c] = "open"
+  /\ poisoned[c] = FALSE
+  /\ \A l \in Ledgers : ledgerState[c][l] = "applied"
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "confirmed"]
+  /\ healthWindow' = [healthWindow EXCEPT ![c] = "confirmed"]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoBase,
+                  approved, poisoned>>
+
+(* Auto-revert on failed health check. Allowed only while rollback window     *)
+(* is open (not poisoned). Reverts the route pointer to the active parent   *)
+(* and atomically rolls back all secondaries.                                  *)
+
+AutoRevert(c) ==
+  /\ promoStatus[c] = "committed"
+  /\ healthWindow[c] = "failed"
+  /\ poisoned[c] = FALSE
+  /\ promoStatus' = [promoStatus EXCEPT ![c] = "reverted"]
+  /\ route' = [s \in Slots |->
+                IF route[s] = promoCandidate[c]
+                  THEN promoActive[c]
+                  ELSE route[s]]
+  /\ ledgerState' = [ledgerState EXCEPT ![c] =
+                      [l \in Ledgers |->
+                         IF ledgerState[c][l] \in {"prepared", "applied"}
+                           THEN "rolled_back"
+                           ELSE ledgerState[c][l]]]
+  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, promoActive,
+                  promoCandidate, promoBase, approved, poisoned, healthWindow>>
+
+--------------------------------------------------------------------------
+(* The full next-state relation.                                             *)
 
 Next ==
-  \/ \E l \in Ledgers : PrepareLedger(l)
-  \/ TailMove
-  \/ Restage
-  \/ Verify
-  \/ Approve
-  \/ Commit
-  \/ Abort
-  \/ \E l \in Ledgers : ApplySecondary(l)
-  \/ \E l \in Ledgers : RollbackSecondary(l)
-  \/ PoisonedWrite
-  \/ ConfirmHealthy
-  \/ AutoRevert
+  \/ \E a \in ActiveComps : MoveActiveTail(a)
+  \/ \E c \in CandidateComps, a \in ActiveComps : ForkCandidate(c, a)
+  \/ \E c \in CandidateComps : Restage(c)
+  \/ \E c \in CandidateComps : Verify(c)
+  \/ \E c \in CandidateComps : Approve(c)
+  \/ \E c \in CandidateComps : Commit(c)
+  \/ \E c \in CandidateComps : Abort(c)
+  \/ \E c \in CandidateComps, l \in Ledgers : PrepareLedger(c, l)
+  \/ \E c \in CandidateComps, l \in Ledgers : ApplySecondary(c, l)
+  \/ \E c \in CandidateComps, l \in Ledgers : RollbackSecondary(c, l)
+  \/ \E c \in CandidateComps : PoisonedWrite(c)
+  \/ \E c \in CandidateComps : HealthCheckFail(c)
+  \/ \E c \in CandidateComps : ConfirmHealthy(c)
+  \/ \E c \in CandidateComps : AutoRevert(c)
 
-(* Runtime obligations: preparing, restaging, verifying, and reconciling  *)
-(* keep happening. Approval, aborts, tail moves, health outcomes, and     *)
-(* poisoned writes are environment.                                       *)
+--------------------------------------------------------------------------
+(* Invariants: what must never be true on any reachable state.               *)
+
+(* The active base of a promotion's parent must match the promotion base    *)
+(* at the moment of commit.                                                   *)
+NoStaleCommit ==
+  \A c \in CandidateComps :
+    promoStatus[c] \in CommittedFamily
+      => promoBase[c] = activeBase[promoActive[c]]
+
+(* Nothing becomes route-visible without owner approval.                      *)
+ApprovalGate ==
+  \A c \in CandidateComps :
+    promoStatus[c] \in CommittedFamily => approved[c]
+
+(* No ledger is applied while another is rolled back for the same promotion. *)
+NoTornOutcome ==
+  \A c \in CandidateComps, l1, l2 \in Ledgers :
+    ~(ledgerState[c][l1] = "applied" /\ ledgerState[c][l2] = "rolled_back")
+
+(* The route pointer is consistent: it points to an active computer or to a    *)
+(* candidate that has already been committed.                                *)
+RouteConsistency ==
+  \A s \in Slots :
+    LET r == route[s] IN
+    \/ r \in ActiveComps
+    \/ \E c \in CandidateComps :
+         /\ promoStatus[c] \in CommittedFamily
+         /\ promoCandidate[c] = r
+
+(* Before commit, candidate mutations are not route-visible.                  *)
+CandidateIsolation ==
+  \A s \in Slots, c \in CandidateComps :
+    ~(promoStatus[c] \in {"staging", "verified", "approved"}
+       /\ route[s] = promoCandidate[c])
+
+(* Revert is only allowed while the rollback window is open (not poisoned).   *)
+HealthWindowReversible ==
+  \A c \in CandidateComps :
+    promoStatus[c] = "reverted" => poisoned[c] = FALSE
+
+(* All ledgers of a confirmed promotion are applied.                          *)
+ConfirmedLedgersApplied ==
+  \A c \in CandidateComps, l \in Ledgers :
+    promoStatus[c] = "confirmed" => ledgerState[c][l] = "applied"
+
+(* All ledgers of an aborted or reverted promotion are rolled back.           *)
+AbortedLedgersRolledBack ==
+  \A c \in CandidateComps, l \in Ledgers :
+    promoStatus[c] \in {"aborted", "reverted"}
+      => ledgerState[c][l] \in {"none", "rolled_back"}
+
+(* Promotion certificate completeness: a committed-or-terminal promotion     *)
+(* records a non-negative base and a candidate.                              *)
+CertificateCompleteness ==
+  \A c \in CandidateComps :
+    promoStatus[c] \in CommittedFamily \cup TerminalStates
+      => promoBase[c] >= 0 /\ promoCandidate[c] = c
+
+--------------------------------------------------------------------------
+(* Liveness: what must eventually happen.                                   *)
+(* Every promotion eventually reaches a terminal state.                     *)
+(* We use weak fairness on the key actions to ensure progress.              *)
+
+(* A committed promotion that never becomes poisoned eventually reaches a     *)
+(* terminal state: confirmed or reverted. After a poisoned write, only         *)
+(* forward recovery (a new promotion) is safe and is outside this single-       *)
+(* promotion model.                                                            *)
+EveryCommittedPromotionSettles ==
+  \A c \in CandidateComps :
+    (promoStatus[c] = "committed" /\ poisoned[c] = FALSE)
+      ~> promoStatus[c] \in {"confirmed", "reverted"}
+
+(* A promotion in staging/verified/approved will not be blocked forever by     *)
+(* system inaction alone. The owner may still choose not to approve, but the   *)
+(* system must make progress on prepare/verify/restage when enabled.        *)
+SystemProgress ==
+  \A c \in CandidateComps :
+    (promoStatus[c] = "staging" /\ promoBase[c] = activeBase[promoActive[c]])
+      ~> (promoStatus[c] \in {"verified", "approved", TerminalStates})
+
 Fairness ==
-  /\ \A l \in Ledgers : WF_vars(PrepareLedger(l))
-  /\ WF_vars(Restage)
-  /\ WF_vars(Verify)
-  /\ \A l \in Ledgers : WF_vars(ApplySecondary(l))
-  /\ \A l \in Ledgers : WF_vars(RollbackSecondary(l))
+  /\ \A c \in CandidateComps : WF_vars(Verify(c))
+  /\ \A c \in CandidateComps : WF_vars(Commit(c))
+  /\ \A c \in CandidateComps : WF_vars(Abort(c))
+  /\ \A c \in CandidateComps : WF_vars(AutoRevert(c))
+  /\ \A c \in CandidateComps : WF_vars(ConfirmHealthy(c))
+  /\ \A c \in CandidateComps, l \in Ledgers : WF_vars(PrepareLedger(c, l))
+  /\ \A c \in CandidateComps, l \in Ledgers : WF_vars(ApplySecondary(c, l))
+  /\ \A c \in CandidateComps, l \in Ledgers : WF_vars(RollbackSecondary(c, l))
 
 Spec == Init /\ [][Next]_vars /\ Fairness
 
---------------------------------------------------------------------------
-(* INVARIANTS *)
-
-\* 2PC-style uniformity: secondaries only ever follow the commit point.
-SecondaryFollowsCommitPoint ==
-  \A l \in Ledgers :
-    /\ ledger[l] = "applied"
-         => commit \in {"committed", "confirmed", "reverted"}
-    /\ ledger[l] = "rolled_back"
-         => commit \in {"aborted", "reverted"}
-
-\* No torn final states: once the promotion has fully settled
-\* (confirmed / aborted / reverted + reconciled), every ledger agrees.
-NoTornOutcome ==
-  /\ commit = "confirmed" => \A l \in Ledgers : ledger[l] = "applied"
-  /\ commit = "aborted"   => \A l \in Ledgers : ledger[l] # "applied"
-
-\* Freshness: no commit ever fired against a moved foreground tail.
-\* (Sabotage 1 — today's PromoteAppAdoption — violates this.)
-NoStaleCommit == staleCommit = FALSE
-
-\* Visibility gate: nothing ever becomes user-visible (committed-family,
-\* or reverted, which implies it was visible) without the owner having
-\* actually approved THIS staging of the promotion.
-\* (Sabotage 2 — today's PromoteAppAdoption firing straight from
-\* `verified`, owner_approved being dead code — violates this.)
-ApprovalGate ==
-  commit \in (CommittedFamily \cup {"reverted"}) => approved = TRUE
-
-\* Rollback-window safety: a revert never happens after a poisoned write.
-\* (Sabotage 3 violates this.)
-RevertSafety == commit = "reverted" => poisoned = FALSE
-
---------------------------------------------------------------------------
-(* TEMPORAL PROPERTIES *)
-
-\* The commit point determines the outcome: a committed promotion is
-\* eventually fully applied-and-confirmed or reverted; an aborted one is
-\* eventually fully rolled back. No promotion hangs half-reconciled.
-CommitPointDeterminesOutcome ==
-  /\ (commit = "committed") ~>
-       (\/ \A l \in Ledgers : ledger[l] = "applied"
-        \/ commit = "reverted")
-  /\ (commit = "aborted") ~>
-       (\A l \in Ledgers : ledger[l] \in {"none", "rolled_back"})
-  /\ (commit = "reverted") ~>
-       (\A l \in Ledgers : ledger[l] \in {"none", "rolled_back"})
-
-================================================================================
+============================================================================
