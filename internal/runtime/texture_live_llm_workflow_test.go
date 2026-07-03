@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	choirruntime "github.com/yusefmosiah/go-choir/internal/runtime"

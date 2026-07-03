@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
+	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
@@ -179,8 +180,8 @@ func main() {
 	}
 
 	// Register runtime API routes (overrides default /health).
-	apiHandler := runtime.NewAPIHandler(rt.Runtime)
-	runtime.RegisterRoutes(s, apiHandler)
+	apiHandler := apihandler.NewAPIHandler(rt.Runtime)
+	apihandler.RegisterRoutes(s, apiHandler)
 
 	// Readiness endpoint: probes Qdrant and Ollama, the two external
 	// dependencies of the semantic-dedup path. Both degrade gracefully via
