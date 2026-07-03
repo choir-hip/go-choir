@@ -80,9 +80,9 @@ The suite has one **central spec mission** and three **implementation missions**
 - If the code already matches an intended invariant, the spec must encode that invariant and model-check green (not just flag old violations).
 
 **Conjectures to test:**
-- C-S1: `actor_protocol.tla` holds under object-graph semantics. (UNDECIDED)
+- C-S1: `actor_protocol.tla` holds under object-graph semantics. (**SUPPORTED** — main CI run `28684139979`)
 - C-S2: `wire_pipeline.tla` captures the sourcecycled → processor → Texture → publish → edition flow. (UNDECIDED)
-- C-S3: `autoputer_lifecycle.tla` reproduces the current boot failure as a counterexample. (UNDECIDED)
+- C-S3: `autoputer_lifecycle.tla` model-checks the boot/recovery safety model. (**SUPPORTED** — main CI run `28684139979`; refreshed guest health remains an implementation gap under Mission C)
 - **C-S4 (gate):** `promotion_protocol.tla` models active/candidate/route/rollback/health-window and checks green against the intended autoputer protocol. (**SUPPORTED** — CI run `28648508586`, 826 states, no errors)
 - **C-S5 (gate):** `promotion_protocol.tla` encodes `NoStaleCommit`, `ApprovalGate`, `NoTornOutcome`, `RouteConsistency`, `CandidateIsolation`, `HealthWindowReversible`, `ConfirmedLedgersApplied`, `AbortedLedgersRolledBack`, `CertificateCompleteness`, and liveness `EveryCommittedPromotionSettles` / `SystemProgress`. (**SUPPORTED**)
 
@@ -95,8 +95,8 @@ The suite has one **central spec mission** and three **implementation missions**
 **Depends on:** Mission S's `actor_protocol.tla` to define the exact state/transition model.
 
 **Deliverables:**
-- Move `ResolvedLLMConfigFromMetadata` and `MaxInteractiveOutputTokensForSelection` from `internal/runtime` to `internal/provideriface` (completes State 2).
-- Move `NewAPIHandler` and `RegisterRoutes` from `internal/runtime/api.go` to a new `internal/apihandler` package (completes State 3).
+- Move `ResolvedLLMConfigFromMetadata` and `MaxInteractiveOutputTokensForSelection` from `internal/runtime` to `internal/provideriface` (completed in Pass 2).
+- Move `NewAPIHandler` and `RegisterRoutes` behind `internal/apihandler` and wire `cmd/sandbox` through that package (completed in Pass 2).
 - Move stub provider and config defaults to `internal/provideriface`.
 - Refactor `internal/actorruntime` so it does not embed `*runtime.Runtime` for business logic.
 - Extract remaining business logic from `internal/runtime/runtime.go` into `internal/runengine` or directly into `internal/actorruntime`.
@@ -105,7 +105,7 @@ The suite has one **central spec mission** and three **implementation missions**
 
 **Conjectures:**
 - C-A1: `internal/runtime` package can be deleted. (UNDECIDED)
-- C-A2: `cmd/sandbox/main.go` builds using only actor runtime + extracted helpers. (UNDECIDED)
+- C-A2: `cmd/sandbox/main.go` builds using actor runtime + extracted helpers. (**SUPPORTED** — PR #42 merged; main CI run `28684139979`; sandbox Nix package fixed in `02fa2ea6`)
 - C-A3: Actor runtime tests pass under `-race`. (UNDECIDED)
 
 ---
@@ -144,7 +144,7 @@ The suite has one **central spec mission** and three **implementation missions**
 - Add `/internal/capsule/*` endpoints to the autoputer runtime.
 - Add `bash_in_capsule` tool behind opt-in flag.
 - Move promotion logic from `internal/runtime` to `internal/autoputer/promotion` (or `internal/promotion`), aligned with the new `promotion_protocol.tla`.
-- Deploy autoputer VM to staging; verify health on port 8085. (Default decision: reset persistent Dolt state on staging; pre-launch, only good state.)
+- Deploy autoputer VM to staging; verify health on port 8085. Active refreshed guest health currently fails readiness during deploy and is the next Mission C boot-realism gap.
 
 **Conjectures:**
 - C-C1: Autoputer VM image builds with Nucleus included. (UNDECIDED)
@@ -218,7 +218,7 @@ This is the spec-centered version of the Landing Loop.
 V = count of undecided conjectures across the suite.
 
 Initial: 5 (S) + 3 (A) + 3 (B) + 4 (C) + 3 (D) = **18 conjectures**.
-Current: 3 (S) + 3 (A) + 3 (B) + 4 (C) + 2 (D) = **14 conjectures remaining**. (C-S4, C-S5, C-D1, C-D2 decided.)
+Current: 1 (S) + 2 (A) + 3 (B) + 4 (C) + 1 (D) = **11 conjectures remaining**. (C-S1, C-S3, C-S4, C-S5, C-A2, C-D1, C-D2 decided.)
 Target: 0.
 
 Each pass must decide at least one conjecture or discover a new conjecture with evidence. A pass that only adds code without changing the spec or deciding a conjecture is not descent.
@@ -247,19 +247,18 @@ I act as orchestrator, spawning subagents for each mission track.
 - **Mission S subagent (promotion gate):** `specs/promotion_protocol.tla` rewritten and model-checked green in CI run `28648508586`. The gate is established.
 - Default decisions recorded and old specs deleted.
 
-### Pass 2 (now)
-- Spawn Mission S subagent: draft `actor_protocol.tla` and `autoputer_lifecycle.tla`; model-check both.
-- Spawn Mission A subagent: extract the two model-policy helper functions (completes State 2).
-- Spawn Mission A subagent: extract API handlers (State 3 completion).
-- Spawn Mission C subagent: begin rename scaffolding (flake.nix package names, env vars) in parallel with Mission A.
-- Keep Mission D running as guard.
+### Pass 2 (complete)
+- Mission S: `actor_protocol.tla` and `autoputer_lifecycle.tla` landed and model-check green in main CI.
+- Mission A: model-policy helpers moved to `internal/provideriface`; API handler wrapper package `internal/apihandler` landed; sandbox package source filter repaired.
+- Mission D: Codex review artifact landed.
+- Evidence: PR #42 merged as `a6f11b7dbb64c07677a767c19c00e47cf87fdd54`; main CI run `28684139979` green.
+- Known limitation: deploy-time active computer refresh still fails guest health on `:8085`; host services were healthy. This is Mission C boot-readiness work, not Pass 2 extraction work.
 
 ### Pass 3+
-- Merge Mission A helper/API handler extractions into main.
-- Continue extraction/deletion in Mission A.
-- Model-check new specs in Mission S.
-- Begin wire pipeline extraction in Mission B once Mission A is far enough.
-- Move promotion logic from `internal/runtime` to `internal/autoputer/promotion` aligned with the new `promotion_protocol.tla`.
+- Open Mission C active-refresh/autoputer boot readiness definition before promotion encoding.
+- Continue remaining Mission A extraction/deletion only after preserving the boot-readiness boundary.
+- Rewrite/model-check wire pipeline in Mission B once actor/runtime deletion risk is bounded.
+- Address Codex reservations before moving promotion logic from `internal/runtime` to `internal/autoputer/promotion`.
 - Keep Mission D running as guard.
 
 Every subagent reports conjecture status, evidence, and proposed next move. I coordinate handoffs and verify builds. The promotion spec is the gate: Mission C promotion work does not proceed until `promotion_protocol.tla` checks green.

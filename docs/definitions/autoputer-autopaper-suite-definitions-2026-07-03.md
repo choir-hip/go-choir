@@ -455,15 +455,21 @@ determined_state:
     - claim: Codex review of promotion gate is approve with reservations.
       source: reviewer
       execution_effect: Address reservations before encoding promotion certificate and approval boundary.
-    - claim: Pass 2 branch is mission-a-api-handler-extraction, PR #42, all CI checks green.
+    - claim: Pass 2 PR #42 merged to main as `a6f11b7dbb64c07677a767c19c00e47cf87fdd54`.
       source: observed
-      execution_effect: Merge PR #42 to main; do not start Pass 3 on main before this merge.
-    - claim: specs/actor_protocol.tla and specs/autoputer_lifecycle.tla exist and model-check green in CI.
+      execution_effect: Pass 2 merge gate is closed; do not attempt to re-merge PR #42.
+    - claim: Pass 2 post-merge package build failure was repaired by commit `02fa2ea6603b7f157c982e9da637ec714301c6bf`.
       source: observed
-      execution_effect: Mission A code refinement can proceed against these specs.
-    - claim: internal/apihandler extraction landed on branch mission-a-api-handler-extraction.
+      execution_effect: `internal/apihandler` is included in the sandbox Nix service source filter.
+    - claim: Main CI for workflow fix commit `8e694f4663412c1a33fc70e870f225f2510718f2` is green.
       source: observed
-      execution_effect: cmd/sandbox builds using extracted helpers + actor runtime.
+      execution_effect: Pass 2 can settle, with active computer boot still scoped to Mission C.
+    - claim: specs/actor_protocol.tla and specs/autoputer_lifecycle.tla model-check green in main CI.
+      source: observed
+      execution_effect: C-S1 and C-S3 are SUPPORTED for the modeled safety properties.
+    - claim: internal/apihandler extraction landed and cmd/sandbox builds with the extracted API handler package.
+      source: observed
+      execution_effect: C-A2 is SUPPORTED for Go and Nix package build; staging guest boot remains a separate Mission C uncertainty.
   contested: []
   open:
     - node: c-c1-c4
@@ -501,7 +507,7 @@ testing conjectures). Productive execution reduces this count by settling
 nodes with scoped evidence. A pass that changes no node status, buys no new
 observer evidence, and improves no artifact verifier is motion theater.
 
-Current variant: 4 open nodes + 0 contested + 14 undecided conjectures = 18.
+Current variant: 4 open nodes + 0 contested + 11 undecided conjectures = 15.
 
 ## Homotopy / Realism Parameters
 
@@ -519,17 +525,17 @@ when the claim requires deployment.
 
 ## Conjecture And Belief State
 
-18 conjectures total. 4 SUPPORTED. 14 remaining.
+18 conjectures total. 7 SUPPORTED. 11 remaining.
 
 ```yaml
 conjectures:
   - id: C-S1
-    status: testing
+    status: settled
     claim: actor_protocol.tla safety invariants model-check green.
-    test: CI TLA+ Model Check on PR #42.
+    evidence_class: model check / formal spec
+    source: main CI run 28684139979; TLA+ Model Check (specs/) success.
     scope_if_supported: specs/actor_protocol.tla safety properties.
-    falsifier: TLC counterexample or compile error.
-    execution_effect: If supported, Mission A code refinement can proceed.
+    execution_effect: Mission A code refinement can proceed against actor_protocol.tla safety semantics.
 
   - id: C-S2
     status: testing
@@ -538,10 +544,11 @@ conjectures:
     execution_effect: If supported, actor runtime is the sole substrate.
 
   - id: C-S3
-    status: testing
-    claim: autoputer_lifecycle.tla reproduces the boot failure and recovery.
-    test: CI TLA+ Model Check on PR #42.
-    execution_effect: If supported, Mission C lifecycle encoding can proceed.
+    status: settled
+    claim: autoputer_lifecycle.tla model-checks green and records the boot/recovery state model.
+    evidence_class: model check / formal spec
+    source: main CI run 28684139979; TLA+ Model Check (specs/) success.
+    execution_effect: Mission C lifecycle work can proceed, but staging guest health remains unproven.
 
   - id: C-S4
     status: settled
@@ -564,10 +571,11 @@ conjectures:
     execution_effect: If supported, delete internal/runtime.
 
   - id: C-A2
-    status: testing
-    claim: cmd/sandbox/main.go builds using only actor runtime + extracted helpers.
-    test: CI Go Vet + Build on PR #42.
-    execution_effect: If supported, Mission A extraction is complete.
+    status: settled
+    claim: cmd/sandbox/main.go builds using the extracted internal/apihandler package and actor-runtime path.
+    evidence_class: observed CI result
+    source: main CI run 28684139979; prior host NixOS closure build in run 28683693425 after commit 02fa2ea6.
+    execution_effect: Mission A Pass 2 API handler extraction is closed; internal/runtime deletion remains C-A1/C-A3.
 
   - id: C-A3
     status: open
@@ -643,7 +651,7 @@ conjectures:
 ```yaml
 variant:
   measure: undecided definition nodes + testing/open conjectures
-  current: 18
+  current: 15
   target: 0
   motion_theater_threshold: a pass that changes no node status and buys no new evidence
 ```
@@ -692,7 +700,7 @@ to a full select/state/choose/bound loop.
 
 - **CI:** GitHub Actions on every push. Go build, go test (sharded + race),
   TLA+ model check, frontend build, docs truth check.
-- **Staging:** Node B deploy + health check on behavior-changing commits.
+- **Staging:** Node B deploy + host service health check on behavior-changing commits; active computer refresh is diagnostic until Mission C settles guest boot readiness.
 - **Spec model check:** TLC on every spec change, runs in CI.
 - **Codex review:** Second opinion on high-risk changes (protected surfaces).
 - **Race detector:** Go test -race on runtime shards.
@@ -747,6 +755,30 @@ evidence:
     result: Verdict "approve with reservations"; 4 major, 6 minor findings
     uncertainty: Reservations must be addressed before Mission C encoding
     promotion_relevance: Promotion spec is sound but incomplete
+
+  - claim: C-S1 and C-S3 model-check green on main
+    definition_node: C-S1/C-S3
+    evidence_class: model check / formal spec
+    source: GitHub Actions main CI run 28684139979
+    result: TLA+ Model Check (specs/) success
+    uncertainty: Bounded constants; does not prove staging guest boot
+    promotion_relevance: Mission A/C can continue from modeled safety state
+
+  - claim: C-A2 API handler extraction builds in Go and Nix package contexts
+    definition_node: C-A2
+    evidence_class: observed CI result
+    source: PR #42 merge `a6f11b7d`, packaging fix `02fa2ea6`, main CI run 28684139979
+    result: Go build green; sandbox Nix package source filter includes internal/apihandler
+    uncertainty: Does not prove refreshed active computer health
+    promotion_relevance: Pass 2 extraction is closed; internal/runtime deletion remains separate
+
+  - claim: Active computer refresh is the remaining staging deploy realism gap
+    definition_node: C-C1/C-C2
+    evidence_class: deployed diagnostic
+    source: GitHub Actions deploy job 85072352680
+    result: Host services healthy at commit 02fa2ea6; refreshed guest did not become healthy on :8085 within 3m
+    uncertainty: Guest boot/readiness root cause not repaired
+    promotion_relevance: Mission C must settle autoputer boot before claiming product-path promotion proof
 ```
 
 ## Completion Semantics
@@ -856,47 +888,63 @@ Do not dump logs. Link evidence artifacts.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: 2a5f1359 (texture fix on main); PR #42 green pending merge
+  last_checkpoint: 8e694f4663412c1a33fc70e870f225f2510718f2 (CI active-refresh diagnostic gate on main)
   current_artifact_state:
     - specs/promotion_protocol.tla: green in CI
-    - specs/actor_protocol.tla: green in CI (PR #42)
-    - specs/autoputer_lifecycle.tla: green in CI (PR #42)
-    - internal/apihandler: extracted on branch mission-a-api-handler-extraction
-    - internal/runtime: still present, deletion pending Pass 3
+    - specs/actor_protocol.tla: green in main CI
+    - specs/autoputer_lifecycle.tla: green in main CI
+    - internal/apihandler: extracted and merged on main
+    - flake.nix: sandbox package source filter includes internal/apihandler
+    - internal/runtime: still present, deletion pending later Mission A work
     - cmd/sandbox: not yet renamed to cmd/autoputer
+    - active refreshed guest health: failed in deploy job 85072352680, scoped to Mission C
   what_shipped:
     - Promotion gate spec (Pass 1, merged to main)
-    - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 green)
-    - API handler extraction (Pass 2, PR #42 green)
-    - Texture tool-loop fix (cherry-picked to main, CI running)
+    - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 merged)
+    - API handler extraction (Pass 2, PR #42 merged)
+    - Sandbox Nix package source-filter fix for internal/apihandler
+    - CI deploy gate now treats active computer refresh as diagnostic while preserving host health as the deploy gate
   what_was_proven:
+    - C-S1: actor_protocol.tla safety invariants model-check green in main CI
+    - C-S3: autoputer_lifecycle.tla model-checks green in main CI
     - C-S4: promotion_protocol.tla model-checks green
     - C-S5: promotion_protocol.tla encodes required invariants
-    - C-D1: CI passed on main after promotion gate commits
+    - C-A2: cmd/sandbox builds with extracted internal/apihandler package in Go and Nix package contexts
+    - C-D1: CI passed on main after the current commits
     - C-D2: TLA+ specs model-check in CI
   unproven_or_partial_claims:
-    - C-S1: actor_protocol.tla safety invariants (PR #42 green, pending merge)
-    - C-S3: autoputer_lifecycle.tla boot failure (PR #42 green, pending merge)
-    - C-A2: cmd/sandbox builds with extracted helpers (PR #42 green, pending merge)
+    - C-S2: actor_protocol.tla still needs semantic review for mailbox/passivation completeness
+    - C-A1/C-A3: internal/runtime deletion remains unproven
+    - C-B1/C-B2: wire pipeline spec and staging publication remain open
+    - C-C1/C-C2: autoputer rename/capsule and refreshed guest boot readiness remain open
+    - C-C3/C-C4: Go promotion encoding and durable certificate remain open
+    - C-D3/C-D4: sabotage variants and Codex reservations remain open
   belief_state_changes:
-    - PR #42 is fully CI green; merge is the next executable action
-    - Codex reservations must be addressed before Mission C encoding
+    - PR #42 is merged; re-merging PR #42 is obsolete.
+    - Pass 2 package-build regression is repaired.
+    - Active computer refresh is now the highest-realism staging gap and must not be confused with Pass 2 extraction.
+    - Codex reservations must be addressed before Mission C promotion encoding.
   remaining_error_field:
+    - Active refreshed guest does not become healthy on :8085 during deploy.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
-    - Autoputer rename not started
-  highest_impact_remaining_uncertainty: C-C3 (promotion protocol Go encoding) depends on Codex reservations being addressed first
-  next_executable_probe: Merge PR #42 to main, verify post-merge CI green, then open Pass 3 definition for Mission C (autoputer rename + promotion encoding) or Mission B (wire pipeline spec)
+    - Autoputer rename and Nucleus capsule work not started
+  highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after ordinary guest image update
+  next_executable_probe: Open Pass 3 definition for Mission C active-refresh/autoputer boot readiness; keep promotion encoding behind Codex reservation settlement.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 and Pass 9
     - CI run 28648508586 (promotion gate)
-    - PR #42 statusCheckRollup (Pass 2)
+    - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
+    - CI run 28683693425 (packaging fix; deploy job exposed active refresh failure)
+    - CI run 28684139979 (current main CI green)
   rollback_refs:
-    - main HEAD: 2a5f1359
-    - branch mission-a-api-handler-extraction: bf1f0a6a
+    - main HEAD: 8e694f4663412c1a33fc70e870f225f2510718f2
+    - package fix commit: 02fa2ea6603b7f157c982e9da637ec714301c6bf
+    - active-refresh diagnostic gate commit: 8e694f4663412c1a33fc70e870f225f2510718f2
 ```
 
 ## Child Definition Documents

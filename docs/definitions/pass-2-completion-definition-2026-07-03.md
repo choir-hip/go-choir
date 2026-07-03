@@ -1,10 +1,10 @@
 # Definition: Pass 2 Completion — Autoputer/Autopaper Spec-First Suite
 
-**Status:** under_deliberation → proposed settlement  
+**Status:** settled complete  
 **Date:** 2026-07-03  
 **Governed by:** `definitions` skill (live semantic control)  
-**Orchestrator:** Devin (current session)  
-**Next execution:** this document is executable by any agent with the same repo context.
+**Orchestrator:** Devin (prior session) + current continuation  
+**Next execution:** Pass 2 is closed. Resume from the super definition and open Pass 3 for Mission C active-refresh/autoputer boot readiness.
 
 ---
 
@@ -17,18 +17,13 @@
 - **C-D1 SUPPORTED** — CI passed on `main` after the promotion gate commits.
 - **C-D2 SUPPORTED** — TLA+ specs model-check in CI.
 - **Codex review completed** — `docs/reviews/promotion-gate-codex-review-2026-07-03.md` verdict: approve with reservations. Major findings documented before Mission C encodes promotion logic.
-- **Pass 2 work landed on branch `mission-a-api-handler-extraction`** — combined branch containing:
-  - Mission S: `specs/actor_protocol.tla` + `.cfg`, `specs/autoputer_lifecycle.tla` + `.cfg`, updated `specs/README.md`.
-  - Mission A: `internal/provideriface/model_policy.go` + test, moved from `internal/runtime`; `internal/apihandler/api.go` wrapping runtime handlers.
-  - Mission D: Codex review artifact.
-- **PR #42 opened** — `https://github.com/choir-hip/go-choir/pull/42`.
-
-### Observed (in progress)
-
-- CI run `28651170805` on PR #42:
-  - `TLA+ Model Check (specs/)` — **pass** (11s).
-  - `Docs Truth Check` — **pass**.
-  - Go build/test/race jobs — **pending** (expected to complete within ~5 minutes).
+- **Pass 2 work merged** — PR #42 merged into `main` as `a6f11b7dbb64c07677a767c19c00e47cf87fdd54`.
+- **C-S1 SUPPORTED** — `specs/actor_protocol.tla` model-checks green in main CI.
+- **C-S3 SUPPORTED** — `specs/autoputer_lifecycle.tla` model-checks green in main CI.
+- **C-A2 SUPPORTED** — `cmd/sandbox` builds with the extracted `internal/apihandler` package in Go and Nix package contexts.
+- **Post-merge package regression repaired** — commit `02fa2ea6603b7f157c982e9da637ec714301c6bf` includes `internal/apihandler` in the sandbox Nix package source filter.
+- **Current main CI green** — CI run `28684139979` succeeded for commit `8e694f4663412c1a33fc70e870f225f2510718f2`.
+- **Active refreshed guest health remains open** — deploy job `85072352680` showed host services healthy, but refreshed active guest health on `:8085` did not become ready. This is Mission C boot readiness work, not Pass 2 extraction work.
 
 ---
 
@@ -39,7 +34,7 @@
 ```yaml
 id: pass-2-green
 kind: status
-status: under_deliberation
+status: settled
 source: observed
 term: Pass 2 is green
 non_definition:
@@ -47,10 +42,10 @@ non_definition:
   - "TLA+ passed" alone does not make Pass 2 green.
   - "Go tests passed locally" does not make Pass 2 green (local ICU env is broken).
 examples:
-  - PR #42 CI run shows all required jobs passed (not pending, not skipped, not failed).
-  - PR #42 is approved and merged into `origin/main`.
-  - Post-merge `main` CI run passes.
-  - Staging deploy impact is either skipped (no runtime behavior change) or green.
+  - PR #42 CI run shows all required jobs passed.
+  - PR #42 is merged into `origin/main` as `a6f11b7dbb64c07677a767c19c00e47cf87fdd54`.
+  - Current `main` CI run `28684139979` passes.
+  - Staging host health remained green after package deployment; active refreshed guest health is tracked separately under Mission C.
 counterexamples:
   - Any CI job on PR #42 fails or is cancelled.
   - PR is merged with a red TLA+ or Go test gate.
@@ -60,8 +55,8 @@ observables:
   - `gh pr merge 42 --squash` succeeds.
   - Post-merge `gh run list --workflow=ci.yml --branch=main` shows the merge commit CI as `success`.
 execution_effect:
-  - Once settled, Pass 2 is closed and Pass 3 begins.
-  - The suite variant drops from 14 to 12 conjectures (C-S1, C-S3, C-A2 become SUPPORTED).
+  - Pass 2 is closed and Pass 3 begins.
+  - The suite variant drops by three conjectures: C-S1, C-S3, C-A2 become SUPPORTED.
 settlement:
   rule: "PR #42 CI fully green and PR merged to main with post-merge CI green."
   settled_by: orchestrator
@@ -76,7 +71,7 @@ settlement:
 ```yaml
 id: combined-branch-vs-split
 kind: boundary
-status: proposed
+status: settled
 source: operational-preference
 term: Accept combined Pass 2 branch
 non_definition:
@@ -110,7 +105,7 @@ settlement:
 ```yaml
 id: liveness-deferred
 kind: invariant
-status: proposed
+status: settled
 source: reviewer
 term: Defer two liveness properties to a later spec pass
 non_definition:
@@ -144,14 +139,12 @@ settlement:
 ## Completion Semantics
 
 ```text
-Pass 2 is COMPLETE when:
-  1. PR #42 CI is fully green (all required jobs pass).
-  2. PR #42 is merged into origin/main.
-  3. Post-merge main CI is green.
-  4. The suite ledger is updated with Pass 2 decisions and conjecture status.
-  5. The suite paradoc is updated to reflect Pass 2 completion and Pass 3 plan.
-
-Pass 2 is INCOMPLETE if any of the above are not satisfied.
+Pass 2 is COMPLETE:
+  1. PR #42 CI was fully green before merge.
+  2. PR #42 merged into origin/main.
+  3. Post-merge main CI is green at run 28684139979.
+  4. The suite ledger records Pass 2 merge, package repair, and active-refresh evidence.
+  5. The suite definition/paradoc now point Pass 3 at the remaining Mission C boot-readiness work.
 ```
 
 ---
@@ -167,17 +160,10 @@ Pass 2 is INCOMPLETE if any of the above are not satisfied.
 
 ## Next Operators (autonomous execution)
 
-1. **monitor(node: pass-2-green)** — poll `gh pr checks 42` until all jobs pass or fail.
-2. **if pass-2-green settles**:
-   - `merge(PR 42)` — squash merge to main.
-   - `monitor(node: main-ci-green)` — poll post-merge CI.
-   - `update_ledger()` — append Pass 2 settlement to `docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md`.
-   - `update_paradoc()` — mark C-S1, C-S3, C-A2 as SUPPORTED in `docs/mission-suite-autoputer-autopaper-spec-first-v0.md`.
-   - `open_pass_3()` — create definition for Pass 3 (wire pipeline + remaining actor runtime defactoring + autoputer rename promotion encoding).
-3. **if pass-2-green fails**:
-   - `diagnose()` — identify failing job and root cause.
-   - `fix()` — commit fix to the same branch.
-   - `re_monitor()` — return to step 1.
+1. **return_to_super_definition()** — read `docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md`.
+2. **open_pass_3()** — define Mission C active-refresh/autoputer boot readiness before promotion encoding.
+3. **preserve_boundary()** — do not treat Pass 2 extraction success as proof that refreshed active computers boot correctly.
+4. **defer_promotion_encoding()** — address Codex reservations before implementing the Go promotion certificate/approval boundary.
 
 ---
 
