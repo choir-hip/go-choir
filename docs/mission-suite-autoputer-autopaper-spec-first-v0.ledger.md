@@ -423,3 +423,29 @@ Mission D (CI/Verification Guard):
 
 **Next:** Execute Pass 3: collect or add diagnostics that distinguish whether active refresh fails because the runtime does not listen, persistent state blocks startup, guest networking is unreachable, `/health` returns non-200, or the guest enters emergency mode.
 
+## Pass 11 — 2026-07-03 (Mission C: Readiness Diagnostic Patch)
+
+**Conjecture:** The first actionable Pass 3 root cause is an evidence-layer bug: guest readiness polling collapses HTTP status, response body, and transport failure into a boolean, so the deploy failure cannot yet select the correct product boot fix.
+
+**Move:** Prepared a diagnostic patch:
+- `internal/vmmanager/manager.go` preserves the last guest `/health` probe status/body/error in `waitForGuestReady` timeout errors.
+- `internal/vmmanager/manager_test.go` covers HTTP 503 + body preservation in the timeout error.
+- `.github/workflows/ci.yml` deploy diagnostics now print vmctl ownership snapshots and direct active sandbox health probes.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN, but the next deploy should distinguish health-response failure from TCP timeout/connect failure.
+- Guest-network, persistent-data, and emergency-mode hypotheses remain open until deployed evidence returns.
+- C-C3/C-C4 remain blocked behind boot readiness and Codex reservation settlement.
+
+**Actual ΔV:**
+- Local diagnostic-sufficiency improved: vmmanager timeout errors now include the last guest `/health` status/body/error.
+- Deploy diagnostics now capture vmctl ownership snapshots and direct active sandbox health probes when active refresh fails.
+- Product boot root cause remains OPEN until staging deploy evidence exercises the changed diagnostic path.
+
+**Evidence:**
+- `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1` passed.
+- `.github/scripts/deploy-impact-classify-test` passed.
+- `scripts/doccheck report-only` passed.
+
+**Next:** Push, monitor CI/deploy, then update Pass 3 with the new staging evidence.
+

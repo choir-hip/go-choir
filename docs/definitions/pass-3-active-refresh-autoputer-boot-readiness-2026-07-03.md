@@ -125,6 +125,9 @@ determined_state:
     - claim: Another VM in the same deploy window entered emergency mode with root locked.
       source: deploy diagnostics in artifact/job logs
       execution_effect: Persistent disk/mount or boot dependency failure remains a live hypothesis.
+    - claim: The first confirmed root cause is an evidence collapse in `internal/vmmanager`: `waitForGuestReady` only preserved a boolean guest-health result, so deploy logs could not distinguish HTTP non-200 health, response body, TCP timeout, or connect failure.
+      source: observed code in `internal/vmmanager/manager.go`
+      execution_effect: Add readiness diagnostics before choosing a product boot fix.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -132,7 +135,7 @@ determined_state:
     - node: current-node-b-state
       missing: Confirm whether Node B currently has failed ownership records or whether later deploys recovered them.
     - node: diagnostic-sufficiency
-      missing: Current deploy diagnostics do not show per-VM `curl /health`, listener state, guest service stdout after runtime start, or persistent mount failure cause.
+      missing: Focused tests now cover last-probe HTTP status/body preservation, but diagnostic-sufficiency is not settled until a staging deploy exercises the changed path.
 ```
 
 ---
@@ -261,24 +264,28 @@ run_checkpoint_and_resumption_state:
     - Pass 2 child definition is settled complete.
     - Super definition says the next executable probe is active-refresh/autoputer boot readiness.
     - Deploy evidence exists from job 85072352680.
-    - No Pass 3 code fix has landed yet.
+    - Pass 3 diagnostic patch prepared in `internal/vmmanager/manager.go`: guest readiness timeout errors include the last `/health` probe status/body/error.
+    - Pass 3 deploy diagnostic patch prepared in `.github/workflows/ci.yml`: failure diagnostics include vmctl ownership snapshots and direct active sandbox health probes.
   what_was_proven:
     - Package source-filter bug is repaired.
     - Host services can deploy and report health while active guest refresh still fails.
-    - Current evidence is sufficient to scope Pass 3, not sufficient to pick a root-cause fix.
+    - Current evidence is sufficient to scope Pass 3 and confirm the first evidence-layer root cause; it is not sufficient to pick the product boot fix.
   unproven_or_partial_claims:
     - Whether the active target VM reached `server.Start()`.
     - Whether preserved persistent state blocks runtime startup.
     - Whether host-to-guest tap networking blocks HTTP readiness.
     - Whether `/health` returns non-200 versus never accepting TCP.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
-  next_executable_probe: Collect or add diagnostics that distinguish runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
+  next_executable_probe: Push and monitor the diagnostic patch, then use staging deploy evidence to distinguish runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 and Pass 9
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 11
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
+    - diagnostic patch files: `internal/vmmanager/manager.go`, `internal/vmmanager/manager_test.go`, `.github/workflows/ci.yml`
+    - focused test: `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1`
+    - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD before Pass 3: 0cf1ba4e31c4b8a932ac7b5438372267ac7b30c5
     - package fix commit: 02fa2ea6603b7f157c982e9da637ec714301c6bf

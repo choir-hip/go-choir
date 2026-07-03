@@ -1693,16 +1693,25 @@ func TestWaitForGuestReady_EventuallySucceeds(t *testing.T) {
 
 func TestWaitForGuestReady_TimesOut(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "booting", http.StatusServiceUnavailable)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "booting details")
 	}))
 	defer srv.Close()
 
 	cfg := DefaultManagerConfig()
 	cfg.HealthCheckTimeout = 50 * time.Millisecond
-	cfg.BootReadyTimeout = 300 * time.Millisecond
+	cfg.BootReadyTimeout = time.Nanosecond
 	mgr := NewManager(cfg)
 
-	if err := mgr.waitForGuestReady(srv.URL); err == nil {
+	err := mgr.waitForGuestReady(srv.URL)
+	if err == nil {
 		t.Fatal("expected timeout waiting for guest readiness")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "last probe: HTTP 503") {
+		t.Fatalf("timeout error missing HTTP status from last probe: %v", err)
+	}
+	if !strings.Contains(msg, "booting details") {
+		t.Fatalf("timeout error missing response body from last probe: %v", err)
 	}
 }

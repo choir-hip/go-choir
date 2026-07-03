@@ -508,6 +508,26 @@ jobs:
                 echo "port ${port}" >&2
                 curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" >&2 || true
               done
+              echo "-- vmctl ownership snapshot" >&2
+              ownerships_snapshot=$(curl -fsS --max-time 5 -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list 2>/dev/null || true)
+              if [ -n "$ownerships_snapshot" ]; then
+                printf '%s\n' "$ownerships_snapshot" | jq . >&2 || printf '%s\n' "$ownerships_snapshot" >&2
+                mapfile -t diagnostic_sandbox_urls < <(printf '%s' "$ownerships_snapshot" | jq -r '
+                  .ownerships[]
+                  | select(.state == "active")
+                  | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
+                  | [.vm_id, .sandbox_url]
+                  | @tsv
+                ' 2>/dev/null || true)
+                for record in "${diagnostic_sandbox_urls[@]}"; do
+                  IFS=$'\t' read -r diagnostic_vm_id diagnostic_sandbox_url <<< "$record"
+                  if [ -z "$diagnostic_sandbox_url" ]; then
+                    continue
+                  fi
+                  echo "-- active sandbox health ${diagnostic_vm_id} ${diagnostic_sandbox_url}" >&2
+                  curl -sS --max-time 5 -w '\nhttp_status=%{http_code} total_time=%{time_total}\n' "${diagnostic_sandbox_url}/health" >&2 || true
+                done
+              fi
             }
 
             if [ ! -d /opt/go-choir/.git ]; then

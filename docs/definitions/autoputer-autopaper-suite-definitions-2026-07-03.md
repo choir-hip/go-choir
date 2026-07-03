@@ -900,6 +900,7 @@ run_checkpoint_and_resumption_state:
     - cmd/sandbox: not yet renamed to cmd/autoputer
     - active refreshed guest health: failed in deploy job 85072352680, scoped to Mission C
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md: opened for Mission C boot-readiness investigation
+    - Pass 3 diagnostic patch prepared: vmmanager readiness timeout errors retain last `/health` probe detail; deploy diagnostics print vmctl ownership and active sandbox health snapshots.
   what_shipped:
     - Promotion gate spec (Pass 1, merged to main)
     - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 merged)
@@ -926,6 +927,7 @@ run_checkpoint_and_resumption_state:
     - Pass 2 package-build regression is repaired.
     - Active computer refresh is now the highest-realism staging gap and must not be confused with Pass 2 extraction.
     - Codex reservations must be addressed before Mission C promotion encoding.
+    - The first Pass 3 root cause is an evidence-layer bug: guest readiness polling collapsed HTTP status/body and transport errors into a boolean.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
@@ -933,17 +935,19 @@ run_checkpoint_and_resumption_state:
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
   highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after ordinary guest image update
-  next_executable_probe: Execute Pass 3 child definition for Mission C active-refresh/autoputer boot readiness; first distinguish runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
+  next_executable_probe: Push and monitor the Pass 3 diagnostic patch so the next staging deploy distinguishes runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8, Pass 9, and Pass 10
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 11
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
     - CI run 28683693425 (packaging fix; deploy job exposed active refresh failure)
     - CI run 28684139979 (current main CI green)
+    - focused Pass 3 test: `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1`
+    - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD: 8e694f4663412c1a33fc70e870f225f2510718f2
     - package fix commit: 02fa2ea6603b7f157c982e9da637ec714301c6bf

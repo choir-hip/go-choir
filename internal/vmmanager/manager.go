@@ -1701,11 +1701,28 @@ func processCmdlineArgs(data []byte) []string {
 	return strings.Fields(raw)
 }
 
-// probeGuestHealth attempts to reach the guest's /health endpoint.
-// On Linux/Node B with real Firecracker VMs, this uses HTTP to probe
-// the guest sandbox runtime. On macOS or environments without Firecracker,
-// this returns true by default (the VM isn't actually running).
-func (m *Manager) probeGuestHealth(hostURL string) bool {
+type guestHealthProbeResult struct {
+	Healthy bool
+	Status  int
+	Body    string
+	Err     error
+}
+
+func (r guestHealthProbeResult) String() string {
+	if r.Err != nil {
+		return r.Err.Error()
+	}
+	if r.Status != 0 {
+		body := strings.TrimSpace(r.Body)
+		if body != "" {
+			return fmt.Sprintf("HTTP %d: %s", r.Status, body)
+		}
+		return fmt.Sprintf("HTTP %d", r.Status)
+	}
+	return "no probe result"
+}
+
+func (m *Manager) probeGuestHealthDetailed(hostURL string) guestHealthProbeResult {
 	client := &http.Client{
 		Timeout: m.cfg.HealthCheckTimeout,
 		Transport: &http.Transport{
@@ -1716,20 +1733,35 @@ func (m *Manager) probeGuestHealth(hostURL string) bool {
 	}
 	resp, err := client.Get(hostURL + "/health")
 	if err != nil {
-		return false
+		return guestHealthProbeResult{Err: err}
 	}
-	_ = resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return guestHealthProbeResult{
+		Healthy: resp.StatusCode == http.StatusOK,
+		Status:  resp.StatusCode,
+		Body:    string(body),
+	}
+}
+
+// probeGuestHealth attempts to reach the guest's /health endpoint.
+// On Linux/Node B with real Firecracker VMs, this uses HTTP to probe
+// the guest sandbox runtime. On macOS or environments without Firecracker,
+// this returns true by default (the VM isn't actually running).
+func (m *Manager) probeGuestHealth(hostURL string) bool {
+	return m.probeGuestHealthDetailed(hostURL).Healthy
 }
 
 func (m *Manager) waitForGuestReady(hostURL string) error {
 	deadline := time.Now().Add(m.cfg.BootReadyTimeout)
+	var lastProbe guestHealthProbeResult
 	for {
-		if m.probeGuestHealth(hostURL) {
+		lastProbe = m.probeGuestHealthDetailed(hostURL)
+		if lastProbe.Healthy {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("guest did not become healthy at %s within %s", hostURL, m.cfg.BootReadyTimeout)
+			return fmt.Errorf("guest did not become healthy at %s within %s (last probe: %s)", hostURL, m.cfg.BootReadyTimeout, lastProbe.String())
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
