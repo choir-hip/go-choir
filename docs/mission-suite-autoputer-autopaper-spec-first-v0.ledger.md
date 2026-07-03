@@ -182,3 +182,28 @@ Mission D (CI/Verification Guard):
 
 **Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
 
+---
+
+## Pass 4 — 2026-07-03 (Mission S: Promotion Protocol Gate — TLC iteration 3)
+
+**Conjecture:** The third CI TLC run revealed that `Abort` does not roll back prepared secondaries, violating the `AbortedLedgersRolledBack` invariant. The fix is a pure spec correction.
+
+**Move:** correct (make `Abort` atomically roll back all prepared secondaries to `rolled_back`)
+
+**Expected ΔV:** Resolve the third TLC error and get closer to a green model check.
+
+**Actual ΔV:**
+- CI run `28648213384` executed TLC and produced a counterexample trace ending in `Abort` while `ledgerState[c][source] = "prepared"`.
+- Root cause: `Abort` only changed `promoStatus` but left prepared secondaries in `prepared`, violating `AbortedLedgersRolledBack`.
+- Fixed in `specs/promotion_protocol.tla` by making `Abort` atomically roll back all prepared secondaries.
+
+**Conjecture status update:**
+- C-S4: still TESTING (pending fourth CI TLC run after fix).
+- C-S5: still TESTING (pending fourth CI TLC run after fix).
+- C-D1: CI overall failed because of the TLA+ job; will re-evaluate after fix.
+- C-D2: still UNDECIDED (pending green TLC run).
+
+**Open decisions:** None.
+
+**Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
+

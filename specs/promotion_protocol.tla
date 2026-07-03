@@ -188,13 +188,19 @@ Commit(c) ==
                   poisoned, healthWindow>>
 
 (* Pre-pivot abandonment: backward recovery is always safe before commit.   *)
+(* Abort atomically rolls back all prepared secondaries.                     *)
 
 Abort(c) ==
   /\ promoStatus[c] \in {"staging", "verified", "approved"}
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "aborted"]
+  /\ ledgerState' = [ledgerState EXCEPT ![c] =
+                      [l \in Ledgers |->
+                         IF ledgerState[c][l] = "prepared"
+                           THEN "rolled_back"
+                           ELSE ledgerState[c][l]]]
   /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  ledgerState, promoActive, promoCandidate, promoBase,
-                  approved, poisoned, healthWindow>>
+                  promoActive, promoCandidate, promoBase, approved,
+                  poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
 (* Reconciliation: secondaries follow the commit point.                    *)
