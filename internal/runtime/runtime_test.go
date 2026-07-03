@@ -964,14 +964,9 @@ func TestEventsPersistedToStore(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Wait for the task to complete and events to be persisted.
-	time.Sleep(200 * time.Millisecond)
-
-	// Check that events were persisted.
-	evts, err := s.ListEvents(ctx, rec.RunID, 20)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
+	// Wait for events to be persisted. Poll instead of fixed sleep so
+	// this works reliably under -race (2-10x slowdown).
+	evts := waitForEvents(t, s, rec.RunID, []types.EventKind{types.EventRunSubmitted}, 3*time.Second)
 
 	if len(evts) == 0 {
 		t.Fatal("expected events to be persisted")
@@ -1364,10 +1359,9 @@ func TestProviderStubDeltaEvent(t *testing.T) {
 		t.Fatalf("state: got %s, want completed", done.State)
 	}
 
-	evts, err := s.ListEvents(ctx, rec.RunID, 50)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
+	// Poll for events since the run state may be terminal before events
+	// are persisted (especially under -race).
+	evts := waitForEvents(t, s, rec.RunID, []types.EventKind{types.EventRunDelta}, 3*time.Second)
 
 	hasDelta := false
 	for _, ev := range evts {
@@ -1536,12 +1530,8 @@ func TestBridgeProviderEventsContainRealMarker(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
-	evts, err := s.ListEvents(ctx, rec.RunID, 20)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
+	// Poll for events instead of fixed sleep (reliable under -race).
+	evts := waitForEvents(t, s, rec.RunID, []types.EventKind{types.EventRunCompleted}, 3*time.Second)
 
 	// Look for events with the "real":"true" marker that distinguishes
 	// bridge provider events from stub provider events.

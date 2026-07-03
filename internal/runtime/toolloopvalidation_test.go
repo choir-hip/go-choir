@@ -716,32 +716,18 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 		t.Errorf("result:\ngot:  %q\nwant: %q", fetched.Result, expectedResult)
 	}
 
-	// Validate all expected events were emitted.
-	evts, err := s.ListEvents(context.Background(), rec.RunID, 100)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
-
-	expectedKinds := map[types.EventKind]bool{
-		types.EventRunSubmitted: false,
-		types.EventRunStarted:   false,
-		types.EventToolInvoked:  false,
-		types.EventToolResult:   false,
-		types.EventRunProgress:  false,
-		types.EventRunCompleted: false,
-	}
-
-	for _, ev := range evts {
-		if _, ok := expectedKinds[ev.Kind]; ok {
-			expectedKinds[ev.Kind] = true
-		}
-	}
-
-	for kind, found := range expectedKinds {
-		if !found {
-			t.Errorf("missing expected event kind: %s", kind)
-		}
-	}
+	// Validate all expected events were emitted. The task state can become
+	// terminal a moment before the final event query observes the
+	// completed-event row, so poll via waitForEvents (same pattern as
+	// TestToolLoopFileReadWithRuntime).
+	waitForEvents(t, s, rec.RunID, []types.EventKind{
+		types.EventRunSubmitted,
+		types.EventRunStarted,
+		types.EventToolInvoked,
+		types.EventToolResult,
+		types.EventRunProgress,
+		types.EventRunCompleted,
+	}, 3*time.Second)
 
 	// Verify metadata has token usage.
 	if fetched.Metadata["input_tokens"] == nil {

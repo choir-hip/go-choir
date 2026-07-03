@@ -161,11 +161,9 @@ func TestStreamingProviderEmitsMultipleDeltas(t *testing.T) {
 		t.Errorf("result: got %q, want %q", stored.Result, expected)
 	}
 
-	// Verify delta events were persisted for each chunk.
-	evts, err := s.ListEvents(ctx, rec.RunID, 50)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
+	// Verify delta events were persisted for each chunk. Poll for events
+	// since the run state may be terminal before all events are persisted.
+	evts := waitForEvents(t, s, rec.RunID, []types.EventKind{types.EventRunCompleted}, 3*time.Second)
 
 	deltaCount := 0
 	for _, ev := range evts {
@@ -349,21 +347,9 @@ func TestStreamingCompletesWithProperTermination(t *testing.T) {
 		t.Error("finished_at should be set for completed streaming task")
 	}
 
-	// Verify a loop.completed event was emitted.
-	evts, err := s.ListEvents(ctx, rec.RunID, 50)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
-
-	hasCompleted := false
-	for _, ev := range evts {
-		if ev.Kind == types.EventRunCompleted {
-			hasCompleted = true
-		}
-	}
-	if !hasCompleted {
-		t.Error("expected loop.completed event for streaming run")
-	}
+	// Verify a loop.completed event was emitted. Poll for events since
+	// the run state may be terminal before the event is persisted.
+	waitForEvents(t, s, rec.RunID, []types.EventKind{types.EventRunCompleted}, 3*time.Second)
 }
 
 // TestStreamingFailureEmitsErrorEvents verifies that when a streaming provider

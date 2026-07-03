@@ -3049,27 +3049,12 @@ func TestRuntimeWithToolRegistryEmitsToolEvents(t *testing.T) {
 		}
 	}
 
-	// Also check persisted events.
-	events, err := rt.Store().ListEvents(context.Background(), rec.RunID, 100)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
-
-	var persistedInvoked, persistedResult bool
-	for _, ev := range events {
-		if ev.Kind == types.EventToolInvoked {
-			persistedInvoked = true
-		}
-		if ev.Kind == types.EventToolResult {
-			persistedResult = true
-		}
-	}
-	if !persistedInvoked {
-		t.Error("expected persisted tool.invoked event")
-	}
-	if !persistedResult {
-		t.Error("expected persisted tool.result event")
-	}
+	// Also check persisted events. Poll since the bus events may arrive
+	// before the store has persisted them (common under -race).
+	waitForEvents(t, rt.Store(), rec.RunID, []types.EventKind{
+		types.EventToolInvoked,
+		types.EventToolResult,
+	}, 3*time.Second)
 }
 
 // --- Helper content builders ---

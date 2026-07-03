@@ -161,6 +161,37 @@ func waitForTaskCompletion(t *testing.T, h *APIHandler, taskID string, timeout t
 	return ""
 }
 
+// waitForEvents polls ListEvents until all expected event kinds are present
+// or the deadline expires. This avoids races where the run state becomes
+// terminal before the final event is persisted (common under -race).
+func waitForEvents(t *testing.T, s *store.Store, runID string, expectedKinds []types.EventKind, timeout time.Duration) []types.EventRecord {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	needed := make(map[types.EventKind]bool, len(expectedKinds))
+	for _, k := range expectedKinds {
+		needed[k] = true
+	}
+	var evts []types.EventRecord
+	for time.Now().Before(deadline) {
+		var err error
+		evts, err = s.ListEvents(context.Background(), runID, 200)
+		if err != nil {
+			t.Fatalf("list events: %v", err)
+		}
+		for _, ev := range evts {
+			delete(needed, ev.Kind)
+		}
+		if len(needed) == 0 {
+			return evts
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for kind := range needed {
+		t.Errorf("missing expected event kind: %s", kind)
+	}
+	return evts
+}
+
 func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	t.Helper()
 
