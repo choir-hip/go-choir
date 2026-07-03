@@ -265,3 +265,41 @@ Mission D (CI/Verification Guard):
 
 **Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
 
+---
+
+## Pass 7 — 2026-07-03 (Mission S: Promotion Protocol Gate — GREEN)
+
+**Conjecture:** The sixth iteration of the new `promotion_protocol.tla` model-checks green in CI. The promotion gate is established.
+
+**Move:** verify (monitor CI `tla-model-check` job; confirm green; update ledger)
+
+**Expected ΔV:** C-S4 and C-S5 become SUPPORTED; C-D1 and C-D2 become SUPPORTED for this commit.
+
+**Actual ΔV:**
+- CI run `28648508586` completed successfully.
+- TLA+ Model Check job (ID `84960756999`) completed in 11s with:
+  ```
+  Model checking completed. No error has been found.
+  826 states generated, 318 distinct states found, 0 states left on queue.
+  ```
+- All other CI jobs passed: Go build, Go tests (including race detector), frontend build, docs truth check, staging deploy.
+- Staging deploy job completed: `Deploy to Staging (Node B) in 1m29s (ID 84961058309)`.
+
+**Conjecture status update:**
+- **C-S4: SUPPORTED** — `promotion_protocol.tla` models active/candidate/route/rollback/health-window and checks green (CI run `28648508586`).
+- **C-S5: SUPPORTED** — `promotion_protocol.tla` encodes `NoStaleCommit`, `ApprovalGate`, `NoTornOutcome`, `RouteConsistency`, `CandidateIsolation`, `HealthWindowReversible`, `ConfirmedLedgersApplied`, `AbortedLedgersRolledBack`, `CertificateCompleteness`, and liveness `EveryCommittedPromotionSettles` / `SystemProgress`.
+- **C-D1: SUPPORTED** — CI passed after the mission commit.
+- **C-D2: SUPPORTED** — TLA+ specs model-check in CI.
+- **Suite variant:** 18 - 4 = **14 conjectures remaining** (C-S4, C-S5, C-D1, C-D2 decided).
+
+**Definitions recorded:**
+- D10: The autoputer promotion gate is established. `promotion_protocol.tla` is the verified spec for candidate promotion.
+- D11: The promotion protocol spec captures: computer ontology, ledger split, route identity, per-ledger prepare/apply, owner approval, freshness CAS at commit, health window, poisoned writes, and atomic rollback.
+- D12: NoStaleCommit is a property of the commit action, not a state invariant, because the active computer continues to move after promotion.
+- D13: Aborted and AutoRevert actions atomically roll back all secondaries to preserve NoTornOutcome.
+- D14: A committed promotion's liveness outcome includes confirmed, reverted, or poisoned (forward recovery is a new promotion).
+
+**Open decisions:** None.
+
+**Next:** The promotion gate is established. Proceed to Mission S next items (actor_protocol.tla, autoputer_lifecycle.tla) and Mission A/B/C parallel work. The spec is the source of truth; code changes must now match it.
+
