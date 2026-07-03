@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,8 +52,6 @@ func testSearchClient(providers []SearchProvider, providersPerQuery int) *Search
 		},
 	}
 }
-
-
 
 func TestSearchClient_NoProviders(t *testing.T) {
 	client := testSearchClient([]SearchProvider{}, 1)
@@ -324,6 +323,103 @@ func TestSearchClient_CoolsDownQuotaLimitedProviders(t *testing.T) {
 	}
 }
 
+func TestParseSearXNGResults(t *testing.T) {
+	raw := []byte(`{
+		"query": "test query",
+		"number_of_results": 2,
+		"results": [
+			{
+				"url": "https://example.com/one",
+				"title": "Example One",
+				"content": "First result content",
+				"publishedDate": "2025-01-15T10:30:00",
+				"engines": ["google", "bing"],
+				"score": 8.5
+			},
+			{
+				"url": "https://example.com/two",
+				"title": "Example Two",
+				"content": "Second result content",
+				"publishedDate": null,
+				"engines": ["duckduckgo"],
+				"score": 3.2
+			}
+		]
+	}`)
+
+	results, err := parseSearXNGResults(raw, 10)
+	if err != nil {
+		t.Fatalf("parseSearXNGResults: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+	if results[0].Title != "Example One" || results[0].URL != "https://example.com/one" {
+		t.Fatalf("result[0] = %+v, want parsed title/url", results[0])
+	}
+	if results[0].Snippet != "First result content" {
+		t.Fatalf("snippet = %q, want content", results[0].Snippet)
+	}
+	if results[0].Score != 8.5 {
+		t.Fatalf("score = %v, want 8.5", results[0].Score)
+	}
+	if results[1].Title != "Example Two" {
+		t.Fatalf("result[1] title = %q, want Example Two", results[1].Title)
+	}
+}
+
+func TestParseSearXNGResults_MaxResults(t *testing.T) {
+	raw := []byte(`{
+		"results": [
+			{"url": "https://a.com", "title": "A", "content": "a"},
+			{"url": "https://b.com", "title": "B", "content": "b"},
+			{"url": "https://c.com", "title": "C", "content": "c"}
+		]
+	}`)
+
+	results, err := parseSearXNGResults(raw, 2)
+	if err != nil {
+		t.Fatalf("parseSearXNGResults: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2 (maxResults)", len(results))
+	}
+}
+
+func TestParseSearXNGResults_EmptyURL(t *testing.T) {
+	raw := []byte(`{
+		"results": [
+			{"url": "", "title": "No URL", "content": "skip"},
+			{"url": "https://valid.com", "title": "Valid", "content": "keep"}
+		]
+	}`)
+
+	results, err := parseSearXNGResults(raw, 10)
+	if err != nil {
+		t.Fatalf("parseSearXNGResults: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1 (empty URL skipped)", len(results))
+	}
+	if results[0].URL != "https://valid.com" {
+		t.Fatalf("url = %q, want https://valid.com", results[0].URL)
+	}
+}
+
+func TestSearXNGProvider_IsAvailable(t *testing.T) {
+	p := &SearXNGProvider{}
+
+	t.Setenv("SEARXNG_URL", "")
+	if p.IsAvailable() {
+		t.Fatal("expected not available when SEARXNG_URL unset")
+	}
+
+	t.Setenv("SEARXNG_URL", "http://localhost:8888")
+	if !p.IsAvailable() {
+		t.Fatal("expected available when SEARXNG_URL is set")
+	}
+}
+
 func TestParseParallelResults(t *testing.T) {
 	raw := []byte(`{
 		"search_id": "search_test",
@@ -417,6 +513,60 @@ func TestSearchClient_AvailableProviders(t *testing.T) {
 	}
 	if names[0] != "mock1" || names[1] != "mock2" {
 		t.Errorf("expected [mock1, mock2], got %v", names)
+	}
+}
+
+func TestSearXNGProvider_Search(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/search" {
+			t.Errorf("path = %q, want /search", r.URL.Path)
+		}
+		q := r.URL.Query().Get("q")
+		if q != "test query" {
+			t.Errorf("q = %q, want 'test query'", q)
+		}
+		if r.URL.Query().Get("format") != "json" {
+			t.Errorf("format = %q, want json", r.URL.Query().Get("format"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"query":"test query","results":[{"url":"https://result.com","title":"Result","content":"snippet","score":5.0}]}`)
+	}))
+	defer srv.Close()
+
+	t.Setenv("SEARXNG_URL", srv.URL)
+	p := &SearXNGProvider{}
+	if !p.IsAvailable() {
+		t.Fatal("expected available")
+	}
+
+	results, err := p.Search(context.Background(), "test query", 10)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].URL != "https://result.com" || results[0].Title != "Result" {
+		t.Fatalf("result = %+v", results[0])
+	}
+	if results[0].Snippet != "snippet" {
+		t.Fatalf("snippet = %q, want 'snippet'", results[0].Snippet)
+	}
+}
+
+func TestSearXNGProvider_SearchError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, `{"error": "upstream unavailable"}`)
+	}))
+	defer srv.Close()
+
+	t.Setenv("SEARXNG_URL", srv.URL)
+	p := &SearXNGProvider{}
+
+	_, err := p.Search(context.Background(), "test", 10)
+	if err == nil {
+		t.Fatal("expected error on 503")
 	}
 }
 
