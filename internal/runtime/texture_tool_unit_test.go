@@ -336,8 +336,8 @@ func TestTextureToolRejectsWholeMarkdownInUpdateBlockText(t *testing.T) {
 			Text:    "# Music brief\n\nLead paragraph.",
 		}},
 	}, current)
-	if err == nil || !strings.Contains(err.Error(), "whole-document markdown") {
-		t.Fatalf("update_block_text markdown err = %v, want whole-document markdown rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "multi-paragraph or markdown-formatted text") {
+		t.Fatalf("update_block_text markdown err = %v, want multi-paragraph/markdown rejection", err)
 	}
 }
 

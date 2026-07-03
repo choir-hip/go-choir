@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -103,6 +104,7 @@ type toolLoopOptions struct {
 	providerPreconditionFallbacks []LLMSelection
 	initialToolChoice             string
 	terminalTools                 map[string]bool
+	requiredWriteTools            map[string]bool
 	completionGuard               ToolLoopCompletionGuardFunc
 	parkWaiter                    ToolLoopParkWaiterFunc
 	budget                        ToolLoopBudget
@@ -181,6 +183,29 @@ func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
 			name = strings.TrimSpace(name)
 			if name != "" {
 				opts.terminalTools[name] = true
+			}
+		}
+	}
+}
+
+// WithRequiredWriteTools specifies tools that must succeed when the initial
+// tool choice is "required" (not an exact tool name). After the first tool
+// turn, if none of the required write tools succeeded, the loop retries with
+// a targeted reminder. This prevents the model from ending the turn after
+// calling a non-write tool (e.g. record_texture_decision or spawn_agent)
+// without producing a document revision.
+func WithRequiredWriteTools(names ...string) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if len(names) == 0 {
+			return
+		}
+		if opts.requiredWriteTools == nil {
+			opts.requiredWriteTools = make(map[string]bool, len(names))
+		}
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				opts.requiredWriteTools[name] = true
 			}
 		}
 	}
@@ -627,6 +652,41 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 					}
 					continue
 				}
+				// For "required" (non-exact) initial tool choice, verify a
+				// required write tool succeeded. This prevents the model from
+				// ending the turn after calling only non-write tools.
+				if len(options.requiredWriteTools) > 0 && !requiredWriteToolSucceeded(options.requiredWriteTools, resp.ToolCalls, toolResults) {
+					initialToolChoiceAttempts++
+					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: required write tool did not succeed after %d retries", maxRequiredNextToolRetries)
+					}
+					reason := "required_write_tool_not_called"
+					if requiredWriteToolCalled(options.requiredWriteTools, resp.ToolCalls) {
+						reason = "required_write_tool_failed"
+					}
+					reminder := requiredWriteToolReminderText(options.requiredWriteTools, reason)
+					reminderMsg, _ := json.Marshal(map[string]any{
+						"role": "user",
+						"content": []map[string]any{{
+							"type": "text",
+							"text": reminder,
+						}},
+					})
+					if err := appendMessage("user", reminderMsg); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist required write-tool retry: %w", err)
+					}
+					forceInitialToolChoiceRetry = true
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools),
+							"called_tools":         toolCallNames(resp.ToolCalls),
+							"reason":               reason,
+							"attempt":              initialToolChoiceAttempts,
+						})
+						emit(types.EventRunRetry, "required_write_tool", payload)
+					}
+					continue
+				}
 			}
 			if activeRequired != nil && requiredCalled {
 				requiredNextTool = nil
@@ -717,6 +777,39 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 							"attempt":       initialToolChoiceAttempts,
 						})
 						emit(types.EventRunRetry, "initial_tool_choice", payload)
+					}
+					continue
+				}
+				// For "required" (non-exact) initial tool choice, the model
+				// ended the turn without calling any tool. If required write
+				// tools are configured, retry with a targeted reminder.
+				if len(options.requiredWriteTools) > 0 && len(toolDefs) > 0 {
+					initialToolChoiceAttempts++
+					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
+						return "", totalUsage, fmt.Errorf("tool loop: required write tool was not called after %d retries", maxRequiredNextToolRetries)
+					}
+					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist assistant text before write-tool retry: %w", err)
+					}
+					reminder := requiredWriteToolReminderText(options.requiredWriteTools, "model_ended_turn_without_required_write_tool")
+					reminderMsg, _ := json.Marshal(map[string]any{
+						"role": "user",
+						"content": []map[string]any{{
+							"type": "text",
+							"text": reminder,
+						}},
+					})
+					if err := appendMessage("user", reminderMsg); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist required write-tool end-turn retry: %w", err)
+					}
+					forceInitialToolChoiceRetry = true
+					if emit != nil {
+						payload, _ := json.Marshal(map[string]any{
+							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools),
+							"reason":               "model_ended_turn_without_required_write_tool",
+							"attempt":              initialToolChoiceAttempts,
+						})
+						emit(types.EventRunRetry, "required_write_tool", payload)
 					}
 					continue
 				}
@@ -1277,7 +1370,7 @@ func requiredInitialToolChoiceReminderText(requiredName, reason string) string {
 	requiredName = strings.TrimSpace(requiredName)
 	reason = strings.TrimSpace(reason)
 	if requiredName == "patch_texture" && reason == "required_initial_tool_failed" {
-		return "The previous required initial patch_texture call failed. Call patch_texture again now, and do not write prose or call any other tool. For an initial first-paint draft from a user prompt, do not copy the prompt unchanged. Use a structured append_block edit with substantive draft content that changes the document. Use update_block_text only when the structured outline gives the exact block_id to update."
+		return "The previous required initial patch_texture call failed. Review the tool error above and fix the issue. If the change spans multiple sections or is a full-document draft (especially v0→v1 or v1→v2), call rewrite_texture instead. Otherwise, call patch_texture again with corrected arguments. Common fixes: use the current base_revision_id from the document outline, use append_block for new paragraphs, or use update_block_text only when the structured outline gives the exact block_id to update."
 	}
 	return fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
 }
@@ -1354,6 +1447,63 @@ func toolCallNames(calls []types.ToolCall) []string {
 		}
 	}
 	return names
+}
+
+// requiredWriteToolSucceeded returns true if at least one of the required write
+// tools was called and succeeded in this batch.
+func requiredWriteToolSucceeded(writeTools map[string]bool, calls []types.ToolCall, results []types.ToolResult) bool {
+	if len(writeTools) == 0 {
+		return true
+	}
+	limit := len(calls)
+	if len(results) < limit {
+		limit = len(results)
+	}
+	for i := 0; i < limit; i++ {
+		if writeTools[strings.TrimSpace(calls[i].Name)] && !results[i].IsError {
+			return true
+		}
+	}
+	return false
+}
+
+// requiredWriteToolCalled returns true if at least one of the required write
+// tools was called in this batch (regardless of success).
+func requiredWriteToolCalled(writeTools map[string]bool, calls []types.ToolCall) bool {
+	if len(writeTools) == 0 {
+		return true
+	}
+	for _, call := range calls {
+		if writeTools[strings.TrimSpace(call.Name)] {
+			return true
+		}
+	}
+	return false
+}
+
+// requiredWriteToolNames returns the sorted names of required write tools for
+// use in reminder messages.
+func requiredWriteToolNames(writeTools map[string]bool) []string {
+	names := make([]string, 0, len(writeTools))
+	for name := range writeTools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// requiredWriteToolReminderText returns a targeted reminder when the model did
+// not produce a successful write-tool call. It differentiates between "called
+// a write tool but it failed" and "did not call any write tool at all".
+func requiredWriteToolReminderText(writeTools map[string]bool, reason string) string {
+	names := requiredWriteToolNames(writeTools)
+	listed := strings.Join(names, " or ")
+	switch reason {
+	case "required_write_tool_failed":
+		return fmt.Sprintf("The previous %s call failed. Review the tool error, fix the issue, and call the write tool again. Use %s for full-document drafts (especially v0→v1 or v1→v2) and %s for targeted block edits. Common fixes: use the current base_revision_id from the document outline, use rewrite_texture when the change spans multiple sections, or use append_block for new paragraphs.", listed, "rewrite_texture", "patch_texture")
+	default:
+		return fmt.Sprintf("You must call %s to produce a document revision before this turn can end. Do not end the turn after calling only non-write tools.", listed)
+	}
 }
 
 func toolLoopMessageRoles(messages []json.RawMessage) []string {

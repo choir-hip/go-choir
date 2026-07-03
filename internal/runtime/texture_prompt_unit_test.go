@@ -638,7 +638,7 @@ func TestInitialTextureToolChoiceOnlyConstrainsMechanicalContinuations(t *testin
 				"scheduled_message_seq": int64(3),
 				"request_source":        "update_coagent",
 			},
-			want: "function:patch_texture",
+			want: "required",
 		},
 	}
 	for _, tc := range tests {

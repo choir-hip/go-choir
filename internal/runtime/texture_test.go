@@ -2409,7 +2409,7 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 		if strings.Contains(string(msg), "initial model-prior Texture revision must change prompt content") {
 			p.sawNoOpError = true
 		}
-		if strings.Contains(string(msg), "Use a structured append_block edit with substantive draft content") {
+		if strings.Contains(string(msg), "call rewrite_texture instead") {
 			p.sawExactInitialPatchGuidance = true
 		}
 	}
@@ -4565,9 +4565,11 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("activation mailbox turn missing durable evidence handle %s: %s", evidenceID, activationMailboxText)
 	}
 	// Fix #2: a grounded integrate wake must write a revision before it can end
-	// or take a terminal delegation action.
-	if got := initialTextureToolChoice(wakeRun); got != "function:patch_texture" {
-		t.Fatalf("initialTextureToolChoice(wake run) = %q, want function:patch_texture", got)
+	// or take a terminal delegation action. The initial tool choice is "required"
+	// (any tool, but must call one) so the model can choose patch_texture for
+	// small deltas or rewrite_texture for full-document drafts.
+	if got := initialTextureToolChoice(wakeRun); got != "required" {
+		t.Fatalf("initialTextureToolChoice(wake run) = %q, want \"required\"", got)
 	}
 	if !strings.Contains(activationMailboxText, `"title":"Release notes"`) {
 		t.Fatalf("activation mailbox turn missing packet source title: %s", activationMailboxText)

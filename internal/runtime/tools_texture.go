@@ -101,7 +101,7 @@ func newPatchTextureTool(rt *Runtime) Tool {
 						"block_id":         map[string]any{"type": "string"},
 						"node_id":          map[string]any{"type": "string"},
 						"after_block_id":   map[string]any{"type": "string"},
-						"text":             map[string]any{"type": "string"},
+						"text":             map[string]any{"type": "string", "description": "For update_block_text: replacement text for a single block. For append_block/insert_block: text for one paragraph or heading block. Do not include multiple paragraphs separated by blank lines — call append_block once per paragraph instead."},
 						"block_type":       map[string]any{"type": "string", "enum": []string{"paragraph", "heading"}},
 						"heading_level":    map[string]any{"type": "integer"},
 						"source_entity_id": map[string]any{"type": "string"},
@@ -707,7 +707,7 @@ func (rt *Runtime) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		return types.Revision{}, fmt.Errorf("base_revision_id is required")
 	}
 	if doc.CurrentRevisionID != baseRevisionID {
-		return types.Revision{}, fmt.Errorf("base_revision_id %q is stale; current revision is %q", baseRevisionID, doc.CurrentRevisionID)
+		return types.Revision{}, fmt.Errorf("base_revision_id %q is stale; the current revision is %q. Use the current revision id as base_revision_id and retry", baseRevisionID, doc.CurrentRevisionID)
 	}
 	currentRevision, err := rt.store.GetRevision(ctx, baseRevisionID, rec.OwnerID)
 	if err != nil {
@@ -1373,7 +1373,7 @@ func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *
 			return fmt.Errorf("update_block_text supports paragraph or heading blocks, got %q", block.Type)
 		}
 		if textureToolTextLooksLikeMarkdownDocument(edit.Text) {
-			return fmt.Errorf("update_block_text is a single-block operation and cannot accept whole-document markdown; use insert_block/append_block for structured sections or rewrite_texture for an audited full-document rewrite")
+			return fmt.Errorf("update_block_text is a single-block operation and cannot accept multi-paragraph or markdown-formatted text. For a full-document draft, call rewrite_texture instead. For new sections, call append_block once per paragraph")
 		}
 		preservedRefs := collectDirectSourceRefNodes(block.Content)
 		block.Content = append(plainTextureToolInlineNodes(cleanTextureToolContent(edit.Text)), preservedRefs...)

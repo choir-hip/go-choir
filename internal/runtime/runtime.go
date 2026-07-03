@@ -1710,6 +1710,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
 		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, WithToolLoopBudget(textureActorToolLoopBudget(rec)))
+		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses("patch_texture", "rewrite_texture"))
+		toolLoopOptions = append(toolLoopOptions, WithRequiredWriteTools("patch_texture", "rewrite_texture"))
 	}
 
 	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
@@ -2413,12 +2415,17 @@ func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
 // protocols. Ordinary first-paint Texture work must see the full Texture tool
 // surface so the actor can choose an honest revision, decision, delegation, or
 // blocker without hidden exact-tool choreography.
+//
+// For update_coagent continuations (worker evidence arrived), the model must
+// produce a document revision but may choose patch_texture for small deltas or
+// rewrite_texture for full-document drafts (especially v0→v1 and v1→v2). The
+// post-turn required-write-tool check ensures a revision actually lands.
 func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return ""
 	}
 	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
-		return "function:patch_texture"
+		return "required"
 	}
 	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
 		return ""

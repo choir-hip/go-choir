@@ -732,3 +732,57 @@ researcher packet count/spacing, and initial Texture run end time to localize
 the 49s (researcher cadence vs initial-run duration). The deployed `68d09cc3`
 change is architecturally correct and CI-green; keep it pending that
 localization rather than reverting on one high-variance run.
+
+## 2026-07-03 - Manual QA Falsifies Clean First-Paint Tool Use After VM Recovery
+
+Move: observe live staging behavior of the Texture first-paint/revise flow for
+`yusefnathanson@me.com` immediately after recovering the operator VM from a
+corrupted Dolt workspace (`state.texture/` discarded and rebuilt; see VM
+recovery log from this session). The persistent document was reset to empty, so
+this is a fresh first-paint stress test.
+
+Evidence from manual QA (prompt: "whats new in ai lately"):
+
+- V1 took ~2 minutes to appear and produced a tool-loop error:
+  `tool loop: required initial tool "patch_texture" did not succeed after 2 retries`.
+- V2 was very short and incomplete.
+- V3 arrived slowly after the tool error and rendered as a single long paragraph
+  with no paragraph/section breaks (all one block of text).
+- The eventual V3 had 9 sources, so worker evidence delivery succeeded; the
+  failure is in the appagent revision write step, not upstream evidence
+  gathering.
+
+Belief-state update: the Texture tool surface is still fragile for the
+fresh-document, first-paint path. Two independent defects are visible:
+
+1. **First-turn `patch_texture` failure loop.** When `update_coagent` triggers the
+   required-initial `patch_texture` obligation, the model is producing tool
+   arguments that fail validation. After two retries the tool loop aborts,
+   wasting the upstream evidence and producing a thin/incomplete revision before
+   a later turn recovers. Likely causes: the structured-edit schema is too
+   easy to violate (e.g., whole-document markdown in `update_block_text`, stale
+   `base_revision_id`, or empty edits), and the error returned to the model does
+   not tell it exactly what to fix on the next attempt.
+2. **One-paragraph wall-of-text formatting.** When `append_block` or
+   `update_block_text` succeeds, the model is putting long prose into a single
+   `paragraph` block. The reader sees a single unbroken paragraph. The fix must
+   be prompt/tool guidance, not silent runtime manipulation of the model's
+   output; the model should be told explicitly to emit multiple paragraph blocks
+   and to use `rewrite_texture` when a whole-document draft is easier.
+
+Observer shift: the cadence problem (June 2026) has a downstream sibling in
+first-paint robustness. Fixing cadence without fixing the revision-tool write
+path will still produce owner-visible failures. The next code change must make
+`patch_texture` more forgiving for first-paint drafts and ensure multi-paragraph
+output.
+
+Protected surfaces for execution: Texture canonical writes, structured document
+BodyDoc, source entity transclusion, appagent revision provenance, Trace event
+emission, tool loop retry semantics, and deployed staging acceptance.
+
+Heresy delta: discovered 2 symptoms (first-turn tool failure, one-paragraph
+formatting); introduced 0; repaired 0 so far.
+
+Remaining variant: localize the exact `patch_texture` validation error by
+inspecting live tool arguments/returns, then patch the tool implementation and
+prompts so the first paint is both successful and multi-paragraph.
