@@ -37,3 +37,39 @@ deploy, and unverified end-to-end publishing.
 
 **Next:** Fix the flaky test, push, monitor CI. In parallel, trigger
 workflow_dispatch to re-deploy staging.
+
+## Pass 0b — 2026-07-03 03:15 EDT
+
+**Conjecture:** Two substrate-level hypotheses (H1: race-detector CI
+model wrong, H2: TLA+ specs stale) should be explicit in the mission so
+they're available if the first-pass fix fails.
+
+**Move:** construct (add substrate hypotheses + escalation rule to
+mission doc)
+
+**Expected ΔV:** 0 (new conjectures proposed, not decided)
+
+**Actual ΔV:** +2 (V increased from 5 to 7 — but this is discovery, not
+zero progress. The mission now carries the owner's substrate hypotheses
+explicitly, which changes the route if C2 fails.)
+
+**Conjectures recorded:**
+- H1: Race-detector CI model wrong for current architecture — PROPOSED
+  (activate if C2 falsified)
+- H2: TLA+ specs don't match current architecture — PROPOSED (activate
+  if TLA+ check fails or stale invariants found)
+
+**Receipts:**
+- Owner input: "simplify. the race detector model, that is something to
+  review. tla+ was written some time ago, it may not be ready and stable
+  and well designed and well formed for the current architecture. the
+  probability it is seems drawn from a sparse base distribution."
+
+**Open edges:**
+- H1 and H2 are proposed but not active. They activate on C2 falsification
+  or TLA+ failure respectively.
+- Escalation rule: if C2 fails, shift from "fix this test" to "is this
+  testing approach correct?" — simplify, not patch.
+
+**Next:** Fix the flaky test, push, monitor CI. In parallel, trigger
+workflow_dispatch to re-deploy staging. If C2 falsified, activate H1.
