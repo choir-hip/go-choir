@@ -19,7 +19,8 @@ admire, checkpoint early, or create a separate control language.
 4. `AGENTS.md` (repo-level agent operating contract)
 5. `docs/agent-product-doctrine.md` (product architecture rules)
 6. Child definition: `docs/definitions/pass-2-completion-definition-2026-07-03.md`
-7. Codex review: `docs/reviews/promotion-gate-codex-review-2026-07-03.md`
+7. Child definition: `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md`
+8. Codex review: `docs/reviews/promotion-gate-codex-review-2026-07-03.md`
 
 When sources conflict, this document governs execution. When this document is
 silent, the suite paradoc governs. When both are silent, escalate to human.
@@ -898,6 +899,7 @@ run_checkpoint_and_resumption_state:
     - internal/runtime: still present, deletion pending later Mission A work
     - cmd/sandbox: not yet renamed to cmd/autoputer
     - active refreshed guest health: failed in deploy job 85072352680, scoped to Mission C
+    - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md: opened for Mission C boot-readiness investigation
   what_shipped:
     - Promotion gate spec (Pass 1, merged to main)
     - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 merged)
@@ -931,12 +933,13 @@ run_checkpoint_and_resumption_state:
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
   highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after ordinary guest image update
-  next_executable_probe: Open Pass 3 definition for Mission C active-refresh/autoputer boot readiness; keep promotion encoding behind Codex reservation settlement.
+  next_executable_probe: Execute Pass 3 child definition for Mission C active-refresh/autoputer boot readiness; first distinguish runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 and Pass 9
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8, Pass 9, and Pass 10
+    - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
     - CI run 28683693425 (packaging fix; deploy job exposed active refresh failure)
@@ -951,6 +954,9 @@ run_checkpoint_and_resumption_state:
 
 - `docs/definitions/pass-2-completion-definition-2026-07-03.md` — specific
   completion criteria for Pass 2 (PR #42 merge gate).
+- `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md` — specific
+  investigation and completion criteria for Mission C active refresh / autoputer boot readiness.
+
 
 ---
 

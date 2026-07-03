@@ -398,3 +398,28 @@ Mission D (CI/Verification Guard):
 
 **Next:** Keep active computer refresh diagnostic, not a hard deploy blocker, until Mission C settles the autoputer boot contract. Preserve the refresh evidence in logs, keep host service health as the deploy gate, and update the definition document so `/goal` resumes at the real next boot/autoputer work instead of re-merging PR #42.
 
+## Pass 10 — 2026-07-03 (Mission C: Active Refresh Boot-Readiness Definition Opened)
+
+**Conjecture:** The next valid Mission C work is not promotion encoding or renaming; it is proving why refreshed active computers do not become externally healthy on `:8085` after ordinary guest image deploys.
+
+**Move:** Created `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md` as the child definition for the active-refresh/autoputer boot-readiness probe.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN, but their next evidence class is now precise: runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses must be distinguished before a fix lands.
+- C-C3/C-C4 remain behind Codex reservations and must not start until boot readiness and review reservations settle.
+- C-D1 remains supported on main CI; active refresh is tracked as Mission C product-path debt, not Pass 2 extraction debt.
+
+**Actual ΔV:**
+- Pass 3 authority document opened.
+- Super definition updated so `/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md` resumes at Pass 3 instead of stale PR #42 merge work.
+- No runtime behavior changed by this pass.
+
+**Evidence:**
+- `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md`
+- Super definition run checkpoint references Pass 3 as the next executable probe.
+- Prior evidence retained: deploy job `85072352680`, CI runs `28683693425` and `28684139979`.
+
+**Open decisions:** None. Human approval is required before deleting/resetting active user persistent data or changing promotion/route authority.
+
+**Next:** Execute Pass 3: collect or add diagnostics that distinguish whether active refresh fails because the runtime does not listen, persistent state blocks startup, guest networking is unreachable, `/health` returns non-200, or the guest enters emergency mode.
+

@@ -254,8 +254,8 @@ I act as orchestrator, spawning subagents for each mission track.
 - Evidence: PR #42 merged as `a6f11b7dbb64c07677a767c19c00e47cf87fdd54`; main CI run `28684139979` green.
 - Known limitation: deploy-time active computer refresh still fails guest health on `:8085`; host services were healthy. This is Mission C boot-readiness work, not Pass 2 extraction work.
 
-### Pass 3+
-- Open Mission C active-refresh/autoputer boot readiness definition before promotion encoding.
+### Pass 3 (open)
+- Mission C: execute `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md` to settle active-refresh/autoputer boot readiness before promotion encoding.
 - Continue remaining Mission A extraction/deletion only after preserving the boot-readiness boundary.
 - Rewrite/model-check wire pipeline in Mission B once actor/runtime deletion risk is bounded.
 - Address Codex reservations before moving promotion logic from `internal/runtime` to `internal/autoputer/promotion`.
