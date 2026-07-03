@@ -273,14 +273,14 @@ observation of architecture history):
 variant (conjecture descent) V: count conjectures about the pipeline's
 stability and publishing capability. D1/D2/D3 are definitions, not
 conjectures — they don't count toward V but they inform move selection.
-Current: 4.
+Current: 3.
 - C1: The flaky test is a test bug (event polling race), not a production
   data race (SUPPORTED — D1 audit confirmed 8 instances across 4 files;
   local -race tests pass with fix)
-- C2: Fixing the event polling in the test makes CI green (TESTING —
-  commit 2dcee27e pushed, CI run triggered, local -race passes 3x)
+- C2: Fixing the event polling in the test makes CI green (SUPPORTED —
+  CI run 28644141785: all 21 jobs passed including race detector shard 2)
 - C3: Staging VMs can be recovered by re-running the deploy (UNDICIDED —
-  workflow_dispatch deploy in progress)
+  workflow_dispatch deploy triggered, monitoring)
 - C4: Sourcecycled is cycling and dispatching processor runs on staging
   (STRUCTURALLY SUPPORTED — sourcecycled health is ok, but runtime is
   down so dispatch may be failing)
@@ -288,7 +288,7 @@ Current: 4.
   (UNDICIDED — requires healthy runtime + model calls)
 Target: 0.
 
-budget: 15-25 passes. Pass 1 spent. 14-24 remaining. Solvent.
+budget: 15-25 passes. Pass 2 spent. 13-23 remaining. Solvent.
 
 D3 findings: canonical docs are current; historical mission docs have
 appropriate stale vocabulary. No HIGH-severity documentation issues. D3
@@ -324,21 +324,19 @@ debt — these are definitions, not new findings, but recording them is
 epistemic progress).
 
 position / live conjectures / open edges:
-Pass 1 complete. The flaky test fix is pushed (commit 2dcee27e) with a
-shared `waitForEvents` helper applied to all 8 HIGH-risk instances of
-the event-polling race pattern. D1 confirmed the pattern is systemic —
-this is not a one-off fix but a structural test-infrastructure repair.
-D3 documentation critique found canonical docs are current; no
-releveling needed. Staging redeploy is in progress via workflow_dispatch.
-Two CI runs are active: the workflow_dispatch (pre-fix code) and the
-push-triggered run (with fix). The open edges are C2 (will CI pass?)
-and C3 (will staging VMs recover?).
+Pass 2 complete. CI is fully green — all 21 jobs passed including race
+detector shard 2 (the previous blocker). C2 is SUPPORTED. The test fix
+(commit 2dcee27e) used a shared `waitForEvents` helper applied to all
+8 HIGH-risk instances. D1 confirmed the pattern was systemic; the fix
+addresses it structurally rather than patching individually. D3 found
+canonical docs are current. A workflow_dispatch has been triggered to
+force staging deploy (the test-only commit correctly skipped deploy).
+The open edge is C3: will staging VMs recover?
 
-next move: Monitor both CI runs. If the fix commit CI passes, C2 is
-SUPPORTED. If the workflow_dispatch deploy recovers staging VMs, C3 is
-SUPPORTED. Then move to C4/C5: verify sourcecycled is dispatching and
-the agent pipeline is producing articles. If C2 is FALSIFIED (another
-race test flakes), shift to D1: review the race-detector CI model.
+next move: Monitor the workflow_dispatch deploy. If staging VMs recover,
+C3 is SUPPORTED and we move to C4/C5 (Wire publishing verification).
+If VMs fail again, investigate the boot failure — may need to increase
+the VM refresh timeout or check for OG migration startup issues.
 
 ledger file: `docs/mission-universal-wire-stabilization-v1.ledger.md`
 

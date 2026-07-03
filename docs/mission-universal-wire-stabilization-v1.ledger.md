@@ -177,3 +177,28 @@ TESTING — pushed but CI not yet verified)
 **Next:** Monitor CI for the fix commit. Monitor staging deploy. If CI
 green, C2 is SUPPORTED. If staging recovers, C3 is SUPPORTED. Then move
 to C4/C5 (Wire publishing verification).
+
+## Pass 2 — 2026-07-03 04:15 EDT
+
+**Conjecture C2:** Fixing the event polling in the test makes CI green.
+
+**Move:** settle (monitor CI, verify all jobs pass)
+
+**Expected ΔV:** -1 (C2 SUPPORTED)
+
+**Actual ΔV:** -1 (C2 SUPPORTED — CI run 28644141785: all 21 jobs passed
+including race detector shard 2, which was the previous blocker)
+
+**Conjectures decided:**
+- C2: SUPPORTED — all 21 CI jobs passed. Race detector shard 2 passed
+  (10m2s). The deploy job was correctly skipped (test-only commit).
+  Workflow_dispatch triggered to force staging deploy.
+
+**Receipts:**
+- CI run 28644141785: all 21 jobs success
+- Race Detector: success (10m2s) — previously failed at 9m25s
+- Deploy: skipped (test-only changes don't trigger deploy)
+- Workflow_dispatch: triggered for staging recovery
+
+**Next:** Monitor workflow_dispatch deploy for C3. If staging recovers,
+move to C4/C5 (Wire publishing verification).
