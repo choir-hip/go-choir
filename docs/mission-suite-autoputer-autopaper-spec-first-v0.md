@@ -83,8 +83,8 @@ The suite has one **central spec mission** and three **implementation missions**
 - C-S1: `actor_protocol.tla` holds under object-graph semantics. (UNDECIDED)
 - C-S2: `wire_pipeline.tla` captures the sourcecycled → processor → Texture → publish → edition flow. (UNDECIDED)
 - C-S3: `autoputer_lifecycle.tla` reproduces the current boot failure as a counterexample. (UNDECIDED)
-- **C-S4 (gate):** `promotion_protocol.tla` models active/candidate/route/rollback/health-window and checks green against the intended autoputer protocol. (UNDECIDED)
-- **C-S5 (gate):** `promotion_protocol.tla` encodes `NoStaleCommit`, `ApprovalGate`, `NoTornOutcome`, `RouteConsistency`, and `HealthWindowReversible`. (UNDECIDED)
+- **C-S4 (gate):** `promotion_protocol.tla` models active/candidate/route/rollback/health-window and checks green against the intended autoputer protocol. (**SUPPORTED** — CI run `28648508586`, 826 states, no errors)
+- **C-S5 (gate):** `promotion_protocol.tla` encodes `NoStaleCommit`, `ApprovalGate`, `NoTornOutcome`, `RouteConsistency`, `CandidateIsolation`, `HealthWindowReversible`, `ConfirmedLedgersApplied`, `AbortedLedgersRolledBack`, `CertificateCompleteness`, and liveness `EveryCommittedPromotionSettles` / `SystemProgress`. (**SUPPORTED**)
 
 ---
 
@@ -165,8 +165,8 @@ The suite has one **central spec mission** and three **implementation missions**
 - Document TLA+ review findings.
 
 **Conjectures:**
-- C-D1: CI passes after each mission commit. (TESTING)
-- C-D2: TLA+ specs model-check in CI. (UNDECIDED)
+- C-D1: CI passes after each mission commit. (**SUPPORTED**)
+- C-D2: TLA+ specs model-check in CI. (**SUPPORTED**)
 - C-D3: Race detector model is correctly scoped. (SUPPORTED from predecessor)
 
 ---
@@ -218,6 +218,7 @@ This is the spec-centered version of the Landing Loop.
 V = count of undecided conjectures across the suite.
 
 Initial: 5 (S) + 3 (A) + 3 (B) + 4 (C) + 3 (D) = **18 conjectures**.
+Current: 3 (S) + 3 (A) + 3 (B) + 4 (C) + 2 (D) = **14 conjectures remaining**. (C-S4, C-S5, C-D1, C-D2 decided.)
 Target: 0.
 
 Each pass must decide at least one conjecture or discover a new conjecture with evidence. A pass that only adds code without changing the spec or deciding a conjecture is not descent.
@@ -242,19 +243,19 @@ Each pass must decide at least one conjecture or discover a new conjecture with 
 
 I act as orchestrator, spawning subagents for each mission track.
 
-### Pass 1 (now)
-- **Spawn Mission S subagent (promotion gate):** review current `specs/promotion_protocol.tla` and `docs/choir-promotion-protocol-conjecture-2026-06-11.md`; write the new `specs/promotion_protocol.tla` that models the autoputer computer ontology, ledger split, route identity, and health window. This is the highest priority.
-- Spawn Mission A subagent: extract the two model-policy helper functions (completes State 2).
-- Spawn Mission D subagent: verify current CI command and TLA+ CI setup.
+### Pass 1 (complete)
+- **Mission S subagent (promotion gate):** `specs/promotion_protocol.tla` rewritten and model-checked green in CI run `28648508586`. The gate is established.
+- Default decisions recorded and old specs deleted.
 
-### Pass 2
-- Model-check the new `promotion_protocol.tla` with TLC. If it does not check green, iterate the spec before any code changes.
-- Merge Mission A helper extraction into main.
+### Pass 2 (now)
+- Spawn Mission S subagent: draft `actor_protocol.tla` and `autoputer_lifecycle.tla`; model-check both.
+- Spawn Mission A subagent: extract the two model-policy helper functions (completes State 2).
 - Spawn Mission A subagent: extract API handlers (State 3 completion).
-- Spawn Mission S subagent: draft `actor_protocol.tla` and `autoputer_lifecycle.tla`.
-- Spawn Mission C subagent: begin rename scaffolding (flake.nix package names, env vars).
+- Spawn Mission C subagent: begin rename scaffolding (flake.nix package names, env vars) in parallel with Mission A.
+- Keep Mission D running as guard.
 
 ### Pass 3+
+- Merge Mission A helper/API handler extractions into main.
 - Continue extraction/deletion in Mission A.
 - Model-check new specs in Mission S.
 - Begin wire pipeline extraction in Mission B once Mission A is far enough.
