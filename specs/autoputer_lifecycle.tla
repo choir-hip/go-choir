@@ -107,11 +107,17 @@ RuntimeInitFail ==
 --------------------------------------------------------------------------
 (* Repair the runtime substrate: migrate from stale runtime to actor       *)
 (* runtime + object graph. This is the fix that makes the boot path green.  *)
+(* If the VM was failed, repairing the substrate reboots it from scratch.    *)
 
 RepairRuntime ==
   /\ runtimeState = "stale"
   /\ runtimeState' = "ok"
-  /\ UNCHANGED << phase, portBound, attempts, bootCount >>
+  /\ IF phase = "failed"
+       THEN /\ phase' = "booting"
+            /\ attempts' = 0
+       ELSE /\ phase' = phase
+            /\ attempts' = attempts
+  /\ UNCHANGED << portBound, bootCount >>
 
 --------------------------------------------------------------------------
 (* The service binds to port 8085.                                         *)
