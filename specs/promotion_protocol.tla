@@ -303,11 +303,11 @@ Next ==
 (* Invariants: what must never be true on any reachable state.               *)
 
 (* The active base of a promotion's parent must match the promotion base    *)
-(* at the moment of commit.                                                   *)
+(* at the moment of commit. We express this as an action property because the *)
+(* active computer continues to move after a promotion is committed.           *)
 NoStaleCommit ==
-  \A c \in CandidateComps :
-    promoStatus[c] \in CommittedFamily
-      => promoBase[c] = activeBase[promoActive[c]]
+  [][\A c \in CandidateComps :
+       Commit(c) => promoBase[c] = activeBase[promoActive[c]]]_vars
 
 (* Nothing becomes route-visible without owner approval.                      *)
 ApprovalGate ==

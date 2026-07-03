@@ -207,3 +207,32 @@ Mission D (CI/Verification Guard):
 
 **Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
 
+---
+
+## Pass 5 — 2026-07-03 (Mission S: Promotion Protocol Gate — TLC iteration 4)
+
+**Conjecture:** The fourth CI TLC run revealed that the `NoStaleCommit` state invariant was too strong: it required the active base to stay equal to the promotion base forever after commit, but the active computer continues to move. The freshness check must be a property of the commit action, not a state invariant.
+
+**Move:** correct (redefine `NoStaleCommit` as an action property `[][\A c : Commit(c) => promoBase[c] = activeBase[promoActive[c]]]_vars` and move it from INVARIANTS to PROPERTIES in the `.cfg`)
+
+**Expected ΔV:** Resolve the fourth TLC error and get closer to a green model check.
+
+**Actual ΔV:**
+- CI run `28648346786` executed TLC and reported:
+  ```
+  Error: Invariant NoStaleCommit is violated.
+  ```
+  The counterexample trace showed `Commit` at base 0, then `MoveActiveTail` moving the active base to 1, which broke the state invariant.
+- Root cause: `NoStaleCommit` was a state invariant requiring `promoBase[c] = activeBase[promoActive[c]]` for all committed promotions. The active computer's base is allowed to move after commit, so the invariant is only meaningful at the moment of commit.
+- Fixed by redefining `NoStaleCommit` as an action property and moving it from INVARIANTS to PROPERTIES in `specs/promotion_protocol.cfg`.
+
+**Conjecture status update:**
+- C-S4: still TESTING (pending fifth CI TLC run after fix).
+- C-S5: still TESTING (pending fifth CI TLC run after fix).
+- C-D1: CI overall failed because of the TLA+ job; will re-evaluate after fix.
+- C-D2: still UNDECIDED (pending green TLC run).
+
+**Open decisions:** None.
+
+**Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
+
