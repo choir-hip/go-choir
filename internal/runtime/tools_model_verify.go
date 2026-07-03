@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 type verifyModelCapabilityArgs struct {
