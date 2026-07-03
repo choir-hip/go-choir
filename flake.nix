@@ -371,6 +371,7 @@
           internalDirs = [
             "internal/actor"
             "internal/actorruntime"
+            "internal/apihandler"
             "internal/agentprofile"
             "internal/buildinfo"
             "internal/events"
