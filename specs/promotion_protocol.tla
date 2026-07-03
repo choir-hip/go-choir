@@ -119,7 +119,7 @@ ForkCandidate(c, a) ==
   /\ poisoned' = [poisoned EXCEPT ![c] = FALSE]
   /\ healthWindow' = [healthWindow EXCEPT ![c] = "open"]
   /\ ledgerState' = [ledgerState EXCEPT ![c] = [l \in Ledgers |-> "none"]]
-  /\ UNCHANGED <<activeBase, route>>
+  /\ UNCHANGED <<activeBase, candidateParent, route>>
 
 --------------------------------------------------------------------------
 (* Per-ledger prepare: durable, idempotent, inert until commit.             *)

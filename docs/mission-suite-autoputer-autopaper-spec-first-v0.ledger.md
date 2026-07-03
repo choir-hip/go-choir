@@ -112,3 +112,43 @@ Mission D (CI/Verification Guard):
 - The `EveryCommittedPromotionSettles` liveness property deliberately excludes poisoned promotions; forward recovery (a new promotion) is outside the single-promotion model.
 
 **Next:** Commit Pass 1, push to `origin/main`, and monitor the `tla-model-check` CI job. If TLC reports errors, iterate as Pass 2 before any code changes. If TLC passes, the promotion gate is established and Mission C promotion encoding can begin.
+
+---
+
+## Pass 2 — 2026-07-03 (Mission S: Promotion Protocol Gate — TLC iteration)
+
+**Conjecture:** The first CI TLC run of the new `promotion_protocol.tla` revealed a missing `UNCHANGED` variable. The fix is a pure spec correction; no code changes.
+
+**Move:** correct (add `candidateParent` to the `UNCHANGED` tuple of `ForkCandidate`)
+
+**Expected ΔV:** Resolve the first TLC error and get closer to a green model check.
+
+**Actual ΔV:**
+- CI run `28647787006` executed TLC and reported:
+  ```
+  Error: Successor state is not completely specified by action ForkCandidate
+  of the next-state relation. The following variable is not assigned: candidateParent.
+  ```
+- Root cause: `ForkCandidate` did not list `candidateParent` in its `UNCHANGED` tuple.
+- All other `UNCHANGED` tuples were reviewed and found complete.
+- Fixed in `specs/promotion_protocol.tla` by adding `candidateParent` to `UNCHANGED` in `ForkCandidate`.
+
+**Evidence:**
+- CI job log: `gh api repos/choir-hip/go-choir/actions/jobs/84958403708/logs`
+- TLC error state trace shows the initial state and the first application of `ForkCandidate`.
+- The error is a syntax/semantics issue, not a protocol design flaw.
+
+**Conjecture status update:**
+- C-S4: still TESTING (pending second CI TLC run after fix).
+- C-S5: still TESTING (pending second CI TLC run after fix).
+- C-D1: CI overall failed because of the TLA+ job; will re-evaluate after fix.
+- C-D2: still UNDECIDED (pending green TLC run).
+
+**Open decisions:** None.
+
+**Risks:**
+- Additional TLC errors may appear after this fix. The spec is still in the CI verification loop.
+- Pushing spec fixes to `main` while iterating is acceptable because the Go test gates are green; the only failing gate is TLA+ model-check, which is the intended verification target for Mission S.
+
+**Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
+
