@@ -2954,3 +2954,23 @@ nodes:
   - news-live-pr-merge-model-default-v0
   enables: []
   sources: []
+- id: universal-wire-agent-pipeline-v1
+  title: Universal Wire Agent Pipeline v1.1
+  path: docs/mission-universal-wire-agent-pipeline-v1.md
+  ledger: ''
+  status: settled
+  kind: paradoc
+  depends_on: []
+  enables:
+  - universal-wire-stabilization-v1
+  sources: []
+- id: universal-wire-stabilization-v1
+  title: Universal Wire Stabilization v1
+  path: docs/mission-universal-wire-stabilization-v1.md
+  ledger: docs/mission-universal-wire-stabilization-v1.ledger.md
+  status: active
+  kind: paradoc
+  depends_on:
+  - universal-wire-agent-pipeline-v1
+  enables: []
+  sources: []
