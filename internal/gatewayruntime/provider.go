@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -69,7 +68,7 @@ func (p *Provider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
 
-	llmConfig := runtime.ResolvedLLMConfigFromMetadata(task.Metadata)
+	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(task.Metadata)
 	providerName := firstNonEmpty(llmConfig.Provider, p.llmProvider)
 	model := firstNonEmpty(llmConfig.Model, p.llmModel)
 	reasoning := firstNonEmpty(llmConfig.ReasoningEffort, p.reasoningEffort)
@@ -82,7 +81,7 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit prov
 		Messages: []message{
 			{Role: "user", Content: []block{{Type: "text", Text: task.Prompt}}},
 		},
-		MaxTokens: runtime.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
+		MaxTokens: provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, task.AgentProfile),
 		Stream:    true,
 	}
 

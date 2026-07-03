@@ -585,7 +585,7 @@ func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMe
 		ReasoningEffort: m.llmConfig.ReasoningEffort,
 		System:          system,
 		Messages:        []json.RawMessage{msg},
-		MaxTokens:       MaxInteractiveOutputTokensForSelection(m.llmConfig, agentProfileForRun(m.rec)),
+		MaxTokens:       provideriface.MaxInteractiveOutputTokensForSelection(m.llmConfig, agentProfileForRun(m.rec)),
 	})
 	if err != nil {
 		return runMemoryLLMCompaction{}, err
