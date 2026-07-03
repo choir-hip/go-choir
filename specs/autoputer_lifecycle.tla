@@ -209,9 +209,9 @@ RecoveryBounded ==
 HibernationSafe ==
   phase = "hibernating" => bootCount > 0
 
-(* A failed VM is not stuck forever: it can recover if attempts remain.    *)
+(* A failed VM can recover while attempts remain.                              *)
 NoStuckFailure ==
-  phase = "failed" => attempts < MaxAttempts
+  (phase = "failed" /\ attempts < MaxAttempts) => ENABLED Recover
 
 --------------------------------------------------------------------------
 (* Liveness: what must eventually happen.                                   *)
