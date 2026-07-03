@@ -1,31 +1,62 @@
-# Super Definition: Autoputer / Autopaper Spec-First Suite
+# Autoputer / Autopaper Spec-First Suite
 
-**Status:** live semantic authority  
-**Date:** 2026-07-03  
-**Governed by:** `definitions` skill  
-**Scope:** `docs/mission-suite-autoputer-autopaper-spec-first-v0.md` and all child missions (S, A, B, C, D)  
-**Overnight production:** this document is the root authority for autonomous agents continuing the suite while the human is away.
+## Harness Invocation Semantics
 
----
+```text
+/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md
+```
 
-## Executive Determined State
+Read this document as semantic authority. Execute it autonomously until its
+completion semantics are satisfied with named evidence, or until a sharply
+evidenced escalation/blocker/supersession condition is met. Do not summarize,
+admire, checkpoint early, or create a separate control language.
 
-### Settled claims
+## Source Authority Order
 
-- **Mission thesis:** TLA+ is the spec. Code is a refinement of the compiled, model-checked spec.
-- **Predecessor settled:** `docs/mission-autoputer-before-autopaper-v0.md` was the direct predecessor; it is now superseded by this suite.
-- **Promotion gate established:** `specs/promotion_protocol.tla` checks green in CI (run `28648508586`).
-- **Codex review completed:** `docs/reviews/promotion-gate-codex-review-2026-07-03.md` — verdict: approve with reservations.
-- **Pass 2 in flight:** branch `mission-a-api-handler-extraction`, PR #42, contains Mission S (actor + lifecycle specs), Mission A (helper + API extraction), Mission D (review artifact).
+1. This document (definition graph + determined state + completion semantics)
+2. `docs/mission-suite-autoputer-autopaper-spec-first-v0.md` (suite paradoc)
+3. `docs/computer-ontology.md` (product ontology)
+4. `AGENTS.md` (repo-level agent operating contract)
+5. `docs/agent-product-doctrine.md` (product architecture rules)
+6. Child definition: `docs/definitions/pass-2-completion-definition-2026-07-03.md`
+7. Codex review: `docs/reviews/promotion-gate-codex-review-2026-07-03.md`
 
-### Contested / open nodes
+When sources conflict, this document governs execution. When this document is
+silent, the suite paradoc governs. When both are silent, escalate to human.
 
-- **C-S1:** `actor_protocol.tla` safety invariants — pending PR #42 CI.
-- **C-S3:** `autoputer_lifecycle.tla` reproduces boot failure — pending PR #42 CI.
-- **C-A2:** `cmd/sandbox/main.go` builds using only actor runtime + extracted helpers — pending PR #42 CI.
-- **C-C1/C-C2/C-C3/C-C4:** Autoputer rename/promotion/capsule — not yet started.
+## Real Artifact / Object Of Work
 
----
+The real artifacts are:
+
+- **TLA+ specs** in `specs/` that model the current architecture (actor
+  runtime, object graph, autoputer lifecycle, promotion protocol, wire
+  pipeline). Each spec must compile in TLC and check green against its `.cfg`.
+- **Go code** that is a mechanical refinement of those specs: `internal/runtime`
+  deleted, actor runtime as sole substrate, `cmd/sandbox` renamed to
+  `cmd/autoputer`, promotion protocol encoded in Go.
+- **Staging deployment** that boots the renamed autoputer, publishes a wire
+  edition end-to-end, and demonstrates candidate → verify → approve → promote →
+  health → confirm.
+
+The object is not a plan, a review, a set of commits, or a branch. Those are
+projections. The object is the spec-validated, staging-proven system.
+
+## Mission Purpose And Non-Purpose
+
+**Purpose:** Redefine TLA+ specifications to describe the system as it is now
+(actor runtime + object graph + autoputer + capsules + wire), then refactor Go
+code as a mechanical refinement of those specs so the autoputer boots cleanly,
+the wire pipeline publishes end-to-end, and the system is ready for scale-up.
+
+**Non-purpose:**
+
+- This mission does not redesign the product ontology. `autoputer` and
+  `autopaper` are already defined by the owner.
+- This mission does not add new product features. It aligns code with specs.
+- This mission does not preserve compatibility shims. Spec-first means
+  fix-forward, not dual-write.
+- This mission does not treat spec writing as the deliverable. Specs are the
+  authority; code refinement and staging proof are the deliverable.
 
 ## Definition Graph
 
@@ -57,6 +88,9 @@ observables:
 execution_effect:
   - All new code uses the term `autoputer` in package/binary names where appropriate.
   - `sandbox` is treated as a legacy term and renamed incrementally.
+formalization:
+  status: done
+  note: specs/promotion_protocol.tla models the autoputer promotion lifecycle.
 settlement:
   rule: Defined by owner in docs/computer-ontology.md and suite paradoc.
   settled_by: human
@@ -120,6 +154,9 @@ observables:
 execution_effect:
   - Code changes must match the spec.
   - Specs are deleted only if replaced by a more precise spec.
+formalization:
+  status: done
+  note: TLA+ specs are themselves the formalization; TLC is the model checker.
 settlement:
   rule: Spec-first workflow in suite paradoc.
   settled_by: human
@@ -179,7 +216,7 @@ examples:
   - Staging deploy reports the correct SHA and passes health checks.
 counterexamples:
   - A commit is merged while a CI job is pending.
-  - A CI job is bypassed because "it is just docs" (docs-only commits follow the docs truth checker workflow).
+  - A CI job is bypassed because "it is just docs".
   - A race-detector failure is ignored.
 observables:
   - `gh pr checks <n>` returns pass.
@@ -195,74 +232,37 @@ settlement:
     - Emergency break-glass procedure.
 ```
 
-### 6. Status: `conjecture-supported`
+### 6. Boundary: `protected-surfaces`
 
 ```yaml
-id: conjecture-supported
-kind: status
+id: protected-surfaces
+kind: boundary
 status: settled
-source: observed
-term: conjecture supported
-definition: A conjecture (e.g., C-S4) is SUPPORTED when there is observed evidence that satisfies its acceptance criteria and no live contradictions.
+source: user-stated
+term: protected surfaces
+definition: Subsystems that must not be changed without a spec update and explicit human authority. Includes Texture canonical writes, corpusd sync contract, source entity graph, promotion/rollback, VM lifecycle, auth/session, gateway/provider calls.
 non_definition:
-  - "I believe it is true" is not SUPPORTED.
-  - "It passed once" is not SUPPORTED if the CI has since changed.
-  - "A subagent said so" is not SUPPORTED unless the subagent's evidence is verifiable.
+  - Protected surfaces are not "hard to change"; they are authority-bound.
+  - A protected surface cannot be bypassed by a subagent.
 examples:
-  - C-S4: `promotion_protocol.tla` checks green in CI run 28648508586.
-  - C-D2: TLA+ specs model-check in CI for the current commit.
+  - Promotion logic is updated only after promotion_protocol.tla is green.
+  - Texture canonical writes require a spec change.
 counterexamples:
-  - A conjecture is marked SUPPORTED based on a local test run.
-  - A conjecture is marked SUPPORTED while a related CI job is red.
+  - A subagent patches a promotion bug without updating the spec.
+  - A gateway provider call is rerouted without approval.
 observables:
-  - CI run ID and job result.
-  - Spec file and .cfg.
-  - Ledger entry with evidence.
+  - PR touches protected files.
+  - Spec update precedes code change.
+  - Human review is requested.
 execution_effect:
-  - SUPPORTED conjectures reduce the suite variant count.
-  - New work can build on SUPPORTED conjectures.
+  - Red/black ceremony required for protected surfaces.
+  - Subagents must escalate before touching these.
 settlement:
-  rule: Evidence must be observed and verifiable.
-  settled_by: orchestrator
-  invalidation_triggers:
-    - New CI failure contradicts the claim.
-    - Spec is weakened after the claim.
+  rule: AGENTS.md mutation classes + suite paradoc.
+  settled_by: human
 ```
 
-### 7. Status: `conjecture-testing`
-
-```yaml
-id: conjecture-testing
-kind: status
-status: settled
-source: observed
-term: conjecture testing
-definition: A conjecture is TESTING when the work to decide it is in progress but has not yet produced the required evidence.
-non_definition:
-  - TESTING is not a placeholder for "probably true".
-  - TESTING must have an observable test in progress.
-examples:
-  - C-S1 while PR #42 CI is running.
-  - C-A2 while helper/API extraction is being compiled.
-counterexamples:
-  - A conjecture is left TESTING with no active work.
-  - A conjecture is marked TESTING to avoid deciding it.
-observables:
-  - Active PR/branch with related changes.
-  - CI job running.
-  - Subagent report with evidence.
-execution_effect:
-  - TESTING conjectures consume the suite budget.
-  - They must be decided (SUPPORTED or REFUTED) within the pass budget.
-settlement:
-  rule: Must have an active, observable test.
-  settled_by: orchestrator
-  invalidation_triggers:
-    - Test stalls without evidence.
-    - Test is abandoned.
-```
-
-### 8. Object: `mission`
+### 7. Object: `mission`
 
 ```yaml
 id: mission
@@ -293,37 +293,7 @@ settlement:
   settled_by: human
 ```
 
-### 9. Boundary: `protected-surfaces`
-
-```yaml
-id: protected-surfaces
-kind: boundary
-status: settled
-source: user-stated
-term: protected surfaces
-definition: Subsystems that must not be changed without a spec update and explicit human authority. Includes Texture canonical writes, corpusd sync contract, source entity graph, promotion/rollback, VM lifecycle, auth/session, gateway/provider calls.
-non_definition:
-  - Protected surfaces are not "hard to change"; they are authority-bound.
-  - A protected surface cannot be bypassed by a subagent.
-examples:
-  - Promotion logic is updated only after promotion_protocol.tla is green.
-  - Texture canonical writes require a spec change.
-counterexamples:
-  - A subagent patches a promotion bug without updating the spec.
-  - A gateway provider call is rerouted without approval.
-observables:
-  - PR touches protected files.
-  - Spec update precedes code change.
-  - Human review is requested.
-execution_effect:
-  - Red/black ceremony required for protected surfaces.
-  - Subagents must escalate before touching these.
-settlement:
-  rule: AGENTS.md mutation classes + suite paradoc.
-  settled_by: human
-```
-
-### 10. Operator: `orchestrate`
+### 8. Operator: `orchestrate`
 
 ```yaml
 id: orchestrate
@@ -353,6 +323,73 @@ execution_effect:
 settlement:
   rule: Suite orchestration plan.
   settled_by: human
+```
+
+### 9. Status: `conjecture-supported`
+
+```yaml
+id: conjecture-supported
+kind: status
+status: settled
+source: observed
+term: conjecture supported
+definition: A conjecture (e.g., C-S4) is SUPPORTED when there is observed evidence that satisfies its acceptance criteria and no live contradictions.
+non_definition:
+  - "I believe it is true" is not SUPPORTED.
+  - "It passed once" is not SUPPORTED if the CI has since changed.
+  - "A subagent said so" is not SUPPORTED unless the subagent's evidence is verifiable.
+examples:
+  - C-S4: promotion_protocol.tla checks green in CI run 28648508586.
+  - C-D2: TLA+ specs model-check in CI for the current commit.
+counterexamples:
+  - A conjecture is marked SUPPORTED based on a local test run.
+  - A conjecture is marked SUPPORTED while a related CI job is red.
+observables:
+  - CI run ID and job result.
+  - Spec file and .cfg.
+  - Ledger entry with evidence.
+execution_effect:
+  - SUPPORTED conjectures reduce the suite variant count.
+  - New work can build on SUPPORTED conjectures.
+settlement:
+  rule: Evidence must be observed and verifiable.
+  settled_by: orchestrator
+  invalidation_triggers:
+    - New CI failure contradicts the claim.
+    - Spec is weakened after the claim.
+```
+
+### 10. Status: `conjecture-testing`
+
+```yaml
+id: conjecture-testing
+kind: status
+status: settled
+source: observed
+term: conjecture testing
+definition: A conjecture is TESTING when the work to decide it is in progress but has not yet produced the required evidence.
+non_definition:
+  - TESTING is not a placeholder for "probably true".
+  - TESTING must have an observable test in progress.
+examples:
+  - C-S1 while PR #42 CI is running.
+  - C-A2 while helper/API extraction is being compiled.
+counterexamples:
+  - A conjecture is left TESTING with no active work.
+  - A conjecture is marked TESTING to avoid deciding it.
+observables:
+  - Active PR/branch with related changes.
+  - CI job running.
+  - Subagent report with evidence.
+execution_effect:
+  - TESTING conjectures consume the suite budget.
+  - They must be decided (SUPPORTED or REFUTED) within the pass budget.
+settlement:
+  rule: Must have an active, observable test.
+  settled_by: orchestrator
+  invalidation_triggers:
+    - Test stalls without evidence.
+    - Test is abandoned.
 ```
 
 ### 11. Forbidden Collapse: `artifact-vs-valid`
@@ -404,55 +441,6 @@ execution_effect:
   - Keep the variant count and next steps visible.
 ```
 
----
-
-## Completion Semantics
-
-```text
-The suite is COMPLETE when:
-  1. All 18 conjectures are SUPPORTED or explicitly REFUTED with rationale.
-  2. All specs are model-checked green in CI.
-  3. internal/runtime is deleted.
-  4. cmd/sandbox is renamed to cmd/autoputer and boots on staging.
-  5. The wire pipeline publishes end-to-end on staging.
-  6. Promotion protocol works on staging: candidate -> verify -> approve -> promote -> health -> confirm.
-  7. Suite ledger and paradoc are updated with final evidence.
-  8. CI is green on main.
-
-The suite is BLOCKED when:
-  1. A conjecture remains TESTING for more than one pass without evidence.
-  2. A spec fails to model-check and the fix requires a group-level decision.
-  3. A protected surface must be changed without spec authority.
-  4. CI is red on main.
-  5. A subagent reports a blocker that the orchestrator cannot resolve.
-
-The suite is in PROGRESS when:
-  1. At least one conjecture is being tested or one mission is active.
-  2. CI is green on the latest relevant commit.
-  3. The ledger and paradoc are up to date.
-```
-
----
-
-## Execution Policy for Overnight Production
-
-1. **Never leave main red.** If a merge breaks main, either fix it immediately or revert it.
-2. **Never merge a PR with pending required checks.** Wait for CI or abort the merge.
-3. **Update the ledger before going to sleep.** Every pass must leave a trail.
-4. **Spawn subagents for parallel work, but verify their output.** Subagents are not authority.
-5. **Use Codex review for high-risk changes.** A second opinion is required for protected surfaces.
-6. **If a definition is contested, escalate.** Do not let semantic drift accumulate overnight.
-7. **If a mission stalls for 2+ passes, reassess.** Do not keep patching symptoms.
-8. **Document problems before fixing them.** Problem-first, fix-second.
-
----
-
-## Child Definition Documents
-
-- `docs/definitions/pass-2-completion-definition-2026-07-03.md` — specific completion criteria for Pass 2.
-
----
-
 ## Determined State Snapshot
 
 ```yaml
@@ -467,13 +455,16 @@ determined_state:
     - claim: Codex review of promotion gate is approve with reservations.
       source: reviewer
       execution_effect: Address reservations before encoding promotion certificate and approval boundary.
-    - claim: Pass 2 branch is `mission-a-api-handler-extraction`, PR #42.
+    - claim: Pass 2 branch is mission-a-api-handler-extraction, PR #42, all CI checks green.
       source: observed
-      execution_effect: Merge once CI green; do not start Pass 3 on main before this.
-  contested:
-    - node: pass-2-green
-      issue: PR #42 CI is still running; cannot settle until all jobs pass.
-      next_resolution_step: monitor CI run 28651240293.
+      execution_effect: Merge PR #42 to main; do not start Pass 3 on main before this merge.
+    - claim: specs/actor_protocol.tla and specs/autoputer_lifecycle.tla exist and model-check green in CI.
+      source: observed
+      execution_effect: Mission A code refinement can proceed against these specs.
+    - claim: internal/apihandler extraction landed on branch mission-a-api-handler-extraction.
+      source: observed
+      execution_effect: cmd/sandbox builds using extracted helpers + actor runtime.
+  contested: []
   open:
     - node: c-c1-c4
       missing: Autoputer rename, Nucleus capsule, and promotion encoding missions not yet started.
@@ -481,8 +472,440 @@ determined_state:
       missing: specs/wire_pipeline.tla not yet rewritten.
     - node: actor-protocol-xvm-spec
       missing: specs/actor_protocol_xvm.tla not yet rewritten.
+    - node: codex-reservations
+      missing: Promotion certificate as durable record, owner approval as external gate, Restage weak fairness, sabotage variants.
 ```
+
+## Invariants
+
+1. **Spec-first:** Spec changes precede code changes for every subsystem.
+2. **CI green:** No PR merges while any required check is pending or failing.
+3. **No compatibility shims:** Fix-forward, not dual-write.
+4. **Problem documentation first:** Document problems before fixing them.
+5. **Never leave main red:** If a merge breaks main, fix immediately or revert.
+
+## Authority Boundaries
+
+- **Human authority required for:** purpose/identity changes, authority-boundary
+  changes, unsafe/destructive mutations, promotion/rollback changes, spec
+  waivers, conflicting value/taste calls.
+- **Orchestrator authority:** leaf definitions inside established boundaries,
+  subagent coordination, CI monitoring, merge after green, ledger updates.
+- **Subagent authority:** scoped work inside a mission, no protected-surface
+  changes without escalation.
+
+## Value Criterion
+
+The variant is the count of undecided definition nodes (open + contested +
+testing conjectures). Productive execution reduces this count by settling
+nodes with scoped evidence. A pass that changes no node status, buys no new
+observer evidence, and improves no artifact verifier is motion theater.
+
+Current variant: 4 open nodes + 0 contested + 14 undecided conjectures = 18.
+
+## Homotopy / Realism Parameters
+
+- **Spec domain:** TLA+ with bounded constants. Valid for proving safety
+  invariants over the modeled state space. Does not prove implementation
+  conformance without a refinement mapping.
+- **Code domain:** Go with race-detector tests. Valid for proving concurrent
+  safety over exercised execution paths. Does not prove universal correctness.
+- **Staging domain:** Single deployed instance on Node B. Valid for proving
+  the deployment path and health checks. Does not prove scale-up behavior.
+
+Fake islands are forbidden: no mock APIs that bypass the production path, no
+test-only persistence, no manually seeded success artifacts, no local proof
+when the claim requires deployment.
+
+## Conjecture And Belief State
+
+18 conjectures total. 4 SUPPORTED. 14 remaining.
+
+```yaml
+conjectures:
+  - id: C-S1
+    status: testing
+    claim: actor_protocol.tla safety invariants model-check green.
+    test: CI TLA+ Model Check on PR #42.
+    scope_if_supported: specs/actor_protocol.tla safety properties.
+    falsifier: TLC counterexample or compile error.
+    execution_effect: If supported, Mission A code refinement can proceed.
+
+  - id: C-S2
+    status: testing
+    claim: actor_protocol.tla encodes the actor runtime mailbox + passivation model.
+    test: Spec review + model check.
+    execution_effect: If supported, actor runtime is the sole substrate.
+
+  - id: C-S3
+    status: testing
+    claim: autoputer_lifecycle.tla reproduces the boot failure and recovery.
+    test: CI TLA+ Model Check on PR #42.
+    execution_effect: If supported, Mission C lifecycle encoding can proceed.
+
+  - id: C-S4
+    status: settled
+    claim: promotion_protocol.tla model-checks green.
+    evidence_class: model check / formal spec
+    source: CI run 28648508586, 826 states, 0 errors.
+    execution_effect: Promotion gate established.
+
+  - id: C-S5
+    status: settled
+    claim: promotion_protocol.tla encodes all required invariants.
+    evidence_class: model check / formal spec
+    source: CI run 28648508586.
+    execution_effect: Mission C can encode promotion in Go.
+
+  - id: C-A1
+    status: open
+    claim: internal/runtime can be deleted after actor runtime extraction.
+    test: go build + go test with internal/runtime removed.
+    execution_effect: If supported, delete internal/runtime.
+
+  - id: C-A2
+    status: testing
+    claim: cmd/sandbox/main.go builds using only actor runtime + extracted helpers.
+    test: CI Go Vet + Build on PR #42.
+    execution_effect: If supported, Mission A extraction is complete.
+
+  - id: C-A3
+    status: open
+    claim: All runtime tests pass after internal/runtime deletion.
+    test: go test ./internal/... with internal/runtime removed.
+    execution_effect: If supported, no test regression from deletion.
+
+  - id: C-B1
+    status: open
+    claim: wire_pipeline.tla can be rewritten on the object-graph trajectory model.
+    test: TLC model check of rewritten spec.
+    execution_effect: If supported, Mission B code refinement can proceed.
+
+  - id: C-B2
+    status: open
+    claim: Wire pipeline publishes end-to-end on staging after refactor.
+    test: Staging deployment + edition publication proof.
+    execution_effect: If supported, autopaper is production-ready.
+
+  - id: C-C1
+    status: open
+    claim: cmd/sandbox can be renamed to cmd/autoputer without breaking the build.
+    test: go build + staging boot after rename.
+    execution_effect: If supported, product ontology aligns with code.
+
+  - id: C-C2
+    status: open
+    claim: Nucleus capsule can be installed in the autoputer boot path.
+    test: Staging boot with capsule enabled.
+    execution_effect: If supported, autoputer has a clean capsule substrate.
+
+  - id: C-C3
+    status: open
+    claim: Promotion protocol can be encoded in Go matching the spec.
+    test: Go implementation + staging candidate → promote proof.
+    execution_effect: If supported, promotion is spec-validated in production.
+
+  - id: C-C4
+    status: open
+    claim: Promotion certificate is a durable structured record in the object graph.
+    test: Object-graph inspection after promotion.
+    execution_effect: If supported, promotion audit trail is durable.
+
+  - id: C-D1
+    status: settled
+    claim: CI passed on main after promotion gate commits.
+    evidence_class: observed CI result
+    source: GitHub Actions main branch.
+    execution_effect: Promotion gate is deployed.
+
+  - id: C-D2
+    status: settled
+    claim: TLA+ specs model-check in CI for the current commit.
+    evidence_class: model check / formal spec
+    source: CI TLA+ Model Check job.
+    execution_effect: Spec-first workflow is enforced by CI.
+
+  - id: C-D3
+    status: open
+    claim: Sabotage/counterexample tests exist for each spec.
+    test: Spec sabotage variants in CI.
+    execution_effect: If supported, specs are stress-tested, not just green.
+
+  - id: C-D4
+    status: open
+    claim: Codex review reservations are addressed before Mission C encoding.
+    test: Spec update + review for each reservation.
+    execution_effect: If supported, promotion encoding is safe to begin.
+```
+
+## Variant / Progress Measure
+
+```yaml
+variant:
+  measure: undecided definition nodes + testing/open conjectures
+  current: 18
+  target: 0
+  motion_theater_threshold: a pass that changes no node status and buys no new evidence
+```
+
+## Execution Operators
+
+```text
+define(node)          — make a missing meaning executable
+split(node)           — split an overloaded meaning
+merge(nodes)          — merge redundant meanings
+narrow(node)          — restrict scope to evidence
+widen(node)           — expand scope when evidence supports it
+counterexample(node)  — generate a falsifier
+operationalize(node)  — attach observables + execution effects
+formalize(node)       — project into TLA+ spec or Go assertion
+probe(node)           — test a claim under current observer
+shift(node)           — change observer/vocabulary/domain/instrument
+construct(node)       — mutate the artifact under invariants
+verify(node)          — check an artifact or claim
+settle(node)          — promote/weaken/falsify/supersede
+escalate(node)        — send to human for group-level decision
+monitor(node)         — watch for drift after settlement
+```
+
+Each operator must leave a graph or determined-state update. No silent
+semantic changes.
+
+## Receding-Horizon Control Loop
+
+Each control interval:
+
+1. **Select** the live node or conjecture whose settlement most reduces mission
+   uncertainty or unlocks execution.
+2. **State** what the current observer can and cannot see; name any blind spot.
+3. **Choose** one move: define, probe, shift, construct, verify, settle.
+4. **Bound** the mutation radius and rollback surface.
+5. **Execute** the move.
+6. **Update** node status, determined state, evidence ledger, and checkpoint.
+7. **Continue** unless completion, supersession, or hard escalation is reached.
+
+If the route is clear and low-risk, batch foreseeable constructs in one
+interval. The tripwire is surprise: any unexpected evidence returns execution
+to a full select/state/choose/bound loop.
+
+## Dense Feedback Channels
+
+- **CI:** GitHub Actions on every push. Go build, go test (sharded + race),
+  TLA+ model check, frontend build, docs truth check.
+- **Staging:** Node B deploy + health check on behavior-changing commits.
+- **Spec model check:** TLC on every spec change, runs in CI.
+- **Codex review:** Second opinion on high-risk changes (protected surfaces).
+- **Race detector:** Go test -race on runtime shards.
+
+## Evidence Ledger
+
+```yaml
+evidence:
+  - claim: C-S4 promotion_protocol.tla model-checks green
+    definition_node: C-S4
+    evidence_class: model check / formal spec
+    source: CI run 28648508586
+    command_or_observation: TLC model check of specs/promotion_protocol.tla
+    result: 826 states, 0 errors, 0 distinct
+    uncertainty: Bounded constants; does not prove implementation conformance
+    promotion_relevance: Promotion gate established; Mission C may proceed
+
+  - claim: C-S5 promotion_protocol.tla encodes all required invariants
+    definition_node: C-S5
+    evidence_class: model check / formal spec
+    source: CI run 28648508586
+    result: All invariants in .cfg checked green
+    uncertainty: Invariant set may be incomplete (Codex reservations)
+    promotion_relevance: Mission C encoding can begin after reservations addressed
+
+  - claim: C-D1 CI passed on main after promotion gate commits
+    definition_node: C-D1
+    evidence_class: observed CI result
+    source: GitHub Actions main branch
+    result: All required jobs passed
+    promotion_relevance: Promotion gate is deployed
+
+  - claim: C-D2 TLA+ specs model-check in CI
+    definition_node: C-D2
+    evidence_class: model check / formal spec
+    source: CI TLA+ Model Check job
+    result: All specs in specs/ check green
+    promotion_relevance: Spec-first workflow is CI-enforced
+
+  - claim: PR #42 all CI checks green
+    definition_node: pass-2-green
+    evidence_class: observed CI result
+    source: GitHub Actions PR #42 statusCheckRollup
+    result: All 19 required checks SUCCESS, 3 SKIPPED (staging deploy, SBOM, staging impact)
+    uncertainty: Staging deploy was skipped; post-merge staging proof still needed
+    promotion_relevance: PR #42 is safe to merge
+
+  - claim: Codex review of promotion gate completed
+    definition_node: codex-reservations
+    evidence_class: human review
+    source: docs/reviews/promotion-gate-codex-review-2026-07-03.md
+    result: Verdict "approve with reservations"; 4 major, 6 minor findings
+    uncertainty: Reservations must be addressed before Mission C encoding
+    promotion_relevance: Promotion spec is sound but incomplete
+```
+
+## Completion Semantics
+
+```text
+The suite is COMPLETE when:
+  1. All 18 conjectures are SUPPORTED or explicitly REFUTED with rationale.
+  2. All specs are model-checked green in CI.
+  3. internal/runtime is deleted.
+  4. cmd/sandbox is renamed to cmd/autoputer and boots on staging.
+  5. The wire pipeline publishes end-to-end on staging.
+  6. Promotion protocol works on staging: candidate -> verify -> approve -> promote -> health -> confirm.
+  7. Codex review reservations are addressed.
+  8. Suite ledger and paradoc are updated with final evidence.
+  9. CI is green on main.
+
+The suite is BLOCKED when:
+  1. A conjecture remains TESTING for more than one pass without evidence.
+  2. A spec fails to model-check and the fix requires a group-level decision.
+  3. A protected surface must be changed without spec authority.
+  4. CI is red on main.
+  5. A subagent reports a blocker that the orchestrator cannot resolve.
+
+The suite is in PROGRESS when:
+  1. At least one conjecture is being tested or one mission is active.
+  2. CI is green on the latest relevant commit.
+  3. The ledger and paradoc are up to date.
+```
+
+## Escalation Rules
+
+```yaml
+escalation:
+  - rule: Never leave main red. If a merge breaks main, fix immediately or revert.
+  - rule: Never merge a PR with pending required checks.
+  - rule: Update the ledger before going to sleep. Every pass must leave a trail.
+  - rule: Spawn subagents for parallel work, but verify their output. Subagents are not authority.
+  - rule: Use Codex review for high-risk changes. A second opinion is required for protected surfaces.
+  - rule: If a definition is contested, escalate. Do not let semantic drift accumulate overnight.
+  - rule: If a mission stalls for 2+ passes, reassess. Do not keep patching symptoms.
+  - rule: Document problems before fixing them. Problem-first, fix-second.
+
+human_escalation_triggers:
+  - purpose or identity changes
+  - authority-boundary changes
+  - unsafe/destructive or high-blast-radius mutations
+  - spec waivers
+  - conflicting values or taste calls
+  - irreversible actions without accepted rollback
+```
+
+## Forbidden Collapses
+
+- artifact exists -> artifact is valid
+- definition document exists -> definition graph is settled
+- plan exists -> mission is executing
+- review packet exists -> review passed
+- tests passed -> behavior is universally proven
+- checkpoint landed -> mission complete
+- model agreement -> definition settled
+- formal spec exists -> implementation conforms
+- implementation exists -> definition was followed
+- local smoke passed -> production claim proven
+- toy result green -> program validated
+- second opinion -> authority
+- route is familiar -> route is correct
+- worker says done -> done
+
+## Rollback And Resumption Policy
+
+```yaml
+rollback:
+  - surface: Every commit to main is revertible via git revert.
+  - surface: Every spec change is revertible via git revert.
+  - surface: Staging deploy can be rolled back to the previous SHA.
+  - surface: PR merges can be reverted if post-merge CI fails.
+
+resumption:
+  - rule: Read this document first, then the child definition, then execute the next operator.
+  - rule: Reconcile determined state with current artifact state before acting.
+  - rule: If a safe executable probe remains inside the authority boundary, execute it instead of presenting a checkpoint as success.
+```
+
+## Mission Report Policy
+
+Maintain an owner-readable report when the run changes durable system state,
+doctrine, deployed behavior, or long-running execution state.
+
+The report should explain:
+
+```text
+mission goal and artifact
+invariants preserved or violated
+major decisions and route changes
+what shipped
+verification evidence
+what was proven vs merely attempted
+residual risks
+rollback refs
+next mission or next executable probe
+```
+
+Do not dump logs. Link evidence artifacts.
+
+## Run Checkpoint & Resumption State
+
+```yaml
+run_checkpoint_and_resumption_state:
+  status: working
+  last_checkpoint: 2a5f1359 (texture fix on main); PR #42 green pending merge
+  current_artifact_state:
+    - specs/promotion_protocol.tla: green in CI
+    - specs/actor_protocol.tla: green in CI (PR #42)
+    - specs/autoputer_lifecycle.tla: green in CI (PR #42)
+    - internal/apihandler: extracted on branch mission-a-api-handler-extraction
+    - internal/runtime: still present, deletion pending Pass 3
+    - cmd/sandbox: not yet renamed to cmd/autoputer
+  what_shipped:
+    - Promotion gate spec (Pass 1, merged to main)
+    - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 green)
+    - API handler extraction (Pass 2, PR #42 green)
+    - Texture tool-loop fix (cherry-picked to main, CI running)
+  what_was_proven:
+    - C-S4: promotion_protocol.tla model-checks green
+    - C-S5: promotion_protocol.tla encodes required invariants
+    - C-D1: CI passed on main after promotion gate commits
+    - C-D2: TLA+ specs model-check in CI
+  unproven_or_partial_claims:
+    - C-S1: actor_protocol.tla safety invariants (PR #42 green, pending merge)
+    - C-S3: autoputer_lifecycle.tla boot failure (PR #42 green, pending merge)
+    - C-A2: cmd/sandbox builds with extracted helpers (PR #42 green, pending merge)
+  belief_state_changes:
+    - PR #42 is fully CI green; merge is the next executable action
+    - Codex reservations must be addressed before Mission C encoding
+  remaining_error_field:
+    - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
+    - Wire pipeline spec not yet rewritten
+    - actor_protocol_xvm.tla not yet rewritten
+    - Autoputer rename not started
+  highest_impact_remaining_uncertainty: C-C3 (promotion protocol Go encoding) depends on Codex reservations being addressed first
+  next_executable_probe: Merge PR #42 to main, verify post-merge CI green, then open Pass 3 definition for Mission C (autoputer rename + promotion encoding) or Mission B (wire pipeline spec)
+  suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
+  evidence_artifact_refs:
+    - docs/reviews/promotion-gate-codex-review-2026-07-03.md
+    - docs/definitions/pass-2-completion-definition-2026-07-03.md
+    - CI run 28648508586 (promotion gate)
+    - PR #42 statusCheckRollup (Pass 2)
+  rollback_refs:
+    - main HEAD: 2a5f1359
+    - branch mission-a-api-handler-extraction: bf1f0a6a
+```
+
+## Child Definition Documents
+
+- `docs/definitions/pass-2-completion-definition-2026-07-03.md` — specific
+  completion criteria for Pass 2 (PR #42 merge gate).
 
 ---
 
-*This is the super definition for the suite. Any agent resuming work must read this file first, then the relevant child definition, then execute the next operator.*
+*This is the super definition for the suite. Any agent resuming work must read
+this file first, then the relevant child definition, then execute the next
+operator.*
