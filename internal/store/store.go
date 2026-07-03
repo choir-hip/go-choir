@@ -57,16 +57,20 @@ type doltConnector interface {
 }
 
 type Store struct {
-	db            *sql.DB
-	readDB        *sql.DB
-	path          string
-	textureDB     *sql.DB
-	texturePath   string
-	doltConnector doltConnector
-	jsonPatchMu   sync.Mutex
-	og            *objectgraph.Service
-	ogStore       *objectgraph.DoltStore
-	ogReadStore   *objectgraph.DoltStore
+	db             *sql.DB
+	readDB         *sql.DB
+	path           string
+	textureDB      *sql.DB
+	texturePath    string
+	doltConnector  doltConnector
+	jsonPatchMu    sync.Mutex
+	textureRevMu   sync.Mutex
+	workerUpdateMu sync.Mutex
+	channelMsgMu   sync.Mutex
+	eventMu        sync.Mutex
+	og             *objectgraph.Service
+	ogStore        *objectgraph.DoltStore
+	ogReadStore    *objectgraph.DoltStore
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -609,6 +613,16 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: import legacy sqlite: %w", err)
 	}
 
+	// Backfill existing SQL rows into the object graph. Each kind is
+	// gated individually so only empty kinds are backfilled — this
+	// covers freshly-imported SQLite data and pre-existing Dolt stores
+	// that accumulated SQL rows during the Phase 3 dual-write period,
+	// while avoiding replaying stale SQL over newer OG writes.
+	if err := s.backfillOGFromSQL(context.Background()); err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
+	}
+
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
 			_ = s.Close()
@@ -810,285 +824,75 @@ func (s *Store) TexturePath() string {
 }
 
 // UpsertAgent persists a durable agent record.
-// Delegates to the object graph when available, falling back to SQL.
 func (s *Store) UpsertAgent(ctx context.Context, rec types.AgentRecord) error {
-	if s.og != nil {
-		return s.UpsertAgentOG(ctx, rec)
-	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agents (agent_id, owner_id, sandbox_id, profile, role, channel_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   owner_id = VALUES(owner_id),
-		   sandbox_id = VALUES(sandbox_id),
-		   profile = VALUES(profile),
-		   role = VALUES(role),
-		   channel_id = VALUES(channel_id),
-		   updated_at = VALUES(updated_at)`,
-		rec.AgentID,
-		rec.OwnerID,
-		rec.SandboxID,
-		rec.Profile,
-		rec.Role,
-		rec.ChannelID,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("upsert agent: %w", err)
-	}
-	return nil
+	return s.UpsertAgentOG(ctx, rec)
 }
 
 // GetAgent returns the agent with the given ID.
-// Delegates to the object graph when available, falling back to SQL
-// for records that exist only in the relational tables.
 func (s *Store) GetAgent(ctx context.Context, agentID string) (types.AgentRecord, error) {
-	if s.og != nil {
-		rec, err := s.GetAgentOG(ctx, agentID)
-		if err == nil || err != ErrNotFound {
-			return rec, err
-		}
-		// Fall through to SQL for legacy records not yet in the graph.
-	}
-	row := s.db.QueryRowContext(ctx,
-		`SELECT agent_id, owner_id, sandbox_id, profile, role, channel_id, created_at, updated_at
-		   FROM agents
-		  WHERE agent_id = ?`,
-		agentID,
-	)
-	return scanAgent(row)
+	return s.GetAgentOG(ctx, agentID)
 }
 
 // CreateRun inserts a new run record.
-// Delegates to the object graph when available, falling back to SQL.
 func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
-	if s.og != nil {
-		return s.CreateRunOG(ctx, rec)
-	}
-	metadata, err := marshalJSON(rec.Metadata)
-	if err != nil {
-		return fmt.Errorf("marshal run metadata: %w", err)
-	}
-	prompt := sanitizeStoreText(rec.Prompt)
-	result := sanitizeStoreText(rec.Result)
-	runErr := sanitizeStoreText(rec.Error)
-
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO runs (loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.RunID,
-		rec.AgentID,
-		rec.ChannelID,
-		rec.RequestedByRunID,
-		rec.TrajectoryID,
-		rec.AgentProfile,
-		rec.AgentRole,
-		rec.OwnerID,
-		rec.SandboxID,
-		rec.State,
-		prompt,
-		result,
-		runErr,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		formatTimePtr(rec.FinishedAt),
-		string(metadata),
-	)
-	if err != nil {
-		return fmt.Errorf("insert run: %w", err)
-	}
-	return nil
+	return s.CreateRunOG(ctx, rec)
 }
 
 // GetRun returns the run with the given run ID.
-// Delegates to the object graph when available, falling back to SQL
-// for records that exist only in the relational tables (e.g. legacy
-// migrations).
 func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, error) {
-	if s.og != nil {
-		rec, err := s.GetRunOG(ctx, runID)
-		if err == nil || err != ErrNotFound {
-			return rec, err
-		}
-		// Fall through to SQL for legacy records not yet in the graph.
-	}
-	row := s.queryDB().QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
-		   FROM runs
-		  WHERE loop_id = ?`,
-		runID,
-	)
-	return scanRun(row)
+	return s.GetRunOG(ctx, runID)
 }
 
 // UpdateRun updates an existing run record.
-// Delegates to the object graph when available, falling back to SQL.
 func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
-	if s.og != nil {
-		return s.UpdateRunOG(ctx, rec)
-	}
-	metadata, err := marshalJSON(rec.Metadata)
-	if err != nil {
-		return fmt.Errorf("marshal run metadata: %w", err)
-	}
-	prompt := sanitizeStoreText(rec.Prompt)
-	runResult := sanitizeStoreText(rec.Result)
-	runErr := sanitizeStoreText(rec.Error)
-
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE runs
-		    SET agent_id = ?,
-		        channel_id = ?,
-		        requested_by_run_id = ?,
-		        trajectory_id = ?,
-		        agent_profile = ?,
-		        agent_role = ?,
-		        owner_id = ?,
-		        sandbox_id = ?,
-		        state = ?,
-		        prompt = ?,
-		        result = ?,
-		        error = ?,
-		        updated_at = ?,
-		        finished_at = ?,
-		        metadata_json = ?
-		  WHERE loop_id = ?`,
-		rec.AgentID,
-		rec.ChannelID,
-		rec.RequestedByRunID,
-		rec.TrajectoryID,
-		rec.AgentProfile,
-		rec.AgentRole,
-		rec.OwnerID,
-		rec.SandboxID,
-		rec.State,
-		prompt,
-		runResult,
-		runErr,
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		formatTimePtr(rec.FinishedAt),
-		string(metadata),
-		rec.RunID,
-	)
-	if err != nil {
-		return fmt.Errorf("update run: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check updated run rows: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("%w: run %s", ErrNotFound, rec.RunID)
-	}
-	return nil
+	return s.UpdateRunOG(ctx, rec)
 }
 
 // UpdateRunAndMarkWorkerUpdatesDelivered updates a run and marks its waking
-// update_coagent records for the run's agent delivered in the same
-// runtime-store transaction.
+// update_coagent records for the run's agent delivered.
 func (s *Store) UpdateRunAndMarkWorkerUpdatesDelivered(ctx context.Context, rec types.RunRecord, ownerID string, updateIDs []string) error {
-	if len(updateIDs) == 0 {
-		return s.UpdateRun(ctx, rec)
-	}
-	// When the object graph is active, update the run via OG and mark
-	// worker updates via SQL. These are not atomic across the two stores,
-	// but the run update is idempotent and the worker update marking is
-	// a best-effort delivery acknowledgment.
-	if s.og != nil {
-		if err := s.UpdateRunOG(ctx, rec); err != nil {
+	// Mark worker updates delivered BEFORE persisting the run's terminal
+	// state. Otherwise a concurrent reader (e.g., waitForRuntimeRunTerminal)
+	// can observe the run as completed before the updates are marked,
+	// producing a false "not delivered" observation.
+	if len(updateIDs) > 0 {
+		if err := s.MarkWorkerUpdatesDelivered(ctx, ownerID, rec.AgentID, updateIDs, rec.RunID); err != nil {
 			return err
 		}
-		// Mark worker updates as delivered via SQL (worker updates are
-		// not yet wired to OG).
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin worker update delivery transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-		if err := markWorkerUpdatesDeliveredWithExec(ctx, tx, ownerID, rec.AgentID, updateIDs, rec.RunID); err != nil {
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit worker update delivery transaction: %w", err)
-		}
-		return nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin run/update delivery transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := updateRunInTx(ctx, tx, rec); err != nil {
+	if err := s.UpdateRunOG(ctx, rec); err != nil {
+		// Rollback: unmark the worker updates if the run update failed,
+		// so the mailbox cursor doesn't consume them while the run
+		// remains non-terminal. Use context.Background() because the
+		// caller's context may be canceled, and the rollback must still
+		// execute to preserve delivery atomicity.
+		if len(updateIDs) > 0 {
+			_ = s.unmarkWorkerUpdatesDelivered(context.Background(), ownerID, rec.AgentID, updateIDs)
+		}
 		return err
-	}
-	if err := markWorkerUpdatesDeliveredWithExec(ctx, tx, ownerID, rec.AgentID, updateIDs, rec.RunID); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit run/update delivery transaction: %w", err)
 	}
 	return nil
 }
 
-func updateRunInTx(ctx context.Context, tx *sql.Tx, rec types.RunRecord) error {
-	metadata, err := marshalJSON(rec.Metadata)
-	if err != nil {
-		return fmt.Errorf("marshal run metadata: %w", err)
+// unmarkWorkerUpdatesDelivered clears the delivery state on worker update
+// records. Used as a compensating rollback when UpdateRunOG fails after
+// MarkWorkerUpdatesDelivered succeeded.
+func (s *Store) unmarkWorkerUpdatesDelivered(ctx context.Context, ownerID, targetAgentID string, updateIDs []string) error {
+	s.workerUpdateMu.Lock()
+	defer s.workerUpdateMu.Unlock()
+	for _, id := range updateIDs {
+		rec, err := s.GetWorkerUpdateOG(ctx, ownerID, id)
+		if err != nil {
+			continue
+		}
+		if rec.TargetAgentID != targetAgentID {
+			continue
+		}
+		rec.DeliveredToRunID = ""
+		rec.DeliveredAt = nil
+		_ = s.CreateWorkerUpdateOG(ctx, rec)
 	}
-	prompt := sanitizeStoreText(rec.Prompt)
-	runResult := sanitizeStoreText(rec.Result)
-	runErr := sanitizeStoreText(rec.Error)
-
-	result, err := tx.ExecContext(ctx,
-		`UPDATE runs
-		    SET agent_id = ?,
-		        channel_id = ?,
-		        requested_by_run_id = ?,
-		        trajectory_id = ?,
-		        agent_profile = ?,
-		        agent_role = ?,
-		        owner_id = ?,
-		        sandbox_id = ?,
-		        state = ?,
-		        prompt = ?,
-		        result = ?,
-		        error = ?,
-		        updated_at = ?,
-		        finished_at = ?,
-		        metadata_json = ?
-		  WHERE loop_id = ?`,
-		rec.AgentID,
-		rec.ChannelID,
-		rec.RequestedByRunID,
-		rec.TrajectoryID,
-		rec.AgentProfile,
-		rec.AgentRole,
-		rec.OwnerID,
-		rec.SandboxID,
-		rec.State,
-		prompt,
-		runResult,
-		runErr,
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		formatTimePtr(rec.FinishedAt),
-		string(metadata),
-		rec.RunID,
-	)
-	if err != nil {
-		return fmt.Errorf("update run: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check updated run rows: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("%w: run %s", ErrNotFound, rec.RunID)
-	}
-	return nil
+	return s.refreshCoagentMailboxCursorOG(ctx, ownerID, targetAgentID)
 }
 
 // ListRunsByOwner returns runs for the given owner, ordered by created_at
@@ -1097,10 +901,7 @@ func (s *Store) ListRunsByOwner(ctx context.Context, ownerID string, limit int) 
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		return s.ListRunsByOwnerOG(ctx, ownerID, limit)
-	}
-	return s.listRunsWhere(ctx, "owner_id = ?", []any{ownerID}, limit)
+	return s.ListRunsByOwnerOG(ctx, ownerID, limit)
 }
 
 // ListRunsByState returns runs in the given state, ordered by created_at
@@ -1109,10 +910,7 @@ func (s *Store) ListRunsByState(ctx context.Context, state types.RunState, limit
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		return s.ListRunsByStateOG(ctx, state, limit)
-	}
-	return s.listRunsWhere(ctx, "state = ?", []any{string(state)}, limit)
+	return s.ListRunsByStateOG(ctx, state, limit)
 }
 
 // ListRuns returns recent runs ordered by created_at descending, limited
@@ -1121,10 +919,7 @@ func (s *Store) ListRuns(ctx context.Context, limit int) ([]types.RunRecord, err
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		return s.ListAllRunsOG(ctx, limit)
-	}
-	return s.listRunsWhere(ctx, "", nil, limit)
+	return s.ListAllRunsOG(ctx, limit)
 }
 
 // ListRunsByChannel returns runs for a specific coordination channel, ordered by creation time descending.
@@ -1132,34 +927,32 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 	if limit <= 0 {
 		limit = 100
 	}
-	if s.og != nil {
-		objs, err := s.ogListByMetadata(ctx, ogKindRun, "channel_id", channelID, limit*4)
-		if err != nil {
+	// Fetch a large window since ogListByMetadata orders by updated_at
+	// DESC and we need to filter by owner_id before applying the limit.
+	// Using limit*4 could miss runs when channel IDs are shared across
+	// owners.
+	objs, err := s.ogListByMetadata(ctx, ogKindRun, "channel_id", channelID, 100000)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		runs := make([]types.RunRecord, 0, len(objs))
-		for _, obj := range objs {
-			var rec types.RunRecord
-			if err := ogDecode(obj, &rec); err != nil {
-				return nil, err
-			}
-			if rec.OwnerID != ownerID {
-				continue
-			}
-			if rec.ChannelID != channelID {
-				continue
-			}
-			runs = append(runs, rec)
-			if len(runs) >= limit {
-				break
-			}
+		if rec.OwnerID != ownerID {
+			continue
 		}
-		// Fall back to SQL if OG returned nothing (legacy records).
-		if len(runs) > 0 {
-			return runs, nil
+		if rec.ChannelID != channelID {
+			continue
+		}
+		runs = append(runs, rec)
+		if len(runs) >= limit {
+			break
 		}
 	}
-	return s.listRunsWhere(ctx, "owner_id = ? AND channel_id = ?", []any{ownerID, channelID}, limit)
+	return runs, nil
 }
 
 // ListActiveRunsByTrajectory returns pending/running/blocked activations on a
@@ -1180,68 +973,46 @@ func (s *Store) ListActiveRunsByTrajectoryExcluding(ctx context.Context, ownerID
 	if limit <= 0 {
 		limit = 200
 	}
-	// When the object graph is active, fetch runs by trajectory from OG
-	// and filter in Go for state and exclusions.
-	if s.og != nil {
-		// Use a large limit to ensure we get all runs for the trajectory;
-		// the caller-side limit is applied after Go-side filtering.
-		fetchLimit := limit
-		if fetchLimit < 5000 {
-			fetchLimit = 5000
+	// Fetch runs by trajectory from OG and filter in Go for state and exclusions.
+	fetchLimit := limit
+	if fetchLimit < 5000 {
+		fetchLimit = 5000
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+	excludeSet := make(map[string]bool, len(excludeRunIDs))
+	for _, id := range excludeRunIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			excludeSet[id] = true
 		}
-		objs, err := s.ogListByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID, fetchLimit)
-		if err != nil {
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		excludeSet := make(map[string]bool, len(excludeRunIDs))
-		for _, id := range excludeRunIDs {
-			id = strings.TrimSpace(id)
-			if id != "" {
-				excludeSet[id] = true
-			}
+		if rec.OwnerID != ownerID {
+			continue
 		}
-		runs := make([]types.RunRecord, 0, len(objs))
-		for _, obj := range objs {
-			var rec types.RunRecord
-			if err := ogDecode(obj, &rec); err != nil {
-				return nil, err
-			}
-			if rec.OwnerID != ownerID {
-				continue
-			}
-			if rec.TrajectoryID != trajectoryID {
-				continue
-			}
-			if rec.State != types.RunPending && rec.State != types.RunRunning && rec.State != types.RunBlocked {
-				continue
-			}
-			if excludeSet[rec.RunID] {
-				continue
-			}
-			runs = append(runs, rec)
-			if len(runs) >= limit {
-				break
-			}
+		if rec.TrajectoryID != trajectoryID {
+			continue
 		}
-		return runs, nil
-	}
-	where := "owner_id = ? AND trajectory_id = ? AND state IN ('pending', 'running', 'blocked')"
-	args := []any{ownerID, trajectoryID}
-	if len(excludeRunIDs) > 0 {
-		placeholders := make([]string, 0, len(excludeRunIDs))
-		for _, runID := range excludeRunIDs {
-			runID = strings.TrimSpace(runID)
-			if runID == "" {
-				continue
-			}
-			placeholders = append(placeholders, "?")
-			args = append(args, runID)
+		if rec.State != types.RunPending && rec.State != types.RunRunning && rec.State != types.RunBlocked {
+			continue
 		}
-		if len(placeholders) > 0 {
-			where += " AND loop_id NOT IN (" + strings.Join(placeholders, ",") + ")"
+		if excludeSet[rec.RunID] {
+			continue
+		}
+		runs = append(runs, rec)
+		if len(runs) >= limit {
+			break
 		}
 	}
-	return s.listRunsWhere(ctx, where, args, limit)
+	return runs, nil
 }
 
 // ClaimCoSuperSlot atomically claims (owner, trajectory, slot) for a co-super
@@ -1493,141 +1264,94 @@ func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectory
 	if ownerID == "" || trajectoryID == "" {
 		return 0, nil
 	}
-	// When the object graph is active, fetch slot run IDs from SQL and
-	// check run state via OG.
-	if s.og != nil {
-		rows, err := s.db.QueryContext(ctx,
-			`SELECT run_id FROM co_super_slots WHERE owner_id = ? AND trajectory_id = ?`,
-			ownerID, trajectoryID,
-		)
-		if err != nil {
-			return 0, fmt.Errorf("count active co-super slots: %w", err)
-		}
-		defer rows.Close()
-		count := 0
-		for rows.Next() {
-			var runID string
-			if err := rows.Scan(&runID); err != nil {
-				return 0, fmt.Errorf("count active co-super slots: scan: %w", err)
-			}
-			rec, err := s.GetRunOG(ctx, runID)
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					continue
-				}
-				return 0, fmt.Errorf("count active co-super slots: get run: %w", err)
-			}
-			if rec.State.Active() {
-				count++
-			}
-		}
-		return count, rows.Err()
-	}
-	var count int
-	row := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*)
-		   FROM co_super_slots s
-		   JOIN runs r ON r.loop_id = s.run_id
-		  WHERE s.owner_id = ?
-		    AND s.trajectory_id = ?
-		    AND r.owner_id = ?
-		    AND r.state IN ('pending', 'running', 'blocked')`,
-		ownerID,
-		trajectoryID,
-		ownerID,
+	// Fetch slot run IDs from SQL (co_super_slots table not yet in OG)
+	// and check run state via OG.
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT run_id FROM co_super_slots WHERE owner_id = ? AND trajectory_id = ?`,
+		ownerID, trajectoryID,
 	)
-	if err := row.Scan(&count); err != nil {
+	if err != nil {
 		return 0, fmt.Errorf("count active co-super slots: %w", err)
 	}
-	return count, nil
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var runID string
+		if err := rows.Scan(&runID); err != nil {
+			return 0, fmt.Errorf("count active co-super slots: scan: %w", err)
+		}
+		rec, err := s.GetRunOG(ctx, runID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			return 0, fmt.Errorf("count active co-super slots: get run: %w", err)
+		}
+		if rec.State.Active() {
+			count++
+		}
+	}
+	return count, rows.Err()
 }
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.
 func (s *Store) GetLatestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
-	if s.og != nil {
-		objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
-		if err != nil {
+	objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	var latest *types.RunRecord
+	for i := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(objs[i], &rec); err != nil {
 			return types.RunRecord{}, err
 		}
-		var latest *types.RunRecord
-		for i := range objs {
-			var rec types.RunRecord
-			if err := ogDecode(objs[i], &rec); err != nil {
-				return types.RunRecord{}, err
-			}
-			if rec.OwnerID != ownerID {
-				continue
-			}
-			if !rec.State.Active() {
-				continue
-			}
-			if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
-				recCopy := rec
-				latest = &recCopy
-			}
+		if rec.OwnerID != ownerID {
+			continue
 		}
-		if latest == nil {
-			return types.RunRecord{}, ErrNotFound
+		if !rec.State.Active() {
+			continue
 		}
-		return *latest, nil
+		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
+			recCopy := rec
+			latest = &recCopy
+		}
 	}
-	row := s.db.QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
-		   FROM runs
-		  WHERE owner_id = ?
-		    AND agent_id = ?
-		    AND state IN ('pending', 'running', 'blocked')
-		  ORDER BY updated_at DESC
-		  LIMIT 1`,
-		ownerID,
-		agentID,
-	)
-	return scanRun(row)
+	if latest == nil {
+		return types.RunRecord{}, ErrNotFound
+	}
+	return *latest, nil
 }
 
 // GetLatestPassivatedRunByAgent returns the most recent passivated activation
 // for an actor identity. Durable actor reactivation uses this before minting a
 // replacement run.
 func (s *Store) GetLatestPassivatedRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {
-	if s.og != nil {
-		objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
-		if err != nil {
+	objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 200)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	var latest *types.RunRecord
+	for i := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(objs[i], &rec); err != nil {
 			return types.RunRecord{}, err
 		}
-		var latest *types.RunRecord
-		for i := range objs {
-			var rec types.RunRecord
-			if err := ogDecode(objs[i], &rec); err != nil {
-				return types.RunRecord{}, err
-			}
-			if rec.OwnerID != ownerID {
-				continue
-			}
-			if rec.State != types.RunPassivated {
-				continue
-			}
-			if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
-				recCopy := rec
-				latest = &recCopy
-			}
+		if rec.OwnerID != ownerID {
+			continue
 		}
-		if latest == nil {
-			return types.RunRecord{}, ErrNotFound
+		if rec.State != types.RunPassivated {
+			continue
 		}
-		return *latest, nil
+		if latest == nil || rec.UpdatedAt.After(latest.UpdatedAt) {
+			recCopy := rec
+			latest = &recCopy
+		}
 	}
-	row := s.db.QueryRowContext(ctx,
-		`SELECT loop_id, agent_id, channel_id, requested_by_run_id, trajectory_id, agent_profile, agent_role, owner_id, sandbox_id, state, prompt, result, error, created_at, updated_at, finished_at, metadata_json
-		   FROM runs
-		  WHERE owner_id = ?
-		    AND agent_id = ?
-		    AND state = 'passivated'
-		  ORDER BY updated_at DESC, created_at DESC
-		  LIMIT 1`,
-		ownerID,
-		agentID,
-	)
-	return scanRun(row)
+	if latest == nil {
+		return types.RunRecord{}, ErrNotFound
+	}
+	return *latest, nil
 }
 
 func (s *Store) listRunsWhere(ctx context.Context, where string, args []any, limit int) ([]types.RunRecord, error) {
@@ -1667,108 +1391,60 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		rec.Payload = json.RawMessage(`{}`)
 	}
 
-	// When the object graph is active, compute sequence numbers from OG
-	// and store the event there. We still compute stream_seq from SQL to
-	// maintain global ordering during the migration.
-	if s.og != nil && rec.OwnerID != "" {
-		// Compute the next sequence number for this run from OG.
-		existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
-		if err != nil {
-			return fmt.Errorf("append event: list existing: %w", err)
-		}
-		maxSeq := int64(0)
-		for _, obj := range existing {
-			var ev types.EventRecord
-			if err := ogDecode(obj, &ev); err != nil {
-				continue
-			}
-			if ev.OwnerID != rec.OwnerID {
-				continue
-			}
-			if ev.Seq > maxSeq {
-				maxSeq = ev.Seq
-			}
-		}
-		rec.Seq = maxSeq + 1
+	// Serialize event sequence allocation to prevent two concurrent
+	// goroutines from reading the same max and assigning duplicate Seq
+	// or StreamSeq values. The old SQL path relied on UNIQUE(loop_id, seq).
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
 
-		// Compute stream_seq: take the max of all OG events and SQL,
-		// then +1. This ensures global ordering even during migration.
-		allEvents, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-			Kind:  ogKindEvent,
-			Limit: 100000,
-		})
-		if err != nil {
-			return fmt.Errorf("append event: list all events: %w", err)
-		}
-		maxStreamSeq := int64(0)
-		for _, obj := range allEvents {
-			var ev types.EventRecord
-			if err := ogDecode(obj, &ev); err != nil {
-				continue
-			}
-			if ev.StreamSeq > maxStreamSeq {
-				maxStreamSeq = ev.StreamSeq
-			}
-		}
-		sqlMaxStreamSeq := int64(0)
-		row := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(stream_seq), 0) FROM events`)
-		if err := row.Scan(&sqlMaxStreamSeq); err != nil {
-			return fmt.Errorf("query next event stream sequence: %w", err)
-		}
-		if sqlMaxStreamSeq > maxStreamSeq {
-			maxStreamSeq = sqlMaxStreamSeq
-		}
-		rec.StreamSeq = maxStreamSeq + 1
-
-		return s.AppendEventOG(ctx, rec)
+	// OG requires a non-empty owner_id. Synthesize a system owner for
+	// ownerless runtime events (e.g. health/degraded events from
+	// Runtime.SetHealth).
+	if rec.OwnerID == "" {
+		rec.OwnerID = "__system__"
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	// Compute the next sequence number for this run from OG.
+	existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
 	if err != nil {
-		return fmt.Errorf("begin event transaction: %w", err)
+		return fmt.Errorf("append event: list existing: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	maxSeq := int64(0)
+	for _, obj := range existing {
+		var ev types.EventRecord
+		if err := ogDecode(obj, &ev); err != nil {
+			continue
+		}
+		if ev.OwnerID != rec.OwnerID {
+			continue
+		}
+		if ev.Seq > maxSeq {
+			maxSeq = ev.Seq
+		}
+	}
+	rec.Seq = maxSeq + 1
 
-	// Compute the next sequence number for this run.
-	row := tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(seq), 0) + 1 FROM events WHERE loop_id = ?`,
-		rec.RunID,
-	)
-	if err := row.Scan(&rec.Seq); err != nil {
-		return fmt.Errorf("query next event sequence: %w", err)
-	}
-	row = tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(stream_seq), 0) + 1 FROM events`,
-	)
-	if err := row.Scan(&rec.StreamSeq); err != nil {
-		return fmt.Errorf("query next event stream sequence: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO events (event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.EventID,
-		rec.RunID,
-		rec.AgentID,
-		rec.ChannelID,
-		rec.OwnerID,
-		rec.TrajectoryID,
-		rec.Seq,
-		rec.StreamSeq,
-		rec.Timestamp.UTC().Format(time.RFC3339Nano),
-		rec.Kind,
-		rec.Phase,
-		string(rec.Payload),
-	)
+	// Compute stream_seq from OG: take the max of all OG events, then +1.
+	allEvents, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:  ogKindEvent,
+		Limit: 100000,
+	})
 	if err != nil {
-		return fmt.Errorf("insert event: %w", err)
+		return fmt.Errorf("append event: list all events: %w", err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit event insert: %w", err)
+	maxStreamSeq := int64(0)
+	for _, obj := range allEvents {
+		var ev types.EventRecord
+		if err := ogDecode(obj, &ev); err != nil {
+			continue
+		}
+		if ev.StreamSeq > maxStreamSeq {
+			maxStreamSeq = ev.StreamSeq
+		}
 	}
+	rec.StreamSeq = maxStreamSeq + 1
 
-	return nil
+	return s.AppendEventOG(ctx, rec)
 }
 
 // ListEvents returns events for the given run, ordered by sequence ascending.
@@ -1782,64 +1458,26 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 	if limit <= 0 {
 		limit = 200
 	}
-
-	if s.og != nil {
-		// Fetch all events for this run from OG, then filter by seq.
-		// Using a large fetch limit ensures we don't miss events that
-		// fall outside the "most recent N" window but still have
-		// seq > afterSeq.
-		objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, 10000)
-		if err != nil {
-			return nil, fmt.Errorf("query events: %w", err)
-		}
-		events := make([]types.EventRecord, 0, len(objs))
-		for _, obj := range objs {
-			var rec types.EventRecord
-			if err := ogDecode(obj, &rec); err != nil {
-				return nil, err
-			}
-			if rec.Seq <= afterSeq {
-				continue
-			}
-			events = append(events, rec)
-		}
-		// Sort by seq ascending.
-		sort.Slice(events, func(i, j int) bool { return events[i].Seq < events[j].Seq })
-		if len(events) > limit {
-			events = events[:limit]
-		}
-		// Fall back to SQL if OG returned nothing (legacy records).
-		if len(events) > 0 {
-			return events, nil
-		}
-	}
-
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
-		   FROM events
-		  WHERE loop_id = ?
-		    AND seq > ?
-		  ORDER BY seq ASC
-		  LIMIT ?`,
-		runID,
-		afterSeq,
-		limit,
-	)
+	// Fetch a large window since ogListByMetadata orders by updated_at
+	// DESC, not by seq. We need all events to filter by seq and sort.
+	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, 100000)
 	if err != nil {
 		return nil, fmt.Errorf("query events: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	var events []types.EventRecord
-	for rows.Next() {
-		rec, err := scanEvent(rows)
-		if err != nil {
+	events := make([]types.EventRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.Seq <= afterSeq {
+			continue
 		}
 		events = append(events, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events: %w", err)
+	sort.Slice(events, func(i, j int) bool { return events[i].Seq < events[j].Seq })
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
 }
@@ -1850,59 +1488,25 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 	if limit <= 0 {
 		limit = 200
 	}
-
-	if s.og != nil {
-		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-			Kind:    ogKindEvent,
-			OwnerID: ownerID,
-			Limit:   limit,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("query events by owner: %w", err)
-		}
-		events := make([]types.EventRecord, 0, len(objs))
-		for _, obj := range objs {
-			var rec types.EventRecord
-			if err := ogDecode(obj, &rec); err != nil {
-				return nil, err
-			}
-			events = append(events, rec)
-		}
-		// Sort by timestamp descending.
-		sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.After(events[j].Timestamp) })
-		if len(events) > limit {
-			events = events[:limit]
-		}
-		// Fall back to SQL if OG returned nothing (legacy records).
-		if len(events) > 0 {
-			return events, nil
-		}
-	}
-
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
-		   FROM events
-		  WHERE owner_id = ?
-		  ORDER BY ts DESC
-		  LIMIT ?`,
-		ownerID,
-		limit,
-	)
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindEvent,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("query events by owner: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	var events []types.EventRecord
-	for rows.Next() {
-		rec, err := scanEvent(rows)
-		if err != nil {
+	events := make([]types.EventRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
 		events = append(events, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events by owner: %w", err)
+	sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.After(events[j].Timestamp) })
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
 }
@@ -1915,69 +1519,31 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 	if limit <= 0 {
 		limit = 200
 	}
-
-	if s.og != nil {
-		// Fetch all owner events from OG (no limit on the fetch side,
-		// then filter by stream_seq and apply the caller's limit).
-		// Using a large fetch limit ensures we don't miss events that
-		// fall outside the "most recent N" window but still have
-		// stream_seq > afterSeq.
-		objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-			Kind:    ogKindEvent,
-			OwnerID: ownerID,
-			Limit:   10000,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("query events by owner after seq: %w", err)
-		}
-		events := make([]types.EventRecord, 0, len(objs))
-		for _, obj := range objs {
-			var rec types.EventRecord
-			if err := ogDecode(obj, &rec); err != nil {
-				return nil, err
-			}
-			if rec.StreamSeq <= afterSeq {
-				continue
-			}
-			events = append(events, rec)
-		}
-		// Sort by stream_seq ascending.
-		sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
-		if len(events) > limit {
-			events = events[:limit]
-		}
-		// Fall back to SQL if OG returned nothing (legacy records).
-		if len(events) > 0 {
-			return events, nil
-		}
-	}
-
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
-		   FROM events
-		  WHERE owner_id = ?
-		    AND stream_seq > ?
-		  ORDER BY stream_seq ASC
-		  LIMIT ?`,
-		ownerID,
-		afterSeq,
-		limit,
-	)
+	// Fetch a large window since ListObjects orders by updated_at DESC,
+	// not by stream_seq. We need all events to filter by stream_seq and
+	// then apply the caller's limit.
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    ogKindEvent,
+		OwnerID: ownerID,
+		Limit:   100000,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("query events by owner after seq: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	var events []types.EventRecord
-	for rows.Next() {
-		rec, err := scanEvent(rows)
-		if err != nil {
+	events := make([]types.EventRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.StreamSeq <= afterSeq {
+			continue
 		}
 		events = append(events, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events by owner after seq: %w", err)
+	sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
 }
@@ -1987,32 +1553,25 @@ func (s *Store) ListEventsByChannel(ctx context.Context, ownerID, channelID stri
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
-		   FROM events
-		  WHERE owner_id = ?
-		    AND channel_id = ?
-		  ORDER BY ts ASC
-		  LIMIT ?`,
-		ownerID,
-		channelID,
-		limit,
-	)
+	// Fetch a large window since ogListByMetadata orders by updated_at DESC.
+	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "channel_id", channelID, 10000)
 	if err != nil {
 		return nil, fmt.Errorf("query events by channel: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var events []types.EventRecord
-	for rows.Next() {
-		rec, err := scanEvent(rows)
-		if err != nil {
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
 		}
 		events = append(events, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events by channel: %w", err)
+	sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.Before(events[j].Timestamp) })
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
 }
@@ -2022,32 +1581,25 @@ func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryI
 	if limit <= 0 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
-		   FROM events
-		  WHERE owner_id = ?
-		    AND trajectory_id = ?
-		  ORDER BY stream_seq ASC
-		  LIMIT ?`,
-		ownerID,
-		trajectoryID,
-		limit,
-	)
+	// Fetch a large window since ogListByMetadata orders by updated_at DESC.
+	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "trajectory_id", trajectoryID, 10000)
 	if err != nil {
 		return nil, fmt.Errorf("query events by trajectory: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var events []types.EventRecord
-	for rows.Next() {
-		rec, err := scanEvent(rows)
-		if err != nil {
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
 		}
 		events = append(events, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events by trajectory: %w", err)
+	sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
 }
@@ -2058,106 +1610,64 @@ func (s *Store) ListEventsByTrajectoryAfter(ctx context.Context, ownerID, trajec
 	if limit <= 0 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
-		   FROM events
-		  WHERE owner_id = ?
-		    AND trajectory_id = ?
-		    AND stream_seq > ?
-		  ORDER BY stream_seq ASC
-		  LIMIT ?`,
-		ownerID,
-		trajectoryID,
-		afterSeq,
-		limit,
-	)
+	// Fetch a large window since ogListByMetadata orders by updated_at DESC,
+	// not by stream_seq. We need all matching records to filter by afterSeq
+	// and sort by stream_seq before applying the caller's limit.
+	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "trajectory_id", trajectoryID, 10000)
 	if err != nil {
 		return nil, fmt.Errorf("query events by trajectory after seq: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var events []types.EventRecord
-	for rows.Next() {
-		rec, err := scanEvent(rows)
-		if err != nil {
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if rec.StreamSeq <= afterSeq {
+			continue
 		}
 		events = append(events, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events by trajectory after seq: %w", err)
+	sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
 }
 
 // AppendChannelMessage persists a message to a coordination channel and assigns the next cursor sequence.
 func (s *Store) AppendChannelMessage(ctx context.Context, message *types.ChannelMessage, ownerID string) error {
-	if s.og != nil && ownerID != "" {
-		// Compute the next sequence number from OG.
-		existing, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", message.ChannelID, 10000)
-		if err != nil {
-			return fmt.Errorf("append channel message: list existing: %w", err)
-		}
-		maxSeq := int64(0)
-		for _, obj := range existing {
-			if obj.OwnerID != ownerID {
-				continue
-			}
-			var msg types.ChannelMessage
-			if err := ogDecode(obj, &msg); err != nil {
-				continue
-			}
-			if msg.Seq > maxSeq {
-				maxSeq = msg.Seq
-			}
-		}
-		message.Seq = maxSeq + 1
-		if message.Timestamp.IsZero() {
-			message.Timestamp = time.Now().UTC()
-		}
-		return s.AppendChannelMessageOG(ctx, message, ownerID)
-	}
+	// Serialize channel message sequence allocation to prevent two
+	// concurrent sends from reading the same maxSeq and both assigning
+	// the same sequence number.
+	s.channelMsgMu.Lock()
+	defer s.channelMsgMu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	// Compute the next sequence number from OG. Sequences are global
+	// per channel (not per-owner) to match the old SQL `MAX(seq) WHERE
+	// channel_id = ?` semantics.
+	existing, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", message.ChannelID, 10000)
 	if err != nil {
-		return fmt.Errorf("begin channel message transaction: %w", err)
+		return fmt.Errorf("append channel message: list existing: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	row := tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(seq), 0) + 1 FROM channel_messages WHERE channel_id = ?`,
-		message.ChannelID,
-	)
-	if err := row.Scan(&message.Seq); err != nil {
-		return fmt.Errorf("query next channel message sequence: %w", err)
+	maxSeq := int64(0)
+	for _, obj := range existing {
+		var msg types.ChannelMessage
+		if err := ogDecode(obj, &msg); err != nil {
+			continue
+		}
+		if msg.Seq > maxSeq {
+			maxSeq = msg.Seq
+		}
 	}
+	message.Seq = maxSeq + 1
 	if message.Timestamp.IsZero() {
 		message.Timestamp = time.Now().UTC()
 	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO channel_messages (channel_id, seq, owner_id, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		message.ChannelID,
-		message.Seq,
-		ownerID,
-		message.FromAgentID,
-		message.FromRunID,
-		message.ToAgentID,
-		message.ToRunID,
-		message.TrajectoryID,
-		message.From,
-		message.Role,
-		message.Content,
-		message.Timestamp.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert channel message: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit channel message: %w", err)
-	}
-	return nil
+	return s.AppendChannelMessageOG(ctx, message, ownerID)
 }
 
 // ListChannelMessages returns channel messages after the provided cursor, ordered by sequence ascending.
@@ -2165,47 +1675,12 @@ func (s *Store) ListChannelMessages(ctx context.Context, ownerID, channelID stri
 	if limit <= 0 {
 		limit = 200
 	}
-	if s.og != nil && ownerID != "" {
-		msgs, err := s.ListChannelMessagesOG(ctx, ownerID, channelID, afterSeq, limit)
-		if err != nil {
-			return nil, fmt.Errorf("query channel messages: %w", err)
-		}
-		// Sort by seq ascending.
-		sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
-		// Fall back to SQL if OG returned nothing (legacy records).
-		if len(msgs) > 0 {
-			return msgs, nil
-		}
-	}
-	query := `SELECT channel_id, seq, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at
-		   FROM channel_messages
-		  WHERE channel_id = ?
-		    AND seq > ?`
-	args := []any{channelID, afterSeq}
-	if strings.TrimSpace(ownerID) != "" {
-		query += ` AND owner_id = ?`
-		args = append(args, ownerID)
-	}
-	query += ` ORDER BY seq ASC LIMIT ?`
-	args = append(args, limit)
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	msgs, err := s.ListChannelMessagesOG(ctx, ownerID, channelID, afterSeq, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query channel messages: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	var messages []types.ChannelMessage
-	for rows.Next() {
-		msg, err := scanChannelMessage(rows)
-		if err != nil {
-			return nil, err
-		}
-		messages = append(messages, msg)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate channel messages: %w", err)
-	}
-	return messages, nil
+	sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
+	return msgs, nil
 }
 
 // ListChannelMessagesByTrajectory returns durable channel messages for a
@@ -2214,80 +1689,39 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 	if limit <= 0 {
 		limit = 500
 	}
-	if s.og != nil && ownerID != "" {
-		objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "trajectory_id", trajectoryID, limit*2)
-		if err != nil {
-			return nil, fmt.Errorf("query channel messages by trajectory: %w", err)
-		}
-		msgs := make([]types.ChannelMessage, 0, len(objs))
-		for _, obj := range objs {
-			if obj.OwnerID != ownerID {
-				continue
-			}
-			var msg types.ChannelMessage
-			if err := ogDecode(obj, &msg); err != nil {
-				return nil, err
-			}
-			msgs = append(msgs, msg)
-		}
-		sort.Slice(msgs, func(i, j int) bool {
-			if !msgs[i].Timestamp.Equal(msgs[j].Timestamp) {
-				return msgs[i].Timestamp.Before(msgs[j].Timestamp)
-			}
-			return msgs[i].Seq < msgs[j].Seq
-		})
-		if len(msgs) > limit {
-			msgs = msgs[:limit]
-		}
-		if len(msgs) > 0 {
-			return msgs, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT channel_id, seq, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at
-		   FROM channel_messages
-		  WHERE owner_id = ?
-		    AND trajectory_id = ?
-		  ORDER BY created_at ASC, seq ASC
-		  LIMIT ?`,
-		ownerID,
-		trajectoryID,
-		limit,
-	)
+	// Fetch a large window since ogListByMetadata orders by updated_at
+	// DESC, not by seq/timestamp. We need all matching messages to sort
+	// by timestamp/seq and then apply the caller's limit.
+	objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "trajectory_id", trajectoryID, 100000)
 	if err != nil {
 		return nil, fmt.Errorf("query channel messages by trajectory: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	var messages []types.ChannelMessage
-	for rows.Next() {
-		msg, err := scanChannelMessage(rows)
-		if err != nil {
+	msgs := make([]types.ChannelMessage, 0, len(objs))
+	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
+		}
+		var msg types.ChannelMessage
+		if err := ogDecode(obj, &msg); err != nil {
 			return nil, err
 		}
-		messages = append(messages, msg)
+		msgs = append(msgs, msg)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate channel messages by trajectory: %w", err)
+	sort.Slice(msgs, func(i, j int) bool {
+		if !msgs[i].Timestamp.Equal(msgs[j].Timestamp) {
+			return msgs[i].Timestamp.Before(msgs[j].Timestamp)
+		}
+		return msgs[i].Seq < msgs[j].Seq
+	})
+	if len(msgs) > limit {
+		msgs = msgs[:limit]
 	}
-	return messages, nil
+	return msgs, nil
 }
 
 // GetWorkerUpdate returns a previously dispatched structured worker update.
 func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
-	if s.og != nil {
-		rec, err := s.GetWorkerUpdateOG(ctx, ownerID, updateID)
-		if err == nil || err != ErrNotFound {
-			return rec, err
-		}
-		// Fall through to SQL for legacy records.
-	}
-	row := s.db.QueryRowContext(ctx,
-		workerUpdateSelectSQL()+` WHERE owner_id = ? AND update_id = ?`,
-		ownerID, updateID,
-	)
-	return scanWorkerUpdate(row)
+	return s.GetWorkerUpdateOG(ctx, ownerID, updateID)
 }
 
 // ListWorkerUpdatesByTrajectory returns structured worker updates for one
@@ -2296,39 +1730,7 @@ func (s *Store) ListWorkerUpdatesByTrajectory(ctx context.Context, ownerID, traj
 	if limit <= 0 {
 		limit = 500
 	}
-	if s.og != nil {
-		updates, err := s.ListWorkerUpdatesByTrajectoryOG(ctx, ownerID, trajectoryID, limit)
-		if err == nil && len(updates) > 0 {
-			return updates, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.db.QueryContext(ctx,
-		workerUpdateSelectSQL()+` WHERE owner_id = ?
-		    AND trajectory_id = ?
-		  ORDER BY created_at ASC
-		  LIMIT ?`,
-		ownerID,
-		trajectoryID,
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query worker updates by trajectory: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var updates []types.CoagentSourcePacket
-	for rows.Next() {
-		rec, err := scanWorkerUpdate(rows)
-		if err != nil {
-			return nil, err
-		}
-		updates = append(updates, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate worker updates by trajectory: %w", err)
-	}
-	return updates, nil
+	return s.ListWorkerUpdatesByTrajectoryOG(ctx, ownerID, trajectoryID, limit)
 }
 
 // ListPendingWorkerUpdates returns undelivered update_coagent records for one
@@ -2338,39 +1740,7 @@ func (s *Store) ListPendingWorkerUpdates(ctx context.Context, ownerID, targetAge
 	if limit <= 0 {
 		limit = 200
 	}
-	if s.og != nil {
-		updates, err := s.ListPendingWorkerUpdatesOG(ctx, ownerID, targetAgentID, limit)
-		if err == nil && len(updates) > 0 {
-			return updates, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.db.QueryContext(ctx,
-		workerUpdateSelectSQL()+` WHERE owner_id = ?
-		    AND target_agent_id = ?
-		    AND delivered_at IS NULL
-		  ORDER BY created_at ASC, update_id ASC
-		  LIMIT ?`,
-		ownerID,
-		targetAgentID,
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query pending worker updates: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var updates []types.CoagentSourcePacket
-	for rows.Next() {
-		rec, err := scanWorkerUpdate(rows)
-		if err != nil {
-			return nil, err
-		}
-		updates = append(updates, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate pending worker updates: %w", err)
-	}
-	return updates, nil
+	return s.ListPendingWorkerUpdatesOG(ctx, ownerID, targetAgentID, limit)
 }
 
 // ListPendingWorkerUpdatesAll returns undelivered update_coagent records across
@@ -2379,26 +1749,37 @@ func (s *Store) ListPendingWorkerUpdatesAll(ctx context.Context, limit int) ([]t
 	if limit <= 0 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx,
-		workerUpdateSelectSQL()+` WHERE delivered_at IS NULL
-		  ORDER BY created_at ASC, update_id ASC
-		  LIMIT ?`,
-		limit,
-	)
+	// Fetch a large window since ListObjects orders by updated_at DESC.
+	// We need all pending records to sort by created_at and then apply
+	// the caller's limit in memory. Using a small limit can miss older
+	// undelivered records when many delivered records are more recently
+	// updated.
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:  objectgraph.ObjectKind("choir.worker_update"),
+		Limit: 100000,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("query pending worker updates: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 	var updates []types.CoagentSourcePacket
-	for rows.Next() {
-		rec, err := scanWorkerUpdate(rows)
-		if err != nil {
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.DeliveredToRunID != "" {
+			continue
 		}
 		updates = append(updates, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate pending worker updates: %w", err)
+	sort.Slice(updates, func(i, j int) bool {
+		if !updates[i].CreatedAt.Equal(updates[j].CreatedAt) {
+			return updates[i].CreatedAt.Before(updates[j].CreatedAt)
+		}
+		return updates[i].UpdateID < updates[j].UpdateID
+	})
+	if len(updates) > limit {
+		updates = updates[:limit]
 	}
 	return updates, nil
 }
@@ -2415,40 +1796,42 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 	if ownerID == "" || targetAgentID == "" {
 		return nil, fmt.Errorf("list coagent mailbox backlog: owner_id and target_agent_id are required")
 	}
-	rows, err := s.db.QueryContext(ctx,
-		workerUpdateSelectSQL()+` WHERE owner_id = ?
-		    AND target_agent_id = ?
-		    AND (
-		      delivered_at IS NULL
-		      OR message_seq > COALESCE((
-		        SELECT processed_message_seq
-		          FROM coagent_mailboxes
-		         WHERE owner_id = ?
-		           AND agent_id = ?
-		      ), 0)
-		    )
-		  ORDER BY message_seq ASC, created_at ASC, update_id ASC
-		  LIMIT ?`,
-		ownerID,
-		targetAgentID,
-		ownerID,
-		targetAgentID,
-		limit,
-	)
+	cursor, _, _, cursorErr := s.GetCoagentMailboxCursor(ctx, ownerID, targetAgentID)
+	if cursorErr != nil {
+		return nil, fmt.Errorf("list coagent mailbox backlog: read cursor: %w", cursorErr)
+	}
+	// Fetch a large window since ogListByMetadata orders by updated_at DESC,
+	// not by message_seq. We need all matching records to sort by message_seq
+	// and then apply the caller's limit in memory.
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID, 10000)
 	if err != nil {
 		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 	var updates []types.CoagentSourcePacket
-	for rows.Next() {
-		rec, err := scanWorkerUpdate(rows)
-		if err != nil {
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+			continue
 		}
 		updates = append(updates, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate coagent mailbox backlog: %w", err)
+	sort.Slice(updates, func(i, j int) bool {
+		if updates[i].MessageSeq != updates[j].MessageSeq {
+			return updates[i].MessageSeq < updates[j].MessageSeq
+		}
+		if !updates[i].CreatedAt.Equal(updates[j].CreatedAt) {
+			return updates[i].CreatedAt.Before(updates[j].CreatedAt)
+		}
+		return updates[i].UpdateID < updates[j].UpdateID
+	})
+	if len(updates) > limit {
+		updates = updates[:limit]
 	}
 	return updates, nil
 }
@@ -2459,32 +1842,50 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 	if limit <= 0 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx,
-		workerUpdateSelectSQL()+` WHERE delivered_at IS NULL
-		     OR message_seq > COALESCE((
-		        SELECT processed_message_seq
-		          FROM coagent_mailboxes
-		         WHERE owner_id = worker_updates.owner_id
-		           AND agent_id = worker_updates.target_agent_id
-		    ), 0)
-		  ORDER BY owner_id ASC, target_agent_id ASC, message_seq ASC, created_at ASC, update_id ASC
-		  LIMIT ?`,
-		limit,
-	)
+	// Fetch a large window since ListObjects orders by updated_at DESC.
+	// We need all records to filter by cursor/pending state before
+	// applying the caller's limit. Using a small limit can miss older
+	// undelivered updates when many delivered records are more recently
+	// updated.
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:  objectgraph.ObjectKind("choir.worker_update"),
+		Limit: 100000,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("query coagent mailbox backlog: %w", err)
+		return nil, fmt.Errorf("query coagent mailbox backlog all: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 	var updates []types.CoagentSourcePacket
-	for rows.Next() {
-		rec, err := scanWorkerUpdate(rows)
-		if err != nil {
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		cursor, _, _, cursorErr := s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
+		if cursorErr != nil {
+			return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
+		}
+		if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+			continue
 		}
 		updates = append(updates, rec)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate coagent mailbox backlog: %w", err)
+	sort.Slice(updates, func(i, j int) bool {
+		if updates[i].OwnerID != updates[j].OwnerID {
+			return updates[i].OwnerID < updates[j].OwnerID
+		}
+		if updates[i].TargetAgentID != updates[j].TargetAgentID {
+			return updates[i].TargetAgentID < updates[j].TargetAgentID
+		}
+		if updates[i].MessageSeq != updates[j].MessageSeq {
+			return updates[i].MessageSeq < updates[j].MessageSeq
+		}
+		if !updates[i].CreatedAt.Equal(updates[j].CreatedAt) {
+			return updates[i].CreatedAt.Before(updates[j].CreatedAt)
+		}
+		return updates[i].UpdateID < updates[j].UpdateID
+	})
+	if len(updates) > limit {
+		updates = updates[:limit]
 	}
 	return updates, nil
 }
@@ -2492,17 +1893,22 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 // CountPendingWorkerUpdatesByTrajectory returns undelivered updates for the
 // silent-stall oracle.
 func (s *Store) CountPendingWorkerUpdatesByTrajectory(ctx context.Context, ownerID, trajectoryID string) (int, error) {
-	var count int
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*)
-		   FROM worker_updates
-		  WHERE owner_id = ?
-		    AND trajectory_id = ?
-		    AND delivered_at IS NULL`,
-		ownerID,
-		trajectoryID,
-	).Scan(&count); err != nil {
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "trajectory_id", trajectoryID, 10000)
+	if err != nil {
 		return 0, fmt.Errorf("count pending worker updates by trajectory: %w", err)
+	}
+	count := 0
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
+			return 0, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if rec.DeliveredToRunID == "" {
+			count++
+		}
 	}
 	return count, nil
 }
@@ -2513,121 +1919,143 @@ func (s *Store) MarkWorkerUpdatesDelivered(ctx context.Context, ownerID, targetA
 	if len(updateIDs) == 0 {
 		return nil
 	}
-	return markWorkerUpdatesDeliveredWithExec(ctx, s.db, ownerID, targetAgentID, updateIDs, runID)
-}
-
-type workerUpdateDeliveryExecer interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-	QueryRowContext(context.Context, string, ...any) *sql.Row
-}
-
-func markWorkerUpdatesDeliveredWithExec(ctx context.Context, exec workerUpdateDeliveryExecer, ownerID, targetAgentID string, updateIDs []string, runID string) error {
 	targetAgentID = strings.TrimSpace(targetAgentID)
 	if targetAgentID == "" {
 		return fmt.Errorf("mark worker updates delivered: target_agent_id is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(updateIDs)), ",")
-	args := make([]any, 0, len(updateIDs)+4)
-	args = append(args, runID, now, ownerID, targetAgentID)
+	// Serialize delivery marking to preserve the compare-and-set semantics
+	// that the old SQL `WHERE delivered_at IS NULL AND delivered_to_loop_id
+	// = ''` provided atomically. Without this lock, two concurrent
+	// activations can both read DeliveredToRunID == "" and both upsert a
+	// delivered copy.
+	s.workerUpdateMu.Lock()
+	defer s.workerUpdateMu.Unlock()
+	now := time.Now().UTC()
 	for _, id := range updateIDs {
-		args = append(args, id)
+		rec, err := s.GetWorkerUpdateOG(ctx, ownerID, id)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			return fmt.Errorf("mark worker updates delivered: get %s: %w", id, err)
+		}
+		if rec.TargetAgentID != targetAgentID {
+			continue // not addressed to this agent
+		}
+		if rec.DeliveredToRunID != "" {
+			continue // already delivered
+		}
+		rec.DeliveredToRunID = runID
+		rec.DeliveredAt = &now
+		if err := s.CreateWorkerUpdateOG(ctx, rec); err != nil {
+			return fmt.Errorf("mark worker updates delivered: put %s: %w", id, err)
+		}
 	}
-	query := fmt.Sprintf(
-		`UPDATE worker_updates
-		    SET delivered_to_loop_id = ?,
-		        delivered_at = ?
-		  WHERE owner_id = ?
-		    AND target_agent_id = ?
-		    AND update_id IN (%s)
-		    AND delivered_at IS NULL
-		    AND delivered_to_loop_id = ''`,
-		placeholders,
-	)
-	if _, err := exec.ExecContext(ctx, query, args...); err != nil {
-		return fmt.Errorf("mark worker updates delivered: %w", err)
-	}
-	if err := refreshCoagentMailboxCursorWithExec(ctx, exec, ownerID, targetAgentID); err != nil {
-		return err
-	}
-	return nil
+	// Refresh the persisted cursor after marking.
+	return s.refreshCoagentMailboxCursorOG(ctx, ownerID, targetAgentID)
 }
 
 // GetCoagentMailboxCursor returns the durable contiguous processed cursor for
-// one addressed actor mailbox. It is a projection over update_coagent delivery
-// state and is the substrate for the durable actor mailbox cutover.
+// one addressed actor mailbox. The cursor is persisted in the object graph
+// and only refreshed when worker updates are marked delivered.
 func (s *Store) GetCoagentMailboxCursor(ctx context.Context, ownerID, agentID string) (int64, string, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	agentID = strings.TrimSpace(agentID)
 	if ownerID == "" || agentID == "" {
 		return 0, "", false, fmt.Errorf("get coagent mailbox cursor: owner_id and agent_id are required")
 	}
-	var (
-		channelID string
-		cursor    int64
-	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT channel_id, processed_message_seq
-		   FROM coagent_mailboxes
-		  WHERE owner_id = ? AND agent_id = ?`,
-		ownerID, agentID,
-	).Scan(&channelID, &cursor)
+	// Read the persisted cursor from OG. Search by agent_id and filter
+	// by owner_id, since multiple owners can have the same agent_id.
+	objs, err := s.ogListByMetadata(ctx, ogKindCoagentMail, "agent_id", agentID, 100)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, "", false, nil
-		}
 		return 0, "", false, fmt.Errorf("get coagent mailbox cursor: %w", err)
+	}
+	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
+		}
+		var mb struct {
+			AgentID      string `json:"agent_id"`
+			ChannelID    string `json:"channel_id"`
+			ProcessedSeq int64  `json:"processed_message_seq"`
+		}
+		if err := ogDecode(obj, &mb); err != nil {
+			return 0, "", false, fmt.Errorf("get coagent mailbox cursor: %w", err)
+		}
+		return mb.ProcessedSeq, mb.ChannelID, true, nil
+	}
+	// No persisted cursor yet; compute initial value from worker updates.
+	return s.computeAndPersistCoagentMailboxCursor(ctx, ownerID, agentID)
+}
+
+// computeAndPersistCoagentMailboxCursor computes the cursor from worker
+// update delivery state and persists it to OG.
+func (s *Store) computeAndPersistCoagentMailboxCursor(ctx context.Context, ownerID, agentID string) (int64, string, bool, error) {
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", agentID, 10000)
+	if err != nil {
+		return 0, "", false, fmt.Errorf("compute coagent mailbox cursor: %w", err)
+	}
+	var maxSeq int64
+	var minPendingSeq int64
+	var channelID string
+	hasAny := false
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
+			return 0, "", false, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if rec.MessageSeq <= 0 {
+			continue
+		}
+		hasAny = true
+		if rec.MessageSeq > maxSeq {
+			maxSeq = rec.MessageSeq
+		}
+		if rec.DeliveredToRunID == "" {
+			if minPendingSeq == 0 || rec.MessageSeq < minPendingSeq {
+				minPendingSeq = rec.MessageSeq
+			}
+		}
+		if channelID == "" && rec.ChannelID != "" {
+			channelID = rec.ChannelID
+		}
+	}
+	if !hasAny {
+		return 0, "", false, nil
+	}
+	cursor := maxSeq
+	if minPendingSeq > 0 {
+		cursor = minPendingSeq - 1
+	}
+	// Persist the cursor.
+	mbRec := struct {
+		AgentID      string `json:"agent_id"`
+		ChannelID    string `json:"channel_id"`
+		ProcessedSeq int64  `json:"processed_message_seq"`
+	}{
+		AgentID:      agentID,
+		ChannelID:    channelID,
+		ProcessedSeq: cursor,
+	}
+	metadata := map[string]any{
+		"agent_id":            agentID,
+		"channel_id":          channelID,
+		"processed_message_seq": cursor,
+	}
+	if _, err := s.ogPut(ctx, ogKindCoagentMail, ownerID, agentID, mbRec, metadata, time.Now().UTC()); err != nil {
+		return 0, "", false, fmt.Errorf("persist coagent mailbox cursor: %w", err)
 	}
 	return cursor, channelID, true, nil
 }
 
-func refreshCoagentMailboxCursorWithExec(ctx context.Context, exec workerUpdateDeliveryExecer, ownerID, agentID string) error {
-	ownerID = strings.TrimSpace(ownerID)
-	agentID = strings.TrimSpace(agentID)
-	if ownerID == "" || agentID == "" {
-		return fmt.Errorf("refresh coagent mailbox cursor: owner_id and agent_id are required")
-	}
-	var (
-		minPending sql.NullInt64
-		maxSeq     sql.NullInt64
-		channelID  sql.NullString
-	)
-	if err := exec.QueryRowContext(ctx,
-		`SELECT MIN(CASE WHEN delivered_at IS NULL THEN message_seq END),
-		        MAX(message_seq),
-		        MAX(channel_id)
-		   FROM worker_updates
-		  WHERE owner_id = ?
-		    AND target_agent_id = ?
-		    AND message_seq > 0`,
-		ownerID, agentID,
-	).Scan(&minPending, &maxSeq, &channelID); err != nil {
-		return fmt.Errorf("refresh coagent mailbox cursor query: %w", err)
-	}
-	if !maxSeq.Valid || maxSeq.Int64 <= 0 {
-		return nil
-	}
-	cursor := maxSeq.Int64
-	if minPending.Valid && minPending.Int64 > 0 {
-		cursor = minPending.Int64 - 1
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := exec.ExecContext(ctx,
-		`INSERT INTO coagent_mailboxes (owner_id, agent_id, channel_id, processed_message_seq, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   channel_id = VALUES(channel_id),
-		   processed_message_seq = VALUES(processed_message_seq),
-		   updated_at = VALUES(updated_at)`,
-		ownerID,
-		agentID,
-		channelID.String,
-		cursor,
-		now,
-	); err != nil {
-		return fmt.Errorf("refresh coagent mailbox cursor upsert: %w", err)
-	}
-	return nil
+// refreshCoagentMailboxCursorOG recomputes and persists the cursor after
+// worker updates are marked delivered.
+func (s *Store) refreshCoagentMailboxCursorOG(ctx context.Context, ownerID, agentID string) error {
+	_, _, _, err := s.computeAndPersistCoagentMailboxCursor(ctx, ownerID, agentID)
+	return err
 }
 
 // DispatchWorkerUpdate atomically persists a structured worker update with its
@@ -2635,16 +2063,15 @@ func refreshCoagentMailboxCursorWithExec(ctx context.Context, exec workerUpdateD
 // backlog; the update_id is idempotent per owner, so retries can return the
 // existing update without duplicating delivery.
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("begin worker update transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	// Serialize the entire dispatch path to preserve idempotency:
+	// the dedupe check and the channel message sequence allocation
+	// must be in the same critical section so two concurrent retries
+	// can't both pass the dedupe check and both append messages.
+	s.channelMsgMu.Lock()
+	defer s.channelMsgMu.Unlock()
 
-	existing, err := scanWorkerUpdate(tx.QueryRowContext(ctx,
-		workerUpdateSelectSQL()+` WHERE owner_id = ? AND update_id = ?`,
-		update.OwnerID, update.UpdateID,
-	))
+	// Check for an existing worker update in OG (dedup).
+	existing, err := s.GetWorkerUpdateOG(ctx, update.OwnerID, update.UpdateID)
 	if err == nil {
 		return existing, false, nil
 	}
@@ -2652,13 +2079,23 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSo
 		return types.CoagentSourcePacket{}, false, err
 	}
 
-	row := tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(seq), 0) + 1 FROM channel_messages WHERE channel_id = ?`,
-		message.ChannelID,
-	)
-	if err := row.Scan(&message.Seq); err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("query next worker update message sequence: %w", err)
+	// Compute the next sequence number from OG. Sequences are global
+	// per channel (not per-owner) to match the old SQL semantics.
+	existingMsgs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", message.ChannelID, 10000)
+	if err != nil {
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("dispatch worker update: list existing messages: %w", err)
 	}
+	maxSeq := int64(0)
+	for _, obj := range existingMsgs {
+		var msg types.ChannelMessage
+		if err := ogDecode(obj, &msg); err != nil {
+			continue
+		}
+		if msg.Seq > maxSeq {
+			maxSeq = msg.Seq
+		}
+	}
+	message.Seq = maxSeq + 1
 	if message.Timestamp.IsZero() {
 		message.Timestamp = time.Now().UTC()
 	}
@@ -2667,53 +2104,30 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSo
 		update.CreatedAt = message.Timestamp
 	}
 
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO channel_messages (channel_id, seq, owner_id, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		message.ChannelID,
-		message.Seq,
-		update.OwnerID,
-		message.FromAgentID,
-		message.FromRunID,
-		message.ToAgentID,
-		message.ToRunID,
-		message.TrajectoryID,
-		message.From,
-		message.Role,
-		message.Content,
-		message.Timestamp.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("insert worker update channel message: %w", err)
+	// Store the channel message in OG.
+	if err := s.AppendChannelMessageOG(ctx, message, update.OwnerID); err != nil {
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("dispatch worker update: store channel message: %w", err)
 	}
 
-	packetJSON, err := json.Marshal(update.Packet)
-	if err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("marshal coagent source packet: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, packet_json, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		update.OwnerID,
-		update.UpdateID,
-		update.AgentID,
-		update.TargetAgentID,
-		update.ChannelID,
-		update.MessageSeq,
-		update.TrajectoryID,
-		update.Role,
-		update.Packet.Kind,
-		update.Packet.Summary,
-		string(packetJSON),
-		update.Content,
-		update.CreatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("insert worker update record: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return types.CoagentSourcePacket{}, false, fmt.Errorf("commit worker update transaction: %w", err)
+	// Store the worker update in OG. If this fails, compensate by
+	// deleting the channel message we just wrote so a retry doesn't
+	// end up with a duplicate audit message.
+	if err := s.CreateWorkerUpdateOG(ctx, update); err != nil {
+		// Best-effort compensating delete of the channel message.
+		// List all messages on the channel and find the one with the
+		// exact seq we just appended, since ogGetByKey may return a
+		// different message on the same channel.
+		objs, delErr := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", message.ChannelID, 10000)
+		if delErr == nil {
+			for _, obj := range objs {
+				var existing types.ChannelMessage
+				if ogDecode(obj, &existing) == nil && existing.Seq == message.Seq && existing.ChannelID == message.ChannelID {
+					_ = s.ogDelete(ctx, obj.CanonicalID)
+					break
+				}
+			}
+		}
+		return types.CoagentSourcePacket{}, false, fmt.Errorf("dispatch worker update: store worker update: %w", err)
 	}
 	return update, true, nil
 }

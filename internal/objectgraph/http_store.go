@@ -196,6 +196,10 @@ func (h *HTTPStore) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, e
 	return edges, nil
 }
 
+func (h *HTTPStore) DeleteObject(ctx context.Context, id string) error {
+	return fmt.Errorf("objectgraph http: delete not supported")
+}
+
 // Close is a no-op: HTTP connections are pooled by the http.Client and do not
 // require explicit teardown.
 func (h *HTTPStore) Close() error { return nil }

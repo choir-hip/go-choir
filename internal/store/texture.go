@@ -35,6 +35,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	embedded "github.com/dolthub/driver"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -233,7 +234,55 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 		_ = s.Close()
 		return nil, fmt.Errorf("texture workspace: bootstrap: %w", err)
 	}
+	// Initialize the object graph service on the texture workspace.
+	ogDoltStore := objectgraph.NewDoltStore(db)
+	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("texture workspace: bootstrap object graph: %w", err)
+	}
+	s.ogStore = ogDoltStore
+	s.og = objectgraph.NewService(objectgraph.Config{
+		Durable: ogDoltStore,
+	})
+	// Backfill existing SQL texture rows into the object graph.
+	// Each kind is gated individually so only empty kinds are
+	// backfilled, avoiding replaying stale SQL over newer OG writes.
+	if err := s.backfillTextureTablesOG(context.Background()); err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("texture workspace: backfill OG: %w", err)
+	}
 	return s, nil
+}
+
+// backfillTextureTablesOG backfills texture-specific SQL tables into OG.
+// It is called from both Open and OpenTextureWorkspace. Each record uses
+// put-if-absent semantics to avoid overwriting newer OG state.
+func (s *Store) backfillTextureTablesOG(ctx context.Context) error {
+	if s.og == nil {
+		return nil
+	}
+	if err := s.backfillTextureDocumentsOG(ctx); err != nil {
+		return err
+	}
+	if err := s.backfillTextureRevisionsOG(ctx); err != nil {
+		return err
+	}
+	if err := s.backfillTextureDecisionsOG(ctx); err != nil {
+		return err
+	}
+	if err := s.backfillContentItemsOG(ctx); err != nil {
+		return err
+	}
+	if err := s.backfillPodcastSubscriptionsOG(ctx); err != nil {
+		return err
+	}
+	if err := s.backfillTextureSourceEntitiesOG(ctx); err != nil {
+		return err
+	}
+	if err := s.backfillTextureSourceRefsOG(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func deriveTextureWorkspacePath(path string) string {
@@ -477,44 +526,14 @@ func (s *Store) EnsureTextureSchema() error {
 
 // CreateDocument inserts a new document record.
 func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
-	_, err := s.textureHandle().ExecContext(ctx,
-		`INSERT INTO texture_documents (doc_id, owner_id, title, current_revision_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		doc.DocID,
-		doc.OwnerID,
-		doc.Title,
-		doc.CurrentRevisionID,
-		doc.CreatedAt.UTC().Format(time.RFC3339Nano),
-		doc.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert texture document: %w", err)
-	}
-	// Dual-write to OG for OG-backed reads.
-	if s.og != nil {
-		_ = s.CreateTextureDocumentOG(ctx, doc)
-	}
-	return nil
+	return s.CreateTextureDocumentOG(ctx, doc)
 }
 
 // GetDocument returns the document with the given doc ID, scoped to the
 // given owner. If the document does not exist or does not belong to the
 // owner, it returns ErrNotFound.
 func (s *Store) GetDocument(ctx context.Context, docID, ownerID string) (types.Document, error) {
-	if s.og != nil {
-		doc, err := s.GetTextureDocumentOG(ctx, ownerID, docID)
-		if err == nil || err != ErrNotFound {
-			return doc, err
-		}
-		// Fall through to SQL for legacy records.
-	}
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT doc_id, owner_id, title, current_revision_id, created_at, updated_at
-		   FROM texture_documents
-		  WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	)
-	return scanDocument(row)
+	return s.GetTextureDocumentOG(ctx, ownerID, docID)
 }
 
 // ListDocumentsByOwner returns documents for the given owner, ordered by
@@ -523,69 +542,13 @@ func (s *Store) ListDocumentsByOwner(ctx context.Context, ownerID string, limit 
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		docs, err := s.ListTextureDocumentsByOwnerOG(ctx, ownerID, limit)
-		if err == nil && len(docs) > 0 {
-			return docs, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT doc_id, owner_id, title, current_revision_id, created_at, updated_at
-		   FROM texture_documents
-		  WHERE owner_id = ?
-		  ORDER BY updated_at DESC
-		  LIMIT ?`,
-		ownerID, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query texture documents: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var docs []types.Document
-	for rows.Next() {
-		doc, err := scanDocument(rows)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate texture documents: %w", err)
-	}
-	return docs, nil
+	return s.ListTextureDocumentsByOwnerOG(ctx, ownerID, limit)
 }
 
 // ListAllDocuments returns documents across owners ordered by updated_at
 // descending. This is used for controller reconciliation on restart.
 func (s *Store) ListAllDocuments(ctx context.Context, limit int) ([]types.Document, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT doc_id, owner_id, title, current_revision_id, created_at, updated_at
-		   FROM texture_documents
-		  ORDER BY updated_at DESC
-		  LIMIT ?`,
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query all texture documents: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var docs []types.Document
-	for rows.Next() {
-		doc, err := scanDocument(rows)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate all texture documents: %w", err)
-	}
-	return docs, nil
+	return s.ListAllTextureDocumentsOG(ctx, limit)
 }
 
 // SearchResult is a document match from corpus search.
@@ -618,7 +581,7 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 		return nil, nil
 	}
 
-	// Split query into terms for multi-term LIKE matching.
+	// Split query into terms for multi-term matching.
 	terms := strings.Fields(strings.ToLower(query))
 	if len(terms) == 0 {
 		return nil, nil
@@ -627,120 +590,103 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 		terms = terms[:8]
 	}
 
-	// Build LIKE conditions for title matching.
-	var titleConds []string
-	var args []any
-	for _, term := range terms {
-		likeVal := "%" + term + "%"
-		titleConds = append(titleConds, "LOWER(d.title) LIKE ?")
-		args = append(args, likeVal)
-	}
-	titleWhere := strings.Join(titleConds, " AND ")
-
-	// Query documents matching title terms.
-	ownerClause := ""
-	if strings.TrimSpace(ownerID) != "" {
-		ownerClause = " AND d.owner_id = ?"
-		args = append(args, ownerID)
-	}
-	publishedClause := ""
-	if publishedOnly {
-		publishedClause = " AND EXISTS (SELECT 1 FROM texture_revisions rp WHERE rp.doc_id = d.doc_id AND rp.revision_id = d.current_revision_id AND (rp.metadata_json LIKE '%\"corpusd_route_path\"%' OR rp.metadata_json LIKE '%\"platformd_route_path\"%'))"
-	}
-	titleArgs := append([]any(nil), args...)
-	titleSQL := fmt.Sprintf(
-		`SELECT d.doc_id, d.title, d.owner_id, d.updated_at, 'title' as match_source
-		   FROM texture_documents d
-		  WHERE %s%s%s
-		  ORDER BY d.updated_at DESC
-		  LIMIT ?`, titleWhere, ownerClause, publishedClause)
-	titleArgs = append(titleArgs, limit)
-
-	rows, err := s.textureHandle().QueryContext(ctx, titleSQL, titleArgs...)
+	// Load all documents from OG. Use a large limit to avoid truncation
+	// for workspaces with many documents.
+	docs, err := s.ListAllTextureDocumentsOG(ctx, 100000)
 	if err != nil {
-		return nil, fmt.Errorf("search texture documents by title: %w", err)
+		return nil, fmt.Errorf("search texture documents: load docs: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+
+	// Filter by owner if specified.
+	if ownerID != "" {
+		filtered := docs[:0]
+		for _, d := range docs {
+			if d.OwnerID == ownerID {
+				filtered = append(filtered, d)
+			}
+		}
+		docs = filtered
+	}
+
+	// Helper: check if all terms match a string.
+	matchesAllTerms := func(text string) bool {
+		lower := strings.ToLower(text)
+		for _, term := range terms {
+			if !strings.Contains(lower, term) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Helper: check if a revision is published.
+	isPublished := func(rev types.Revision) bool {
+		metaJSON := string(rev.Metadata)
+		return strings.Contains(metaJSON, "corpusd_route_path") || strings.Contains(metaJSON, "platformd_route_path")
+	}
 
 	seen := map[string]bool{}
 	var results []SearchResult
-	for rows.Next() {
-		var r SearchResult
-		if err := rows.Scan(&r.DocID, &r.Title, &r.OwnerID, &r.UpdatedAt, &r.MatchSource); err != nil {
-			return nil, err
+
+	// Phase 1: title matching.
+	for _, doc := range docs {
+		if publishedOnly {
+			if doc.CurrentRevisionID == "" {
+				continue
+			}
+			rev, err := s.GetTextureRevisionOG(ctx, doc.OwnerID, doc.CurrentRevisionID)
+			if err != nil || !isPublished(rev) {
+				continue
+			}
 		}
-		if !seen[r.DocID] {
-			seen[r.DocID] = true
-			results = append(results, r)
+		if matchesAllTerms(doc.Title) {
+			seen[doc.DocID] = true
+			results = append(results, SearchResult{
+				DocID:       doc.DocID,
+				Title:       doc.Title,
+				OwnerID:     doc.OwnerID,
+				UpdatedAt:   doc.UpdatedAt,
+				MatchSource: "title",
+			})
+			if len(results) >= limit {
+				return results, nil
+			}
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate title search: %w", err)
 	}
 
-	// If we have enough title matches, skip content search.
-	if len(results) >= limit {
-		return results[:limit], nil
-	}
-
-	// Search revision content for remaining capacity.
-	remaining := limit - len(results)
-	var contentConds []string
-	var contentArgs []any
-	for _, term := range terms {
-		likeVal := "%" + term + "%"
-		contentConds = append(contentConds, "LOWER(r.content) LIKE ?")
-		contentArgs = append(contentArgs, likeVal)
-	}
-	contentWhere := strings.Join(contentConds, " AND ")
-	contentOwnerClause := ""
-	if strings.TrimSpace(ownerID) != "" {
-		contentOwnerClause = " AND d.owner_id = ?"
-		contentArgs = append(contentArgs, ownerID)
-	}
-	publishedContentClause := ""
-	if publishedOnly {
-		publishedContentClause = " AND (r.metadata_json LIKE '%\"corpusd_route_path\"%' OR r.metadata_json LIKE '%\"platformd_route_path\"%')"
-	}
-	// Exclude already-found docs.
-	excludeClause := ""
-	if len(seen) > 0 {
-		exclusions := make([]string, 0, len(seen))
-		for docID := range seen {
-			exclusions = append(exclusions, "'"+docID+"'")
+	// Phase 2: content matching for remaining capacity.
+	for _, doc := range docs {
+		if seen[doc.DocID] {
+			continue
 		}
-		excludeClause = " AND d.doc_id NOT IN (" + strings.Join(exclusions, ",") + ")"
-	}
-	contentSQL := fmt.Sprintf(
-		`SELECT DISTINCT d.doc_id, d.title, d.owner_id, d.updated_at, SUBSTRING(r.content, 1, 200) as snippet, 'content' as match_source
-		   FROM texture_documents d
-		   JOIN texture_revisions r ON r.doc_id = d.doc_id AND r.revision_id = d.current_revision_id
-		  WHERE %s%s%s%s
-		  ORDER BY d.updated_at DESC
-		  LIMIT ?`, contentWhere, contentOwnerClause, publishedContentClause, excludeClause)
-	contentArgs = append(contentArgs, remaining)
-
-	rows2, err := s.textureHandle().QueryContext(ctx, contentSQL, contentArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("search texture documents by content: %w", err)
-	}
-	defer func() { _ = rows2.Close() }()
-	for rows2.Next() {
-		var r SearchResult
-		var snippet sql.NullString
-		if err := rows2.Scan(&r.DocID, &r.Title, &r.OwnerID, &r.UpdatedAt, &snippet, &r.MatchSource); err != nil {
-			return nil, err
+		if doc.CurrentRevisionID == "" {
+			continue
 		}
-		if snippet.Valid {
-			r.Snippet = snippet.String
+		rev, err := s.GetTextureRevisionOG(ctx, doc.OwnerID, doc.CurrentRevisionID)
+		if err != nil {
+			continue
 		}
-		if !seen[r.DocID] {
-			seen[r.DocID] = true
-			results = append(results, r)
+		if publishedOnly && !isPublished(rev) {
+			continue
 		}
-	}
-	if err := rows2.Err(); err != nil {
-		return nil, fmt.Errorf("iterate content search: %w", err)
+		if matchesAllTerms(rev.Content) {
+			snippet := rev.Content
+			if len(snippet) > 200 {
+				snippet = snippet[:200]
+			}
+			seen[doc.DocID] = true
+			results = append(results, SearchResult{
+				DocID:       doc.DocID,
+				Title:       doc.Title,
+				OwnerID:     doc.OwnerID,
+				UpdatedAt:   doc.UpdatedAt,
+				Snippet:     snippet,
+				MatchSource: "content",
+			})
+			if len(results) >= limit {
+				break
+			}
+		}
 	}
 
 	return results, nil
@@ -748,35 +694,7 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 
 // UpdateDocument updates an existing document record.
 func (s *Store) UpdateDocument(ctx context.Context, doc types.Document) error {
-	result, err := s.textureHandle().ExecContext(ctx,
-		`UPDATE texture_documents
-		    SET owner_id = ?,
-		        title = ?,
-		        current_revision_id = ?,
-		        updated_at = ?
-		  WHERE doc_id = ? AND owner_id = ?`,
-		doc.OwnerID,
-		doc.Title,
-		doc.CurrentRevisionID,
-		doc.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		doc.DocID,
-		doc.OwnerID,
-	)
-	if err != nil {
-		return fmt.Errorf("update texture document: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check updated document rows: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, doc.DocID, doc.OwnerID)
-	}
-	// Dual-write to OG for OG-backed reads.
-	if s.og != nil {
-		_ = s.UpdateTextureDocumentOG(ctx, doc)
-	}
-	return nil
+	return s.UpdateTextureDocumentOG(ctx, doc)
 }
 
 // GetDocumentAlias resolves a file-browser alias to its canonical document ID.
@@ -848,35 +766,94 @@ func (s *Store) UpsertDocumentAlias(ctx context.Context, ownerID, sourcePath, do
 // DeleteDocument deletes a document and all its revisions. It is scoped
 // to the given owner.
 func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error {
-	// Delete revisions first (no FK constraint, so manual cleanup).
-	_, _ = s.textureHandle().ExecContext(ctx,
-		`DELETE FROM texture_revisions WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	)
+	// Delete revisions from OG. Use a large limit to avoid truncation
+	// for documents with many revisions.
+	revs, err := s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, 100000)
+	if err != nil {
+		return fmt.Errorf("delete texture document: list revisions: %w", err)
+	}
+	for _, rev := range revs {
+		// Delete source refs for this revision from OG.
+		refs, err := s.ListTextureSourceRefsByRevisionOG(ctx, ownerID, docID, rev.RevisionID, 100000)
+		if err == nil {
+			for _, ref := range refs {
+				refObj, err := s.ogGetByKey(ctx, TextureSourceRefObjectKind, "ref_version_key", ref.CanonicalID+"\x00"+ref.VersionID)
+				if err == nil {
+					_ = s.ogDelete(ctx, refObj.CanonicalID)
+				}
+			}
+		}
+		obj, err := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", rev.RevisionID)
+		if err == nil {
+			_ = s.ogDelete(ctx, obj.CanonicalID)
+		}
+	}
+
+	// Delete decisions from OG. Use a large limit to avoid truncation.
+	decisions, err := s.ListTextureDecisionsByDocOG(ctx, ownerID, docID, 100000)
+	if err != nil {
+		return fmt.Errorf("delete texture document: list decisions: %w", err)
+	}
+	for _, dec := range decisions {
+		obj, err := s.ogGetByKey(ctx, ogKindTexDecision, "decision_id", dec.DecisionID)
+		if err == nil {
+			_ = s.ogDelete(ctx, obj.CanonicalID)
+		}
+	}
+
+	// Delete aliases from SQL (aliases are still SQL-backed).
 	_, _ = s.textureHandle().ExecContext(ctx,
 		`DELETE FROM texture_document_aliases WHERE doc_id = ? AND owner_id = ?`,
 		docID, ownerID,
 	)
-	_, _ = s.textureHandle().ExecContext(ctx,
+
+	// Delete legacy SQL rows so backfillTextureTablesOG doesn't
+	// recreate the document on next open. These tables are read-only
+	// after cutover; deleting here prevents resurrection. Propagate
+	// errors from the texture_documents delete (the root table) before
+	// deleting the OG object, so a stale SQL row can't resurrect the
+	// document on the next open.
+	if _, err := s.textureHandle().ExecContext(ctx,
+		`DELETE FROM texture_source_refs WHERE doc_id = ? AND owner_id = ?`,
+		docID, ownerID,
+	); err != nil {
+		return fmt.Errorf("delete texture document: cleanup source refs: %w", err)
+	}
+	if _, err := s.textureHandle().ExecContext(ctx,
 		`DELETE FROM texture_decisions WHERE doc_id = ? AND owner_id = ?`,
 		docID, ownerID,
-	)
-
-	result, err := s.textureHandle().ExecContext(ctx,
+	); err != nil {
+		return fmt.Errorf("delete texture document: cleanup decisions: %w", err)
+	}
+	if _, err := s.textureHandle().ExecContext(ctx,
+		`DELETE FROM texture_revisions WHERE doc_id = ? AND owner_id = ?`,
+		docID, ownerID,
+	); err != nil {
+		return fmt.Errorf("delete texture document: cleanup revisions: %w", err)
+	}
+	if _, err := s.textureHandle().ExecContext(ctx,
 		`DELETE FROM texture_documents WHERE doc_id = ? AND owner_id = ?`,
 		docID, ownerID,
-	)
+	); err != nil {
+		return fmt.Errorf("delete texture document: cleanup document: %w", err)
+	}
+
+	// Delete the document from OG.
+	docObj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)
 	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
+		}
 		return fmt.Errorf("delete texture document: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check deleted document rows: %w", err)
+	var existing types.Document
+	if err := ogDecode(docObj, &existing); err != nil {
+		return fmt.Errorf("delete texture document: %w", err)
 	}
-	if rows == 0 {
+	if existing.OwnerID != ownerID {
 		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, docID, ownerID)
 	}
-	return nil
+	return s.ogDelete(ctx, docObj.CanonicalID)
 }
 
 // DeleteTextureAliasesByOwner removes all source-path aliases for an owner.
@@ -916,56 +893,44 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 		return err
 	}
 	rev = preparedRev
-	citations := string(rev.Citations)
-	if citations == "" {
-		citations = "[]"
-	}
-	metadata := string(rev.Metadata)
-	if metadata == "" {
-		metadata = "{}"
-	}
 	provenance := string(rev.Provenance)
 	if strings.TrimSpace(provenance) == "" {
 		provenance = "{}"
 	}
-	tx, err := s.textureHandle().BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin texture revision transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
 
-	var currentHead string
-	row := tx.QueryRowContext(ctx,
-		`SELECT current_revision_id
-		   FROM texture_documents
-		  WHERE doc_id = ? AND owner_id = ?`,
-		rev.DocID, rev.OwnerID,
-	)
-	if err := row.Scan(&currentHead); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, rev.DocID, rev.OwnerID)
-		}
-		return fmt.Errorf("query texture document head: %w", err)
+	// Serialize revision creation per store to preserve the stale-head
+	// compare-and-set semantics that the old SQL `WHERE current_revision_id
+	// = expectedHead` provided atomically. Without this lock, two
+	// concurrent calls can both read the same currentHead, both pass the
+	// stale-head check, and both overwrite the document head.
+	s.textureRevMu.Lock()
+	defer s.textureRevMu.Unlock()
+
+	doc, err := s.GetTextureDocumentOG(ctx, rev.OwnerID, rev.DocID)
+	if err != nil {
+		return fmt.Errorf("%w: document %s for owner %s", ErrNotFound, rev.DocID, rev.OwnerID)
 	}
+	currentHead := strings.TrimSpace(doc.CurrentRevisionID)
 	expectedHead := strings.TrimSpace(rev.ParentRevisionID)
-	if strings.TrimSpace(currentHead) != expectedHead {
+	if currentHead != expectedHead {
 		return fmt.Errorf("%w: document %s current head %s does not match parent %s", ErrStaleDocumentHead, rev.DocID, currentHead, expectedHead)
 	}
 
 	var versionNumber int
-	if strings.TrimSpace(currentHead) == "" {
+	if currentHead == "" {
 		versionNumber = 0
 	} else {
-		row = tx.QueryRowContext(ctx,
-			`SELECT COALESCE(MAX(version_number), -1) + 1
-			   FROM texture_revisions
-			  WHERE doc_id = ? AND owner_id = ?`,
-			rev.DocID,
-			rev.OwnerID,
-		)
-		if err := row.Scan(&versionNumber); err != nil {
+		existingRevs, err := s.ListTextureRevisionsByDocOG(ctx, rev.OwnerID, rev.DocID, 100000)
+		if err != nil {
 			return fmt.Errorf("query next texture revision version number: %w", err)
 		}
+		maxVersion := -1
+		for _, r := range existingRevs {
+			if r.VersionNumber > maxVersion {
+				maxVersion = r.VersionNumber
+			}
+		}
+		versionNumber = maxVersion + 1
 	}
 	rev.VersionNumber = versionNumber
 
@@ -974,76 +939,39 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 	// caller) guarantees every revision is hashed regardless of write path.
 	var parentHash string
 	if expectedHead != "" {
-		if err := tx.QueryRowContext(ctx,
-			`SELECT revision_hash FROM texture_revisions WHERE revision_id = ? AND owner_id = ?`,
-			expectedHead, rev.OwnerID,
-		).Scan(&parentHash); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		parentRev, err := s.GetTextureRevisionOG(ctx, rev.OwnerID, expectedHead)
+		if err == nil {
+			parentHash = parentRev.RevisionHash
+		} else if err != ErrNotFound {
 			return fmt.Errorf("query parent revision hash: %w", err)
 		}
 	}
 	rev.RevisionHash = types.ComputeStructuredRevisionHash(parentHash, rev.Content, []byte(bodyDocJSON), []byte(sourceEntitiesJSON), []byte(provenance))
 
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO texture_revisions (revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rev.RevisionID,
-		rev.DocID,
-		rev.OwnerID,
-		string(rev.AuthorKind),
-		rev.AuthorLabel,
-		rev.VersionNumber,
-		rev.Content,
-		bodyDocJSON,
-		sourceEntitiesJSON,
-		citations,
-		metadata,
-		provenance,
-		rev.RevisionHash,
-		rev.ParentRevisionID,
-		rev.CreatedAt.UTC().Format(time.RFC3339Nano),
-	)
+	createdEntityKeys, writtenRefKeys, err := s.writeTextureSourceGraph(ctx, rev, graph)
 	if err != nil {
-		return fmt.Errorf("insert texture revision: %w", err)
-	}
-
-	if err := s.writeTextureSourceGraph(ctx, tx, rev, graph); err != nil {
 		return err
 	}
 
-	// Update the document's current_revision_id and updated_at, but only if the
-	// head still matches the parent revision we read at the start of this transaction.
-	result, err := tx.ExecContext(ctx,
-		`UPDATE texture_documents
-		    SET current_revision_id = ?,
-		        updated_at = ?
-		  WHERE doc_id = ? AND owner_id = ? AND current_revision_id = ?`,
-		rev.RevisionID,
-		rev.CreatedAt.UTC().Format(time.RFC3339Nano),
-		rev.DocID,
-		rev.OwnerID,
-		expectedHead,
-	)
-	if err != nil {
-		return fmt.Errorf("update texture document head: %w", err)
+	if err := s.CreateTextureRevisionOG(ctx, rev); err != nil {
+		// Compensate: delete source refs/entities written for this revision.
+		s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
+		return fmt.Errorf("insert texture revision: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check updated texture document head rows: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("%w: document %s head moved during revision create", ErrStaleDocumentHead, rev.DocID)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit texture revision: %w", err)
-	}
-	// Dual-write: update OG document head and write revision to OG.
-	if s.og != nil {
-		_ = s.CreateTextureRevisionOG(ctx, rev)
-		if doc, err := s.GetTextureDocumentOG(ctx, rev.OwnerID, rev.DocID); err == nil {
-			doc.CurrentRevisionID = rev.RevisionID
-			doc.UpdatedAt = rev.CreatedAt
-			_ = s.UpdateTextureDocumentOG(ctx, doc)
+
+	// Update the document's current_revision_id and updated_at. If this
+	// fails, compensate by deleting the revision and source graph so
+	// retries don't accumulate orphan revisions.
+	doc.CurrentRevisionID = rev.RevisionID
+	doc.UpdatedAt = rev.CreatedAt
+	if err := s.UpdateTextureDocumentOG(ctx, doc); err != nil {
+		// Best-effort compensating delete of the revision.
+		if revObj, delErr := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", rev.RevisionID); delErr == nil {
+			_ = s.ogDelete(ctx, revObj.CanonicalID)
 		}
+		// Compensate: delete source refs/entities written for this revision.
+		s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
+		return fmt.Errorf("update texture document head: %w", err)
 	}
 	return nil
 }
@@ -1085,58 +1013,32 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 	if err != nil {
 		return fmt.Errorf("marshal revision metadata: %w", err)
 	}
-	result, err := s.textureHandle().ExecContext(ctx,
-		`UPDATE texture_revisions SET metadata_json = ? WHERE revision_id = ? AND owner_id = ?`,
-		string(merged), revisionID, ownerID,
-	)
-	if err != nil {
-		return fmt.Errorf("patch revision metadata: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check patched revision rows: %w", err)
-	}
-	if rows == 0 {
-		return ErrNotFound
-	}
-	// Dual-write: update OG revision with patched metadata.
-	if s.og != nil {
-		rev.Metadata = json.RawMessage(merged)
-		_ = s.CreateTextureRevisionOG(ctx, rev)
-	}
-	return nil
+	rev.Metadata = json.RawMessage(merged)
+	return s.CreateTextureRevisionOG(ctx, rev)
 }
 
 // GetRevision returns the revision with the given revision ID, scoped to
 // the given owner.
 func (s *Store) GetRevision(ctx context.Context, revisionID, ownerID string) (types.Revision, error) {
-	if s.og != nil {
-		rev, err := s.GetTextureRevisionOG(ctx, ownerID, revisionID)
-		if err == nil || err != ErrNotFound {
-			return rev, err
-		}
-		// Fall through to SQL for legacy records.
-	}
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
-		   FROM texture_revisions
-		  WHERE revision_id = ? AND owner_id = ?`,
-		revisionID, ownerID,
-	)
-	return scanRevision(row)
+	return s.GetTextureRevisionOG(ctx, ownerID, revisionID)
 }
 
 // GetRevisionUnscoped returns the revision without owner scoping.
 // Used internally for diff/blame computation where the revision chain
 // is already known to belong to the same owner.
 func (s *Store) GetRevisionUnscoped(ctx context.Context, revisionID string) (types.Revision, error) {
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
-		   FROM texture_revisions
-		  WHERE revision_id = ?`,
-		revisionID,
-	)
-	return scanRevision(row)
+	obj, err := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", revisionID)
+	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return types.Revision{}, ErrNotFound
+		}
+		return types.Revision{}, err
+	}
+	var rec types.Revision
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.Revision{}, err
+	}
+	return rec, nil
 }
 
 // ListRevisionsByDoc returns revisions for the given document, scoped to
@@ -1146,66 +1048,32 @@ func (s *Store) ListRevisionsByDoc(ctx context.Context, docID, ownerID string, l
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		revs, err := s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, limit)
-		if err == nil && len(revs) > 0 {
-			return revs, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT revision_id, doc_id, owner_id, author_kind, author_label, version_number, content, body_doc_json, source_entities_json, citations_json, metadata_json, provenance_json, revision_hash, parent_revision_id, created_at
-		   FROM texture_revisions
-		  WHERE doc_id = ? AND owner_id = ?
-		  ORDER BY version_number DESC, created_at DESC
-		  LIMIT ?`,
-		docID, ownerID, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query texture revisions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var revs []types.Revision
-	for rows.Next() {
-		rev, err := scanRevision(rows)
-		if err != nil {
-			return nil, err
-		}
-		revs = append(revs, rev)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate texture revisions: %w", err)
-	}
-	return revs, nil
+	return s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, limit)
 }
 
 func (s *Store) CountRevisionsByDoc(ctx context.Context, docID, ownerID string) (int, error) {
-	var count int
-	if err := s.textureHandle().QueryRowContext(ctx,
-		`SELECT COUNT(*)
-		   FROM texture_revisions
-		  WHERE doc_id = ? AND owner_id = ?`,
-		docID,
-		ownerID,
-	).Scan(&count); err != nil {
+	// Use a large limit to count all revisions. Limit 0 would be
+	// rewritten to the default page size by the OG helper.
+	revs, err := s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, 100000)
+	if err != nil {
 		return 0, fmt.Errorf("count texture revisions: %w", err)
 	}
-	return count, nil
+	return len(revs), nil
 }
 
 func (s *Store) CurrentVersionNumberByDoc(ctx context.Context, docID, ownerID string) (int, error) {
-	var versionNumber int
-	if err := s.textureHandle().QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(version_number), -1)
-		   FROM texture_revisions
-		  WHERE doc_id = ? AND owner_id = ?`,
-		docID,
-		ownerID,
-	).Scan(&versionNumber); err != nil {
+	// Use a large limit to scan all revisions for the max version number.
+	revs, err := s.ListTextureRevisionsByDocOG(ctx, ownerID, docID, 100000)
+	if err != nil {
 		return -1, fmt.Errorf("query current texture revision version number: %w", err)
 	}
-	return versionNumber, nil
+	maxVersion := -1
+	for _, r := range revs {
+		if r.VersionNumber > maxVersion {
+			maxVersion = r.VersionNumber
+		}
+	}
+	return maxVersion, nil
 }
 
 // ----- History -----
@@ -2138,36 +2006,7 @@ func (s *Store) CreateTextureDecision(ctx context.Context, rec types.TextureDeci
 	if rec.CreatedAt.IsZero() {
 		rec.CreatedAt = time.Now().UTC()
 	}
-	evidenceRefs, err := json.Marshal(rec.EvidenceRefs)
-	if err != nil {
-		return fmt.Errorf("marshal texture decision evidence refs: %w", err)
-	}
-	if len(evidenceRefs) == 0 || string(evidenceRefs) == "null" {
-		evidenceRefs = []byte("[]")
-	}
-	_, err = s.textureHandle().ExecContext(ctx,
-		`INSERT INTO texture_decisions (decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.DecisionID,
-		rec.OwnerID,
-		rec.DocID,
-		rec.RunID,
-		rec.TrajectoryID,
-		rec.ActorID,
-		rec.DecisionKind,
-		rec.Reason,
-		string(evidenceRefs),
-		rec.NextAction,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert texture decision: %w", err)
-	}
-	// Dual-write to OG for OG-backed reads.
-	if s.og != nil {
-		_ = s.CreateTextureDecisionOG(ctx, rec)
-	}
-	return nil
+	return s.CreateTextureDecisionOG(ctx, rec)
 }
 
 // ListTextureDecisionsByDocument returns recent off-document decision notes for a
@@ -2176,25 +2015,7 @@ func (s *Store) ListTextureDecisionsByDocument(ctx context.Context, ownerID, doc
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		decisions, err := s.ListTextureDecisionsByDocOG(ctx, ownerID, docID, limit)
-		if err == nil && len(decisions) > 0 {
-			return decisions, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at
-		   FROM texture_decisions
-		  WHERE owner_id = ? AND doc_id = ?
-		  ORDER BY created_at DESC
-		  LIMIT ?`,
-		ownerID, docID, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query texture decisions by document: %w", err)
-	}
-	return scanTextureDecisionRows(rows)
+	return s.ListTextureDecisionsByDocOG(ctx, ownerID, docID, limit)
 }
 
 // ListTextureDecisionsByTrajectory returns recent decision notes associated with
@@ -2203,18 +2024,7 @@ func (s *Store) ListTextureDecisionsByTrajectory(ctx context.Context, ownerID, t
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT decision_id, owner_id, doc_id, loop_id, trajectory_id, actor_id, decision_kind, reason, evidence_refs_json, next_action, created_at
-		   FROM texture_decisions
-		  WHERE owner_id = ? AND trajectory_id = ?
-		  ORDER BY created_at DESC
-		  LIMIT ?`,
-		ownerID, trajectoryID, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query texture decisions by trajectory: %w", err)
-	}
-	return scanTextureDecisionRows(rows)
+	return s.ListTextureDecisionsByTrajectoryOG(ctx, ownerID, trajectoryID, limit)
 }
 
 // CreateEvidence inserts a durable evidence record into the embedded Dolt
@@ -2305,65 +2115,18 @@ func (s *Store) ListEvidenceByAgent(ctx context.Context, ownerID, agentID string
 
 // CreateContentItem inserts a shared content-substrate record.
 func (s *Store) CreateContentItem(ctx context.Context, rec types.ContentItem) error {
-	metadata := string(rec.Metadata)
-	if strings.TrimSpace(metadata) == "" {
-		metadata = "{}"
+	if strings.TrimSpace(string(rec.Metadata)) == "" {
+		rec.Metadata = json.RawMessage("{}")
 	}
-	provenance := string(rec.Provenance)
-	if strings.TrimSpace(provenance) == "" {
-		provenance = "{}"
+	if strings.TrimSpace(string(rec.Provenance)) == "" {
+		rec.Provenance = json.RawMessage("{}")
 	}
-	_, err := s.textureHandle().ExecContext(ctx,
-		`INSERT INTO content_items (
-			content_id, owner_id, source_type, media_type, app_hint, title,
-			source_url, canonical_url, file_path, text_content, content_hash,
-			metadata_json, provenance_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.ContentID,
-		rec.OwnerID,
-		rec.SourceType,
-		rec.MediaType,
-		rec.AppHint,
-		rec.Title,
-		rec.SourceURL,
-		rec.CanonicalURL,
-		rec.FilePath,
-		rec.TextContent,
-		rec.ContentHash,
-		metadata,
-		provenance,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert content item: %w", err)
-	}
-	// Dual-write to OG.
-	if s.og != nil {
-		_ = s.CreateContentItemOG(ctx, rec)
-	}
-	return nil
+	return s.CreateContentItemOG(ctx, rec)
 }
 
 // GetContentItem returns a content item scoped to the authenticated owner.
 func (s *Store) GetContentItem(ctx context.Context, ownerID, contentID string) (types.ContentItem, error) {
-	if s.og != nil {
-		item, err := s.GetContentItemOG(ctx, ownerID, contentID)
-		if err == nil || err != ErrNotFound {
-			return item, err
-		}
-		// Fall through to SQL for legacy records.
-	}
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT content_id, owner_id, source_type, media_type, app_hint, title,
-		        source_url, canonical_url, file_path, text_content, content_hash,
-		        metadata_json, provenance_json, created_at, updated_at
-		   FROM content_items
-		  WHERE owner_id = ? AND content_id = ?`,
-		ownerID,
-		contentID,
-	)
-	return scanContentItem(row)
+	return s.GetContentItemOG(ctx, ownerID, contentID)
 }
 
 // ListContentItems lists recent content substrate records for an owner.
@@ -2371,41 +2134,7 @@ func (s *Store) ListContentItems(ctx context.Context, ownerID string, limit int)
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.og != nil {
-		items, err := s.ListContentItemsByOwnerOG(ctx, ownerID, limit)
-		if err == nil && len(items) > 0 {
-			return items, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT content_id, owner_id, source_type, media_type, app_hint, title,
-		        source_url, canonical_url, file_path, text_content, content_hash,
-		        metadata_json, provenance_json, created_at, updated_at
-		   FROM content_items
-		  WHERE owner_id = ?
-		  ORDER BY updated_at DESC
-		  LIMIT ?`,
-		ownerID,
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query content items: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []types.ContentItem
-	for rows.Next() {
-		rec, err := scanContentItem(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate content items: %w", err)
-	}
-	return out, nil
+	return s.ListContentItemsByOwnerOG(ctx, ownerID, limit)
 }
 
 func scanContentItem(row interface{ Scan(...any) error }) (types.ContentItem, error) {

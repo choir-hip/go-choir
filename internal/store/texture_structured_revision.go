@@ -56,7 +56,11 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		return types.Revision{}, "", "", fmt.Errorf("%w: marshal source_entities: %v", ErrInvalidTextureRevision, err)
 	}
 	rev.BodyDoc = json.RawMessage(bodyDocJSON)
-	rev.SourceEntities = json.RawMessage(sourceEntitiesJSON)
+	if len(entities) > 0 {
+		rev.SourceEntities = json.RawMessage(sourceEntitiesJSON)
+	} else {
+		rev.SourceEntities = nil
+	}
 	return rev, string(bodyDocJSON), string(sourceEntitiesJSON), nil
 }
 

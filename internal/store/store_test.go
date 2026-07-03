@@ -1524,6 +1524,7 @@ func TestAppendEventDefaultPayload(t *testing.T) {
 	rec := &types.EventRecord{
 		EventID:   "evt-default-payload",
 		RunID:     "task-001",
+		OwnerID:   "user-test",
 		Timestamp: time.Now().UTC(),
 		Kind:      types.EventRunSubmitted,
 		Payload:   nil, // should default to {}

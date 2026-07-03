@@ -13,6 +13,7 @@ type Store interface {
 	ListObjects(ctx context.Context, filter ListFilter) ([]Object, error)
 	PutEdge(ctx context.Context, edge Edge) error
 	ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, error)
+	DeleteObject(ctx context.Context, id string) error
 	Close() error
 }
 

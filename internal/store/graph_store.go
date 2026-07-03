@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -28,7 +30,8 @@ const (
 	ogKindEvidence    = objectgraph.ObjectKind("choir.agent_evidence")
 	ogKindContentItem = objectgraph.ObjectKind("choir.content_item")
 	ogKindPodcastSub  = objectgraph.ObjectKind("choir.podcast_subscription")
-	ogKindBrowserSess = objectgraph.ObjectKind("choir.browser_session")
+	ogKindBrowserSess  = objectgraph.ObjectKind("choir.browser_session")
+	ogKindCoagentMail  = objectgraph.ObjectKind("choir.coagent_mailbox")
 	ogKindAppPackage  = objectgraph.ObjectKind("choir.app_change_package")
 	ogKindAppAdoption = objectgraph.ObjectKind("choir.app_adoption")
 	ogKindDesktopSess = objectgraph.ObjectKind("choir.desktop_session")
@@ -129,6 +132,58 @@ func (s *Store) ogListByMetadata(ctx context.Context, kind objectgraph.ObjectKin
 	return store.ListObjectsByMetadata(ctx, string(kind), "$."+metadataField, value, limit)
 }
 
+// ogIsEmpty reports whether the object graph has any objects at all.
+// Used to gate SQL-to-OG backfill so it only runs on the first open,
+// not on every restart (which would replay stale SQL over newer OG state).
+func (s *Store) ogIsEmpty(ctx context.Context) (bool, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return true, nil
+	}
+	objs, err := store.ListObjects(ctx, objectgraph.ListFilter{Limit: 1})
+	if err != nil {
+		return false, err
+	}
+	return len(objs) == 0, nil
+}
+
+// ogExistsByKey reports whether an object of the given kind exists with
+// the specified metadata field value. Used for put-if-absent semantics
+// in backfill methods.
+func (s *Store) ogExistsByKey(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string) (bool, error) {
+	_, err := s.ogGetByKey(ctx, kind, metadataField, value)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, objectgraph.ErrNotFound) {
+		return false, nil
+	}
+	return false, err
+}
+
+// ogKindIsEmpty reports whether the object graph has zero objects of
+// the given kind. Used to gate per-kind SQL-to-OG backfill: stores that
+// already have OG objects from the Phase 3 dual-write period still need
+// to backfill newly cut-over kinds (e.g. texture_source_entities) that
+// were previously read from SQL only.
+func (s *Store) ogKindIsEmpty(ctx context.Context, kind objectgraph.ObjectKind) (bool, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return true, nil
+	}
+	objs, err := store.ListObjects(ctx, objectgraph.ListFilter{Kind: kind, Limit: 1})
+	if err != nil {
+		return false, err
+	}
+	return len(objs) == 0, nil
+}
+
 // ogPutEdge creates an edge between two objects.
 func (s *Store) ogPutEdge(ctx context.Context, fromID, toID string, kind objectgraph.EdgeKind, metadata any) error {
 	if s.og == nil {
@@ -144,6 +199,14 @@ func ogDecode(obj objectgraph.Object, target any) error {
 		return fmt.Errorf("store: unmarshal object body: %w", err)
 	}
 	return nil
+}
+
+// ogDelete removes an object from the graph by canonical ID.
+func (s *Store) ogDelete(ctx context.Context, id string) error {
+	if s.ogStore == nil {
+		return fmt.Errorf("store: object graph not initialized")
+	}
+	return s.ogStore.DeleteObject(ctx, id)
 }
 
 // =========================================================================
@@ -683,7 +746,11 @@ func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (
 
 // ListWorkItemsByTrajectoryOG lists work items for a trajectory.
 func (s *Store) ListWorkItemsByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, openOnly bool) ([]types.WorkItemRecord, error) {
-	objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID, 500)
+	// Fetch a large window since ogListByMetadata orders by updated_at
+	// DESC and we need all matching records to filter by owner/open
+	// status. Using a small limit can miss older work items that are
+	// still open.
+	objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID, 100000)
 	if err != nil {
 		return nil, err
 	}
@@ -775,7 +842,12 @@ func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID st
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", channelID, limit*2)
+	// Fetch a large window since ogListByMetadata orders by updated_at
+	// DESC, not by seq. We need all matching messages to filter by
+	// afterSeq and sort by seq to preserve cursor-based pagination.
+	// 100000 is a practical upper bound that covers all real-world
+	// channels without causing excessive memory allocation.
+	objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "channel_id", channelID, 100000)
 	if err != nil {
 		return nil, err
 	}
@@ -785,16 +857,20 @@ func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID st
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if obj.OwnerID != ownerID {
+		// When ownerID is empty, return messages for all owners
+		// (unscoped read used by Runtime.ChannelRead).
+		if ownerID != "" && obj.OwnerID != ownerID {
 			continue
 		}
 		if rec.Seq <= afterSeq {
 			continue
 		}
 		msgs = append(msgs, rec)
-		if len(msgs) >= limit {
-			break
-		}
+	}
+	// Sort by seq ascending to match the old SQL ORDER BY seq ASC.
+	sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
+	if len(msgs) > limit {
+		msgs = msgs[:limit]
 	}
 	return msgs, nil
 }
@@ -803,23 +879,48 @@ func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID st
 // Worker Updates — object graph implementation
 // =========================================================================
 
-// GetWorkerUpdateOG retrieves a worker update by ID.
+// CreateWorkerUpdateOG stores a worker update in the object graph.
+func (s *Store) CreateWorkerUpdateOG(ctx context.Context, rec types.CoagentSourcePacket) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"update_id":       rec.UpdateID,
+		"agent_id":        rec.AgentID,
+		"target_agent_id": rec.TargetAgentID,
+		"channel_id":      rec.ChannelID,
+		"trajectory_id":   rec.TrajectoryID,
+		"role":            rec.Role,
+		"message_seq":     rec.MessageSeq,
+	}
+	if rec.DeliveredToRunID != "" {
+		metadata["delivered_to_run_id"] = rec.DeliveredToRunID
+	}
+	_, err := s.ogPut(ctx, objectgraph.ObjectKind("choir.worker_update"), rec.OwnerID, rec.UpdateID, rec, metadata, now)
+	return err
+}
+
+// GetWorkerUpdateOG retrieves a worker update by ID, scoped to the given owner.
 func (s *Store) GetWorkerUpdateOG(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
-	obj, err := s.ogGetByKey(ctx, objectgraph.ObjectKind("choir.worker_update"), "update_id", updateID)
+	// Use ogListByMetadata to find all updates with this update_id, then
+	// filter by owner. This avoids the ogGetByKey single-match limitation
+	// which could return another owner's record with the same update_id.
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "update_id", updateID, 100)
 	if err != nil {
-		if err == objectgraph.ErrNotFound {
-			return types.CoagentSourcePacket{}, ErrNotFound
+		return types.CoagentSourcePacket{}, err
+	}
+	for _, obj := range objs {
+		if obj.OwnerID != ownerID {
+			continue
 		}
-		return types.CoagentSourcePacket{}, err
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
+			return types.CoagentSourcePacket{}, err
+		}
+		return rec, nil
 	}
-	var rec types.CoagentSourcePacket
-	if err := ogDecode(obj, &rec); err != nil {
-		return types.CoagentSourcePacket{}, err
-	}
-	if rec.OwnerID != ownerID {
-		return types.CoagentSourcePacket{}, ErrNotFound
-	}
-	return rec, nil
+	return types.CoagentSourcePacket{}, ErrNotFound
 }
 
 // ListWorkerUpdatesByTrajectoryOG lists worker updates for a trajectory.
@@ -851,7 +952,12 @@ func (s *Store) ListPendingWorkerUpdatesOG(ctx context.Context, ownerID, targetA
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID, limit*2)
+	// Fetch a large window since ogListByMetadata orders by updated_at DESC.
+	// We need all matching records to filter out delivered ones and then
+	// sort by created_at before applying the caller's limit. Using a small
+	// limit can miss older undelivered records when many delivered records
+	// are more recently updated.
+	objs, err := s.ogListByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "target_agent_id", targetAgentID, 100000)
 	if err != nil {
 		return nil, err
 	}
@@ -868,9 +974,15 @@ func (s *Store) ListPendingWorkerUpdatesOG(ctx context.Context, ownerID, targetA
 			continue
 		}
 		packets = append(packets, rec)
-		if len(packets) >= limit {
-			break
+	}
+	sort.Slice(packets, func(i, j int) bool {
+		if !packets[i].CreatedAt.Equal(packets[j].CreatedAt) {
+			return packets[i].CreatedAt.Before(packets[j].CreatedAt)
 		}
+		return packets[i].MessageSeq < packets[j].MessageSeq
+	})
+	if len(packets) > limit {
+		packets = packets[:limit]
 	}
 	return packets, nil
 }
@@ -1212,10 +1324,14 @@ func (s *Store) ListTextureDocumentsByOwnerOG(ctx context.Context, ownerID strin
 	if limit <= 0 {
 		limit = 100
 	}
+	// Fetch a large window since ListObjects orders by og_objects.updated_at
+	// which may differ from Document.UpdatedAt (e.g. after backfill where
+	// the OG timestamp comes from CreatedAt). We sort by Document.UpdatedAt
+	// and then apply the caller's limit.
 	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
 		Kind:    ogKindTexDoc,
 		OwnerID: ownerID,
-		Limit:   limit,
+		Limit:   100000,
 	})
 	if err != nil {
 		return nil, err
@@ -1227,6 +1343,42 @@ func (s *Store) ListTextureDocumentsByOwnerOG(ctx context.Context, ownerID strin
 			return nil, err
 		}
 		docs = append(docs, rec)
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
+	if len(docs) > limit {
+		docs = docs[:limit]
+	}
+	return docs, nil
+}
+
+// ListAllTextureDocumentsOG lists all texture documents across all owners,
+// ordered by updated_at descending.
+func (s *Store) ListAllTextureDocumentsOG(ctx context.Context, limit int) ([]types.Document, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	// Fetch a large window since ListObjects orders by og_objects.updated_at
+	// which may differ from Document.UpdatedAt (e.g. after backfill where
+	// object updated_at comes from creation time). We sort by Document.UpdatedAt
+	// and then apply the caller's limit.
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:  ogKindTexDoc,
+		Limit: 100000,
+	})
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]types.Document, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.Document
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		docs = append(docs, rec)
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
+	if len(docs) > limit {
+		docs = docs[:limit]
 	}
 	return docs, nil
 }
@@ -1346,6 +1498,9 @@ func (s *Store) ListTextureRevisionsByDocOG(ctx context.Context, ownerID, docID 
 		}
 		revisions = append(revisions, rec)
 	}
+	sort.Slice(revisions, func(i, j int) bool {
+		return revisions[i].VersionNumber > revisions[j].VersionNumber
+	})
 	return revisions, nil
 }
 
@@ -1396,6 +1551,29 @@ func (s *Store) ListTextureDecisionsByDocOG(ctx context.Context, ownerID, docID 
 		limit = 100
 	}
 	objs, err := s.ogListByMetadata(ctx, ogKindTexDecision, "doc_id", docID, limit)
+	if err != nil {
+		return nil, err
+	}
+	decisions := make([]types.TextureDecisionRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.TextureDecisionRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		decisions = append(decisions, rec)
+	}
+	return decisions, nil
+}
+
+// ListTextureDecisionsByTrajectoryOG lists decisions for a trajectory.
+func (s *Store) ListTextureDecisionsByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.TextureDecisionRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindTexDecision, "trajectory_id", trajectoryID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1564,7 +1742,13 @@ func (s *Store) ListContentItemsByOwnerOG(ctx context.Context, ownerID string, l
 // CreatePodcastSubscriptionOG stores a podcast subscription.
 // Subscriptions use external-key identity (subscription_id).
 func (s *Store) CreatePodcastSubscriptionOG(ctx context.Context, rec types.PodcastSubscription) error {
-	now := rec.CreatedAt
+	// Use UpdatedAt for the OG object timestamp so that list queries
+	// ordering by updated_at DESC reflect the most recent refresh, not
+	// just the creation time.
+	now := rec.UpdatedAt
+	if now.IsZero() {
+		now = rec.CreatedAt
+	}
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -1646,7 +1830,13 @@ func (s *Store) ListPodcastSubscriptionsByOwnerOG(ctx context.Context, ownerID s
 // CreateBrowserSessionOG stores a browser session record.
 // Sessions use external-key identity (session_id).
 func (s *Store) CreateBrowserSessionOG(ctx context.Context, rec types.BrowserSessionRecord) error {
-	now := rec.CreatedAt
+	// Use UpdatedAt for the OG object timestamp so that list queries
+	// ordering by updated_at DESC reflect the most recent session activity,
+	// not just the creation time.
+	now := rec.UpdatedAt
+	if now.IsZero() {
+		now = rec.CreatedAt
+	}
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -1910,6 +2100,148 @@ func (s *Store) GetDesktopStateOG(ctx context.Context, ownerID, desktopID string
 		return types.DesktopState{}, ErrNotFound
 	}
 	return rec, nil
+}
+
+// =========================================================================
+// Texture Source Graph — object graph implementation
+// =========================================================================
+
+// PutTextureSourceEntityOG stores a texture source entity in the object graph.
+// Source entities are versioned by canonical_id + version_id, so the identity
+// key combines both to produce a unique OG object per version.
+func (s *Store) PutTextureSourceEntityOG(ctx context.Context, rec TextureSourceEntityGraphRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	identityKey := rec.CanonicalID + "\x00" + rec.VersionID
+	metadata := map[string]any{
+		"canonical_id":       rec.CanonicalID,
+		"version_id":         rec.VersionID,
+		"entity_version_key": entityVersionKey(rec.CanonicalID, rec.VersionID),
+		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	_, err := s.ogPut(ctx, TextureSourceEntityObjectKind, rec.OwnerID, identityKey, rec, metadata, now)
+	return err
+}
+
+// GetTextureSourceEntityOG retrieves a source entity by canonical_id + version_id.
+func (s *Store) GetTextureSourceEntityOG(ctx context.Context, canonicalID, versionID string) (TextureSourceEntityGraphRecord, error) {
+	obj, err := s.ogGetByKey(ctx, TextureSourceEntityObjectKind, "entity_version_key", entityVersionKey(canonicalID, versionID))
+	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return TextureSourceEntityGraphRecord{}, ErrNotFound
+		}
+		return TextureSourceEntityGraphRecord{}, err
+	}
+	var rec TextureSourceEntityGraphRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return TextureSourceEntityGraphRecord{}, err
+	}
+	return rec, nil
+}
+
+// ListTextureSourceEntitiesByOwnerOG lists all source entities for an owner.
+// The choir.source_entity kind is shared with sourcecycled web captures, so
+// we filter to only texture source entities by checking for the
+// entity_version_key metadata field that texture source entities carry.
+func (s *Store) ListTextureSourceEntitiesByOwnerOG(ctx context.Context, ownerID string, limit int) ([]TextureSourceEntityGraphRecord, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:    TextureSourceEntityObjectKind,
+		OwnerID: ownerID,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TextureSourceEntityGraphRecord, 0, len(objs))
+	for _, obj := range objs {
+		// Skip non-texture source entities (e.g. sourcecycled web captures)
+		// that share the choir.source_entity kind but don't carry the
+		// entity_version_key metadata field.
+		var meta map[string]any
+		if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+			return nil, fmt.Errorf("list texture source entities: parse metadata: %w", err)
+		}
+		if _, ok := meta["entity_version_key"]; !ok {
+			continue
+		}
+		var rec TextureSourceEntityGraphRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
+// TextureSourceEntityVersionExistsOG checks if a source entity version exists in OG.
+func (s *Store) TextureSourceEntityVersionExistsOG(ctx context.Context, canonicalID, versionID string) (bool, error) {
+	_, err := s.ogGetByKey(ctx, TextureSourceEntityObjectKind, "entity_version_key", entityVersionKey(canonicalID, versionID))
+	if err == nil {
+		return true, nil
+	}
+	if err == objectgraph.ErrNotFound {
+		return false, nil
+	}
+	return false, err
+}
+
+// PutTextureSourceRefOG stores a texture source ref in the object graph.
+func (s *Store) PutTextureSourceRefOG(ctx context.Context, rec TextureSourceRefGraphRecord) error {
+	now := rec.CreatedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	identityKey := rec.CanonicalID + "\x00" + rec.VersionID
+	metadata := map[string]any{
+		"canonical_id":        rec.CanonicalID,
+		"version_id":          rec.VersionID,
+		"ref_version_key":     identityKey,
+		"doc_id":              rec.DocID,
+		"texture_revision_id": rec.TextureRevisionID,
+		"created_at":          rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	_, err := s.ogPut(ctx, TextureSourceRefObjectKind, rec.OwnerID, identityKey, rec, metadata, now)
+	return err
+}
+
+// TextureSourceRefVersionExistsOG checks if a source ref version exists in OG.
+func (s *Store) TextureSourceRefVersionExistsOG(ctx context.Context, canonicalID, versionID string) (bool, error) {
+	_, err := s.ogGetByKey(ctx, TextureSourceRefObjectKind, "ref_version_key", canonicalID+"\x00"+versionID)
+	if err == nil {
+		return true, nil
+	}
+	if err == objectgraph.ErrNotFound {
+		return false, nil
+	}
+	return false, err
+}
+
+// ListTextureSourceRefsByRevisionOG lists source refs for a specific revision.
+func (s *Store) ListTextureSourceRefsByRevisionOG(ctx context.Context, ownerID, docID, revisionID string, limit int) ([]TextureSourceRefGraphRecord, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	objs, err := s.ogListByMetadata(ctx, TextureSourceRefObjectKind, "texture_revision_id", revisionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TextureSourceRefGraphRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec TextureSourceRefGraphRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID != ownerID || rec.DocID != docID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out, nil
 }
 
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on

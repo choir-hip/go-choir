@@ -129,90 +129,55 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, agentI
 		return "", nil, fmt.Errorf("latest actor run memory: agent_id is required")
 	}
 
-	// When the object graph is active, find candidate runs from OG and
-	// check for run_memory_entries in SQL.
-	if s.og != nil {
-		objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 500)
-		if err != nil {
-			return "", nil, fmt.Errorf("query latest actor run memory: %w", err)
-		}
-		type candidate struct {
-			runID    string
-			priority time.Time
-		}
-		candidates := make([]candidate, 0, len(objs))
-		for _, obj := range objs {
-			var rec types.RunRecord
-			if err := ogDecode(obj, &rec); err != nil {
-				continue
-			}
-			if rec.OwnerID != ownerID {
-				continue
-			}
-			if rec.RunID == excludeRunID {
-				continue
-			}
-			if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
-				continue
-			}
-			priority := rec.UpdatedAt
-			if rec.FinishedAt != nil {
-				priority = *rec.FinishedAt
-			}
-			if priority.IsZero() {
-				priority = rec.CreatedAt
-			}
-			candidates = append(candidates, candidate{runID: rec.RunID, priority: priority})
-		}
-		// Sort by priority descending.
-		sort.Slice(candidates, func(i, j int) bool { return candidates[i].priority.After(candidates[j].priority) })
-
-		// Find the first candidate that has run_memory_entries in SQL.
-		for _, c := range candidates {
-			entries, err := s.ListRunMemoryEntries(ctx, ownerID, c.runID)
-			if err != nil {
-				return "", nil, err
-			}
-			if len(entries) > 0 {
-				return c.runID, entries, nil
-			}
-		}
-		return "", nil, ErrNotFound
-	}
-
-	args := []any{ownerID, agentID}
-	excludeClause := ""
-	if excludeRunID != "" {
-		excludeClause = " AND r.loop_id <> ?"
-		args = append(args, excludeRunID)
-	}
-	args = append(args, ownerID, agentID)
-	query := `SELECT r.loop_id
-		   FROM runs r
-		  WHERE r.owner_id = ?
-		    AND r.agent_id = ?
-		    AND r.state IN ('completed', 'passivated')` + excludeClause + `
-		    AND EXISTS (
-		         SELECT 1
-		           FROM run_memory_entries rme
-		          WHERE rme.owner_id = ?
-		            AND rme.agent_id = ?
-		            AND rme.loop_id = r.loop_id
-		    )
-		  ORDER BY COALESCE(r.finished_at, r.updated_at, r.created_at) DESC, r.created_at DESC
-		  LIMIT 1`
-	var sourceRunID string
-	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&sourceRunID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", nil, ErrNotFound
-		}
+	// Find candidate runs from OG, then check for run_memory_entries in SQL.
+	// Use a large limit to avoid missing older runs that have memory
+	// entries when newer runs don't.
+	objs, err := s.ogListByMetadata(ctx, ogKindRun, "agent_id", agentID, 100000)
+	if err != nil {
 		return "", nil, fmt.Errorf("query latest actor run memory: %w", err)
 	}
-	entries, err := s.ListRunMemoryEntries(ctx, ownerID, sourceRunID)
-	if err != nil {
-		return "", nil, err
+	type candidate struct {
+		runID    string
+		priority time.Time
 	}
-	return sourceRunID, entries, nil
+	candidates := make([]candidate, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			continue
+		}
+		if rec.OwnerID != ownerID {
+			continue
+		}
+		if rec.RunID == excludeRunID {
+			continue
+		}
+		if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
+			continue
+		}
+		priority := rec.UpdatedAt
+		if rec.FinishedAt != nil {
+			priority = *rec.FinishedAt
+		}
+		if priority.IsZero() {
+			priority = rec.CreatedAt
+		}
+		candidates = append(candidates, candidate{runID: rec.RunID, priority: priority})
+	}
+	// Sort by priority descending.
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].priority.After(candidates[j].priority) })
+
+	// Find the first candidate that has run_memory_entries in SQL.
+	for _, c := range candidates {
+		entries, err := s.ListRunMemoryEntries(ctx, ownerID, c.runID)
+		if err != nil {
+			return "", nil, err
+		}
+		if len(entries) > 0 {
+			return c.runID, entries, nil
+		}
+	}
+	return "", nil, ErrNotFound
 }
 
 // ListRunMemoryEntries returns a run's durable memory log in sequence order.

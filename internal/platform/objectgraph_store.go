@@ -63,6 +63,17 @@ func (o *ObjectGraphStore) GetObject(ctx context.Context, id string) (objectgrap
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
 }
 
+func (o *ObjectGraphStore) DeleteObject(ctx context.Context, id string) error {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return fmt.Errorf("platform objectgraph: nil store")
+	}
+	_, err := o.store.db.ExecContext(ctx, `DELETE FROM og_objects WHERE canonical_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("platform objectgraph: delete object: %w", err)
+	}
+	return nil
+}
+
 func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.ListFilter) ([]objectgraph.Object, error) {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return nil, fmt.Errorf("platform objectgraph: nil store")

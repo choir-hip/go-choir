@@ -1759,16 +1759,14 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: synthesize researcher completion update for run %s: %v", rec.RunID, synthErr)
 	}
 
+	// Persist the terminal run state BEFORE publishing the completion
+	// event. Otherwise a subscriber that reacts to the event and
+	// immediately fetches run status can observe the run as still
+	// running, and if the persist fails the store is left with a
+	// completion event for a non-terminal run.
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
-	}
-	if shouldLogWireLifecycle(rec) {
-		preview := rec.Result
-		if len(preview) > 160 {
-			preview = preview[:160]
-		}
-		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
 	resultLenPayload, _ := json.Marshal(map[string]any{
 		"result_length": len(text),
@@ -1776,6 +1774,13 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		"output_tokens": usage.OutputTokens,
 	})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	if shouldLogWireLifecycle(rec) {
+		preview := rec.Result
+		if len(preview) > 160 {
+			preview = preview[:160]
+		}
+		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
+	}
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 }
 
@@ -1958,6 +1963,11 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: synthesize researcher completion update for run %s: %v", rec.RunID, synthErr)
 	}
 
+	// Persist the terminal run state BEFORE publishing the completion
+	// event. Otherwise a subscriber that reacts to the event and
+	// immediately fetches run status can observe the run as still
+	// running, and if the persist fails the store is left with a
+	// completion event for a non-terminal run.
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return

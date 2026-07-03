@@ -368,6 +368,18 @@ func (s *DoltStore) ListEdgesByKind(ctx context.Context, fromID string, kind Edg
 	return out, rows.Err()
 }
 
+func (s *DoltStore) DeleteObject(ctx context.Context, id string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM og_objects WHERE canonical_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("objectgraph dolt: delete object: %w", err)
+	}
+	return nil
+}
+
 func (s *DoltStore) Close() error {
 	// The caller owns the *sql.DB; do not close it here.
 	return nil

@@ -83,6 +83,13 @@ func (m *MemoryStore) ListEdges(_ context.Context, filter EdgeFilter) ([]Edge, e
 	return out, nil
 }
 
+func (m *MemoryStore) DeleteObject(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.objects, id)
+	return nil
+}
+
 func (m *MemoryStore) Close() error { return nil }
 
 func NormalizedLimit(limit int) int {

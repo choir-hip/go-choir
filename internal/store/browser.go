@@ -34,42 +34,8 @@ func (s *Store) CreateBrowserSession(ctx context.Context, rec types.BrowserSessi
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO browser_sessions (
-			session_id, owner_id, provider, mode, execution_scope, backend_session_id,
-			world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
-			state, current_url,
-			title, text_snapshot, html_snapshot, links_json, screenshot_png_base64,
-			error, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.SessionID,
-		rec.OwnerID,
-		rec.Provider,
-		rec.Mode,
-		rec.ExecutionScope,
-		rec.BackendSessionID,
-		rec.WorldKind,
-		rec.VMID,
-		rec.SnapshotID,
-		rec.SourceRunID,
-		rec.CandidateTraceID,
-		rec.State,
-		rec.CurrentURL,
-		rec.Title,
-		rec.TextSnapshot,
-		rec.HTMLSnapshot,
-		encodeBrowserLinks(rec.Links),
-		rec.ScreenshotPNG,
-		rec.Error,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
+	if err := s.CreateBrowserSessionOG(ctx, rec); err != nil {
 		return types.BrowserSessionRecord{}, fmt.Errorf("create browser session: %w", err)
-	}
-	// Dual-write to OG.
-	if s.og != nil {
-		_ = s.CreateBrowserSessionOG(ctx, rec)
 	}
 	return rec, nil
 }
@@ -85,61 +51,12 @@ func (s *Store) UpdateBrowserSession(ctx context.Context, rec types.BrowserSessi
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = time.Now().UTC()
 	}
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE browser_sessions
-		    SET provider = ?,
-		        mode = ?,
-		        execution_scope = ?,
-		        backend_session_id = ?,
-		        world_kind = ?,
-		        vm_id = ?,
-		        snapshot_id = ?,
-		        source_loop_id = ?,
-		        candidate_trace_id = ?,
-		        state = ?,
-		        current_url = ?,
-		        title = ?,
-		        text_snapshot = ?,
-		        html_snapshot = ?,
-		        links_json = ?,
-		        screenshot_png_base64 = ?,
-		        error = ?,
-		        updated_at = ?
-		  WHERE owner_id = ? AND session_id = ?`,
-		rec.Provider,
-		rec.Mode,
-		rec.ExecutionScope,
-		rec.BackendSessionID,
-		rec.WorldKind,
-		rec.VMID,
-		rec.SnapshotID,
-		rec.SourceRunID,
-		rec.CandidateTraceID,
-		rec.State,
-		rec.CurrentURL,
-		rec.Title,
-		rec.TextSnapshot,
-		rec.HTMLSnapshot,
-		encodeBrowserLinks(rec.Links),
-		rec.ScreenshotPNG,
-		rec.Error,
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		rec.OwnerID,
-		rec.SessionID,
-	)
-	if err != nil {
+	// Verify the session exists (preserves ErrNotFound semantics).
+	if _, err := s.GetBrowserSessionOG(ctx, rec.OwnerID, rec.SessionID); err != nil {
+		return types.BrowserSessionRecord{}, err
+	}
+	if err := s.CreateBrowserSessionOG(ctx, rec); err != nil {
 		return types.BrowserSessionRecord{}, fmt.Errorf("update browser session: %w", err)
-	}
-	count, err := res.RowsAffected()
-	if err != nil {
-		return types.BrowserSessionRecord{}, fmt.Errorf("update browser session rows: %w", err)
-	}
-	if count == 0 {
-		return types.BrowserSessionRecord{}, ErrNotFound
-	}
-	// Dual-write: update OG with the new state.
-	if s.og != nil {
-		_ = s.CreateBrowserSessionOG(ctx, rec)
 	}
 	return rec, nil
 }
@@ -152,24 +69,7 @@ func (s *Store) GetBrowserSession(ctx context.Context, ownerID, sessionID string
 	if sessionID == "" {
 		return types.BrowserSessionRecord{}, fmt.Errorf("get browser session: session_id is required")
 	}
-	if s.og != nil {
-		rec, err := s.GetBrowserSessionOG(ctx, ownerID, sessionID)
-		if err == nil || err != ErrNotFound {
-			return rec, err
-		}
-		// Fall through to SQL for legacy records.
-	}
-	row := s.db.QueryRowContext(ctx,
-		`SELECT session_id, owner_id, provider, mode, execution_scope, backend_session_id,
-		        world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
-		        state, current_url, title, text_snapshot, html_snapshot, links_json, screenshot_png_base64,
-		        error, created_at, updated_at
-		   FROM browser_sessions
-		  WHERE owner_id = ? AND session_id = ?`,
-		ownerID,
-		sessionID,
-	)
-	return scanBrowserSession(row)
+	return s.GetBrowserSessionOG(ctx, ownerID, sessionID)
 }
 
 // ListBrowserSessions returns recent browser sessions for an owner.
@@ -180,42 +80,7 @@ func (s *Store) ListBrowserSessions(ctx context.Context, ownerID string, limit i
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	if s.og != nil {
-		sessions, err := s.ListBrowserSessionsByOwnerOG(ctx, ownerID, limit)
-		if err == nil && len(sessions) > 0 {
-			return sessions, nil
-		}
-		// Fall through to SQL if OG returned nothing.
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT session_id, owner_id, provider, mode, execution_scope, backend_session_id,
-		        world_kind, vm_id, snapshot_id, source_loop_id, candidate_trace_id,
-		        state, current_url, title, text_snapshot, html_snapshot, links_json, screenshot_png_base64,
-		        error, created_at, updated_at
-		   FROM browser_sessions
-		  WHERE owner_id = ?
-		  ORDER BY updated_at DESC, created_at DESC
-		  LIMIT ?`,
-		ownerID,
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query browser sessions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	sessions := []types.BrowserSessionRecord{}
-	for rows.Next() {
-		rec, err := scanBrowserSession(rows)
-		if err != nil {
-			return nil, err
-		}
-		sessions = append(sessions, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate browser sessions: %w", err)
-	}
-	return sessions, nil
+	return s.ListBrowserSessionsByOwnerOG(ctx, ownerID, limit)
 }
 
 func scanBrowserSession(scanner interface {
