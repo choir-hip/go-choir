@@ -178,17 +178,17 @@ Resume ==
 (* The full next-state relation.                                             *)
 
 Next ==
-  /\ \/ PowerOn
-     \/ BootSystemd
-     \/ RuntimeInitOk
-     \/ RuntimeInitFail
-     \/ RepairRuntime
-     \/ BindPort
-     \/ HealthCheck
-     \/ Crash
-     \/ Recover
-     \/ Hibernate
-     \/ Resume
+  PowerOn
+  \/ BootSystemd
+  \/ RuntimeInitOk
+  \/ RuntimeInitFail
+  \/ RepairRuntime
+  \/ BindPort
+  \/ HealthCheck
+  \/ Crash
+  \/ Recover
+  \/ Hibernate
+  \/ Resume
 
 --------------------------------------------------------------------------
 (* Invariants: what must never be true on any reachable state.               *)

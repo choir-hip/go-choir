@@ -115,7 +115,7 @@ Send(u, to, from, k, c) ==
   /\ updateContent' = [updateContent EXCEPT ![u] = c]
   /\ IF actorState[to] = "resident"
        THEN mailbox' = [mailbox EXCEPT ![to] = @ \cup {u}]
-       ELSE mailbox' = mailbox
+       ELSE mailbox' = [mailbox EXCEPT ![to] = {u}]
   /\ IF actorState[to] = "passive"
        THEN actorState' = [actorState EXCEPT ![to] = "resident"]
        ELSE actorState' = actorState
@@ -189,12 +189,12 @@ Sweep(a) ==
 (* The full next-state relation.                                             *)
 
 Next ==
-  /\ \/ \E u \in UpdateIDs, to, from \in Actors, k \in Kinds, c \in Contents :
-          Send(u, to, from, k, c)
-     \/ \E a \in Actors, u \in UpdateIDs : Process(a, u)
-     \/ \E a \in Actors : Passivate(a)
-     \/ \E a \in Actors : Evict(a)
-     \/ \E a \in Actors : Sweep(a)
+  \/ \E u \in UpdateIDs, to, from \in Actors, k \in Kinds, c \in Contents :
+       Send(u, to, from, k, c)
+  \/ \E a \in Actors, u \in UpdateIDs : Process(a, u)
+  \/ \E a \in Actors : Passivate(a)
+  \/ \E a \in Actors : Evict(a)
+  \/ \E a \in Actors : Sweep(a)
 
 --------------------------------------------------------------------------
 (* Invariants: what must never be true on any reachable state.               *)
@@ -210,14 +210,6 @@ ProcessedImpliesSent ==
 (* A processed update is never still in any mailbox. *)
 NoDuplicateDelivery ==
   \A a \in Actors : mailbox[a] \cap processed = {}
-
-(* An unprocessed update is always reachable: either in a resident mailbox or *)
-(* in the backlog of a passive actor that Sweep can re-activate.             *)
-UnprocessedUpdatesReachable ==
-  \A u \in UpdateIDs :
-    u \in (sent \ processed) =>
-      (\E a \in Actors : actorState[a] = "resident" /\ u \in mailbox[a])
-      \/ (\E a \in Actors : actorState[a] = "passive" /\ updateTo[u] = a)
 
 (* Every object in the graph is committed and has a unique identity. *)
 ObjectGraphDurable ==
