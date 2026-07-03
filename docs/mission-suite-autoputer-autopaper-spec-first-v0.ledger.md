@@ -447,5 +447,53 @@ Mission D (CI/Verification Guard):
 - `.github/scripts/deploy-impact-classify-test` passed.
 - `scripts/doccheck report-only` passed.
 
-**Next:** Push, monitor CI/deploy, then update Pass 3 with the new staging evidence.
+**Next:** Diagnostic patch has been deployed; the remaining probe is to observe or create an active interactive computer during an ordinary guest deploy so the new readiness diagnostics exercise the failure path.
+
+## Pass 12 — 2026-07-03 (Mission C: Diagnostic Patch Deployed, Active Refresh Not Exercised)
+
+**Conjecture:** Landing better readiness diagnostics is necessary but not sufficient. The next evidence must exercise active interactive computer refresh, not just host service deploy health.
+
+**Move:** Monitored commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` through main CI, race detector rerun, FlakeHub publish, docs truth, and staging deploy.
+
+**Actual ΔV:**
+- The diagnostic patch deployed successfully to staging at commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`.
+- Deploy job `85076877932` reported `No active interactive computers need refresh`, with vmctl health showing `active_vms: 0`, `total_ownerships: 149`, and states `failed: 1`, `hibernated: 147`, `stopped: 1`.
+- Staging `/health` reports proxy/vmctl `ok` for deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`.
+- Staging `/health/ready` remains degraded for runtime/dolt/ollama, so it is evidence of unresolved product readiness, not Pass 3 completion.
+- C-C1/C-C2 remain OPEN because no refreshed active interactive computer answered `/health` on `:8085` after the patch.
+
+**Evidence:**
+- CI run `28685279292`: success, including deploy job `85076877932`.
+- Race Detector run `28685279281`: success on rerun attempt 2.
+- Docs Truth Check run `28685279290`: success.
+- FlakeHub publish run `28685279274`: success.
+- `https://choir.news/health`: deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`.
+- `https://choir.news/health/ready`: degraded runtime/dolt/ollama.
+
+**Next:** Obtain an authenticated staging product session or explicit approval to create a disposable passkey-backed staging user, then create/observe an active interactive computer and run or wait for an ordinary guest deploy that refreshes it and captures deployed readiness diagnostics.
+
+## Pass 13 — 2026-07-03 (Mission C: Product-Path Activation Boundary)
+
+**Conjecture:** The next active-refresh proof requires a real authenticated product-path computer. A signed-out preview is not evidence that an active interactive computer exists.
+
+**Move:** Opened `https://choir.news` in the harness browser, inspected storage/cookies, opened Desk, and selected Sign in.
+
+**Actual ΔV:**
+- The harness browser reached the signed-out Choir preview.
+- `document.cookie` was empty; `sessionStorage` contained no auth state; `localStorage` only showed theme boot data.
+- Desk -> Sign in exposed passkey create/login UI.
+- No passkey registration, passkey login, or account creation was performed.
+- The active-refresh proof is now blocked on an authenticated staging product session or explicit approval to create a disposable passkey-backed staging user.
+
+**Evidence:**
+- Browser observation of `https://choir.news`: "Local preview - sign in to save".
+- Browser storage probe: no cookies and no authenticated session storage.
+- Browser interaction: Desk -> Sign in showed "Create passkey" / "Use passkey" and "Email for this computer".
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- The next probe's boundary is auth/access, not deploy mechanics.
+- Do not weaken Pass 3 by substituting preview UI for active computer evidence.
+
+**Next:** Use an authenticated staging session, import approved cookies, or get explicit approval to create a disposable passkey-backed staging user; then create or wake an active interactive computer before the next ordinary guest deploy.
 

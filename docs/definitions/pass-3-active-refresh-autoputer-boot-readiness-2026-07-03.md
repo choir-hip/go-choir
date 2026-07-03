@@ -128,6 +128,18 @@ determined_state:
     - claim: The first confirmed root cause is an evidence collapse in `internal/vmmanager`: `waitForGuestReady` only preserved a boolean guest-health result, so deploy logs could not distinguish HTTP non-200 health, response body, TCP timeout, or connect failure.
       source: observed code in `internal/vmmanager/manager.go`
       execution_effect: Add readiness diagnostics before choosing a product boot fix.
+    - claim: The diagnostic patch was deployed to staging at commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`.
+      source: CI run `28685279292`, deploy job `85076877932`, staging `/health`
+      execution_effect: Do not re-land the diagnostic patch; use its deployed evidence surface for the next active-refresh probe.
+    - claim: Deploy job `85076877932` did not exercise active interactive computer refresh because vmctl reported `active_vms: 0` and "No active interactive computers need refresh".
+      source: GitHub Actions deploy log and staging `/health`
+      execution_effect: Diagnostic sufficiency remains unproven for the active-refresh failure path; the next probe must create or observe an active computer before refresh.
+    - claim: Staging proxy health reports deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`, while `/health/ready` is degraded for runtime/dolt/ollama.
+      source: `https://choir.news/health` and `https://choir.news/health/ready`
+      execution_effect: Host proxy deploy identity is verified, but product runtime readiness is still not a Pass 3 completion proof.
+    - claim: Product-path activation was attempted from the harness browser, but the session was signed out and the only available activation path required creating or using a passkey.
+      source: headless browser observation of `https://choir.news` after opening Desk -> Sign in; no auth cookies or authenticated local/session storage were present.
+      execution_effect: Do not create a production/staging user account or passkey as an implicit side effect of the dry run; record the external auth boundary and keep Pass 3 open.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -135,7 +147,9 @@ determined_state:
     - node: current-node-b-state
       missing: Confirm whether Node B currently has failed ownership records or whether later deploys recovered them.
     - node: diagnostic-sufficiency
-      missing: Focused tests now cover last-probe HTTP status/body preservation, but diagnostic-sufficiency is not settled until a staging deploy exercises the changed path.
+      missing: Focused tests now cover last-probe HTTP status/body preservation, and the patch is deployed, but diagnostic-sufficiency is not settled until a staging deploy exercises active interactive computer refresh with at least one active computer.
+    - node: product-path-active-computer-access
+      missing: An authenticated staging product session or explicit approval to create a disposable passkey-backed staging user, so the harness can create/observe an active interactive computer before an ordinary guest deploy.
 ```
 
 ---
@@ -252,6 +266,9 @@ Pass 3 is IN PROGRESS when:
 - Active refresh failed → promotion path is invalidated.
 - Local `go build` green → Nix/Firecracker deploy path proven.
 
+- Signed-out preview visible → product-path active computer exists.
+- Passkey dialog visible → safe to create a staging user without explicit approval.
+
 ---
 
 ## Run Checkpoint & Resumption State
@@ -264,25 +281,34 @@ run_checkpoint_and_resumption_state:
     - Pass 2 child definition is settled complete.
     - Super definition says the next executable probe is active-refresh/autoputer boot readiness.
     - Deploy evidence exists from job 85072352680.
-    - Pass 3 diagnostic patch prepared in `internal/vmmanager/manager.go`: guest readiness timeout errors include the last `/health` probe status/body/error.
-    - Pass 3 deploy diagnostic patch prepared in `.github/workflows/ci.yml`: failure diagnostics include vmctl ownership snapshots and direct active sandbox health probes.
+    - Pass 3 diagnostic patch landed in `internal/vmmanager/manager.go`: guest readiness timeout errors include the last `/health` probe status/body/error.
+    - Pass 3 deploy diagnostic patch landed in `.github/workflows/ci.yml`: failure diagnostics include vmctl ownership snapshots and direct active sandbox health probes.
+    - Commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` deployed those diagnostics to staging; deploy job `85076877932` reported no active interactive computers needed refresh.
   what_was_proven:
     - Package source-filter bug is repaired.
-    - Host services can deploy and report health while active guest refresh still fails.
+    - Host services can deploy and report health while active guest refresh still fails in prior evidence.
     - Current evidence is sufficient to scope Pass 3 and confirm the first evidence-layer root cause; it is not sufficient to pick the product boot fix.
+    - The deployed diagnostic patch did not regress host deploy health or CI.
   unproven_or_partial_claims:
     - Whether the active target VM reached `server.Start()`.
     - Whether preserved persistent state blocks runtime startup.
     - Whether host-to-guest tap networking blocks HTTP readiness.
     - Whether `/health` returns non-200 versus never accepting TCP.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
-  next_executable_probe: Push and monitor the diagnostic patch, then use staging deploy evidence to distinguish runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
+    - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
+    - Whether an authenticated product session can create or wake an active interactive computer for the next deploy; the current harness browser is signed out and has no cookies/storage credentials.
+  next_executable_probe: Create or observe an active interactive computer through the product path, then run or wait for an ordinary guest deploy that refreshes it and captures the new readiness diagnostics; if product-path activation is unavailable, record the missing credential/tool boundary instead of weakening Pass 3.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 11
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 12
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
+    - CI run 28685279292 and deploy job 85076877932
+    - Race Detector run 28685279281 attempt 2
+    - browser product-path probe: `https://choir.news` opened signed out; Desk -> Sign in exposed passkey creation/login, but no account creation or login was performed.
+    - staging `/health` showing deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`
+    - staging `/health/ready` showing degraded runtime/dolt/ollama
     - diagnostic patch files: `internal/vmmanager/manager.go`, `internal/vmmanager/manager_test.go`, `.github/workflows/ci.yml`
     - focused test: `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`

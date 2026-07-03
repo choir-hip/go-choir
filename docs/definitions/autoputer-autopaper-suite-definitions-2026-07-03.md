@@ -889,7 +889,7 @@ Do not dump logs. Link evidence artifacts.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: 8e694f4663412c1a33fc70e870f225f2510718f2 (CI active-refresh diagnostic gate on main)
+  last_checkpoint: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a (Pass 3 diagnostic patch deployed on main)
   current_artifact_state:
     - specs/promotion_protocol.tla: green in CI
     - specs/actor_protocol.tla: green in main CI
@@ -900,13 +900,16 @@ run_checkpoint_and_resumption_state:
     - cmd/sandbox: not yet renamed to cmd/autoputer
     - active refreshed guest health: failed in deploy job 85072352680, scoped to Mission C
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md: opened for Mission C boot-readiness investigation
-    - Pass 3 diagnostic patch prepared: vmmanager readiness timeout errors retain last `/health` probe detail; deploy diagnostics print vmctl ownership and active sandbox health snapshots.
+    - Pass 3 diagnostic patch deployed: vmmanager readiness timeout errors retain last `/health` probe detail; deploy diagnostics print vmctl ownership and active sandbox health snapshots.
+    - Deploy job `85076877932` for commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` reported no active interactive computers needed refresh, so the changed active-refresh diagnostic path has not yet been exercised.
+    - Product-path activation probe reached signed-out Choir preview and passkey sign-in/create dialog; no cookies, localStorage auth, sessionStorage auth, passkey login, or account creation were available/performed from the harness.
   what_shipped:
     - Promotion gate spec (Pass 1, merged to main)
     - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 merged)
     - API handler extraction (Pass 2, PR #42 merged)
     - Sandbox Nix package source-filter fix for internal/apihandler
     - CI deploy gate now treats active computer refresh as diagnostic while preserving host health as the deploy gate
+    - Pass 3 readiness diagnostic patch at `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`
   what_was_proven:
     - C-S1: actor_protocol.tla safety invariants model-check green in main CI
     - C-S3: autoputer_lifecycle.tla model-checks green in main CI
@@ -915,6 +918,7 @@ run_checkpoint_and_resumption_state:
     - C-A2: cmd/sandbox builds with extracted internal/apihandler package in Go and Nix package contexts
     - C-D1: CI passed on main after the current commits
     - C-D2: TLA+ specs model-check in CI
+    - Pass 3 diagnostic patch deploys without regressing host service health, but did not exercise active refresh because no active interactive computers needed refresh.
   unproven_or_partial_claims:
     - C-S2: actor_protocol.tla still needs semantic review for mailbox/passivation completeness
     - C-A1/C-A3: internal/runtime deletion remains unproven
@@ -928,30 +932,36 @@ run_checkpoint_and_resumption_state:
     - Active computer refresh is now the highest-realism staging gap and must not be confused with Pass 2 extraction.
     - Codex reservations must be addressed before Mission C promotion encoding.
     - The first Pass 3 root cause is an evidence-layer bug: guest readiness polling collapsed HTTP status/body and transport errors into a boolean.
+    - The evidence-layer patch is deployed, but the next active-refresh root-cause evidence still requires an active interactive computer during an ordinary guest deploy.
+    - Product-path activation currently needs an authenticated staging session or explicit approval to create a disposable passkey-backed staging user; the dry run must not mutate auth/user state implicitly.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
+    - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
   highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after ordinary guest image update
-  next_executable_probe: Push and monitor the Pass 3 diagnostic patch so the next staging deploy distinguishes runtime-listen, persistent-data, guest-network, health-response, and emergency-mode hypotheses.
+  next_executable_probe: Obtain an authenticated staging product session or explicit approval to create a disposable passkey-backed staging user, create/observe an active interactive computer through the product path, then run or wait for an ordinary guest deploy that refreshes it and captures deployed readiness diagnostics.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 11
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 13
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
     - CI run 28683693425 (packaging fix; deploy job exposed active refresh failure)
     - CI run 28684139979 (current main CI green)
+    - CI run 28685279292 and deploy job 85076877932 (Pass 3 diagnostic patch deployed)
+    - Race Detector run 28685279281 attempt 2
+    - staging `/health` at commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`
+    - staging `/health/ready` degraded for runtime/dolt/ollama
     - focused Pass 3 test: `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
+    - browser product-path probe: `https://choir.news` signed-out preview -> Desk -> Sign in exposed passkey create/login; no authenticated storage/cookies were present.
   rollback_refs:
-    - main HEAD: 8e694f4663412c1a33fc70e870f225f2510718f2
-    - package fix commit: 02fa2ea6603b7f157c982e9da637ec714301c6bf
-    - active-refresh diagnostic gate commit: 8e694f4663412c1a33fc70e870f225f2510718f2
+    - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```
 
 ## Child Definition Documents
