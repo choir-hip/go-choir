@@ -363,14 +363,13 @@ CertificateCompleteness ==
 (* Every promotion eventually reaches a terminal state.                     *)
 (* We use weak fairness on the key actions to ensure progress.              *)
 
-(* A committed promotion that never becomes poisoned eventually reaches a     *)
-(* terminal state: confirmed or reverted. After a poisoned write, only         *)
-(* forward recovery (a new promotion) is safe and is outside this single-       *)
-(* promotion model.                                                            *)
+(* A committed promotion eventually reaches confirmed, reverted, or poisoned. *)
+(* After a poisoned write, only forward recovery (a new promotion) is safe and  *)
+(* is outside this single-promotion model.                                       *)
 EveryCommittedPromotionSettles ==
   \A c \in CandidateComps :
     (promoStatus[c] = "committed" /\ poisoned[c] = FALSE)
-      ~> promoStatus[c] \in {"confirmed", "reverted"}
+      ~> (promoStatus[c] \in {"confirmed", "reverted"} \/ poisoned[c] = TRUE)
 
 (* A promotion in staging/verified/approved will not be blocked forever by     *)
 (* system inaction alone. The owner may still choose not to approve, but the   *)

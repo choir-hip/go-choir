@@ -236,3 +236,32 @@ Mission D (CI/Verification Guard):
 
 **Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
 
+---
+
+## Pass 6 — 2026-07-03 (Mission S: Promotion Protocol Gate — TLC iteration 5)
+
+**Conjecture:** The fifth CI TLC run revealed that the `EveryCommittedPromotionSettles` liveness property was too narrow: it excluded poisoned promotions only by premise, but TLA+ `~>` requires the right-hand side to eventually become true if the premise ever becomes true. After poisoned, the promotion cannot reach confirmed/reverted, so the right-hand side never became true. The property must allow the promotion to become poisoned as a valid outcome.
+
+**Move:** correct (expand `EveryCommittedPromotionSettles` right-hand side to include `poisoned[c] = TRUE`)
+
+**Expected ΔV:** Resolve the fifth TLC error and get closer to a green model check.
+
+**Actual ΔV:**
+- CI run `28648433822` executed TLC and reported:
+  ```
+  Error: Temporal properties were violated.
+  ```
+  The counterexample trace showed a committed promotion reaching `poisoned = TRUE` and then stuttering with all secondaries applied. The old liveness property required eventual `confirmed` or `reverted`, which became impossible after poisoned.
+- Root cause: `EveryCommittedPromotionSettles` used `~> promoStatus \in {"confirmed", "reverted"}` but did not account for the valid outcome of becoming poisoned.
+- Fixed by making the right-hand side `(promoStatus \in {"confirmed", "reverted"} \/ poisoned = TRUE)`.
+
+**Conjecture status update:**
+- C-S4: still TESTING (pending sixth CI TLC run after fix).
+- C-S5: still TESTING (pending sixth CI TLC run after fix).
+- C-D1: CI overall failed because of the TLA+ job; will re-evaluate after fix.
+- C-D2: still UNDECIDED (pending green TLC run).
+
+**Open decisions:** None.
+
+**Next:** Commit the fix, push to `origin/main`, and re-run the `tla-model-check` CI job. Repeat until TLC reports "No error has been found".
+
