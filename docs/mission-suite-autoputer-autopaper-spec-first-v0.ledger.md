@@ -303,3 +303,47 @@ Mission D (CI/Verification Guard):
 
 **Next:** The promotion gate is established. Proceed to Mission S next items (actor_protocol.tla, autoputer_lifecycle.tla) and Mission A/B/C parallel work. The spec is the source of truth; code changes must now match it.
 
+---
+
+## Pass 8 — 2026-07-03 (Pass 2 Post-Merge CI — Staging Deploy Failure)
+
+**Conjecture:** PR #42 can settle Pass 2 only if post-merge main CI and staging deploy pass. The merge itself is not completion.
+
+**Move:** verify (reconcile PR #42 merged state, monitor main CI, record deploy failure before any fix)
+
+**Expected ΔV:** If post-merge CI and staging passed, C-S1, C-S3, and C-A2 could become SUPPORTED and Pass 2 could close.
+
+**Actual ΔV:**
+- PR #42 is merged to `main` as merge commit `a6f11b7dbb64c07677a767c19c00e47cf87fdd54`.
+- Main CI run `28683310290` began for the merge commit.
+- `TLA+ Model Check (specs/)`, `Go Vet + Build`, frontend build, docs truth check, and multiple Go test shards passed.
+- `Deploy to Staging (Node B)` job `85071266856` failed while building the host NixOS closure.
+- Pass 2 remains INCOMPLETE until the staging packaging failure is repaired and post-fix CI/deploy proof is green.
+
+**Evidence:**
+- `pr://42` reports state `MERGED`.
+- `gh run view 28683310290 --json status,conclusion,headSha,url,jobs`
+- `gh api repos/choir-hip/go-choir/actions/jobs/85071266856/logs`
+- Deploy log root error:
+  ```text
+  error: Cannot build '/nix/store/...-sandbox-0.1.0.drv'.
+  > Building subPackage ./cmd/sandbox
+  > cmd/sandbox/main.go:13:2: cannot find module providing package github.com/yusefmosiah/go-choir/internal/apihandler: import lookup disabled by -mod=vendor
+  ```
+
+**Root cause hypothesis:**
+- PR #42 added `internal/apihandler` and made `cmd/sandbox/main.go` import it.
+- Local `go build ./cmd/sandbox` passes because the full source tree is visible.
+- The Nix service package source filter in `flake.nix` includes only the service `subPackage` and listed `internalDirs`.
+- The sandbox package `internalDirs` does not include `internal/apihandler`, so the Nix build's filtered source omits the package and fails under `-mod=vendor`.
+
+**Conjecture status update:**
+- C-S1: still TESTING until Pass 2 post-merge CI fully settles.
+- C-S3: still TESTING until Pass 2 post-merge CI fully settles.
+- C-A2: weakened from pending support to TESTING, because normal Go build passed but the staging Nix service package path failed.
+- C-D1: not supported for merge commit `a6f11b7d` until CI/deploy reruns green.
+
+**Open decisions:** None. This is a packaging-source-filter bug, not a spec waiver or product ontology decision.
+
+**Next:** Fix the root cause in `flake.nix` by including `internal/apihandler` in the sandbox service source filter, verify focused Nix build locally if possible, push the fix, monitor main CI/staging, then update the suite definition checkpoint to the new settled state.
+
