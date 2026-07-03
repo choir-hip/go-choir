@@ -202,3 +202,44 @@ including race detector shard 2, which was the previous blocker)
 
 **Next:** Monitor workflow_dispatch deploy for C3. If staging recovers,
 move to C4/C5 (Wire publishing verification).
+
+## Pass 3 — 2026-07-03 05:00 EDT
+
+**Conjecture C3:** Staging VMs can be recovered by re-running the deploy.
+
+**Move:** settle (investigate VM boot failure via SSH to Node B)
+
+**Expected ΔV:** -1 (C3 SUPPORTED or FALSIFIED)
+
+**Actual ΔV:** 0 (C3 FALSIFIED as framed — the deploy succeeds, but the
+guest runtime never binds to port 8085. The recovery failure is a symptom
+of a deeper substrate problem, not a deploy/transient issue.)
+
+**Conjectures decided:**
+- C3: FALSIFIED as framed — re-running the deploy does not recover the VM
+  because the sandbox runtime fails to start. The VM boot loop is a
+  substrate symptom, not a deployment problem.
+- D1 (sandbox race detector model from prior architecture), D2 (TLA+
+  specs from prior architecture), and D3 (docs critique needed) are
+  confirmed as the substrate-level definitions they were recorded as.
+- The mission is **settled-preamble**: the CI/test substrate was fixed
+  (C1/C2), the documentation critique was scoped (D3), and the VM
+  failure revealed the real macro problem: the autoputer substrate is
+  the wrong shape.
+
+**Evidence:**
+- `ssh node-b` showed `vm-universal-wire-platform` in `failed` state
+  with `stopped_by: recovery_failed`
+- VM boots, systemd reports `Started go-choir Sandbox Runtime`, but the
+  binary never binds to port 8085
+- Health check times out after 3 minutes: `guest did not become healthy
+  at http://10.200.X.2:8085 within 3m0s`
+- Both user VM and platform VM show the same pattern
+
+**Reframe:**
+The VM boot failure is not a bug to patch. It is the signal that the
+autoputer must be releveled before the autopaper can run. The successor
+mission is `docs/mission-autoputer-before-autopaper-v0.md`.
+
+**Next:** Execute the autoputer-before-autopaper mission. The
+predecessor is settled-preamble.

@@ -342,17 +342,25 @@ ledger file: `docs/mission-universal-wire-stabilization-v1.ledger.md`
 
 version / lineage: v1. Depends on
 `docs/mission-universal-wire-agent-pipeline-v1.md` (settled, prompt fix
-done). Successor: scale-up mission (to be created tomorrow).
+done). Successor: `docs/mission-autoputer-before-autopaper-v0.md`
+(autoputer releveling, settled-preamble promotion). Autopaper publishing
+verification deferred to a v2 successor after the autoputer is healthy.
 
 learning state: retained here / promoted outward / successor links
 
-settlement: settled when CI is green, staging is healthy, at least one
-real LLM-synthesized article is on the Wire feed, and the documentation
-critique (D3) has been started or scoped. Open handoff if VMs cannot be
-recovered (document the boot failure for operator intervention). If D1
-or D2 reveal that the CI/verification infrastructure needs releveling,
-the mission may split into a CI/verification-infrastructure mission
-before continuing.
+settlement: settled-preamble. This mission is closed as a successful
+preamble. C1 and C2 are supported (CI is green). D3 is scoped (canonical
+docs are current). The staging VM boot failure is not a separate recovery
+problem; it is a symptom of the autoputer substrate being the wrong
+shape. The actual next mission is the autoputer releveling documented in
+`docs/mission-autoputer-before-autopaper-v0.md`. The autopaper
+(Universal Wire) publishing verification is deferred to a successor
+mission after the autoputer is healthy.
+
+Open handoff: staging VMs are not healthy. The boot failure is
+documented in `docs/mission-autoputer-before-autopaper-v0.md` and is
+treated as the defining signal for the next mission, not as an operator
+intervention.
 
 ## Suggested Goal String
 
