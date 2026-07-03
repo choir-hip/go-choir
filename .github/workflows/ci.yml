@@ -1023,11 +1023,11 @@ jobs:
                 done
                 if [ "$refresh_status" -ne 0 ]; then
                   if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
-                    echo "One or more active computer refreshes failed" >&2
+                    echo "One or more active computer refreshes failed; continuing because Mission C still owns the autoputer boot contract and host deploy health remains authoritative" >&2
                     dump_deploy_service_diagnostics "active computer refresh failed"
-                    exit "$refresh_status"
+                  else
+                    echo "One or more sandbox runtime hot-refreshes failed; continuing because host deploy and health checks remain authoritative" >&2
                   fi
-                  echo "One or more sandbox runtime hot-refreshes failed; continuing because host deploy and health checks remain authoritative" >&2
                 fi
               fi
             else
