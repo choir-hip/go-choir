@@ -9,6 +9,7 @@ package journal
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -76,6 +77,25 @@ func NewSQLiteJournal(path string) (*SQLiteJournal, error) {
 	if _, err := db.Exec(schemaSQL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("journal: create schema: %w", err)
+	}
+	return &SQLiteJournal{db: db}, nil
+}
+
+// OpenSQLiteJournalReadOnly opens an existing SQLite journal without applying
+// schema migrations or creating a missing database file. It is intended for
+// read-only observation paths.
+func OpenSQLiteJournalReadOnly(path string) (*SQLiteJournal, error) {
+	if path == "" {
+		return nil, fmt.Errorf("journal: sqlite path is required")
+	}
+	uri := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
+	db, err := sql.Open("sqlite", uri.String())
+	if err != nil {
+		return nil, fmt.Errorf("journal: open sqlite read-only: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("journal: open sqlite read-only: %w", err)
 	}
 	return &SQLiteJournal{db: db}, nil
 }

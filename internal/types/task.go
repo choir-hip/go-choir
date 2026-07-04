@@ -286,6 +286,14 @@ const (
 	// transition; it does not replace verification.
 	EventAppAdoptionOwnerApproved EventKind = "app_adoption.owner_approved"
 
+	// EventAppAdoptionOwnerReviewResolved is emitted when a non-deployed owner
+	// adoption-review boundary approves or rejects a private candidate-package draft.
+	EventAppAdoptionOwnerReviewResolved EventKind = "app_adoption.owner_review_resolved"
+
+	// EventAppAdoptionSourceLineageSwitched is emitted when a non-deployed
+	// candidate-package adoption review advances only target source lineage.
+	EventAppAdoptionSourceLineageSwitched EventKind = "app_adoption.source_lineage_switched"
+
 	// EventAppAdoptionPromoted is emitted when an approved adoption advances a
 	// target computer source lineage.
 	EventAppAdoptionPromoted EventKind = "app_adoption.promoted"

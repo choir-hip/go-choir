@@ -46,6 +46,26 @@ func NewStore(dir string) (*Store, error) {
 	return &Store{root: dir}, nil
 }
 
+// OpenStore opens an existing blob store root without creating directories.
+// Use this for read-only observation paths that must not materialize missing
+// state.
+func OpenStore(dir string) (*Store, error) {
+	if dir == "" {
+		return nil, errors.New("blob store: root directory is required")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("blob store: stat root %s: %w", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("blob store: root %s is not a directory", dir)
+	}
+	return &Store{root: dir}, nil
+}
+
 // Put hashes data with SHA-256 and stores it under the resulting ref. If the
 // blob already exists, it is a no-op and the existing ref is returned. The
 // returned BlobRef is "sha256:<hex>".

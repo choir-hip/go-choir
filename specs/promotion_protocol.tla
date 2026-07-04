@@ -15,13 +15,16 @@
 (*                                                                         *)
 (* Invariants checked:                                                       *)
 (*   1. NoStaleCommit     — no commit if the active base moved since the    *)
-(*                          candidate was prepared and verified.          *)
+(*                          candidate was prepared and verified.            *)
 (*   2. ApprovalGate      — no commit without explicit owner approval.      *)
 (*   3. NoTornOutcome     — settled promotions are uniform across ledgers.  *)
 (*   4. RouteConsistency  — route points to exactly one committed computer. *)
 (*   5. HealthWindowReversible — revert only while rollback window is open. *)
 (*   6. CandidateIsolation — candidate mutations are not route-visible      *)
 (*                          before commit.                                  *)
+(*   7. RouteNamesComputerVersion / PromotionNamesComputerVersion — the     *)
+(*      abstract base versions used by this model refine to ComputerVersion *)
+(*      records of the form (CodeRef, ArtifactProgramRef).                  *)
 (*                                                                         *)
 (* Liveness checked:                                                         *)
 (*   EveryPromotionSettles — each promotion eventually aborts, reverts,   *)
@@ -38,15 +41,15 @@ CONSTANTS
   MaxTailMoves      \* bound on active-base divergence during candidacy
 
 VARIABLES
-  activeBase,       \* activeBase[a]  : version of active computer a
-  candidateBase,    \* candidateBase[c] : version of candidate c's fork point
+  activeBase,       \* activeBase[a]  : abstract ComputerVersion index of active computer a
+  candidateBase,    \* candidateBase[c] : abstract ComputerVersion index of candidate c's fork point
   candidateParent,  \* candidateParent[c] : active computer c forks from
   route,            \* route[s] : computer currently serving slot s (active or candidate)
   ledgerState,      \* ledgerState[p][l] : state of ledger l for promotion p
   promoStatus,      \* promoStatus[p] : promotion lifecycle state
   promoActive,      \* promoActive[p] : active computer owning promotion p
   promoCandidate,   \* promoCandidate[p] : candidate computer of promotion p
-  promoBase,        \* promoBase[p] : active base version at candidate fork
+  promoBase,        \* promoBase[p] : abstract ComputerVersion index at candidate fork
   approved,         \* approved[p] : owner approval recorded
   poisoned,         \* poisoned[p] : new version wrote data old cannot read
   healthWindow      \* healthWindow[p] : "open" | "failed" | "confirmed"
@@ -60,6 +63,22 @@ PromoStates  == {"staging", "verified", "approved", "committed",
                  "confirmed", "aborted", "reverted"}
 HealthStates == {"open", "failed", "confirmed"}
 
+\* Refinement seam for the substrate-independent audited-computer mission.
+\* Runtime refs are richer values; this finite model keeps the existing bounded
+\* base-version counter as the abstraction and maps each counter value to an
+\* explicit ComputerVersion record.
+BaseVersionNumbers == 0..MaxTailMoves
+CodeRefs == BaseVersionNumbers
+ArtifactProgramRefs == BaseVersionNumbers
+ComputerVersions == [codeRef: CodeRefs, artifactProgramRef: ArtifactProgramRefs]
+ComputerVersionOfBase(n) ==
+  [codeRef |-> n, artifactProgramRef |-> n]
+
+ComputerVersionOfRoutedComputer(r) ==
+  IF r \in ActiveComps
+    THEN ComputerVersionOfBase(activeBase[r])
+    ELSE ComputerVersionOfBase(candidateBase[r])
+
 \* A promotion is "settled" if it has reached a terminal state.
 TerminalStates == {"aborted", "confirmed", "reverted"}
 
@@ -67,14 +86,14 @@ TerminalStates == {"aborted", "confirmed", "reverted"}
 CommittedFamily == {"committed", "confirmed", "reverted"}
 
 TypeOK ==
-  /\ activeBase \in [ActiveComps -> 0..MaxTailMoves]
-  /\ candidateBase \in [CandidateComps -> 0..MaxTailMoves]
+  /\ activeBase \in [ActiveComps -> BaseVersionNumbers]
+  /\ candidateBase \in [CandidateComps -> BaseVersionNumbers]
   /\ candidateParent \in [CandidateComps -> ActiveComps]
   /\ route \in [Slots -> ActiveComps \cup CandidateComps]
   /\ promoStatus \in [CandidateComps -> PromoStates]
   /\ promoActive \in [CandidateComps -> ActiveComps]
   /\ promoCandidate \in [CandidateComps -> CandidateComps]
-  /\ promoBase \in [CandidateComps -> 0..MaxTailMoves]
+  /\ promoBase \in [CandidateComps -> BaseVersionNumbers]
   /\ approved \in [CandidateComps -> BOOLEAN]
   /\ poisoned \in [CandidateComps -> BOOLEAN]
   /\ healthWindow \in [CandidateComps -> HealthStates]
@@ -357,6 +376,17 @@ CertificateCompleteness ==
   \A c \in CandidateComps :
     promoStatus[c] \in CommittedFamily \cup TerminalStates
       => promoBase[c] >= 0 /\ promoCandidate[c] = c
+
+(* Route and promotion certificates name ComputerVersion through the explicit *)
+(* refinement seam from bounded base versions to (CodeRef, ArtifactProgramRef). *)
+RouteNamesComputerVersion ==
+  \A s \in Slots :
+    ComputerVersionOfRoutedComputer(route[s]) \in ComputerVersions
+
+PromotionNamesComputerVersion ==
+  \A c \in CandidateComps :
+    promoStatus[c] \in CommittedFamily \cup TerminalStates
+      => ComputerVersionOfBase(promoBase[c]) \in ComputerVersions
 
 --------------------------------------------------------------------------
 (* Liveness: what must eventually happen.                                   *)

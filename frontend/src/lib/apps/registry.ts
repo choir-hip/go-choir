@@ -240,6 +240,17 @@ export const APP_REGISTRY = [
     theme: { surface: 'standard', shellDataAttr: 'data-features-window', contentClass: 'features-content' },
   },
   {
+    id: 'candidate-review',
+    name: 'Candidate Review',
+    icon: 'CR',
+    description: 'Review non-deployed candidate adoption evidence',
+    component: () => import('../CandidateReviewApp.svelte'),
+    launcher: { desk: true, desktopIcon: false, mobileSwitcher: true, order: 132 },
+    window: { singleton: false, heavy: false, desktop: { width: 1040, height: 720, minWidth: 720, minHeight: 520 }, compact: compactDefault },
+    auth: { preview: 'public-preview', requiresAuthFor: ['candidate_review'] },
+    theme: { surface: 'standard', shellDataAttr: 'data-candidate-review-window', contentClass: 'candidate-review-content' },
+  },
+  {
     id: 'content',
     name: 'Source',
     icon: '📎',

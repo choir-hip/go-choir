@@ -41,6 +41,10 @@ var ErrNotFound = errors.New("record not found")
 // against an older parent while the document head has already moved on.
 var ErrStaleDocumentHead = errors.New("stale document head")
 
+// ErrConcurrentStateChange is returned when an optimistic state transition
+// loses a compare-and-set race against a newer stored record.
+var ErrConcurrentStateChange = errors.New("concurrent state change")
+
 // ErrInvalidTextureRevision is returned when a Texture revision write fails
 // structured body/source validation before persistence.
 var ErrInvalidTextureRevision = errors.New("invalid texture revision")
@@ -57,20 +61,22 @@ type doltConnector interface {
 }
 
 type Store struct {
-	db             *sql.DB
-	readDB         *sql.DB
-	path           string
-	textureDB      *sql.DB
-	texturePath    string
-	doltConnector  doltConnector
-	jsonPatchMu    sync.Mutex
-	textureRevMu   sync.Mutex
-	workerUpdateMu sync.Mutex
-	channelMsgMu   sync.Mutex
-	eventMu        sync.Mutex
-	og             *objectgraph.Service
-	ogStore        *objectgraph.DoltStore
-	ogReadStore    *objectgraph.DoltStore
+	db                       *sql.DB
+	readDB                   *sql.DB
+	path                     string
+	textureDB                *sql.DB
+	texturePath              string
+	doltConnector            doltConnector
+	jsonPatchMu              sync.Mutex
+	textureRevMu             sync.Mutex
+	workerUpdateMu           sync.Mutex
+	channelMsgMu             sync.Mutex
+	eventMu                  sync.Mutex
+	candidatePackageIntakeMu sync.Mutex
+	appAdoptionMu            sync.Mutex
+	og                       *objectgraph.Service
+	ogStore                  *objectgraph.DoltStore
+	ogReadStore              *objectgraph.DoltStore
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -229,6 +235,30 @@ CREATE TABLE IF NOT EXISTS app_change_packages (
 	created_at                    DATETIME NOT NULL,
 	updated_at                    DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS candidate_package_intakes (
+	intake_id                       VARCHAR(255) PRIMARY KEY,
+	owner_id                        VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_package_id            VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_package_manifest_sha256 VARCHAR(128) NOT NULL DEFAULT '',
+	source_computer_id              VARCHAR(255) NOT NULL DEFAULT '',
+	source_candidate_id             VARCHAR(255) NOT NULL DEFAULT '',
+	candidate_source_ref            LONGTEXT NOT NULL DEFAULT '',
+	intake_boundary                 VARCHAR(255) NOT NULL DEFAULT '',
+	status                          VARCHAR(64) NOT NULL DEFAULT '',
+	owner_review_state              VARCHAR(64) NOT NULL DEFAULT '',
+	owner_review_required           BOOLEAN NOT NULL DEFAULT TRUE,
+	adoption_ready                  BOOLEAN NOT NULL DEFAULT FALSE,
+	adoption_blockers_json          LONGTEXT NOT NULL DEFAULT '[]',
+	verifier_contracts_json         LONGTEXT NOT NULL DEFAULT '[]',
+	evidence_refs_json              LONGTEXT NOT NULL DEFAULT '[]',
+	required_observations_json      LONGTEXT NOT NULL DEFAULT '[]',
+	acceptance_json                 LONGTEXT NOT NULL DEFAULT '{}',
+	trace_id                        VARCHAR(255) NOT NULL DEFAULT '',
+	created_at                      DATETIME NOT NULL,
+	updated_at                      DATETIME NOT NULL
+);
+
 
 CREATE TABLE IF NOT EXISTS app_adoptions (
 	adoption_id                              VARCHAR(255) PRIMARY KEY,
@@ -461,6 +491,9 @@ CREATE INDEX IF NOT EXISTS idx_computer_source_lineages_owner_kind ON computer_s
 CREATE INDEX IF NOT EXISTS idx_app_change_packages_owner_status ON app_change_packages(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_change_packages_visibility ON app_change_packages(visibility, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_change_packages_trace_id ON app_change_packages(trace_id);
+CREATE INDEX IF NOT EXISTS idx_candidate_package_intakes_owner_status ON candidate_package_intakes(owner_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_candidate_package_intakes_package ON candidate_package_intakes(candidate_package_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_candidate_package_intakes_trace_id ON candidate_package_intakes(trace_id);
 CREATE INDEX IF NOT EXISTS idx_app_adoptions_owner_status ON app_adoptions(owner_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_adoptions_package ON app_adoptions(package_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_app_adoptions_target ON app_adoptions(owner_id, target_computer_id, updated_at);
@@ -2041,8 +2074,8 @@ func (s *Store) computeAndPersistCoagentMailboxCursor(ctx context.Context, owner
 		ProcessedSeq: cursor,
 	}
 	metadata := map[string]any{
-		"agent_id":            agentID,
-		"channel_id":          channelID,
+		"agent_id":              agentID,
+		"channel_id":            channelID,
 		"processed_message_seq": cursor,
 	}
 	if _, err := s.ogPut(ctx, ogKindCoagentMail, ownerID, agentID, mbRec, metadata, time.Now().UTC()); err != nil {

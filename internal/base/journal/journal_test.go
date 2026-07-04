@@ -1,6 +1,8 @@
 package journal
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -322,6 +324,43 @@ func TestSQLiteAppendAndReadBack(t *testing.T) {
 	}
 	if entries[1].Event.ParentEventID != "base_evt_1" {
 		t.Errorf("read-back parent should be base_evt_1, got %q", entries[1].Event.ParentEventID)
+	}
+}
+
+func TestOpenSQLiteJournalReadOnlyExisting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.sqlite")
+	j, err := NewSQLiteJournal(path)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if _, err := j.Append(mkEvent("base_evt_1", "base_item_1", model.EventCreate, 0)); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatalf("close writable journal: %v", err)
+	}
+
+	readOnly, err := OpenSQLiteJournalReadOnly(path)
+	if err != nil {
+		t.Fatalf("open read-only sqlite: %v", err)
+	}
+	defer readOnly.Close()
+	entries := readOnly.Entries()
+	if len(entries) != 1 || entries[0].Event.EventID != "base_evt_1" {
+		t.Fatalf("entries = %#v", entries)
+	}
+	if _, err := readOnly.Append(mkEvent("base_evt_2", "base_item_1", model.EventUpdate, 0)); err == nil {
+		t.Fatal("expected append through read-only journal to fail")
+	}
+}
+
+func TestOpenSQLiteJournalReadOnlyMissingDoesNotCreate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.sqlite")
+	if _, err := OpenSQLiteJournalReadOnly(path); err == nil {
+		t.Fatal("expected missing read-only journal open to fail")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("read-only open created missing journal or unexpected stat error: %v", err)
 	}
 }
 

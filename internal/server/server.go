@@ -27,10 +27,10 @@ type healthResponse struct {
 
 // Server wraps an http.Server with go-choir service configuration.
 type Server struct {
-	serviceName     string
-	httpServer      *http.Server
-	mux             *http.ServeMux
-	addr            string
+	serviceName string
+	httpServer  *http.Server
+	mux         *http.ServeMux
+	addr        string
 	// listener is written by Start (in the Start goroutine) and read by Addr
 	// (which may run in any goroutine, e.g. the health handler invoked from a
 	// test or an in-process caller). listenerMu guards all access to listener
@@ -104,6 +104,12 @@ func (s *Server) SetHealthHandler(handler http.HandlerFunc) {
 // This must be called before Start.
 func (s *Server) HandleFunc(pattern string, handler http.HandlerFunc) {
 	s.mux.HandleFunc(pattern, handler)
+}
+
+// Handle registers an HTTP handler for the given pattern on the server's mux.
+// This must be called before Start.
+func (s *Server) Handle(pattern string, handler http.Handler) {
+	s.mux.Handle(pattern, handler)
 }
 
 // ServeHTTP exposes the server mux for package tests and in-process callers

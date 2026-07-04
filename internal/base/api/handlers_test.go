@@ -10,9 +10,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/base/blob"
@@ -22,8 +25,8 @@ import (
 
 // mockValidator is a test APIKeyValidator that returns a fixed key.
 type mockValidator struct {
-	key    *auth.APIKey
-	user   *auth.User
+	key     *auth.APIKey
+	user    *auth.User
 	touched bool
 }
 
@@ -194,6 +197,94 @@ func TestPutItemAndDelta(t *testing.T) {
 	}
 	if len(dresp.Events) != 0 {
 		t.Fatalf("delta2 events: got %d want 0", len(dresp.Events))
+	}
+}
+
+func TestBaseAPIWritesCanFeedReadOnlyCurrentStateObservation(t *testing.T) {
+	root := t.TempDir()
+	blobRoot := filepath.Join(root, "blobs")
+	bs, err := blob.NewStore(blobRoot)
+	if err != nil {
+		t.Fatalf("blob store: %v", err)
+	}
+	journalPath := filepath.Join(root, "base.sqlite")
+	jr, err := journal.NewSQLiteJournal(journalPath)
+	if err != nil {
+		t.Fatalf("sqlite journal: %v", err)
+	}
+	v, secret := fakeValidator(t, "choir_sk_testsecret", []string{ScopeWriteBase, ScopeReadBase})
+	h := NewHandler(bs, jr, v)
+	h.SetClock(func() time.Time { return time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC) })
+
+	blobBody := []byte("base api durable state")
+	rr := do(t, h.Routes(), http.MethodPost, "/api/base/blobs", secret, bytes.NewReader(blobBody))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("put blob status: %d body: %s", rr.Code, rr.Body.String())
+	}
+	var blobResp putBlobResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &blobResp); err != nil {
+		t.Fatalf("decode blob: %v", err)
+	}
+
+	itemID := model.ItemID("base_item_api_observation")
+	itemBody, _ := json.Marshal(putItemRequest{
+		ItemID:       itemID,
+		EventType:    model.EventCreate,
+		Kind:         model.KindFile,
+		Name:         "observed.txt",
+		ParentItemID: "base_item_root",
+		VersionID:    "base_ver_api_observation",
+		BlobRef:      blobResp.BlobRef,
+		ContentHash:  blobResp.SHA256,
+		MediaType:    "text/plain",
+	})
+	rr = do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(itemBody))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("put item status: %d body: %s", rr.Code, rr.Body.String())
+	}
+	if err := jr.Close(); err != nil {
+		t.Fatalf("close writable journal: %v", err)
+	}
+
+	source, err := computerversion.OpenBaseCurrentStateSource(computerversion.BaseCurrentStatePaths{
+		JournalPath: journalPath,
+		BlobRoot:    blobRoot,
+	})
+	if err != nil {
+		t.Fatalf("open current state source: %v", err)
+	}
+	defer source.Close()
+	observationSet, err := source.ObservationSet(context.Background(), "base-api-current-state", computerversion.ComputerVersion{
+		CodeRef:            "test-code-ref",
+		ArtifactProgramRef: computerversion.ArtifactProgramRef("base-sqlite:" + journalPath),
+	})
+	if err != nil {
+		t.Fatalf("observe current state: %v", err)
+	}
+	kinds := observationSet.RequiredKinds()
+	if len(kinds) != 2 || kinds[0] != computerversion.ObservationBlobSet || kinds[1] != computerversion.ObservationFileManifest {
+		t.Fatalf("required kinds = %#v", kinds)
+	}
+	if len(observationSet.Observations) != 2 {
+		t.Fatalf("expected file manifest and blob observation, got %#v", observationSet.Observations)
+	}
+	var sawItem, sawBlob bool
+	for _, observation := range observationSet.Observations {
+		switch {
+		case observation.Kind == computerversion.ObservationFileManifest && observation.Key == string(itemID):
+			if !strings.Contains(observation.Value, string(blobResp.BlobRef)) {
+				t.Fatalf("file observation does not reference uploaded blob: %s", observation.Value)
+			}
+			sawItem = true
+		case observation.Kind == computerversion.ObservationBlobSet && observation.Key == string(blobResp.BlobRef):
+			if !strings.Contains(observation.Value, blobResp.SHA256) {
+				t.Fatalf("blob observation does not carry uploaded hash: %s", observation.Value)
+			}
+			sawBlob = true
+		}
+	}
+	if !sawItem || !sawBlob {
+		t.Fatalf("missing observations: sawItem=%v sawBlob=%v set=%#v", sawItem, sawBlob, observationSet.Observations)
 	}
 }
 

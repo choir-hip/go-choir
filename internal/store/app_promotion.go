@@ -225,6 +225,12 @@ func (s *Store) ListAppChangePackages(ctx context.Context, viewerID string, limi
 }
 
 func (s *Store) UpsertAppAdoption(ctx context.Context, rec types.AppAdoptionRecord) (types.AppAdoptionRecord, error) {
+	s.appAdoptionMu.Lock()
+	defer s.appAdoptionMu.Unlock()
+	return s.upsertAppAdoptionLocked(ctx, rec)
+}
+
+func (s *Store) upsertAppAdoptionLocked(ctx context.Context, rec types.AppAdoptionRecord) (types.AppAdoptionRecord, error) {
 	if rec.OwnerID == "" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("upsert app adoption: owner_id is required")
 	}
@@ -316,6 +322,40 @@ func (s *Store) UpsertAppAdoption(ctx context.Context, rec types.AppAdoptionReco
 	rec.VerifierResultsJSON = json.RawMessage(resultsJSON)
 	rec.RollbackProfileJSON = json.RawMessage(rollbackJSON)
 	return rec, nil
+}
+
+// UpdateAppAdoptionIfCurrent persists an already-loaded adoption only if its
+// owner and updated_at value still match the stored row. It protects owner
+// review, switch, rollback, and roll-forward transitions from stale
+// load/validate/mutate cycles.
+func (s *Store) UpdateAppAdoptionIfCurrent(ctx context.Context, rec types.AppAdoptionRecord, previousUpdatedAt time.Time) (types.AppAdoptionRecord, error) {
+	if rec.OwnerID == "" {
+		return types.AppAdoptionRecord{}, fmt.Errorf("update app adoption: owner_id is required")
+	}
+	if rec.AdoptionID == "" {
+		return types.AppAdoptionRecord{}, fmt.Errorf("update app adoption: adoption_id is required")
+	}
+	if previousUpdatedAt.IsZero() {
+		return types.AppAdoptionRecord{}, fmt.Errorf("update app adoption: previous updated_at is required")
+	}
+	s.appAdoptionMu.Lock()
+	defer s.appAdoptionMu.Unlock()
+
+	current, err := s.getAppAdoptionLocked(ctx, rec.OwnerID, rec.AdoptionID)
+	if err != nil {
+		return types.AppAdoptionRecord{}, err
+	}
+	if !current.UpdatedAt.Equal(previousUpdatedAt) {
+		return current, fmt.Errorf("update app adoption: %w", ErrConcurrentStateChange)
+	}
+	rec.CreatedAt = current.CreatedAt
+	rec.UpdatedAt = time.Now().UTC()
+	return s.upsertAppAdoptionLocked(ctx, rec)
+}
+
+func (s *Store) getAppAdoptionLocked(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	row := s.db.QueryRowContext(ctx, appAdoptionSelectSQL()+` WHERE owner_id = ? AND adoption_id = ?`, ownerID, adoptionID)
+	return scanAppAdoption(row)
 }
 
 func (s *Store) GetAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {

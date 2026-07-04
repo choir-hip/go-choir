@@ -65,18 +65,67 @@ type AppChangePackageRecord struct {
 	UpdatedAt                   time.Time              `json:"updated_at"`
 }
 
+type CandidatePackageIntakeStatus string
+
+const (
+	CandidatePackageIntakeOwnerReviewPending CandidatePackageIntakeStatus = "owner_review_pending"
+	CandidatePackageIntakeOwnerApproved      CandidatePackageIntakeStatus = "owner_approved"
+	CandidatePackageIntakeRejected           CandidatePackageIntakeStatus = "rejected"
+	CandidatePackageIntakeArchived           CandidatePackageIntakeStatus = "archived"
+)
+
+type CandidatePackageOwnerReviewState string
+
+const (
+	CandidatePackageOwnerReviewRequired CandidatePackageOwnerReviewState = "required"
+	CandidatePackageOwnerReviewApproved CandidatePackageOwnerReviewState = "approved"
+	CandidatePackageOwnerReviewRejected CandidatePackageOwnerReviewState = "rejected"
+)
+
+// CandidatePackageIntakeRecord is the evidence-only owner-review record for a
+// candidate-computer package. It deliberately does not publish an
+// AppChangePackage, create an adoption, promote a computer, or change active
+// routes; it persists the review boundary and blockers that must be cleared
+// before a later product path may act on the package.
+type CandidatePackageIntakeRecord struct {
+	IntakeID                       string                           `json:"intake_id"`
+	OwnerID                        string                           `json:"owner_id"`
+	CandidatePackageID             string                           `json:"candidate_package_id"`
+	CandidatePackageManifestSHA256 string                           `json:"candidate_package_manifest_sha256"`
+	SourceComputerID               string                           `json:"source_computer_id,omitempty"`
+	SourceCandidateID              string                           `json:"source_candidate_id,omitempty"`
+	CandidateSourceRef             string                           `json:"candidate_source_ref,omitempty"`
+	IntakeBoundary                 string                           `json:"intake_boundary"`
+	Status                         CandidatePackageIntakeStatus     `json:"status"`
+	OwnerReviewState               CandidatePackageOwnerReviewState `json:"owner_review_state"`
+	OwnerReviewRequired            bool                             `json:"owner_review_required"`
+	AdoptionReady                  bool                             `json:"adoption_ready"`
+	AdoptionBlockersJSON           json.RawMessage                  `json:"adoption_blockers_json,omitempty"`
+	VerifierContractsJSON          json.RawMessage                  `json:"verifier_contracts_json,omitempty"`
+	EvidenceRefsJSON               json.RawMessage                  `json:"evidence_refs_json,omitempty"`
+	RequiredObservationsJSON       json.RawMessage                  `json:"required_observations_json,omitempty"`
+	AcceptanceJSON                 json.RawMessage                  `json:"acceptance_json,omitempty"`
+	TraceID                        string                           `json:"trace_id,omitempty"`
+	CreatedAt                      time.Time                        `json:"created_at"`
+	UpdatedAt                      time.Time                        `json:"updated_at"`
+}
+
 type AppAdoptionStatus string
 
 const (
-	AppAdoptionProposed         AppAdoptionStatus = "adoption_proposed"
-	AppAdoptionCandidateApplied AppAdoptionStatus = "candidate_applied"
-	AppAdoptionVerifying        AppAdoptionStatus = "verifying"
-	AppAdoptionBuilt            AppAdoptionStatus = "built"
-	AppAdoptionVerified         AppAdoptionStatus = "verified"
-	AppAdoptionOwnerApproved    AppAdoptionStatus = "owner_approved"
-	AppAdoptionAdopted          AppAdoptionStatus = "adopted"
-	AppAdoptionRolledBack       AppAdoptionStatus = "rolled_back"
-	AppAdoptionBlocked          AppAdoptionStatus = "blocked"
+	AppAdoptionProposed              AppAdoptionStatus = "adoption_proposed"
+	AppAdoptionOwnerReviewPending    AppAdoptionStatus = "owner_review_pending"
+	AppAdoptionOwnerReviewApproved   AppAdoptionStatus = "owner_review_approved"
+	AppAdoptionOwnerReviewRejected   AppAdoptionStatus = "owner_review_rejected"
+	AppAdoptionSourceLineageSwitched AppAdoptionStatus = "source_lineage_switched"
+	AppAdoptionCandidateApplied      AppAdoptionStatus = "candidate_applied"
+	AppAdoptionVerifying             AppAdoptionStatus = "verifying"
+	AppAdoptionBuilt                 AppAdoptionStatus = "built"
+	AppAdoptionVerified              AppAdoptionStatus = "verified"
+	AppAdoptionOwnerApproved         AppAdoptionStatus = "owner_approved"
+	AppAdoptionAdopted               AppAdoptionStatus = "adopted"
+	AppAdoptionRolledBack            AppAdoptionStatus = "rolled_back"
+	AppAdoptionBlocked               AppAdoptionStatus = "blocked"
 )
 
 // AppAdoptionRecord is the recipient-side promotion record for one package

@@ -22,6 +22,41 @@ func tempStore(t *testing.T) *Store {
 	return s
 }
 
+func TestOpenStoreExistingRoot(t *testing.T) {
+	root := t.TempDir()
+	s, err := NewStore(root)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	ref, err := s.Put([]byte("persisted"))
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	opened, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	got, err := opened.Get(ref)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if string(got) != "persisted" {
+		t.Fatalf("data = %q", got)
+	}
+}
+
+func TestOpenStoreMissingRootDoesNotCreate(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing")
+	_, err := OpenStore(root)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("OpenStore missing = %v, want ErrNotFound", err)
+	}
+	if _, statErr := os.Stat(root); !os.IsNotExist(statErr) {
+		t.Fatalf("OpenStore created missing root or unexpected stat error: %v", statErr)
+	}
+}
+
 func TestPutGetRoundTrip(t *testing.T) {
 	s := tempStore(t)
 	data := []byte("hello choir base blobs")

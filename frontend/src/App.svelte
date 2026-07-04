@@ -244,6 +244,22 @@
         },
       };
     }
+    if (appId === 'candidate-review') {
+      const intakeID = (params.get('intake') || params.get('intake_id') || '').trim();
+      const adoptionID = (params.get('adoption') || params.get('adoption_id') || '').trim();
+      return {
+        kind: 'app_launch',
+        source: 'url',
+        appId: 'candidate-review',
+        appName: 'Candidate Review',
+        icon: 'CR',
+        appContext: {
+          intakeID,
+          adoptionID,
+          windowTitle: 'Candidate Review',
+        },
+      };
+    }
     if (appId) {
       clearConsumedAppIntentFromURL();
     }
@@ -274,6 +290,10 @@
     url.searchParams.delete('doc');
     url.searchParams.delete('doc_id');
     url.searchParams.delete('title');
+    url.searchParams.delete('intake');
+    url.searchParams.delete('intake_id');
+    url.searchParams.delete('adoption');
+    url.searchParams.delete('adoption_id');
     const next = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', next || '/');
   }
