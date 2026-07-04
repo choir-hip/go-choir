@@ -20,7 +20,8 @@ admire, checkpoint early, or create a separate control language.
 5. `docs/agent-product-doctrine.md` (product architecture rules)
 6. Child definition: `docs/definitions/pass-2-completion-definition-2026-07-03.md`
 7. Child definition: `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md`
-8. Codex review: `docs/reviews/promotion-gate-codex-review-2026-07-03.md`
+8. Refinement definition: `docs/definitions/substrate-independent-audited-computer-2026-07-04.md`
+9. Codex review: `docs/reviews/promotion-gate-codex-review-2026-07-03.md`
 
 When sources conflict, this document governs execution. When this document is
 silent, the suite paradoc governs. When both are silent, escalate to human.
@@ -44,10 +45,15 @@ projections. The object is the spec-validated, staging-proven system.
 
 ## Mission Purpose And Non-Purpose
 
-**Purpose:** Redefine TLA+ specifications to describe the system as it is now
-(actor runtime + object graph + autoputer + capsules + wire), then refactor Go
-code as a mechanical refinement of those specs so the autoputer boots cleanly,
-the wire pipeline publishes end-to-end, and the system is ready for scale-up.
+**Purpose:** Execute the suite in the correct order: first make the autoputer
+work correctly as a substrate-independent audited computer, then reactivate
+autopaper/wire work after the autoputer substrate is trustworthy. The immediate
+work is to refine the current autoputer goal through
+`docs/definitions/substrate-independent-audited-computer-2026-07-04.md` so the
+computer is not identified with Firecracker, Cloud Hypervisor, Nucleus,
+containers, `data.img`, or any other materialization substrate. The original
+spec-first work remains: TLA+ specs should describe the current architecture,
+and Go code should mechanically refine those specs.
 
 **Non-purpose:**
 
@@ -58,6 +64,13 @@ the wire pipeline publishes end-to-end, and the system is ready for scale-up.
   fix-forward, not dual-write.
 - This mission does not treat spec writing as the deliverable. Specs are the
   authority; code refinement and staging proof are the deliverable.
+
+**Current owner reordering (2026-07-04):** Autopaper is tabled. This is not a
+rejection of autopaper; it is a sequencing correction. The active suite path is
+autoputer first: get the computer working correctly as an audited,
+substrate-independent product object before resuming autopaper publication work.
+The substrate-independent audited computer definition is a refinement and
+rephrasing of the autoputer goal, not a competing mission.
 
 ## Definition Graph
 
@@ -784,17 +797,23 @@ evidence:
 
 ## Completion Semantics
 
-```text
-The suite is COMPLETE when:
-  1. All 18 conjectures are SUPPORTED or explicitly REFUTED with rationale.
-  2. All specs are model-checked green in CI.
-  3. internal/runtime is deleted.
-  4. cmd/sandbox is renamed to cmd/autoputer and boots on staging.
-  5. The wire pipeline publishes end-to-end on staging.
-  6. Promotion protocol works on staging: candidate -> verify -> approve -> promote -> health -> confirm.
-  7. Codex review reservations are addressed.
-  8. Suite ledger and paradoc are updated with final evidence.
-  9. CI is green on main.
+The current **AUTOPUTER-FIRST INTERVAL** is COMPLETE when:
+
+  1. `docs/definitions/substrate-independent-audited-computer-2026-07-04.md`
+     is adopted as the active refinement of the autoputer goal.
+  2. The next executable probes are ordered around the autoputer as a
+     user-isomorphic audited computer, not around autopaper/wire publication.
+  3. Autopaper/wire criteria are explicitly marked deferred rather than silently
+     deleted.
+  4. CI/docs checks for the definition update pass or any warnings are scoped.
+  5. The run checkpoint names the next substrate-independent autoputer probe.
+
+The full suite remains INCOMPLETE until the original broader goals are later
+reactivated and satisfied: specs model-check green in CI, `internal/runtime` is
+deleted or superseded by the settled runtime substrate, `cmd/sandbox` is renamed
+or otherwise resolved under the autoputer ontology, promotion works on staging,
+Codex reservations are addressed, and autopaper/wire publication is explicitly
+untabled and proven end-to-end. Autopaper is deferred, not erased.
 
 The suite is BLOCKED when:
   1. A conjecture remains TESTING for more than one pass without evidence.
@@ -904,6 +923,9 @@ run_checkpoint_and_resumption_state:
     - Deploy job `85076877932` for commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` reported no active interactive computers needed refresh, so the changed active-refresh diagnostic path has not yet been exercised.
     - Product-path activation probe reached signed-out Choir preview and passkey sign-in/create dialog; no cookies, localStorage auth, sessionStorage auth, passkey login, or account creation were available/performed from the harness.
     - Authenticated product-path probe for `yusefnathanson@me.com` is available through imported Chrome cookies, but the account remains stuck in Choir BIOS boot pending after recovery.
+    - Owner clarified on 2026-07-04 that the substrate-independent audited computer mission is a refinement/rephrasing of the autoputer goal, not a competing goal.
+    - Owner clarified that autopaper should be tabled until the autoputer works correctly; correct order is autoputer first, then autopaper.
+    - docs/definitions/substrate-independent-audited-computer-2026-07-04.md now defines the active substrate-independent audited computer refinement.
   what_shipped:
     - Promotion gate spec (Pass 1, merged to main)
     - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 merged)
@@ -911,6 +933,7 @@ run_checkpoint_and_resumption_state:
     - Sandbox Nix package source-filter fix for internal/apihandler
     - CI deploy gate now treats active computer refresh as diagnostic while preserving host health as the deploy gate
     - Pass 3 readiness diagnostic patch at `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`
+    - Substrate-independent audited computer mission definition created as the active autoputer refinement
   what_was_proven:
     - C-S1: actor_protocol.tla safety invariants model-check green in main CI
     - C-S3: autoputer_lifecycle.tla model-checks green in main CI
@@ -927,6 +950,8 @@ run_checkpoint_and_resumption_state:
     - C-C1/C-C2: autoputer rename/capsule and refreshed guest boot readiness remain open
     - C-C3/C-C4: Go promotion encoding and durable certificate remain open
     - C-D3/C-D4: sabotage variants and Codex reservations remain open
+    - Autopaper/wire publication criteria are tabled by owner direction until autoputer correctness and substrate independence are settled.
+    - Substrate-independent audited computer definition is adopted as a refinement of Mission C/autoputer work, not a separate competing suite.
   belief_state_changes:
     - PR #42 is merged; re-merging PR #42 is obsolete.
     - Pass 2 package-build regression is repaired.
@@ -946,6 +971,7 @@ run_checkpoint_and_resumption_state:
     - Resolve-path stopped/hibernated coalescing is deployed, but authenticated recovery still launches duplicate Firecracker processes through direct resume/refresh paths; the guest also reaches NixOS emergency mode.
     - The authenticated primary computer's persistent ext4 data image is corrupted: guest `fsck` fails on `/dev/vdb`, `/mnt/persistent` does not mount, and host-side `e2fsck -fn` exits 4 with filesystem errors.
     - Protected ext4 repair recovered `yusefnathanson@me.com` primary computer: authenticated recovery returns 200, runtime is ready, compute status reports active primary state, and the desktop app shell renders.
+    - Owner reordered the suite: substrate-independent audited computer work is the active refinement of the autoputer goal; autopaper is tabled until autoputer correctness is settled.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
     - `yusefnathanson@me.com` primary computer manual recovery is repaired; deploy-triggered active refresh remains unproven.
@@ -954,14 +980,16 @@ run_checkpoint_and_resumption_state:
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 deploy-triggered active refresh proof with an active authenticated primary computer
-  next_executable_probe: Run or observe the next ordinary guest deploy with the authenticated primary computer active, then verify deploy-refresh logs and direct `/health` evidence for every refreshed active interactive computer; only pursue direct lifecycle coalescing if duplicate launches recur after persistent filesystems mount cleanly.
-  suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
+    - Autopaper/wire criteria tabled by owner direction until autoputer substrate independence is settled
+  highest_impact_remaining_uncertainty: The smallest real substrate-independent autoputer probe that preserves the audited-computer topology while moving current Firecracker/vmmanager behavior behind materializer/equivalence contracts.
+  next_executable_probe: Execute `/goal docs/definitions/substrate-independent-audited-computer-2026-07-04.md`; define `Materializer`, `CapabilityManifest`, `ObservationSet`, and `EquivalenceCheck` interfaces/types in a non-runtime package with focused tests and a failing mismatch fixture.
+  suggested_goal_string: "/goal docs/definitions/substrate-independent-audited-computer-2026-07-04.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 23
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 24
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
+    - docs/definitions/substrate-independent-audited-computer-2026-07-04.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
     - CI run 28683693425 (packaging fix; deploy job exposed active refresh failure)
@@ -1005,6 +1033,8 @@ run_checkpoint_and_resumption_state:
   completion criteria for Pass 2 (PR #42 merge gate).
 - `docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md` — specific
   investigation and completion criteria for Mission C active refresh / autoputer boot readiness.
+- `docs/definitions/substrate-independent-audited-computer-2026-07-04.md` — active
+  refinement of the autoputer goal: user-isomorphic audited computers with substrate independence; autopaper/wire work is tabled until this is settled.
 
 
 ---
