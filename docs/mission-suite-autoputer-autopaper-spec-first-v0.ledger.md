@@ -692,3 +692,24 @@ Mission D (CI/Verification Guard):
 - The next repair must share coalescing across direct resume/refresh/recovery paths, not only request-time resolve.
 
 **Next:** Add direct-path regression coverage for concurrent `ResumeVMForDesktop`/refresh recovery with a stopped computer; fix `internal/vmctl` lifecycle coalescing at the shared lifecycle operation boundary; deploy; re-run authenticated recovery and inspect guest emergency-mode evidence.
+
+## Pass 22 — 2026-07-04 (Mission C: Persistent Filesystem Corruption Confirmed)
+
+**Conjecture:** The current authenticated boot blocker is no longer disk capacity or missing coalescing alone. The primary computer's persistent ext4 data image is corrupted, so NixOS fails `fsck` on `/dev/vdb`, cannot mount `/mnt/persistent`, and drops to emergency mode.
+
+**Move:** Inspected Node B vmctl logs for the post-deploy authenticated recovery and ran a non-mutating host-side filesystem check against the stopped primary computer's data image.
+
+**Actual ΔV:**
+- The guest boot log contains `[FAILED] Failed to start File System Check on /dev/vdb`, followed by dependency failures for `/mnt/persistent` and Local File Systems.
+- `e2fsck -fn` on `/var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img` reports ext4 errors and exits 4.
+- The data image is repairable in principle, but repairing it mutates persistent user computer state and must be treated as a protected data-repair action, not a routine code fix.
+
+**Evidence:**
+- Node B `journalctl -u go-choir-vmctl.service --since=2026-07-04T04:13:30 --until=2026-07-04T04:20:00 -g failed -o cat --no-pager -a`: `/dev/vdb` filesystem check failed; `/mnt/persistent` dependency failed; Local File Systems dependency failed.
+- `ssh node-b e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`: unconnected directories, bad reference counts, bitmap/checksum differences, `Feature orphan_present is set but orphan file is clean`, and `WARNING: Filesystem still has errors`.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- The next action is not another boot retry. The next action is a protected persistent data image repair with rollback evidence, or an explicit decision to preserve the corrupted image and switch to a fresh computer.
+
+**Next:** Before mutating the data image, capture a byte-for-byte rollback copy or snapshot ref; then run an explicit ext4 repair path and re-run authenticated recovery.
