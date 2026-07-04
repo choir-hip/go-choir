@@ -8,7 +8,9 @@ import (
 
 const dataImageFileName = "data.img"
 
-// DataImageStats reports host-side persistent disk image allocation for a VM.
+// DataImageStats reports host-side persistent disk image stats for a VM.
+// FileBytes is allocated host storage, not the image's virtual capacity.
+// CapBytes is the virtual data.img size exposed to the guest filesystem.
 type DataImageStats struct {
 	FileBytes     uint64 `json:"file_bytes"`
 	CapBytes      uint64 `json:"cap_bytes"`
@@ -46,10 +48,11 @@ func LookupDataImageStats(stateDir, vmID string) (DataImageStats, bool) {
 	if capBytes == 0 {
 		return DataImageStats{}, false
 	}
+	stateDirBytes := uint64(vmStateDirUsageBytes(stateDir, vmID))
 	return DataImageStats{
-		FileBytes:     capBytes,
+		FileBytes:     stateDirBytes,
 		CapBytes:      capBytes,
-		StateDirBytes: uint64(vmStateDirUsageBytes(stateDir, vmID)),
+		StateDirBytes: stateDirBytes,
 	}, true
 }
 

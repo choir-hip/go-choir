@@ -939,21 +939,22 @@ run_checkpoint_and_resumption_state:
     - Authenticated compute status now identifies the leading boot blocker: the primary computer is stopped after `vmctl-restart`, recovery failed, and the persistent data image is 100% full.
     - Persistent data capacity repair is prepared locally: per-VM data image minimum is 32 GiB, and focused resize tests passed.
     - The 32 GiB capacity repair is deployed to vmctl, but stopped-computer host-image disk status currently reports virtual image size as used bytes; this reclassifies the 100% disk signal as a diagnostic artifact until vmctl stats are corrected.
+    - Host-image disk gauge fix is prepared locally: vmctl `file_bytes` now reports allocated state-dir bytes rather than virtual `data.img` capacity, and focused tests passed.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
-    - `yusefnathanson@me.com` primary computer recovery remains unproven after the vmctl capacity deploy; compute-status disk fullness must be corrected because host-image stats currently fabricate 100% usage for stopped images.
+    - `yusefnathanson@me.com` primary computer recovery remains unproven after the vmctl capacity deploy; host-image disk fullness diagnostics are fixed locally but not yet deployed.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after valid stopped-image disk diagnostics and authenticated recovery
-  next_executable_probe: Fix vmctl stopped-image disk stats, deploy it, re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and then re-run bootstrap/health evidence to decide whether any runtime/listen/network/emergency-mode cause remains.
+  highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after deployed stopped-image disk diagnostics and authenticated recovery
+  next_executable_probe: Commit/push/deploy the vmctl stopped-image disk stats fix, re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and then re-run bootstrap/health evidence to decide whether any runtime/listen/network/emergency-mode cause remains.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 17
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 18
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -970,6 +971,7 @@ run_checkpoint_and_resumption_state:
     - authenticated compute status: `/api/compute/status` returned primary `state=stopped`, recovery `status=failed`, and `persistent_disk.used_percent=100` with warning "persistent data image is critically full".
     - focused capacity test: `go test ./internal/vmmanager -run 'TestDataImageSizeCoversSelfDevelopmentWorkspace|TestBootVMExpandsExistingSmallDataImageBeforeLaunch' -count=1`
     - capacity repair CI/deploy: CI run `28690422412`, Race Detector run `28690422396`, Docs Truth Check run `28690422415`, FlakeHub run `28690422405`, deploy job `85090768662`
+    - focused vmctl data-image test: `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
   rollback_refs:
     - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```

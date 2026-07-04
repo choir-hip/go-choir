@@ -598,3 +598,24 @@ Mission D (CI/Verification Guard):
 - The next in-bound repair is diagnostic: report host-side data image allocated bytes separately from virtual capacity so stopped-computer status does not fabricate 100% usage.
 
 **Next:** Fix `internal/vmctl` host image stats so `file_bytes` reports allocated state-dir bytes rather than virtual capacity; then re-run focused vmctl tests, deploy, recover the account, and re-check authenticated boot.
+
+## Pass 18 — 2026-07-04 (Mission C: Host Image Disk Gauge Fix Prepared)
+
+**Conjecture:** Stopped-computer disk status should use host allocated state-dir bytes for `file_bytes`, while `cap_bytes` remains the virtual guest data image capacity.
+
+**Move:** Changed `internal/vmctl.LookupDataImageStats` to set `FileBytes` from `vmStateDirUsageBytes` instead of `capBytes`; updated data-image tests to prove `file_bytes` follows state-dir allocation rather than virtual capacity.
+
+**Actual ΔV:**
+- `file_bytes` no longer equals `cap_bytes` by construction.
+- `cap_bytes` still reports the virtual `data.img` capacity.
+- `state_dir_bytes` and `file_bytes` now agree for stopped-image host diagnostics.
+
+**Evidence:**
+- `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1` passed.
+- Code paths touched: `internal/vmctl/data_image.go`, `internal/vmctl/data_image_test.go`.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN until the fix is deployed and authenticated recovery is re-run.
+- Compute status should stop fabricating 100% usage solely because a stopped image was resized to 32 GiB.
+
+**Next:** Commit, push, monitor CI/deploy, restore authenticated browser cookies if needed, trigger recovery for `yusefnathanson@me.com`, and re-check `/api/compute/status` plus product boot state.

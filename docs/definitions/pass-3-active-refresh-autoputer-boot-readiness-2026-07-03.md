@@ -158,16 +158,22 @@ determined_state:
     - claim: Stopped-computer host-image disk status currently reports virtual image capacity as used bytes, so `used_percent=100` after resize is not valid guest-filesystem fullness evidence.
       source: authenticated `/api/compute/status` after deploy and code inspection of `internal/vmctl/data_image.go`
       execution_effect: Correct vmctl data-image stats before treating compute-status disk fullness as a root-cause proof.
+    - claim: Host-image disk gauge fix is prepared: vmctl `file_bytes` now reports state-dir allocation rather than virtual `data.img` capacity.
+      source: local edits to `internal/vmctl/data_image.go` and `internal/vmctl/data_image_test.go`
+      execution_effect: The next proof must deploy this diagnostic fix and re-check stopped-computer compute status before interpreting capacity pressure.
+    - claim: Focused vmctl data-image tests passed for the allocation-vs-capacity distinction.
+      source: `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
+      execution_effect: Local proof covers the host-image gauge semantics that feed `/api/compute/status`.
   contested: []
   open:
     - node: root-cause-active-refresh-health
-      missing: Confirm whether the deployed 32 GiB resize lets the authenticated computer boot after host-image disk status stops fabricating 100% usage, or whether a separate runtime listen/network/emergency-mode failure remains.
+      missing: Confirm whether the deployed 32 GiB resize lets the authenticated computer boot after the host-image disk gauge fix is deployed, or whether a separate runtime listen/network/emergency-mode failure remains.
     - node: current-node-b-state
       missing: Confirm post-deploy vmctl state for the primary computer after recovery is triggered with valid disk diagnostics.
     - node: diagnostic-sufficiency
-      missing: Host-image disk status must report allocated bytes rather than virtual capacity before stopped-computer compute status can distinguish capacity pressure from a reporting artifact.
+      missing: Deploy the host-image disk gauge fix, then confirm stopped-computer compute status no longer reports 100% usage solely from virtual image size.
     - node: authenticated-product-path
-      missing: Re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap after vmctl host-image stats are corrected.
+      missing: Re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap after vmctl host-image stats are deployed.
 ```
 
 ---
@@ -309,6 +315,7 @@ run_checkpoint_and_resumption_state:
     - Capacity repair is prepared: `dataImageSizeMB` is 32 GiB and focused tests passed for both the minimum guard and existing-image expansion path.
     - Capacity repair deployed to vmctl at commit `a11a7ea41bcd51a2b65a4e976a2715e3e5a3ee70`; deploy impact did not restart proxy, so public proxy `/health` still reports the prior proxy build.
     - Post-deploy compute status shows `cap_bytes=34359738368`, but the `used_percent=100` warning is now reclassified as a host-image reporting artifact until `internal/vmctl/data_image.go` stops setting `file_bytes=cap_bytes`.
+    - Host-image disk gauge fix is prepared: `internal/vmctl/data_image.go` now reports `file_bytes` from state-dir allocation, with focused tests passing.
   what_was_proven:
     - Package source-filter bug is repaired.
     - Host services can deploy and report health while active guest refresh still fails in prior evidence.
@@ -316,17 +323,17 @@ run_checkpoint_and_resumption_state:
     - The deployed diagnostic patch did not regress host deploy health or CI.
     - The authenticated boot-stuck account has a concrete persistent-disk exhaustion signal.
   unproven_or_partial_claims:
-    - Whether the deployed 32 GiB resize is sufficient to boot the account after status diagnostics are corrected.
+    - Whether the deployed 32 GiB resize is sufficient to boot the account after the host-image disk gauge fix is deployed.
     - Whether the active target VM reached `server.Start()` after capacity is restored.
     - Whether host-to-guest tap networking blocks HTTP readiness after capacity is restored.
     - Whether `/health` returns non-200 versus never accepting TCP after capacity is restored.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
     - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
-    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, and compute status host-image status currently overstates stopped-image usage.
-  next_executable_probe: Fix vmctl host-image stats, deploy, re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap/compute-status evidence.
+    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, and pre-fix compute status host-image status overstated stopped-image usage.
+  next_executable_probe: Deploy the vmctl host-image gauge fix, re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap/compute-status evidence.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 17
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 18
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
@@ -343,6 +350,8 @@ run_checkpoint_and_resumption_state:
     - focused capacity test: `go test ./internal/vmmanager -run 'TestDataImageSizeCoversSelfDevelopmentWorkspace|TestBootVMExpandsExistingSmallDataImageBeforeLaunch' -count=1`
     - CI/deploy for capacity repair: CI run `28690422412`, Race Detector run `28690422396`, Docs Truth Check run `28690422415`, FlakeHub run `28690422405`, deploy job `85090768662`
     - post-deploy authenticated compute status: `persistent_disk.cap_bytes=34359738368`; warning reclassified as host-image virtual-size reporting artifact pending vmctl stats fix.
+    - host-image gauge fix files: `internal/vmctl/data_image.go`, `internal/vmctl/data_image_test.go`
+    - focused vmctl data-image test: `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD before Pass 3: 0cf1ba4e31c4b8a932ac7b5438372267ac7b30c5
