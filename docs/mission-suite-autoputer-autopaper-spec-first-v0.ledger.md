@@ -619,3 +619,29 @@ Mission D (CI/Verification Guard):
 - Compute status should stop fabricating 100% usage solely because a stopped image was resized to 32 GiB.
 
 **Next:** Commit, push, monitor CI/deploy, restore authenticated browser cookies if needed, trigger recovery for `yusefnathanson@me.com`, and re-check `/api/compute/status` plus product boot state.
+
+## Pass 19 — 2026-07-04 (Mission C: Stopped-Resume Concurrency Failure Identified)
+
+**Conjecture:** The capacity and stopped-image gauge repairs landed, but authenticated boot still fails because concurrent product/bootstrap probes repeatedly resolve the same stopped primary computer while a resume/recovery boot is already in flight, causing duplicate Firecracker launches for the same VM ID to kill each other.
+
+**Move:** Monitored the vmctl gauge fix through CI/deploy, restored authenticated cookies from Comet, re-ran `/auth/session`, `/api/compute/status`, and `/api/compute/recovery`, then inspected Node B `go-choir-vmctl.service` logs over SSH after the browser still showed "Computer boot is still pending".
+
+**Actual ΔV:**
+- Commit `03d95773849e5e3c8f7dcc5cf8a33d83c1551294` passed CI and deployed vmctl.
+- Authenticated `/api/compute/status` now reports `persistent_disk.used_percent=49.93085861206055`, `critical=false`, and `cap_bytes=34359738368`; the previous 100% full signal is repaired as a host-image gauge artifact.
+- Authenticated recovery still returns 202 and the browser remains in CHOIR BIOS boot pending.
+- Node B vmctl logs show repeated `start existing VM vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19 failed` entries; each path attempts to resume/recover the same VM while another boot is pending, then logs `killing duplicate Firecracker process for VM vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19`.
+
+**Evidence:**
+- CI run `28691200371`; Race Detector run `28691200354`; Docs Truth Check run `28691200358`; FlakeHub run `28691200363`; deploy job `85092811346`.
+- Authenticated `/auth/session`: `yusefnathanson@me.com`.
+- Authenticated `/api/compute/status` generated at `2026-07-04T03:45:10Z`: stopped primary, `persistent_disk.used_bytes=17156112384`, `total_bytes=34359738368`, `used_percent=49.93085861206055`, `critical=false`.
+- Authenticated `/api/compute/recovery`: 202 with `status=refreshing`.
+- Node B `journalctl -u go-choir-vmctl.service` around `2026-07-04T03:48Z`: repeated duplicate Firecracker kills and 3m guest-ready timeouts on `http://10.200.76.2:8085` through later reassigned guest IPs.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- Disk capacity is no longer the leading root cause.
+- The next in-bound repair is substrate-level VM lifecycle coalescing: stopped/hibernated resume/recover paths must join an in-flight boot for a user/desktop instead of launching duplicate Firecracker processes for the same VM ID.
+
+**Next:** Add a regression proving concurrent resolves of a stopped primary computer perform one resume/recovery boot; fix `internal/vmctl` stopped/hibernated resume coalescing; deploy; re-run authenticated recovery and browser boot proof.

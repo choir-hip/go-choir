@@ -164,6 +164,12 @@ determined_state:
     - claim: Focused vmctl data-image tests passed for the allocation-vs-capacity distinction.
       source: `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
       execution_effect: Local proof covers the host-image gauge semantics that feed `/api/compute/status`.
+    - claim: The host-image disk gauge fix is deployed, and authenticated compute status no longer reports a critical full stopped data image.
+      source: CI run `28691200371`, deploy job `85092811346`, authenticated `/api/compute/status` generated `2026-07-04T03:45:10Z`
+      execution_effect: Disk capacity is no longer the leading root-cause hypothesis; `persistent_disk.used_percent=49.93085861206055`, `critical=false`, `cap_bytes=34359738368`.
+    - claim: Authenticated boot still fails because concurrent stopped-computer recovery/resolve attempts launch duplicate Firecracker processes for the same VM ID instead of joining one in-flight resume.
+      source: Node B `journalctl -u go-choir-vmctl.service` around `2026-07-04T03:48Z`
+      execution_effect: The next fix must coalesce stopped/hibernated resume/recovery in `internal/vmctl` before re-running authenticated product boot proof.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -321,16 +327,16 @@ run_checkpoint_and_resumption_state:
     - Host services can deploy and report health while active guest refresh still fails in prior evidence.
     - Current evidence is sufficient to scope Pass 3 and confirm the first evidence-layer root cause; it is not sufficient to pick every product boot fix.
     - The deployed diagnostic patch did not regress host deploy health or CI.
-    - The authenticated boot-stuck account has a concrete persistent-disk exhaustion signal.
+    - The authenticated boot-stuck account no longer has a critical stopped-image disk signal after the gauge fix; Node B logs now point at duplicate stopped-resume Firecracker launches.
   unproven_or_partial_claims:
-    - Whether the deployed 32 GiB resize is sufficient to boot the account after the host-image disk gauge fix is deployed.
+    - Whether the authenticated computer will boot after stopped/hibernated resume coalescing prevents duplicate Firecracker launches for the same VM ID.
     - Whether the active target VM reached `server.Start()` after capacity is restored.
     - Whether host-to-guest tap networking blocks HTTP readiness after capacity is restored.
     - Whether `/health` returns non-200 versus never accepting TCP after capacity is restored.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
     - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
-    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, and pre-fix compute status host-image status overstated stopped-image usage.
-  next_executable_probe: Deploy the vmctl host-image gauge fix, re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap/compute-status evidence.
+    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, post-gauge-fix compute status at 49.93% data-image usage, and Node B duplicate Firecracker kills during stopped-computer recovery.
+  next_executable_probe: Fix `internal/vmctl` stopped/hibernated resume coalescing so concurrent product/bootstrap probes join one in-flight boot for the current desktop; then deploy and re-run authenticated bootstrap/compute-status evidence.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
     - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 18
@@ -352,6 +358,10 @@ run_checkpoint_and_resumption_state:
     - post-deploy authenticated compute status: `persistent_disk.cap_bytes=34359738368`; warning reclassified as host-image virtual-size reporting artifact pending vmctl stats fix.
     - host-image gauge fix files: `internal/vmctl/data_image.go`, `internal/vmctl/data_image_test.go`
     - focused vmctl data-image test: `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
+    - vmctl gauge fix CI/deploy: CI run `28691200371`, Race Detector run `28691200354`, Docs Truth Check run `28691200358`, FlakeHub run `28691200363`, deploy job `85092811346`
+    - post-gauge-fix authenticated compute status: `persistent_disk.used_percent=49.93085861206055`, `critical=false`, `cap_bytes=34359738368`
+    - authenticated recovery attempt: `/api/compute/recovery` returned 202 with `status=refreshing`, but browser stayed in CHOIR BIOS boot pending.
+    - Node B vmctl logs: repeated duplicate Firecracker process kills for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` and 3m guest-ready timeouts across `10.200.76.2:8085` and later guest IPs.
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD before Pass 3: 0cf1ba4e31c4b8a932ac7b5438372267ac7b30c5

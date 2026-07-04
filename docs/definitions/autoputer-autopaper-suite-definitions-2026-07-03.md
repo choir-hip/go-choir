@@ -936,25 +936,27 @@ run_checkpoint_and_resumption_state:
     - The evidence-layer patch is deployed, but the next active-refresh root-cause evidence still requires an active interactive computer during an ordinary guest deploy.
     - Product-path activation boundary was crossed through approved Chrome cookie import; the active problem is now authenticated boot readiness, not lack of browser auth.
     - Authenticated account evidence now exists: `yusefnathanson@me.com` repeats bootstrap probes, recovery returns 202, theme preferences returns 502 after 180010ms, and boot does not complete.
-    - Authenticated compute status now identifies the leading boot blocker: the primary computer is stopped after `vmctl-restart`, recovery failed, and the persistent data image is 100% full.
+    - Authenticated compute status previously identified stopped-primary disk fullness as a suspect, but the deployed gauge fix disproved that as a critical-full signal.
     - Persistent data capacity repair is prepared locally: per-VM data image minimum is 32 GiB, and focused resize tests passed.
-    - The 32 GiB capacity repair is deployed to vmctl, but stopped-computer host-image disk status currently reports virtual image size as used bytes; this reclassifies the 100% disk signal as a diagnostic artifact until vmctl stats are corrected.
-    - Host-image disk gauge fix is prepared locally: vmctl `file_bytes` now reports allocated state-dir bytes rather than virtual `data.img` capacity, and focused tests passed.
+    - The 32 GiB capacity repair is deployed to vmctl.
+    - Host-image disk gauge fix is deployed to vmctl: stopped-computer `file_bytes` now reports allocated state-dir bytes rather than virtual `data.img` capacity.
+    - The host-image disk gauge fix is deployed and authenticated compute status now reports the stopped primary data image at 49.93% used, not critical/full.
+    - Authenticated recovery still does not boot because Node B vmctl logs show concurrent stopped-computer resolve/recovery paths launching duplicate Firecracker processes for the same VM ID and killing each other.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
-    - `yusefnathanson@me.com` primary computer recovery remains unproven after the vmctl capacity deploy; host-image disk fullness diagnostics are fixed locally but not yet deployed.
+    - `yusefnathanson@me.com` primary computer recovery remains unproven after the vmctl capacity and gauge deploys; current evidence points at stopped/hibernated resume coalescing, not disk fullness.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after deployed stopped-image disk diagnostics and authenticated recovery
-  next_executable_probe: Commit/push/deploy the vmctl stopped-image disk stats fix, re-establish authenticated browser cookies, trigger recovery for `yusefnathanson@me.com`, and then re-run bootstrap/health evidence to decide whether any runtime/listen/network/emergency-mode cause remains.
+  highest_impact_remaining_uncertainty: C-C1/C-C2 stopped/hibernated current-computer resume coalescing under concurrent authenticated bootstrap probes
+  next_executable_probe: Fix `internal/vmctl` so concurrent resolves/recoveries of a stopped or hibernated current desktop join one in-flight boot instead of launching duplicate Firecracker processes; then deploy and re-run authenticated bootstrap/health evidence.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 18
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 19
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -972,6 +974,9 @@ run_checkpoint_and_resumption_state:
     - focused capacity test: `go test ./internal/vmmanager -run 'TestDataImageSizeCoversSelfDevelopmentWorkspace|TestBootVMExpandsExistingSmallDataImageBeforeLaunch' -count=1`
     - capacity repair CI/deploy: CI run `28690422412`, Race Detector run `28690422396`, Docs Truth Check run `28690422415`, FlakeHub run `28690422405`, deploy job `85090768662`
     - focused vmctl data-image test: `go test ./internal/vmctl -run 'TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
+    - vmctl gauge fix CI/deploy: CI run `28691200371`, Race Detector run `28691200354`, Docs Truth Check run `28691200358`, FlakeHub run `28691200363`, deploy job `85092811346`
+    - post-gauge-fix authenticated compute status: `persistent_disk.used_percent=49.93085861206055`, `critical=false`, `cap_bytes=34359738368`
+    - Node B vmctl logs: repeated duplicate Firecracker kills for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` during authenticated stopped-computer recovery.
   rollback_refs:
     - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```
