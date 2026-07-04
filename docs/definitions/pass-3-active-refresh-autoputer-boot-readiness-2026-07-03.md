@@ -185,6 +185,9 @@ determined_state:
     - claim: The authenticated primary computer's persistent ext4 data image has filesystem errors.
       source: Node B guest boot log reports failed `fsck` on `/dev/vdb`; host-side `e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img` exits 4 with ext4 errors.
       execution_effect: Do not keep retrying boot as the next probe. The next action is a protected data-image repair with rollback evidence, or a deliberate switch to a fresh computer.
+    - claim: Protected ext4 repair recovered the authenticated primary computer.
+      source: rollback copy `data.img.rollback-20260704T0426Z`; `e2fsck -fy` modified the live image; follow-up `e2fsck -fn` was clean; authenticated `/api/compute/recovery` returned 200 with `runtime.status=ready`; `/api/compute/status` generated `2026-07-04T04:32:42Z` reported `state=active`.
+      execution_effect: The manual authenticated primary recovery axis is repaired; Pass 3 still needs deploy-triggered active-refresh proof if claiming the original deploy acceptance semantics.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -331,30 +334,27 @@ run_checkpoint_and_resumption_state:
     - Pass 3 diagnostic patch landed in `internal/vmmanager/manager.go`: guest readiness timeout errors include the last `/health` probe status/body/error.
     - Pass 3 deploy diagnostic patch landed in `.github/workflows/ci.yml`: failure diagnostics include vmctl ownership snapshots and direct active sandbox health probes.
     - Commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` deployed those diagnostics to staging; deploy job `85076877932` reported no active interactive computers needed refresh.
-    - Authenticated product-path probe for `yusefnathanson@me.com` is now available via imported Chrome cookies, but the account remains stuck in Choir BIOS boot pending.
-    - Authenticated `/api/compute/status` reports primary computer `state=stopped`, `stopped_by=vmctl-restart`, recovery `status=failed`, and persistent data image `used_percent=100` with critical warning.
-    - Capacity repair is prepared: `dataImageSizeMB` is 32 GiB and focused tests passed for both the minimum guard and existing-image expansion path.
+    - Authenticated product-path probe for `yusefnathanson@me.com` is available via imported Chrome cookies.
+    - Authenticated `/api/compute/status` initially reported primary computer `state=stopped`, `stopped_by=vmctl-restart`, recovery `status=failed`, and persistent data image `used_percent=100` with critical warning.
     - Capacity repair deployed to vmctl at commit `a11a7ea41bcd51a2b65a4e976a2715e3e5a3ee70`; deploy impact did not restart proxy, so public proxy `/health` still reports the prior proxy build.
-    - Post-deploy compute status shows `cap_bytes=34359738368`, but the `used_percent=100` warning is now reclassified as a host-image reporting artifact until `internal/vmctl/data_image.go` stops setting `file_bytes=cap_bytes`.
-    - Host-image disk gauge fix is prepared: `internal/vmctl/data_image.go` now reports `file_bytes` from state-dir allocation, with focused tests passing.
+    - Host-image disk gauge fix deployed and reclassified the stopped-image fullness signal as a host-image reporting artifact.
+    - Protected ext4 repair of the authenticated primary data image recovered the manual product path: `/api/compute/recovery` now returns ready runtime state, `/api/compute/status` reports active primary state, and the authenticated desktop app shell renders.
   what_was_proven:
     - Package source-filter bug is repaired.
     - Host services can deploy and report health while active guest refresh still fails in prior evidence.
     - Current evidence is sufficient to scope Pass 3 and confirm the first evidence-layer root cause; it is not sufficient to pick every product boot fix.
     - The deployed diagnostic patch did not regress host deploy health or CI.
-    - The authenticated boot-stuck account no longer has a critical stopped-image disk signal after the gauge fix; Node B logs now point at duplicate stopped-resume Firecracker launches.
+    - The authenticated boot-stuck primary account recovered after ext4 repair; the next unproven axis is deploy-triggered active refresh with an active computer, not manual account boot.
   unproven_or_partial_claims:
-    - Whether the authenticated computer will boot after the persistent ext4 data image is repaired.
+    - Whether a later ordinary guest deploy refreshes every active interactive computer and proves `/health` on port 8085 before timeout.
     - Whether direct lifecycle coalescing is still needed after filesystem repair, or whether the duplicate-kill logs were cleanup side effects of repeated fsck-failing boots.
-    - Whether the active target VM reached `server.Start()` after persistent storage mounts.
-    - Whether host-to-guest tap networking blocks HTTP readiness after persistent storage mounts.
-    - Whether `/health` returns non-200 versus never accepting TCP after persistent storage mounts.
-    - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
-    - Whether the authenticated product-path stall has only one cause; current evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, post-gauge-fix compute status at 49.93% data-image usage, guest emergency mode, and host-side ext4 corruption on the primary data image.
-  next_executable_probe: Capture a byte-for-byte rollback copy or snapshot ref for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`, run an explicit ext4 repair path, re-run authenticated recovery for `yusefnathanson@me.com`, and then reassess direct lifecycle coalescing only if duplicate launches remain after the filesystem mounts.
+    - Whether Universal Wire platform computer recovery has the same persistent-storage failure or a separate boot issue.
+    - Whether the new diagnostics capture the active-refresh failure path during a real deploy with an active computer.
+    - Whether the authenticated product-path stall has only one cause; current evidence shows the primary account now recovers and the desktop app shell renders after ext4 repair, but the deploy-triggered refresh acceptance axis remains separate.
+  next_executable_probe: Run or observe the next ordinary guest deploy with the authenticated primary computer active, then verify deploy-refresh logs and direct `/health` evidence for every refreshed active interactive computer; only pursue direct lifecycle coalescing if duplicate launches recur after persistent filesystems mount cleanly.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 22
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 23
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
@@ -385,9 +385,17 @@ run_checkpoint_and_resumption_state:
     - post-resolve-coalescing Node B vmctl logs: duplicate Firecracker kills still occurred at `04:16:34` and `04:16:53`; guest reached NixOS emergency mode around `04:16:39`
     - persistent filesystem corruption evidence: guest boot failed `File System Check on /dev/vdb`; `/mnt/persistent` and Local File Systems dependencies failed.
     - host-side read-only fsck: `ssh node-b e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img` exited 4 with ext4 errors and `WARNING: Filesystem still has errors`.
+    - rollback copy: `/var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img.rollback-20260704T0426Z`
+    - protected filesystem repair: `ssh node-b e2fsck -fy /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`; output `FILE SYSTEM WAS MODIFIED`.
+    - repaired filesystem verification: `ssh node-b e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`; clean pass 1 through pass 5, no warning.
+    - repaired authenticated recovery: `/api/compute/recovery` returned 200 with `current_computer.state=active`, `runtime.status=ready`, `runtime_health=ready`, `researcher_count=3`.
+    - repaired compute status: `/api/compute/status` generated `2026-07-04T04:32:42Z`; primary `state=active`; guest persistent disk `used_percent=7.26568350535852`, `warning=false`, `critical=false`.
+    - browser product proof: `browse goto https://choir.news` returned 200 and `browse text body` showed the authenticated desktop app shell.
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD before Pass 3: 0cf1ba4e31c4b8a932ac7b5438372267ac7b30c5
     - package fix commit: 02fa2ea6603b7f157c982e9da637ec714301c6bf
     - active-refresh diagnostic gate commit: 8e694f4663412c1a33fc70e870f225f2510718f2
+    - main HEAD before protected filesystem repair evidence commit: d6c5f8cf26b155738b9223b597f6df29772086df
+    - data image rollback copy: `/var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img.rollback-20260704T0426Z`
 ```

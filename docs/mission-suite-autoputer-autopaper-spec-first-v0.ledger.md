@@ -713,3 +713,31 @@ Mission D (CI/Verification Guard):
 - The next action is not another boot retry. The next action is a protected persistent data image repair with rollback evidence, or an explicit decision to preserve the corrupted image and switch to a fresh computer.
 
 **Next:** Before mutating the data image, capture a byte-for-byte rollback copy or snapshot ref; then run an explicit ext4 repair path and re-run authenticated recovery.
+
+## Pass 23 — 2026-07-04 (Mission C: Authenticated Primary Computer Boot Recovered)
+
+**Conjecture:** Repairing the corrupted primary persistent data image will allow the authenticated computer to mount `/mnt/persistent`, complete runtime boot, and report ready through the product compute monitor.
+
+**Move:** Created a rollback copy of the live data image, ran an explicit mutating ext4 repair after approval, verified the repaired filesystem with read-only fsck, re-imported Chrome auth cookies, triggered authenticated recovery, and opened the product page.
+
+**Actual ΔV:**
+- Rollback copy exists at `/var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img.rollback-20260704T0426Z`.
+- `e2fsck -fy` repaired the live ext4 image; follow-up `e2fsck -fn` reports no filesystem errors.
+- Authenticated recovery for `yusefnathanson@me.com` now returns 200 with `current_computer.state=active` and `runtime.status=ready`.
+- `/api/compute/status` reports the primary computer active, runtime reachable/ready, and guest persistent disk healthy: `used_percent=7.26568350535852`, `warning=false`, `critical=false`.
+- Browser product path at `https://choir.news` renders the authenticated desktop app shell with Files, Web Lens, Email, Compute Monitor, Pulse, Texture, Universal Wire, Podcast, Calendar, Super Console, and Settings.
+
+**Evidence:**
+- Rollback copy command: `ssh node-b cp --sparse=always --reflink=auto .../data.img .../data.img.rollback-20260704T0426Z`.
+- Repair command: `ssh node-b e2fsck -fy /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`; output: `FILE SYSTEM WAS MODIFIED`.
+- Verification command: `ssh node-b e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`; output: clean pass 1 through pass 5, no warning.
+- Auth recovery: `/api/compute/recovery` returned 200 at `2026-07-04T04:32:29Z`, `runtime_health=ready`, `researcher_count=3`.
+- Compute status: `/api/compute/status` generated `2026-07-04T04:32:42Z`, `state=active`, `recovery.status=ready`, guest persistent disk healthy.
+- Browser proof: `browse goto https://choir.news` returned 200; `browse text body` showed the authenticated app shell.
+
+**Expected ΔV:**
+- C-C1/C-C2 for authenticated primary boot are satisfied for this repaired computer.
+- Direct lifecycle coalescing remains a code hardening candidate, but it is no longer the active blocker for `yusefnathanson@me.com` boot readiness.
+- Pass 3 active-refresh acceptance still needs the original deploy-refresh axis if the suite requires a deploy-triggered active computer refresh, not merely manual authenticated recovery.
+
+**Next:** Update the definition checkpoint, commit and push the repair evidence, then decide whether to proceed to deploy-triggered active-refresh proof or the next suite mission.

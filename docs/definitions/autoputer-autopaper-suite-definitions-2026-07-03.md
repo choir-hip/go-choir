@@ -945,21 +945,22 @@ run_checkpoint_and_resumption_state:
     - Stopped/hibernated resume coalescing fix is prepared locally in `internal/vmctl`, and focused normal/race tests passed.
     - Resolve-path stopped/hibernated coalescing is deployed, but authenticated recovery still launches duplicate Firecracker processes through direct resume/refresh paths; the guest also reaches NixOS emergency mode.
     - The authenticated primary computer's persistent ext4 data image is corrupted: guest `fsck` fails on `/dev/vdb`, `/mnt/persistent` does not mount, and host-side `e2fsck -fn` exits 4 with filesystem errors.
+    - Protected ext4 repair recovered `yusefnathanson@me.com` primary computer: authenticated recovery returns 200, runtime is ready, compute status reports active primary state, and the desktop app shell renders.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
-    - `yusefnathanson@me.com` primary computer recovery remains unproven until the persistent ext4 data image is repaired or a fresh computer is intentionally selected.
+    - `yusefnathanson@me.com` primary computer manual recovery is repaired; deploy-triggered active refresh remains unproven.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 protected repair of the authenticated primary computer's corrupted persistent data image
-  next_executable_probe: Capture a byte-for-byte rollback copy or snapshot ref for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`, run an explicit ext4 repair path, re-run authenticated recovery for `yusefnathanson@me.com`, and then reassess direct lifecycle coalescing only if duplicate launches remain after the filesystem mounts.
+  highest_impact_remaining_uncertainty: C-C1/C-C2 deploy-triggered active refresh proof with an active authenticated primary computer
+  next_executable_probe: Run or observe the next ordinary guest deploy with the authenticated primary computer active, then verify deploy-refresh logs and direct `/health` evidence for every refreshed active interactive computer; only pursue direct lifecycle coalescing if duplicate launches recur after persistent filesystems mount cleanly.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 22
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 23
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -987,8 +988,15 @@ run_checkpoint_and_resumption_state:
     - post-resolve-coalescing Node B vmctl logs: duplicate Firecracker kills still occurred at `04:16:34` and `04:16:53`; guest reached NixOS emergency mode around `04:16:39`
     - persistent filesystem corruption evidence: guest boot failed `File System Check on /dev/vdb`; `/mnt/persistent` and Local File Systems dependencies failed.
     - host-side read-only fsck: `ssh node-b e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img` exited 4 with ext4 errors and `WARNING: Filesystem still has errors`.
+    - rollback copy: `/var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img.rollback-20260704T0426Z`
+    - protected filesystem repair: `ssh node-b e2fsck -fy /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`; output `FILE SYSTEM WAS MODIFIED`.
+    - repaired filesystem verification: `ssh node-b e2fsck -fn /var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img`; clean pass 1 through pass 5, no warning.
+    - repaired authenticated recovery: `/api/compute/recovery` returned 200 with `current_computer.state=active`, `runtime.status=ready`, `runtime_health=ready`, `researcher_count=3`.
+    - repaired compute status: `/api/compute/status` generated `2026-07-04T04:32:42Z`; primary `state=active`; guest persistent disk `used_percent=7.26568350535852`, `warning=false`, `critical=false`.
+    - browser product proof: `browse goto https://choir.news` returned 200 and `browse text body` showed the authenticated desktop app shell.
   rollback_refs:
-    - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
+    - main HEAD before protected filesystem repair evidence commit: d6c5f8cf26b155738b9223b597f6df29772086df
+    - data image rollback copy: `/var/lib/go-choir/vm-state/vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19/data.img.rollback-20260704T0426Z`
 ```
 
 ## Child Definition Documents
