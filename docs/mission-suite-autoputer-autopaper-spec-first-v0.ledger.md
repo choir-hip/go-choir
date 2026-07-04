@@ -571,3 +571,30 @@ Mission D (CI/Verification Guard):
 - If recovery still fails after resize, the remaining candidates are runtime listen/startup, host-to-guest networking, auth/session renewal, and emergency-mode recovery.
 
 **Next:** Commit, push, monitor CI/deploy, then trigger authenticated recovery for `yusefnathanson@me.com` and re-check `/api/compute/status`, `/api/shell/bootstrap`, and product UI boot state.
+
+## Pass 17 — 2026-07-04 (Mission C: Capacity Repair Deployed, Host Image Gauge Reclassified)
+
+**Conjecture:** The 32 GiB capacity repair deployed correctly, but `/api/compute/status`'s stopped-VM host-image gauge is not valid evidence of guest filesystem fullness because it reports the image virtual size as used bytes.
+
+**Move:** Monitored the capacity repair push and staging deploy, then queried authenticated compute status after deployment.
+
+**Actual ΔV:**
+- Commit `a11a7ea41bcd51a2b65a4e976a2715e3e5a3ee70` passed CI, Race Detector, Docs Truth Check, and FlakeHub publishing.
+- Deploy job `85090768662` completed and restarted `go-choir-vmctl.service`.
+- Deploy impact selected vmctl only; public proxy `/health` still reports proxy build `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`, which is expected for a vmctl-only service pointer deploy.
+- Authenticated `/api/compute/status` after deploy reported the primary data image as 32 GiB (`cap_bytes=34359738368`), proving the vmctl data-image size changed.
+- The same stopped-VM host-image status still reported `used_percent=100` because `internal/vmctl.LookupDataImageStats` sets `file_bytes` to `cap_bytes` for `data.img`; this is virtual image size, not guest filesystem usage.
+- A recovery request returned 202 and started `wake_current_computer`, but authenticated browser cookies were lost before a final product boot result could be re-read.
+
+**Evidence:**
+- CI run `28690422412`, Race Detector run `28690422396`, Docs Truth Check run `28690422415`, FlakeHub run `28690422405`.
+- Deploy job `85090768662` log: vmctl package built from `a11a7ea41bcd51a2b65a4e976a2715e3e5a3ee70`, service restarted, no active interactive computers refreshed.
+- Authenticated compute status generated at `2026-07-04T01:26:49Z`: primary stopped, recovery failed from the prior attempt, `persistent_disk.cap_bytes=34359738368`.
+- Code inspection: `internal/vmctl/data_image.go` maps `FileBytes: capBytes`.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- The capacity resize path is deployed, but the stopped-VM disk warning must be corrected before treating compute-status disk fullness as root-cause evidence.
+- The next in-bound repair is diagnostic: report host-side data image allocated bytes separately from virtual capacity so stopped-computer status does not fabricate 100% usage.
+
+**Next:** Fix `internal/vmctl` host image stats so `file_bytes` reports allocated state-dir bytes rather than virtual capacity; then re-run focused vmctl tests, deploy, recover the account, and re-check authenticated boot.
