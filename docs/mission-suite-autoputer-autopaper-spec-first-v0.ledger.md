@@ -550,3 +550,24 @@ Mission D (CI/Verification Guard):
 - Runtime bind/listen, host-to-guest networking, auth/session renewal, and emergency-mode recovery remain possible secondary causes until a resized/recovered computer boots.
 
 **Next:** Repair the persistent data capacity path by increasing the per-VM data image minimum and using the existing resize-on-boot mechanism; deploy, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap.
+
+## Pass 16 — 2026-07-04 (Mission C: Persistent Data Capacity Repair Prepared)
+
+**Conjecture:** Existing stopped computer data images can be recovered without deleting user state by raising the minimum image size and letting `BootVM`'s existing `ensureDataImageMinSize` path grow the ext4 image before Firecracker launch.
+
+**Move:** Changed `internal/vmmanager/manager.go` `dataImageSizeMB` from 16384 to 32768 and tightened `TestDataImageSizeCoversSelfDevelopmentWorkspace` to lock the 32 GiB floor.
+
+**Actual ΔV:**
+- New user and computer data images are created at 32 GiB.
+- Existing non-cloned data images smaller than 32 GiB are resized by the already-present `ensureDataImageMinSize` path before launch.
+- The repair avoids deleting or resetting the primary computer's persistent state.
+
+**Evidence:**
+- `go test ./internal/vmmanager -run 'TestDataImageSizeCoversSelfDevelopmentWorkspace|TestBootVMExpandsExistingSmallDataImageBeforeLaunch' -count=1` passed.
+- Code paths touched: `internal/vmmanager/manager.go`, `internal/vmmanager/manager_test.go`.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN until staging deploys the repair and the authenticated product path boots or produces new diagnostics.
+- If recovery still fails after resize, the remaining candidates are runtime listen/startup, host-to-guest networking, auth/session renewal, and emergency-mode recovery.
+
+**Next:** Commit, push, monitor CI/deploy, then trigger authenticated recovery for `yusefnathanson@me.com` and re-check `/api/compute/status`, `/api/shell/bootstrap`, and product UI boot state.

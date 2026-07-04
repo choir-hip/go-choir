@@ -608,8 +608,8 @@ func TestCreateDataImage_CreatesMissingFile(t *testing.T) {
 }
 
 func TestDataImageSizeCoversSelfDevelopmentWorkspace(t *testing.T) {
-	if dataImageSizeMB < 8192 {
-		t.Fatalf("dataImageSizeMB = %d, want at least 8192 for candidate repo, Dolt, cache, and export artifacts", dataImageSizeMB)
+	if dataImageSizeMB < 32768 {
+		t.Fatalf("dataImageSizeMB = %d, want at least 32768 for persistent user computers, candidate repos, Dolt, cache, and export artifacts", dataImageSizeMB)
 	}
 }
 

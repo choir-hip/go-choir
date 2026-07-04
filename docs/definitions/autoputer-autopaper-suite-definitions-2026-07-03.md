@@ -937,21 +937,22 @@ run_checkpoint_and_resumption_state:
     - Product-path activation boundary was crossed through approved Chrome cookie import; the active problem is now authenticated boot readiness, not lack of browser auth.
     - Authenticated account evidence now exists: `yusefnathanson@me.com` repeats bootstrap probes, recovery returns 202, theme preferences returns 502 after 180010ms, and boot does not complete.
     - Authenticated compute status now identifies the leading boot blocker: the primary computer is stopped after `vmctl-restart`, recovery failed, and the persistent data image is 100% full.
+    - Persistent data capacity repair is prepared locally: per-VM data image minimum is 32 GiB, and focused resize tests passed.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
-    - `yusefnathanson@me.com` primary computer has a critically full persistent data image; recovery cannot be considered complete until capacity is restored and authenticated bootstrap succeeds.
+    - `yusefnathanson@me.com` primary computer has a critically full persistent data image; the 32 GiB resize repair is prepared but not yet deployed/proven on staging.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after persistent data capacity recovery
-  next_executable_probe: Repair persistent data capacity by increasing the per-VM data image minimum, deploy it, trigger authenticated recovery for `yusefnathanson@me.com`, and then re-run bootstrap/health evidence to decide whether any runtime/listen/network/emergency-mode cause remains.
+  highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after deployed persistent data capacity recovery
+  next_executable_probe: Commit/push/deploy the 32 GiB data-image minimum, trigger authenticated recovery for `yusefnathanson@me.com`, and then re-run bootstrap/health evidence to decide whether any runtime/listen/network/emergency-mode cause remains.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 15
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 16
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -966,6 +967,7 @@ run_checkpoint_and_resumption_state:
     - browser product-path probe: `https://choir.news` signed-out preview -> Desk -> Sign in exposed passkey create/login; no authenticated storage/cookies were present.
     - authenticated browser probe: imported Chrome cookies for `choir.news`; `yusefnathanson@me.com` showed BIOS boot pending for 207s+, recovery POST 202, repeated pending `/api/shell/bootstrap`, `/api/preferences/theme` 502 after 180010ms.
     - authenticated compute status: `/api/compute/status` returned primary `state=stopped`, recovery `status=failed`, and `persistent_disk.used_percent=100` with warning "persistent data image is critically full".
+    - focused capacity test: `go test ./internal/vmmanager -run 'TestDataImageSizeCoversSelfDevelopmentWorkspace|TestBootVMExpandsExistingSmallDataImageBeforeLaunch' -count=1`
   rollback_refs:
     - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```
