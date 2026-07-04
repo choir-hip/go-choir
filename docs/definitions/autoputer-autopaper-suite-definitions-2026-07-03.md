@@ -942,21 +942,22 @@ run_checkpoint_and_resumption_state:
     - Host-image disk gauge fix is deployed to vmctl: stopped-computer `file_bytes` now reports allocated state-dir bytes rather than virtual `data.img` capacity.
     - The host-image disk gauge fix is deployed and authenticated compute status now reports the stopped primary data image at 49.93% used, not critical/full.
     - Authenticated recovery still does not boot because Node B vmctl logs show concurrent stopped-computer resolve/recovery paths launching duplicate Firecracker processes for the same VM ID and killing each other.
+    - Stopped/hibernated resume coalescing fix is prepared locally in `internal/vmctl`, and focused normal/race tests passed.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
-    - `yusefnathanson@me.com` primary computer recovery remains unproven after the vmctl capacity and gauge deploys; current evidence points at stopped/hibernated resume coalescing, not disk fullness.
+    - `yusefnathanson@me.com` primary computer recovery remains unproven until the stopped/hibernated resume coalescing fix is deployed and authenticated recovery is re-run.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 stopped/hibernated current-computer resume coalescing under concurrent authenticated bootstrap probes
-  next_executable_probe: Fix `internal/vmctl` so concurrent resolves/recoveries of a stopped or hibernated current desktop join one in-flight boot instead of launching duplicate Firecracker processes; then deploy and re-run authenticated bootstrap/health evidence.
+  highest_impact_remaining_uncertainty: C-C1/C-C2 deployed stopped/hibernated current-computer resume coalescing under concurrent authenticated bootstrap probes
+  next_executable_probe: Commit/push/deploy the `internal/vmctl` stopped/hibernated resume coalescing fix, trigger authenticated recovery for `yusefnathanson@me.com`, inspect Node B vmctl logs for absence of duplicate Firecracker kills, and re-run authenticated bootstrap/health evidence.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 19
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 20
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -977,6 +978,8 @@ run_checkpoint_and_resumption_state:
     - vmctl gauge fix CI/deploy: CI run `28691200371`, Race Detector run `28691200354`, Docs Truth Check run `28691200358`, FlakeHub run `28691200363`, deploy job `85092811346`
     - post-gauge-fix authenticated compute status: `persistent_disk.used_percent=49.93085861206055`, `critical=false`, `cap_bytes=34359738368`
     - Node B vmctl logs: repeated duplicate Firecracker kills for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` during authenticated stopped-computer recovery.
+    - focused stopped-resume coalescing test: `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
+    - stopped-resume race test: `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1`
   rollback_refs:
     - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```

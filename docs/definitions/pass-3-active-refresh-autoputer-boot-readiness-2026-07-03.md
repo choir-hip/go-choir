@@ -170,6 +170,12 @@ determined_state:
     - claim: Authenticated boot still fails because concurrent stopped-computer recovery/resolve attempts launch duplicate Firecracker processes for the same VM ID instead of joining one in-flight resume.
       source: Node B `journalctl -u go-choir-vmctl.service` around `2026-07-04T03:48Z`
       execution_effect: The next fix must coalesce stopped/hibernated resume/recovery in `internal/vmctl` before re-running authenticated product boot proof.
+    - claim: Stopped/hibernated resume coalescing is prepared locally.
+      source: local edits to `internal/vmctl/ownership.go` and `internal/vmctl/vmctl_test.go`
+      execution_effect: Concurrent product/bootstrap probes should join one in-flight stopped-computer resume instead of launching duplicate Firecracker processes for the same VM ID.
+    - claim: Focused stopped-resume coalescing tests passed, including the race detector.
+      source: `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`; `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1`
+      execution_effect: Local proof covers the concurrency failure observed in Node B vmctl logs.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -329,17 +335,17 @@ run_checkpoint_and_resumption_state:
     - The deployed diagnostic patch did not regress host deploy health or CI.
     - The authenticated boot-stuck account no longer has a critical stopped-image disk signal after the gauge fix; Node B logs now point at duplicate stopped-resume Firecracker launches.
   unproven_or_partial_claims:
-    - Whether the authenticated computer will boot after stopped/hibernated resume coalescing prevents duplicate Firecracker launches for the same VM ID.
+    - Whether the authenticated computer will boot after stopped/hibernated resume coalescing is deployed.
     - Whether the active target VM reached `server.Start()` after capacity is restored.
     - Whether host-to-guest tap networking blocks HTTP readiness after capacity is restored.
     - Whether `/health` returns non-200 versus never accepting TCP after capacity is restored.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
     - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
     - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, post-gauge-fix compute status at 49.93% data-image usage, and Node B duplicate Firecracker kills during stopped-computer recovery.
-  next_executable_probe: Fix `internal/vmctl` stopped/hibernated resume coalescing so concurrent product/bootstrap probes join one in-flight boot for the current desktop; then deploy and re-run authenticated bootstrap/compute-status evidence.
+  next_executable_probe: Deploy the stopped/hibernated resume coalescing fix, trigger authenticated recovery for `yusefnathanson@me.com`, inspect Node B vmctl logs for absence of duplicate Firecracker kills, and re-run authenticated bootstrap/compute-status evidence.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 18
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 20
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
@@ -362,6 +368,9 @@ run_checkpoint_and_resumption_state:
     - post-gauge-fix authenticated compute status: `persistent_disk.used_percent=49.93085861206055`, `critical=false`, `cap_bytes=34359738368`
     - authenticated recovery attempt: `/api/compute/recovery` returned 202 with `status=refreshing`, but browser stayed in CHOIR BIOS boot pending.
     - Node B vmctl logs: repeated duplicate Firecracker process kills for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` and 3m guest-ready timeouts across `10.200.76.2:8085` and later guest IPs.
+    - stopped-resume coalescing fix files: `internal/vmctl/ownership.go`, `internal/vmctl/vmctl_test.go`
+    - focused stopped-resume coalescing test: `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
+    - stopped-resume race test: `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD before Pass 3: 0cf1ba4e31c4b8a932ac7b5438372267ac7b30c5

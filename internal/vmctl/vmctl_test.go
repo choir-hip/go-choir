@@ -3632,6 +3632,7 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 // It records lifecycle calls so tests can verify that the OwnershipRegistry
 // properly delegates to the VM manager when one is configured.
 type mockVMManager struct {
+	mu          sync.Mutex
 	boots       []VMManagerConfig
 	stops       []string
 	hibernates  []string
@@ -3644,20 +3645,23 @@ type mockVMManager struct {
 	destroys    []string
 	tokens      map[string]string
 	// Configurable responses
-	bootResponse     *VMInstanceInfo
-	bootError        error
-	resumeResponse   *VMInstanceInfo
-	resumeError      error
-	reattachResponse *VMInstanceInfo
-	reattachError    error
-	recoverResponse  *VMInstanceInfo
-	recoverError     error
-	refreshResponse  *VMInstanceInfo
-	refreshError     error
-	getVMs           map[string]*VMInstanceInfo
-	checkHealthOK    *bool
-	checkHealthError error
-	checkHealthCalls []string
+	bootResponse      *VMInstanceInfo
+	bootError         error
+	resumeResponse    *VMInstanceInfo
+	resumeError       error
+	reattachResponse  *VMInstanceInfo
+	reattachError     error
+	recoverResponse   *VMInstanceInfo
+	recoverError      error
+	refreshResponse   *VMInstanceInfo
+	refreshError      error
+	getVMs            map[string]*VMInstanceInfo
+	checkHealthOK     *bool
+	checkHealthError  error
+	checkHealthCalls  []string
+	resumeStarted     chan struct{}
+	resumeRelease     chan struct{}
+	resumeStartedOnce sync.Once
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
@@ -3682,14 +3686,31 @@ func (m *mockVMManager) HibernateVM(vmID string) error {
 }
 
 func (m *mockVMManager) ResumeVM(vmID string) (*VMInstanceInfo, error) {
+	m.mu.Lock()
 	m.resumes = append(m.resumes, vmID)
+	m.resumeStartedOnce.Do(func() {
+		if m.resumeStarted != nil {
+			close(m.resumeStarted)
+		}
+	})
+	release := m.resumeRelease
+	m.mu.Unlock()
+	if release != nil {
+		<-release
+	}
 	if m.resumeError != nil {
 		return nil, m.resumeError
 	}
-	if m.resumeResponse != nil {
-		return m.resumeResponse, nil
+	result := m.resumeResponse
+	if result == nil {
+		result = &VMInstanceInfo{HostURL: "http://127.0.0.1:9002", Epoch: 1, Healthy: true, State: "running"}
 	}
-	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9002", Epoch: 1, Healthy: true, State: "running"}, nil
+	m.mu.Lock()
+	if m.getVMs != nil {
+		m.getVMs[vmID] = result
+	}
+	m.mu.Unlock()
+	return result, nil
 }
 
 func (m *mockVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstanceInfo, error) {
@@ -3733,6 +3754,8 @@ func (m *mockVMManager) DestroyVMState(vmID string) error {
 }
 
 func (m *mockVMManager) GetVM(vmID string) *VMInstanceInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.getVMs != nil {
 		return m.getVMs[vmID]
 	}
@@ -4420,6 +4443,77 @@ func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
 	}
 	if own.State != VMStateActive || own.StoppedBy != "" {
 		t.Fatalf("refreshed ownership state=%s stopped_by=%q, want active/empty", own.State, own.StoppedBy)
+	}
+}
+
+func TestOwnershipRegistry_ResolveCoalescesStoppedVMResume(t *testing.T) {
+	mgr := &mockVMManager{
+		resumeResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9048",
+			Epoch:   103,
+			Healthy: true,
+			State:   "running",
+		},
+		resumeStarted: make(chan struct{}),
+		resumeRelease: make(chan struct{}),
+		getVMs:        make(map[string]*VMInstanceInfo),
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	initial, err := reg.ResolveOrAssign("user-coalesce-stopped")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+	if err := reg.StopVM("user-coalesce-stopped"); err != nil {
+		t.Fatalf("StopVM: %v", err)
+	}
+
+	const callers = 8
+	results := make(chan *VMOwnership, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			own, err := reg.ResolveOrAssign("user-coalesce-stopped")
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- own
+		}()
+	}
+
+	select {
+	case <-mgr.resumeStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first resume")
+	}
+	close(mgr.resumeRelease)
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	for err := range errs {
+		t.Fatalf("ResolveOrAssign concurrent stopped resume: %v", err)
+	}
+	for own := range results {
+		if own.VMID != initial.VMID {
+			t.Fatalf("VMID = %s, want existing %s", own.VMID, initial.VMID)
+		}
+		if own.State != VMStateActive {
+			t.Fatalf("state = %s, want active", own.State)
+		}
+		if own.SandboxURL != "http://127.0.0.1:9048" {
+			t.Fatalf("sandbox URL = %q, want resumed URL", own.SandboxURL)
+		}
+	}
+	mgr.mu.Lock()
+	resumeCount := len(mgr.resumes)
+	mgr.mu.Unlock()
+	if resumeCount != 1 {
+		t.Fatalf("ResumeVM calls = %d, want 1", resumeCount)
 	}
 }
 

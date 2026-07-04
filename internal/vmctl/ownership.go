@@ -1321,40 +1321,58 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 		// of creating a new VM, preserving the user's state and epoch
 		// (VAL-CROSS-116, VAL-CROSS-117).
 		if own.State == VMStateStopped || own.State == VMStateHibernated {
+			if waiters, ok := r.pendingWaiters[key]; ok {
+				return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
+			}
 			mgr := r.vmManager
 			pending := cloneOwnership(own)
+			r.pendingWaiters[key] = nil
 			r.mu.Unlock()
 
+			var info *VMInstanceInfo
+			var err error
 			if mgr != nil {
-				info, err := r.startExistingVM(pending, mgr)
+				info, err = r.startExistingVM(pending, mgr)
 				if err != nil {
 					log.Printf("vmctl: start existing VM %s failed: %v", pending.VMID, err)
+					r.mu.Lock()
+					waiters := r.pendingWaiters[key]
+					delete(r.pendingWaiters, key)
+					r.mu.Unlock()
+					for _, ch := range waiters {
+						ch <- nil
+					}
 					return nil, fmt.Errorf("failed to start existing VM %s: %w", pending.VMID, err)
 				}
-				r.mu.Lock()
-				current := r.ownerships[key]
-				if current == nil || current.VMID != pending.VMID {
-					r.mu.Unlock()
-					return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
-				}
-				current.SandboxURL = info.HostURL
-				current.Epoch = info.Epoch
-				r.mu.Unlock()
 			}
 
 			r.mu.Lock()
 			current := r.ownerships[key]
 			if current == nil || current.VMID != pending.VMID {
+				waiters := r.pendingWaiters[key]
+				delete(r.pendingWaiters, key)
 				r.mu.Unlock()
+				for _, ch := range waiters {
+					ch <- nil
+				}
 				return r.ResolveOrAssignDesktopContext(ctx, userID, desktopID)
+			}
+			if info != nil {
+				current.SandboxURL = info.HostURL
+				current.Epoch = info.Epoch
 			}
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
 			current.StoppedBy = ""
 			r.saveLocked()
+			waiters := r.pendingWaiters[key]
+			delete(r.pendingWaiters, key)
 			result := cloneOwnership(current)
 			r.mu.Unlock()
 			r.ensureExistingGatewayCredential(result.VMID)
+			for _, ch := range waiters {
+				ch <- cloneOwnership(result)
+			}
 			log.Printf("vmctl: resumed VM %s for user %s desktop %s on resolve (epoch=%d)", result.VMID, userID, desktopID, result.Epoch)
 			return result, nil
 		}

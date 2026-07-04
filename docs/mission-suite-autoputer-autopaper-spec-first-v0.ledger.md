@@ -645,3 +645,25 @@ Mission D (CI/Verification Guard):
 - The next in-bound repair is substrate-level VM lifecycle coalescing: stopped/hibernated resume/recover paths must join an in-flight boot for a user/desktop instead of launching duplicate Firecracker processes for the same VM ID.
 
 **Next:** Add a regression proving concurrent resolves of a stopped primary computer perform one resume/recovery boot; fix `internal/vmctl` stopped/hibernated resume coalescing; deploy; re-run authenticated recovery and browser boot proof.
+
+## Pass 20 — 2026-07-04 (Mission C: Stopped-Resume Coalescing Fix Prepared)
+
+**Conjecture:** If stopped/hibernated current-computer resolve registers the user/desktop as pending before starting the VM, concurrent bootstrap probes will wait on the same resume instead of launching duplicate Firecracker processes for the same VM ID.
+
+**Move:** Changed `internal/vmctl.ResolveOrAssignDesktopContext` so stopped/hibernated ownerships use the existing pending-waiter mechanism during resume, notify waiters on success/failure, and return the same resumed ownership to concurrent callers. Added a regression that starts 8 concurrent resolves against one stopped primary computer and proves only one `ResumeVM` call occurs.
+
+**Actual ΔV:**
+- Concurrent stopped-computer resolves now coalesce on one in-flight resume.
+- The resumed ownership keeps the existing VM ID, preserving the user's data image lineage.
+- Focused race coverage passes for the new concurrent path.
+
+**Evidence:**
+- Code paths touched: `internal/vmctl/ownership.go`, `internal/vmctl/vmctl_test.go`.
+- `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1` passed.
+- `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1` passed.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN until the fix is deployed and authenticated recovery is re-run.
+- The next staging proof should show no duplicate Firecracker kills for `yusefnathanson@me.com` during bootstrap/recovery.
+
+**Next:** Commit, push, monitor CI/deploy, trigger authenticated recovery again, inspect Node B vmctl logs for absence of duplicate Firecracker kills, and verify product boot state.
