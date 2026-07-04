@@ -525,3 +525,28 @@ Mission D (CI/Verification Guard):
 
 **Next:** Capture vmctl/proxy/backend diagnostics for `yusefnathanson@me.com` while the browser is stuck, then decide whether the root cause is runtime bind/listen, host-to-guest network, persistent disk/startup, auth/session renewal, or emergency-mode recovery.
 
+
+## Pass 15 — 2026-07-04 (Mission C: Persistent Data Full Identified)
+
+**Conjecture:** The authenticated boot-stuck account is blocked by persistent data exhaustion before or during VM/runtime boot, not merely by browser auth or missing product-path activation.
+
+**Move:** Queried authenticated `/api/compute/status` from the imported-cookie browser session for `yusefnathanson@me.com`.
+
+**Actual ΔV:**
+- `/api/compute/status` returned 200.
+- The primary computer is `state=stopped`, `stopped_by=vmctl-restart`, `warmness_class=premium_always_on`, and `recovery_eligible=true`.
+- The latest recovery is inactive but failed: `action=wake_current_computer`, `status=failed`, `message=current computer recovery failed`.
+- The persistent data image is full: `used_bytes=17179869184`, `total_bytes=17179869184`, `avail_bytes=0`, `used_percent=100`, `warning=true`, `critical=true`.
+- The response warns: "persistent data image is critically full".
+
+**Evidence:**
+- Authenticated browser synchronous XHR to `/api/compute/status`.
+- Response generated at `2026-07-04T01:06:34Z`.
+- Browser session had imported Chrome cookies for `choir.news` and authenticated as `yusefnathanson@me.com` in the product path.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- The leading fix candidate is now persistent data capacity recovery.
+- Runtime bind/listen, host-to-guest networking, auth/session renewal, and emergency-mode recovery remain possible secondary causes until a resized/recovered computer boots.
+
+**Next:** Repair the persistent data capacity path by increasing the per-VM data image minimum and using the existing resize-on-boot mechanism; deploy, trigger recovery for `yusefnathanson@me.com`, and re-run authenticated bootstrap.

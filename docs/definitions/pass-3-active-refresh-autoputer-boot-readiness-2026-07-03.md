@@ -143,16 +143,19 @@ determined_state:
     - claim: After importing approved Chrome cookies for `choir.news`, the authenticated account `yusefnathanson@me.com` still remained in BIOS boot pending state for more than 200 seconds.
       source: gstack browser session with imported Chrome cookies; page text showed "Computer boot is still pending", recovery POST returned 202, repeated `/api/shell/bootstrap` requests stayed pending, and `/api/preferences/theme` returned 502 after 180010ms.
       execution_effect: This looks like the same Pass 3 boot/readiness class, now reproduced on a real authenticated account, not merely a signed-out preview or deploy-only diagnostic gap.
+    - claim: Authenticated `/api/compute/status` for `yusefnathanson@me.com` reports the primary computer stopped by `vmctl-restart`, failed recovery, and a critical full persistent data image (`used_bytes=17179869184`, `total_bytes=17179869184`, `used_percent=100`).
+      source: authenticated browser synchronous XHR to `/api/compute/status`
+      execution_effect: Persistent data exhaustion is now the leading product boot hypothesis; do not choose runtime/listen/network fixes until disk capacity recovery is attempted or disproven.
   contested: []
   open:
     - node: root-cause-active-refresh-health
-      missing: Confirm whether the active guest fails because the runtime never listens, listens on the wrong interface, blocks inside startup, returns non-200 health, loses network route, or stalls on persistent data.
+      missing: Confirm whether persistent data exhaustion alone explains the authenticated boot stall and prior active-refresh readiness evidence, or whether a separate runtime listen/network/emergency-mode failure remains after disk capacity recovery.
     - node: current-node-b-state
-      missing: Confirm whether Node B currently has failed ownership records or whether later deploys recovered them.
+      missing: Confirm whether Node B currently has failed ownership records after the primary computer is recovered from full persistent data.
     - node: diagnostic-sufficiency
-      missing: Focused tests now cover last-probe HTTP status/body preservation, and the patch is deployed, but diagnostic-sufficiency is not settled until a staging deploy exercises active interactive computer refresh with at least one active computer.
-    - node: product-path-active-computer-access
-      missing: Authenticated access is now available through imported Chrome cookies, but the active account's computer does not finish booting; collect the deployed diagnostics for this authenticated path before choosing a runtime/listen/network/persistent-state fix.
+      missing: Focused tests now cover last-probe HTTP status/body preservation, and the patch is deployed, but diagnostic-sufficiency is not settled until staging exercises active interactive computer refresh after persistent data capacity is restored.
+    - node: authenticated-product-path
+      missing: Persistent data exhaustion is observed for `yusefnathanson@me.com`; recover capacity, then re-run authenticated bootstrap to prove or reject it as the boot blocker.
 ```
 
 ---
@@ -290,20 +293,22 @@ run_checkpoint_and_resumption_state:
     - Pass 3 deploy diagnostic patch landed in `.github/workflows/ci.yml`: failure diagnostics include vmctl ownership snapshots and direct active sandbox health probes.
     - Commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` deployed those diagnostics to staging; deploy job `85076877932` reported no active interactive computers needed refresh.
     - Authenticated product-path probe for `yusefnathanson@me.com` is now available via imported Chrome cookies, but the account remains stuck in Choir BIOS boot pending.
+    - Authenticated `/api/compute/status` reports primary computer `state=stopped`, `stopped_by=vmctl-restart`, recovery `status=failed`, and persistent data image `used_percent=100` with critical warning.
   what_was_proven:
     - Package source-filter bug is repaired.
     - Host services can deploy and report health while active guest refresh still fails in prior evidence.
-    - Current evidence is sufficient to scope Pass 3 and confirm the first evidence-layer root cause; it is not sufficient to pick the product boot fix.
+    - Current evidence is sufficient to scope Pass 3 and confirm the first evidence-layer root cause; it is not sufficient to pick every product boot fix.
     - The deployed diagnostic patch did not regress host deploy health or CI.
+    - The authenticated boot-stuck account has a concrete persistent-disk exhaustion signal.
   unproven_or_partial_claims:
+    - Whether increasing/resizing the persistent data image is sufficient to boot the account.
     - Whether the active target VM reached `server.Start()`.
-    - Whether preserved persistent state blocks runtime startup.
-    - Whether host-to-guest tap networking blocks HTTP readiness.
-    - Whether `/health` returns non-200 versus never accepting TCP.
+    - Whether host-to-guest tap networking blocks HTTP readiness after disk capacity is restored.
+    - Whether `/health` returns non-200 versus never accepting TCP after disk capacity is restored.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
     - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
-    - Whether the authenticated product-path stall is runtime listen, proxy resolve, WebSocket dial, persistent disk, or emergency-mode recovery; the browser shows repeated pending bootstrap probes, one bootstrap 401, `/api/preferences/theme` 502 after 180010ms, and recovery POST 202 without boot completion.
-  next_executable_probe: Use the authenticated Chrome-cookie product path to capture backend/deploy diagnostics for `yusefnathanson@me.com` boot pending, then classify whether it is the same runtime/listen/network/persistent-state failure as active refresh deploy evidence.
+    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, and compute status shows persistent disk 100% full.
+  next_executable_probe: Document the persistent data exhaustion problem, then repair capacity by increasing the per-VM data image minimum and relying on existing resize-on-boot behavior; re-run authenticated bootstrap afterward.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
     - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 14
@@ -316,6 +321,7 @@ run_checkpoint_and_resumption_state:
     - authenticated browser probe: imported 2 Chrome cookies for `choir.news`; `yusefnathanson@me.com` product path showed BIOS boot pending for 207s+, recovery POST 202, repeated pending `/api/shell/bootstrap`, `/api/preferences/theme` 502 after 180010ms.
     - staging `/health` showing deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`
     - staging `/health/ready` showing degraded runtime/dolt/ollama
+    - authenticated compute status: `/api/compute/status` returned primary `state=stopped`, recovery `status=failed`, and `persistent_disk.used_percent=100` with warning "persistent data image is critically full".
     - diagnostic patch files: `internal/vmmanager/manager.go`, `internal/vmmanager/manager_test.go`, `.github/workflows/ci.yml`
     - focused test: `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
