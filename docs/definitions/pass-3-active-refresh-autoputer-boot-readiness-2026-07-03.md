@@ -140,6 +140,9 @@ determined_state:
     - claim: Product-path activation was attempted from the harness browser, but the session was signed out and the only available activation path required creating or using a passkey.
       source: headless browser observation of `https://choir.news` after opening Desk -> Sign in; no auth cookies or authenticated local/session storage were present.
       execution_effect: Do not create a production/staging user account or passkey as an implicit side effect of the dry run; record the external auth boundary and keep Pass 3 open.
+    - claim: After importing approved Chrome cookies for `choir.news`, the authenticated account `yusefnathanson@me.com` still remained in BIOS boot pending state for more than 200 seconds.
+      source: gstack browser session with imported Chrome cookies; page text showed "Computer boot is still pending", recovery POST returned 202, repeated `/api/shell/bootstrap` requests stayed pending, and `/api/preferences/theme` returned 502 after 180010ms.
+      execution_effect: This looks like the same Pass 3 boot/readiness class, now reproduced on a real authenticated account, not merely a signed-out preview or deploy-only diagnostic gap.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -149,7 +152,7 @@ determined_state:
     - node: diagnostic-sufficiency
       missing: Focused tests now cover last-probe HTTP status/body preservation, and the patch is deployed, but diagnostic-sufficiency is not settled until a staging deploy exercises active interactive computer refresh with at least one active computer.
     - node: product-path-active-computer-access
-      missing: An authenticated staging product session or explicit approval to create a disposable passkey-backed staging user, so the harness can create/observe an active interactive computer before an ordinary guest deploy.
+      missing: Authenticated access is now available through imported Chrome cookies, but the active account's computer does not finish booting; collect the deployed diagnostics for this authenticated path before choosing a runtime/listen/network/persistent-state fix.
 ```
 
 ---
@@ -268,6 +271,8 @@ Pass 3 is IN PROGRESS when:
 
 - Signed-out preview visible → product-path active computer exists.
 - Passkey dialog visible → safe to create a staging user without explicit approval.
+- Authenticated session accepted → computer booted.
+- Recovery request accepted → recovery succeeded.
 
 ---
 
@@ -284,6 +289,7 @@ run_checkpoint_and_resumption_state:
     - Pass 3 diagnostic patch landed in `internal/vmmanager/manager.go`: guest readiness timeout errors include the last `/health` probe status/body/error.
     - Pass 3 deploy diagnostic patch landed in `.github/workflows/ci.yml`: failure diagnostics include vmctl ownership snapshots and direct active sandbox health probes.
     - Commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` deployed those diagnostics to staging; deploy job `85076877932` reported no active interactive computers needed refresh.
+    - Authenticated product-path probe for `yusefnathanson@me.com` is now available via imported Chrome cookies, but the account remains stuck in Choir BIOS boot pending.
   what_was_proven:
     - Package source-filter bug is repaired.
     - Host services can deploy and report health while active guest refresh still fails in prior evidence.
@@ -296,17 +302,18 @@ run_checkpoint_and_resumption_state:
     - Whether `/health` returns non-200 versus never accepting TCP.
     - Whether emergency mode is primary root cause or a second VM's separate failure.
     - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
-    - Whether an authenticated product session can create or wake an active interactive computer for the next deploy; the current harness browser is signed out and has no cookies/storage credentials.
-  next_executable_probe: Create or observe an active interactive computer through the product path, then run or wait for an ordinary guest deploy that refreshes it and captures the new readiness diagnostics; if product-path activation is unavailable, record the missing credential/tool boundary instead of weakening Pass 3.
+    - Whether the authenticated product-path stall is runtime listen, proxy resolve, WebSocket dial, persistent disk, or emergency-mode recovery; the browser shows repeated pending bootstrap probes, one bootstrap 401, `/api/preferences/theme` 502 after 180010ms, and recovery POST 202 without boot completion.
+  next_executable_probe: Use the authenticated Chrome-cookie product path to capture backend/deploy diagnostics for `yusefnathanson@me.com` boot pending, then classify whether it is the same runtime/listen/network/persistent-state failure as active refresh deploy evidence.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 12
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 14
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
     - CI run 28685279292 and deploy job 85076877932
     - Race Detector run 28685279281 attempt 2
     - browser product-path probe: `https://choir.news` opened signed out; Desk -> Sign in exposed passkey creation/login, but no account creation or login was performed.
+    - authenticated browser probe: imported 2 Chrome cookies for `choir.news`; `yusefnathanson@me.com` product path showed BIOS boot pending for 207s+, recovery POST 202, repeated pending `/api/shell/bootstrap`, `/api/preferences/theme` 502 after 180010ms.
     - staging `/health` showing deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`
     - staging `/health/ready` showing degraded runtime/dolt/ollama
     - diagnostic patch files: `internal/vmmanager/manager.go`, `internal/vmmanager/manager_test.go`, `.github/workflows/ci.yml`

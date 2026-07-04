@@ -495,5 +495,33 @@ Mission D (CI/Verification Guard):
 - The next probe's boundary is auth/access, not deploy mechanics.
 - Do not weaken Pass 3 by substituting preview UI for active computer evidence.
 
-**Next:** Use an authenticated staging session, import approved cookies, or get explicit approval to create a disposable passkey-backed staging user; then create or wake an active interactive computer before the next ordinary guest deploy.
+**Next:** Authenticated access is available through imported Chrome cookies, but the account computer is boot-stuck. Collect backend/deploy diagnostics for `yusefnathanson@me.com` before choosing the runtime/listen/network/persistent-state fix.
+
+## Pass 14 — 2026-07-03 (Mission C: Authenticated Account Boot-Stuck)
+
+**Conjecture:** `yusefnathanson@me.com` failing to boot through the authenticated product path is likely the same Pass 3 boot/readiness class as the deploy active-refresh failure, but it must be classified by backend diagnostics before repair.
+
+**Move:** Imported approved Chrome cookies for `choir.news` into the gstack browser session and reloaded the product path.
+
+**Actual ΔV:**
+- Authentication succeeded enough for `/auth/session` to return a 144B authenticated response.
+- The page entered `CHOIR BIOS` and stayed in "Computer boot is still pending" for more than 200 seconds.
+- Bootstrap probes repeated through at least probe 13.
+- `/api/compute/recovery` returned 202 after about 2044ms.
+- `/api/preferences/theme` returned 502 after 180010ms.
+- Network log showed repeated pending `/api/shell/bootstrap`, plus one `/api/shell/bootstrap` 401 followed by `/auth/session` 200 and more pending bootstrap probes.
+- `/health` still reports deployed commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a`; `/health/ready` remains degraded for runtime/dolt/ollama.
+
+**Evidence:**
+- gstack browser cookies: imported 2 cookies for `choir.news` from Chrome.
+- gstack browser text: "CHOIR BIOS Computer boot is still pending ... Bootstrap probe 13 is still waiting; retrying".
+- gstack network log: `/auth/session` 200, `/api/compute/recovery` 202, `/api/preferences/theme` 502 after 180010ms, repeated pending `/api/shell/bootstrap`.
+- public health: `https://choir.news/health`, `https://choir.news/health/ready`.
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- This is no longer blocked on auth access; it is now an authenticated active-account boot/readiness failure.
+- It looks similar to the prior active-refresh failure, but "similar" is not proof. The next evidence must come from backend diagnostics for the account route.
+
+**Next:** Capture vmctl/proxy/backend diagnostics for `yusefnathanson@me.com` while the browser is stuck, then decide whether the root cause is runtime bind/listen, host-to-guest network, persistent disk/startup, auth/session renewal, or emergency-mode recovery.
 

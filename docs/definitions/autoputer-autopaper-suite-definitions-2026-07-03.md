@@ -903,6 +903,7 @@ run_checkpoint_and_resumption_state:
     - Pass 3 diagnostic patch deployed: vmmanager readiness timeout errors retain last `/health` probe detail; deploy diagnostics print vmctl ownership and active sandbox health snapshots.
     - Deploy job `85076877932` for commit `55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a` reported no active interactive computers needed refresh, so the changed active-refresh diagnostic path has not yet been exercised.
     - Product-path activation probe reached signed-out Choir preview and passkey sign-in/create dialog; no cookies, localStorage auth, sessionStorage auth, passkey login, or account creation were available/performed from the harness.
+    - Authenticated product-path probe for `yusefnathanson@me.com` is available through imported Chrome cookies, but the account remains stuck in Choir BIOS boot pending after recovery.
   what_shipped:
     - Promotion gate spec (Pass 1, merged to main)
     - Actor protocol + autoputer lifecycle specs (Pass 2, PR #42 merged)
@@ -933,7 +934,8 @@ run_checkpoint_and_resumption_state:
     - Codex reservations must be addressed before Mission C promotion encoding.
     - The first Pass 3 root cause is an evidence-layer bug: guest readiness polling collapsed HTTP status/body and transport errors into a boolean.
     - The evidence-layer patch is deployed, but the next active-refresh root-cause evidence still requires an active interactive computer during an ordinary guest deploy.
-    - Product-path activation currently needs an authenticated staging session or explicit approval to create a disposable passkey-backed staging user; the dry run must not mutate auth/user state implicitly.
+    - Product-path activation boundary was crossed through approved Chrome cookie import; the active problem is now authenticated boot readiness, not lack of browser auth.
+    - Authenticated account evidence now exists: `yusefnathanson@me.com` repeats bootstrap probes, recovery returns 202, theme preferences returns 502 after 180010ms, and boot does not complete.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
@@ -942,12 +944,12 @@ run_checkpoint_and_resumption_state:
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
   highest_impact_remaining_uncertainty: C-C1/C-C2 refreshed active computer boot readiness after ordinary guest image update
-  next_executable_probe: Obtain an authenticated staging product session or explicit approval to create a disposable passkey-backed staging user, create/observe an active interactive computer through the product path, then run or wait for an ordinary guest deploy that refreshes it and captures deployed readiness diagnostics.
+  next_executable_probe: Capture vmctl/proxy/backend diagnostics for authenticated `yusefnathanson@me.com` boot pending, then classify whether the cause is runtime bind/listen, host-to-guest network, persistent disk/startup, auth/session renewal, or emergency-mode recovery.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 13
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 14
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -960,6 +962,7 @@ run_checkpoint_and_resumption_state:
     - focused Pass 3 test: `go test ./internal/vmmanager -run TestWaitForGuestReady -count=1`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
     - browser product-path probe: `https://choir.news` signed-out preview -> Desk -> Sign in exposed passkey create/login; no authenticated storage/cookies were present.
+    - authenticated browser probe: imported Chrome cookies for `choir.news`; `yusefnathanson@me.com` showed BIOS boot pending for 207s+, recovery POST 202, repeated pending `/api/shell/bootstrap`, `/api/preferences/theme` 502 after 180010ms.
   rollback_refs:
     - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```
