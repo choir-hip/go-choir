@@ -943,21 +943,22 @@ run_checkpoint_and_resumption_state:
     - The host-image disk gauge fix is deployed and authenticated compute status now reports the stopped primary data image at 49.93% used, not critical/full.
     - Authenticated recovery still does not boot because Node B vmctl logs show concurrent stopped-computer resolve/recovery paths launching duplicate Firecracker processes for the same VM ID and killing each other.
     - Stopped/hibernated resume coalescing fix is prepared locally in `internal/vmctl`, and focused normal/race tests passed.
+    - Resolve-path stopped/hibernated coalescing is deployed, but authenticated recovery still launches duplicate Firecracker processes through direct resume/refresh paths; the guest also reaches NixOS emergency mode.
   remaining_error_field:
     - Active refreshed guest does not become healthy on :8085 during deploy.
-    - `yusefnathanson@me.com` primary computer recovery remains unproven until the stopped/hibernated resume coalescing fix is deployed and authenticated recovery is re-run.
+    - `yusefnathanson@me.com` primary computer recovery remains unproven until direct resume/refresh lifecycle coalescing is deployed and authenticated recovery is re-run.
     - Current staging `/health/ready` is degraded for runtime/dolt/ollama, not accepted as Pass 3 completion proof.
     - Codex reservations: promotion certificate, owner approval model, Restage fairness, sabotage variants
     - Wire pipeline spec not yet rewritten
     - actor_protocol_xvm.tla not yet rewritten
     - Autoputer rename and Nucleus capsule work not started
-  highest_impact_remaining_uncertainty: C-C1/C-C2 deployed stopped/hibernated current-computer resume coalescing under concurrent authenticated bootstrap probes
-  next_executable_probe: Commit/push/deploy the `internal/vmctl` stopped/hibernated resume coalescing fix, trigger authenticated recovery for `yusefnathanson@me.com`, inspect Node B vmctl logs for absence of duplicate Firecracker kills, and re-run authenticated bootstrap/health evidence.
+  highest_impact_remaining_uncertainty: C-C1/C-C2 direct stopped/hibernated current-computer lifecycle coalescing under concurrent authenticated recovery/bootstrap probes
+  next_executable_probe: Add direct-path regression coverage for concurrent `ResumeVMForDesktop`/refresh recovery with a stopped computer, fix `internal/vmctl` lifecycle coalescing at the shared direct operation boundary, deploy, re-run authenticated recovery for `yusefnathanson@me.com`, and inspect Node B vmctl logs for absence of duplicate Firecracker kills plus emergency-mode evidence.
   suggested_goal_string: "/goal docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md"
   evidence_artifact_refs:
     - docs/reviews/promotion-gate-codex-review-2026-07-03.md
     - docs/definitions/pass-2-completion-definition-2026-07-03.md
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 20
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 21
     - docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md
     - CI run 28648508586 (promotion gate)
     - PR #42 merged commit a6f11b7dbb64c07677a767c19c00e47cf87fdd54
@@ -980,6 +981,9 @@ run_checkpoint_and_resumption_state:
     - Node B vmctl logs: repeated duplicate Firecracker kills for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` during authenticated stopped-computer recovery.
     - focused stopped-resume coalescing test: `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
     - stopped-resume race test: `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1`
+    - resolve-path coalescing CI/deploy: CI run `28694317169`, Race Detector run `28694317183`, Docs Truth Check run `28694317189`, FlakeHub run `28694317173`, deploy job `85101324996`
+    - post-resolve-coalescing authenticated recovery: `/api/compute/recovery` returned 202 with `status=refreshing` at `2026-07-04T04:13:52Z`
+    - post-resolve-coalescing Node B vmctl logs: duplicate Firecracker kills still occurred at `04:16:34` and `04:16:53`; guest reached NixOS emergency mode around `04:16:39`
   rollback_refs:
     - main HEAD: 55cbe8dbc8cfd5b040fa14b568b037e0f5ec557a
 ```

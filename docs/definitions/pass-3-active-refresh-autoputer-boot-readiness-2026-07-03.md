@@ -176,6 +176,12 @@ determined_state:
     - claim: Focused stopped-resume coalescing tests passed, including the race detector.
       source: `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`; `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1`
       execution_effect: Local proof covers the concurrency failure observed in Node B vmctl logs.
+    - claim: Resolve-path stopped/hibernated coalescing is deployed, but authenticated recovery still launches duplicate Firecracker processes through direct resume/refresh paths.
+      source: CI run `28694317169`, deploy job `85101324996`, authenticated recovery at `2026-07-04T04:13:52Z`, Node B vmctl logs at `04:16:34` and `04:16:53`
+      execution_effect: The next fix must move coalescing to the shared direct lifecycle boundary, covering `ResumeVMForDesktop`/`RefreshVMForDesktop`, not only `ResolveOrAssignDesktopContext`.
+    - claim: The recovered guest reaches NixOS emergency mode.
+      source: Node B vmctl logs around `2026-07-04T04:16:39Z`
+      execution_effect: Product boot readiness remains blocked after Firecracker launch; emergency-mode evidence is a separate realism axis after duplicate launch coalescing is repaired.
   contested: []
   open:
     - node: root-cause-active-refresh-health
@@ -335,17 +341,17 @@ run_checkpoint_and_resumption_state:
     - The deployed diagnostic patch did not regress host deploy health or CI.
     - The authenticated boot-stuck account no longer has a critical stopped-image disk signal after the gauge fix; Node B logs now point at duplicate stopped-resume Firecracker launches.
   unproven_or_partial_claims:
-    - Whether the authenticated computer will boot after stopped/hibernated resume coalescing is deployed.
+    - Whether the authenticated computer will boot after direct resume/refresh lifecycle coalescing is deployed.
     - Whether the active target VM reached `server.Start()` after capacity is restored.
     - Whether host-to-guest tap networking blocks HTTP readiness after capacity is restored.
     - Whether `/health` returns non-200 versus never accepting TCP after capacity is restored.
-    - Whether emergency mode is primary root cause or a second VM's separate failure.
+    - Whether NixOS emergency mode is primary root cause after duplicate lifecycle launches are eliminated.
     - Whether the new diagnostics capture the active-refresh failure path, because the first deploy after the patch had zero active interactive computers to refresh.
-    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, post-gauge-fix compute status at 49.93% data-image usage, and Node B duplicate Firecracker kills during stopped-computer recovery.
-  next_executable_probe: Deploy the stopped/hibernated resume coalescing fix, trigger authenticated recovery for `yusefnathanson@me.com`, inspect Node B vmctl logs for absence of duplicate Firecracker kills, and re-run authenticated bootstrap/compute-status evidence.
+    - Whether the authenticated product-path stall has only one cause; browser evidence shows pending bootstrap probes, `/api/preferences/theme` 502 after 180010ms, recovery POST 202, post-gauge-fix compute status at 49.93% data-image usage, duplicate Firecracker kills after resolve-path coalescing, and guest emergency mode.
+  next_executable_probe: Add direct-path regression coverage for concurrent `ResumeVMForDesktop`/refresh recovery with a stopped computer, fix `internal/vmctl` lifecycle coalescing at the shared direct operation boundary, deploy, re-run authenticated recovery for `yusefnathanson@me.com`, and inspect Node B vmctl logs for absence of duplicate Firecracker kills plus emergency-mode evidence.
   suggested_goal_string: "/goal docs/definitions/pass-3-active-refresh-autoputer-boot-readiness-2026-07-03.md"
   evidence_artifact_refs:
-    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 20
+    - docs/mission-suite-autoputer-autopaper-spec-first-v0.ledger.md Pass 8 through Pass 21
     - GitHub Actions deploy job 85072352680
     - CI run 28683693425
     - CI run 28684139979
@@ -371,6 +377,9 @@ run_checkpoint_and_resumption_state:
     - stopped-resume coalescing fix files: `internal/vmctl/ownership.go`, `internal/vmctl/vmctl_test.go`
     - focused stopped-resume coalescing test: `go test ./internal/vmctl -run 'TestOwnershipRegistry_ResolveCoalescesStoppedVMResume|TestDataImageStats|TestOwnershipRegistryDataImageStatsForVM' -count=1`
     - stopped-resume race test: `go test ./internal/vmctl -run TestOwnershipRegistry_ResolveCoalescesStoppedVMResume -race -count=1`
+    - resolve-path coalescing CI/deploy: CI run `28694317169`, Race Detector run `28694317183`, Docs Truth Check run `28694317189`, FlakeHub run `28694317173`, deploy job `85101324996`
+    - post-resolve-coalescing authenticated recovery: `/api/compute/recovery` returned 202 with `status=refreshing` at `2026-07-04T04:13:52Z`
+    - post-resolve-coalescing Node B vmctl logs: duplicate Firecracker kills still occurred at `04:16:34` and `04:16:53`; guest reached NixOS emergency mode around `04:16:39`
     - deploy-impact classifier test: `.github/scripts/deploy-impact-classify-test`
   rollback_refs:
     - main HEAD before Pass 3: 0cf1ba4e31c4b8a932ac7b5438372267ac7b30c5

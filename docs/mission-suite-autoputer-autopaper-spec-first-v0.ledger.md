@@ -667,3 +667,28 @@ Mission D (CI/Verification Guard):
 - The next staging proof should show no duplicate Firecracker kills for `yusefnathanson@me.com` during bootstrap/recovery.
 
 **Next:** Commit, push, monitor CI/deploy, trigger authenticated recovery again, inspect Node B vmctl logs for absence of duplicate Firecracker kills, and verify product boot state.
+
+## Pass 21 — 2026-07-04 (Mission C: Refresh/Resume Coalescing Gap Identified)
+
+**Conjecture:** The resolve-path coalescing fix landed, but authenticated recovery still launches duplicate Firecracker processes because the recovery/warmness path uses `ResumeVMForDesktop`/`RefreshVMForDesktop` directly instead of the newly coalesced resolve path.
+
+**Move:** Monitored commit `d6c5f8cf26b155738b9223b597f6df29772086df` through CI/deploy, re-triggered authenticated recovery for `yusefnathanson@me.com`, and inspected Node B vmctl logs.
+
+**Actual ΔV:**
+- CI, Race Detector, Docs Truth Check, FlakeHub, and Node B deploy succeeded for the resolve-path coalescing fix.
+- Authenticated recovery still did not produce product boot readiness.
+- Node B logs still show duplicate Firecracker kills after the deploy, now pointing at uncoalesced direct resume/refresh paths rather than `ResolveOrAssignDesktopContext`.
+- Guest boot progressed far enough to enter NixOS emergency mode, which makes the remaining failure more specific than the earlier generic BIOS-pending symptom.
+
+**Evidence:**
+- CI run `28694317169`; Race Detector run `28694317183`; Docs Truth Check run `28694317189`; FlakeHub run `28694317173`; deploy job `85101324996`.
+- Authenticated `/auth/session`: `yusefnathanson@me.com`.
+- Authenticated `/api/compute/recovery`: 202 with `status=refreshing` at `2026-07-04T04:13:52Z`.
+- Node B `journalctl -u go-choir-vmctl.service --since=2026-07-04T04:16:30 --until=2026-07-04T04:17:00 -g duplicate -o cat --no-pager -a`: duplicate Firecracker kills for `vm-5b0c1bef1e2b6d7f8dad7d0e8473ed19` at `04:16:34` and `04:16:53`.
+- Node B vmctl logs around `04:16:39`: the guest reaches NixOS emergency mode and prompts "Press Enter to continue".
+
+**Expected ΔV:**
+- C-C1/C-C2 remain OPEN.
+- The next repair must share coalescing across direct resume/refresh/recovery paths, not only request-time resolve.
+
+**Next:** Add direct-path regression coverage for concurrent `ResumeVMForDesktop`/refresh recovery with a stopped computer; fix `internal/vmctl` lifecycle coalescing at the shared lifecycle operation boundary; deploy; re-run authenticated recovery and inspect guest emergency-mode evidence.
