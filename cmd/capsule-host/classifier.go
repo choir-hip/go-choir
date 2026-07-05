@@ -113,14 +113,13 @@ func NewClassifier() *Classifier {
 			},
 			LedgerArtifact: {
 				{Prefix: "/var/lib/artifact"},
-				{Prefix: "/tmp/artifact"},
 			},
 			LedgerRoute: {
 				{Prefix: "/etc/choir/route"},
 			},
 		},
 		Ignore: []PathPattern{
-			{Prefix: "/tmp/."},
+			{Prefix: "/tmp/"},
 			{Prefix: "/run"},
 			{Prefix: "/var/log"},
 			{Prefix: "/var/cache"},
