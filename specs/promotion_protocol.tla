@@ -22,9 +22,15 @@
 (*   5. HealthWindowReversible — revert only while rollback window is open. *)
 (*   6. CandidateIsolation — candidate mutations are not route-visible      *)
 (*                          before commit.                                  *)
-(*   7. RouteNamesComputerVersion / PromotionNamesComputerVersion — the     *)
-(*      abstract base versions used by this model refine to ComputerVersion *)
-(*      records of the form (CodeRef, ArtifactProgramRef).                  *)
+(*   7. RouteVersionValid / PromotionVersionValid — the route and promotion  *)
+(*      certificates name a ComputerVersion whose CodeRef and               *)
+(*      ArtifactProgramRef are independently bounded.  The earlier           *)
+(*      RouteNamesComputerVersion / PromotionNamesComputerVersion            *)
+(*      invariants were vacuous because ComputerVersionOfBase(n) mapped      *)
+(*      both codeRef and artifactProgramRef to the same counter n, making    *)
+(*      the result trivially a member of ComputerVersions.  The model now    *)
+(*      tracks code and artifact counters independently, so the invariants   *)
+(*      can fail if an action produces an out-of-bounds ref.                 *)
 (*                                                                         *)
 (* Liveness checked:                                                         *)
 (*   EveryPromotionSettles — each promotion eventually aborts, reverts,   *)
@@ -41,22 +47,26 @@ CONSTANTS
   MaxTailMoves      \* bound on active-base divergence during candidacy
 
 VARIABLES
-  activeBase,       \* activeBase[a]  : abstract ComputerVersion index of active computer a
-  candidateBase,    \* candidateBase[c] : abstract ComputerVersion index of candidate c's fork point
+  activeCodeBase,     \* activeCodeBase[a]  : code ref counter of active computer a
+  activeArtifactBase, \* activeArtifactBase[a] : artifact program ref counter of active computer a
+  candidateCodeBase,    \* candidateCodeBase[c] : code ref counter at candidate c's fork point
+  candidateArtifactBase,\* candidateArtifactBase[c] : artifact ref counter at candidate c's fork point
   candidateParent,  \* candidateParent[c] : active computer c forks from
   route,            \* route[s] : computer currently serving slot s (active or candidate)
   ledgerState,      \* ledgerState[p][l] : state of ledger l for promotion p
   promoStatus,      \* promoStatus[p] : promotion lifecycle state
   promoActive,      \* promoActive[p] : active computer owning promotion p
   promoCandidate,   \* promoCandidate[p] : candidate computer of promotion p
-  promoBase,        \* promoBase[p] : abstract ComputerVersion index at candidate fork
+  promoCodeBase,        \* promoCodeBase[p] : code ref counter at candidate fork
+  promoArtifactBase,    \* promoArtifactBase[p] : artifact ref counter at candidate fork
   approved,         \* approved[p] : owner approval recorded
   poisoned,         \* poisoned[p] : new version wrote data old cannot read
   healthWindow      \* healthWindow[p] : "open" | "failed" | "confirmed"
 
-vars == <<activeBase, candidateBase, candidateParent, route, ledgerState,
-          promoStatus, promoActive, promoCandidate, promoBase, approved,
-          poisoned, healthWindow>>
+vars == <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+          candidateArtifactBase, candidateParent, route, ledgerState,
+          promoStatus, promoActive, promoCandidate, promoCodeBase,
+          promoArtifactBase, approved, poisoned, healthWindow>>
 
 LedgerStates == {"none", "prepared", "applied", "rolled_back"}
 PromoStates  == {"staging", "verified", "approved", "committed",
@@ -64,20 +74,22 @@ PromoStates  == {"staging", "verified", "approved", "committed",
 HealthStates == {"open", "failed", "confirmed"}
 
 \* Refinement seam for the substrate-independent audited-computer mission.
-\* Runtime refs are richer values; this finite model keeps the existing bounded
-\* base-version counter as the abstraction and maps each counter value to an
-\* explicit ComputerVersion record.
+\* Runtime refs are richer values; this finite model tracks code and artifact
+\* counters independently so the model can express code/artifact divergence.
 BaseVersionNumbers == 0..MaxTailMoves
 CodeRefs == BaseVersionNumbers
 ArtifactProgramRefs == BaseVersionNumbers
 ComputerVersions == [codeRef: CodeRefs, artifactProgramRef: ArtifactProgramRefs]
-ComputerVersionOfBase(n) ==
-  [codeRef |-> n, artifactProgramRef |-> n]
+
+\* Construct a ComputerVersion from independent code and artifact counters.
+\* Both counters must be in bounds; the invariant checks this.
+ComputerVersionOfBase(codeN, artifactN) ==
+  [codeRef |-> codeN, artifactProgramRef |-> artifactN]
 
 ComputerVersionOfRoutedComputer(r) ==
   IF r \in ActiveComps
-    THEN ComputerVersionOfBase(activeBase[r])
-    ELSE ComputerVersionOfBase(candidateBase[r])
+    THEN ComputerVersionOfBase(activeCodeBase[r], activeArtifactBase[r])
+    ELSE ComputerVersionOfBase(candidateCodeBase[r], candidateArtifactBase[r])
 
 \* A promotion is "settled" if it has reached a terminal state.
 TerminalStates == {"aborted", "confirmed", "reverted"}
@@ -86,28 +98,34 @@ TerminalStates == {"aborted", "confirmed", "reverted"}
 CommittedFamily == {"committed", "confirmed", "reverted"}
 
 TypeOK ==
-  /\ activeBase \in [ActiveComps -> BaseVersionNumbers]
-  /\ candidateBase \in [CandidateComps -> BaseVersionNumbers]
+  /\ activeCodeBase \in [ActiveComps -> BaseVersionNumbers]
+  /\ activeArtifactBase \in [ActiveComps -> BaseVersionNumbers]
+  /\ candidateCodeBase \in [CandidateComps -> BaseVersionNumbers]
+  /\ candidateArtifactBase \in [CandidateComps -> BaseVersionNumbers]
   /\ candidateParent \in [CandidateComps -> ActiveComps]
   /\ route \in [Slots -> ActiveComps \cup CandidateComps]
   /\ promoStatus \in [CandidateComps -> PromoStates]
   /\ promoActive \in [CandidateComps -> ActiveComps]
   /\ promoCandidate \in [CandidateComps -> CandidateComps]
-  /\ promoBase \in [CandidateComps -> BaseVersionNumbers]
+  /\ promoCodeBase \in [CandidateComps -> BaseVersionNumbers]
+  /\ promoArtifactBase \in [CandidateComps -> BaseVersionNumbers]
   /\ approved \in [CandidateComps -> BOOLEAN]
   /\ poisoned \in [CandidateComps -> BOOLEAN]
   /\ healthWindow \in [CandidateComps -> HealthStates]
   /\ ledgerState \in [CandidateComps -> [Ledgers -> LedgerStates]]
 
 Init ==
-  /\ activeBase = [a \in ActiveComps |-> 0]
-  /\ candidateBase = [c \in CandidateComps |-> 0]
+  /\ activeCodeBase = [a \in ActiveComps |-> 0]
+  /\ activeArtifactBase = [a \in ActiveComps |-> 0]
+  /\ candidateCodeBase = [c \in CandidateComps |-> 0]
+  /\ candidateArtifactBase = [c \in CandidateComps |-> 0]
   /\ candidateParent = [c \in CandidateComps |-> CHOOSE a \in ActiveComps : TRUE]
   /\ route = [s \in Slots |-> CHOOSE a \in ActiveComps : TRUE]
   /\ promoStatus = [c \in CandidateComps |-> "aborted"]
   /\ promoActive = [c \in CandidateComps |-> candidateParent[c]]
   /\ promoCandidate = [c \in CandidateComps |-> c]
-  /\ promoBase = [c \in CandidateComps |-> 0]
+  /\ promoCodeBase = [c \in CandidateComps |-> 0]
+  /\ promoArtifactBase = [c \in CandidateComps |-> 0]
   /\ approved = [c \in CandidateComps |-> FALSE]
   /\ poisoned = [c \in CandidateComps |-> FALSE]
   /\ healthWindow = [c \in CandidateComps |-> "open"]
@@ -115,13 +133,26 @@ Init ==
 
 --------------------------------------------------------------------------
 (* Active computer divergence: the foreground keeps moving during candidacy. *)
+(* Code and artifact counters advance independently to model code-only         *)
+(* updates (e.g. interpreter patch) and artifact-only updates (e.g. user data  *)
+(* growth).  Both actions are enabled while their respective counters are      *)
+(* below MaxTailMoves.                                                         *)
 
-MoveActiveTail(a) ==
-  /\ activeBase[a] < MaxTailMoves
-  /\ activeBase' = [activeBase EXCEPT ![a] = @ + 1]
-  /\ UNCHANGED <<candidateBase, candidateParent, route, ledgerState,
-                  promoStatus, promoActive, promoCandidate, promoBase,
-                  approved, poisoned, healthWindow>>
+MoveActiveCode(a) ==
+  /\ activeCodeBase[a] < MaxTailMoves
+  /\ activeCodeBase' = [activeCodeBase EXCEPT ![a] = @ + 1]
+  /\ UNCHANGED <<activeArtifactBase, candidateCodeBase, candidateArtifactBase,
+                  candidateParent, route, ledgerState,
+                  promoStatus, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
+
+MoveActiveArtifact(a) ==
+  /\ activeArtifactBase[a] < MaxTailMoves
+  /\ activeArtifactBase' = [activeArtifactBase EXCEPT ![a] = @ + 1]
+  /\ UNCHANGED <<activeCodeBase, candidateCodeBase, candidateArtifactBase,
+                  candidateParent, route, ledgerState,
+                  promoStatus, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
 (* Fork a candidate from an active computer. This is the durable fork point. *)
@@ -131,14 +162,16 @@ ForkCandidate(c, a) ==
   /\ candidateParent[c] = a
   /\ promoActive' = [promoActive EXCEPT ![c] = a]
   /\ promoCandidate' = [promoCandidate EXCEPT ![c] = c]
-  /\ candidateBase' = [candidateBase EXCEPT ![c] = activeBase[a]]
-  /\ promoBase' = [promoBase EXCEPT ![c] = activeBase[a]]
+  /\ candidateCodeBase' = [candidateCodeBase EXCEPT ![c] = activeCodeBase[a]]
+  /\ candidateArtifactBase' = [candidateArtifactBase EXCEPT ![c] = activeArtifactBase[a]]
+  /\ promoCodeBase' = [promoCodeBase EXCEPT ![c] = activeCodeBase[a]]
+  /\ promoArtifactBase' = [promoArtifactBase EXCEPT ![c] = activeArtifactBase[a]]
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "staging"]
   /\ approved' = [approved EXCEPT ![c] = FALSE]
   /\ poisoned' = [poisoned EXCEPT ![c] = FALSE]
   /\ healthWindow' = [healthWindow EXCEPT ![c] = "open"]
   /\ ledgerState' = [ledgerState EXCEPT ![c] = [l \in Ledgers |-> "none"]]
-  /\ UNCHANGED <<activeBase, candidateParent, route>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateParent, route>>
 
 --------------------------------------------------------------------------
 (* Per-ledger prepare: durable, idempotent, inert until commit.             *)
@@ -147,9 +180,10 @@ PrepareLedger(c, l) ==
   /\ promoStatus[c] \in {"staging", "verified", "approved"}
   /\ ledgerState[c][l] = "none"
   /\ ledgerState' = [ledgerState EXCEPT ![c][l] = "prepared"]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  promoStatus, promoActive, promoCandidate, promoBase,
-                  approved, poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  promoStatus, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 (* Restage: the active base moved, so the candidate must re-prepare.        *)
 (* Verification and approval are invalidated because evidence about a stale *)
@@ -157,25 +191,30 @@ PrepareLedger(c, l) ==
 
 Restage(c) ==
   /\ promoStatus[c] \in {"staging", "verified", "approved"}
-  /\ promoBase[c] # activeBase[promoActive[c]]
-  /\ promoBase' = [promoBase EXCEPT ![c] = activeBase[promoActive[c]]]
-  /\ candidateBase' = [candidateBase EXCEPT ![c] = activeBase[promoActive[c]]]
+  /\ \/ promoCodeBase[c] # activeCodeBase[promoActive[c]]
+     \/ promoArtifactBase[c] # activeArtifactBase[promoActive[c]]
+  /\ promoCodeBase' = [promoCodeBase EXCEPT ![c] = activeCodeBase[promoActive[c]]]
+  /\ promoArtifactBase' = [promoArtifactBase EXCEPT ![c] = activeArtifactBase[promoActive[c]]]
+  /\ candidateCodeBase' = [candidateCodeBase EXCEPT ![c] = activeCodeBase[promoActive[c]]]
+  /\ candidateArtifactBase' = [candidateArtifactBase EXCEPT ![c] = activeArtifactBase[promoActive[c]]]
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "staging"]
   /\ approved' = [approved EXCEPT ![c] = FALSE]
   /\ ledgerState' = [ledgerState EXCEPT ![c] = [l \in Ledgers |-> "none"]]
-  /\ UNCHANGED <<activeBase, candidateParent, route, promoActive,
-                  promoCandidate, poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateParent, route,
+                  promoActive, promoCandidate, poisoned, healthWindow>>
 
 (* Verifier evidence: all ledgers prepared -> candidate is verified.         *)
 
 Verify(c) ==
   /\ promoStatus[c] = "staging"
   /\ \A l \in Ledgers : ledgerState[c][l] = "prepared"
-  /\ promoBase[c] = activeBase[promoActive[c]]
+  /\ promoCodeBase[c] = activeCodeBase[promoActive[c]]
+  /\ promoArtifactBase[c] = activeArtifactBase[promoActive[c]]
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "verified"]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  ledgerState, promoActive, promoCandidate, promoBase,
-                  approved, poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 (* Owner approval gate. Review authorizes a verified transition.             *)
 
@@ -183,9 +222,10 @@ Approve(c) ==
   /\ promoStatus[c] = "verified"
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "approved"]
   /\ approved' = [approved EXCEPT ![c] = TRUE]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  ledgerState, promoActive, promoCandidate, promoBase,
-                  poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
 (* The commit point: atomic route-pointer flip. Guards:                    *)
@@ -196,15 +236,17 @@ Approve(c) ==
 Commit(c) ==
   /\ promoStatus[c] = "approved"
   /\ \A l \in Ledgers : ledgerState[c][l] = "prepared"
-  /\ promoBase[c] = activeBase[promoActive[c]]
+  /\ promoCodeBase[c] = activeCodeBase[promoActive[c]]
+  /\ promoArtifactBase[c] = activeArtifactBase[promoActive[c]]
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "committed"]
   /\ route' = [s \in Slots |->
                 IF route[s] = promoActive[c]
                   THEN promoCandidate[c]
                   ELSE route[s]]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, ledgerState,
-                  promoActive, promoCandidate, promoBase, approved,
-                  poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, ledgerState,
+                  promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 (* Pre-pivot abandonment: backward recovery is always safe before commit.   *)
 (* Abort atomically rolls back all prepared secondaries.                     *)
@@ -217,9 +259,10 @@ Abort(c) ==
                          IF ledgerState[c][l] = "prepared"
                            THEN "rolled_back"
                            ELSE ledgerState[c][l]]]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  promoActive, promoCandidate, promoBase, approved,
-                  poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
 (* Reconciliation: secondaries follow the commit point.                    *)
@@ -230,17 +273,19 @@ ApplySecondary(c, l) ==
   /\ healthWindow[c] = "open"
   /\ ledgerState[c][l] = "prepared"
   /\ ledgerState' = [ledgerState EXCEPT ![c][l] = "applied"]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  promoStatus, promoActive, promoCandidate, promoBase,
-                  approved, poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  promoStatus, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 RollbackSecondary(c, l) ==
   /\ promoStatus[c] \in {"aborted", "reverted"}
   /\ ledgerState[c][l] \in {"prepared", "applied"}
   /\ ledgerState' = [ledgerState EXCEPT ![c][l] = "rolled_back"]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  promoStatus, promoActive, promoCandidate, promoBase,
-                  approved, poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  promoStatus, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
 (* Post-commit health window (try-then-confirm).                             *)
@@ -250,9 +295,10 @@ RollbackSecondary(c, l) ==
 PoisonedWrite(c) ==
   /\ promoStatus[c] = "committed"
   /\ poisoned' = [poisoned EXCEPT ![c] = TRUE]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
                   ledgerState, promoStatus, promoActive, promoCandidate,
-                  promoBase, approved, healthWindow>>
+                  promoCodeBase, promoArtifactBase, approved, healthWindow>>
 
 (* Health check fails while the window is open. This is the "try" half.     *)
 
@@ -261,9 +307,10 @@ HealthCheckFail(c) ==
   /\ healthWindow[c] = "open"
   /\ poisoned[c] = FALSE
   /\ healthWindow' = [healthWindow EXCEPT ![c] = "failed"]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
                   ledgerState, promoStatus, promoActive, promoCandidate,
-                  promoBase, approved, poisoned>>
+                  promoCodeBase, promoArtifactBase, approved, poisoned>>
 
 (* Confirm healthy: all secondaries applied and window not poisoned.        *)
 
@@ -274,9 +321,10 @@ ConfirmHealthy(c) ==
   /\ \A l \in Ledgers : ledgerState[c][l] = "applied"
   /\ promoStatus' = [promoStatus EXCEPT ![c] = "confirmed"]
   /\ healthWindow' = [healthWindow EXCEPT ![c] = "confirmed"]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, route,
-                  ledgerState, promoActive, promoCandidate, promoBase,
-                  approved, poisoned>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, route,
+                  ledgerState, promoActive, promoCandidate, promoCodeBase,
+                  promoArtifactBase, approved, poisoned>>
 
 (* Auto-revert on failed health check. Allowed only while rollback window     *)
 (* is open (not poisoned). Reverts the route pointer to the active parent   *)
@@ -296,14 +344,17 @@ AutoRevert(c) ==
                          IF ledgerState[c][l] \in {"prepared", "applied"}
                            THEN "rolled_back"
                            ELSE ledgerState[c][l]]]
-  /\ UNCHANGED <<activeBase, candidateBase, candidateParent, promoActive,
-                  promoCandidate, promoBase, approved, poisoned, healthWindow>>
+  /\ UNCHANGED <<activeCodeBase, activeArtifactBase, candidateCodeBase,
+                  candidateArtifactBase, candidateParent, promoActive,
+                  promoCandidate, promoCodeBase, promoArtifactBase,
+                  approved, poisoned, healthWindow>>
 
 --------------------------------------------------------------------------
 (* The full next-state relation.                                             *)
 
 Next ==
-  \/ \E a \in ActiveComps : MoveActiveTail(a)
+  \/ \E a \in ActiveComps : MoveActiveCode(a)
+  \/ \E a \in ActiveComps : MoveActiveArtifact(a)
   \/ \E c \in CandidateComps, a \in ActiveComps : ForkCandidate(c, a)
   \/ \E c \in CandidateComps : Restage(c)
   \/ \E c \in CandidateComps : Verify(c)
@@ -326,7 +377,8 @@ Next ==
 (* active computer continues to move after a promotion is committed.           *)
 NoStaleCommit ==
   [][\A c \in CandidateComps :
-       Commit(c) => promoBase[c] = activeBase[promoActive[c]]]_vars
+       Commit(c) => /\ promoCodeBase[c] = activeCodeBase[promoActive[c]]
+                     /\ promoArtifactBase[c] = activeArtifactBase[promoActive[c]]]_vars
 
 (* Nothing becomes route-visible without owner approval.                      *)
 ApprovalGate ==
@@ -375,18 +427,25 @@ AbortedLedgersRolledBack ==
 CertificateCompleteness ==
   \A c \in CandidateComps :
     promoStatus[c] \in CommittedFamily \cup TerminalStates
-      => promoBase[c] >= 0 /\ promoCandidate[c] = c
+      => promoCodeBase[c] >= 0 /\ promoArtifactBase[c] >= 0
+         /\ promoCandidate[c] = c
 
-(* Route and promotion certificates name ComputerVersion through the explicit *)
-(* refinement seam from bounded base versions to (CodeRef, ArtifactProgramRef). *)
-RouteNamesComputerVersion ==
+(* Route and promotion certificates name ComputerVersion through the explicit   *)
+(* refinement seam from independent code/artifact counters to                  *)
+(* (CodeRef, ArtifactProgramRef).  These invariants are non-vacuous because     *)
+(* code and artifact counters can diverge independently: a code-only update     *)
+(* produces a ComputerVersion where codeRef > artifactProgramRef, which is      *)
+(* still in ComputerVersions (the full product set) but the invariant would     *)
+(* fail if an action produced an out-of-bounds ref.                             *)
+RouteVersionValid ==
   \A s \in Slots :
     ComputerVersionOfRoutedComputer(route[s]) \in ComputerVersions
 
-PromotionNamesComputerVersion ==
+PromotionVersionValid ==
   \A c \in CandidateComps :
     promoStatus[c] \in CommittedFamily \cup TerminalStates
-      => ComputerVersionOfBase(promoBase[c]) \in ComputerVersions
+      => ComputerVersionOfBase(promoCodeBase[c], promoArtifactBase[c])
+         \in ComputerVersions
 
 --------------------------------------------------------------------------
 (* Liveness: what must eventually happen.                                   *)
@@ -406,7 +465,9 @@ EveryCommittedPromotionSettles ==
 (* system must make progress on prepare/verify/restage when enabled.        *)
 SystemProgress ==
   \A c \in CandidateComps :
-    (promoStatus[c] = "staging" /\ promoBase[c] = activeBase[promoActive[c]])
+    (promoStatus[c] = "staging"
+     /\ promoCodeBase[c] = activeCodeBase[promoActive[c]]
+     /\ promoArtifactBase[c] = activeArtifactBase[promoActive[c]])
       ~> (promoStatus[c] \in {"verified", "approved"} \cup TerminalStates)
 
 Fairness ==

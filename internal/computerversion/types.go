@@ -1,10 +1,15 @@
 // Package computerversion defines the substrate-independent value vocabulary
 // for Choir audited computers.
 //
-// The package is intentionally pure: it performs no filesystem, network,
-// database, hypervisor, clock, or random operations. It gives higher layers a
-// small contract for naming the durable computer version, declaring materializer
-// capabilities, and carrying observation sets into equivalence checks.
+// The contract types (ComputerVersion, CapabilityManifest, ObservationSet,
+// EquivalenceChecker, and all *_contract.go structs) are pure value types: they
+// perform no filesystem, network, database, hypervisor, or random operations.
+//
+// The observation extraction layer (base_current_state_loader.go, base_blob.go,
+// base_journal.go, base_tree.go) performs read-only I/O via internal/base/blob
+// and internal/base/journal to load scoped observations from existing Base
+// persistence. These extraction functions use context for cancellation and
+// crypto/sha256 for content addressing, but do not mutate product state.
 package computerversion
 
 import (

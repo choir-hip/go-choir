@@ -1,20 +1,19 @@
 # Landing Brief: Substrate-Independent Audited Computer Changeset
 
-**Date:** 2026-07-04 (updated for Pass 125)
+**Date:** 2026-07-04 (updated post-landing)
 **For:** The agent that ran Passes 0-125 of the autoputer-autopaper spec-first suite.
 **From:** Multi-agent review (Devin + Claude Code + Codex), see
 `docs/reviews/substrate-independent-audited-computer-changeset-review-2026-07-04.md`
 for full findings.
 
-## Why You're Reading This
+## Status: LANDED
 
-You were asked to stop after Pass 125. The work is not rejected. The mission
-direction is sound. But the changeset has grown to ~40k LOC uncommitted across
-36 paths (116 Go files in computerversion, 39 contract files, 5,490 ledger
-lines), and a multi-agent review found three bugs that need fixing before
-anything lands, plus a strategic decision (PGo) that changes the refactoring
-plan. You have tacit knowledge from 125 passes that this brief needs you to
-apply.
+The agent fixed all three bugs and landed the full changeset as commit
+`30f0301f` on `main` (156 files, 49,807 insertions). CI passed (runs
+28723175791, 28723175801, 28723175802, 28723175805). Working tree is clean.
+The agent's self-review confirmed the review findings and acknowledged
+boundary inflation. The landing brief's job is done. The remaining sections
+are preserved for reference and for planning the next phase.
 
 ## What Happened in Passes 104-125
 

@@ -10,10 +10,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/cmdutil"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 )
-
-const stdinPath = "-"
 
 type config struct {
 	leftPath  string
@@ -55,7 +54,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 func parseConfig(args []string, stderr io.Writer) (config, error) {
 	fs := flag.NewFlagSet("basecompare", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	cfg := config{leftPath: stdinPath}
+	cfg := config{leftPath: cmdutil.StdinPath}
 	fs.StringVar(&cfg.leftPath, "left", cfg.leftPath, "Base current-state ObservationSet JSON path, or '-' for stdin")
 	fs.StringVar(&cfg.rightPath, "right", "", "file-projection ObservationSet JSON path; defaults to --left")
 	if err := fs.Parse(args); err != nil {
@@ -71,44 +70,12 @@ func (cfg config) validate() error {
 	if strings.TrimSpace(cfg.leftPath) == "" {
 		return errors.New("basecompare: --left is required")
 	}
-	if strings.TrimSpace(cfg.rightPath) == stdinPath && strings.TrimSpace(cfg.leftPath) == stdinPath {
+	if strings.TrimSpace(cfg.rightPath) == cmdutil.StdinPath && strings.TrimSpace(cfg.leftPath) == cmdutil.StdinPath {
 		return errors.New("basecompare: --left and --right cannot both read stdin")
 	}
 	return nil
 }
 
 func loadObservationSets(cfg config, stdin io.Reader) (computerversion.ObservationSet, computerversion.ObservationSet, error) {
-	left, err := readObservationSet(cfg.leftPath, stdin)
-	if err != nil {
-		return computerversion.ObservationSet{}, computerversion.ObservationSet{}, fmt.Errorf("read left observation set: %w", err)
-	}
-	if strings.TrimSpace(cfg.rightPath) == "" {
-		return left, left, nil
-	}
-	right, err := readObservationSet(cfg.rightPath, stdin)
-	if err != nil {
-		return computerversion.ObservationSet{}, computerversion.ObservationSet{}, fmt.Errorf("read right observation set: %w", err)
-	}
-	return left, right, nil
-}
-
-func readObservationSet(path string, stdin io.Reader) (computerversion.ObservationSet, error) {
-	var reader io.Reader
-	if strings.TrimSpace(path) == stdinPath {
-		reader = stdin
-	} else {
-		file, err := os.Open(path)
-		if err != nil {
-			return computerversion.ObservationSet{}, err
-		}
-		defer file.Close()
-		reader = file
-	}
-	var set computerversion.ObservationSet
-	dec := json.NewDecoder(reader)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&set); err != nil {
-		return computerversion.ObservationSet{}, err
-	}
-	return set, nil
+	return cmdutil.LoadObservationSets(cfg.leftPath, cfg.rightPath, stdin, "basecompare")
 }

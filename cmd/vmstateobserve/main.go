@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/cmdutil"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 )
 
@@ -145,42 +146,13 @@ func (cfg config) observationSet() (computerversion.ObservationSet, error) {
 }
 
 func (cfg config) epoch() (int64, error) {
-	if strings.TrimSpace(cfg.epochRaw) == "" {
-		return 0, nil
-	}
-	epoch, err := strconv.ParseInt(strings.TrimSpace(cfg.epochRaw), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("vmstateobserve: --epoch must be an int64: %w", err)
-	}
-	return epoch, nil
+	return cmdutil.ParseEpoch(cfg.epochRaw, "vmstateobserve")
 }
 
 func requireDirIfSet(flagName, path string) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("vmstateobserve: %s %q: %w", flagName, path, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("vmstateobserve: %s %q is not a directory", flagName, path)
-	}
-	return nil
+	return cmdutil.RequireDirIfSet(flagName, path, "vmstateobserve")
 }
 
 func requireFileIfSet(flagName, path string) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("vmstateobserve: %s %q: %w", flagName, path, err)
-	}
-	if info.IsDir() {
-		return fmt.Errorf("vmstateobserve: %s %q is a directory", flagName, path)
-	}
-	return nil
+	return cmdutil.RequireFileIfSet(flagName, path, "vmstateobserve")
 }

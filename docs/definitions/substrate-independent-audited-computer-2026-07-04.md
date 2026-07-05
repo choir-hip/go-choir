@@ -956,7 +956,31 @@ route_registration_assessment:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: checkpoint_incomplete
-  last_checkpoint: Pass 125 complete; human landing override accepted. Pass 126 boundary-inflation ceremony was not executed and is superseded by the landing brief's Phase 0 correctness fixes: intake ownership upsert, intake transition optimistic concurrency, and deployed write-route guard. Do not add further boundary-only contracts before landing these fixes.
+  last_checkpoint: |
+    Pass 125 landed as commit 30f0301f on main (156 files, 49,807 insertions, CI green).
+    Three landing-blocker bugs fixed: intake ownership upsert, intake transition
+    optimistic concurrency (CAS), deployed write-route guard (env var panic).
+
+    Substrate hardening mission (docs/missions/substrate-hardening-v0.md) executed:
+    - PGo evaluation: CONDITIONAL GO for spec verification, NO-GO for code generation.
+      PGo builds on Mill/JDK 24/Scala 3.7.3. gogen produces compilable Go (842 lines).
+      Integration cost too high: distsys ~8.9k LOC, tla.Value type system, no actor
+      integration, fairness model mismatch. Use PGo for MPCal+TLC spec verification only.
+    - TLA+ invariants strengthened: independent code/artifact counters replace vacuous
+      single-counter invariants. RouteVersionValid and PromotionVersionValid replace
+      RouteNamesComputerVersion and PromotionNamesComputerVersion. TLC passes (1908
+      distinct states, 0 errors).
+    - Purity claim fixed in internal/computerversion/types.go: doc now accurately
+      describes contract types as pure and extraction layer as read-only I/O.
+    - Shared ContractHeader and NegativeClaims types created in contract_header.go.
+      Full contract consolidation deferred (cascading dependency across 39 files).
+    - cmd binary shared code extracted to internal/cmdutil: observation set loading,
+      epoch parsing, path validation. basecompare, vmstatecompare, vmrealize,
+      vmstateobserve updated and tests pass.
+
+    SIAC major gates remain open: cross-substrate proof, data.img disposability,
+    promotion/rollback over ComputerVersion, staging/product proof for behavior changes.
+    Next axis: real Firecracker + non-identical projection for same ComputerVersion.
   active_red_ceremony: null
   completed_red_ceremonies:
     - pass: 125
