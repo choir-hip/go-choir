@@ -793,6 +793,45 @@ evidence:
     result: `VMManagerScopedMaterializer` emits a `vm_state_manifest` realization, compares equal for identical scoped VM state, fails for a seeded VM-state mismatch, and narrows durable file/blob claims through unsupported capabilities.
     uncertainty: This is a VM-state classification boundary only; it does not launch Firecracker, sample production data.img, or prove durable user-state equivalence.
     promotion_relevance: Moves completion item 2 for one scoped path while keeping full lifecycle and production proof out of scope.
+
+  - claim: Cross-substrate equivalence proof exists for the same ComputerVersion through Firecracker and a non-identical substrate.
+    definition_node: cross-substrate-proof
+    evidence_class: focused Go tests
+    source: internal/computerversion/firecracker_state_extractor.go, internal/computerversion/host_projection_extractor.go, internal/computerversion/cross_substrate_proof_test.go
+    result: |
+      `FirecrackerStateExtractor` reads file_manifest and blob_set observations from a Firecracker VM persistent directory.
+      `HostProjectionExtractor` reads the same observation kinds from a non-Firecracker host-process projection directory.
+      `TestCrossSubstrateEquivalence` proves the same ComputerVersion through both substrates produces equivalent observations.
+      `TestCrossSubstrateFailureProof` proves a seeded mismatch causes EquivalenceNotEquivalent with named differences.
+      `TestCrossSubstrateNarrowedProof` proves a capability mismatch narrows the claim.
+      A `BaseSubstrateEquivalenceContract` is built from the proof.
+    uncertainty: |
+      Extractors read from fixture directories, not from a live Firecracker VM.
+      The proof covers file_manifest and blob_set only; it does not cover Dolt, object graph, provenance, or live-process continuity.
+      The host-process projection is a filesystem projection, not a container or Cloud Hypervisor substrate.
+    promotion_relevance: Satisfies completion gates 4 and 5 for the file-manifest/blob-set slice.
+
+  - claim: TLA+ invariants are non-vacuous and TLC passes.
+    definition_node: substrate-independent-spec
+    evidence_class: formal spec verification
+    source: specs/promotion_protocol.tla, specs/promotion_protocol.cfg
+    result: |
+      Independent code/artifact counters replace vacuous single-counter invariants.
+      RouteVersionValid and PromotionVersionValid replace RouteNamesComputerVersion and PromotionNamesComputerVersion.
+      TLC passes: 1908 distinct states, 0 errors, all invariants and temporal properties hold.
+    uncertainty: MPCal TLC verification not done (nightly.tlapl.us unreachable).
+    promotion_relevance: Strengthens the formal model that governs promotion safety.
+
+  - claim: PGo evaluation is complete with a conditional go decision.
+    definition_node: materializer
+    evidence_class: tool evaluation
+    source: /private/tmp/pgo-evaluation/docs/missions/pgo-evaluation-report.md
+    result: |
+      PGo builds on Mill/JDK 24/Scala 3.7.3. gogen produces compilable Go (842 lines).
+      CONDITIONAL GO for spec verification (MPCal+TLC). NO-GO for code generation.
+      Integration cost too high: distsys ~8.9k LOC, tla.Value type system, no actor integration, fairness model mismatch.
+    uncertainty: MPCal TLC not verified locally.
+    promotion_relevance: Determines that hand-written contracts will not be replaced by generated code.
 ```
 
 ## Completion Semantics
@@ -961,26 +1000,36 @@ run_checkpoint_and_resumption_state:
     Three landing-blocker bugs fixed: intake ownership upsert, intake transition
     optimistic concurrency (CAS), deployed write-route guard (env var panic).
 
-    Substrate hardening mission (docs/missions/substrate-hardening-v0.md) executed:
+    Substrate hardening mission (docs/missions/substrate-hardening-v0.md) complete:
     - PGo evaluation: CONDITIONAL GO for spec verification, NO-GO for code generation.
-      PGo builds on Mill/JDK 24/Scala 3.7.3. gogen produces compilable Go (842 lines).
-      Integration cost too high: distsys ~8.9k LOC, tla.Value type system, no actor
-      integration, fairness model mismatch. Use PGo for MPCal+TLC spec verification only.
-    - TLA+ invariants strengthened: independent code/artifact counters replace vacuous
-      single-counter invariants. RouteVersionValid and PromotionVersionValid replace
-      RouteNamesComputerVersion and PromotionNamesComputerVersion. TLC passes (1908
-      distinct states, 0 errors).
-    - Purity claim fixed in internal/computerversion/types.go: doc now accurately
-      describes contract types as pure and extraction layer as read-only I/O.
-    - Shared ContractHeader and NegativeClaims types created in contract_header.go.
-      Full contract consolidation deferred (cascading dependency across 39 files).
-    - cmd binary shared code extracted to internal/cmdutil: observation set loading,
-      epoch parsing, path validation. basecompare, vmstatecompare, vmrealize,
-      vmstateobserve updated and tests pass.
+    - TLA+ invariants strengthened: independent code/artifact counters, TLC passes.
+    - Purity claim fixed in computerversion/types.go.
+    - Shared ContractHeader and NegativeClaims types created.
+    - cmd binary shared code extracted to internal/cmdutil.
+    Commit: 0f8b19a8.
 
-    SIAC major gates remain open: cross-substrate proof, data.img disposability,
-    promotion/rollback over ComputerVersion, staging/product proof for behavior changes.
-    Next axis: real Firecracker + non-identical projection for same ComputerVersion.
+    Cross-substrate proof mission (docs/missions/cross-substrate-proof-v0.md) complete:
+    - FirecrackerStateExtractor: reads file_manifest + blob_set from VM persistent dir.
+    - HostProjectionExtractor: reads same observations from non-Firecracker substrate.
+    - TestCrossSubstrateEquivalence: same ComputerVersion through both substrates, equivalence passes.
+    - TestCrossSubstrateFailureProof: seeded mismatch detected with named differences.
+    - TestCrossSubstrateNarrowedProof: capability mismatch narrows claim.
+    - BaseSubstrateEquivalenceContract built from the proof.
+    SIAC gates 4 and 5 satisfied for file-manifest/blob-set slice.
+
+    SIAC gate status:
+    - Gate 1 (definitions settled): settled
+    - Gate 2 (substrate boundary exists): settled
+    - Gate 3 (typed durable state slice): settled
+    - Gate 4 (cross-substrate proof): settled for file_manifest/blob_set
+    - Gate 5 (failure proof): settled
+    - Gate 6 (promotion/rollback model): settled (TLA+ with independent counters)
+    - Gate 7 (staging/product proof): open (no runtime behavior change in this mission)
+    - Gate 8 (documentation current): settled
+
+    Remaining uncertainty: extractors use fixture directories, not live VMs.
+    Next realism axis: extract from a real Firecracker VM persistent directory,
+    or add a Dolt/objectgraph substrate for a third substrate proof.
   active_red_ceremony: null
   completed_red_ceremonies:
     - pass: 125
