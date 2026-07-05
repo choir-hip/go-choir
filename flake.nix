@@ -218,7 +218,7 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
-          vendorHash = "sha256-3fI2LRkE9IJwVgMj6V/3MYbO46kpFhy2opEK5UEbhG0=";
+          vendorHash = "sha256-QrspfxtHqlTaQKVhkQKxYeoFF5TXmC21Mf5N3lLjwHg=";
           internalDirs = [
             "internal/auth"
             "internal/server"
@@ -227,7 +227,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = "sha256-1PECBS1qDS7COSOIoYuNqqRvTbBr8epH9HNMYWqSANg=";
+          vendorHash = "sha256-VWqAiOlvLJtOe77Qhn4s3tjAi3Tnu+kEjIyEAjHJ5YQ=";
           internalDirs = [
             "internal/auth"
             "internal/buildinfo"
@@ -247,7 +247,7 @@
         maild = mkGoService {
           pname = "maild";
           subPackage = "cmd/maild";
-          vendorHash = "sha256-25DrJCeURo8pPy8o0m9pwxXr9EvGTZYKHsEUpsS+WDU=";
+          vendorHash = "sha256-E3klM1YpHjPhf2Zn+e/1JxzghFAal7o2DuLTSKP/H8g=";
           internalDirs = [
             "internal/buildinfo"
             "internal/maild"
@@ -257,7 +257,7 @@
         maildctl = mkGoService {
           pname = "maildctl";
           subPackage = "cmd/maildctl";
-          vendorHash = "sha256-25DrJCeURo8pPy8o0m9pwxXr9EvGTZYKHsEUpsS+WDU=";
+          vendorHash = "sha256-E3klM1YpHjPhf2Zn+e/1JxzghFAal7o2DuLTSKP/H8g=";
           internalDirs = [
             "internal/maild"
             "internal/server"
@@ -266,7 +266,7 @@
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";
-          vendorHash = "sha256-25DrJCeURo8pPy8o0m9pwxXr9EvGTZYKHsEUpsS+WDU=";
+          vendorHash = "sha256-E3klM1YpHjPhf2Zn+e/1JxzghFAal7o2DuLTSKP/H8g=";
           internalDirs = [
             "internal/buildinfo"
             "internal/server"
@@ -277,7 +277,7 @@
         gateway = mkGoService {
           pname = "gateway";
           subPackage = "cmd/gateway";
-          vendorHash = "sha256-lF7qnT9GyADK3AQ+5oASUrYVttjH9SHv+TzSsModXeI=";
+          vendorHash = pkgs.lib.fakeHash;
           internalDirs = [
             "internal/agentprofile"
             "internal/buildinfo"
@@ -315,7 +315,7 @@
         corpusd = mkGoService {
           pname = "corpusd";
           subPackage = "cmd/corpusd";
-          vendorHash = "sha256-A0LB5SCE0xfeI/I4NbwMmAHBIWgNOP9Nf4gAKQ7SZGQ=";
+          vendorHash = "sha256-Brp+PtHUcw1pk++J2MRibuRB63lBhPEwAMNiap5wMAo=";
           internalDirs = [
             "internal/buildinfo"
             "internal/markdownstructure"
@@ -329,7 +329,7 @@
         sourcecycled = mkGoService {
           pname = "sourcecycled";
           subPackage = "cmd/sourcecycled";
-          vendorHash = "sha256-lF7qnT9GyADK3AQ+5oASUrYVttjH9SHv+TzSsModXeI=";
+          vendorHash = pkgs.lib.fakeHash;
           internalDirs = [
             "internal/agentprofile"
             "internal/buildinfo"
@@ -367,7 +367,7 @@
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
-          vendorHash = "sha256-lF7qnT9GyADK3AQ+5oASUrYVttjH9SHv+TzSsModXeI=";
+          vendorHash = pkgs.lib.fakeHash;
           internalDirs = [
             "internal/actor"
             "internal/actorruntime"
