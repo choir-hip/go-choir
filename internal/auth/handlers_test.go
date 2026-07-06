@@ -4529,3 +4529,92 @@ func TestCreateAPIKeyRejectsPastExpiry(t *testing.T) {
 		t.Errorf("status: got %d, want %d; body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
+
+// TestListAPIKeysWithBearerToken verifies that the API key management routes
+// accept Bearer token (API key) auth in addition to cookie auth. This enables
+// CLI management of API keys with an existing key.
+func TestListAPIKeysWithBearerToken(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-list-user", "bearerlist@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	// Create an API key via cookie auth.
+	body := `{"label":"first key","scopes":["read:texture","read:base"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create key: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	var createResp createAPIKeyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if createResp.Secret == "" {
+		t.Fatal("no secret in create response")
+	}
+
+	// List keys using Bearer token auth (no cookie).
+	listReq := httptest.NewRequest(http.MethodGet, "/auth/api-keys", nil)
+	listReq.Header.Set("Authorization", "Bearer "+createResp.Secret)
+	listRec := httptest.NewRecorder()
+	h.HandleListAPIKeys(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list keys with bearer: status %d, body %s", listRec.Code, listRec.Body.String())
+	}
+	var listResp listAPIKeysResponse
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listResp.Keys) != 1 {
+		t.Fatalf("expected 1 key, got %d", len(listResp.Keys))
+	}
+	if listResp.Keys[0].Label != "first key" {
+		t.Fatalf("label = %q, want first key", listResp.Keys[0].Label)
+	}
+}
+
+// TestCreateAPIKeyWithBearerToken verifies that a new API key can be created
+// using an existing API key via Bearer token auth.
+func TestCreateAPIKeyWithBearerToken(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-create-user", "bearercreate@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	// Create the first API key via cookie auth.
+	body := `{"label":"first key","scopes":["read:texture"]}`
+	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create first key: status %d, body %s", rec.Code, rec.Body.String())
+	}
+	var firstResp createAPIKeyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &firstResp); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+
+	// Create a second API key using the first key's Bearer token.
+	body2 := `{"label":"second key","scopes":["read:base"]}`
+	createReq := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body2))
+	createReq.Header.Set("Authorization", "Bearer "+firstResp.Secret)
+	createRec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create second key with bearer: status %d, body %s", createRec.Code, createRec.Body.String())
+	}
+	var secondResp createAPIKeyResponse
+	if err := json.Unmarshal(createRec.Body.Bytes(), &secondResp); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if secondResp.Secret == "" {
+		t.Fatal("no secret in second create response")
+	}
+	if secondResp.Label != "second key" {
+		t.Fatalf("label = %q, want second key", secondResp.Label)
+	}
+}

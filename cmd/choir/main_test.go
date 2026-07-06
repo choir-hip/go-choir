@@ -173,3 +173,182 @@ func TestUnknownCommand(t *testing.T) {
 		t.Fatalf("stderr = %q, want unknown command", errOut.String())
 	}
 }
+
+// TestRunStartPostsToPromptBar asserts the run start command POSTs to
+// /api/prompt-bar with the prompt text and decodes the submission response.
+func TestRunStartPostsToPromptBar(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/prompt-bar" {
+			t.Errorf("path = %q, want /api/prompt-bar", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body["text"] != "hello world" {
+			t.Fatalf("text = %q, want hello world", body["text"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = io.WriteString(w, `{"submission_id":"sub-123","state":"pending","created_at":"2026-07-06T00:00:00.000Z","status_url":"/api/prompt-bar/submissions/sub-123"}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"run", "start", "--api-key=choir_sk_test", "--host=" + stub.URL, "hello", "world"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp promptBarSubmitResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if resp.SubmissionID != "sub-123" {
+		t.Fatalf("submission_id = %q, want sub-123", resp.SubmissionID)
+	}
+}
+
+// TestRunStartRequiresText asserts the run start command fails when no prompt
+// text is provided.
+func TestRunStartRequiresText(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"run", "start", "--api-key=choir_sk_test"}, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "prompt text required") {
+		t.Fatalf("stderr = %q, want prompt text required", errOut.String())
+	}
+}
+
+// TestRunStatusHitsSubmissionEndpoint asserts the run status command GETs the
+// submission status endpoint.
+func TestRunStatusHitsSubmissionEndpoint(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/prompt-bar/submissions/sub-123" {
+			t.Errorf("path = %q, want /api/prompt-bar/submissions/sub-123", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"submission_id":"sub-123","state":"completed","created_at":"2026-07-06T00:00:00.000Z","updated_at":"2026-07-06T00:01:00.000Z"}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"run", "status", "--api-key=choir_sk_test", "--host=" + stub.URL, "sub-123"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if resp["state"] != "completed" {
+		t.Fatalf("state = %v, want completed", resp["state"])
+	}
+}
+
+// TestAPIKeyListHitsAuthEndpoint asserts the api-key list command GETs
+// /auth/api-keys with the Bearer token.
+func TestAPIKeyListHitsAuthEndpoint(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/api-keys" {
+			t.Errorf("path = %q, want /auth/api-keys", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer choir_sk_test" {
+			t.Errorf("Authorization = %q, want Bearer choir_sk_test", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"keys":[{"id":"ak_1","label":"CLI key","scopes":["read:texture"],"created_at":"2026-07-06T00:00:00Z"}]}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"api-key", "list", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	keys, ok := resp["keys"].([]any)
+	if !ok || len(keys) != 1 {
+		t.Fatalf("keys = %v, want one key", resp["keys"])
+	}
+}
+
+// TestAPIKeyCreatePostsToAuthEndpoint asserts the api-key create command POSTs
+// to /auth/api-keys with label and scopes.
+func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/api-keys" {
+			t.Errorf("path = %q, want /auth/api-keys", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body["label"] != "Devin CLI" {
+			t.Fatalf("label = %v, want Devin CLI", body["label"])
+		}
+		scopes, ok := body["scopes"].([]any)
+		if !ok || len(scopes) != 1 || scopes[0] != "read:texture" {
+			t.Fatalf("scopes = %v, want [read:texture]", body["scopes"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"ak_new","label":"Devin CLI","scopes":["read:texture"],"secret":"choir_sk_newkey"}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"api-key", "create", "--label=Devin CLI", "--scopes=read:texture", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if resp["secret"] != "choir_sk_newkey" {
+		t.Fatalf("secret = %v, want choir_sk_newkey", resp["secret"])
+	}
+}
+
+// TestAPIKeyRevokeDeletesKey asserts the api-key revoke command DELETEs the
+// specified key.
+func TestAPIKeyRevokeDeletesKey(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/api-keys/ak_123" {
+			t.Errorf("path = %q, want /auth/api-keys/ak_123", r.URL.Path)
+		}
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %q, want DELETE", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"api-key", "revoke", "--api-key=choir_sk_test", "--host=" + stub.URL, "ak_123"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "ak_123") {
+		t.Fatalf("stdout = %q, want it to mention ak_123", out.String())
+	}
+}

@@ -25,6 +25,116 @@
   let themeError = '';
   let themeNotice = '';
 
+  // API key management state
+  let apiKeys = [];
+  let apiKeyLoading = false;
+  let apiKeyError = '';
+  let apiKeyNotice = '';
+  let newKeyLabel = '';
+  let newKeyScopes = ['read:texture', 'read:base', 'read:runtime'];
+  let newKeySecret = '';
+  let showNewKeySecret = false;
+  let copiedKey = false;
+
+  const allScopes = [
+    { value: 'read:texture', label: 'Read Texture' },
+    { value: 'write:texture', label: 'Write Texture' },
+    { value: 'read:base', label: 'Read Base' },
+    { value: 'write:base', label: 'Write Base' },
+    { value: 'read:runtime', label: 'Read Runtime' },
+    { value: 'write:runtime', label: 'Write Runtime' },
+    { value: 'admin', label: 'Admin' },
+  ];
+
+  async function loadAPIKeys() {
+    apiKeyLoading = true;
+    apiKeyError = '';
+    try {
+      const res = await fetchWithRenewal('/auth/api-keys', { method: 'GET' });
+      if (!res.ok) throw new Error(`Failed to load API keys (${res.status})`);
+      const data = await res.json();
+      apiKeys = Array.isArray(data) ? data : (data.keys || []);
+    } catch (err) {
+      if (err instanceof AuthRequiredError) { dispatch('authexpired'); return; }
+      apiKeyError = err.message || 'Failed to load API keys';
+    } finally {
+      apiKeyLoading = false;
+    }
+  }
+
+  async function createAPIKey() {
+    apiKeyError = '';
+    apiKeyNotice = '';
+    const label = newKeyLabel.trim() || 'CLI key';
+    try {
+      const res = await fetchWithRenewal('/auth/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, scopes: newKeyScopes }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Failed to create API key (${res.status}): ${body}`);
+      }
+      const data = await res.json();
+      newKeySecret = data.secret || '';
+      showNewKeySecret = true;
+      newKeyLabel = '';
+      apiKeyNotice = 'API key created. Copy the secret now — it won\'t be shown again.';
+      void loadAPIKeys();
+    } catch (err) {
+      if (err instanceof AuthRequiredError) { dispatch('authexpired'); return; }
+      apiKeyError = err.message || 'Failed to create API key';
+    }
+  }
+
+  async function revokeAPIKey(keyId) {
+    apiKeyError = '';
+    apiKeyNotice = '';
+    try {
+      const res = await fetchWithRenewal(`/auth/api-keys/${keyId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Failed to revoke API key (${res.status})`);
+      apiKeyNotice = 'API key revoked.';
+      void loadAPIKeys();
+    } catch (err) {
+      if (err instanceof AuthRequiredError) { dispatch('authexpired'); return; }
+      apiKeyError = err.message || 'Failed to revoke API key';
+    }
+  }
+
+  function toggleScope(scope) {
+    if (newKeyScopes.includes(scope)) {
+      newKeyScopes = newKeyScopes.filter(s => s !== scope);
+    } else {
+      newKeyScopes = [...newKeyScopes, scope];
+    }
+  }
+
+  function copySecret() {
+    if (newKeySecret) {
+      navigator.clipboard.writeText(newKeySecret).then(() => {
+        copiedKey = true;
+        setTimeout(() => { copiedKey = false; }, 2000);
+      });
+    }
+  }
+
+  function dismissNewKeySecret() {
+    showNewKeySecret = false;
+    newKeySecret = '';
+    apiKeyNotice = '';
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch (_e) {
+      return dateStr;
+    }
+  }
+
   $: themeValidation = validateThemeConfig(selectedTheme);
   $: themePreviewVars = themeCSSVariables(selectedTheme);
 
@@ -128,6 +238,7 @@
     selectedTheme = currentUser?.email ? await loadStoredTheme() : normalizeThemeConfig(currentTheme);
     themeJSON = JSON.stringify(selectedTheme, null, 2);
     void refreshStatus();
+    if (currentUser?.email) void loadAPIKeys();
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
       if (kind === 'theme.updated') {
@@ -162,6 +273,88 @@
       </div>
       <strong class="account-email">{currentUser?.email || 'Public preview'}</strong>
     </section>
+
+    {#if currentUser?.email}
+      <section class="settings-card api-keys-card" data-settings-api-keys>
+        <div>
+          <h3>API keys</h3>
+          <p class="muted">Create keys for CLI access and coding agents. The secret is shown once — copy it immediately.</p>
+        </div>
+
+        {#if showNewKeySecret}
+          <div class="api-key-secret-banner" data-api-key-secret-banner>
+            <div class="api-key-secret-row">
+              <code class="api-key-secret" data-api-key-secret>{newKeySecret}</code>
+              <button class="secondary-action" on:click={copySecret}>
+                {copiedKey ? 'Copied!' : 'Copy'}
+              </button>
+              <button class="secondary-action" on:click={dismissNewKeySecret}>Done</button>
+            </div>
+            <p class="theme-notice">{apiKeyNotice}</p>
+          </div>
+        {:else}
+          <div class="api-key-create-form" data-api-key-create-form>
+            <input
+              type="text"
+              class="api-key-label-input"
+              data-api-key-label-input
+              placeholder="Key label (e.g. Devin CLI)"
+              value={newKeyLabel}
+              on:input={(e) => newKeyLabel = e.currentTarget.value}
+            />
+            <div class="api-key-scopes" data-api-key-scopes>
+              {#each allScopes as scope}
+                <label class="scope-chip" class:active={newKeyScopes.includes(scope.value)}>
+                  <input
+                    type="checkbox"
+                    checked={newKeyScopes.includes(scope.value)}
+                    on:change={() => toggleScope(scope.value)}
+                  />
+                  <span>{scope.label}</span>
+                </label>
+              {/each}
+            </div>
+            <button class="secondary-action" data-api-key-create-btn on:click={createAPIKey}>
+              Create API key
+            </button>
+          </div>
+        {/if}
+
+        {#if apiKeyError}
+          <p class="theme-error" data-api-key-error>{apiKeyError}</p>
+        {/if}
+        {#if apiKeyNotice && !showNewKeySecret}
+          <p class="theme-notice" data-api-key-notice>{apiKeyNotice}</p>
+        {/if}
+
+        <div class="api-key-list" data-api-key-list>
+          {#if apiKeyLoading}
+            <p class="muted">Loading keys…</p>
+          {:else if apiKeys.length === 0}
+            <p class="muted">No API keys yet.</p>
+          {:else}
+            {#each apiKeys as key}
+              <div class="api-key-row" class:revoked={key.revoked_at} data-api-key-row={key.id}>
+                <div class="api-key-info">
+                  <strong>{key.label}</strong>
+                  <span class="api-key-meta">
+                    {key.scopes?.join(', ') || 'no scopes'}
+                    · created {formatDate(key.created_at)}
+                    {#if key.last_used_at} · last used {formatDate(key.last_used_at)}{/if}
+                    {#if key.revoked_at} · <strong>revoked</strong>{/if}
+                  </span>
+                </div>
+                {#if !key.revoked_at}
+                  <button class="secondary-action api-key-revoke-btn" on:click={() => revokeAPIKey(key.id)}>
+                    Revoke
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </section>
+    {/if}
 
     <section class="settings-card" data-settings-theme>
       <div>
@@ -586,6 +779,119 @@
     background: var(--choir-status-danger-soft);
     color: var(--choir-status-danger);
     padding: 0.75rem;
+  }
+
+  /* API Keys */
+  .api-keys-card {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .api-key-create-form {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .api-key-label-input {
+    border: 1px solid var(--choir-state-hover);
+    border-radius: var(--choir-radius-control, 20px);
+    background: color-mix(in srgb, var(--choir-bg) 74%, transparent);
+    color: var(--choir-text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.8rem;
+  }
+
+  .api-key-scopes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .scope-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: var(--choir-radius-pill, 30px);
+    background: color-mix(in srgb, var(--choir-bg) 42%, transparent);
+    padding: 0.25rem 0.6rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .scope-chip.active {
+    background: var(--choir-state-selected);
+  }
+
+  .scope-chip input {
+    margin: 0;
+    accent-color: var(--choir-accent);
+  }
+
+  .api-key-secret-banner {
+    border: 1px solid var(--choir-status-success);
+    border-radius: 14px;
+    background: var(--choir-status-success-soft, color-mix(in srgb, var(--choir-accent) 12%, transparent));
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .api-key-secret-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .api-key-secret {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.82rem;
+    background: color-mix(in srgb, var(--choir-bg) 60%, transparent);
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+  }
+
+  .api-key-list {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .api-key-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: var(--choir-radius-control, 20px);
+    background: color-mix(in srgb, var(--choir-surface-control) 76%, transparent);
+    box-shadow: var(--choir-control-shadow);
+    padding: 0.55rem 0.72rem;
+  }
+
+  .api-key-row.revoked {
+    opacity: 0.55;
+  }
+
+  .api-key-info {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .api-key-meta {
+    font-size: 0.75rem;
+    color: var(--choir-text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .api-key-revoke-btn {
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    padding: 0.4rem 0.7rem;
   }
 
   @media (min-width: 860px) {

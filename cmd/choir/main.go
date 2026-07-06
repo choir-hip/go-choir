@@ -1,7 +1,7 @@
 // Command choir is the headless control surface for Choir. It wraps the
 // /api/ HTTP surface with API key (Bearer choir_sk_...) auth so agents and
-// scripts can read Texture documents, observe trajectories, search, and
-// verify the Universal Wire news feed without a browser.
+// scripts can read Texture documents, observe trajectories, search,
+// start runs, and verify the Universal Wire news feed without a browser.
 //
 // Auth: CHOIR_API_KEY env var or --api-key flag. Host: CHOIR_HOST env var
 // or --host flag (defaults to https://choir.news).
@@ -13,6 +13,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -56,6 +57,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runTexture(rest, stdout, stderr)
 	case "search":
 		return runSearch(rest, stdout, stderr)
+	case "run":
+		return runRun(rest, stdout, stderr)
+	case "api-key":
+		return runAPIKey(rest, stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, "choir v0 (Phase 1: existing /api/ routes)")
 		return 0
@@ -83,6 +88,11 @@ Commands:
   texture read <doc>  Read a Texture document + current revision
   texture history <doc>  List revision history for a document
   search <query>      Search the corpus
+  run start <text>    Submit a prompt to the conductor (starts a run)
+  run status <id>     Get the status of a prompt-bar submission
+  api-key list        List your API keys
+  api-key create      Create a new API key (prints secret once)
+  api-key revoke <id> Revoke an API key
   version             Print CLI version
   help                Print this usage
 
@@ -135,33 +145,45 @@ func envOr(key, def string) string {
 	return def
 }
 
-// do performs an authenticated GET and decodes the JSON response into out.
+// do performs an authenticated request and decodes the JSON response into
+// out. If body is non-nil it is JSON-encoded and sent as the request body.
 // On non-2xx it returns an error with the response body.
-func (c *client) do(method, path string, out any) error {
+func (c *client) do(method, path string, body any, out any) error {
 	url := c.host + path
-	req, err := http.NewRequest(method, url, nil)
+	var reqBody io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("encode request body: %w", err)
+		}
+		reqBody = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, url, reqBody)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("request %s %s: %w", method, path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &apiErrorResp{Status: resp.StatusCode, Body: string(body)}
+		return &apiErrorResp{Status: resp.StatusCode, Body: string(respBody)}
 	}
 	if out == nil {
 		return nil
 	}
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("decode response: %w (body: %s)", err, truncate(string(body), 200))
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("decode response: %w (body: %s)", err, truncate(string(respBody), 200))
 	}
 	return nil
 }
@@ -211,14 +233,14 @@ func runWire(args []string, stdout, stderr io.Writer) int {
 	switch sub {
 	case "stories":
 		var resp wireStoriesResponse
-		if err := c.do(http.MethodGet, "/api/universal-wire/stories", &resp); err != nil {
+		if err := c.do(http.MethodGet, "/api/universal-wire/stories", nil, &resp); err != nil {
 			fmt.Fprintf(stderr, "choir wire stories: %v\n", err)
 			return 1
 		}
 		return writeJSON(stdout, resp)
 	case "diagnostics":
 		var resp wireStoriesResponse
-		if err := c.do(http.MethodGet, "/api/universal-wire/stories", &resp); err != nil {
+		if err := c.do(http.MethodGet, "/api/universal-wire/stories", nil, &resp); err != nil {
 			fmt.Fprintf(stderr, "choir wire diagnostics: %v\n", err)
 			return 1
 		}
@@ -279,7 +301,7 @@ func runTrajectories(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	var resp trajectoriesListResponse
-	if err := c.do(http.MethodGet, "/api/trajectories", &resp); err != nil {
+	if err := c.do(http.MethodGet, "/api/trajectories", nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir trajectories: %v\n", err)
 		return 1
 	}
@@ -304,7 +326,7 @@ func runTrajectory(args []string, stdout, stderr io.Writer) int {
 	}
 	id := strings.TrimSpace(rest[0])
 	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/trajectories/"+id, &resp); err != nil {
+	if err := c.do(http.MethodGet, "/api/trajectories/"+id, nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir trajectory %s: %v\n", id, err)
 		return 1
 	}
@@ -351,14 +373,14 @@ func runTexture(args []string, stdout, stderr io.Writer) int {
 	switch sub {
 	case "read":
 		var resp json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+docID, &resp); err != nil {
+		if err := c.do(http.MethodGet, "/api/texture/documents/"+docID, nil, &resp); err != nil {
 			fmt.Fprintf(stderr, "choir texture read %s: %v\n", docID, err)
 			return 1
 		}
 		return writeJSON(stdout, resp)
 	case "history":
 		var resp json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+docID+"/history", &resp); err != nil {
+		if err := c.do(http.MethodGet, "/api/texture/documents/"+docID+"/history", nil, &resp); err != nil {
 			fmt.Fprintf(stderr, "choir texture history %s: %v\n", docID, err)
 			return 1
 		}
@@ -388,9 +410,168 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	// The proxy owns /api/platform/retrieval/search; it expects the query
 	// in the q parameter.
 	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/platform/retrieval/search?q="+url.QueryEscape(q), &resp); err != nil {
+	if err := c.do(http.MethodGet, "/api/platform/retrieval/search?q="+url.QueryEscape(q), nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir search: %v\n", err)
 		return 1
 	}
 	return writeJSON(stdout, resp)
+}
+
+// ---- run ----
+
+func runRun(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "choir run: subcommand required (start|status)")
+		return 2
+	}
+	sub := args[0]
+	switch sub {
+	case "start":
+		return runRunStart(args[1:], stdout, stderr)
+	case "status":
+		return runRunStatus(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "choir run: unknown subcommand %q\n", sub)
+		return 2
+	}
+}
+
+func runRunStart(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir run start", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir run start: %v\n", err)
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) == 0 || strings.TrimSpace(strings.Join(rest, " ")) == "" {
+		fmt.Fprintln(stderr, "choir run start: prompt text required")
+		return 2
+	}
+	text := strings.TrimSpace(strings.Join(rest, " "))
+	var resp promptBarSubmitResponse
+	if err := c.do(http.MethodPost, "/api/prompt-bar", map[string]string{"text": text}, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir run start: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+func runRunStatus(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir run status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir run status: %v\n", err)
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
+		fmt.Fprintln(stderr, "choir run status: submission id required")
+		return 2
+	}
+	id := strings.TrimSpace(rest[0])
+	var resp json.RawMessage
+	if err := c.do(http.MethodGet, "/api/prompt-bar/submissions/"+id, nil, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir run status %s: %v\n", id, err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+// promptBarSubmitResponse mirrors internal/runtime.promptBarSubmitResponse.
+type promptBarSubmitResponse struct {
+	SubmissionID string `json:"submission_id"`
+	State        string `json:"state"`
+	CreatedAt    string `json:"created_at"`
+	StatusURL    string `json:"status_url"`
+}
+
+// ---- api-key ----
+
+func runAPIKey(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "choir api-key: subcommand required (list|create|revoke)")
+		return 2
+	}
+	sub := args[0]
+	switch sub {
+	case "list":
+		return runAPIKeyList(args[1:], stdout, stderr)
+	case "create":
+		return runAPIKeyCreate(args[1:], stdout, stderr)
+	case "revoke":
+		return runAPIKeyRevoke(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "choir api-key: unknown subcommand %q\n", sub)
+		return 2
+	}
+}
+
+func runAPIKeyList(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir api-key list", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir api-key list: %v\n", err)
+		return 2
+	}
+	var resp json.RawMessage
+	if err := c.do(http.MethodGet, "/auth/api-keys", nil, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir api-key list: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+func runAPIKeyCreate(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir api-key create", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	labelFlag := fs.String("label", "CLI key", "Label for the new API key")
+	scopesFlag := fs.String("scopes", "read:texture,read:base,read:runtime", "Comma-separated scopes")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir api-key create: %v\n", err)
+		return 2
+	}
+	scopes := []string{}
+	for _, s := range strings.Split(*scopesFlag, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			scopes = append(scopes, s)
+		}
+	}
+	body := map[string]any{
+		"label":  strings.TrimSpace(*labelFlag),
+		"scopes": scopes,
+	}
+	var resp json.RawMessage
+	if err := c.do(http.MethodPost, "/auth/api-keys", body, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir api-key create: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+func runAPIKeyRevoke(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir api-key revoke", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir api-key revoke: %v\n", err)
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
+		fmt.Fprintln(stderr, "choir api-key revoke: key id required")
+		return 2
+	}
+	id := strings.TrimSpace(rest[0])
+	if err := c.do(http.MethodDelete, "/auth/api-keys/"+id, nil, nil); err != nil {
+		fmt.Fprintf(stderr, "choir api-key revoke %s: %v\n", id, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, `{"revoked":%q}`+"\n", id)
+	return 0
 }

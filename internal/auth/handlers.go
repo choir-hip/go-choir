@@ -1330,6 +1330,43 @@ func (h *Handler) requireAuthUser(w http.ResponseWriter, r *http.Request) *User 
 	return user
 }
 
+// requireAuthUserAny validates either the choir_access cookie (browser session)
+// or a Bearer API key (headless/CLI) and returns the authenticated user. This
+// allows API key management routes to be used from the CLI with an existing
+// API key. The first key must still be created via the browser UI.
+func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) *User {
+	// 1. Try cookie-based JWT (browser sessions).
+	if cookie, err := r.Cookie(AccessTokenCookieName); err == nil && cookie.Value != "" {
+		userID, err := h.ValidateAccessToken(cookie.Value)
+		if err == nil {
+			user, err := h.store.GetUserByID(userID)
+			if err == nil {
+				return user
+			}
+		}
+	}
+	// 2. Try Bearer token (API key for headless access).
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+		if token != "" {
+			keyHash := hashAPIKeySecret(token)
+			ak, err := h.store.GetAPIKeyByHash(r.Context(), keyHash)
+			if err == nil && ak != nil && ak.RevokedAt == nil &&
+				(ak.ExpiresAt == nil || ak.ExpiresAt.After(time.Now())) {
+				user, err := h.store.GetUserByID(ak.UserID)
+				if err == nil {
+					// Update last_used_at (best-effort, ignore errors).
+					_ = h.store.TouchAPIKeyLastUsed(r.Context(), ak.ID)
+					return user
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+	return nil
+}
+
 // formatTimePtr formats a *time.Time as RFC3339, returning nil for nil.
 func formatTimePtr(t *time.Time) *string {
 	if t == nil {
@@ -1364,16 +1401,16 @@ func validateScopes(scopes []string) error {
 }
 
 // HandleCreateAPIKey handles POST /auth/api-keys.
-// It requires a valid choir_access cookie (WebAuthn session), creates a new
-// API key, and returns the secret once. The secret is never stored in
-// plaintext — only the SHA-256 hash is persisted.
+// It accepts either a choir_access cookie (WebAuthn session) or a Bearer API
+// key, creates a new API key, and returns the secret once. The secret is never
+// stored in plaintext — only the SHA-256 hash is persisted.
 func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	user := h.requireAuthUser(w, r)
+	user := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
@@ -1433,15 +1470,15 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListAPIKeys handles GET /auth/api-keys.
-// It requires a valid choir_access cookie and returns the user's API keys
-// (without secrets).
+// It accepts either a choir_access cookie or a Bearer API key and returns the
+// user's API keys (without secrets).
 func (h *Handler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	user := h.requireAuthUser(w, r)
+	user := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
@@ -1462,15 +1499,15 @@ func (h *Handler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleRevokeAPIKey handles DELETE /auth/api-keys/{id}.
-// It requires a valid choir_access cookie and soft-deletes (revokes) the
-// specified API key. Only the key owner can revoke their own keys.
+// It accepts either a choir_access cookie or a Bearer API key and soft-deletes
+// (revokes) the specified API key. Only the key owner can revoke their own keys.
 func (h *Handler) HandleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	user := h.requireAuthUser(w, r)
+	user := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
