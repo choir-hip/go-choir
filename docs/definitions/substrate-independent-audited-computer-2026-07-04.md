@@ -269,7 +269,7 @@ execution_effect:
   - First implementation work should define the materializer contract before adding another substrate.
 formalization:
   status: testing
-  note: Interface-level contract is tested with projection and scoped Firecracker/vmmanager materializers; full lifecycle/refinement formalization remains open.
+  note: Interface-level contract is tested with projection, scoped Firecracker/vmmanager materializers, and the StateGenerator (ComputerVersion → filesystem state). Full lifecycle/refinement formalization remains open.
 settlement:
   rule: Settled for the interface boundary after `ProjectionMaterializer` and `VMManagerScopedMaterializer` capability manifests exist with focused equivalence/narrowing tests.
   settled_by: evidence
@@ -558,8 +558,8 @@ determined_state:
     - node: substrate-independent-spec
       missing: Formal model or property contract for Materialize/Observe equivalence.
 
-    - node: first-non-firecracker-materializer
-      missing: Choice of second substrate/projection for first equivalence proof.
+    - node: coderef-resolver
+      missing: CodeRef → concrete boot artifacts (kernel, rootfs, store disk). The generator handles ArtifactProgramRef only; CodeRef resolution is the next gap.
 ```
 
 ## Invariants
@@ -797,19 +797,22 @@ evidence:
   - claim: Cross-substrate equivalence proof exists for the same ComputerVersion through Firecracker and a non-identical substrate.
     definition_node: cross-substrate-proof
     evidence_class: focused Go tests
-    source: internal/computerversion/firecracker_state_extractor.go, internal/computerversion/host_projection_extractor.go, internal/computerversion/cross_substrate_proof_test.go
+    source: internal/computerversion/state_generator.go, internal/computerversion/tree_to_fs.go, internal/computerversion/firecracker_state_extractor.go, internal/computerversion/state_generator_test.go
     result: |
-      `FirecrackerStateExtractor` reads file_manifest and blob_set observations from a Firecracker VM persistent directory.
-      `HostProjectionExtractor` reads the same observation kinds from a non-Firecracker host-process projection directory.
-      `TestCrossSubstrateEquivalence` proves the same ComputerVersion through both substrates produces equivalent observations.
-      `TestCrossSubstrateFailureProof` proves a seeded mismatch causes EquivalenceNotEquivalent with named differences.
-      `TestCrossSubstrateNarrowedProof` proves a capability mismatch narrows the claim.
+      `StateGenerator` generates concrete filesystem state from a ComputerVersion + journal + blob store.
+      `TreeToFS` writes a Base tree's live items to a target directory, reading file content from the blob store.
+      The generator chains: ArtifactProgramRef → journal → tree.Derive → TreeToFS → filesystem directory.
+      `TestStateGeneratorRoundTrip` proves the generator writes correct files and the extractor reads them back.
+      `TestCrossSubstrateEquivalenceRealGenerator` proves the same ComputerVersion generated into two independent
+        substrate directories produces equivalent observations (true generation-based proof: single extractor, two independent output dirs, no file copying).
+      `TestCrossSubstrateFailureRealGenerator` proves a seeded corruption in one substrate is detected with named differences.
+      `TestTreeToFSDirect` and `TestTreeToFSSkipsTombstones` verify the TreeToFS function directly.
       A `BaseSubstrateEquivalenceContract` is built from the proof.
     uncertainty: |
-      Extractors read from fixture directories, not from a live Firecracker VM.
+      The generator writes to filesystem directories, not to a live Firecracker VM data.img.
       The proof covers file_manifest and blob_set only; it does not cover Dolt, object graph, provenance, or live-process continuity.
-      The host-process projection is a filesystem projection, not a container or Cloud Hypervisor substrate.
-    promotion_relevance: Satisfies completion gates 4 and 5 for the file-manifest/blob-set slice.
+      CodeRef resolution (CodeRef → kernel/rootfs paths) is not yet implemented; the generator handles ArtifactProgramRef only.
+    promotion_relevance: Satisfies completion gates 4 and 5 for the file-manifest/blob-set slice with a real generator.
 
   - claim: TLA+ invariants are non-vacuous and TLC passes.
     definition_node: substrate-independent-spec
@@ -1009,27 +1012,30 @@ run_checkpoint_and_resumption_state:
     Commit: 0f8b19a8.
 
     Cross-substrate proof mission (docs/missions/cross-substrate-proof-v0.md) complete:
+    - StateGenerator: generates concrete filesystem state from ComputerVersion + journal + blob store.
+    - TreeToFS: writes a Base tree's live items to a target directory via blob store content.
     - FirecrackerStateExtractor: reads file_manifest + blob_set from VM persistent dir.
-    - HostProjectionExtractor: reads same observations from non-Firecracker substrate.
-    - TestCrossSubstrateEquivalence: same ComputerVersion through both substrates, equivalence passes.
-    - TestCrossSubstrateFailureProof: seeded mismatch detected with named differences.
-    - TestCrossSubstrateNarrowedProof: capability mismatch narrows claim.
+    - TestStateGeneratorRoundTrip: generator writes files, extractor reads them back.
+    - TestCrossSubstrateEquivalenceRealGenerator: same ComputerVersion generated into two independent
+      substrate directories, equivalence passes (true generation-based proof: single extractor, two independent output dirs, no file copying).
+    - TestCrossSubstrateFailureRealGenerator: seeded corruption detected with named differences.
+    - TestTreeToFSDirect, TestTreeToFSSkipsTombstones: TreeToFS unit tests.
     - BaseSubstrateEquivalenceContract built from the proof.
-    SIAC gates 4 and 5 satisfied for file-manifest/blob-set slice.
+    SIAC gates 4 and 5 satisfied for file-manifest/blob-set slice with real generator.
 
     SIAC gate status:
     - Gate 1 (definitions settled): settled
     - Gate 2 (substrate boundary exists): settled
     - Gate 3 (typed durable state slice): settled
-    - Gate 4 (cross-substrate proof): settled for file_manifest/blob_set
+    - Gate 4 (cross-substrate proof): settled for file_manifest/blob_set (real generator)
     - Gate 5 (failure proof): settled
     - Gate 6 (promotion/rollback model): settled (TLA+ with independent counters)
     - Gate 7 (staging/product proof): open (no runtime behavior change in this mission)
     - Gate 8 (documentation current): settled
 
-    Remaining uncertainty: extractors use fixture directories, not live VMs.
-    Next realism axis: extract from a real Firecracker VM persistent directory,
-    or add a Dolt/objectgraph substrate for a third substrate proof.
+    Remaining uncertainty: generator writes to filesystem directories, not live VM data.img.
+    CodeRef resolution (CodeRef → kernel/rootfs paths) is the next gap.
+    Next realism axis: CodeRef resolver, or extract from a real Firecracker VM persistent directory.
   active_red_ceremony: null
   completed_red_ceremonies:
     - pass: 125
