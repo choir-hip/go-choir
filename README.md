@@ -140,6 +140,31 @@ auth bridge details, and
 [docs/spec-choir-desktop-wails-v3-2026-06-22.md](docs/spec-choir-desktop-wails-v3-2026-06-22.md)
 for the full build spec and phase plan.
 
+### Choir CLI
+
+`cmd/choir` is the headless control surface: a pure-Go binary that wraps the
+public `/api/` and `/auth/` routes with API key auth (`choir_sk_...`) so
+agents and scripts can drive Choir without a browser.
+
+```bash
+go build -o choir ./cmd/choir
+export CHOIR_API_KEY=choir_sk_...   # or --api-key; host defaults to https://choir.news
+
+choir run start "prompt text"        # submit to the conductor (same path as the prompt bar)
+choir run status <submission_id>     # conductor decision, routed app, doc ids
+choir texture read <doc_id>          # document metadata
+choir texture revisions <doc_id>     # revisions with full content bodies
+choir trajectories                   # recent trajectory state
+choir search "query"                 # corpus search
+choir wire stories                   # Universal Wire feed
+choir api-key list|create|revoke     # key management
+```
+
+All output is JSON on stdout; errors go to stderr (exit 0/1/2 for
+success/API error/usage error). See
+[skills/choir-cli/SKILL.md](skills/choir-cli/SKILL.md) for the full command
+reference and architecture notes.
+
 Trace is not a normal user-facing app. It is the causal/evidence substrate for
 agentic tracing, run bundles, acceptance records, and diagnosis artifacts. Raw
 Terminal is not a user app either; shell-like repair access is mediated through

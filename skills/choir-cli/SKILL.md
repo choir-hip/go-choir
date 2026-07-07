@@ -44,7 +44,14 @@ choir run status <submission_id>
 ```
 
 `run start` posts to `/api/prompt-bar` — the same endpoint the browser prompt
-bar uses. The conductor decides which agent app to route to.
+bar uses. The conductor decides which agent app to route to. The submission
+often completes synchronously: the response `state` may already be
+`completed`, and `run status` then returns the `decision` (routed app,
+`doc_id`, revision/loop ids). For a Texture-routed run, follow up with
+`choir texture revisions <doc_id>` to read what the appagent wrote — the
+appagent revision typically lands within ~10 seconds of submission. Each run
+also creates a trajectory visible in `choir trajectories` under the same id
+as the submission's channel.
 
 ### API key management
 
@@ -66,9 +73,15 @@ can be created via CLI.
 ### Texture
 
 ```sh
-choir texture read <doc_id>
-choir texture history <doc_id>
+choir texture read <doc_id>       # metadata: title, current revision id, revision count
+choir texture history <doc_id>    # revision list, metadata only (no content)
+choir texture revisions <doc_id>  # revisions WITH full content + body_doc JSON
 ```
+
+`texture read` and `texture history` do not return document content. Use
+`texture revisions` when you need the actual text — each entry carries a
+plain-text `content` field plus the structured `body_doc`
+(`choir.texture_doc.v1`).
 
 ### Trajectories
 
@@ -102,6 +115,21 @@ All output is JSON to stdout. Diagnostics and errors go to stderr. Exit codes:
 ```sh
 go test ./cmd/choir/ -count=1
 ```
+
+## Known Limits (observed 2026-07-07 against choir.news)
+
+- **Fixed 30s HTTP timeout, no `--timeout` flag.** Fine for every route
+  except the wire feed.
+- **`/api/universal-wire/stories` can hang server-side** — observed taking
+  longer than 120s on production, so `choir wire stories` and
+  `choir wire diagnostics` time out. This is a server issue, not a CLI one;
+  when it happens the CLI reports `context deadline exceeded`.
+- **`trajectories` truncates to 50 entries client-side**; there is no paging
+  flag yet.
+- **`search` takes no limit/filter flags** — it passes the raw query as `q`.
+- **No streaming**: `/api/texture/documents/<id>/stream` exists in the proxy
+  but the CLI does not expose it; poll `run status` / `texture revisions`
+  instead.
 
 ## Architecture Notes
 

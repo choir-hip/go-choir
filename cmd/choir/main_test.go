@@ -13,6 +13,7 @@ import (
 // TestRunRequiresAPIKey asserts the CLI fails fast with a clear error when
 // no API key is supplied, without making a network request.
 func TestRunRequiresAPIKey(t *testing.T) {
+	t.Setenv(apiKeyEnvVar, "") // isolate from a developer's real key
 	var out, errOut bytes.Buffer
 	code := run([]string{"wire", "stories"}, &out, &errOut)
 	if code != 2 {
@@ -118,6 +119,55 @@ func TestTrajectoriesHitsAPI(t *testing.T) {
 	}
 	if len(resp.Trajectories) != 1 || resp.Trajectories[0].TrajectoryID != "traj-1" {
 		t.Fatalf("trajectories = %+v, want one traj-1", resp.Trajectories)
+	}
+}
+
+// TestTrajectoriesDecodesObjectSettlementRule asserts the trajectories
+// command handles settlement_rule as the JSON object the API actually
+// returns (e.g. {"require_no_open_work_items":true}), not a string.
+func TestTrajectoriesDecodesObjectSettlementRule(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"trajectories":[{"trajectory_id":"traj-1","kind":"document","status":"live","subject_refs":{"channel_id":"ch-1"},"settlement_rule":{"require_no_open_work_items":true}}]}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"trajectories", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp trajectoriesListResponse
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if len(resp.Trajectories) != 1 || resp.Trajectories[0].Status != "live" {
+		t.Fatalf("trajectories = %+v, want one live trajectory", resp.Trajectories)
+	}
+	if !strings.Contains(string(resp.Trajectories[0].SettlementRule), "require_no_open_work_items") {
+		t.Fatalf("settlement_rule = %s, want the rule object passed through", resp.Trajectories[0].SettlementRule)
+	}
+}
+
+// TestTextureRevisionsHitsAPI asserts the texture revisions command GETs the
+// revisions endpoint, which returns full content bodies.
+func TestTextureRevisionsHitsAPI(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/texture/documents/doc-1/revisions" {
+			t.Errorf("path = %q, want /api/texture/documents/doc-1/revisions", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"revisions":[{"revision_id":"rev-1","doc_id":"doc-1","content":"hello"}]}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"texture", "revisions", "--api-key=choir_sk_test", "--host=" + stub.URL, "doc-1"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), `"content": "hello"`) {
+		t.Fatalf("stdout = %q, want revision content", out.String())
 	}
 }
 
