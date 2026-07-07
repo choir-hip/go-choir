@@ -21,23 +21,60 @@ what future implementation work is allowed to mean.
    substrate independence.
    This mission is a refinement and rephrasing of the autoputer goal; autopaper
    is tabled until the autoputer works correctly.
-3. `docs/computer-ontology.md` (canonical computer/product ontology)
-4. `docs/memo-artifact-program-doctrine-2026-06-28.md` (artifact program
+3. Owner statement, 2026-07-07: the object graph becomes canonical by hard
+   cutover; Dolt version-control features become load-bearing; all named
+   heresies are eliminated and doctrine prose is replaced by executable
+   enforcement; candidate computers are no longer VMs — capsules (containers)
+   host what candidate VMs used to, over substrate-independent audited
+   computers. The World Wire (renamed from "Universal") is the public feed
+   moat.
+4. `docs/definitions/heresy-eradication-2026-07-07.md` (heresy elimination
+   mission; H031 candidate-computer-as-VM heresy and capsule blessed
+   replacement)
+5. `docs/mission-og-dolt-heresy-hard-cutover-v0.md` (implementation program
+   that executes the OG cutover, Dolt adoption, and heresy elimination in
+   phased dependency order)
+6. `docs/computer-ontology.md` (canonical computer/product ontology)
+7. `docs/memo-artifact-program-doctrine-2026-06-28.md` (artifact program
    doctrine)
-5. `docs/vision-choir-category-texture-transclusion-v0.md` (audited computer
+8. `docs/vision-choir-category-texture-transclusion-v0.md` (audited computer
    vision)
-6. `specs/promotion_protocol.tla` (promotion safety model)
-7. `docs/agent-product-doctrine.md` (authority boundaries and product-path
-   verification)
-8. `AGENTS.md` (repo operating contract)
-9. Existing suite definition:
-   `docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md`
+9. `specs/promotion_protocol.tla` (promotion safety model)
+10. `docs/agent-product-doctrine.md` (authority boundaries and product-path
+    verification)
+11. `AGENTS.md` (repo operating contract)
+12. Existing suite definition:
+    `docs/definitions/autoputer-autopaper-suite-definitions-2026-07-03.md`
 
 When this document conflicts with older docs that treat a VM, sandbox,
 `data.img`, or any specific hypervisor as the product object, this document
 governs for this mission. When this document is silent, follow the computer
 ontology and artifact program doctrine. Escalate only for group-level authority
 changes, unsafe mutation, or owner value decisions.
+
+### Implementation Mission Alignment
+
+This mission defines the invariants that the implementation missions must
+satisfy. It does not define a separate implementation program. The
+implementation tracks are:
+
+- **OG/Dolt hard cutover** (`docs/mission-og-dolt-heresy-hard-cutover-v0.md`):
+  Phases 0–5 execute the object-graph cutover, Dolt version-control adoption,
+  batch-commit infrastructure, promotion protocol rewrite over ComputerVersion,
+  candidate-VM residue elimination, and doctrine replacement. SIAC gates map
+  to these phases (see Gate-to-Phase Mapping below).
+
+- **Heresy eradication** (`docs/definitions/heresy-eradication-2026-07-07.md`):
+  Eliminates registered heresies H001–H031 with detector-enforced guards. H031
+  (candidate-computer-as-VM) is the heresy that SIAC's substrate-independence
+  invariant directly targets; its blessed replacement (capsules) is the
+  candidate-computer materializer.
+
+- **SIAC framework** (this document): provides the materializer/equivalence
+  contracts, observation sets, and cross-substrate proof infrastructure that
+  the implementation missions use to verify substrate independence. The
+  StateGenerator's Dolt adapter (Gate 4 extension) is the SIAC framework's
+  contribution to OG/Dolt Phase 4.
 
 ## Mutation Class
 
@@ -541,25 +578,65 @@ determined_state:
       source: specs/promotion_protocol.tla
       execution_effect: Substrate-independent promotion should refine or extend this model, not replace it with image copying.
 
+    - claim: The object graph becomes canonical by hard cutover, not accretion; Dolt version-control features become load-bearing; candidate computers are capsules, not VMs.
+      source: owner statement, 2026-07-07; docs/mission-og-dolt-heresy-hard-cutover-v0.md
+      execution_effect: SIAC implementation aligns with the OG/Dolt phased program. The StateGenerator Dolt adapter is the SIAC contribution to Phase 4. H031 elimination (candidate-VM → capsule) is gated on Phase 4's route-over-ComputerVersion landing.
+
+    - claim: The ArtifactProgramRef is a composite typed ledger-head vector, not a single store hash.
+      source: docs/computer-ontology.md heterogeneous ledger model + agentic consensus panel, 2026-07-07
+      execution_effect: |
+        ArtifactProgramRef names one head per ledger in scope:
+          dolt_app_head (Dolt/app state ledger)
+          blob_store_root (blob/content ledger)
+          artifact_graph_head (artifact/provenance ledger)
+          source_build_ref (source/build ledger)
+          route_epoch (route identity ledger)
+          vm_runtime_ref (VM/OS ledger, classified cache/ephemeral unless typed)
+        A Dolt commit hash is the head of the Dolt/app-state ledger only, not the whole computer. Do not collapse the state vector to a single hash.
+
+    - claim: Dolt is canonical for the Dolt/app-state ledger. Base stays for desktop file sync only. No semantic object has two canonical ledgers.
+      source: storage architecture investigation + agentic consensus, 2026-07-07
+      execution_effect: Do not make Base canonical for platform computer state to satisfy the StateGenerator's SQLite dependency. Instead, add a Dolt adapter to the StateGenerator. Base remains one ledger adapter; Dolt becomes another.
+
+    - claim: The platform computer's "branch in the same database" is metaphorical, not real. Production code uses zero Dolt version-control features (no DOLT_BRANCH, DOLT_CHECKOUT, DOLT_MERGE, AS OF, dolt_history_, dolt_log_). The VM-embedded Dolt and corpusd platform Dolt are two separate databases stitched by an app-level HTTP POST that syncs only texture documents.
+      source: codebase verification, 2026-07-07
+      execution_effect: |
+        The "each cosuper's state is a branch" invariant is aspirational, not implemented. Dolt is used as MySQL + per-write commit markers (DOLT_COMMIT in platform store only; VM-embedded store uses no version-control features at all).
+        Branch-per-computer (not branch-per-cosuper) becomes real when OG/Dolt Phase 4 moves platform Dolt to sql-server mode and the promotion protocol is rewritten over ComputerVersion with Dolt branch/merge as the ledger fork mechanism.
+        Co-supers are agents in the supervision hierarchy operating over the computer's single owned object graph, not separate computers with their own branches.
+
+    - claim: The supervision trace (agents, runs, events, trajectories, work_items, run_memory_entries) is VM-local with no typed-export path. 37 tables exist in the VM-embedded store; only 2 (platform_texture_documents, platform_texture_revisions) are synced to corpusd.
+      source: codebase verification, 2026-07-07
+      execution_effect: |
+        This is an I4 gap (discovered heresy, not a regression). The supervision trace is the moat — the proprietary learning signal. If it is VM-local with no typed-export path, it cannot survive a substrate change.
+        The OG cutover (Phases 2–3) migrates runtime entities to the object graph, making them typed and exportable. Until then, runtime state bytes are neither classified cache nor represented by typed persistent transactions.
+        Do not claim substrate independence for the runtime-state ledger until the OG cutover covers it.
+
   contested:
     - node: materializer
-      issue: Exact Go package/API boundary is not settled.
-      next_resolution_step: Read current vmmanager/vmctl ownership boundaries and define a minimal Materializer interface with no runtime behavior change.
+      issue: Exact Go package/API boundary is not settled. Candidate computers are capsules (H031 blessed replacement), but active computers may still use VMs as one materializer substrate.
+      next_resolution_step: OG/Dolt Phase 4 defines the materializer boundary for promotion over ComputerVersion. The capsule materializer for candidate computers is already wired (internal/capsule). The VM materializer for active computers stays behind the capability boundary.
 
     - node: user-isomorphic
-      issue: Observation set must be specific enough to verify and narrow enough not to overclaim process-level identity.
-      next_resolution_step: Define observation-set tiers: file-ledger, structured-app-ledger, full-computer-durable, live-process-continuity.
+      issue: Observation set must be specific enough to verify and narrow enough not to overclaim process-level identity. The Dolt/app-state ledger observation set is not yet defined because no Dolt extractor exists.
+      next_resolution_step: Build a Dolt adapter for the StateGenerator that produces ObservationDoltHead observations from a live Dolt commit. Define the observation set for the Dolt/app-state ledger (table content hashes, row counts, schema version). This is the SIAC framework's contribution to OG/Dolt Phase 4.
 
     - node: persistent-ephemeral-cache
-      issue: Current persistent image contains mixed state; not all durable bytes have transaction coverage. Future eBPF or filesystem probes can inform classification, but they are observation sources, not artifact-program proof.
-      next_resolution_step: Build inventory/extractor proof on a copy or fixture before declaring classes disposable; later, capability-scoped write tracing may identify uncovered mutable paths.
+      issue: Current persistent image contains mixed state; not all durable bytes have transaction coverage. The supervision trace (37 VM-local tables) is neither classified cache nor represented by typed persistent transactions — an I4 gap.
+      next_resolution_step: The OG cutover (Phases 2–3) migrates runtime entities to the object graph, making them typed and exportable. Until then, runtime state bytes block substrate-independence claims for the runtime-state ledger. File-manifest and blob-set ledgers are already covered by the existing StateGenerator proof.
 
   open:
     - node: substrate-independent-spec
-      missing: Formal model or property contract for Materialize/Observe equivalence.
+      missing: Formal model or property contract for Materialize/Observe equivalence over the composite state vector (multiple ledger heads, not just file_manifest/blob_set).
 
     - node: coderef-resolver
       missing: CodeRef → concrete boot artifacts (kernel, rootfs, store disk). The generator handles ArtifactProgramRef only; CodeRef resolution is the next gap.
+
+    - node: dolt-extractor
+      missing: A production-capable Dolt extractor that reads a live Dolt commit and produces ObservationDoltHead observations. All existing materializers declare ObservationDoltHead as unsupported. DoltHeadSnapshot is fixture-only and hard-rejects production state. This is the prerequisite for any I3 equivalence claim on the Dolt/app-state ledger.
+
+    - node: runtime-state-ledger-coverage
+      missing: The supervision trace (agents, runs, events, trajectories, work_items, run_memory_entries) has no typed-export path. OG cutover Phases 2–3 must migrate these entities to the object graph before substrate independence can be claimed for the runtime-state ledger.
 ```
 
 ## Invariants
@@ -835,6 +912,50 @@ evidence:
       Integration cost too high: distsys ~8.9k LOC, tla.Value type system, no actor integration, fairness model mismatch.
     uncertainty: MPCal TLC not verified locally.
     promotion_relevance: Determines that hand-written contracts will not be replaced by generated code.
+
+  - claim: The ArtifactProgramRef is a composite typed ledger-head vector, not a single store hash.
+    definition_node: computer-version
+    evidence_class: reviewer consensus + doctrine
+    source: agentic consensus panel (GPT-5.5, GLM-5.2, Devin, Cursor, opencode), 2026-07-07; docs/computer-ontology.md heterogeneous ledger model
+    result: |
+      Five of six panel agents rejected collapsing to a single Dolt commit hash. The heterogeneous ledger model in docs/computer-ontology.md defines a computer as W = (V, D, S, B, A, R) — VM/OS, Dolt/app, source/build, blobs, artifact/provenance, route identity. A Dolt commit hash is the head of the Dolt/app ledger only.
+      The composite state vector: dolt_app_head, blob_store_root, artifact_graph_head, source_build_ref, route_epoch, vm_runtime_ref (classified).
+    uncertainty: The composite is heavier than a single hash; mitigation is to store compressed ledger roots and typed program refs, not raw data.
+    promotion_relevance: Governs what ArtifactProgramRef means across all substrates and promotion records.
+
+  - claim: Production code uses zero Dolt version-control features. The "branch in the same database" is metaphorical.
+    definition_node: persistent-ephemeral-cache
+    evidence_class: observed file (codebase verification)
+    source: codebase grep, 2026-07-07
+    result: |
+      Zero matches for DOLT_BRANCH, DOLT_CHECKOUT, DOLT_MERGE, AS OF, dolt_history_, dolt_log_, DOLT_LOG in internal/.
+      DOLT_COMMIT found in internal/platform/store.go:459 (corpusd) and internal/cycle/storage.go:56 (sourcecycled). NOT in internal/store/store.go (VM-embedded store).
+      DOLT_GC found in internal/store/dolt_maintenance.go:145 (maintenance only).
+      The VM-embedded Dolt and corpusd platform Dolt are two separate databases. The sync path (HTTP POST /internal/platform/texture/sync) transfers only texture document metadata and revision content — no runtime state.
+    uncertainty: None — this is a direct codebase grep.
+    promotion_relevance: The "branch in the same database" invariant is aspirational. Branch-per-computer becomes real only when OG/Dolt Phase 4 moves platform Dolt to sql-server mode with native Dolt remotes/branches.
+
+  - claim: The supervision trace is VM-local with no typed-export path — an I4 gap.
+    definition_node: persistent-ephemeral-cache
+    evidence_class: observed file (codebase verification)
+    source: internal/store/store.go, internal/store/texture.go, internal/platform/store.go, internal/runtime/wire_platform_publish.go, 2026-07-07
+    result: |
+      37 tables in VM-embedded store (26 runtime + 11 texture). Only 2 (platform_texture_documents, platform_texture_revisions) synced to corpusd.
+      Runtime tables (agents, runs, events, run_memory_entries, work_items, trajectories, channel_messages, coagent_mailboxes, etc.) are VM-local only.
+      The sync path sends only texture document metadata and revision content via HTTP POST. No runtime state is transferred.
+    uncertainty: None — direct schema comparison and sync-path trace.
+    promotion_relevance: Blocks substrate-independence claims for the runtime-state ledger until the OG cutover (Phases 2–3) migrates these entities to the object graph.
+
+  - claim: Every existing materializer declares ObservationDoltHead as unsupported. No production-capable Dolt extractor exists.
+    definition_node: cross-substrate-proof
+    evidence_class: observed file
+    source: internal/computerversion/state_generator.go:142, firecracker_state_extractor.go:191, vmmanager_boundary.go:113, dolt_head_snapshot.go:79-81, 2026-07-07
+    result: |
+      StateGeneratorCapabilityManifest, FirecrackerStateCapabilityManifest, and VMManagerCapabilityManifest all list ObservationDoltHead as unsupported.
+      DoltHeadSnapshot is the only thing that produces ObservationDoltHead, and it hard-rejects production state (ContainsProduction → error).
+      The framework is correctly honest about this gap. The work is to fill it with a real Dolt extractor, not to redesign the framework.
+    uncertainty: None — direct code inspection.
+    promotion_relevance: The Dolt extractor is the prerequisite for any I3 equivalence claim on the Dolt/app-state ledger. It is the SIAC framework's contribution to OG/Dolt Phase 4.
 ```
 
 ## Completion Semantics
@@ -884,6 +1005,128 @@ substrate-independent audited computers with a different product object.
 A checkpoint is not completion. A single booting VM, a new hypervisor, a green
 local test, or a repaired `data.img` is not completion.
 
+## Gate-to-Phase Mapping
+
+The SIAC completion gates map to the OG/Dolt hard cutover mission phases. This
+mapping makes the dependency structure explicit: SIAC does not run a separate
+implementation program; it defines the invariants that the implementation
+phases must satisfy.
+
+```yaml
+gate_phase_mapping:
+  Gate 1 (definitions settled):
+    status: settled
+    satisfied_by: existing SIAC framework + this document
+    notes: ComputerVersion, ArtifactProgramRef, Materializer, CapabilityManifest, ObservationSet defined in docs and code.
+
+  Gate 2 (substrate boundary exists):
+    status: settled
+    satisfied_by: VMManagerScopedMaterializer, ProjectionMaterializer, FirecrackerStateExtractor
+    notes: Firecracker/vmmanager-specific behavior is behind a materializer/capability boundary for scoped paths.
+
+  Gate 3 (typed durable state slice):
+    status: settled for file_manifest/blob_set; open for Dolt/objectgraph and runtime-state ledgers
+    satisfied_by: StateGenerator + TreeToFS + Base journal/blob store (file_manifest/blob_set slice)
+    opens_for: |
+      Dolt/app-state ledger: requires Dolt extractor (dolt-extractor open node).
+      Runtime-state ledger: requires OG cutover Phases 2-3 to migrate runtime entities to the object graph.
+    og_dolt_phase: Phase 2-3 (cold-entity cutover) + Phase 3 (hot-path cutover)
+
+  Gate 4 (cross-substrate proof):
+    status: settled for file_manifest/blob_set; open for Dolt/app-state ledger
+    satisfied_by: TestCrossSubstrateEquivalenceRealGenerator (file_manifest/blob_set, real generator)
+    opens_for: |
+      Dolt/app-state ledger: requires Dolt adapter for StateGenerator that produces ObservationDoltHead from a live Dolt commit.
+      The composite state vector means cross-substrate proof must cover each ledger in scope, not just file_manifest/blob_set.
+    siac_contribution: The Dolt adapter is the SIAC framework's contribution to OG/Dolt Phase 4.
+    og_dolt_phase: Phase 4 (Dolt-native promotion over ComputerVersion)
+
+  Gate 5 (failure proof):
+    status: settled for file_manifest/blob_set
+    satisfied_by: TestCrossSubstrateFailureRealGenerator (seeded corruption detected with named differences)
+    opens_for: Dolt/app-state ledger failure proof (seeded Dolt mismatch detected by the Dolt extractor)
+    og_dolt_phase: Phase 4
+
+  Gate 6 (promotion/rollback model):
+    status: settled (TLA+ with independent counters); pending rewrite over ComputerVersion
+    satisfied_by: specs/promotion_protocol.tla (TLC passes, 1908 states, 0 errors)
+    opens_for: |
+      Rewrite promotion protocol over ComputerVersion: candidate = (same-or-new CodeRef, forked ArtifactProgramRef);
+      ledger fork = Dolt branch; capsule transactions append to candidate tape; promotion = atomic route flip
+      to candidate ComputerVersion (merge-to-main + tag); rollback = route flip back (reset-to-tag).
+      TLC-checked in CI before any Go change.
+    og_dolt_phase: Phase 4 (spec-first)
+
+  Gate 7 (staging/product proof):
+    status: open
+    opens_for: |
+      The World Wire service (formerly "platform computer" / "Universal Wire") is the first staging proof target.
+      Proof requires: route resolves to ComputerVersion (not VM identity), Dolt/app-state ledger observations match
+      across substrates, and the wire feed serves from the materialized computer.
+      H031 elimination (candidate-VM → capsule) is gated on this: no route may resolve to a VM identity.
+      The current platform VM failure (recovery_failed since July 3) must be documented first (I7), then recovered
+      by rebuilding from corpusd + typed inputs, not by patching the corrupted workspace.
+    og_dolt_phase: Phase 4b (candidate-VM residue elimination) + Phase 5 (doctrine replacement)
+
+  Gate 8 (documentation current):
+    status: settled (this document); pending update after Phase 4-5
+    og_dolt_phase: Phase 5 (doctrine replacement)
+```
+
+### Composite State Vector
+
+The ArtifactProgramRef is a composite typed ledger-head vector. This is
+doctrine from `docs/computer-ontology.md` (heterogeneous ledgers) and was
+confirmed by agentic consensus (5 of 6 agents, 2026-07-07).
+
+```text
+ArtifactProgramRef = {
+  dolt_app_head:       <Dolt commit hash of the app-state branch>
+  blob_store_root:     <content-addressed root of blob store>
+  artifact_graph_head: <provenance/artifact graph root>
+  source_build_ref:    <git commit + nix closure + sbom>
+  route_epoch:         <route identity + CAS token + rollback pointer>
+  vm_runtime_ref:      <classified cache/ephemeral unless typed>
+}
+```
+
+Rules:
+
+- Every field has ledger kind, ref, hash, and schema/projection version.
+- Every field has durability classification: durable, cache, ephemeral, derived.
+- Opaque VM bytes are not durable unless explicitly classified and promoted.
+- A Dolt commit may name the structured app-state ledger. A Dolt table may
+  index other ledger refs. A Dolt commit must not imply opaque VM, blob,
+  provenance, source, or route equivalence unless those refs are explicitly
+  recorded and verified.
+- No semantic object has two canonical ledgers. Dolt owns structured app/product
+  state. Base owns desktop/file-journal state where that is the actual product
+  path. Blob store owns bytes. Artifact graph owns provenance/evidence.
+- The StateGenerator reads ledger adapters, not only Base. Base remains one
+  adapter; Dolt becomes another.
+
+### Candidate Computers and Capsules
+
+Per owner statement (2026-07-07) and the heresy eradication mission,
+candidate computers are no longer VMs. H031 (candidate-computer-as-VM) is a
+registered heresy with capsules as the blessed replacement.
+
+- **Candidate computer** = (same-or-new CodeRef, forked ArtifactProgramRef).
+  Effects execute in capsules (container-based effect chambers with
+  landlock/seccomp/namespaces/capability broker — `internal/capsule` +
+  `internal/runtime/tools_capsule.go`).
+- **Active computer** may use a VM as one materializer substrate behind the
+  capability boundary. The VM is not the product object.
+- **Branch-per-computer** (not branch-per-cosuper): each computer's
+  ArtifactProgramRef fork is a Dolt branch. Co-supers are agents in the
+  supervision hierarchy operating over the computer's single owned object
+  graph, not separate computers with their own branches.
+- **Promotion** = atomic route flip to the candidate ComputerVersion
+  (merge-to-main + tag as the ledger operation). **Rollback** = route flip
+  back (reset-to-tag).
+- H031 elimination is gated on Phase 4's route-over-ComputerVersion landing.
+  Until then, the cluster is frozen against new accretion.
+
 ## Escalation Rules
 
 Escalate for:
@@ -916,6 +1159,11 @@ or local proof strategy when the invariants above remain intact.
 - a new abstraction exists -> callers obey it
 - materializer exists -> every state class is captured
 - FileProvider projection works -> full computer substrate independence is done
+- Dolt commit hash matches -> computer state is equivalent (a Dolt hash is one ledger head, not the whole computer)
+- "branch in the same database" stated -> branch semantics exist (production code uses zero Dolt version-control features)
+- texture documents synced -> runtime state is durable (the sync path transfers only texture documents; 37 VM-local tables have no export path)
+- capsule exists -> H031 eliminated (sequencing gate still applies; route-over-ComputerVersion must land first)
+- per-write DOLT_COMMIT -> audit trail exists (nothing reads DOLT_LOG or uses AS OF today; the commit latency is paid without collecting the audit benefit)
 
 ## Rollback And Resumption Policy
 
@@ -1026,16 +1274,35 @@ run_checkpoint_and_resumption_state:
     SIAC gate status:
     - Gate 1 (definitions settled): settled
     - Gate 2 (substrate boundary exists): settled
-    - Gate 3 (typed durable state slice): settled
-    - Gate 4 (cross-substrate proof): settled for file_manifest/blob_set (real generator)
-    - Gate 5 (failure proof): settled
-    - Gate 6 (promotion/rollback model): settled (TLA+ with independent counters)
-    - Gate 7 (staging/product proof): open (no runtime behavior change in this mission)
-    - Gate 8 (documentation current): settled
+    - Gate 3 (typed durable state slice): settled for file_manifest/blob_set; open for Dolt/app-state and runtime-state ledgers
+    - Gate 4 (cross-substrate proof): settled for file_manifest/blob_set (real generator); open for Dolt/app-state ledger
+    - Gate 5 (failure proof): settled for file_manifest/blob_set; open for Dolt/app-state ledger
+    - Gate 6 (promotion/rollback model): settled (TLA+ with independent counters); pending rewrite over ComputerVersion (OG/Dolt Phase 4)
+    - Gate 7 (staging/product proof): open
+    - Gate 8 (documentation current): settled (updated 2026-07-07 with mission alignment, composite state vector, gate-to-phase mapping, and verified codebase findings)
 
-    Remaining uncertainty: generator writes to filesystem directories, not live VM data.img.
-    CodeRef resolution (CodeRef → kernel/rootfs paths) is the next gap.
-    Next realism axis: CodeRef resolver, or extract from a real Firecracker VM persistent directory.
+    Architecture clarification, 2026-07-07:
+    - SIAC implementation aligns with OG/Dolt hard cutover mission (docs/mission-og-dolt-heresy-hard-cutover-v0.md) and heresy eradication mission (docs/definitions/heresy-eradication-2026-07-07.md).
+    - ArtifactProgramRef is a composite typed ledger-head vector (dolt_app_head, blob_store_root, artifact_graph_head, source_build_ref, route_epoch, vm_runtime_ref), not a single Dolt hash.
+    - Dolt is canonical for the Dolt/app-state ledger. Base stays for desktop file sync only.
+    - Candidate computers are capsules, not VMs (H031). Active computers may use VMs as one materializer substrate.
+    - Branch-per-computer (not branch-per-cosuper). Co-supers operate over the computer's single owned object graph.
+    - Production code uses zero Dolt version-control features. "Branch in the same database" is aspirational, not implemented.
+    - The supervision trace (37 VM-local tables) has no typed-export path — an I4 gap that the OG cutover (Phases 2-3) resolves.
+    - No production-capable Dolt extractor exists. All materializers declare ObservationDoltHead unsupported. The Dolt extractor is the SIAC framework's contribution to OG/Dolt Phase 4.
+    - The World Wire (renamed from "Universal") is the first staging proof target for Gate 7.
+
+    Remaining uncertainty: |
+      Generator writes to filesystem directories, not live VM data.img.
+      CodeRef resolution (CodeRef → kernel/rootfs paths) is the next gap.
+      Dolt extractor for StateGenerator is the prerequisite for Dolt/app-state ledger equivalence proof.
+      Runtime-state ledger coverage depends on OG cutover Phases 2-3.
+      Platform VM failure (recovery_failed since July 3) must be documented (I7) before repair.
+    Next realism axis: |
+      1. Document the platform VM failure and Dolt corruption hypothesis (I7).
+      2. Build the Dolt extractor for StateGenerator (SIAC contribution to OG/Dolt Phase 4).
+      3. Support OG/Dolt Phase 4: promotion protocol rewrite over ComputerVersion with Dolt branch/merge.
+      4. Gate 7 staging proof: World Wire service with route-over-ComputerVersion.
   active_red_ceremony: null
   completed_red_ceremonies:
     - pass: 125
