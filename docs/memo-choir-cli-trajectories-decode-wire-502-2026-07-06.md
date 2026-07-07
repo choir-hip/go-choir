@@ -70,31 +70,47 @@ Earlier test with 180s timeout returned `502` after `180.112591s`.
   `/api/texture/documents` (120ms), `/api/search` (works), 
   `/api/prompt-bar` (works — `run start` succeeded).
 
-**Root cause hypothesis:** The upstream VM's `HandleUniversalWireStories`
-handler (`internal/runtime/universal_wire.go:59`) calls
-`universalWireEditionTextureStories` which does Dolt store queries
-(`GetDocumentAlias`, `GetDocument`, `GetRevision`). One of these queries is
-hanging indefinitely on staging. The handler always writes a JSON response
-(line 125), so the hang is inside a store call, not in the response writing.
+**Root cause (confirmed):** The proxy routes `/api/universal-wire/stories` to
+the **platform computer** VM (`universal-wire-platform`/`platform`), a separate
+always-on VM from the user's personal VM. Other API endpoints route to the
+user's VM (working fine). The platform computer VM is not responding — the
+proxy's `resolveSandboxURL` for the platform computer times out at 180s.
 
-The handler passes `r.Context()` to store methods, so the query should cancel
-when the client disconnects — but the proxy's 180s timeout means the upstream
-VM is blocked for the full duration.
+Evidence:
+- `internal/proxy/handlers.go:970`: `protectedAPIResolveTarget` hard-codes
+  `/api/universal-wire/stories` → `vmctl.UniversalWirePlatformOwnerID`/
+  `UniversalWirePlatformDesktopID`.
+- `internal/proxy/handlers.go:577-578`: "Universal Wire stories read the
+  platform computer's embedded store, not the caller's personal computer."
+- Health endpoint `api.resolve` stage: count=104, errors=23,
+  avg=28102ms, max=180029ms. The 23 errors are the wire stories requests
+  that timed out. The 81 successful resolves (other endpoints) have fast
+  upstream calls (13ms avg).
+- `platform_publication.resolve` and `platform_retrieval.search` stages
+  resolve fine (23ms and 455ms avg respectively) — those routes go through
+  a different path (corpusd, not the platform computer VM).
+
+The handler (`internal/runtime/universal_wire.go:59`) always writes a JSON
+response (line 125), so the hang is NOT in the handler's response writing —
+the proxy never reaches the upstream VM at all. The `resolveSandboxURL` call
+for the platform computer is what hangs.
 
 **Impact:** `choir wire stories` and `choir wire diagnostics` both fail (they
 hit the same endpoint). The Universal Wire feed is unavailable on staging.
 
-**Belief state:** This is a staging runtime issue, not a CLI issue. The Dolt
-store on the upstream VM may have a lock, a slow query, or a corrupted state
-on the wire edition path. Cannot be diagnosed locally per doctrine (staging is
-the acceptance environment; local dev is not proof for live worker/candidate
-computers or Dolt store state).
+**Class:** red (VM lifecycle, deployment routing). The platform computer VM
+is down, unresponsive, or missing from vmctl's registry.
 
-**Remaining error field:** Needs staging investigation — check upstream VM
-logs for the wire stories handler, check Dolt store state for the
-`universal-wire/Wire.texture` alias, and check if the edition document has a
-corrupted or circular transclusion that causes an infinite loop in
-`universalWireEditionIncludedDocIDs`.
+**Belief state:** This is a staging VM lifecycle issue. The platform computer
+VM (`universal-wire-platform`/`platform`) needs to be checked and possibly
+resumed. Cannot be diagnosed or fixed locally per doctrine (staging is the
+acceptance environment; local dev is not proof for VM lifecycle).
+
+**Remaining error field:** Needs staging VM access to:
+1. Check platform computer VM status via vmctl (is it running/stopped/crashed?)
+2. Resume it if stopped
+3. Check the runtime inside it if running but unresponsive
+4. Check vmctl's registry for the platform computer ownership entry
 
 ## Commands that work correctly
 
