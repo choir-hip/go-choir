@@ -69,3 +69,6 @@ specs/states/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Local tool caches (e.g. transient GOCACHE pointed at repo root)
+.cache/
