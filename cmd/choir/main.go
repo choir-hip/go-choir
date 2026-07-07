@@ -85,8 +85,9 @@ Commands:
   wire diagnostics    Print wire feed diagnostics (edition substrate state)
   trajectories        List recent trajectories (ingestion/run state)
   trajectory <id>     Show one trajectory's obligations
-  texture read <doc>  Read a Texture document + current revision
-  texture history <doc>  List revision history for a document
+  texture read <doc>  Read a Texture document's metadata (title, current revision id)
+  texture history <doc>  List revision history for a document (metadata only)
+  texture revisions <doc>  List revisions with full content bodies
   search <query>      Search the corpus
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
@@ -341,19 +342,21 @@ type trajectoriesListResponse struct {
 // internal/types.TrajectoryRecord. Kept minimal to avoid importing the
 // types package (and its transitive cgo deps).
 type trajectoryRecord struct {
-	TrajectoryID   string    `json:"trajectory_id"`
-	OwnerID        string    `json:"owner_id"`
-	Kind           string    `json:"kind"`
-	SettlementRule string    `json:"settlement_rule,omitempty"`
-	CreatedAt      time.Time `json:"created_at,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	TrajectoryID   string          `json:"trajectory_id"`
+	OwnerID        string          `json:"owner_id"`
+	Kind           string          `json:"kind"`
+	SubjectRefs    json.RawMessage `json:"subject_refs,omitempty"`
+	Status         string          `json:"status,omitempty"`
+	SettlementRule json.RawMessage `json:"settlement_rule,omitempty"`
+	CreatedAt      time.Time       `json:"created_at,omitempty"`
+	UpdatedAt      time.Time       `json:"updated_at,omitempty"`
 }
 
 // ---- texture ----
 
 func runTexture(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir texture: subcommand required (read|history)")
+		fmt.Fprintln(stderr, "choir texture: subcommand required (read|history|revisions)")
 		return 2
 	}
 	sub := args[0]
@@ -382,6 +385,13 @@ func runTexture(args []string, stdout, stderr io.Writer) int {
 		var resp json.RawMessage
 		if err := c.do(http.MethodGet, "/api/texture/documents/"+docID+"/history", nil, &resp); err != nil {
 			fmt.Fprintf(stderr, "choir texture history %s: %v\n", docID, err)
+			return 1
+		}
+		return writeJSON(stdout, resp)
+	case "revisions":
+		var resp json.RawMessage
+		if err := c.do(http.MethodGet, "/api/texture/documents/"+docID+"/revisions", nil, &resp); err != nil {
+			fmt.Fprintf(stderr, "choir texture revisions %s: %v\n", docID, err)
 			return 1
 		}
 		return writeJSON(stdout, resp)
