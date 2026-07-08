@@ -1,6 +1,4 @@
-//go:build linux
-
-package main
+package transaction
 
 import (
 	"encoding/json"
@@ -25,15 +23,15 @@ func NewTransactionBuilder(classifier *Classifier) *TransactionBuilder {
 // TransactionRecord is the structured output of the transaction builder.
 // It represents a single capsule's diff as a tape-appendable record.
 type TransactionRecord struct {
-	CapsuleID    string                    `json:"capsule_id"`
-	Timestamp    time.Time                 `json:"timestamp"`
-	ClassifierV  string                    `json:"classifier_version"`
-	ClassifierDigest string                `json:"classifier_digest"`
-	Groups       map[string][]ChangeRecord `json:"groups"`
-	Ignored      []ChangeRecord            `json:"ignored"`
-	Unknown      []ChangeRecord            `json:"unknown,omitempty"`
-	Rejected     bool                      `json:"rejected"` // true if unknown paths present
-	RejectReason string                    `json:"reject_reason,omitempty"`
+	CapsuleID        string                    `json:"capsule_id"`
+	Timestamp        time.Time                 `json:"timestamp"`
+	ClassifierV      string                    `json:"classifier_version"`
+	ClassifierDigest string                    `json:"classifier_digest"`
+	Groups           map[string][]ChangeRecord `json:"groups"`
+	Ignored          []ChangeRecord            `json:"ignored"`
+	Unknown          []ChangeRecord            `json:"unknown,omitempty"`
+	Rejected         bool                      `json:"rejected"` // true if unknown paths present
+	RejectReason     string                    `json:"reject_reason,omitempty"`
 }
 
 // ChangeRecord is a single file change in the transaction record.

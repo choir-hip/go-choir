@@ -1,6 +1,13 @@
-//go:build linux
-
-package main
+// Package transaction provides the capsule transaction classifier, builder,
+// and tape. It runs on the host (trusted zone) alongside the capsule executor.
+//
+// The classifier groups file changes by ledger kind. The builder converts
+// classified diffs into structured transaction records. The tape is a
+// tamper-evident append-only log of transaction records.
+//
+// v7 decision: Unknown paths are REJECTED at commit time. Silently
+// classifying as LedgerVM creates a trust-bearing catch-all.
+package transaction
 
 import (
 	"crypto/sha256"
@@ -79,13 +86,10 @@ func (p PathPattern) Match(filePath string) bool {
 // Classifier groups file changes by ledger kind. It runs on the host
 // (trusted zone) and determines how each change is recorded in the
 // MutationTransaction.
-//
-// v7 decision: Unknown paths are REJECTED at commit time. Silently
-// classifying as LedgerVM creates a trust-bearing catch-all.
 type Classifier struct {
-	Version string                      `json:"version"` // "v1"
+	Version string                       `json:"version"` // "v1"
 	Rules   map[LedgerKind][]PathPattern `json:"rules"`
-	Ignore  []PathPattern               `json:"ignore"` // ephemeral paths
+	Ignore  []PathPattern                `json:"ignore"` // ephemeral paths
 }
 
 // NewClassifier creates the default v1 classifier with standard path rules.
@@ -135,11 +139,11 @@ func NewClassifier() *Classifier {
 
 // ClassifyResult is the output of classification.
 type ClassifyResult struct {
-	Version  string                          `json:"version"`
-	Groups   map[LedgerKind][]capsule.FileChange `json:"groups"`
-	Ignored  []capsule.FileChange            `json:"ignored"`
-	Unknown  []capsule.FileChange            `json:"unknown"`
-	Digest   string                          `json:"digest"` // SHA-256 of the classification
+	Version string                          `json:"version"`
+	Groups  map[LedgerKind][]capsule.FileChange `json:"groups"`
+	Ignored []capsule.FileChange            `json:"ignored"`
+	Unknown []capsule.FileChange            `json:"unknown"`
+	Digest  string                          `json:"digest"` // SHA-256 of the classification
 }
 
 // Classify groups file changes by ledger kind. Ephemeral paths are ignored.

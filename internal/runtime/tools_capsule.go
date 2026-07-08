@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 )
 
 // CapsuleToolCtx holds the capsule executor and current agent context
@@ -19,6 +20,17 @@ type CapsuleToolCtx struct {
 	AgentRunID    string
 	Role          capsule.AgentRole
 	CapsuleHandle string // opaque handle for the current capsule
+
+	// TransactionTape is the tamper-evident append-only log of capsule
+	// transaction records. Each commit_transaction call appends one entry.
+	// The tape models the candidate branch's transaction history in the
+	// TLA+ promotion protocol spec (capsuleTxns variable).
+	TransactionTape *transaction.Tape
+
+	// TransactionBuilder classifies capsule diffs and builds structured
+	// transaction records for the tape. If nil, commit_transaction falls
+	// back to returning raw changes without classification or tape append.
+	TransactionBuilder *transaction.TransactionBuilder
 }
 
 type capsuleCtxKey struct{}
@@ -289,12 +301,55 @@ func newCommitTransactionTool() Tool {
 				return "", fmt.Errorf("failed to extract diff: %w", err)
 			}
 
-			// TODO: Call CapsuleDiffClassifier + TransactionBuilder.
-			// For now, return the raw changes.
+			// If no transaction builder is configured, fall back to raw changes.
+			// This preserves backward compatibility with existing callers.
+			if ctc.TransactionBuilder == nil {
+				return toolResultJSON(map[string]any{
+					"capsule_id":   in.CapsuleID,
+					"change_count": len(changes),
+					"changes":      changes,
+					"tape_append":  false,
+				})
+			}
+
+			// Classify the diff and build a transaction record.
+			record, err := ctc.TransactionBuilder.BuildTransactionFromDiff(in.CapsuleID, changes)
+			if err != nil {
+				return "", fmt.Errorf("build transaction: %w", err)
+			}
+
+			// If the record is rejected (unknown paths), do not append to tape.
+			if record.Rejected {
+				return toolResultJSON(map[string]any{
+					"capsule_id":   in.CapsuleID,
+					"change_count": len(changes),
+					"rejected":     true,
+					"reject_reason": record.RejectReason,
+					"tape_append":  false,
+				})
+			}
+
+			// Append to the tamper-evident tape.
+			var tapeHash string
+			var tapeLen int
+			if ctc.TransactionTape != nil {
+				tapeHash, err = ctc.TransactionTape.Append(record)
+				if err != nil {
+					return "", fmt.Errorf("tape append: %w", err)
+				}
+				tapeLen = ctc.TransactionTape.Len()
+			}
+
 			return toolResultJSON(map[string]any{
-				"capsule_id":   in.CapsuleID,
-				"change_count": len(changes),
-				"changes":      changes,
+				"capsule_id":        in.CapsuleID,
+				"change_count":      len(changes),
+				"classifier_version": record.ClassifierV,
+				"classifier_digest": record.ClassifierDigest,
+				"groups":            record.Groups,
+				"ignored_count":     len(record.Ignored),
+				"tape_append":       ctc.TransactionTape != nil,
+				"tape_hash":         tapeHash,
+				"tape_length":       tapeLen,
 			})
 		},
 	}
