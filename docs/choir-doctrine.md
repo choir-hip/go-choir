@@ -1168,7 +1168,7 @@ pattern. The test: if there are no `chan` declarations in
 
 #### H031 - Candidate Computer Modeled as VM Identity
 
-`status:` **active** (gated on Phase 4 of the current umbrella mission
+`status:` **active** (gated on Phase D of the current umbrella mission
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md);
 the older `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` is superseded source
 material).

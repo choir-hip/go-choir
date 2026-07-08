@@ -1,0 +1,42 @@
+[0m
+> build · mimo-v2.5-free
+[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+[0m→ [0mRead docs/choir-doctrine.md
+[0m→ [0mRead docs/heresy-detectors.md
+[0m→ [0mRead docs/evidence/agentic-consensus-2026-07-08-mission-readiness-recheck-2
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md[90m [offset=817][0m
+[0m→ [0mRead docs/archive/heresy-eradication-2026-07-07.md
+[0m→ [0mRead docs/choir-doctrine.md[90m [offset=1141][0m
+[0m→ [0mRead docs/evidence/agentic-consensus-2026-07-08-mission-readiness-recheck-2/prompt.md
+Let me continue reading the mission doc and check the other referenced files.
+[0m→ [0mRead README.md[90m [limit=40][0m
+[0m→ [0mRead docs/mission-graph.yaml
+[0m→ [0mRead docs/doc-authority-manifest.yaml
+[0m→ [0mRead docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md[90m [limit=30][0m
+Now let me check the specific residual concerns and verify the fixes. Let me look at a few more areas:
+Based on my review of the mission document and all referenced files, here is my readiness assessment:
+
+## 1. Verdict: **safe** for execution readiness
+
+All five residual concerns from the previous recheck panel have been addressed. The document is internally consistent, the definition graph is complete, the phase structure and gate protocol are correct, and the archival/supersession notes are properly placed.
+
+## 2. Blockers remaining: **none**
+
+No blockers prevent `/goal` execution.
+
+## 3. Important issues remaining (should fix before Phase A): **none**
+
+All Phase A work items (W1, W2, W3, C1-C7, D-PROMO settlement test, S1, P-TRIAGE) have clear scope and entry bars.
+
+## 4. Minor issues / nits
+
+- **N1** `docs/choir-doctrine.md:1173` — H031 status line contains a code-span reference `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` without hyperlink. Cosmetic only; the text is descriptive context, not an active reference. Could become a link in a future doc pass but is not blocking.
+
+- **N2** `docs/archive/heresy-eradication-2026-07-07.md:35` — body text references `docs/mission-og-dolt-heresy-hard-cutover-v0.md` without the `archive/` prefix. The historical-only note at the top (lines 1-6) already explains these are historical source material paths, so this is contextually correct but could confuse a reader who skips the header.
+
+- **N3** `docs/archive/heresy-eradication-2026-07-07.md:13` — body retains the `/goal docs/definitions/heresy-eradication-2026-07-07.md` string. The header redirect (lines 1-6) says "A `/goal` against this file should redirect there," which is the correct treatment for archived authority.
+
+## 5. Confidence: **high**
+
+The document is well-structured, internally consistent, and the five previous concerns have been resolved. The definition graph has 12 nodes (2 terms, 4 invariants, 1 boundary, 3 decision/conjecture nodes, 2 store taxonomy nodes). The determined state snapshot is accurate. The variant baseline is specific and measurable. The phase gate protocol correctly handles red-class gates. Machine-readable authority (doc-authority-manifest.yaml, mission-graph.yaml) is registered for the mission and its archived sources.
