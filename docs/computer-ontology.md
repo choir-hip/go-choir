@@ -1,7 +1,7 @@
 # Choir Computer Ontology
 
 **Status:** canonical architecture vocabulary
-**Last updated:** 2026-06-09
+**Last updated:** 2026-07-07
 
 This document names the durable object that Choir operates on.
 
@@ -36,7 +36,10 @@ Use these terms:
 - **User computer**: a persistent computer owned by a person or service account
   inside a cloud.
 - **Candidate computer**: a speculative fork of a platform computer or user
-  computer.
+  computer. A candidate is a forked
+  `ComputerVersion = (CodeRef, ArtifactProgramRef)` — forked by tape/program
+  reference — never a VM or desktop instance (see
+  [substrate-independent-audited-computer-2026-07-04](definitions/substrate-independent-audited-computer-2026-07-04.md)).
 
 Do not model a customer Private Choir Cloud as just a tenant row in the
 Community Cloud. A private cloud may have a thousand employees, its own NixOS
@@ -69,6 +72,16 @@ computers to explore risky mutations, long-running work, app changes, package
 installs, new Go binaries, new Svelte builds, generated media, or semantic data
 changes. A candidate computer can later be discarded, archived, merged into the
 active computer, promoted as the active computer, or packaged for publication.
+
+A candidate computer is identified by its forked ComputerVersion
+`(CodeRef, ArtifactProgramRef)`, never by a VM or desktop instance. It is
+materialized on demand — as a VM, a container, or a narrower projection,
+according to the chosen materializer's capability manifest — and its
+speculative *effects* execute in capsules (the effect chambers in
+`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
+append to the candidate's tape. There is no background VM or desktop kept warm
+waiting to be switched to; promotion moves the route pointer between
+ComputerVersions (invariant `route-over-computer-version`).
 
 When the implementation substrate is VM-backed, computer liveness is governed
 by the warmness and reclaim policy in
@@ -119,7 +132,9 @@ Platform versions, platform computers, and user computers are different levels.
 - A platform computer is a persistent cloud-owned computer for cloud-level
   agents, cloud-owned artifacts, publication/source systems, and shared indexes.
 - A user computer is a persistent fork of that baseline.
-- A candidate computer is a speculative fork of a platform or user computer.
+- A candidate computer is a speculative fork of a platform or user computer — a
+  forked ComputerVersion `(CodeRef, ArtifactProgramRef)`, materialized on
+  demand, with speculative effects executing in capsules.
 - A published package/change is a typed artifact extracted from a user or
   candidate computer so another computer can import it.
 
@@ -333,7 +348,8 @@ citations connect, and future work can reuse the retained structure.
 - Use **computer** for the user-facing durable execution object.
 - Use **active computer** for the computer currently routed to the user.
 - Use **candidate computer** for a speculative fork that may become active,
-  merge back, publish a package, or be discarded.
+  merge back, publish a package, or be discarded. The name refers to a forked
+  ComputerVersion, not to a VM or desktop instance.
 - Use **background computer** when emphasizing long-running off-foreground work.
 - Use **sandbox** only for existing service/process names or legacy references.
 - Use **VM** or **microVM** only when discussing the implementation substrate.

@@ -209,12 +209,19 @@ At a high level:
 
 - each user computer is a persistent, stateful object;
 - canonical state stays stable unless a change is promoted;
-- risky or speculative mutation happens in candidate computers or worker worlds;
+- risky or speculative mutation runs in capsules: ephemeral, capability-scoped
+  effect chambers whose effects commit as typed transactions
+  (`internal/capsule` plus super's `spawn_capsule`/`mint_capability`/
+  `commit_transaction` tools);
+- candidate state is a ComputerVersion fork — `(CodeRef, ArtifactProgramRef)` —
+  not a VM; substrates (Firecracker, containers, host process) are
+  materializers of a ComputerVersion, not its identity;
 - appagents own durable app artifacts;
 - workers produce evidence, deltas, candidates, or reports;
 - AppChangePackages carry source changes between divergent computers;
 - recipient computers rebuild and verify adopted changes themselves;
-- promotion requires verification, owner acceptance, and rollback evidence;
+- promotion is an atomic route flip between ComputerVersions, and requires
+  verification, owner acceptance, and rollback evidence;
 - compaction preserves what a run learned for future inference.
 
 A compact operating invariant:
@@ -223,7 +230,7 @@ A compact operating invariant:
 Evidence enters through researchers.
 Meaning is owned by appagents.
 Computation is orchestrated by super.
-Mutation happens in candidate worlds.
+Mutation happens in capsules against forked ComputerVersions.
 Computers diverge.
 Canonical state changes only by promotion.
 ```
@@ -232,16 +239,22 @@ The current self-development path is roughly:
 
 ```text
 prompt bar -> conductor -> appagent/Texture -> super
--> vmctl worker or candidate computer
+-> capsule execution against a forked ComputerVersion
 -> AppChangePackage
 -> recipient adoption and rebuild
 -> verifier evidence
 -> owner decision
--> promotion or rollback
+-> promotion (atomic route flip between ComputerVersions) or rollback
 ```
 
 The objective is to improve artifacts over time while minimizing corruption,
 deadlock, human monitoring burden, and loss of understanding.
+
+Storage direction (owner decision, 2026-07-07): the object graph is becoming
+the canonical data model by hard cutover — it currently dual-writes alongside
+the `internal/store` SQL tables — and Dolt's native history (`dolt_history`,
+`AS OF`) is becoming the audit read-path. See
+[docs/mission-og-dolt-heresy-hard-cutover-v0.md](docs/mission-og-dolt-heresy-hard-cutover-v0.md).
 
 ## Services
 
@@ -408,6 +421,10 @@ Start here:
 - [docs/glossary.md](docs/glossary.md): canonical vocabulary.
 - [docs/README.md](docs/README.md): documentation index and cleanup status.
 - [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
+- [docs/assessment-overall-state-2026-07-07.md](docs/assessment-overall-state-2026-07-07.md): evidence-backed system state assessment; corrects stale premises (actor runtime fully wired, wire outage is substrate not pipeline, audit trail is application-level today).
+- [docs/mission-og-dolt-heresy-hard-cutover-v0.md](docs/mission-og-dolt-heresy-hard-cutover-v0.md): owner-approved program for object-graph hard cutover, Dolt-native audit/promotion, and heresy elimination.
+- [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](docs/definitions/substrate-independent-audited-computer-2026-07-04.md): executable definition of the product object — `ComputerVersion = (CodeRef, ArtifactProgramRef)` — with substrates as materializers.
+- [docs/choir-grip-checkpoint-2026-07-07.md](docs/choir-grip-checkpoint-2026-07-07.md): narrative checkpoint connecting the architecture, GRIP theory, and the project's conceptual lineage.
 - [docs/frontend-app-building-api.md](docs/frontend-app-building-api.md): current frontend app registry, preview, theme, and shell contract.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
 - [docs/adr-dolt-as-canonical-state.md](docs/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision.

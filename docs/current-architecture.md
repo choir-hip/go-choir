@@ -1,7 +1,12 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-06-11 (ontology revision: durable actors, trajectories,
-conjecture vocabulary; see the new Ontology section)
+**Last updated:** 2026-07-07 (status-tag pass: every claim is now marked
+**Live (2026-07)**, **Target**, or **Retired**; actor-runtime, capsule,
+candidate-computer, and storage claims corrected against
+[assessment-overall-state-2026-07-07.md](assessment-overall-state-2026-07-07.md)
+and [mission-og-dolt-heresy-hard-cutover-v0.md](mission-og-dolt-heresy-hard-cutover-v0.md).
+Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
+conjecture vocabulary; see the Ontology section.)
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `texture`, conductor routing, workers, Trace, Dolt,
@@ -17,6 +22,18 @@ This document tracks the architecture that the current repo and staging system
 actually implement, plus explicitly labeled active hardening where the code
 already has a partial substrate. It should not be used as a speculative product
 roadmap. Sections labeled target-only are not current-state claims.
+
+Every claim in this document belongs to exactly one of three states, and the
+tags below make that explicit (this repairs heresy H020, mixed current/target
+onboarding):
+
+- **Live (2026-07)** — implemented and running in this repo/staging now.
+- **Target** — decided direction, not yet (fully) implemented. Where an owner
+  decision exists, it is cited.
+- **Retired** — a former design or vocabulary that still has code/doc residue
+  but must not receive new work.
+
+Untagged prose inside a tagged section inherits the section's tag.
 
 Use [intended-architecture-next-2026-06-06.md](intended-architecture-next-2026-06-06.md)
 for the intended architecture after the next week-plus of source, Base,
@@ -46,11 +63,20 @@ model and cutover program), `choir-role-free-actor-protocol-2026-06-11.md`
 `conjecture-learning-proof-theory-2026-06-11.md` (the epistemic frame). The
 runtime protocols are model-checked in `specs/` (TLC runs in CI).
 
-**Transitional honesty:** the code has NOT fully cut over. Parent/child runs,
-RunContinuations, and DB-polled channel messages still run today; the transitional
-portfolio (`mission-portfolio-2026-06-11.md`) sequences their replacement.
-This section states the target vocabulary so new work stops accreting on the
-retired ontology.
+**Transitional honesty (revised 2026-07-07):** the actor cutover is further
+along than earlier revisions of this paragraph claimed. **Live (2026-07):** the
+actor runtime is fully wired and is the *only* execution substrate — the
+`dispatchActor` hook panics if nil, with no legacy fallback path
+(internal/runtime/runtime.go); cold-start, coagent wake, cancel, park-resume,
+and the tool loop all run through the actor; warm delivery is a Go channel, not
+DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
+(~106K LOC of tool loops, texture state machine, wire synthesis, run memory)
+awaiting *extraction and deletion*, not a zombie awaiting wiring. **Retired
+(residue still in tree):** parent/child run control and RunContinuations are
+named heresies (H001–H008) with deletion scheduled in
+[mission-og-dolt-heresy-hard-cutover-v0.md](mission-og-dolt-heresy-hard-cutover-v0.md);
+they must receive no new callers. This section states the settled vocabulary so
+new work stops accreting on the retired ontology.
 
 | Term | Meaning |
 |---|---|

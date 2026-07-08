@@ -2,7 +2,7 @@
 
 ## Status
 
-Canonical doctrine and architecture control document as of 2026-06-13.
+Canonical doctrine and architecture control document as of 2026-07-07.
 
 This document states:
 
@@ -46,10 +46,25 @@ document wins unless the support doc is a newer explicitly promoted doctrine
 update. Historical specs, master-spec reviews, MissionGradient reports, and
 mission ledgers are evidence. They do not silently override Choir Doctrine.
 
+Enforcement direction (owner decision 2026-07-07): doctrine prose is being
+replaced by executable enforcement. Invariants trend toward TLA+ specs
+model-checked in CI, and heresies trend toward detectors that fail CI on
+regression. This document trends toward thesis + invariants + pointers, with
+the mission form defined in
+[mission-og-dolt-heresy-hard-cutover-v0.md](./mission-og-dolt-heresy-hard-cutover-v0.md)
+and the executable definitions in [docs/definitions/](./definitions/). A heresy
+entry below without a CI detector is a heresy entry that is not yet done being
+written.
+
 ## System Thesis
 
-Choir is a self-improving mainframe: a persistent-computer system for owned
-learning over versioned artifacts, evidence, provenance, and promotion history.
+Choir is a human-improving, machine-compounding mainframe: a
+persistent-computer system for owned learning over versioned artifacts,
+evidence, provenance, and promotion history. "Self-improving mainframe" is
+acknowledged historical shorthand and may still appear in older docs and code;
+the precise claim is that the improver is the person — the human supplies the
+off-distribution judgment — and the system is the compounding memory that
+accumulates that judgment as durable owned state surviving model churn.
 
 The primary optimization target is not chat quality, local test passage, or
 short-term product smoothness. The target is:
@@ -95,13 +110,21 @@ of that new debt.
 
 ## Framing Doctrine
 
-Current framing: Choir is a self-improving mainframe made of persistent
-computers. Older framings such as personal writing system, publishing system, AI
+Current framing: Choir is a human-improving, machine-compounding mainframe made
+of persistent computers ("self-improving mainframe" remains acceptable
+historical shorthand: the improver is the person, the system is the compounding
+memory). Older framings such as personal writing system, publishing system, AI
 workspace, sandbox, workflow app, StoryGraph app, or chat interface are
 historical, surface-specific, or deprecated unless this document explicitly
 promotes them.
 Where those terms reappear below, they are quoted as detector vocabulary or
 historical evidence, not endorsed naming.
+
+Naming note (2026-07-07): the Universal Wire is renamed the **World Wire** in
+product narrative — humility over totality; it indexes the world *as reported*,
+contested and plural, not a god's-eye index. Code identifiers and routes still
+say `universal-wire` until a code rename mission lands; until then the code
+name is transitional, not endorsed framing.
 
 Framing drift is doctrine drift. If a document, prompt, test, or UI label teaches
 agents to optimize an older product story, it can pull code back toward the old
@@ -110,12 +133,18 @@ alignment, not only technical symbol deletion.
 
 Preferred vocabulary:
 
-- self-improving mainframe;
+- human-improving, machine-compounding mainframe (historically: self-improving
+  mainframe);
 - persistent computer;
+- ComputerVersion (CodeRef, ArtifactProgramRef);
 - durable artifact;
+- artifact program;
 - trajectory and work item;
 - evidence, provenance, verifier contract, and acceptance class;
-- candidate world / candidate computer;
+- candidate world / candidate computer — a semantic term for speculative state:
+  a candidate is a ComputerVersion fork, never a VM;
+- capsule (ephemeral effect chamber);
+- materializer;
 - promotion and rollback.
 
 Avoid making these the root frame unless the sentence is explicitly about a
@@ -140,8 +169,11 @@ the canonical document and artifact control-plane core; other appagents own
 their own typed artifact domains.
 
 `C3 asserted` Canonical state remains stable. Risky or long-running mutation
-happens in candidate computers or candidate worlds and becomes canonical only
-by promotion.
+*effects* execute in capsules (ephemeral effect chambers whose effects become
+typed transactions in the artifact program), and speculative state lives as a
+forked ComputerVersion/ledger — a candidate world in the semantic sense, never
+a candidate VM. Speculative state becomes canonical only by promotion, an
+atomic route flip between ComputerVersions.
 
 `C4 active` Wire, publication, review, and later economic surfaces are
 projections of the artifact-and-provenance substrate, not independent product
@@ -1087,6 +1119,14 @@ gathering workflow.
 
 #### H030 - Actor Runtime Database Polling
 
+`status:` **repaired 2026-06-27.** `internal/actor/actor.go:141` declares
+`mailbox chan Update` and the warm loop selects on the channel; the log is
+queried only for cold-start replay, post-drain overflow catch, and Sweep boot
+recovery. See
+[docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md).
+The entry remains as detector vocabulary because this heresy recurred three
+times; the deletion gate below is now the regression test.
+
 `bad pattern:` the actor runtime polls the durable log as the delivery
 mechanism instead of using Go channels. The loop queries `log.Unprocessed`
 every iteration. There are zero `chan` declarations in the actor package. A
@@ -1122,6 +1162,22 @@ loop must `select` on the channel, not call `log.Unprocessed` in a polling
 pattern. The test: if there are no `chan` declarations in
 `internal/actor/actor.go`, the heresy is present regardless of comments.
 
+
+#### H031 - Candidate Computer Modeled as VM Identity
+
+`status:` **active** (gated on Phase 4 of OG/Dolt hard cutover).
+
+`bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
+
+`detectors:` vmctl candidate-desktop publish/switch lifecycle (`internal/vmctl/handlers.go:312`, `client.go:191`), candidate_computer_package files capturing VM state as candidate identity, route resolutions targeting VM/desktop IDs.
+
+`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](./definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/definitions/heresy-eradication-2026-07-07.md](./definitions/heresy-eradication-2026-07-07.md).
+
+`why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
+
+`successor pattern:` Candidate = `(CodeRef, forked ArtifactProgramRef)`; speculative effects execute in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`); promotion = atomic route flip between `ComputerVersion` records.
+
+`deletion gate:` No route resolves to a VM identity; all routes and promotion records target `ComputerVersion` records; vmctl candidate-desktop lifecycle code is deleted.
 ## Banned Patterns
 
 Agents must not introduce:

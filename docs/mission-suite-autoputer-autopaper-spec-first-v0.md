@@ -27,6 +27,18 @@ This mission suite redesigns the specs first, then executes the code migrations 
 
 ---
 
+## Premise Corrections (2026-07-07)
+
+The historical text below is preserved as written on 2026-07-03. Three of its premises are now known to be stale or inverted (evidence: [assessment-overall-state-2026-07-07.md](./assessment-overall-state-2026-07-07.md); owner decisions: [mission-og-dolt-heresy-hard-cutover-v0.md](./mission-og-dolt-heresy-hard-cutover-v0.md)). Read the rest of this document through these corrections:
+
+1. **The actor runtime is fully wired, not "partially wired."** It is the only execution substrate — `internal/runtime`'s `dispatchActor` hook panics if nil; there is no legacy fallback path. The remaining Mission A work is business-logic *extraction and deletion*, not wiring.
+2. **`internal/runtime` is not a zombie.** It is the live application-logic layer (148 files, ~106K LOC: tool loops, texture state machine, wire synthesis, run memory) that the actor substrate schedules. Deleting it means extracting live logic, not removing dead code.
+3. **The object graph migration was additive, not replacive** — two data models coexisted. As of 2026-07-07 the owner has decided a **hard cutover to object-graph-canonical**, sequenced in [mission-og-dolt-heresy-hard-cutover-v0.md](./mission-og-dolt-heresy-hard-cutover-v0.md).
+
+Also corrected (owner, 2026-07-07): **candidate computers are ComputerVersion `(CodeRef, ArtifactProgramRef)` forks with speculative effects executing in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`), not candidate VMs** — "we use containers for what used to be candidate computers now." Where this document (and the specs it lists for rewrite, especially `promotion_protocol.tla` and `actor_protocol_xvm.tla`) speaks of candidate/active computer splits, the specs should model ComputerVersion and capsule semantics per [definitions/substrate-independent-audited-computer-2026-07-04.md](./definitions/substrate-independent-audited-computer-2026-07-04.md).
+
+---
+
 ## Central Conjecture
 
 ```text
