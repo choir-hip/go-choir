@@ -1,0 +1,60 @@
+I now have all the evidence needed. Let me compile the verdict.
+
+---
+
+## Consensus Panel Review: `og-dolt-heresy-completion-2026-07-08.md`
+
+### 1. Verdict: **conditional** (safe to execute after cheap stale-reference reconciliation)
+
+The mission's architecture, store taxonomy, supersession wiring, completion bars, and rollback policy are all verified sound against the code. The blocking issues are stale doc-line references left by the green pass (commits `7ec03ac2`/`fa64b636`) that would mislead an autonomous `/goal` run — not structural defects.
+
+### 2. Blocking issues (must fix before `/goal`)
+
+**B1. C1 line reference is stale.** The doc says `C1 current-architecture.md:93 — split "capsule substrate wired" from "promotion-bearing capsule transactions unproven"`. Verified: line 93 is now the *trajectory* row; the capsule row is line 98 and reads `(designed, not built)`. Grep for `capsule substrate|promotion-bearing` across `current-architecture.md` returns **zero matches** — the green pass restructured this section. An autonomous run will hunt for non-existent text. Reconcile C1 against the post-green-pass file: either the split is already done (close it), or restate the target with current line/content.
+
+**B2. C3 / H031 claims are partially stale.** The doc says `C3 ... add H031 banned-pattern entry; assign a registry number + entry to candidate-computer-as-VM` and the open node lists `candidate-computer-as-VM heresy number: missing`. Verified against `docs/choir-doctrine.md:1169-1186`: **H031 is already fully populated** — title is literally "Candidate Computer Modeled as VM Identity", with `bad pattern`, `detectors` (vmctl candidate-desktop lifecycle, candidate_computer_package, route-to-VM-IDs), `successor pattern`, and `deletion gate` ("No route resolves to a VM identity... vmctl candidate-desktop lifecycle code is deleted"). So:
+- The "candidate-computer-as-VM" heresy **is H031** — it is not a missing/new number. The open node is stale.
+- What is genuinely unbuilt: the H031 pattern is **not** in the numbered *Banned Patterns* list (lines 1187-1214 lists 15 patterns, none is route-over-VM). C3 should be reframed as "add H031 route-over-VM pattern to the Banned Patterns list for detector enforcement" (the heresy entry itself is done).
+
+Both B1 and B2 are minutes of text reconciliation — fix before `/goal` so the run doesn't misfire.
+
+### 3. Important issues (should fix before Phase A)
+
+**I1. Phase gates are self-adjudicating.** The Phase Gate Protocol has the *executing agent* classify its own consensus panel's findings (acknowledged at lines 466-469, with the mitigation that classifications are committed to `docs/evidence/` and unjustified `retired`/category-(c) reclassifications become category-(a) defects). That mitigation is an audit *trail*, not an independent *gate*. For yellow Phase A/B this is tolerable; for red-class Phases C/D/E it is riskier. Recommend: require explicit **owner sign-off** (not mere escalation-trigger) on the Phase D gate (promotion cutover — red) and Phase E gate (irreversible SQL table drops — black-adjacent). The escalation rules (lines 688-697) already route table drops and D-PROMO group-level changes to the owner; extend that to the gate-clear decision itself for D and E.
+
+**I2. D-PROMO settlement location is inconsistent.** `settlement.rule` says "Settle by the experiment during the Phase D spec rewrite (earlier if cheap)" while the `test:` field and Phase A work item say it is *pulled forward into Phase A*. Pick one declared settlement point (Phase A, since the test is cheap and settles the mission's biggest decision node). Otherwise an agent could argue D-PROMO is still "testing" at the Phase D gate and block itself.
+
+**I3. W1 manifest-exists nuance.** The doc claims "detector manifest ... do not exist." Verified: `docs/heresy-detectors.md` **exists** (baseline captured 2026-06-13, doctrine-level manifest with H001-H029 rows + counts) but is explicitly "not yet a CI-enforced check" and is **missing H030/H031 rows**. `scripts/check-heresies.sh` is correctly absent. W1 should read "extend the existing manifest (add H030/H031), create the CI script, wire the discovery job" — not "manifest does not exist."
+
+### 4. Minor issues / nits
+
+- **Task/doc terminology:** the task says "five completion criteria (C1-C5)" but the doc has **9** completion criteria (numbered 1-9, lines 718-741) and **separately** C1-C7 are doc-correction work items. All 9 completion criteria *do* have objective verifiable exit bars + evidence plans (verified below). Reconcile the "C1-C5" framing so reviewers and the run agree on what's being checked.
+- **C7 README:** README already leads with "self-improving mainframe" (lines 3, 15, 38, 112). C7 wants the specific phrase "human-improving, machine-compounding mainframe" — a wording refinement, not creation. Flag as a content decision, not a gap.
+- Variant `heresy_families_without_ci_detector: 31` is accurate (H001-H031); the manifest just lacks the last two rows.
+
+### 5. Verification of the six explicit check items
+
+| Check | Result | Evidence |
+|---|---|---|
+| **#1 Completion criteria have verifiable bars + evidence plans** | ✅ (all 9) | Each criterion maps to an observable: CI fail-on-regression (criterion 1), `go test` green + table-drop (2), staging route-flip trace + rollback flip (3, with explicit falsified-D-PROMO fallback), grep I1 observables gone (4), doctrine structure (5), committed before/after CLI diff (6), staging 504 proof (7), git-log C1-C7 + no mislabeled status (8), triage table full (9). Evidence classes bound at lines 636-647. |
+| **#2 Machine-readable supersession (C5)** | ✅ present | `mission-graph.yaml:2977-3005` — both absorbed docs as `status: superseded, kind: superseded` with `sources` pointing at the new definition; umbrella node `og-dolt-heresy-completion-2026-07-08` at :3006 (`status: working, kind: spine`). `doc-authority-manifest.yaml:241/262/278` — all three registered with correct roles/witnesses. **C5 is already landed by the green pass.** |
+| **#3 Phase gates A-E: sequencing, deps, adjudication** | ✅ sequencing/deps; ⚠️ self-adjudication (see I1) | A→B→C→D→E with explicit deps (D gated on D-STORE/D-PROMO/S1; C needs batch-commit infra; A parallel-safe). Each phase has an explicit exit bar (A:554, B:570, C:587, D:606, E:624). Owner escalation triggers defined (688-697). Weakness: agent adjudicates its own panel (I1). |
+| **#4 D-STORES file mapping** | ✅ correct | world-wire = `internal/platform/objectgraph_store.go` (ObjectGraphStore, corpusd/platform SQL server, :12-25); VM-local embedded = `internal/objectgraph/dolt_store.go` (DoltStore, :44-61); promotion = operation on embedded store via `DoltPromotionAdapter.WorkspacePath` (adapter :40-44). Prior inverted mapping corrected. |
+| **#5 D-PROMO pinned-conn determinism test + falsifier** | ✅ well-specified | `test:` (lines 312-320): pinned `db.Conn(ctx)`, `go test -count=10` determinism bar, verify checkout-sticks/isolation/merge+tag/rollback. `falsifier:` (321-323): deterministic isolation failure OR CAS-retry infeasibility. Fallback in criterion 3 (725-729): serialized single writer / separate DB per candidate. Success bar is clear and falsifiable. |
+| **#6 H031 registry/detector + I1 seam scoping** | ⚠️ entry done, C3 stale (see B2) | H031 entry fully populated (doctrine :1169-1186); I1 invariant scoped to `route_resolver.go:47` (hard-coded constants, verified) + `lineage_route_resolver.go` (route_profile parse, verified). Detector (W1) genuinely unbuilt. Banned-pattern-list addition genuinely unbuilt. C3 wording stale. |
+| **#7 No false assumptions / stale claims / missing rollback** | ⚠️ 2 stale refs (B1, B2) + 1 nuance (I3) | Code claims all verified accurate: `client.go:22` 180s ✓, `handlers.go:46` 10s ✓, no server Read/WriteTimeout ✓, adapter comment :18-22 ✓, resolver env-gating (`cmd/proxy/main.go:64` wireRouteResolver) ✓, adapter zero cmd/ callers ✓, seeded route_profile `"route:computer-universal-wire-platform"` (no slash → parser fail → fallback) ✓ matches `UniversalWirePlatformComputerID` constant. Rollback paths covered: git-revertable docs, SQL fallback window before drops, route-flip promotion rollback (I4 forbids DOLT_RESET --hard), D-WIRE code-only cutover (revert = DSN swap). |
+
+### 6. Recommended first phase actions with risk controls
+
+1. **W2 timeout hardening — first, highest leverage.** Orange (proxy request path). Rollback: revert `DefaultClientTimeout`/server-timeout constants. Staging proof: `/api/universal-wire/stories` under induced resolve failure → 504 fast. Unblocks all later staging proof.
+2. **D-PROMO pinned-conn `-count=10` test — parallel.** Yellow (test-only). Settles the mission's largest decision node cheaply; if it passes, Phase D's adapter direction is locked; if it fails, escalate early (not at Phase D gate).
+3. **W1 manifest extension + CI discovery job — parallel.** Yellow. Extend `docs/heresy-detectors.md` (add H030/H031 rows), create `scripts/check-heresies.sh`, wire report-only CI job. No runtime risk.
+4. **Reconcile B1/B2/I3 (stale refs) — before executing C1/C3.** Minutes of doc text; prevents the run from chasing ghosts.
+5. **C5 — verify-and-close.** Already landed (verified); mark done, don't redo.
+6. **Defer C2 (headless surface spec) and P-TRIAGE tail.** C2 is the softest bar; P-TRIAGE is large (25 edges) but yellow — don't let either block W1/W2/D-PROMO.
+
+Risk controls: every red pass names its rollback ref before mutation (doc policy :748); D-WIRE cutover is code-only with no data migration (owner-confirmed, :276-278); promotion stays inert-by-default until D-PROMO settles (:749); table drops stay owner-gated (irreversible).
+
+### 7. Confidence: **medium-high**
+
+Architecture, store taxonomy, supersession, bars, and rollback are verified against code and hold. Blocking issues are cheap stale-reference reconciliation, not structural. Residual uncertainty: (a) the self-adjudicating gate design for red-class phases (I1), and (b) whether D-PROMO's pinned-conn test actually passes — deliberately left to the run, with a documented falsification fallback, so the mission degrades gracefully either way.

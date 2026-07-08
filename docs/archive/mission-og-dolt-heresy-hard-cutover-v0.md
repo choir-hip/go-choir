@@ -1,6 +1,11 @@
+> **Superseded / redirect:** This document is archived source material. The
+> current executable authority for OG/Dolt/heresy completion is
+> `../definitions/og-dolt-heresy-completion-2026-07-08.md`. A `/goal` against
+> this file should redirect there.
+
 # Mission: Object-Graph Hard Cutover, Dolt All-In, Heresy Elimination — v0
 
-**Status:** paradoc / owner-approved direction, sequencing proposed
+**Status:** paradoc / owner-approved direction, superseded; sequencing proposed
 **Date:** 2026-07-07
 **Decisions (owner, 2026-07-07):** (1) the object graph becomes the canonical
 data model by hard cutover, not accretion; (2) Dolt's version-control features

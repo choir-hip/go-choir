@@ -1,3 +1,8 @@
+> **Superseded / redirect:** This document is archived source material. The
+> current executable authority for OG/Dolt/heresy completion is
+> `../definitions/og-dolt-heresy-completion-2026-07-08.md`. A `/goal` against
+> this file should redirect there.
+
 # Heresy Eradication Mission
 
 ## Harness Invocation Semantics

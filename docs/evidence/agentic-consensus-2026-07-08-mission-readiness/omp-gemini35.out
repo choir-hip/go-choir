@@ -1,0 +1,36 @@
+### 1. Verdict
+**Conditional**. Safe to execute Phase A (Foundations and D-PROMO settlement test), but execution of later phases is blocked until the route-over-ComputerVersion invariant is correctly scoped and the self-adjudicating loophole in the Phase Gate Protocol is closed.
+
+---
+
+### 2. Blocking Issues for Execution (Must fix before `/goal`)
+*   **Self-Adjudicating Phase Gates (Phase Gate Protocol):** Under the current protocol, the executing agent has sole authority to classify panel findings (as defects, new nodes, or "noise") and can clear the gate and proceed to the next phase without owner/human sign-off. This violates the "no self-adjudicating gates" principle.
+    *   *Fix:* Require the adjudication table to be approved by the owner (or signed off via an independent verification step) before the gate is considered cleared.
+*   **Over-Broad Invariant Scoping (I1 - `route-over-computer-version`):** The invariant classifies the proxy feeding resolved owner/desktop IDs to `vmctl.ResolveDesktopContext` as a violation because it eventually terminates in a VM identity. However, the proxy must resolve a logical ComputerVersion to a network endpoint (SandboxURL) to forward HTTP traffic. Under this broad definition, the system is unroutable.
+    *   *Fix:* Scope the invariant strictly to the implementation seam: the proxy's routing table resolves to a ComputerVersion, and the translation from ComputerVersion to physical SandboxURL is isolated within the `vmctl/materializer` client boundary as an implementation detail.
+
+---
+
+### 3. Important Issues (Should fix before Phase A)
+*   **Missing Evidence Plans for C4 and C5:** Completion Criteria 1–3, 6, and 7 have clear evidence requirements in the "Evidence Classes and Claim Scope" section. However, Criteria 4 (No VM routing) and 5 (Doctrine reduction) lack corresponding evidence definitions.
+    *   *Fix:* Add explicit evidence specifications. For Criterion 4, require a clean `grep`/`ast_grep` search showing no VM-identity constants in `internal/proxy/`. For Criterion 5, require a green execution of `cmd/doccheck`.
+*   **Undefined Rollback Path for D-WIRE:** The document classifies the D-WIRE migration as code-only (swapping database DSNs in the store paths) but does not specify a concrete rollback path under the rollback policy.
+    *   *Fix:* Explicitly name a git-revert of the DSN and `config.yaml` swaps as the rollback mechanism.
+
+---
+
+### 4. Minor Issues / Nits
+*   **Stale Direct-File-Open Path Code:** Although `PROXY_RUNTIME_DB_PATH` file-sharing is recognized as structurally impossible in embedded mode (due to Dolt's exclusive directory locks), `cmd/proxy/main.go` and `internal/proxy/config.go` still contain the direct-store-open logic. This must be prioritized for removal in Phase D.
+*   **Prose vs. Committed State (C5):** The C5 prose in the definition doc states that "currently none of the three [documents] appear" in `doc-authority-manifest.yaml`. This is slightly stale, as the alignment commits `7ec03ac2` and `fa64b636` have already successfully registered them.
+
+---
+
+### 5. Recommended First Phase Actions with Risk Controls
+1.  **Implement W1 (Detector Manifest + CI Job):** Establish the heresy detector baseline. *Risk control:* Run in discovery mode (reporting counts without failing the build) to confirm the baseline before promoting families to fail-on-regression.
+2.  **Implement W2 (Timeout Hardening):** Bounding client and server timeouts. *Risk control:* Induce a mock resolver timeout on staging and verify the proxy fails fast with a 504.
+3.  **Execute the D-PROMO Settlement Test:** Run the branch-isolation test pulled forward to Phase A. *Risk control:* Pin the connection using `db.Conn(ctx)` or a single transaction to bypass connection pooling issues, and assert a success bar of `-count=10` determinism. If it fails, halt and trigger the falsification fallback (serialized single writer or separate database per candidate) before writing Phase D logic.
+
+---
+
+### 6. Confidence
+**High**. Findings are grounded by direct inspection of `internal/proxy/lineage_route_resolver.go`, `internal/proxy/handlers.go`, `cmd/proxy/main.go`, and the recently landed YAML files.

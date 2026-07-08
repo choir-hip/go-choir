@@ -14,11 +14,11 @@ this document as a plan, checklist, or summary. Its definitions govern what
 
 This document **supersedes as executable authority**:
 
-- `docs/mission-og-dolt-heresy-hard-cutover-v0.md` (the 2026-07-07 program
+- `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` (the 2026-07-07 program
   paradoc) — its phases were partially executed and its sequencing was violated
   in practice (Phase 4 seams landed before Phase 0 foundations); this document
   absorbs its remaining work and corrects the sequencing.
-- `docs/definitions/heresy-eradication-2026-07-07.md` — its definition graph
+- `docs/archive/heresy-eradication-2026-07-07.md` — its definition graph
   (heresy, eliminated, detector, registry-close semantics) is imported by
   reference; its execution state is absorbed here.
 
@@ -40,15 +40,18 @@ either should redirect here.
    (ComputerVersion, materializer, route-over-computer-version).
 4. `docs/choir-doctrine.md` heresy registry (H001–H031) — per-heresy authority
    for bad pattern and blessed replacement.
-5. `docs/definitions/heresy-eradication-2026-07-07.md` — imported definition
+5. `docs/archive/heresy-eradication-2026-07-07.md` — imported definition
    graph for `heresy`, `eliminated`, detector semantics.
-6. `docs/mission-og-dolt-heresy-hard-cutover-v0.md` — phase inventories,
+6. `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` — phase inventories,
    deletion inventories, completion criteria (imported, resequenced here).
 7. `docs/assessment-overall-state-2026-07-07.md` — evidence baseline
    (completeness percentages, timeout diagnosis, storage-fork analysis).
-8. Agentic-consensus panel review 2026-07-08
-   (`docs/evidence/agentic-consensus-2026-07-08/`, four panelists) — reviewer evidence
-   class; findings adjudicated into this document, not authority on their own.
+8. Agentic-consensus panel reviews 2026-07-08
+   (`docs/evidence/agentic-consensus-2026-07-08-docs-review/`,
+   `docs/evidence/agentic-consensus-2026-07-08-docs-review-2/`,
+   `docs/evidence/agentic-consensus-2026-07-08-mission-readiness/`) — reviewer
+   evidence class; findings adjudicated into this document, not authority on their
+   own.
 9. `AGENTS.md` (repo operating contract, mutation ceremony, Landing Loop).
 
 Where this document conflicts with older mission docs or ledgers that label
@@ -108,8 +111,8 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 ## Definition Graph
 
 Imported nodes: `heresy`, `eliminated`, detector semantics, registry-close
-semantics from `docs/definitions/heresy-eradication-2026-07-07.md` — status
-carried as settled there.
+semantics from `docs/archive/heresy-eradication-2026-07-07.md` — status carried as
+settled there.
 
 ### T1. Term: `seam`
 
@@ -161,16 +164,29 @@ id: route-over-computer-version
 kind: invariant
 status: settled (definition) / violated (implementation)
 source: docs/definitions/substrate-independent-audited-computer-2026-07-04.md; choir-doctrine.md H031
-definition: No route resolves to a VM identity; routes point at ComputerVersion records.
+definition: >-
+  No product route resolves to a VM or desktop identity at the routing decision
+  layer; routes must key off `ComputerVersion = (CodeRef, ArtifactProgramRef)`
+  records. Translation from the resolved `ComputerVersion` to a materializer/
+  `vmctl` endpoint (SandboxURL) is an implementation seam, not a route target.
 observables:
-  - internal/proxy/route_resolver.go returning UniversalWirePlatformOwnerID/DesktopID constants (violation).
-  - LineageBasedRouteResolver parsing route_profile into owner/desktop and feeding vmctl ResolveDesktopContext (still terminates in VM identity — violation even when active).
+  - `internal/proxy/route_resolver.go` returning hard-coded
+    `UniversalWirePlatformOwnerID`/`DesktopID` constants as the route target
+    (violation: no ComputerVersion lookup).
+  - `LineageBasedRouteResolver` parsing `route_profile` as owner/desktop and
+    treating that as the route target instead of first resolving to a
+    `ComputerVersion` record (violation at the decision layer; physical
+    dispatch from the resolved ComputerVersion is the permitted seam).
 counterexamples:
-  - Default seeded route_profile "route:computer-universal-wire-platform" has no slash, fails the parser, and falls back to the hard-coded VM identity.
+  - Default seeded `route_profile` "route:computer-universal-wire-platform" has no
+    slash, fails the parser, and falls back to the hard-coded VM identity.
 execution_effect:
-  - H031 may not be recorded as repaired until the observables above are gone and the detector for the banned pattern is green.
+  - H031 may not be recorded as repaired until the observables above are gone,
+    the resolver's product-level routing table resolves through `ComputerVersion`
+    records, and the detector for the banned pattern is green.
 forbidden_collapses:
   - resolver reads route_profile -> route is over ComputerVersion
+  - ComputerVersion -> SandboxURL materialization seam treated as a route-over-VM
 ```
 
 ### I2. Invariant: spec claims match implementation reach
@@ -229,7 +245,7 @@ execution_effect:
   - Work item C6 records this in the docs index; agents must not cite grip narrative as execution authority.
 ```
 
-### D-STORES. Term: the three Dolt stores — SETTLED (owner + observed, 2026-07-08)
+### D-STORES. Term: the two Dolt stores — SETTLED (owner + observed, 2026-07-08)
 
 ```yaml
 id: dolt-store-taxonomy
@@ -275,7 +291,7 @@ execution_effect:
   - Unblocks the lineage route resolver reading live wire state without PROXY_RUNTIME_DB_PATH file-sharing hacks. Docs research 2026-07-08 confirms this hack is structurally impossible anyway — embedded mode holds an exclusive directory lock, so proxy and runtime can never share the embedded store across processes; sql-server is the only multi-process topology.
 migration_notes:
   - NO DATA MIGRATION (owner, 2026-07-08): the universal-wire/world-wire loop has never worked end-to-end and the current wire-store data is junk. Stand up the sql-server store fresh; discard existing data. No stop-the-world window, no blue/green, no preservation ceremony.
-  - Cutover is therefore code-only: swap dolthub/driver file DSN for go-sql-driver/mysql TCP DSN in the wire-store paths; config.yaml max_connections/timeouts govern multi-writer. Delete PROXY_RUNTIME_DB_PATH and the proxy's direct-file-open path with it.
+  - Cutover is therefore code-only: swap dolthub/driver file DSN for go-sql-driver/mysql TCP DSN in the wire-store paths; config.yaml max_connections/timeouts govern multi-writer. Delete PROXY_RUNTIME_DB_PATH and the proxy's direct-file-open path with it. Rollback ref for this red-class change is the pre-swap commit SHA plus the old `config.yaml`/DSN values; because there is no data migration, git-revert of the DSN swap is sufficient.
   - Auto-GC is default-on since Dolt 1.75 (behavior.auto_gc_behavior, ~125MB-growth heuristic); manual dolt_gc() blocks writes and breaks connections — schedule it, never call it on the hot path.
 settlement:
   settled_by: human
@@ -329,7 +345,7 @@ execution_effect:
   - If falsified: escalate with options (serialize capsule writes through one writer, or reopen topology) — group-level call.
   - Until settled: the tag-based adapter remains interim and off; DOLT_RESET rollback stays forbidden (I4); seam commits keep W5 labeling.
 settlement:
-  rule: Settle by the experiment during the Phase D spec rewrite (earlier if cheap).
+  rule: Settle by the Phase A pinned-connection experiment; the answer gates Phase D spec and adapter work.
   settled_by: evidence
 ```
 
@@ -381,8 +397,8 @@ determined_state:
       issue: promotion_protocol.tla BranchIsolation vs tag-only adapter; unclear whether spec intends target-state or current-state semantics.
       next_resolution_step: read spec header intent; add scope conditioning or block; add conformance binding (W6).
     - node: route-over-computer-version (H031)
-      issue: lineage resolver routes through route_profile but still terminates in VM identity with hard-coded fallback.
-      next_resolution_step: define the H031 banned pattern in doctrine (C3), add detector, then Phase D redesign.
+      issue: lineage resolver routes through route_profile and uses owner/desktop as the product route target instead of resolving to a ComputerVersion record.
+      next_resolution_step: add the H031 banned pattern to `docs/heresy-detectors.md` and `docs/choir-doctrine.md` Banned Patterns list (C3); add detector; then Phase D redesign.
     - node: cross-substrate-proof-v0 gates 4/5
       issue: document self-contradicts (claims satisfied, lists unproven).
       next_resolution_step: C4 relabel + verify against artifacts.
@@ -400,8 +416,8 @@ determined_state:
       missing: answers to six storage-inventory questions.
     - node: red-commit landing evidence (W3)
       missing: CI status of e393eb5c/e5c1d38a, staging deploy identity, live resolver-vs-fallback observation.
-    - node: candidate-computer-as-VM heresy number
-      missing: registry number + doctrine entry (C3 assigns).
+    - node: candidate-computer-as-VM heresy number (H031)
+      missing: Banned Patterns list row in `docs/choir-doctrine.md` and detector refs (C3 closes this; the heresy entry itself is already complete).
 ```
 
 ## Value Criterion
@@ -462,11 +478,13 @@ At each phase exit:
    (the phase's own bar not met), (b) new definition nodes (register, don't
    silently absorb), (c) out-of-scope noise (record and drop). The
    adjudication table (finding → category → one-line reasoning) MUST be
-   committed to `docs/evidence/` before the gate can clear — the executing
-   agent classifies its own reviewers' findings, so the classification
-   itself must be auditable after the fact. Unjustified `retired` triage
-   dispositions and unjustified category-(c) reclassifications are
-   themselves category-(a) defects for the next round.
+   committed to `docs/evidence/` before the gate can clear. The executing
+   agent MUST NOT be the sole adjudicator for red-class gates (Phases C, D,
+   E); either the owner signs off on the table, or a non-implementing
+   independent agent (not the consensus runner) verifies the table and the
+   repo state. Unjustified `retired` triage dispositions and unjustified
+   category-(c) reclassifications are themselves category-(a) defects for the
+   next round.
 3. **Iterate**: fix all category-(a) findings, update the definition graph
    and evidence ledger, then re-run the panel on the delta.
 4. **Clear** means: a panel round produces zero confirmed category-(a)
@@ -476,8 +494,12 @@ At each phase exit:
    like non-convergence). For the red-class gates (Phases C, D, E) require
    at least four returned panelists, retrying failed ones once.
 5. **Proceed** into the next phase in the same run, updating the Run
-   Checkpoint section in passing. Do not stop, summarize-and-exit, or await
-   owner input unless an escalation rule fires or a decision node
+   Checkpoint section in passing. For yellow/green gates (Phases A, B) proceed
+   on clear. For red-class gates (Phases C, D, E) proceed only after the
+   adjudication table is approved by the owner or a non-implementing
+   independent agent, the required panel count has returned (four), and any
+   escalation rule has been resolved. Do not stop, summarize-and-exit, or
+   await owner input unless an escalation rule fires or a decision node
    (D-PROMO, D-STORE) blocks the specific next phase.
 
 If three consecutive panel rounds on the same phase fail to converge (new
@@ -487,12 +509,13 @@ group-level, escalate with the `human_escalation` shape.
 
 ### Phase A — Foundations and truth (execute first, parallel-safe)
 
-- **W1** Detector manifest + CI discovery job: `scripts/check-heresies.sh`,
-  manifest mapping H001–H031 families to discovery-mode patterns with
-  allow-contexts (per `docs/heresy-detectors.md`), CI job reporting counts
-  without failing, baseline counts committed as evidence. Include the H031
-  banned pattern once C3 defines it, a detector for `DOLT_RESET --hard` in
-  production (non-test) paths (I4 guard), and the trivial H030 registry
+- **W1** Detector manifest + CI discovery job: extend the existing
+  `docs/heresy-detectors.md` manifest with H030/H031 banned-pattern rows,
+  create `scripts/check-heresies.sh` mapping H001–H031 families to
+  discovery-mode patterns with allow-contexts, CI job reporting counts
+  without failing, and baseline counts committed as evidence. Include the H031
+  route-over-VM banned pattern once C3 sets it, a detector for `DOLT_RESET --hard`
+  in production (non-test) paths (I4 guard), and the trivial H030 registry
   closure (repaired 2026-06-27, entry update only). Promote families to
   fail-on-regression as their clusters are eliminated.
 - **W2** Timeout hardening: bounded vmctl resolve timeout (30–60s),
@@ -504,25 +527,26 @@ group-level, escalate with the `human_escalation` shape.
   whether any flow has the promotion adapter configured. Enter results in the
   evidence ledger.
 - **C1–C7** Doc truth corrections (yellow, one pass):
-  - C1 `current-architecture.md:93` — split "capsule substrate wired" from
-    "promotion-bearing capsule transactions unproven".
+  - C1 `current-architecture.md` — verify the capsule/substrate section clearly
+    separates "designed, not built" capsule substrate from any claim that
+    promotion-bearing capsule transactions are proven.
   - C2 `design-choir-headless-surface-v0.md` — strengthen the candidate-verb
     gate (spec models ComputerVersion/capsule semantics + route-over-CV
     load-bearing + atomic-or-degraded promotion + staging proof).
-  - C3 `choir-doctrine.md` — add H031 banned-pattern entry; assign a registry
-    number + entry to candidate-computer-as-VM (Phase 4b cluster).
+  - C3 `choir-doctrine.md` — verify H031 heresy entry is complete (it already
+    exists); add the H031 route-over-VM banned pattern to the numbered Banned
+    Patterns list and set its detector refs. Do not duplicate the heresy entry.
   - C4 Relabel `missions/substrate-hardening-v0.md` and
     `missions/cross-substrate-proof-v0.md` to `checkpoint_incomplete`.
-  - C5 (FIRST Phase A commit — until it lands, an agent could /goal the old
-    docs independently) — supersession made machine-readable, not just
-    prose: pointer notes in `mission-og-dolt-heresy-hard-cutover-v0.md`
-    (plus its post-commit state note: tag adapter is an embedded-mode
-    interim hook; freezes but does not settle H031) and
-    `heresy-eradication-2026-07-07.md`; `docs/mission-graph.yaml` nodes for
-    both absorbed docs with `status: superseded` pointing at this node; all
-    three documents registered in `docs/doc-authority-manifest.yaml` with
-    correct roles/witnesses (currently none of the three appear there, which
-    `cmd/doccheck` will flag).
+  - C5 (FIRST Phase A commit — now landed in the green docs alignment pass;
+    verify-and-close) — supersession made machine-readable, not just prose:
+    pointer notes in `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md`
+    (plus its post-commit state note: tag adapter is an embedded-mode interim
+    hook; freezes but does not settle H031) and
+    `docs/archive/heresy-eradication-2026-07-07.md`; `docs/mission-graph.yaml`
+    nodes for both absorbed docs with `status: superseded` pointing at this
+    node; all three documents registered in `docs/doc-authority-manifest.yaml`
+    with correct roles/witnesses.
   - C6 Docs index / authority manifest — grip checkpoint is narrative layer.
   - C7 `README.md` — lead with "human-improving, machine-compounding
     mainframe".
@@ -592,8 +616,7 @@ SQL fallback exercised; detector families for these clusters enforcing.
 ### Phase D — Hot-path cutover + promotion over ComputerVersion
 
 Imported from mission-og-dolt Phases 3, 4, 4b, gated on D-STORE resolution,
-D-PROMO settlement (by experiment during the spec rewrite), and the S1 scope
-header landing. This phase includes the world-wire store's sql-server
+D-PROMO settlement (by Phase A experiment), and the S1 scope header landing. This phase includes the world-wire store's sql-server
 migration (D-WIRE, decided): batch-commit infrastructure, hot-table cutover
 with a rollback latency budget **defined before cutover**, storage-growth
 measurement before victory; promotion_protocol rewrite over ComputerVersion

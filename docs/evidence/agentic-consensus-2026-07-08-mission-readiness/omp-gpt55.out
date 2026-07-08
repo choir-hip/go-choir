@@ -1,0 +1,145 @@
+1. **Verdict: conditional**
+
+The mission is close, but I would not run `/goal` yet. It is execution-shaped, but not execution-ready until the preflight defects below are corrected. The biggest risk is not technical feasibility; it is that the Definition document still contains stale sequencing/path claims that can send the executor into the wrong first commits or let a red gate adjudicate itself.
+
+2. **Blocking issues for execution**
+
+- **Phase gates are still self-adjudicating.**  
+  Evidence: `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:459-466` says the executing agent confirms and classifies panel findings itself; `:472-481` lets the same run clear and proceed unless a decision node blocks. That violates the “no self-adjudicating gates” requirement.  
+  Required fix before `/goal`: define a non-implementing adjudication owner for each gate, at least:
+  - Phase A/B: independent adjudicator may be another agent or owner-designated reviewer.
+  - Phase C/D/E red gates: owner or explicitly separate gatekeeper must approve the adjudication table.
+  - D-PROMO / D-STORE: executor may produce evidence, but cannot be sole settler if the result changes architecture.
+
+- **C5 supersession is machine-readable, but the mission doc’s C5 instructions are stale and path-wrong.**  
+  Confirmed present:
+  - `docs/mission-graph.yaml:2977-3004` has superseded nodes for `mission-og-dolt-heresy-hard-cutover-v0` and `heresy-eradication-2026-07-07`, both pointing at `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`.
+  - `docs/doc-authority-manifest.yaml:241-291` registers the active Definition and both archived superseded docs.
+  Problems:
+  - Mission doc still says old paths `docs/mission-og-dolt-heresy-hard-cutover-v0.md` and `docs/definitions/heresy-eradication-2026-07-07.md` at `:17-21`, `:43-46`, `:110-111`; those files are actually under `docs/archive/`.
+  - C5 text says “currently none of the three appear there” at `:523-525`, which is now false.
+  - The archived old docs still begin with old `/goal` invocations and no redirect note: `docs/archive/heresy-eradication-2026-07-07.md:3-7`; `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md:1-14`.
+  Required fix before `/goal`: update the active mission doc to reflect current graph/manifest state, correct all archive paths, and add explicit redirect/supersession notes to the archived source docs or intentionally drop that from C5.
+
+- **D-PROMO / S1 sequencing is internally contradictory.**  
+  Evidence:
+  - D-PROMO test says Phase A settlement test, pinned connection, `go test -count=10` success bar at `:312-320`.
+  - D-PROMO settlement still says “Settle by the experiment during the Phase D spec rewrite (earlier if cheap)” at `:331-333`.
+  - Phase A S1 still says condition `BranchIsolation` on sql-server mode at `:532-535`, but D-STORES / D-PROMO now say promotion is on the VM-local embedded store, not the world-wire sql-server store (`:232-259`, `:286-330`).
+  Required fix before `/goal`: make the order unambiguous:
+  1. Phase A runs pinned embedded-store branch isolation test first.
+  2. S1 spec scope is “VM-local embedded store if D-PROMO passes; fallback mechanism if D-PROMO falsifies,” not “sql-server mode” unless D-PROMO failure reopens topology.
+  3. Phase D consumes the Phase A D-PROMO result; it does not discover it during spec rewrite.
+
+- **Completion criteria C1-C5 are not explicitly represented as a C1-C5 execution matrix.**  
+  The mission has completion semantics 1-9 at `:715-741`, and the original five settlement criteria are imported from `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md:211-225`. Most bars are objective, but the current doc does not name them as C1-C5 or attach a per-criterion evidence producer/command/artifact.  
+  Specific gaps:
+  - C1 detector bar is objective enough: fail-on-regression CI for every family, registry entries closed with detector refs (`:718-719`), with W1 plan (`:490-497`).
+  - C2 SQL/OG cutover bar needs a table/code inventory and evidence artifact plan beyond “SQL tables dropped; go test ./... green” (`:720-721`). It should name how “OG only durable model” is proven.
+  - C3 promotion/history bar is objective and evidence-producing (`:722-729`, `:606-611`).
+  - C4 route-over-ComputerVersion bar is objective (`:730-731`), with H031 detector enforcement planned (`:490-495`, `:603-611`).
+  - C5 doctrine reduction bar is objective only in part (`:732-733`); it lost the older “owner accepted” / adversarial reintroduction proof from `docs/archive/heresy-eradication-2026-07-07.md:364-365`.  
+  Required fix before `/goal`: add a short matrix: `C1-C5 -> exit bar -> evidence artifact -> producing phase -> adjudicator`.
+
+3. **Important issues**
+
+- **D-STORES mapping is correct.**  
+  Mission D-STORES correctly states:
+  - world-wire store = `internal/platform/objectgraph_store.go`;
+  - VM-local embedded store = `internal/objectgraph/dolt_store.go`;
+  - promotion is an operation on the embedded store, not a separate store.  
+  Code confirms:
+  - `internal/platform/objectgraph_store.go:12-15` says `ObjectGraphStore` executes against the platform Dolt SQL server connection.
+  - `internal/objectgraph/dolt_store.go:44-47` says `DoltStore` is VM-local embedded Dolt.
+  - `internal/computerversion/dolt_promotion_adapter.go:11-14` connects to a live embedded workspace.  
+  Nit: D-STORES heading says “the three Dolt stores” at mission `:232`; the definition says two stores plus promotion-as-operation. Rename heading to “two Dolt stores plus promotion operation.”
+
+- **D-PROMO test plan is mostly good, but rollback wording must not normalize `DOLT_RESET --hard` as production rollback.**  
+  Success bar is clear: pinned connection or transaction, branch checkout sticks, candidate writes isolate, merge + tag are two resumable steps, `go test -count=10` clean (`:312-320`).  
+  Falsifier/fallback exists: deterministic pinned failure or capsule writers cannot tolerate CAS retry, then escalate to serialized single writer or topology reopen (`:321-330`).  
+  Risk: “rollback restores” in the D-PROMO test text can be misread as validating `DOLT_RESET --hard` rollback. I4 forbids that in production (`:208-217`). Clarify that test-only reset may probe mechanics, but production rollback is route flip or isolated-branch operation.
+
+- **H031 registry entry is already present; mission C3 is stale.**  
+  `docs/choir-doctrine.md:1169-1186` already defines H031 with status active, bad pattern, detectors, successor pattern, and deletion gate. The mission still says C3 must “add H031 banned-pattern entry; assign a registry number” at `:512-513`.  
+  Fix: change C3 from “add” to “verify/update H031 registry entry and bind detector refs.”
+
+- **H031 detector plan exists but is not yet concrete enough.**  
+  W1 plans H031 detector inclusion (`:490-495`), and Phase D requires detector enforcing (`:606-611`). Good execution shape.  
+  Missing before Phase A implementation: exact banned patterns and allow-contexts. Based on code, likely patterns include:
+  - `UniversalWirePlatformOwnerID` / `UniversalWirePlatformDesktopID` in routing code;
+  - `ResolveDesktopContext` as route target for product routes;
+  - `route_profile` parsed as `owner_id/desktop_id`;
+  - candidate-desktop lifecycle code in `internal/vmctl`.  
+  Allow test fixtures separately.
+
+- **Route-over-ComputerVersion violation is accurately identified.**  
+  Code confirms mission claims:
+  - `internal/proxy/route_resolver.go:38-48` falls back to `vmctl.UniversalWirePlatformOwnerID` / `UniversalWirePlatformDesktopID`.
+  - `internal/proxy/lineage_route_resolver.go:68-81` parses `route_profile` as `owner_id/desktop_id`, still terminating in VM/desktop identity.
+  - `cmd/proxy/main.go:60-83` wires lineage resolver only if `PROXY_RUNTIME_DB_PATH` / `RuntimeDBPath` is configured.
+  - `internal/runtime/app_promotion.go:272` defaults `RouteProfile` to `"route:"+safeRefPart(targetComputerID)`, which does not match the resolver’s required slash format.  
+  The plan correctly treats the current resolver as a seam, not repair.
+
+- **Promotion adapter seam evidence needs wording correction.**  
+  Mission evidence says `WithPromotionAdapter` has zero `cmd/` hits and is a seam. That is directionally right for “not wired into production binary/default config,” but imprecise:
+  - `internal/runtime/runtime.go:398-405` defines `WithPromotionAdapter`.
+  - `internal/runtime/app_promotion.go:286-296`, `:514-530`, `:583-589` does call `Fork`, `Promote`, and `Rollback` when configured.
+  - The absence is production/default wiring, not runtime callsites.  
+  Fix wording: “adapter callsites exist behind nil option; no default/cmd wiring observed.”
+
+- **Rollback paths are uneven.**  
+  Good:
+  - Red pass policy requires rollback ref before mutation (`:748-752`).
+  - Entity cutovers keep SQL fallback for declared window (`:748-750`).
+  - D-WIRE hard blocker escalates, not silent revert (`:282-283`, `:690-692`).
+  Weak:
+  - SQL table drops in Phase E are irreversible-ish and only say “after stability window” (`:615-616`) plus escalation for SQL drops (`:690-693`). No explicit dump/tag/snapshot/restore rehearsal is required.
+  - World-wire fresh sql-server store says no data migration because current data is junk (`:276-278`), which is owner-approved, but still needs operational rollback to previous serving path until cutover is proven.  
+  Add Phase E pre-drop bar: exported schema/data snapshot or explicit owner-approved discard record, restore rehearsal or rollback-inapplicability proof, and stability window duration.
+
+4. **Minor issues / nits**
+
+- `docs/choir-doctrine.md:1180` link text says `docs/definitions/heresy-eradication-2026-07-07.md` but the href points to `archive/heresy-eradication-2026-07-07.md`. Fix text for clarity.
+- `docs/doc-authority-manifest.yaml:262-285` marks archived superseded docs with `annotations.authority: mission`; acceptable because `claim_scope: historical`, `is_evidence: true`, and `lifecycle: archived` are clear, but `authority: superseded_mission_source` would be safer.
+- `docs/mission-graph.yaml` has duplicate older nodes elsewhere in the file for several missions; not directly about this mission, but a graph hygiene risk if tooling expects unique ids. I saw duplicate `portfolio-2026-06-11`, `texture-product-loop-recovery-v0`, etc. This mission’s three terminal nodes are clear.
+- Phase A says “execute first, parallel-safe” while C5 says “FIRST Phase A commit” (`:488`, `:516`). If C5 remains first, parallel-safe needs a carveout: C5 lands before other Phase A doc work that depends on old authority state.
+- `current-architecture.md` says `corpusd` already writes to a separate localhost-only Dolt sql-server primary (`:279-282`), while mission D-WIRE says world-wire store “moves to sql-server mode now” (`:270-278`). This may be a code/staging reality distinction, but the execution plan should say whether D-WIRE is already partially live or still a migration.
+
+5. **Recommended first phase actions with risk controls**
+
+- **Preflight doc patch before `/goal`:**
+  1. Correct archive paths in the mission doc.
+  2. Replace stale C5 “currently none appear” claim with current graph/manifest status.
+  3. Add redirect notes to the two archived docs or explicitly remove pointer-note requirement.
+  4. Change C3 to “verify/update H031,” not “add H031.”
+  5. Normalize D-PROMO/S1 sequencing: Phase A pinned test first; Phase D consumes result.
+
+- **Add a C1-C5 matrix before mutation:**
+  - C1 detector CI: required artifact = CI run + detector baseline + seeded reintroduction proof.
+  - C2 OG-only model: required artifact = SQL table inventory, deletion diff, dual-path detector, `go test ./...`, staging read/write smoke.
+  - C3 history + promotion: required artifact = `choir texture history` production diff, promotion route flip trace, rollback flip trace, W6 conformance green.
+  - C4 route-over-CV: required artifact = H031 detector zero production hits, route resolver tests, staging route proof showing ComputerVersion target.
+  - C5 doctrine reduction: required artifact = reduced doctrine diff, detector links for every closed registry entry, owner/adjudicator acceptance or explicit non-owner objective substitute.
+
+- **Fix gate ownership before Phase A starts.**
+  Use a gate table:
+  - Gate A owner: non-implementing adjudicator.
+  - Gate B owner: non-implementing adjudicator.
+  - Gate C/D/E owner: owner or designated red-gate reviewer.
+  - D-PROMO/D-STORE owner: evidence can settle only if result follows already-approved options; architecture-changing fallback escalates.
+
+- **Run D-PROMO as the first technical probe after docs preflight.**
+  Risk controls:
+  - Pinned `db.Conn(ctx)` or `sql.Tx`; no pooled calls inside candidate sequence.
+  - `go test -run <pinned-test> -count=10`.
+  - Assert candidate writes invisible from main before merge.
+  - Assert merge+tag are separate resumable steps.
+  - Do not treat `DOLT_RESET --hard` as production rollback; keep it test-only or replace with branch/route rollback semantics.
+  - On fail: freeze adapter rewrite and escalate fallback choice.
+
+- **Keep promotion adapter inert until D-PROMO and W6 are green.**
+  Code already has graceful degradation and nil-option behavior in `internal/runtime/app_promotion.go`; preserve that. Do not wire `WithPromotionAdapter` into any `cmd/` path before the branch/fallback decision settles.
+
+6. **Confidence: high**
+
+Grounded reads: active mission doc, mission graph, authority manifest, current architecture, computer ontology, product doctrine, choir doctrine, README/docs README, and the requested code paths. Code confirms the main technical claims: D-STORES mapping is now correct, current route resolver is still VM/desktop-based, promotion adapter is tag/reset interim and option-gated, and C5 machine-readable supersession exists in graph/manifest despite stale prose.

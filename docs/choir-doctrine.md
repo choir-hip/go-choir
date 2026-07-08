@@ -1175,9 +1175,9 @@ material).
 
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
 
-`detectors:` vmctl candidate-desktop publish/switch lifecycle (`internal/vmctl/handlers.go:312`, `client.go:191`), candidate_computer_package files capturing VM state as candidate identity, route resolutions targeting VM/desktop IDs.
+`detectors:` vmctl candidate-desktop publish/switch lifecycle (`internal/vmctl/handlers.go:312`, `client.go:191`), candidate_computer_package files capturing VM state as candidate identity, route resolutions targeting VM/desktop IDs (see Banned Patterns list item 16).
 
-`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/definitions/heresy-eradication-2026-07-07.md](archive/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
+`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/archive/heresy-eradication-2026-07-07.md](archive/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
 
 `why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
 
@@ -1212,6 +1212,9 @@ Agents must not introduce:
     instead of using Go channels — the test is whether `internal/actor/actor.go`
     contains `chan` declarations and the warm loop `select`s on the channel
     rather than calling `log.Unprocessed` in a polling pattern.
+16. new product routes, promotion records, or candidate-computer bindings that
+    resolve to VM or desktop identities instead of `ComputerVersion = (CodeRef,
+    ArtifactProgramRef)` records.
 
 ## Active Cutover Order
 
