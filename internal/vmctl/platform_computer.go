@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	UniversalWirePlatformOwnerID   = "universal-wire-platform"
-	UniversalWirePlatformDesktopID = "platform"
-	UniversalWirePlatformVMID      = "vm-universal-wire-platform"
+	UniversalWirePlatformOwnerID    = "universal-wire-platform"
+	UniversalWirePlatformDesktopID  = "platform"
+	UniversalWirePlatformVMID       = "vm-universal-wire-platform"
+	UniversalWirePlatformComputerID = "computer-universal-wire-platform"
 )
 
 // EnsureUniversalWirePlatformComputer boots or resumes the always-on platform

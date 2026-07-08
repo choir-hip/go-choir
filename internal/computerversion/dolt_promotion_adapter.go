@@ -43,6 +43,14 @@ import (
 // overlayfs). When the platform Dolt moves to sql-server mode, this adapter
 // can be extended to use branch-based isolation.
 type DoltPromotionAdapter struct {
+	// DB is an existing Dolt database connection. If set, the adapter uses
+	// it directly instead of opening its own connection. This is required
+	// when integrating with the runtime store, which already holds the
+	// single writable connection to the embedded Dolt workspace.
+	DB *sql.DB
+
+	// WorkspacePath and Database are used to open a new connection when
+	// DB is nil. This is primarily used by tests and standalone tools.
 	WorkspacePath string
 	Database      string
 	CommitName    string
@@ -248,8 +256,16 @@ func (a DoltPromotionAdapter) GetTagHash(ctx context.Context, tagName string) (s
 	return hash, nil
 }
 
-// open opens an embedded Dolt connection to the adapter's workspace.
+// open returns a database connection for the adapter. If the adapter has
+// a shared DB connection, it returns that without closing it. Otherwise,
+// it opens a new connection to the workspace (and the caller must close it).
 func (a DoltPromotionAdapter) open() (*sql.DB, interface{ Close() error }, error) {
+	if a.DB != nil {
+		// Use the shared connection; return a nil connector to signal
+		// that the caller should not close it.
+		return a.DB, nil, nil
+	}
+
 	workspace := strings.TrimSpace(a.WorkspacePath)
 	if workspace == "" {
 		return nil, nil, fmt.Errorf("dolt promotion: workspace path is required")
@@ -269,8 +285,13 @@ func (a DoltPromotionAdapter) open() (*sql.DB, interface{ Close() error }, error
 	return openDoltWorkspace(workspace, database, commitName, commitEmail)
 }
 
-// close closes the database and connector.
+// close closes the database and connector if they were opened by open().
+// If the adapter is using a shared DB connection, this is a no-op.
 func (a DoltPromotionAdapter) close(db *sql.DB, connector interface{ Close() error }) {
+	if a.DB != nil {
+		// Shared connection — do not close.
+		return
+	}
 	_ = db.Close()
 	if connector != nil {
 		_ = connector.Close()

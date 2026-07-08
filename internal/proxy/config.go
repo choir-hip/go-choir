@@ -52,6 +52,13 @@ type Config struct {
 	// tokens) as a fallback to cookie-based JWT auth. When empty, API key
 	// auth is disabled and only cookie auth is used.
 	AuthDBPath string
+
+	// RuntimeDBPath is the filesystem path to the runtime Dolt workspace.
+	// When set, the proxy opens a read-only lineage reader and can resolve
+	// the platform route through ComputerSourceLineage (route-over-
+	// ComputerVersion). When empty, the proxy uses the hard-coded platform
+	// constants (H031 fallback).
+	RuntimeDBPath string
 }
 
 const (
@@ -92,6 +99,7 @@ func LoadConfig() (*Config, error) {
 		CorpusdURL:      envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
 		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
 		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
+		RuntimeDBPath:     os.Getenv("PROXY_RUNTIME_DB_PATH"),
 	}
 
 	if err := cfg.validate(); err != nil {
