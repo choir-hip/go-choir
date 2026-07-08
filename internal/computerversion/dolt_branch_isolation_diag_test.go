@@ -9,10 +9,13 @@ import (
 	embedded "github.com/dolthub/driver"
 )
 
-// TestDoltBranchIsolationDiagnostic investigates why DOLT_CHECKOUT in embedded
-// mode does not provide branch isolation. The prior experiment showed that
-// data inserted on a candidate branch is visible on main after checkout,
-// which would break the candidate isolation invariant.
+// TestDoltBranchIsolationDiagnostic is a historical 2026-07-07 diagnostic that
+// used *sql.DB (the connection pool). It showed that DOLT_CHECKOUT appeared
+// not to provide branch isolation because each statement ran on a different
+// DoltSession. TestDoltEmbeddedBranchIsolationPinnedConnection superseded this:
+// on a pinned *sql.Conn, DOLT_CHECKOUT works and branch isolation is
+// deterministic. This diagnostic is kept as source material for the D-PROMO
+// evidence chain.
 //
 // This diagnostic checks:
 //  1. What branch is active before/after checkout?
@@ -165,11 +168,11 @@ func TestDoltBranchIsolationDiagnostic(t *testing.T) {
 	t.Logf("items count on main after checkout: %d (expected 1 for isolation)", mainCount)
 
 	if mainCount == 1 {
-		t.Log("RESULT: branch isolation WORKS in embedded mode")
+		t.Log("RESULT: branch isolation WORKS in this single pooled-connection run")
 	} else {
-		t.Logf("RESULT: branch isolation DOES NOT WORK in embedded mode — main has %d rows after candidate checkout", mainCount)
-		t.Log("This means DOLT_CHECKOUT in embedded mode does not swap the working set.")
-		t.Log("Branch-based promotion requires sql-server mode or a different isolation approach.")
+		t.Logf("RESULT: branch isolation DOES NOT WORK in this pooled-connection run — main has %d rows after candidate checkout", mainCount)
+		t.Log("This means DOLT_CHECKOUT in the pooled run did not swap the working set (a connection-pooling artifact).")
+		t.Log("See TestDoltEmbeddedBranchIsolationPinnedConnection for the deterministic pinned-connection settlement.")
 	}
 
 	// Also try AS OF query to verify history reads work.

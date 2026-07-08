@@ -13,13 +13,19 @@ import (
 // workspace and provides typed operations for fork, commit, promote, and
 // rollback.
 //
-// Tag-based approach (embedded-mode compatible):
+// Tag-based approach (interim, pending Phase D branch rewrite):
 //
-// The branch isolation experiment (2026-07-07) found that DOLT_CHECKOUT in
-// embedded mode is a no-op for the working set — branch-based candidate
-// isolation requires sql-server mode. However, DOLT_TAG, DOLT_COMMIT, and
-// DOLT_RESET all work in embedded mode. So this adapter uses a tag-based
-// approach:
+// The 2026-07-07 branch-isolation experiment used *sql.DB and concluded that
+// DOLT_CHECKOUT in embedded mode is a no-op. The D-PROMO Phase A settlement
+// test (`TestDoltEmbeddedBranchIsolationPinnedConnection`, -count=10) showed
+// that the apparent no-op was a database/sql connection-pooling artifact:
+// DOLT_CHECKOUT affects only the DoltSession of the connection that executes
+// it. On a pinned *sql.Conn (db.Conn(ctx)) all statements share one session,
+// so DOLT_BRANCH / DOLT_CHECKOUT / DOLT_MERGE / DOLT_TAG / DOLT_RESET provide
+// deterministic branch isolation and rollback in embedded mode.
+//
+// Until Phase D rewrites this adapter to branch-based operations (one pinned
+// connection per candidate), the adapter remains tag-based for safety:
 //
 //   - Fork: record the current HEAD as a fork tag (DOLT_TAG).
 //     The fork tag is the rollback target.
@@ -30,18 +36,27 @@ import (
 //   - Rollback: reset the working set to the fork tag (DOLT_RESET --hard).
 //     This restores the active computer's state to the pre-promotion point.
 //
-// TLA+ spec mapping:
+// TLA+ spec mapping (interim tag mapping):
 //
 //   - ForkCandidate(c, a) → Fork(candidateID)
 //   - CapsuleTxn(c) → Commit(message)  [called per capsule transaction batch]
 //   - Commit(c) → Promote(candidateID, forkTag)
 //   - AutoRevert(c) → Rollback(forkTag)
 //
-// This adapter does NOT use DOLT_BRANCH or DOLT_CHECKOUT. Candidate isolation
-// in embedded mode must come from a different layer (e.g., separate Dolt
-// databases per candidate, or application-level isolation via capsule
-// overlayfs). When the platform Dolt moves to sql-server mode, this adapter
-// can be extended to use branch-based isolation.
+// Phase D rewrite target (after D-PROMO settlement passed):
+//
+//   - Fork: DOLT_BRANCH per candidate + DOLT_CHECKOUT onto the candidate branch
+//     on a pinned *sql.Conn.
+//   - Commit: DOLT_COMMIT on the candidate branch.
+//   - Promote: DOLT_MERGE('candidate') into main, then DOLT_TAG('promote-...').
+//     These must be two resumable steps; promotion atomicity lives at the
+//     route-flip layer, not in a single SQL transaction.
+//   - Rollback: DOLT_RESET('--hard') to the fork tag on the same pinned
+//     connection, or a route flip.
+//
+// Until that rewrite lands, this adapter does NOT use DOLT_BRANCH or
+// DOLT_CHECKOUT. Candidate isolation in the tag-only interim comes from the
+// single-writer discipline and the store's shared embedded connection.
 type DoltPromotionAdapter struct {
 	// DB is an existing Dolt database connection. If set, the adapter uses
 	// it directly instead of opening its own connection. This is required

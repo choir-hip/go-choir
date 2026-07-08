@@ -299,12 +299,12 @@ settlement:
     - hard blocker in migration evidence (escalate, don't silently revert)
 ```
 
-### D-PROMO. Conjecture: branch isolation on the embedded store — TESTING
+### D-PROMO. Conjecture: branch isolation on the embedded store — SETTLED
 
 ```yaml
 id: embedded-branch-isolation
 kind: conjecture
-status: testing  # strengthened by Dolt docs research 2026-07-08; local experiment still required
+status: settled  # Phase A pinned-connection experiment passed go test -count=10
 source: opened 2026-07-08 (split from the conflated D-SQL; owner: promotion uses the VM's embedded Dolt, no separate workspaces)
 claim: >-
   The VM's embedded Dolt store, under single-writer-per-process discipline,
@@ -334,6 +334,11 @@ test: >-
   determinism (go test -count=10 clean), not a single pass — the pooled
   variant was observably flaky. Also correct the adapter comment and retire
   the 2026-07-07 conclusion if the pinned test passes.
+evidence_artifact:
+  - file: internal/computerversion/dolt_branch_isolation_pinned_test.go
+  - command: go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+  - result: 10/10 passes; branch isolation, merge, tag, and rollback are deterministic on a pinned *sql.Conn in embedded mode.
+  - note: the 2026-07-07 no-op conclusion was a connection-pooling artifact, not an embedded-engine limitation.
 falsifier: >-
   The pinned-connection test still fails isolation deterministically, or
   capsule writers cannot live with application-level CAS retry.
@@ -341,11 +346,11 @@ adapter_requirements_if_supported:
   - All promotion operations for a candidate MUST run on a pinned sql.Conn or sql.Tx, never through the pool; connections must be closed/returned on success, failure, and panic (leak risk is real).
   - Concurrent capsule writers within the VM serialize through the store's single-writer discipline; CAS-retry at application level.
 execution_effect:
-  - If supported: Phase D rewrites the adapter to branch operations on the embedded store; the spec's BranchIsolation scope header names the embedded store; sql-server stays a wire-store-only concern.
-  - If falsified: escalate with options (serialize capsule writes through one writer, or reopen topology) — group-level call.
-  - Until settled: the tag-based adapter remains interim and off; DOLT_RESET rollback stays forbidden (I4); seam commits keep W5 labeling.
+  - Settled supported: Phase D rewrites the adapter to branch operations on the embedded store; the spec's BranchIsolation scope header names the embedded store; sql-server stays a wire-store-only concern.
+  - The tag-based adapter remains interim and off until the branch rewrite lands; DOLT_RESET rollback stays forbidden (I4) for the tag-based path.
+  - All adapter operations must use pinned connections; the store's single-writer discipline and connection pinning provide isolation.
 settlement:
-  rule: Settle by the Phase A pinned-connection experiment; the answer gates Phase D spec and adapter work.
+  rule: Settled by the Phase A pinned-connection experiment; result gates Phase D spec and adapter work.
   settled_by: evidence
 ```
 

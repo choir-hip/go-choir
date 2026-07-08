@@ -9,10 +9,14 @@ import (
 	embedded "github.com/dolthub/driver"
 )
 
-// TestDoltBranchMergeTagExperiment is an experiment to verify that
-// DOLT_BRANCH, DOLT_MERGE, and DOLT_TAG work in the embedded Dolt driver.
-// This settles the mission's open question: "does embedded mode support
-// branch-based promotion, or do we need sql-server mode first?"
+// TestDoltBranchMergeTagExperiment is a historical 2026-07-07 experiment that
+// used *sql.DB (connection pool) and concluded that DOLT_CHECKOUT in embedded
+// mode is a no-op. That conclusion was superseded in Phase A by
+// TestDoltEmbeddedBranchIsolationPinnedConnection, which showed the no-op was a
+// database/sql connection-pooling artifact: DOLT_CHECKOUT only affects the
+// session of the connection that executes it, and a pinned *sql.Conn gives
+// deterministic branch isolation. This test is kept as source material for the
+// D-PROMO evidence chain.
 //
 // The experiment:
 //  1. Create a workspace with a database and a table
@@ -25,9 +29,6 @@ import (
 //  8. Tag the merge commit (DOLT_TAG)
 //  9. Verify the tag references the merge commit
 // 10. Reset main to the tag (DOLT_RESET) for rollback
-//
-// If all steps pass, embedded mode supports branch-based promotion.
-// If any step fails, we need sql-server mode before Phase 4 implementation.
 func TestDoltBranchMergeTagExperiment(t *testing.T) {
 	root := t.TempDir()
 
@@ -111,20 +112,12 @@ func TestDoltBranchMergeTagExperiment(t *testing.T) {
 
 	// Step 6: Checkout main and check branch isolation.
 	//
-	// FINDING (2026-07-07): DOLT_CHECKOUT in embedded mode is a no-op for
-	// the working set. active_branch() still returns "main" after checkout.
-	// Data inserted on the "candidate" branch is visible on main because the
-	// embedded driver uses a single-session model where the branch is fixed.
-	//
-	// This means branch-based candidate isolation requires sql-server mode
-	// (where each session has its own branch). The mission doc predicted this:
-	// "Dolt server mode is the gate for branch-based candidates."
-	//
-	// DOLT_MERGE, DOLT_TAG, and DOLT_RESET still work in embedded mode, so
-	// we can use tags for promotion certificates and reset-to-tag for rollback
-	// without branch isolation. The isolation must come from a different layer
-	// (e.g., separate Dolt databases per candidate, or application-level
-	// isolation via the capsule overlayfs).
+	// FINDING (2026-07-07, superseded by TestDoltEmbeddedBranchIsolationPinnedConnection):
+	// when this experiment ran through *sql.DB (the connection pool), DOLT_CHECKOUT
+	// appeared to be a no-op for the working set because each statement was
+	// dispatched on a different connection/DoltSession. The Phase A pinned-connection
+	// determinism test showed that DOLT_CHECKOUT works correctly on a single
+	// *sql.Conn, and branch-based candidate isolation is feasible in embedded mode.
 	if _, err := db.ExecContext(ctx, "CALL DOLT_CHECKOUT('main')"); err != nil {
 		t.Fatalf("step 6 checkout main: %v", err)
 	}
@@ -211,5 +204,5 @@ func TestDoltBranchMergeTagExperiment(t *testing.T) {
 		t.Log("step 11: roll-forward verified - main restored to tagged merge state")
 	}
 
-	t.Log("EXPERIMENT RESULT: embedded Dolt supports DOLT_BRANCH, DOLT_CHECKOUT, DOLT_MERGE, DOLT_TAG, and DOLT_RESET. Branch-based promotion is feasible in embedded mode.")
+	t.Log("HISTORICAL EXPERIMENT RESULT (superseded): this pooled-connection run did not show branch isolation. See TestDoltEmbeddedBranchIsolationPinnedConnection for the deterministic pinned-connection settlement.")
 }
