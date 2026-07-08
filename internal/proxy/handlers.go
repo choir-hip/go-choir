@@ -125,6 +125,7 @@ type Handler struct {
 	recoveries      *computeRecoveryTracker
 	apiKeyValidator APIKeyValidator // optional: enables Bearer token (API key) auth
 	authStore       *auth.Store     // optional: owned auth store for API key validation
+	routeResolver   PlatformRouteResolver // optional: route-over-ComputerVersion resolver
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
@@ -577,7 +578,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	// Resolve the sandbox URL for this user. Universal Wire stories read the
 	// platform computer's embedded store, not the caller's personal computer.
 	desktopID := requestDesktopID(r)
-	resolveOwnerID, resolveDesktopID := protectedAPIResolveTarget(r, authResult.UserID, desktopID)
+	resolveOwnerID, resolveDesktopID := h.protectedAPIResolveTarget(r, authResult.UserID, desktopID)
 	resolveStarted := time.Now()
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), resolveOwnerID, resolveDesktopID)
 	if err != nil {
@@ -962,13 +963,19 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 // protectedAPIResolveTarget chooses which computer sandbox should serve an
 // authenticated /api/* request. Universal Wire edition state lives on the
 // always-on platform computer.
-func protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (ownerID, resolvedDesktopID string) {
+//
+// Route-over-ComputerVersion: if the handler has a PlatformRouteResolver,
+// the platform route resolves through the promotion protocol's lineage
+// state instead of hard-coded VM identity constants. If the resolver is
+// nil or fails, the handler falls back to the hard-coded constants
+// (UniversalWirePlatformOwnerID/UniversalWirePlatformDesktopID).
+func (h *Handler) protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (ownerID, resolvedDesktopID string) {
 	if r == nil || r.URL == nil {
 		return userID, desktopID
 	}
 	path := r.URL.Path
 	if path == "/api/universal-wire/stories" {
-		return vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID
+		return h.resolvePlatformTarget(r.Context())
 	}
 	return userID, desktopID
 }
