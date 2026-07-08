@@ -1,5 +1,14 @@
 # Assessment: Overall System State — 2026-07-07
 
+> **Era note (2026-07-08):** This assessment predates the 2026-07-08 decisions on
+> Dolt store taxonomy, the `Universal Wire` → `World Wire` product rename,
+> the route-over-`ComputerVersion` invariant (H031), the D-PROMO branch-isolation
+> conjecture, and the D-WIRE world-wire sql-server migration. For current
+> executable authority see
+> [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md).
+> This document remains valuable as historical evidence but should not be read as
+> current architecture authority.
+
 **Status:** assessment / evidence
 **Method:** three parallel read-only codebase reviews (actor runtime + object
 graph; universal wire pipeline; storage substrate inventory) plus live API
@@ -8,7 +17,9 @@ probes against choir.news via the choir CLI and curl.
 mismatch now" after ~a dozen refactors in as many days.
 **Companions:** [design-choir-headless-surface-v0.md](./design-choir-headless-surface-v0.md),
 [memo-choir-cli-trajectories-decode-wire-502-2026-07-06.md](./memo-choir-cli-trajectories-decode-wire-502-2026-07-06.md),
-the in-flight Dolt-vs-SQLite evaluation (separate agent).
+the in-flight Dolt-vs-SQLite evaluation (superseded by the 2026-07-08 D-WIRE
+and D-STORES decisions; see the umbrella mission for current storage
+authority).
 
 ---
 
@@ -62,7 +73,7 @@ Full report retained in session evidence; key facts:
 object-graph integration 60%; business-logic extraction 0%; continuation
 deletion 0%; parent/child deletion 5%; texture-forcing removal 0%.
 
-## 2. Universal Wire — broken substrate, not broken pipeline
+## 2. World Wire (formerly Universal Wire) — broken substrate, not broken pipeline
 
 - **Confirmed root cause of the stories hang:** the proxy's
   `resolveSandboxURL` calls `vmctl.Client.ResolveDesktopContext` for the

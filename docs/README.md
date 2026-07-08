@@ -167,8 +167,9 @@ explicitly promotes one as source form.
   to identify the current spine mission instead of updating this index for every
   mission transition.
 - `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` - (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
-  historical product/architecture spec for the superseded Universal Wire +
-  retired StoryGraph/Texture framing. Do not use it as current ontology.
+  historical product/architecture spec for the superseded Universal Wire
+  (now World Wire) + retired StoryGraph/Texture framing. Do not use it as
+  current ontology.
 - `docs/archive/vtext-styleguide-system-research-2026-06-06.md` - research synthesis (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   for Texture-native style support, client corpus ingestion, learned style
   memory, edit feedback, style review, and optional future fine-tuning.
@@ -209,8 +210,9 @@ explicitly promotes one as source form.
 - `docs/archive/mission-run-memory-v0.md` - run-memory/compaction mission.
 - `docs/archive/mission-web-surface-rationalization-v0.md` - Obscura/Web Lens surface rationalization mission.
 - `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
-  historical draft mission for the superseded Universal Wire / Style artifact
-  collaborative retired StoryGraph trajectory. Do not use it as current ontology.
+  historical draft mission for the superseded World Wire (formerly Universal Wire) /
+  Style artifact collaborative retired StoryGraph trajectory. Do not use it as
+  current ontology.
 
 Read the mission portfolio, `docs/mission-graph.yaml`, and the current
 definition document first. Older promotion-queue mission docs have been pruned;

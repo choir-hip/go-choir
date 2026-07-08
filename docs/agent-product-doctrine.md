@@ -3,6 +3,10 @@
 This file carries product architecture rules for agents working on Choir. It is
 loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
+Long-running missions now execute as Definition documents (`/goal <doc>.md`);
+see [skills/definition/SKILL.md](../skills/definition/SKILL.md) and
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
+for the current umbrella mission.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.
 
@@ -21,6 +25,27 @@ unless `AGENTS.md` is carrying a newer explicitly promoted operating update.
 - Verification is a contract over evidence, not a separate privileged caste.
 
 Foreground/canonical state stays stable. Background/candidate computers mutate. Canonical state changes only by promotion.
+
+## Current Invariants (2026-07-08)
+
+- **Route-over-ComputerVersion:** no product route resolves to a VM or desktop
+  identity; routes point at `ComputerVersion = (CodeRef, ArtifactProgramRef)`
+  records. This is currently violated by the hard-coded platform computer
+  fallback in `internal/proxy/route_resolver.go` and `internal/proxy/lineage_route_resolver.go`
+  (H031; see `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` I1).
+- **Two Dolt stores:** the world-wire store (`internal/platform/objectgraph_store.go`,
+  moving to sql-server) and the VM-local embedded store (`internal/objectgraph/dolt_store.go`)
+  are distinct substrates. Promotion is an operation on the embedded store, not a
+  property of the world-wire store (see D-STORES in the umbrella mission).
+- **World Wire (formerly Universal Wire):** the public feed surface for the
+  Community Cloud. Documents still using "Universal Wire" are historical or
+  pending the Phase E rename.
+- **D-PROMO interim:** branch isolation on the VM-local embedded store is
+  under test; the current `DoltPromotionAdapter` is tag-only interim and must not
+  be enabled for production promotion flow until the conjecture settles.
+- **Timeout hardening pending:** `internal/vmctl/client.go` default timeout is
+  180s and `internal/server/server.go` has no `ReadTimeout`/`WriteTimeout`. This
+  is a known substrate gap (I3 in the umbrella mission).
 
 Texture delegation is agentic. Texture may write, ask researcher, ask super, ask
 both, ask neither, wait for more evidence, or report a blocker within its
@@ -170,7 +195,12 @@ The verifier must observe product/control evidence. It must not manually seed su
 
 ## Run Acceptance Records
 
-For long-running self-development proof, synthesize a durable `RunAcceptanceRecord` from existing evidence:
+For long-running Definition mission proof (`/goal <doc>.md`), the mission's own
+evidence ledger and completion semantics in `skills/definition/SKILL.md` govern
+what counts as settled. Synthesize a durable `RunAcceptanceRecord` from that
+ledger when a mission reaches `complete` or a clean handoff state. For
+self-development proof outside a Definition run, synthesize a record from
+existing evidence:
 
 ```text
 POST /api/run-acceptances/synthesize

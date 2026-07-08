@@ -1,7 +1,7 @@
 # Choir Computer Ontology
 
 **Status:** canonical architecture vocabulary
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-08
 
 This document names the durable object that Choir operates on.
 
@@ -24,8 +24,8 @@ source systems, policy, and publication/subscription boundaries.
 Use these terms:
 
 - **Choir Community Cloud**: the public/shared Choir deployment, including
-  `choir.news`, Universal Wire, public publication surfaces, public user
-  computers, and Community Cloud platform computers.
+  `choir.news`, World Wire (formerly Universal Wire), public publication
+  surfaces, public user computers, and Community Cloud platform computers.
 - **Private Choir Cloud**: a customer-controlled deployment with its own NixOS
   host or host cluster, platform computer(s), many user computers, candidate
   computers, private source systems, policy, and optional publication or
@@ -39,7 +39,8 @@ Use these terms:
   computer. A candidate is a forked
   `ComputerVersion = (CodeRef, ArtifactProgramRef)` — forked by tape/program
   reference — never a VM or desktop instance (see
-  [substrate-independent-audited-computer-2026-07-04](definitions/substrate-independent-audited-computer-2026-07-04.md)).
+  [substrate-independent-audited-computer-2026-07-04](definitions/substrate-independent-audited-computer-2026-07-04.md)
+  and the H031 candidate-computer-as-VM heresy in [choir-doctrine.md](choir-doctrine.md)).
 
 Do not model a customer Private Choir Cloud as just a tenant row in the
 Community Cloud. A private cloud may have a thousand employees, its own NixOS
@@ -85,10 +86,30 @@ ComputerVersions (invariant `route-over-computer-version`).
 
 When the implementation substrate is VM-backed, computer liveness is governed
 by the warmness and reclaim policy in
-[vm-priority-policy.md](vm-priority-policy.md). That policy is part of the
+[vm-priority-policy.md](archive/vm-priority-policy.md). That policy is part of the
 computer ontology: active primary computers outrank candidate/background work,
 and future always-on computers must be modeled as a first-class lifecycle class
 rather than a cosmetic account flag.
+
+## Dolt Store Taxonomy
+
+The Dolt substrate is split into two stores that must never be conflated (see
+D-STORES and D-WIRE in
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)):
+
+- **World-wire store:** platform `ObjectGraphStore` at
+  `internal/platform/objectgraph_store.go`, served by `corpusd`. It is moving to
+  sql-server mode now (multi-writer); no data migration is needed.
+- **VM-local embedded store:** one embedded Dolt workspace per user VM at
+  `internal/objectgraph/dolt_store.go`, shared by all capsules in that VM.
+  Promotion (fork/promote/rollback) is an operation on this embedded store, not
+  a property of the world-wire store and not a separate promotion workspace.
+
+Branch isolation on the VM-local embedded store is under test (D-PROMO). The
+current `DoltPromotionAdapter` is tag-only interim and must not be enabled in any
+production promotion flow until the conjecture settles. Rollback on a shared
+main branch via `DOLT_RESET --hard` is not an admissible production mechanism
+(I4); rollback is a route flip or an isolated-branch operation.
 
 ## Ledger Split
 
@@ -97,7 +118,7 @@ Do not force every change through one storage abstraction.
 | Ledger | Owns | Typical promotion |
 | --- | --- | --- |
 | VM/OS/runtime | machine image, installed packages, running services, local caches, process environment | snapshot/cutover, rebuild from typed inputs, or discard |
-| Dolt/app state | textures, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants |
+| Dolt/app state | textures, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants on the VM-local embedded store; current adapter is tag-only interim while D-PROMO branch-isolation testing settles |
 | Source/build | Go code, Svelte code, tests, Nix/package recipes, app bundles | git-like patch/commit or typed package import |
 | Blob/content store | uploaded files, generated media, PDFs, audio, images, patch artifacts | content-addressed hash plus Dolt/artifact metadata |
 | Artifact/provenance graph | claims, citations, source anchors, verifier results, trace refs, promotion certificates | graph merge with provenance completeness checks |

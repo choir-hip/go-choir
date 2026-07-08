@@ -23,15 +23,15 @@ Primary support docs:
 
 - [current-architecture.md](./current-architecture.md)
 - [computer-ontology.md](./computer-ontology.md)
-- [choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)
+- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./archive/choir-rearchitecture-durable-actors-2026-06-11.md)
 - [conjecture-learning-proof-theory-2026-06-11.md](./conjecture-learning-proof-theory-2026-06-11.md)
 - [conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md)
 - [why-texture-2026-06-15.md](./why-texture-2026-06-15.md)
 - [why-texture-background-2026-06-15.md](./why-texture-background-2026-06-15.md)
 - [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
 - [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
-- [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
-- [mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md)
+- [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./archive/mission-agentic-debugging-vtext-stability-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+- [docs/archive/mission-source-system-simplify-secure-smart-v0.md](./archive/mission-source-system-simplify-secure-smart-v0.md)
 
 Reading order for architecture or behavior work:
 
@@ -49,10 +49,13 @@ mission ledgers are evidence. They do not silently override Choir Doctrine.
 Enforcement direction (owner decision 2026-07-07): doctrine prose is being
 replaced by executable enforcement. Invariants trend toward TLA+ specs
 model-checked in CI, and heresies trend toward detectors that fail CI on
-regression. This document trends toward thesis + invariants + pointers, with
-the mission form defined in
-[mission-og-dolt-heresy-hard-cutover-v0.md](./mission-og-dolt-heresy-hard-cutover-v0.md)
-and the executable definitions in [docs/definitions/](./definitions/). A heresy
+regression. This document trends toward thesis + invariants + pointers. The
+mission form for long-running work is now `skills/definition/SKILL.md`
+(`/goal <doc>.md`); the current executable Definition for the OG/Dolt/heresy
+program is
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md).
+The older [mission-og-dolt-heresy-hard-cutover-v0.md](./mission-og-dolt-heresy-hard-cutover-v0.md)
+is superseded source material folded into that Definition. A heresy
 entry below without a CI detector is a heresy entry that is not yet done being
 written.
 
@@ -487,7 +490,7 @@ causal structure rather than frozen provenance.
 and child runs.
 
 `evidence:` [internal/runtime/texture_workflow_verifier.go](../internal/runtime/texture_workflow_verifier.go),
-[internal/runtime/api_trace.go](../internal/runtime/api_trace.go).
+`internal/runtime/api_trace.go` (deleted; references retained as provenance).
 
 `why it violates the spec:` operator-facing and test-facing truth surfaces keep
 rendering the wrong graph, so legacy ontology remains cognitively primary.
@@ -530,7 +533,7 @@ by source run, and child-run launch.
 `maybeStartConfiguredContinuation`, `"request_source": "run_continuation"`,
 `request_source.*run_continuation`.
 
-`evidence:` [internal/runtime/continuation.go](../internal/runtime/continuation.go),
+`evidence:` `internal/runtime/continuation.go` (deleted; references retained as provenance),
 [internal/store/continuations.go](../internal/store/continuations.go),
 [internal/store/store.go](../internal/store/store.go).
 
@@ -572,7 +575,7 @@ acceptance synthesis and trace.
 
 `evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
 [internal/types/acceptance.go](../internal/types/acceptance.go),
-[internal/runtime/api_trace.go](../internal/runtime/api_trace.go),
+`internal/runtime/api_trace.go` (deleted; references retained as provenance),
 [AGENTS.md](../AGENTS.md).
 
 `why it violates the spec:` the verifier surface still encodes old run and
@@ -691,7 +694,7 @@ evidence, `continuation-level`.
 
 `evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
 [AGENTS.md](../AGENTS.md),
-[docs/archive/mission-lifecycle-cutover-v0.md](./mission-lifecycle-cutover-v0.md).
+[docs/archive/mission-lifecycle-cutover-v0.md](./archive/mission-lifecycle-cutover-v0.md).
 
 `why it violates the spec:` architectural missions can appear settled on
 surface health rather than causal proof.
@@ -730,7 +733,7 @@ obligation delivery.
 trajectory-specific reconciliation.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[docs/archive/mission-lifecycle-cutover-v0.md](./mission-lifecycle-cutover-v0.md).
+[docs/archive/mission-lifecycle-cutover-v0.md](./archive/mission-lifecycle-cutover-v0.md).
 
 `why it violates the spec:` authority lives on trajectory and work item, but
 delivery can be skipped because “some activation of this agent exists.”
@@ -776,7 +779,7 @@ state.
 [internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
 [internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
 [internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
-[docs/archive/glossary.md](./glossary.md).
+[docs/archive/glossary.md](./archive/glossary.md).
 
 `why it violates the spec:` the docs say blockers and questions are
 obligations, but the control substrate does not fully express them that way.
@@ -795,7 +798,7 @@ work items, but the generic update append path does not universally do that.
 
 `evidence:` [internal/store/store.go](../internal/store/store.go),
 [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
-[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md).
+[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./archive/choir-rearchitecture-durable-actors-2026-06-11.md).
 
 `why it violates the spec:` the one-message/one-obligation model remains only
 partially realized.
@@ -816,8 +819,8 @@ explicitly rejects lease as an architectural control concept.
 
 `evidence:` [AGENTS.md](../AGENTS.md),
 [docs/current-architecture.md](./current-architecture.md),
-[docs/archive/glossary.md](./glossary.md),
-[internal/runtime/continuation.go](../internal/runtime/continuation.go),
+[docs/archive/glossary.md](./archive/glossary.md),
+`internal/runtime/continuation.go` (deleted; references retained as provenance),
 [internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
 
 `why it violates the spec:` it invites agents to smuggle lease-shaped control
@@ -1036,7 +1039,7 @@ manual navigation destination.
 launchers for `trace`, tests expecting a Trace icon, copy that tells users to
 manually browse Trace as the debugging surface.
 
-`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [docs/platform-os-app-state.md](./platform-os-app-state.md),
 [frontend/src/lib/FeaturesApp.svelte](../frontend/src/lib/FeaturesApp.svelte),
 [frontend/tests/desktop-shell-core.spec.js](../frontend/tests/desktop-shell-core.spec.js).
@@ -1063,7 +1066,7 @@ desktop-state tests, comments that say users open Terminal, routes that keep
 `/api/terminal/ws` as a live product affordance rather than a compatibility
 shim.
 
-`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [internal/sandbox/terminal.go](../internal/sandbox/terminal.go),
 [frontend/tests/terminal-app.spec.js](../frontend/tests/terminal-app.spec.js),
 [internal/store/desktop_test.go](../internal/store/desktop_test.go).
@@ -1093,8 +1096,8 @@ for sources.
 `evidence:` [README.md](../README.md),
 [docs/current-architecture.md](./current-architecture.md),
 [docs/platform-os-app-state.md](./platform-os-app-state.md),
-[docs/archive/mission-web-surface-rationalization-v0.md](./mission-web-surface-rationalization-v0.md),
-[docs/archive/mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md),
+[docs/archive/mission-web-surface-rationalization-v0.md](./archive/mission-web-surface-rationalization-v0.md),
+[docs/archive/mission-source-system-simplify-secure-smart-v0.md](./archive/mission-source-system-simplify-secure-smart-v0.md),
 [internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
 [internal/store/browser.go](../internal/store/browser.go),
 [internal/types/browser.go](../internal/types/browser.go),
@@ -1140,7 +1143,7 @@ cold-start replay), `pending []Update` instead of `mailbox chan Update`, no
 or "steers are already in the log" inside the warm loop.
 
 `evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md),
-[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)
+[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./archive/choir-rearchitecture-durable-actors-2026-06-11.md)
 (section 2.2, "Go delivers, the database remembers"),
 [docs/mission-3c_2-actor-runtime-migration-real-v0.md](./mission-3c_2-actor-runtime-migration-real-v0.md).
 
@@ -1165,13 +1168,16 @@ pattern. The test: if there are no `chan` declarations in
 
 #### H031 - Candidate Computer Modeled as VM Identity
 
-`status:` **active** (gated on Phase 4 of OG/Dolt hard cutover).
+`status:` **active** (gated on Phase 4 of the current umbrella mission
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md);
+the older `mission-og-dolt-heresy-hard-cutover-v0.md` is superseded source
+material).
 
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
 
 `detectors:` vmctl candidate-desktop publish/switch lifecycle (`internal/vmctl/handlers.go:312`, `client.go:191`), candidate_computer_package files capturing VM state as candidate identity, route resolutions targeting VM/desktop IDs.
 
-`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](./definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/definitions/heresy-eradication-2026-07-07.md](./definitions/heresy-eradication-2026-07-07.md).
+`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](./definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/definitions/heresy-eradication-2026-07-07.md](./definitions/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
 
 `why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
 

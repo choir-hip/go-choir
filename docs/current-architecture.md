@@ -1,18 +1,22 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-07 (status-tag pass: every claim is now marked
-**Live (2026-07)**, **Target**, or **Retired**; actor-runtime, capsule,
+**Last updated:** 2026-07-08 (status-tag pass: every claim is now marked
+**Live**, **Target**, or **Retired**; actor-runtime, capsule,
 candidate-computer, and storage claims corrected against
 [assessment-overall-state-2026-07-07.md](assessment-overall-state-2026-07-07.md)
-and [mission-og-dolt-heresy-hard-cutover-v0.md](mission-og-dolt-heresy-hard-cutover-v0.md).
+— historical evidence, see era note there — and
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)
+for current executable authority. The older
+[mission-og-dolt-heresy-hard-cutover-v0.md](mission-og-dolt-heresy-hard-cutover-v0.md)
+is superseded source material.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
 conjecture vocabulary; see the Ontology section.)
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `texture`, conductor routing, workers, Trace, Dolt,
 `vmctl`, publication, or appagent behavior. For current vocabulary, read
-[glossary.md](glossary.md). For project direction, read
-[project-goals.md](project-goals.md). For the current common platform/default
+[glossary.md](archive/glossary.md). For project direction, read
+[project-goals.md](archive/project-goals.md). For the current common platform/default
 computer OS, desktop shell, and app catalog state, read
 [platform-os-app-state.md](platform-os-app-state.md).
 
@@ -73,9 +77,10 @@ DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
 (~106K LOC of tool loops, texture state machine, wire synthesis, run memory)
 awaiting *extraction and deletion*, not a zombie awaiting wiring. **Retired
 (residue still in tree):** parent/child run control and RunContinuations are
-named heresies (H001–H008) with deletion scheduled in
-[mission-og-dolt-heresy-hard-cutover-v0.md](mission-og-dolt-heresy-hard-cutover-v0.md);
-they must receive no new callers. This section states the settled vocabulary so
+named heresies (H001–H008) with deletion scheduled in the current umbrella
+mission [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)
+(Phase B/C; the older hard-cutover mission doc is superseded source material).
+They must receive no new callers. This section states the settled vocabulary so
 new work stops accreting on the retired ontology.
 
 | Term | Meaning |
@@ -117,8 +122,8 @@ gates is the named anti-pattern.
 
 Choir is a durable learning control system over versioned artifacts. The web
 desktop is the current general-purpose projection of that substrate, not the
-whole ontology. Read [docs/archive/mission-geometry.md](mission-geometry.md) for the
-higher-level frame and [glossary.md](glossary.md) for the current
+whole ontology. Read [docs/archive/mission-geometry.md](archive/mission-geometry.md) for the
+higher-level frame and [glossary.md](archive/glossary.md) for the current
 Community Cloud / Private Cloud / Wire vocabulary.
 
 The Automatic Computer already exists in deployed form: a web desktop, backend
@@ -126,7 +131,7 @@ services, appagents, and NixOS-on-NixOS VM infrastructure. A native macOS app
 (Wails v3) wraps the web desktop with `ASWebAuthenticationSession` for passkey
 auth, transparent title bar, and cloud-mode-by-default. See
 [cmd/desktop/README.md](../cmd/desktop/README.md) and
-[spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
+[docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](archive/spec-choir-desktop-wails-v3-2026-06-22.md).
 The product object is a persistent user **computer**, not a disposable sandbox.
 The current work is not to invent the product from scratch. The current work is
 to stabilize the deployed system around the right causal model.
@@ -156,7 +161,7 @@ proven.
 
 The current promotion architecture is stable platform, divergent computers.
 Read
-[stable-platform-divergent-computers-architecture-2026-05-17.md](stable-platform-divergent-computers-architecture-2026-05-17.md)
+[stable-platform-divergent-computers-architecture-2026-05-17.md](archive/stable-platform-divergent-computers-architecture-2026-05-17.md)
 before changing source-lineage, app-package, runtime/UI promotion, platform
 computer, or deployment behavior. The short version is:
 
@@ -176,7 +181,7 @@ The current cloud vocabulary matters for source/news work:
   with platform computer(s), many user computers, candidate computers, private
   source systems, and optional publication/subscription links;
 - **Wire** is the reusable source-to-Texture substrate;
-- **Universal Wire** is platform-level work in the Community Cloud, not a
+- **World Wire** is platform-level work in the Community Cloud, not a
   user-computer feature;
 - personalization is user-computer work over accessible public/private corpora.
 
@@ -227,7 +232,7 @@ Important boundary rules:
 - The per-user computer runtime is where private conductor, Texture, appagent,
   Trace, run memory, app state, source metadata, and candidate-control product
   state live.
-- Platform-level semantic work, such as Universal Wire article/edition Textures
+- Platform-level semantic work, such as World Wire article/edition Textures
   and public source synthesis, should be scoped to platform computer authority
   even when host daemons perform serving, lifecycle, or adapter work.
 - Provider secrets stay in the gateway/platform boundary. Per-computer model
@@ -584,7 +589,7 @@ still the computer.
 
 VM-backed computers are retained by a typed warmness policy, not by a single
 idle timeout. Current and future priority semantics are documented in
-[vm-priority-policy.md](vm-priority-policy.md): ordinary primary computers stay
+[vm-priority-policy.md](archive/vm-priority-policy.md): ordinary primary computers stay
 warm while capacity allows, candidates and workers hibernate first, and
 configured always-on primary computers have an explicit protected/resume lane.
 
@@ -660,7 +665,20 @@ should ask them to register or log in, then create or resume a user-owned active
 or candidate computer. Platform/public mutation is a fork/proposal/promotion
 path, not direct anonymous mutation of the platform computer.
 
-Read [public-identity-and-custom-domains.md](public-identity-and-custom-domains.md).
+Read [public-identity-and-custom-domains.md](archive/public-identity-and-custom-domains.md).
+
+### Routing Invariants
+
+- **Route-over-ComputerVersion (H031):** no product route resolves to a VM or
+  desktop instance identity. Routes point at `ComputerVersion = (CodeRef,
+  ArtifactProgramRef)` records. The current implementation has a seam in
+  `internal/proxy/lineage_route_resolver.go` that still falls back to hard-coded
+  platform VM/desktop constants when the `route_profile` parser fails or
+  `PROXY_RUNTIME_DB_PATH` is unset; this is a known violation tracked by H031.
+- **Timeout hardening (I3):** `vmctl.Client` defaults to a 180s resolve timeout
+  while `internal/server/server.go` has no `ReadTimeout`/`WriteTimeout`, so a
+  hung VM can block a public request for the full 180s. Bounded resolve timeout,
+  server timeouts, and a fast 504 path are pending.
 
 ## Promotion Paths
 
@@ -726,12 +744,26 @@ the route pointer changes atomically with rollback.
 
 ## State Placement
 
-Choir needs multiple state ledgers with different merge laws.
+Choir needs multiple state ledgers with different merge laws. The Dolt substrate
+is split into two stores that must not be conflated (see D-STORES in
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)):
 
-Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md) for the
-Dolt/SQLite decision record.
+- **World-wire store:** platform `ObjectGraphStore` at
+  `internal/platform/objectgraph_store.go`, served by `corpusd`. The platform
+  decision (D-WIRE) is to move this to sql-server mode now; no data migration
+  is needed and existing wire data is junk.
+- **VM-local embedded store:** one embedded Dolt workspace per user VM at
+  `internal/objectgraph/dolt_store.go`, shared by all capsules in that VM.
+  Promotion (fork/promote/rollback) is an operation on this embedded store, not
+  a property of the world-wire store and not a separate promotion workspace.
 
-Per-user embedded Dolt holds private product state:
+Read [adr-dolt-as-canonical-state.md](archive/adr-dolt-as-canonical-state.md) for the
+original Dolt/SQLite decision record, but note that the 2026-07-08 D-STORES /
+D-WIRE decisions refine the two-store topology and the sql-server migration
+path.
+
+VM-local embedded Dolt (one workspace per user VM, shared by its capsules) holds
+private product state:
 
 - desktop/app graph
 - appagent state
@@ -740,6 +772,12 @@ Per-user embedded Dolt holds private product state:
 - local trajectories
 - researcher findings and evidence metadata
 - publication staging metadata
+
+Promotion (fork/promote/rollback) operates against this embedded store, not
+against the world-wire store and not a separate promotion workspace. Branch
+isolation on the embedded store is under test (D-PROMO); the current
+`DoltPromotionAdapter` is tag-only interim and must not be enabled in any
+production promotion flow until the conjecture settles.
 
 Per-user snapshot filesystem holds workspace and file state:
 
@@ -754,21 +792,23 @@ Per-user snapshot filesystem holds workspace and file state:
 filesystem should expose natural aliases/shortcuts so documents are discoverable
 from the desktop and file browser.
 
-Platform Dolt holds platform-visible state:
+World-wire store (historically misnamed "Platform Dolt") holds the public/source
+object graph served by `corpusd`:
 
-- users/accounts/tenants
-- VM lifecycle, capacity, and routing records
-- platform VM pool records
-- publication records
-- public artifact metadata
-- citation graph
-- compute/accounting records
-- later CHIPS economy state
+- publication proposals, publications, publication versions, and public routes
+- public artifact metadata and manifests
+- source/retrieval/citation/provenance records and wire/source object graph
+  (`og_objects` / `og_edges`)
+- consent, review, verifier, and related control records scoped to public/source
+  objects
+- later CHIPS economy state for public transactions
 
-Platform Dolt is not the hot-path message bus and not the store for every private
-event. Cross-VM work should use direct transport or a relay, then write compact
-durable facts for routing, recovery, provenance, publication, citation, and
-compute accounting.
+It does not own VM lifecycle, platform VM pool state, auth/user account state,
+candidate-computer identity, promotion rollback, or general compute accounting.
+Those belong to platform control ledgers or VM-local embedded stores as named by
+their subsystem. Per D-WIRE, the world-wire store moves to sql-server mode for
+multi-writer access by proxy/runtime/wire agents. Per D-STORES, this does not
+change promotion mechanics: promotion operates on the VM-local embedded store.
 
 Do not keep the whole filesystem in git. Source files under a repo belong to the
 source/build ledger. Uploaded files and generated media belong to a
@@ -901,7 +941,7 @@ Future coding agents should not simplify Choir into:
 - one global agent with tools
 - one active computer that mutable workers freely edit
 - workers patching `texture` text directly
-- platform Dolt as a global polling bus
+- world-wire store as a global polling bus
 - provider-specific product behavior
 - publication as a flat export with no version/provenance model
 

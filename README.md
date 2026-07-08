@@ -137,7 +137,7 @@ task sign       # ad-hoc sign for local testing
 
 See [cmd/desktop/README.md](cmd/desktop/README.md) for setup, build, and
 auth bridge details, and
-[docs/spec-choir-desktop-wails-v3-2026-06-22.md](docs/spec-choir-desktop-wails-v3-2026-06-22.md)
+[docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md)
 for the full build spec and phase plan.
 
 ### Choir CLI
@@ -156,7 +156,7 @@ choir texture read <doc_id>          # document metadata
 choir texture revisions <doc_id>     # revisions with full content bodies
 choir trajectories                   # recent trajectory state
 choir search "query"                 # corpus search
-choir wire stories                   # Universal Wire feed
+choir wire stories                   # World Wire feed
 choir api-key list|create|revoke     # key management
 ```
 
@@ -196,9 +196,9 @@ system. The deeper object is the owned computer and its durable artifacts.
 For the deeper design frame, see:
 
 - [docs/choir-doctrine.md](docs/choir-doctrine.md)
-- [docs/mission-geometry.md](docs/mission-geometry.md)
+- [docs/archive/mission-geometry.md](docs/archive/mission-geometry.md)
 - [docs/computer-ontology.md](docs/computer-ontology.md)
-- [docs/project-goals.md](docs/project-goals.md)
+- [docs/archive/project-goals.md](docs/archive/project-goals.md)
 
 ## Runtime Model
 
@@ -250,11 +250,17 @@ prompt bar -> conductor -> appagent/Texture -> super
 The objective is to improve artifacts over time while minimizing corruption,
 deadlock, human monitoring burden, and loss of understanding.
 
-Storage direction (owner decision, 2026-07-07): the object graph is becoming
-the canonical data model by hard cutover — it currently dual-writes alongside
-the `internal/store` SQL tables — and Dolt's native history (`dolt_history`,
-`AS OF`) is becoming the audit read-path. See
-[docs/mission-og-dolt-heresy-hard-cutover-v0.md](docs/mission-og-dolt-heresy-hard-cutover-v0.md).
+Storage direction (owner decision, 2026-07-08): the Dolt substrate is split into
+a world-wire store (`internal/platform/objectgraph_store.go`, moving to
+sql-server now) and a VM-local embedded store per user VM
+(`internal/objectgraph/dolt_store.go`). Promotion (fork/promote/rollback) is
+an operation on the VM-local embedded store, not a property of the world-wire
+store. Branch isolation on the embedded store is under test (D-PROMO); the
+current `DoltPromotionAdapter` is tag-only interim and must not be enabled in
+production promotion flow until the conjecture settles. See the current umbrella
+Definition mission
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](docs/definitions/og-dolt-heresy-completion-2026-07-08.md)
+(older hard-cutover and heresy-eradication docs are superseded source material).
 
 ## Services
 
@@ -415,24 +421,24 @@ Start here:
 
 - [docs/choir-doctrine.md](docs/choir-doctrine.md): apex doctrine and architecture control document.
 - [AGENTS.md](AGENTS.md): repository agent operating contract.
-- [docs/mission-geometry.md](docs/mission-geometry.md): high-level mission geometry and product ontology.
+- [docs/archive/mission-geometry.md](docs/archive/mission-geometry.md): high-level mission geometry and product ontology.
 - [docs/computer-ontology.md](docs/computer-ontology.md): persistent computer, ledger, promotion, and update ontology.
-- [docs/project-goals.md](docs/project-goals.md): current goal continuum and absorbed historical mission signal.
-- [docs/glossary.md](docs/glossary.md): canonical vocabulary.
+- [docs/archive/project-goals.md](docs/archive/project-goals.md): current goal continuum and absorbed historical mission signal.
+- [docs/archive/glossary.md](docs/archive/glossary.md): canonical vocabulary.
 - [docs/README.md](docs/README.md): documentation index and cleanup status.
 - [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
 - [docs/assessment-overall-state-2026-07-07.md](docs/assessment-overall-state-2026-07-07.md): evidence-backed system state assessment; corrects stale premises (actor runtime fully wired, wire outage is substrate not pipeline, audit trail is application-level today).
-- [docs/mission-og-dolt-heresy-hard-cutover-v0.md](docs/mission-og-dolt-heresy-hard-cutover-v0.md): owner-approved program for object-graph hard cutover, Dolt-native audit/promotion, and heresy elimination.
+- [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](docs/definitions/og-dolt-heresy-completion-2026-07-08.md): current umbrella Definition mission for object-graph hard cutover, Dolt-native audit/promotion, and heresy elimination (supersedes the older hard-cutover mission).
 - [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](docs/definitions/substrate-independent-audited-computer-2026-07-04.md): executable definition of the product object — `ComputerVersion = (CodeRef, ArtifactProgramRef)` — with substrates as materializers.
 - [docs/choir-grip-checkpoint-2026-07-07.md](docs/choir-grip-checkpoint-2026-07-07.md): narrative checkpoint connecting the architecture, GRIP theory, and the project's conceptual lineage.
 - [docs/frontend-app-building-api.md](docs/frontend-app-building-api.md): current frontend app registry, preview, theme, and shell contract.
 - [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
-- [docs/adr-dolt-as-canonical-state.md](docs/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision.
+- [docs/archive/adr-dolt-as-canonical-state.md](docs/archive/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision (original ADR; refined by D-STORES/D-WIRE in the umbrella mission).
 - [docs/legacy-promotion-experiments-learnings.md](docs/legacy-promotion-experiments-learnings.md): consolidated lessons from pruned patchset-promotion experiments.
-- [docs/implementation-scope.md](docs/implementation-scope.md): near-term scope and non-goals.
-- [docs/north-star.md](docs/north-star.md): longer product direction.
+- [docs/archive/implementation-scope.md](docs/archive/implementation-scope.md): near-term scope and non-goals.
+- [docs/archive/north-star.md](docs/archive/north-star.md): longer product direction.
 - [cmd/desktop/README.md](cmd/desktop/README.md): native macOS app setup, build, and auth bridge docs.
-- [docs/spec-choir-desktop-wails-v3-2026-06-22.md](docs/spec-choir-desktop-wails-v3-2026-06-22.md): desktop app build spec and phase plan.
+- [docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md): desktop app build spec and phase plan.
 
 Many stale dated proof files have been pruned. Preserve their reusable lessons
 in consolidated docs instead of keeping obsolete success paths alive.
