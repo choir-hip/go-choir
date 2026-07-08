@@ -1,0 +1,59 @@
+### 1. Verdict
+**Conditional**. 
+The documentation alignment is conceptually correct and aligns with the 2026-07-08 umbrella mission (`docs/definitions/og-dolt-heresy-completion-2026-07-08.md`). However, it contains **29 broken relative markdown links** caused by moving files to `docs/archive/` but failing to update the target URLs inside the parentheses (despite updating the link text in several cases). It also contains outdated path references in code spans within `docs/README.md`. Acceptance is conditional on applying the concrete link fixes listed below.
+
+---
+
+### 2. Blocking Issues List
+These issues break documentation navigation/linking and must be fixed before the updates are accepted.
+
+| File | Exact Outdated/Missing Text | Severity | Concrete Fix |
+| :--- | :--- | :--- | :--- |
+| `docs/current-architecture.md` | `[docs/archive/mission-geometry.md](mission-geometry.md)` | High | Change target to `(archive/mission-geometry.md)` |
+| `docs/current-architecture.md` | `[spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md)` | High | Change target to `(archive/spec-choir-desktop-wails-v3-2026-06-22.md)` |
+| `docs/choir-doctrine.md` | `[choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)` | High | Change target to `./archive/choir-rearchitecture-durable-actors-2026-06-11.md` (line 26) |
+| `docs/choir-doctrine.md` | `[docs/archive/glossary.md](./glossary.md)` | High | Change target to `./archive/glossary.md` (lines 819, 823) |
+| `docs/choir-doctrine.md` | `[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)` | High | Change target to `./archive/choir-rearchitecture-durable-actors-2026-06-11.md` (lines 798, 1143) |
+| `docs/choir-doctrine.md` | `[mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md)` | High | Change target to `./archive/mission-agentic-debugging-vtext-stability-v0.md` (lines 280, 584, 597) |
+| `docs/choir-doctrine.md` | `[mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md)` | High | Change target to `./archive/mission-source-system-simplify-secure-smart-v0.md` (lines 405, 755) |
+| `docs/choir-doctrine.md` | `[mission-lifecycle-cutover-v0.md](./mission-lifecycle-cutover-v0.md)` | High | Change target to `./archive/mission-lifecycle-cutover-v0.md` (lines 498, 509) |
+| `docs/choir-doctrine.md` | `[mission-web-surface-rationalization-v0.md](./mission-web-surface-rationalization-v0.md)` | High | Change target to `./archive/mission-web-surface-rationalization-v0.md` (line 697) |
+| `README.md` | `[docs/spec-choir-desktop-wails-v3-2026-06-22.md](docs/spec-choir-desktop-wails-v3-2026-06-22.md)` | High | Change target to `(docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md)` (lines 140, 435) |
+| `README.md` | `[docs/mission-geometry.md](docs/mission-geometry.md)` | High | Change target to `(docs/archive/mission-geometry.md)` (lines 148, 150) |
+| `README.md` | `[docs/project-goals.md](docs/project-goals.md)` | High | Change target to `(docs/archive/project-goals.md)` (lines 149, 151) |
+| `README.md` | `[docs/glossary.md](docs/glossary.md)` | High | Change target to `(docs/archive/glossary.md)` (line 152) |
+| `README.md` | `[docs/adr-dolt-as-canonical-state.md](docs/adr-dolt-as-canonical-state.md)` | High | Change target to `(docs/archive/adr-dolt-as-canonical-state.md)` (line 153) |
+| `README.md` | `[docs/implementation-scope.md](docs/implementation-scope.md)` | High | Change target to `(docs/archive/implementation-scope.md)` (line 154) |
+| `README.md` | `[docs/north-star.md](docs/north-star.md)` | High | Change target to `(docs/archive/north-star.md)` (line 155) |
+
+---
+
+### 3. Important Issues List
+These issues involve files that are listed in index files under incorrect names or paths, but are not written as standard markdown links.
+
+| File | Issue | Severity | Concrete Fix |
+| :--- | :--- | :--- | :--- |
+| `docs/README.md` | Path `` `docs/mission-texture-hard-cutover-v0.md` `` (line 105) does not exist. | Medium | Update to `` `docs/archive/mission-texture-hard-cutover-v0.md` `` |
+| `docs/README.md` | Path `` `docs/parallax-design-2026-06-11.md` `` (line 107) does not exist. | Medium | Update to `` `docs/archive/parallax-design-2026-06-11.md` `` |
+| `docs/README.md` | Path `` `docs/missiongradient-method.md` `` (line 115) does not exist. | Medium | Update to `` `docs/archive/missiongradient-method.md` `` |
+| `docs/README.md` | Path `` `docs/mission-universal-wire-style-vtext-collaborative-storygraph-v0.md` `` (line 207) does not exist and has a naming discrepancy. | Medium | Update to `` `docs/archive/mission-global-wire-style-vtext-collaborative-storygraph-v0.md` `` |
+| `docs/README.md` | Path `` `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` `` (line 164) has a naming discrepancy compared to the deleted file. | Low | Update to `` `docs/choir-global-wire-style-vtext-dual-object-spec-2026-06-07.md` `` |
+
+---
+
+### 4. Minor Issues / Nits
+* **Stale Code References in Doctrine:** `docs/choir-doctrine.md` references `../internal/runtime/api_trace.go` (lines 490, 575) and `../internal/runtime/continuation.go` (lines 533, 820) as active heresy locations, but both files were deleted in commit `fa166de1`. While these heresies (H006, H007, H008, H012) are still active because full contract-level eradication is pending, the files themselves no longer exist in the repo. It is recommended to update the links to refer to the deletion commit (`fa166de1`) or mark them as `(deleted)` in plain text.
+* **Route References to `/api/universal-wire/stories`:** `docs/current-architecture.md` (line 500) and other files refer to `/api/universal-wire/stories`. While current product terminology has transitioned to `World Wire`, the code route names and constant names in the proxy still use `universal-wire`. Keeping these in the doc is correct as of now, but they should be flagged for renaming in the Phase E rename sweep.
+
+---
+
+### 5. Residual Risks Before Mission Execution
+1. **D-PROMO (Embedded Branch Isolation):** Driver and database connection pooling (database/sql connection pool) causes `DOLT_CHECKOUT` session changes to leak/disappear across different queries. While pinning connections with `db.Conn` under test works, doing this cleanly in production without leaking connections or hitting application-level CAS retry conflicts remains a concurrency risk under load.
+2. **D-WIRE Cutover Data Loss:** Swapping the world-wire store to SQL server mode stands the database up fresh and discards old wire-store data. If any live data existed in production staging that was not logged, it will be discarded.
+3. **I3 Timeout Hardening (Saturating Proxy Workers):** If the 180s resolve timeout is not corrected before the cutover, any VM that hangs will hold a request for 180s, risking thread/worker pool saturation on the proxy under concurrent requests.
+4. **H031 Fallback Silence:** The lineage route resolver falls back to hardcoded VM constants silently if the `route_profile` parser fails or `PROXY_RUNTIME_DB_PATH` is unset. This fallback masks bad configuration and could result in running version mismatches without raising errors.
+
+---
+
+### 6. Confidence
+**High** (The link check was script-verified against the local file system state, and the code path structures were confirmed by grepping the source).
