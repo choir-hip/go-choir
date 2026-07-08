@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/google/uuid"
@@ -78,6 +79,13 @@ type Runtime struct {
 	// it calls this function. If nil, activate() panics — there is no
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
+
+	// promotionAdapter is the optional Dolt promotion adapter. When set,
+	// the promotion runtime calls Fork/Promote/Rollback to create
+	// tamper-evident DOLT_TAG certificates and DOLT_RESET rollback. When
+	// nil, the promotion flow works exactly as before (no Dolt tags).
+	// This is the safety net for the Dolt promotion integration.
+	promotionAdapter *computerversion.DoltPromotionAdapter
 }
 
 type textureWakeTimer interface {
@@ -384,6 +392,16 @@ func WithToolRegistry(registry *ToolRegistry) RuntimeOption {
 func WithTraceStore(s trace.Store) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.traceStore = s
+	}
+}
+
+// WithPromotionAdapter mounts a Dolt promotion adapter into the runtime.
+// When set, the promotion runtime calls Fork/Promote/Rollback to create
+// tamper-evident DOLT_TAG certificates and DOLT_RESET rollback. When nil,
+// the promotion flow works exactly as before (no Dolt tags).
+func WithPromotionAdapter(adapter *computerversion.DoltPromotionAdapter) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.promotionAdapter = adapter
 	}
 }
 

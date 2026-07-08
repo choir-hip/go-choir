@@ -273,6 +273,28 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 		DefaultBaseProfile:                    strings.TrimSpace(in.DefaultBaseProfile),
 		TraceID:                               firstNonEmptyPromotion(strings.TrimSpace(in.TraceID), pkg.TraceID),
 	}
+
+	// If a Dolt promotion adapter is configured, create a fork tag at the
+	// current HEAD. The fork tag is the rollback target: if the promotion
+	// fails the health window, the adapter resets to this tag.
+	//
+	// This maps to the TLA+ ForkCandidate action. The fork tag is stored
+	// in the rollback profile for later use by Promote and Rollback.
+	//
+	// If the adapter is nil or the fork fails, the adoption proceeds
+	// without a Dolt fork tag (graceful degradation).
+	if rt.promotionAdapter != nil {
+		fork, forkErr := rt.promotionAdapter.Fork(ctx, targetCandidateID)
+		if forkErr != nil {
+			log.Printf("app promotion: create adoption: dolt fork for candidate %s: %v (proceeding without fork tag)", targetCandidateID, forkErr)
+		} else {
+			rec.RollbackProfileJSON = mergeRollbackProfile(rec.RollbackProfileJSON, map[string]any{
+				"dolt_fork_tag":    fork.ForkTag,
+				"dolt_fork_commit": fork.ForkCommit,
+			})
+		}
+	}
+
 	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
@@ -477,6 +499,37 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
+
+	// If a Dolt promotion adapter is configured and we have a fork tag,
+	// create a promotion tag at the current HEAD. The promotion tag IS
+	// part of the ArtifactProgramRef — it is the tamper-evident reference
+	// to the promoted state.
+	//
+	// This maps to the TLA+ Commit action: it creates the merge tag
+	// (promoMergeTag) that identifies the promoted state.
+	//
+	// If the adapter is nil or the promote fails, the adoption proceeds
+	// without a Dolt promotion tag (graceful degradation). The lineage
+	// update still happens.
+	if rt.promotionAdapter != nil {
+		forkTag := stringFromMap(jsonRawToMap(rec.RollbackProfileJSON), "dolt_fork_tag")
+		if forkTag != "" {
+			promo, promoErr := rt.promotionAdapter.Promote(ctx, rec.TargetCandidateID, forkTag)
+			if promoErr != nil {
+				log.Printf("app promotion: promote adoption %s: dolt promote: %v (proceeding without promotion tag)", rec.AdoptionID, promoErr)
+			} else {
+				rec.RollbackProfileJSON = mergeRollbackProfile(rec.RollbackProfileJSON, map[string]any{
+					"dolt_promotion_tag": promo.PromotionTag,
+					"dolt_merge_commit":   promo.MergeCommit,
+				})
+				rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+				if err != nil {
+					return types.AppAdoptionRecord{}, err
+				}
+			}
+		}
+	}
+
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
 	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
 	lineage.UIDigest = rec.UIArtifactDigest
@@ -516,6 +569,26 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	if stringFromMap(rollback, "previous_active_source_ref") == "" {
 		return rec, fmt.Errorf("rollback app adoption: rollback source ref is missing")
 	}
+
+	// If a Dolt promotion adapter is configured and we have a fork tag,
+	// reset the Dolt working set to the fork tag. This is the atomic
+	// rollback operation: DOLT_RESET --hard to the fork tag.
+	//
+	// This maps to the TLA+ AutoRevert action: it restores the active
+	// computer's artifact head to the pre-merge fork tag (promoForkTag).
+	//
+	// If the adapter is nil or the rollback fails, the lineage restore
+	// still happens (graceful degradation). The Dolt reset is best-effort
+	// and does not block the lineage rollback.
+	if rt.promotionAdapter != nil {
+		forkTag := stringFromMap(rollback, "dolt_fork_tag")
+		if forkTag != "" {
+			if rbErr := rt.promotionAdapter.Rollback(ctx, forkTag); rbErr != nil {
+				log.Printf("app promotion: rollback adoption %s: dolt reset to fork tag %s: %v (lineage restore still proceeds)", rec.AdoptionID, forkTag, rbErr)
+			}
+		}
+	}
+
 	lineage.ActiveSourceRef = stringFromMap(rollback, "previous_active_source_ref")
 	lineage.RuntimeDigest = stringFromMap(rollback, "previous_runtime_digest")
 	lineage.UIDigest = stringFromMap(rollback, "previous_ui_digest")
@@ -917,6 +990,37 @@ func stringFromMap(m map[string]any, key string) string {
 	}
 	value, _ := m[key].(string)
 	return strings.TrimSpace(value)
+}
+
+// jsonRawToMap unmarshals a json.RawMessage into a map[string]any.
+// Returns an empty map if the input is nil or invalid.
+func jsonRawToMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return map[string]any{}
+	}
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
+}
+
+// mergeRollbackProfile merges additional fields into an existing rollback
+// profile JSON. If the existing profile is empty or invalid, a new one is
+// created with just the additional fields.
+func mergeRollbackProfile(existing json.RawMessage, additions map[string]any) json.RawMessage {
+	base := jsonRawToMap(existing)
+	for k, v := range additions {
+		base[k] = v
+	}
+	out, err := json.Marshal(base)
+	if err != nil {
+		return existing
+	}
+	return out
 }
 
 func boolFromMap(m map[string]any, key string) bool {
