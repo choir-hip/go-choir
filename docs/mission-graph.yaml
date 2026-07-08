@@ -2974,3 +2974,45 @@ nodes:
   - universal-wire-agent-pipeline-v1
   enables: []
   sources: []
+- id: mission-og-dolt-heresy-hard-cutover-v0
+  title: OG / Dolt / Heresy Hard Cutover v0
+  path: docs/mission-og-dolt-heresy-hard-cutover-v0.md
+  ledger: ''
+  status: superseded
+  kind: superseded
+  # Superseded by og-dolt-heresy-completion-2026-07-08. Phases were partially
+  # executed out of sequence; remaining work and open edges are absorbed into
+  # the umbrella mission.
+  depends_on: []
+  enables: []
+  sources:
+  - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+  - docs/assessment-overall-state-2026-07-07.md
+
+- id: heresy-eradication-2026-07-07
+  title: Heresy Eradication Definition 2026-07-07
+  path: docs/definitions/heresy-eradication-2026-07-07.md
+  ledger: ''
+  status: superseded
+  kind: superseded
+  # Superseded by og-dolt-heresy-completion-2026-07-08. The definition graph
+  # (heresy, eliminated, detector semantics) is imported by reference; the
+  # execution state and remaining error field are absorbed here.
+  depends_on: []
+  enables: []
+  sources:
+  - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+
+- id: og-dolt-heresy-completion-2026-07-08
+  title: OG / Dolt / Heresy Completion (umbrella; absorbs incomplete og-dolt hard-cutover and heresy-eradication runs plus past-mission open edges)
+  path: docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+  ledger: ''
+  status: working
+  kind: spine
+  depends_on: []
+  enables: []
+  sources:
+  - docs/mission-og-dolt-heresy-hard-cutover-v0.md
+  - docs/definitions/heresy-eradication-2026-07-07.md
+  - docs/assessment-overall-state-2026-07-07.md
+  - docs/definitions/substrate-independent-audited-computer-2026-07-04.md

@@ -238,6 +238,58 @@ documents:
       - texture_tool_or_prompt_change
       - docs_checker_rule_change
 
+  - path: docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations:
+      doc_role: definition
+      authority: mission
+      lifecycle: active
+    witnesses:
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - docs/mission-og-dolt-heresy-hard-cutover-v0.md
+      - docs/definitions/heresy-eradication-2026-07-07.md
+      - docs/assessment-overall-state-2026-07-07.md
+      - docs/mission-graph.yaml
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - dolt_promotion_change
+      - heresy_elimination_change
+      - computer_version_route_change
+      - mission_supersession_change
+
+  - path: docs/mission-og-dolt-heresy-hard-cutover-v0.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: paradoc
+      authority: mission
+      lifecycle: archived
+    witnesses:
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - docs/assessment-overall-state-2026-07-07.md
+      - docs/mission-graph.yaml
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - mission_supersession_change
+
+  - path: docs/definitions/heresy-eradication-2026-07-07.md
+    claim_scope: historical
+    is_root: false
+    is_evidence: true
+    annotations:
+      doc_role: definition
+      authority: mission
+      lifecycle: archived
+    witnesses:
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - docs/definitions/heresy-eradication-2026-07-07.md
+      - docs/choir-doctrine.md
+    refresh_triggers:
+      - mission_supersession_change
+
   - path: docs/heresy-detectors.md
     claim_scope: mixed
     is_root: false
