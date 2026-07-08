@@ -1,0 +1,62 @@
+1. **Verdict: reject for current `/goal` execution readiness**
+
+Not safe to run `/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md` yet. The current tree fixed most residuals, but the executable Definition still contains a false `determined_state` claim about `docs/heresy-detectors.md`, and the imported archived heresy source still carries stale `/goal` targets and unarchived paths. Both are doc-truth defects in authority material, not implementation work.
+
+2. **Blockers remaining — must fix before `/goal`**
+
+- **W1 stale `determined_state` claim remains in the active mission doc.**  
+  `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:378-381` says the detector manifest is “missing H030/H031 rows,” even though `docs/heresy-detectors.md:32-33` now has H030 and H031 rows.  
+  Verified current state:
+  - `docs/heresy-detectors.md` exists and includes H030/H031.
+  - `scripts/check-heresies.sh` does **not** exist.
+  - `.github/workflows/` has no heresy detector/check-heresies workflow hook.
+  Required correction: determined state should say: manifest exists, H030/H031 rows exist, but the executable script and CI discovery/fail-on-regression job are still missing.
+
+- **W1 task text is still partly stale.**  
+  `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:524-526` still says “extend the existing `docs/heresy-detectors.md` manifest with H030/H031 banned-pattern rows.” Those rows already exist. W1 should be reframed as “verify existing H030/H031 rows, add any missing pattern precision/baseline fields, create `scripts/check-heresies.sh`, and wire CI discovery.”
+
+3. **Important issues remaining — should fix before Phase A**
+
+- **Archived source doc still contains stale executable strings and unarchived paths.**  
+  `docs/archive/heresy-eradication-2026-07-07.md` has a redirect banner at lines 1-4, but still contains:
+  - stale harness invocation `/goal docs/definitions/heresy-eradication-2026-07-07.md` at lines 10-12 and 420-421;
+  - stale `suggested_goal_string` at line 411;
+  - unarchived `docs/mission-og-dolt-heresy-hard-cutover-v0.md` references at lines 33, 339, and 414.  
+  Because the active mission imports this archive as source material for heresy semantics, stale executable strings should be explicitly annotated as historical/non-authoritative or redirected to the current Definition.
+
+- **Phase-gate self-adjudication fix is substantively present, but one phrase is still sloppy.**  
+  The active mission now classifies red gates by protected surfaces and explicitly says Phase A has red work: `docs/definitions/...:497-507` and `:516-522`. That resolves the prior Phase A auto-proceed defect.  
+  Minor risk: `:485-486` says “red-class gates (Phases C, D, E),” which is now misleading because Phase A becomes red if W2/D-PROMO/S1 red surfaces were touched. Later text overrides it, but the parenthetical should be removed.
+
+- **DoltPromotionAdapter source comment remains stale by design, but must not be treated as truth after D-PROMO.**  
+  `internal/computerversion/dolt_promotion_adapter.go:18-22` still states the 2026-07-07 false-falsification conclusion: embedded `DOLT_CHECKOUT` is a no-op and branch isolation requires sql-server mode. The active mission correctly defers correcting this until the Phase A pinned-connection determinism test. Do not enable the adapter or cite the comment as current architecture before D-PROMO settles.
+
+- **H031 implementation remains intentionally violated; mission captures this correctly.**  
+  Current code still routes through VM/desktop identity:
+  - `internal/proxy/route_resolver.go:38-47` falls back to `UniversalWirePlatformOwnerID` / `UniversalWirePlatformDesktopID`.
+  - `internal/proxy/lineage_route_resolver.go:68-81` parses `route_profile` as `owner_id/desktop_id`.
+  - `cmd/proxy/main.go:60-84` still wires lineage resolution through `PROXY_RUNTIME_DB_PATH` and falls back to constants.  
+  This is expected Phase D work, not a pre-`/goal` blocker, but must not be claimed resolved.
+
+4. **Minor issues / nits**
+
+- **Resolved: C3 stale H031 framing is fixed in the active mission doc.**  
+  `docs/definitions/...:549-552` now says verify the existing H031 entry and Banned Patterns #16 instead of duplicating it. `docs/definitions/...:402-404` also correctly says the H031 entry, Banned Patterns #16, and detector manifest row exist and need CI binding.
+
+- **Resolved: D-PROMO evidence ledger location is fixed.**  
+  `docs/definitions/...:711-716` now says D-PROMO settlement is the Phase A pinned-connection branch-isolation determinism test, not an ordinary Phase D integration test.
+
+- **Resolved: doctrine H031 evidence path is fixed.**  
+  `docs/choir-doctrine.md:1180` links archived heresy evidence as `archive/heresy-eradication-2026-07-07.md`, which is the correct relative path from `docs/choir-doctrine.md`.
+
+- **Resolved: README lead framing is fixed.**  
+  `README.md:3-5` and `README.md:15` lead with “human-improving, machine-compounding mainframe.”
+
+- **Doc-authority and mission-graph supersession wiring is present.**  
+  `docs/mission-graph.yaml:2977-3018` marks both source docs superseded and the umbrella mission working/spine. `docs/doc-authority-manifest.yaml:241-306` registers the active Definition, both archived source docs, and `docs/heresy-detectors.md`.
+
+- **Pre-existing mission-graph hygiene debt:** duplicate node IDs exist elsewhere in `docs/mission-graph.yaml`; not introduced by this fix pass and not a blocker for this `/goal`.
+
+5. **Confidence: high**
+
+Grounded by direct reads/searches of the active mission Definition, doctrine H031 section, detector manifest, README, archived source docs, evidence dirs, mission graph, authority manifest, and relevant proxy/vmctl/promotion code paths.

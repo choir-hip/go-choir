@@ -375,10 +375,9 @@ determined_state:
     - claim: Timeout hardening is unbuilt (180s client default, no server timeouts, 10s retry window).
       source: observed
       execution_effect: W2 is first executable work.
-    - claim: `scripts/check-heresies.sh` and the CI discovery job do not exist;
-      the detector manifest at `docs/heresy-detectors.md` exists but is not yet
-      a CI-enforced check and is missing H030/H031 rows (added by the doc-fix
-      pass; C3/W1 now verify and wire it).
+    - claim: `docs/heresy-detectors.md` exists and includes H030/H031 rows; the
+      executable `scripts/check-heresies.sh` and the CI discovery job do not yet
+      exist. C3/W1 now verify and bind the existing rows.
       source: observed
       execution_effect: W1 is first executable work (parallel with W2).
     - claim: WithPromotionAdapter has zero cmd/ callers; adapter is dead in production.
@@ -482,8 +481,8 @@ At each phase exit:
    silently absorb), (c) out-of-scope noise (record and drop). The
    adjudication table (finding → category → one-line reasoning) MUST be
    committed to `docs/evidence/` before the gate can clear. The executing
-   agent MUST NOT be the sole adjudicator for red-class gates (Phases C, D,
-   E); either the owner signs off on the table, or a non-implementing
+   agent MUST NOT be the sole adjudicator for red-class gates; either the
+   owner signs off on the table, or a non-implementing
    independent agent (not the consensus runner) verifies the table and the
    repo state. Unjustified `retired` triage dispositions and unjustified
    category-(c) reclassifications are themselves category-(a) defects for the
@@ -521,16 +520,16 @@ tests promotion mechanics). The red-class parts of Phase A must follow the
 red-gate adjudication rules in the Phase Gate Protocol, not the default
 yellow/green auto-proceed rule.
 
-- **W1** Detector manifest + CI discovery job: extend the existing
-  `docs/heresy-detectors.md` manifest with H030/H031 banned-pattern rows,
-  create `scripts/check-heresies.sh` mapping H001–H031 families to
-  discovery-mode patterns with allow-contexts, CI job reporting counts
-  without failing, and baseline counts committed as evidence. Bind the existing
-  H031 route-over-VM banned pattern and H030 actor-runtime-polling registry row
-  (already present) into CI discovery, add a detector for `DOLT_RESET --hard`
-  in production (non-test) paths (I4 guard), and mark the trivial H030 registry
-  closure (repaired 2026-06-27) as closed. Promote families to fail-on-regression
-  as their clusters are eliminated.
+- **W1** Detector manifest + CI discovery job: verify the existing
+  `docs/heresy-detectors.md` manifest has correct H030/H031 rows and refine
+  allow-contexts as needed; create `scripts/check-heresies.sh` mapping H001–H031
+  families to discovery-mode patterns, wire a CI job reporting counts without
+  failing, and commit baseline counts as evidence. Bind the existing H031
+  route-over-VM banned pattern and H030 actor-runtime-polling registry row into
+  CI discovery, add a detector for `DOLT_RESET --hard` in production (non-test)
+  paths (I4 guard), and mark the trivial H030 registry closure (repaired
+  2026-06-27) as closed. Promote families to fail-on-regression as their
+  clusters are eliminated.
 - **W2** Timeout hardening: bounded vmctl resolve timeout (30–60s),
   `http.Server` Read/WriteTimeouts in `internal/server/server.go`, fast 504,
   reconcile the 10s retry window. Staging proof: `/api/universal-wire/stories`
