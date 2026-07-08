@@ -8,8 +8,14 @@ unless this file is carrying a newer explicitly promoted operating update.
 Product architecture rules live in [docs/agent-product-doctrine.md](docs/agent-product-doctrine.md)
 (authority boundaries, harness minimalism, Texture control plane, runtime
 configuration, product-path verification, run acceptance). Long-running mission
-rules live in [docs/agent-parallax-rules.md](docs/agent-parallax-rules.md)
-(Parallax, Texture narrative, independent review threads). Load those on demand.
+rules live in [skills/definition/SKILL.md](skills/definition/SKILL.md)
+(Definition: executable mission authority for `/goal <doc>.md` runs, with
+definition graph, invariants, conjectures, evidence classes, and completion
+semantics). The older [docs/agent-parallax-rules.md](docs/agent-parallax-rules.md)
+and `skills/parallax/SKILL.md` are legacy reference. For multi-agent review
+panels used at definition or phase gates, see
+[skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those
+on demand.
 
 ## Default Environment
 
