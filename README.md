@@ -1,8 +1,8 @@
 # go-choir
 
-`go-choir` is the implementation repo for Choir, a self-improving mainframe:
-a persistent-computer system for owned learning over artifacts, evidence,
-provenance, and promotion history.
+`go-choir` is the implementation repo for Choir, a human-improving,
+machine-compounding mainframe: a persistent-computer system for owned learning
+over artifacts, evidence, provenance, and promotion history.
 
 Choir runs apps, agents, traces, source material, code, candidate worlds, and
 promotion flows inside persistent computers. It is not a personal note app, an
@@ -12,7 +12,7 @@ created, inspected, revised, verified, forked, and promoted.
 The short version:
 
 ```text
-Choir is a self-improving mainframe made of persistent computers.
+Choir is a human-improving, machine-compounding mainframe made of persistent computers.
 ```
 
 The project is still early and fast-moving. The practical goal is to make
@@ -35,9 +35,9 @@ graph, assertion register, and heresy detector manifest.
 Older docs and code comments may still describe Choir as a personal writing
 system, publishing system, AI workspace, sandbox, or workflow app. Treat that as
 historical or surface-specific language unless a current doctrine document
-explicitly promotes it. The current framing is self-improving mainframe,
-persistent computers, durable artifacts, evidence, trajectories, candidate
-worlds, and promotion.
+explicitly promotes it. The current framing is human-improving,
+machine-compounding mainframe, persistent computers, durable artifacts,
+evidence, trajectories, candidate worlds, and promotion.
 Where those older terms appear below, they are contrast classes or transition
 labels, not endorsed root framing.
 

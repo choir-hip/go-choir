@@ -375,7 +375,10 @@ determined_state:
     - claim: Timeout hardening is unbuilt (180s client default, no server timeouts, 10s retry window).
       source: observed
       execution_effect: W2 is first executable work.
-    - claim: scripts/check-heresies.sh, detector manifest, and CI job do not exist.
+    - claim: `scripts/check-heresies.sh` and the CI discovery job do not exist;
+      the detector manifest at `docs/heresy-detectors.md` exists but is not yet
+      a CI-enforced check and is missing H030/H031 rows (added by the doc-fix
+      pass; C3/W1 now verify and wire it).
       source: observed
       execution_effect: W1 is first executable work (parallel with W2).
     - claim: WithPromotionAdapter has zero cmd/ callers; adapter is dead in production.
@@ -397,8 +400,8 @@ determined_state:
       issue: promotion_protocol.tla BranchIsolation vs tag-only adapter; unclear whether spec intends target-state or current-state semantics.
       next_resolution_step: read spec header intent; add scope conditioning or block; add conformance binding (W6).
     - node: route-over-computer-version (H031)
-      issue: lineage resolver routes through route_profile and uses owner/desktop as the product route target instead of resolving to a ComputerVersion record.
-      next_resolution_step: add the H031 banned pattern to `docs/heresy-detectors.md` and `docs/choir-doctrine.md` Banned Patterns list (C3); add detector; then Phase D redesign.
+      issue: lineage resolver routes through route_profile and uses owner/desktop as the product route target instead of resolving to a ComputerVersion record. The H031 heresy entry, Banned Patterns list #16 row, and detector manifest row exist after the doc-fix pass; they must be verified and bound to CI, not re-created.
+      next_resolution_step: verify H031 banned pattern #16 and detector refs are wired into `docs/heresy-detectors.md` and CI discovery job (W1), then Phase D redesign.
     - node: cross-substrate-proof-v0 gates 4/5
       issue: document self-contradicts (claims satisfied, lists unproven).
       next_resolution_step: C4 relabel + verify against artifacts.
@@ -417,7 +420,7 @@ determined_state:
     - node: red-commit landing evidence (W3)
       missing: CI status of e393eb5c/e5c1d38a, staging deploy identity, live resolver-vs-fallback observation.
     - node: candidate-computer-as-VM heresy number (H031)
-      missing: Banned Patterns list row in `docs/choir-doctrine.md` and detector refs (C3 closes this; the heresy entry itself is already complete).
+      missing: CI-enforced binding for Banned Patterns list #16 and detector refs (W1 closes this; C3 verified the existing heresy entry and banned-pattern row).
 ```
 
 ## Value Criterion
@@ -491,15 +494,18 @@ At each phase exit:
    findings. Failed panelists (CLI errors, timeouts) don't block the gate if
    at least three independent panelists returned; note the failures. Use the
    same panel configuration across rounds of one phase (panelist churn looks
-   like non-convergence). For the red-class gates (Phases C, D, E) require
-   at least four returned panelists, retrying failed ones once.
+   like non-convergence). For red-class gates — determined by the protected
+   surfaces the phase has touched (vmctl lifecycle, proxy request path, public
+   API routes, promotion/rollback, SQL drops), not by phase letter — require at
+   least four returned panelists, retrying failed ones once.
 5. **Proceed** into the next phase in the same run, updating the Run
-   Checkpoint section in passing. For yellow/green gates (Phases A, B) proceed
-   on clear. For red-class gates (Phases C, D, E) proceed only after the
-   adjudication table is approved by the owner or a non-implementing
-   independent agent, the required panel count has returned (four), and any
-   escalation rule has been resolved. Do not stop, summarize-and-exit, or
-   await owner input unless an escalation rule fires or a decision node
+   Checkpoint section in passing. For green/yellow gates proceed on clear. For
+   red-class gates proceed only after the adjudication table is approved by the
+   owner or a non-implementing independent agent, the required panel count has
+   returned (four), and any escalation rule has been resolved. Phase A has red
+   work (W2, D-PROMO settlement), so its gate is red-class even though its
+   yellow/green doc work can run in parallel. Do not stop, summarize-and-exit,
+   or await owner input unless an escalation rule fires or a decision node
    (D-PROMO, D-STORE) blocks the specific next phase.
 
 If three consecutive panel rounds on the same phase fail to converge (new
@@ -507,17 +513,24 @@ category-(a) findings each round), that is evidence of an unsettled
 definition, not reviewer noise: open the definition node and, if it is
 group-level, escalate with the `human_escalation` shape.
 
-### Phase A — Foundations and truth (execute first, parallel-safe)
+### Phase A — Foundations and truth (execute first, parallel-safe for green/yellow work)
+
+Phase A contains both yellow doc corrections and orange/red runtime work (W2
+proxy/vmctl timeout hardening touches the public request path; D-PROMO settlement
+tests promotion mechanics). The red-class parts of Phase A must follow the
+red-gate adjudication rules in the Phase Gate Protocol, not the default
+yellow/green auto-proceed rule.
 
 - **W1** Detector manifest + CI discovery job: extend the existing
   `docs/heresy-detectors.md` manifest with H030/H031 banned-pattern rows,
   create `scripts/check-heresies.sh` mapping H001–H031 families to
   discovery-mode patterns with allow-contexts, CI job reporting counts
-  without failing, and baseline counts committed as evidence. Include the H031
-  route-over-VM banned pattern once C3 sets it, a detector for `DOLT_RESET --hard`
-  in production (non-test) paths (I4 guard), and the trivial H030 registry
-  closure (repaired 2026-06-27, entry update only). Promote families to
-  fail-on-regression as their clusters are eliminated.
+  without failing, and baseline counts committed as evidence. Bind the existing
+  H031 route-over-VM banned pattern and H030 actor-runtime-polling registry row
+  (already present) into CI discovery, add a detector for `DOLT_RESET --hard`
+  in production (non-test) paths (I4 guard), and mark the trivial H030 registry
+  closure (repaired 2026-06-27) as closed. Promote families to fail-on-regression
+  as their clusters are eliminated.
 - **W2** Timeout hardening: bounded vmctl resolve timeout (30–60s),
   `http.Server` Read/WriteTimeouts in `internal/server/server.go`, fast 504,
   reconcile the 10s retry window. Staging proof: `/api/universal-wire/stories`
@@ -534,8 +547,9 @@ group-level, escalate with the `human_escalation` shape.
     gate (spec models ComputerVersion/capsule semantics + route-over-CV
     load-bearing + atomic-or-degraded promotion + staging proof).
   - C3 `choir-doctrine.md` — verify H031 heresy entry is complete (it already
-    exists); add the H031 route-over-VM banned pattern to the numbered Banned
-    Patterns list and set its detector refs. Do not duplicate the heresy entry.
+    exists) and Banned Patterns list #16 is present; ensure detector refs point
+    to `docs/heresy-detectors.md` H030/H031 rows and W1's CI job. Do not
+    duplicate the heresy entry.
   - C4 Relabel `missions/substrate-hardening-v0.md` and
     `missions/cross-substrate-proof-v0.md` to `checkpoint_incomplete`.
   - C5 (FIRST Phase A commit — now landed in the green docs alignment pass;
@@ -698,7 +712,7 @@ Per the definition skill. Specific bindings:
   definition_node: embedded-branch-isolation
   evidence_class: observed file result (driver source read)
   command_or_observation: ~/go/pkg/mod/github.com/dolthub/driver@v1.84.1 — conn.go ResetSession/IsValid, connector.go:136-137, parse_dsn.go:57-70
-  result: D-PROMO settlement reduces to the ordinary Phase D integration test; no separate research experiment needed
+  result: D-PROMO settlement is the Phase A pinned-connection branch-isolation determinism test (go test -count=10); the prior 2026-07-07 falsification is diagnosed as a connection-pooling artifact, and a pinned sql.Conn/BeginTx variant reportedly isolates correctly.
   uncertainty: revision-name resolution via SetCurrentDatabase is inferred from the engine's USE path; the integration test confirms it as a side effect
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol

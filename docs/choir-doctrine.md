@@ -1170,7 +1170,7 @@ pattern. The test: if there are no `chan` declarations in
 
 `status:` **active** (gated on Phase 4 of the current umbrella mission
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md);
-the older `mission-og-dolt-heresy-hard-cutover-v0.md` is superseded source
+the older `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` is superseded source
 material).
 
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
