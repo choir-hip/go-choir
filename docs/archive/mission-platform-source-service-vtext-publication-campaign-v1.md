@@ -3,7 +3,7 @@
 **Status:** draft for owner review  
 **Date:** 2026-06-04  
 **Supersedes:** deleted v0 draft for this campaign  
-**Requirements contract:** [source-external-data-publication.md](source-external-data-publication.md)
+**Requirements contract:** [source-external-data-publication.md](../source-external-data-publication.md)
 
 ## Goal String
 
@@ -365,7 +365,7 @@ the prompt contract that VText should render citations using
 
 ## Authoritative Requirements
 
-Use [source-external-data-publication.md](source-external-data-publication.md)
+Use [source-external-data-publication.md](../source-external-data-publication.md)
 as the official requirements contract for source ingestion, external data
 cleaning, VText metadata, transclusion, publication policy, and export. Older
 mission, problem, incident, and review docs are evidence artifacts only.

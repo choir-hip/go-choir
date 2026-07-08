@@ -164,7 +164,7 @@ or chat wrapper:
 - native macOS app (Wails v3) wrapping the Svelte frontend with
   `ASWebAuthenticationSession` for passkey auth, transparent title bar, and
   cloud-mode-by-default launch — see
-  [cmd/desktop/README.md](../cmd/desktop/README.md)
+  [cmd/desktop/README.md](../../specs/README.md)
   and [spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md).
 
 Apps do not need to become appagents immediately. They become appagents when
@@ -271,10 +271,10 @@ This file absorbs live signal from the deleted root `PROJECT-GOALS.md` and old
 Mission 1/2/3/5/6/7 docs:
 
 - Deploy and provider hardening are now covered by `README.md`, `AGENTS.md`,
-  [runtime-invariants.md](runtime-invariants.md), and staging-first evidence
+  [runtime-invariants.md](../runtime-invariants.md), and staging-first evidence
   rules.
 - Service topology and product APIs are covered by `README.md` and
-  [current-architecture.md](current-architecture.md).
+  [current-architecture.md](../current-architecture.md).
 - Desktop UX goals are represented here as app/launcher/windowing goals, while
   old component-specific rewrite instructions stay in git history.
 - Cogent remains a reference for tool loops and work-control ideas, not a

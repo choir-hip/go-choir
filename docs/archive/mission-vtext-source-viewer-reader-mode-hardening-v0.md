@@ -4,7 +4,7 @@ Status: deployed_review_checkpoint_complete
 Date: 2026-06-06
 
 Requirements contracts:
-[source-external-data-publication.md](source-external-data-publication.md),
+[source-external-data-publication.md](../source-external-data-publication.md),
 [vtext-version-compare-merge-debuggability-spec.md](vtext-version-compare-merge-debuggability-spec.md),
 [vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md](vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md)
 

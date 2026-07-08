@@ -1,6 +1,6 @@
 # Mission: Texture Durable Thread v1
 
-Clean successor to [mission-texture-long-running-agent-v0.md](mission-texture-long-running-agent-v0.md).
+Clean successor to [mission-texture-long-running-agent-v0.md](archive/mission-texture-long-running-agent-v0.md).
 Do **not** use the v0 ledger as the source program. The v0 ledger is historical
 failure evidence: it shows why run-centric park/rewarm, semantic role
 choreography, prompt classifiers, and exact-first-tool scaffolding are the wrong

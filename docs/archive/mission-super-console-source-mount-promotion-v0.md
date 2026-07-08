@@ -2,7 +2,7 @@
 
 **Status:** draft
 **Date:** 2026-05-31
-**Related docs:** [computer-ontology.md](computer-ontology.md),
+**Related docs:** [computer-ontology.md](../computer-ontology.md),
 [mission-agentic-debugging-vtext-stability-v0.md](mission-agentic-debugging-vtext-stability-v0.md),
 [mission-apps-and-changes-store-sweep-v0.md](mission-apps-and-changes-store-sweep-v0.md)
 

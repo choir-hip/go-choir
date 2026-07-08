@@ -2,7 +2,7 @@
 
 **Status:** checkpoint_incomplete — Gate A green; staging deploy proof pending  
 **Date:** 2026-05-26  
-**Approved design:** [design-search-provider-plane-v1.md](./design-search-provider-plane-v1.md)  
+**Approved design:** [design-search-provider-plane-v1.md](design-search-provider-plane-v1.md)  
 **Supersedes:** ad-hoc search fixes and prompt-side workarounds in `mission-research-runtime-evidence-cadence-v1.md` (gateway slice)  
 **Purpose:** deploy and prove the durable gateway search control plane so researcher `web_search` never returns success-with-zero when eligible providers can answer, and VText cadence can stop compensating for broken retrieval.
 
@@ -304,9 +304,9 @@ supports_promotion: yes | no
 
 | Work | Relationship |
 |------|----------------|
-| [design-search-provider-plane-v1.md](./design-search-provider-plane-v1.md) | Canonical architecture (this mission implements and proves it) |
+| [design-search-provider-plane-v1.md](design-search-provider-plane-v1.md) | Canonical architecture (this mission implements and proves it) |
 | VText platform design | **Blocked until** this mission completes or explicitly defers with blocker |
-| [mission-research-runtime-evidence-cadence-v1.md](./mission-research-runtime-evidence-cadence-v1.md) | Downstream consumer of gateway projections; do not duplicate gateway policy here |
+| [mission-research-runtime-evidence-cadence-v1.md](mission-research-runtime-evidence-cadence-v1.md) | Downstream consumer of gateway projections; do not duplicate gateway policy here |
 | VText live cadence repair | Do not start VText cadence mission work until search plane is live |
 
 ---

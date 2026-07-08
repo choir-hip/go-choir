@@ -21,17 +21,17 @@ boundaries that agents optimize.
 
 Primary support docs:
 
-- [current-architecture.md](./current-architecture.md)
-- [computer-ontology.md](./computer-ontology.md)
-- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./archive/choir-rearchitecture-durable-actors-2026-06-11.md)
-- [conjecture-learning-proof-theory-2026-06-11.md](./conjecture-learning-proof-theory-2026-06-11.md)
-- [conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md)
-- [why-texture-2026-06-15.md](./why-texture-2026-06-15.md)
-- [why-texture-background-2026-06-15.md](./why-texture-background-2026-06-15.md)
-- [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
-- [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
-- [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./archive/mission-agentic-debugging-vtext-stability-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
-- [docs/archive/mission-source-system-simplify-secure-smart-v0.md](./archive/mission-source-system-simplify-secure-smart-v0.md)
+- [current-architecture.md](current-architecture.md)
+- [computer-ontology.md](computer-ontology.md)
+- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md)
+- [conjecture-learning-proof-theory-2026-06-11.md](conjecture-learning-proof-theory-2026-06-11.md)
+- [conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md)
+- [why-texture-2026-06-15.md](why-texture-2026-06-15.md)
+- [why-texture-background-2026-06-15.md](why-texture-background-2026-06-15.md)
+- [texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md)
+- [mission-portfolio-2026-06-11.md](mission-portfolio-2026-06-11.md)
+- [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](archive/mission-agentic-debugging-vtext-stability-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+- [docs/archive/mission-source-system-simplify-secure-smart-v0.md](archive/mission-source-system-simplify-secure-smart-v0.md)
 
 Reading order for architecture or behavior work:
 
@@ -53,8 +53,8 @@ regression. This document trends toward thesis + invariants + pointers. The
 mission form for long-running work is now `skills/definition/SKILL.md`
 (`/goal <doc>.md`); the current executable Definition for the OG/Dolt/heresy
 program is
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md).
-The older [mission-og-dolt-heresy-hard-cutover-v0.md](./mission-og-dolt-heresy-hard-cutover-v0.md)
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md).
+The older [mission-og-dolt-heresy-hard-cutover-v0.md](archive/mission-og-dolt-heresy-hard-cutover-v0.md)
 is superseded source material folded into that Definition. A heresy
 entry below without a CI detector is a heresy entry that is not yet done being
 written.
@@ -621,7 +621,7 @@ after a canonical write.
 
 `evidence:` [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go),
 [internal/runtime/texture_test.go](../internal/runtime/texture_test.go),
-[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
+[docs/texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` it turns Texture from an appagent into a workflow
 stepper.
@@ -646,7 +646,7 @@ Texture/context artifact exists, `texturePromptNeedsSuperExecution`,
 individual prompts instead of removing the direct-super ingress path.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
+[docs/texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` conductor becomes a policy engine for Texture/super
 authority rather than a router that materializes exogenous input as
@@ -694,7 +694,7 @@ evidence, `continuation-level`.
 
 `evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
 [AGENTS.md](../AGENTS.md),
-[docs/archive/mission-lifecycle-cutover-v0.md](./archive/mission-lifecycle-cutover-v0.md).
+[docs/archive/mission-lifecycle-cutover-v0.md](archive/mission-lifecycle-cutover-v0.md).
 
 `why it violates the spec:` architectural missions can appear settled on
 surface health rather than causal proof.
@@ -714,7 +714,7 @@ paths where `continued` plus another weaker level substitutes for compaction
 evidence.
 
 `evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
-[docs/runtime-invariants.md](./runtime-invariants.md).
+[docs/runtime-invariants.md](runtime-invariants.md).
 
 `why it violates the spec:` the name outruns the evidence class and keeps the
 old continuation proof shape alive.
@@ -733,7 +733,7 @@ obligation delivery.
 trajectory-specific reconciliation.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[docs/archive/mission-lifecycle-cutover-v0.md](./archive/mission-lifecycle-cutover-v0.md).
+[docs/archive/mission-lifecycle-cutover-v0.md](archive/mission-lifecycle-cutover-v0.md).
 
 `why it violates the spec:` authority lives on trajectory and work item, but
 delivery can be skipped because “some activation of this agent exists.”
@@ -779,7 +779,7 @@ state.
 [internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
 [internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
 [internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
-[docs/archive/glossary.md](./archive/glossary.md).
+[docs/archive/glossary.md](archive/glossary.md).
 
 `why it violates the spec:` the docs say blockers and questions are
 obligations, but the control substrate does not fully express them that way.
@@ -798,7 +798,7 @@ work items, but the generic update append path does not universally do that.
 
 `evidence:` [internal/store/store.go](../internal/store/store.go),
 [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
-[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./archive/choir-rearchitecture-durable-actors-2026-06-11.md).
+[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md).
 
 `why it violates the spec:` the one-message/one-obligation model remains only
 partially realized.
@@ -818,8 +818,8 @@ explicitly rejects lease as an architectural control concept.
 `detectors:` `lease`, `leased`, `worker lease`, `lease_seconds`.
 
 `evidence:` [AGENTS.md](../AGENTS.md),
-[docs/current-architecture.md](./current-architecture.md),
-[docs/archive/glossary.md](./archive/glossary.md),
+[docs/current-architecture.md](current-architecture.md),
+[docs/archive/glossary.md](archive/glossary.md),
 `internal/runtime/continuation.go` (deleted; references retained as provenance),
 [internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
 
@@ -839,8 +839,8 @@ legacy surfaces in a way that still gives both apparent authority.
 `detectors:` current/target sections without hard deprecation banners for
 retired ontology in onboarding docs.
 
-`evidence:` [docs/current-architecture.md](./current-architecture.md),
-[docs/README.md](./README.md) if present, and other first-read architecture
+`evidence:` [docs/current-architecture.md](current-architecture.md),
+[docs/README.md](README.md) if present, and other first-read architecture
 docs.
 
 `why it violates the spec:` agents can cite either model as sanctioned and keep
@@ -858,9 +858,9 @@ newer doctrine falsifies them.
 
 `detectors:` assertion/doc claims contradicted by current code.
 
-`evidence:` [docs/conjecture-assertion-ledger-2026-06.md](./conjecture-assertion-ledger-2026-06.md),
-[docs/current-architecture.md](./current-architecture.md),
-[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
+`evidence:` [docs/conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md),
+[docs/current-architecture.md](current-architecture.md),
+[docs/texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` stale doctrine is a heresy vector; agents optimize
 what they read.
@@ -880,7 +880,7 @@ observe/finish/cancel sequences.
 `detectors:` `delegation_required`, `chained_required_tool`, `next_tools`,
 worker-delegation results that encode exact semantic tool choreography.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
 `internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
 
 `why it violates the spec:` it preserves H009's vice under worker-specific
@@ -900,7 +900,7 @@ terminal condition.
 `detectors:` `pollInternalWorkerRun`, polling loops over worker run state,
 `time.After(500 * time.Millisecond)` control waits.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
 `internal/runtime/tools_vmctl.go`.
 
 `why it violates the spec:` it keeps run-tree blocking semantics under the
@@ -920,7 +920,7 @@ loop.
 `detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`,
 `exactRequiredToolChoice`, super-keyword routing lists.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
 `internal/runtime/runtime.go`.
 
 `why it violates the spec:` even if conductor routes to Texture, the tool loop can
@@ -946,7 +946,7 @@ owner-visible work-state.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
 [internal/runtime/texture_agent_revision.go](../internal/runtime/texture_agent_revision.go),
-[docs/texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md).
+[docs/texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md).
 
 `why it violates the spec:` it satisfies a mechanical cadence rule while making
 the owner-visible artifact less truthful. The bug is not that Texture writes
@@ -974,7 +974,7 @@ model-authored human-readable update ids.
 
 `evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
 [internal/store/store.go](../internal/store/store.go),
-[docs/choir-prompting-invariants.md](./choir-prompting-invariants.md).
+[docs/choir-prompting-invariants.md](choir-prompting-invariants.md).
 
 `why it violates the spec:` the runtime treats `update_id` as an idempotency and
 delivery primitive, but exposes it as if it were semantic content the model can
@@ -995,7 +995,7 @@ codebase and model the forbidden ontology.
 `detectors:` `PostChildResult`, `PostChildError`, `WaitForChildResult`,
 parent/child channel APIs with no production callers.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
 `internal/runtime/channels.go`.
 
 `why it violates the spec:` unused compatibility surfaces still teach future
@@ -1015,7 +1015,7 @@ specific semantic workers as a required sequence.
 `buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
 scripts in Texture prompt defaults.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md),
+`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
 `internal/runtime/prompt_defaults/texture.md`,
 `internal/runtime/texture_agent_revision.go`.
 
@@ -1039,8 +1039,8 @@ manual navigation destination.
 launchers for `trace`, tests expecting a Trace icon, copy that tells users to
 manually browse Trace as the debugging surface.
 
-`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
-[docs/platform-os-app-state.md](./platform-os-app-state.md),
+`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+[docs/platform-os-app-state.md](platform-os-app-state.md),
 [frontend/src/lib/FeaturesApp.svelte](../frontend/src/lib/FeaturesApp.svelte),
 [frontend/tests/desktop-shell-core.spec.js](../frontend/tests/desktop-shell-core.spec.js).
 
@@ -1066,7 +1066,7 @@ desktop-state tests, comments that say users open Terminal, routes that keep
 `/api/terminal/ws` as a live product affordance rather than a compatibility
 shim.
 
-`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](./archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [internal/sandbox/terminal.go](../internal/sandbox/terminal.go),
 [frontend/tests/terminal-app.spec.js](../frontend/tests/terminal-app.spec.js),
 [internal/store/desktop_test.go](../internal/store/desktop_test.go).
@@ -1094,10 +1094,10 @@ or Web Lens merely because a URL exists, docs that say users manually browse
 for sources.
 
 `evidence:` [README.md](../README.md),
-[docs/current-architecture.md](./current-architecture.md),
-[docs/platform-os-app-state.md](./platform-os-app-state.md),
-[docs/archive/mission-web-surface-rationalization-v0.md](./archive/mission-web-surface-rationalization-v0.md),
-[docs/archive/mission-source-system-simplify-secure-smart-v0.md](./archive/mission-source-system-simplify-secure-smart-v0.md),
+[docs/current-architecture.md](current-architecture.md),
+[docs/platform-os-app-state.md](platform-os-app-state.md),
+[docs/archive/mission-web-surface-rationalization-v0.md](archive/mission-web-surface-rationalization-v0.md),
+[docs/archive/mission-source-system-simplify-secure-smart-v0.md](archive/mission-source-system-simplify-secure-smart-v0.md),
 [internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
 [internal/store/browser.go](../internal/store/browser.go),
 [internal/types/browser.go](../internal/types/browser.go),
@@ -1126,7 +1126,7 @@ gathering workflow.
 `mailbox chan Update` and the warm loop selects on the channel; the log is
 queried only for cold-start replay, post-drain overflow catch, and Sweep boot
 recovery. See
-[docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md).
+[docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md).
 The entry remains as detector vocabulary because this heresy recurred three
 times; the deletion gate below is now the regression test.
 
@@ -1142,10 +1142,10 @@ cold-start replay), `pending []Update` instead of `mailbox chan Update`, no
 `chan` declarations in `internal/actor/actor.go`, comments saying "re-query"
 or "steers are already in the log" inside the warm loop.
 
-`evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md),
-[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](./archive/choir-rearchitecture-durable-actors-2026-06-11.md)
+`evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md),
+[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md)
 (section 2.2, "Go delivers, the database remembers"),
-[docs/mission-3c_2-actor-runtime-migration-real-v0.md](./mission-3c_2-actor-runtime-migration-real-v0.md).
+[docs/mission-3c_2-actor-runtime-migration-real-v0.md](mission-3c_2-actor-runtime-migration-real-v0.md).
 
 `why it violates the spec:` the design specifies Go-channel mailboxes for
 warm delivery with the durable log only for crash recovery and cold-start
@@ -1169,7 +1169,7 @@ pattern. The test: if there are no `chan` declarations in
 #### H031 - Candidate Computer Modeled as VM Identity
 
 `status:` **active** (gated on Phase 4 of the current umbrella mission
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md);
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md);
 the older `mission-og-dolt-heresy-hard-cutover-v0.md` is superseded source
 material).
 
@@ -1177,7 +1177,7 @@ material).
 
 `detectors:` vmctl candidate-desktop publish/switch lifecycle (`internal/vmctl/handlers.go:312`, `client.go:191`), candidate_computer_package files capturing VM state as candidate identity, route resolutions targeting VM/desktop IDs.
 
-`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](./definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/definitions/heresy-eradication-2026-07-07.md](./definitions/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
+`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/definitions/heresy-eradication-2026-07-07.md](archive/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
 
 `why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
 

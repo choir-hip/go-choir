@@ -166,8 +166,8 @@ iteration instead of instant channel delivery) and the architecture was wrong
 
 **Heresy delta:** discovered 2026-06-27, introduced original 3c_2
 implementation, repaired 2026-06-27.
-**Evidence:** [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md),
-H030 in [docs/choir-doctrine.md](./choir-doctrine.md).
+**Evidence:** [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md),
+H030 in [docs/choir-doctrine.md](choir-doctrine.md).
 
 ---
 

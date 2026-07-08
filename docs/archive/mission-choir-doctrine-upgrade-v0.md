@@ -14,17 +14,17 @@ trajectories, candidate worlds, promotion, and deletion of retired control paths
 **Kind:** doctrine migration / narrative reconciliation / autonomy-control
 upgrade.
 
-**Primary doctrine target:** [choir-doctrine.md](./choir-doctrine.md).
+**Primary doctrine target:** [choir-doctrine.md](../choir-doctrine.md).
 
 **Input evidence, not current doctrine:**
 
-- [choir-master-spec-review-2026-06-13.md](./choir-master-spec-review-2026-06-13.md)
+- [choir-master-spec-review-2026-06-13.md](choir-master-spec-review-2026-06-13.md)
 - Cursor combined/reconciled review artifacts, if present in sibling worktrees
 - GPT-5.5 proof-carrying-autonomy gestalt pasted on 2026-06-13
 - M3/M3.1 lifecycle regression docs and ledger
-- [mission-agentic-debugging-vtext-stability-v0.md](./mission-agentic-debugging-vtext-stability-v0.md)
+- [mission-agentic-debugging-vtext-stability-v0.md](mission-agentic-debugging-vtext-stability-v0.md)
   for the Trace app removal and Super Console/zot replacement evidence.
-- [mission-source-system-simplify-secure-smart-v0.md](./mission-source-system-simplify-secure-smart-v0.md)
+- [mission-source-system-simplify-secure-smart-v0.md](mission-source-system-simplify-secure-smart-v0.md)
   for Source Viewer/Web Lens source-opening doctrine.
 
 **Naming decision:** use **Choir Doctrine**, not "master spec". "Spec" is too
@@ -270,26 +270,26 @@ High-read docs already reconciled in this paramission:
 
 - [README.md](../README.md) no longer lists Browser, Trace, or Terminal as
   normal current apps.
-- [current-architecture.md](./current-architecture.md) says Source Viewer opens
+- [current-architecture.md](../current-architecture.md) says Source Viewer opens
   by default, Web Lens is explicit live/original inspection, and Trace is
   evidence rather than a product app.
-- [platform-os-app-state.md](./platform-os-app-state.md) names Trace Evidence,
+- [platform-os-app-state.md](../platform-os-app-state.md) names Trace Evidence,
   Web Lens, and Super Console with the correct boundaries.
 
 Docs still to classify or cascade:
 
-- [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md) still
+- [mission-portfolio-2026-06-11.md](../mission-portfolio-2026-06-11.md) still
   has Trace UI language in the durable-actor/promotion mission matrix.
-- [choir-rearchitecture-durable-actors-2026-06-11.md](./choir-rearchitecture-durable-actors-2026-06-11.md)
+- [choir-rearchitecture-durable-actors-2026-06-11.md](choir-rearchitecture-durable-actors-2026-06-11.md)
   still says Trace UI should be re-pointed; update this to trace evidence and
   work-item settlement language.
-- [choir-architecture-review-next-moves-2026-06-11.md](./choir-architecture-review-next-moves-2026-06-11.md)
+- [choir-architecture-review-next-moves-2026-06-11.md](choir-architecture-review-next-moves-2026-06-11.md)
   has `Trace UI / API` wording.
-- [mission-vtext-source-viewer-reader-mode-hardening-v0.md](./mission-vtext-source-viewer-reader-mode-hardening-v0.md)
+- [mission-vtext-source-viewer-reader-mode-hardening-v0.md](mission-vtext-source-viewer-reader-mode-hardening-v0.md)
   still records Browser fallback for URL-only source entities.
-- [mission-choir-grand-deformation-v0.md](./mission-choir-grand-deformation-v0.md)
+- [mission-choir-grand-deformation-v0.md](mission-choir-grand-deformation-v0.md)
   still frames an Obscura/browser-in-VM appagent path.
-- [mission-web-surface-rationalization-v0.md](./mission-web-surface-rationalization-v0.md)
+- [mission-web-surface-rationalization-v0.md](mission-web-surface-rationalization-v0.md)
   is acceptable as problem history but should be superseded by Web Lens/Source
   Viewer doctrine when the portfolio is upgraded.
 

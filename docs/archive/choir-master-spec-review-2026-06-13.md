@@ -104,14 +104,14 @@ reads *rarely*.
   document is normative" (spec line 17) — but normativity is *declared*, not wired
   into what agents load.
 - **The agent's real first-read routes to the competing attractor.**
-  [AGENTS.md:50](../AGENTS.md) sends agents to `computer-ontology.md`; AGENTS.md:150
+  [AGENTS.md:50](../../AGENTS.md) sends agents to `computer-ontology.md`; AGENTS.md:150
   sends them to `current-architecture` "before changing VText tools, prompts,
   routing." Those targets still bless `continuation-level` (AGENTS.md:278-285), the
   `/api/continuations/*` route (AGENTS.md:257), and lease vocabulary.
 - **61 mission paradocs carry the pre-spec ontology and their own reward.** 56
   `docs/mission-*.md` + 5 `.ledger.md`. Each ledger scores work with a local
   `Delta V`. Last night the operative reward function was
-  [mission-lifecycle-cutover-v0.ledger.md](./mission-lifecycle-cutover-v0.ledger.md),
+  [mission-lifecycle-cutover-v0.ledger.md](../mission-lifecycle-cutover-v0.ledger.md),
   which scored the VText forcing regression as **`Delta V: -1` (progress)**. The
   master spec was not in the loop.
 - **`docs/README.md`** lists `current-architecture`, not the master spec, as the
@@ -276,7 +276,7 @@ kept running indefinitely.**
 
 **Clarification (corrective docs are not residue):** the two new docs
 [vtext-agentic-invariants-2026-06-13.md](./vtext-agentic-invariants-2026-06-13.md)
-and [mission-lifecycle-cutover-m3.1-v0.md](./mission-lifecycle-cutover-m3.1-v0.md)
+and [mission-lifecycle-cutover-m3.1-v0.md](mission-lifecycle-cutover-m3.1-v0.md)
 were written *after* the final regression commit and explicitly call it "a
 regression" and prescribe deletion. The doctrine that *rationalized* the heresy is
 in `mission-lifecycle-cutover-v0.md` + its ledger, which the overnight commits

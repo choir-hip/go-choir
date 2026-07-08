@@ -17,12 +17,12 @@ only then canonize a Texture Protocol v0.
 
 ## Source Documents
 
-- [why-texture-2026-06-15.md](./why-texture-2026-06-15.md)
-- [why-texture-background-2026-06-15.md](./why-texture-background-2026-06-15.md)
-- [choir-doctrine.md](./choir-doctrine.md)
+- [why-texture-2026-06-15.md](../why-texture-2026-06-15.md)
+- [why-texture-background-2026-06-15.md](../why-texture-background-2026-06-15.md)
+- [choir-doctrine.md](../choir-doctrine.md)
 - the M3.4 first-draft regression paradoc linked through
   [mission-graph.yaml](./mission-graph.yaml)
-- [mission-portfolio-2026-06-11.md](./mission-portfolio-2026-06-11.md)
+- [mission-portfolio-2026-06-11.md](../mission-portfolio-2026-06-11.md)
 
 ## Problem
 

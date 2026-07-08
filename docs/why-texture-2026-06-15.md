@@ -3,7 +3,7 @@
 Date: 2026-06-15
 
 Status: current explanatory support document and orientation seed. This file
-inherits [choir-doctrine.md](./choir-doctrine.md) and the operating contract in
+inherits [choir-doctrine.md](choir-doctrine.md) and the operating contract in
 [AGENTS.md](../AGENTS.md). It names the Texture ontology that the hard-cutover
 mission must propagate through code, prompts, tests, UI, docs, and the docs
 checker.

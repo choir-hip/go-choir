@@ -3,7 +3,7 @@
 **Last updated:** 2026-05-31
 
 This is the near-term build order. For the complete current architecture, read
-[docs/current-architecture.md](current-architecture.md). For the broader goal
+[docs/current-architecture.md](../current-architecture.md). For the broader goal
 continuum, read [docs/project-goals.md](project-goals.md).
 
 ## Immediate Priority: Public Desktop And Auth-On-Mutation
@@ -103,7 +103,7 @@ These should feed `vtext` through typed app/worker updates and durable artifacts
 not ad hoc prompt stuffing. Media display apps do not need to be appagents at
 first; they become appagents only if they need durable prompts, dynamic UI, or
 domain ownership. The current common platform app state is tracked in
-[platform-os-app-state.md](platform-os-app-state.md).
+[platform-os-app-state.md](../platform-os-app-state.md).
 
 ## Third Priority: Publication
 

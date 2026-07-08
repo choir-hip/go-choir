@@ -115,7 +115,7 @@ documents:
     witnesses:
       - docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md
       - docs/archive/choir-role-free-actor-protocol-2026-06-11.md
-      - docs/system-v1-one-cut-2026-06-11.md
+      - docs/archive/system-v1-one-cut-2026-06-11.md
     refresh_triggers:
       - durable_actor_portfolio_change
       - mission_settlement_change
@@ -220,7 +220,7 @@ documents:
       - product_ontology_change
       - doctrine_change
 
-  - path: docs/mission-texture-hard-cutover-v0.md
+  - path: docs/archive/mission-texture-hard-cutover-v0.md
     claim_scope: historical
     is_root: false
     is_evidence: true
@@ -248,8 +248,8 @@ documents:
       lifecycle: active
     witnesses:
       - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/mission-og-dolt-heresy-hard-cutover-v0.md
-      - docs/definitions/heresy-eradication-2026-07-07.md
+      - docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
+      - docs/archive/heresy-eradication-2026-07-07.md
       - docs/assessment-overall-state-2026-07-07.md
       - docs/mission-graph.yaml
       - docs/choir-doctrine.md
@@ -259,7 +259,7 @@ documents:
       - computer_version_route_change
       - mission_supersession_change
 
-  - path: docs/mission-og-dolt-heresy-hard-cutover-v0.md
+  - path: docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
     claim_scope: historical
     is_root: false
     is_evidence: true
@@ -275,7 +275,7 @@ documents:
     refresh_triggers:
       - mission_supersession_change
 
-  - path: docs/definitions/heresy-eradication-2026-07-07.md
+  - path: docs/archive/heresy-eradication-2026-07-07.md
     claim_scope: historical
     is_root: false
     is_evidence: true
@@ -285,7 +285,7 @@ documents:
       lifecycle: archived
     witnesses:
       - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/definitions/heresy-eradication-2026-07-07.md
+      - docs/archive/heresy-eradication-2026-07-07.md
       - docs/choir-doctrine.md
     refresh_triggers:
       - mission_supersession_change
@@ -324,7 +324,7 @@ documents:
       - assertion_invalidation
       - verifier_contract_change
 
-  - path: docs/intended-architecture-next-2026-06-06.md
+  - path: docs/archive/intended-architecture-next-2026-06-06.md
     claim_scope: target
     is_root: false
     is_evidence: false

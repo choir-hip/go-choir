@@ -5,9 +5,9 @@
 candidate-computer, and storage claims corrected against
 [assessment-overall-state-2026-07-07.md](assessment-overall-state-2026-07-07.md)
 — historical evidence, see era note there — and
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
 for current executable authority. The older
-[mission-og-dolt-heresy-hard-cutover-v0.md](mission-og-dolt-heresy-hard-cutover-v0.md)
+[mission-og-dolt-heresy-hard-cutover-v0.md](archive/mission-og-dolt-heresy-hard-cutover-v0.md)
 is superseded source material.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
 conjecture vocabulary; see the Ontology section.)
@@ -39,7 +39,7 @@ onboarding):
 
 Untagged prose inside a tagged section inherits the section's tag.
 
-Use [intended-architecture-next-2026-06-06.md](intended-architecture-next-2026-06-06.md)
+Use [intended-architecture-next-2026-06-06.md](archive/intended-architecture-next-2026-06-06.md)
 for the intended architecture after the next week-plus of source, Base,
 desktop, Wire, voice, and radio work is written, deployed, and proven stable.
 
@@ -78,7 +78,7 @@ DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
 awaiting *extraction and deletion*, not a zombie awaiting wiring. **Retired
 (residue still in tree):** parent/child run control and RunContinuations are
 named heresies (H001–H008) with deletion scheduled in the current umbrella
-mission [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)
+mission [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
 (Phase B/C; the older hard-cutover mission doc is superseded source material).
 They must receive no new callers. This section states the settled vocabulary so
 new work stops accreting on the retired ontology.
@@ -746,7 +746,7 @@ the route pointer changes atomically with rollback.
 
 Choir needs multiple state ledgers with different merge laws. The Dolt substrate
 is split into two stores that must not be conflated (see D-STORES in
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)):
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)):
 
 - **World-wire store:** platform `ObjectGraphStore` at
   `internal/platform/objectgraph_store.go`, served by `corpusd`. The platform

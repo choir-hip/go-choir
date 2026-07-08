@@ -123,7 +123,7 @@ Existing docs already identify the target shape:
 - [mission-standalone-sourcecycled-data-platform-v0.md](mission-standalone-sourcecycled-data-platform-v0.md)
   defines the clean standalone shape: registry, polite adapters, fetch audit,
   immutable source items, clusters, issue manifests, CLI/API/WebSocket, exports.
-- [source-external-data-publication.md](source-external-data-publication.md)
+- [source-external-data-publication.md](../source-external-data-publication.md)
   is the governing contract for source artifacts, publication, transclusion,
   and export.
 

@@ -95,7 +95,7 @@ rather than a cosmetic account flag.
 
 The Dolt substrate is split into two stores that must never be conflated (see
 D-STORES and D-WIRE in
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md)):
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)):
 
 - **World-wire store:** platform `ObjectGraphStore` at
   `internal/platform/objectgraph_store.go`, served by `corpusd`. It is moving to

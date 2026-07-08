@@ -98,7 +98,7 @@ The automatic computer exists to make long-running work possible without forcing
 
 This is the substrate layer. If this layer is wrong, everything above it becomes slop.
 
-Read [computer-ontology.md](computer-ontology.md) for the ledger split between VM/runtime, Dolt/app state, source/build state, blobs, artifact provenance, and routes. The key distinction is that users can evolve their own computers quickly without global platform deploys, while shared/platform changes require typed artifacts and higher-ceremony promotion.
+Read [computer-ontology.md](../computer-ontology.md) for the ledger split between VM/runtime, Dolt/app state, source/build state, blobs, artifact provenance, and routes. The key distinction is that users can evolve their own computers quickly without global platform deploys, while shared/platform changes require typed artifacts and higher-ceremony promotion.
 
 ## Campaign compiler
 

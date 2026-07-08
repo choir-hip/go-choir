@@ -3,7 +3,7 @@
 ## Status
 
 Operating invariant for seeded agent system prompts and YAML prompt specs.
-Companion: [choir-role-free-actor-protocol-2026-06-11.md](choir-role-free-actor-protocol-2026-06-11.md).
+Companion: [choir-role-free-actor-protocol-2026-06-11.md](archive/choir-role-free-actor-protocol-2026-06-11.md).
 
 ## No false identity assignment
 

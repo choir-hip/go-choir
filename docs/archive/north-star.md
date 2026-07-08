@@ -8,7 +8,7 @@ a persistent user computer, not an ephemeral sandbox. The current task is to
 stabilize the deployed system around versioned living documents, candidate
 computer execution, publication, Wire, and later citation/compute economics.
 
-Read [docs/current-architecture.md](current-architecture.md) first. It is the
+Read [docs/current-architecture.md](../current-architecture.md) first. It is the
 streamlined architecture memo for the current phase.
 
 ## Product Frame
@@ -29,7 +29,7 @@ sources. User computers personalize by creating user-owned editions, forks,
 briefings, and alerts.
 
 Read [docs/mission-geometry.md](mission-geometry.md) for the high-level frame
-and [docs/computer-ontology.md](computer-ontology.md) for the computer and
+and [docs/computer-ontology.md](../computer-ontology.md) for the computer and
 promotion ontology.
 
 The automatic computer is the private agentic workspace: a persistent computer

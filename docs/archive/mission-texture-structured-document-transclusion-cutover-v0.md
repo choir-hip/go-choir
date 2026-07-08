@@ -17,11 +17,11 @@ asking the model to author editor JSON.
 
 ## Source Documents And Prior Art
 
-- [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
-- [mission-texture-hard-cutover-v0.md](./mission-texture-hard-cutover-v0.md)
-- [mission-texture-versioned-artifact-v0.md](./mission-texture-versioned-artifact-v0.md)
+- [texture-agentic-invariants-2026-06-13.md](../texture-agentic-invariants-2026-06-13.md)
+- [mission-texture-hard-cutover-v0.md](mission-texture-hard-cutover-v0.md)
+- [mission-texture-versioned-artifact-v0.md](../mission-texture-versioned-artifact-v0.md)
 - Historical evidence / retired-name predecessor:
-  [mission-vtext-source-entities-multimedia-transclusion-v0.md](./mission-vtext-source-entities-multimedia-transclusion-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+  [mission-vtext-source-entities-multimedia-transclusion-v0.md](mission-vtext-source-entities-multimedia-transclusion-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 - [ProseMirror guide](https://prosemirror.net/docs/guide/) for schema-governed
   document trees, immutable state, transactions, inline leaf nodes, and
   position mapping.

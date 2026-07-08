@@ -1,7 +1,7 @@
 # Choir Design Language - 2026-06-07
 
 **Status:** design language reference for app and shell work.  
-**Related:** [Theme System Contract v0](./theme-system-contract-v0.md),
+**Related:** [Theme System Contract v0](theme-system-contract-v0.md),
 [Universal Wire SourceMaxx spec](./choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md).  
 **Scope:** Choir desktop shell, VText, Universal Wire, and app surfaces across
 Futuristic Noir, Carbon Fiber Kintsugi, and London Salmon.
@@ -160,7 +160,7 @@ spacing instead.
 
 ## Surfaces And Materials
 
-Use the semantic tokens from [Theme System Contract v0](./theme-system-contract-v0.md).
+Use the semantic tokens from [Theme System Contract v0](theme-system-contract-v0.md).
 New app CSS should express roles, not literal colors.
 
 Surface roles:

@@ -1,7 +1,7 @@
 # Mission: Texture As One Durable Deep-Research Thread v0
 
 > Superseded on 2026-06-20 by
-> [mission-texture-durable-thread-v1.md](mission-texture-durable-thread-v1.md).
+> [mission-texture-durable-thread-v1.md](../mission-texture-durable-thread-v1.md).
 > This document and its very long ledger are cautionary evidence, not the current
 > source program. Use v1 for execution. Read this file only to audit why
 > run-centric park/rewarm, semantic role choreography, prompt classifiers, and

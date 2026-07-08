@@ -8,7 +8,7 @@ This glossary names the current Choir product and runtime vocabulary. It folds
 the old root `PROJECT-GLOSSARY.md` into `docs/` and updates it for the current
 cloud, computer, Wire, run-control, promotion, and publication ontology.
 
-Read [computer-ontology.md](computer-ontology.md) for the durable computer
+Read [computer-ontology.md](../computer-ontology.md) for the durable computer
 model and
 [wire-news-system-learning-saga-2026-06-09.md](wire-news-system-learning-saga-2026-06-09.md)
 for the news/Wire terminology correction.
@@ -133,7 +133,7 @@ snapshot, one repo checkout, or one browser session. It is a product object made
 from VM/runtime state, Dolt/app state, source/build state, content blobs,
 artifact provenance, and route identity.
 
-Read [computer-ontology.md](computer-ontology.md) for the ledger and promotion
+Read [computer-ontology.md](../computer-ontology.md) for the ledger and promotion
 model.
 
 ### active computer

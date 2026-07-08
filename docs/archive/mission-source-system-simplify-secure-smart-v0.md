@@ -2,7 +2,7 @@
 
 **Status:** comprehensive mission draft  
 **Created:** 2026-06-06  
-**Primary contract:** [source-external-data-publication.md](source-external-data-publication.md)  
+**Primary contract:** [source-external-data-publication.md](../source-external-data-publication.md)  
 **Related evidence:** [vtext-source-viewer-mission-review-2026-06-06.md](vtext-source-viewer-mission-review-2026-06-06.md), [mission-vtext-source-viewer-reader-mode-hardening-v0.md](mission-vtext-source-viewer-reader-mode-hardening-v0.md), [mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md](mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md)
 
 Doctrine note (2026-06-13): historical references in this mission to
@@ -92,15 +92,15 @@ code/product evidence before deciding fixes:
 
 The mission is governed by these documents:
 
-- [source-external-data-publication.md](source-external-data-publication.md):
+- [source-external-data-publication.md](../source-external-data-publication.md):
   external source, source artifact, VText metadata, transclusion, publication,
   and export contract.
-- [missiongradient-method.md](missiongradient-method.md): mission operation,
+- [missiongradient-method.md](../missiongradient-method.md): mission operation,
   invariant preservation, feedback, rollback, learning side-channel, and stop
   rule.
-- [computer-ontology.md](computer-ontology.md) if candidate computers,
+- [computer-ontology.md](../computer-ontology.md) if candidate computers,
   app-change packages, promotion, or persistent computer state become involved.
-- [memo-problem-documentation-first.md](memo-problem-documentation-first.md):
+- [memo-problem-documentation-first.md](../memo-problem-documentation-first.md):
   newly discovered platform behavior problems must be documented before code
   fixes.
 

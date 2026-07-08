@@ -5,7 +5,7 @@
 **Supersedes:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
 **Depends on:** async supervision runtime hardening lessons now folded into
 runtime invariants and the current campaign compiler mission.
-**State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+**State ledger:** [platform-os-app-state.md](../platform-os-app-state.md)
 
 ## One-Line Goal String
 

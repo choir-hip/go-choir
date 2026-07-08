@@ -133,7 +133,7 @@ If not, it's database-polling regardless of what the comments say.
 
 ## See Also
 
-- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](choir-rearchitecture-durable-actors-2026-06-11.md)
+- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md)
   — original design doc, section 2.2 "Messaging: Go delivers, the database
   remembers"
 - [docs/mission-3c_2-actor-runtime-migration-real-v0.md](mission-3c_2-actor-runtime-migration-real-v0.md)

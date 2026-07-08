@@ -3,7 +3,7 @@
 **Status:** ready for execution
 **Date:** 2026-05-19
 **Operator:** Codex supervising staging, product-path Playwright, git, CI, deploy, Trace, VText, vmctl evidence, and owner review
-**State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+**State ledger:** [platform-os-app-state.md](../platform-os-app-state.md)
 **Priority policy:** [vm-priority-policy.md](vm-priority-policy.md)
 **Starting deployed baseline:** `e61434e88708fdbc6df4c8fbe27e2f64f869d7ca`
 
@@ -387,9 +387,9 @@ Update the platform state ledger when the mission changes:
 If the mission discovers new architecture constraints, update or reference:
 
 - [vm-priority-policy.md](vm-priority-policy.md);
-- [computer-ontology.md](computer-ontology.md);
-- [runtime-invariants.md](runtime-invariants.md);
-- [current-architecture.md](current-architecture.md).
+- [computer-ontology.md](../computer-ontology.md);
+- [runtime-invariants.md](../runtime-invariants.md);
+- [current-architecture.md](../current-architecture.md).
 
 ## Stopping Condition
 

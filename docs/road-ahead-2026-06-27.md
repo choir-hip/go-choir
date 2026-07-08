@@ -160,7 +160,7 @@ readiness P0 for legal/privacy).
 **Status:** Phase 1 implemented (Wails v3 desktop shell). Phase 2 and 7
 partially implemented (local service stack). Phases 3-6 spec'd.
 
-**Spec:** [docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](spec-choir-desktop-wails-v3-2026-06-22.md)
+**Spec:** [docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](archive/spec-choir-desktop-wails-v3-2026-06-22.md)
 
 **Phases:**
 - Phase 1: Wails v3 desktop shell — done
@@ -291,7 +291,7 @@ and consolidate overlapping ones.
 ### 7. Conceptual Refactor: Object Graph
 
 **Status:** Design document at
-[docs/report-conceptual-refactor-2026-06-23.md](report-conceptual-refactor-2026-06-23.md).
+[docs/report-conceptual-refactor-2026-06-23.md](archive/report-conceptual-refactor-2026-06-23.md).
 Object graph prototype in worktree.
 
 **Vision:** Choir is a persistent object graph with a frame-based

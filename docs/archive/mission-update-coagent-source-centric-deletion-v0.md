@@ -13,21 +13,21 @@ path, and we prove it on staging against the existing
 `yusefnathanson@me.com` account.
 
 This is a successor/specialization of
-[mission-texture-structured-document-transclusion-cutover-v0.md](./mission-texture-structured-document-transclusion-cutover-v0.md)
+[mission-texture-structured-document-transclusion-cutover-v0.md](mission-texture-structured-document-transclusion-cutover-v0.md)
 (Pass 43 / D9 raised the source-centric `update_coagent` target) and consumes
 the deletion inventory in
-[report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md](./report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md).
+[report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md](report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md).
 
 ## Source Documents And Prior Art
 
-- [report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md](./report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md)
+- [report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md](report-update-coagent-hard-cutover-legacy-deletion-2026-06-22.md)
   — the deletion inventory, P1/P2 review findings, existing-account cutover
   requirements, acceptance criteria, and manual QA re-confirm.
-- [mission-texture-structured-document-transclusion-cutover-v0.md](./mission-texture-structured-document-transclusion-cutover-v0.md)
+- [mission-texture-structured-document-transclusion-cutover-v0.md](mission-texture-structured-document-transclusion-cutover-v0.md)
   — parent paradoc; Pass 43 raised the D9 source-centric target.
-- [texture-agentic-invariants-2026-06-13.md](./texture-agentic-invariants-2026-06-13.md)
+- [texture-agentic-invariants-2026-06-13.md](../texture-agentic-invariants-2026-06-13.md)
   — Texture invariants that must hold after deletion.
-- [memo-problem-documentation-first.md](./memo-problem-documentation-first.md)
+- [memo-problem-documentation-first.md](../memo-problem-documentation-first.md)
   — the discipline this mission follows: document, then delete.
 
 ## Owner Direction

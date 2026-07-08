@@ -6,7 +6,7 @@ Doctrine and guardrail document. This records the working Texture semantics afte
 the M3 regression review, where an acceptance probe accidentally turned Texture
 researcher delegation into a forced runtime workflow.
 
-This document inherits [choir-doctrine.md](./choir-doctrine.md). Choir Doctrine
+This document inherits [choir-doctrine.md](choir-doctrine.md). Choir Doctrine
 is the apex; this file specializes it for Texture. If this document is used to
 justify hidden workflow forcing, first update the doctrine-level conjecture and
 protected-surface evidence packet.

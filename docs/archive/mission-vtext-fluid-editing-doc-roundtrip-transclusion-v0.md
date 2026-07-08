@@ -3,7 +3,7 @@
 Status: draft for owner review
 Date: 2026-06-05
 Requirements contracts:
-[source-external-data-publication.md](source-external-data-publication.md),
+[source-external-data-publication.md](../source-external-data-publication.md),
 [vtext-version-compare-merge-debuggability-spec.md](vtext-version-compare-merge-debuggability-spec.md),
 [vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md](vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md)
 

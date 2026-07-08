@@ -3,12 +3,12 @@
 **Status:** target architecture, not current-state proof  
 **Scope:** intended architecture after the next week-plus of work is written,
 deployed, and proven stable.  
-**Current-state source of truth:** [current-architecture.md](current-architecture.md)
+**Current-state source of truth:** [current-architecture.md](../current-architecture.md)
 
 ## Purpose
 
 This document holds the forward architecture so
-[current-architecture.md](current-architecture.md) can stay honest about the
+[current-architecture.md](../current-architecture.md) can stay honest about the
 repo and staging system that exist today.
 
 Do not cite this document as proof that a behavior exists. A behavior graduates

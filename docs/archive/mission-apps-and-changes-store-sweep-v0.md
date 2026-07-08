@@ -2,7 +2,7 @@
 
 **Status:** complete
 **Date:** 2026-05-21
-**State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+**State ledger:** [platform-os-app-state.md](../platform-os-app-state.md)
 **Prior portfolio:** historical alternate-computer portfolio docs were pruned
 during Campaign Compiler cleanup. The retained current path is
 AppChangePackage -> adoption -> recipient build -> verify -> promote/rollback.
@@ -165,7 +165,7 @@ Required cleanup:
   `AppsChangesApp.svelte`;
 - run `rg "CandidateDesktopViewer|candidate-desktop"` and ensure remaining
   matches are only docs, migration notes, or intentional internal test fixtures;
-- update [platform-os-app-state.md](platform-os-app-state.md) to replace
+- update [platform-os-app-state.md](../platform-os-app-state.md) to replace
   Candidate Desktop with Apps & Changes.
 
 No "maybe later" code. If it is not wired into the new flow, remove it.

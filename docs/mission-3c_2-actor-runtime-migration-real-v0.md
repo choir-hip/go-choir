@@ -72,7 +72,7 @@ deleted. The wire pipeline must run through actor handlers.
 > `pending []Update` → `mailbox chan Update`, the loop now `select`s on
 > the channel with an idle timer, and the log is queried only on
 > cold-start replay and post-drain overflow catch. See
-> [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](./memo-actor-runtime-database-polling-heresy-2026-06-27.md)
+> [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md)
 > and H030 in choir-doctrine.md. Phase 1's "done" status was conditional
 > on this repair — the handler was correct but the delivery substrate
 > underneath it was wrong.

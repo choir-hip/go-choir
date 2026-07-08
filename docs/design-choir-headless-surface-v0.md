@@ -4,7 +4,7 @@
 **Date:** 2026-07-07
 **Scope:** the mental model and verb design for `cmd/choir` (Phase 1 shipped)
 and the future MCP server. No code in this doc; it gates the MCP work.
-**Doctrine anchor:** [choir-doctrine.md](./choir-doctrine.md) — vocabulary and
+**Doctrine anchor:** [choir-doctrine.md](choir-doctrine.md) — vocabulary and
 invariants below defer to it.
 
 ---
@@ -96,7 +96,7 @@ already enforce scopes.
 
 The obvious missing verbs — `choir candidate fork|promote|rollback` — are
 deliberately **not** in scope. Per
-[mission-suite-autoputer-autopaper-spec-first-v0.md](./mission-suite-autoputer-autopaper-spec-first-v0.md),
+[mission-suite-autoputer-autopaper-spec-first-v0.md](mission-suite-autoputer-autopaper-spec-first-v0.md),
 the promotion protocol is the gate: a persistent computer is not an autoputer
 until candidate promotion is model-checked (`specs/promotion_protocol.tla`
 rewrite). Exposing promotion verbs on the public surface before the spec

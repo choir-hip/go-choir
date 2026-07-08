@@ -9,7 +9,7 @@ is replaced by executable enforcement.
 **Evidence base:** three deep research reports (object-graph cutover ground
 truth; Dolt feature surface incl. embedded-driver constraints; heresy
 elimination inventory) produced 2026-07-07, plus
-[assessment-overall-state-2026-07-07.md](./assessment-overall-state-2026-07-07.md).
+[assessment-overall-state-2026-07-07.md](../assessment-overall-state-2026-07-07.md).
 **Mutation class:** Red/Black — storage substrate, runtime authority,
 promotion/rollback, protected surfaces.
 
@@ -120,7 +120,7 @@ deletion — not greenfield construction.
 
 **Corrected framing (owner, 2026-07-07): candidate computers are no longer
 VMs.** Per the executable definition
-[substrate-independent-audited-computer-2026-07-04](./definitions/substrate-independent-audited-computer-2026-07-04.md),
+[substrate-independent-audited-computer-2026-07-04](../definitions/substrate-independent-audited-computer-2026-07-04.md),
 the product object is `ComputerVersion = (CodeRef, ArtifactProgramRef)`;
 substrates (Firecracker, Cloud Hypervisor, Nucleus, containers) are
 materializers; a candidate is "forked by tape/program reference," and route

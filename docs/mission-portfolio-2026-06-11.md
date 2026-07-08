@@ -9,7 +9,7 @@ settlement, and dependencies. At mission start, `/goal docs/<mission>.md`
 compiles the relevant entry and references into a mutable mission document
 with `Parallax State`.
 
-This portfolio inherits [choir-doctrine.md](./choir-doctrine.md). Read it as a
+This portfolio inherits [choir-doctrine.md](choir-doctrine.md). Read it as a
 heresy-reduction and conjecture-learning program, not a roadmap whose visible
 product smoke can settle architecture. Each mission must report evidence class,
 blocked-by relationships, detector-count target when countable, and heresy

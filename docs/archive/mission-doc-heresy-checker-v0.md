@@ -258,8 +258,8 @@ Current corpus evidence:
 
 R3 needs both:
 
-- Markdown links like `[docs/choir-doctrine.md](docs/choir-doctrine.md)`;
-- relative links like `[source](./source-external-data-publication.md)`;
+- Markdown links like `[docs/choir-doctrine.md](../choir-doctrine.md)`;
+- relative links like `[source](../source-external-data-publication.md)`;
 - bare paths like `docs/mission-portfolio-2026-06-11.md`;
 - bare filenames resolved relative to the source doc and then `docs/`.
 

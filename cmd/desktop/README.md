@@ -179,4 +179,4 @@ github.com/wailsapp/wails/v3 v3.0.0-alpha2.104
 ```
 
 Pinned 2026-06-22. See the spec for version upgrade policy:
-[spec-choir-desktop-wails-v3-2026-06-22.md](../../docs/spec-choir-desktop-wails-v3-2026-06-22.md)
+[spec-choir-desktop-wails-v3-2026-06-22.md](../../docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md)

@@ -4,7 +4,7 @@
 **Date:** 2026-05-23
 **Supersedes immediate continuation of:** [mission-supervision-continuation-experiment-rerun-v0.md](mission-supervision-continuation-experiment-rerun-v0.md)
 **Returns to:** [mission-human-proof-experiment-rerun-v0.md](mission-human-proof-experiment-rerun-v0.md)
-**State ledger:** [platform-os-app-state.md](platform-os-app-state.md)
+**State ledger:** [platform-os-app-state.md](../platform-os-app-state.md)
 
 ## One-Line Goal String
 

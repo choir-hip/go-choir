@@ -3,7 +3,7 @@
 Status: design options, first captured 2026-06-19. Not yet decided.
 
 Context: the **Texture As A Versioned Provenanced Artifact v0** mission
-([ledger](mission-texture-versioned-artifact-v0.ledger.md)) landed D1-D5 and
+([ledger](../mission-texture-versioned-artifact-v0.ledger.md)) landed D1-D5 and
 proved at D7 (`runacc-a5baefc8def0e2af4436`, `staging-smoke-level`) that a
 published Texture now **is** its full versioned history: the `/pub/texture/...`
 resolve bundle carries a `version_history` manifest with per-revision content,

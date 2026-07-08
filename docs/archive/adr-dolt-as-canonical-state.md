@@ -125,7 +125,7 @@ areas, but they should be scoped and verified.
 
 ## Related Docs
 
-- [runtime-invariants.md](runtime-invariants.md)
-- [current-architecture.md](current-architecture.md)
-- [computer-ontology.md](computer-ontology.md)
+- [runtime-invariants.md](../runtime-invariants.md)
+- [current-architecture.md](../current-architecture.md)
+- [computer-ontology.md](../computer-ontology.md)
 - [old-docs-review-2026-06-06.md](old-docs-review-2026-06-06.md)

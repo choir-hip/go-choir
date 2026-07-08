@@ -76,9 +76,9 @@ nodes:
   sources:
   - AGENTS.md
   - docs/choir-doctrine.md
-  - docs/parallax-design-2026-06-11.md
-  - docs/worktree-review-2026-06-23.md
-  - docs/report-conceptual-refactor-2026-06-23.md
+  - docs/archive/parallax-design-2026-06-11.md
+  - docs/archive/worktree-review-2026-06-23.md
+  - docs/archive/report-conceptual-refactor-2026-06-23.md
   - docs/news-voice-autoradio-forward-plan-2026-06-06.md
   - docs/paradoc-object-service-prototype.md
   - docs/paradoc-qdrant-indexing-pipeline.md
@@ -203,7 +203,7 @@ nodes:
   - docs/why-texture-2026-06-15.md
   - docs/why-texture-background-2026-06-15.md
   - docs/texture-agentic-invariants-2026-06-13.md
-  - docs/mission-texture-hard-cutover-v0.md
+  - docs/archive/mission-texture-hard-cutover-v0.md
   - docs/choir-doctrine.md
   - AGENTS.md
 - id: texture-product-loop-recovery-v0
@@ -227,7 +227,7 @@ nodes:
 - id: texture-long-running-agent-v0
   title: Texture As A Long-Running Agent v0
   path: docs/mission-texture-long-running-agent-v0.md
-  ledger: docs/mission-texture-long-running-agent-v0.ledger.md
+  ledger: docs/archive/mission-texture-long-running-agent-v0.ledger.md
   status: superseded
   kind: superseded
   # Supersedes/folds in the cadence defect of texture-product-loop-recovery-v0
@@ -287,7 +287,7 @@ nodes:
   - texture-durable-thread-v1
   - texture-structured-document-transclusion-cutover-v0
   sources:
-  - docs/mission-texture-hard-cutover-v0.md
+  - docs/archive/mission-texture-hard-cutover-v0.md
   - docs/mission-portfolio-2026-06-11.md
   - docs/choir-doctrine.md
   - AGENTS.md
@@ -310,8 +310,8 @@ nodes:
   sources: []
 - id: texture-hard-cutover-v0
   title: Texture Hard Cutover v0
-  path: docs/mission-texture-hard-cutover-v0.md
-  ledger: docs/mission-texture-hard-cutover-v0.ledger.md
+  path: docs/archive/mission-texture-hard-cutover-v0.md
+  ledger: docs/archive/mission-texture-hard-cutover-v0.ledger.md
   status: superseded
   kind: superseded
   # Triage 2026-06-28: consolidated into texture-product-loop-recovery-v0
@@ -341,7 +341,7 @@ nodes:
   enables: []
   sources:
   - docs/texture-agentic-invariants-2026-06-13.md
-  - docs/mission-texture-hard-cutover-v0.md
+  - docs/archive/mission-texture-hard-cutover-v0.md
   - docs/mission-texture-versioned-artifact-v0.md
   - docs/mission-vtext-source-entities-multimedia-transclusion-v0.md # texture-cutover-allow: historical mission evidence path; delete-by texture-hard-cutover-v0
   - docs/choir-doctrine.md
@@ -1362,7 +1362,7 @@ nodes:
   depends_on: []
   enables: []
   sources:
-  - docs/mission-3-universal-wire-ingestion-rebuild-v0.md
+  - docs/archive/mission-3-universal-wire-ingestion-rebuild-v0.md
   - docs/mission-3a-cleanup-wiring-v0.md
   - docs/mission-3-spikes-2026-06-27.md
   - AGENTS.md
@@ -2453,7 +2453,7 @@ nodes:
   - beads-kanban-ui-v0
   sources:
   - docs/mission-graph.yaml
-  - docs/parallax-design-2026-06-11.md
+  - docs/archive/parallax-design-2026-06-11.md
   - docs/agent-parallax-rules.md
 - id: beads-kanban-ui-v0
   title: 'Mission: Beads Kanban UI v0'
@@ -2801,13 +2801,13 @@ nodes:
   # The set of mainlined missions becomes the tape. This was the first
   # self-authoring cycle: the orchestrator delegates conjectures, subagents
   # produce evidence, the orchestrator verifies and mainlines.
-  # Checkpoint report: docs/orchestrator-checkpoint-report-2026-06-28.md
+  # Checkpoint report: docs/archive/orchestrator-checkpoint-report-2026-06-28.md
   depends_on: []
   enables: []
   sources:
   - docs/mission-orchestrator-suite-2026-06-28.md
   - docs/mission-orchestrator-suite-2026-06-28.ledger.md
-  - docs/orchestrator-checkpoint-report-2026-06-28.md
+  - docs/archive/orchestrator-checkpoint-report-2026-06-28.md
   - docs/mission-suite-2026-06-28.md
 - id: orchestrator-suite-2026-06-28
   title: 'Mission: Orchestrator Suite 2026-06-28'
@@ -2822,7 +2822,7 @@ nodes:
   # The set of mainlined missions becomes the tape. This was the first
   # self-authoring cycle: the orchestrator delegates conjectures, subagents
   # produce evidence, the orchestrator verifies and mainlines.
-  # Checkpoint report: docs/orchestrator-checkpoint-report-2026-06-28.md
+  # Checkpoint report: docs/archive/orchestrator-checkpoint-report-2026-06-28.md
   depends_on: []
   enables: []
   sources: []
@@ -2956,7 +2956,7 @@ nodes:
   sources: []
 - id: universal-wire-agent-pipeline-v1
   title: Universal Wire Agent Pipeline v1.1
-  path: docs/mission-universal-wire-agent-pipeline-v1.md
+  path: docs/archive/mission-universal-wire-agent-pipeline-v1.md
   ledger: ''
   status: settled
   kind: paradoc
@@ -2976,7 +2976,7 @@ nodes:
   sources: []
 - id: mission-og-dolt-heresy-hard-cutover-v0
   title: OG / Dolt / Heresy Hard Cutover v0
-  path: docs/mission-og-dolt-heresy-hard-cutover-v0.md
+  path: docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -2991,7 +2991,7 @@ nodes:
 
 - id: heresy-eradication-2026-07-07
   title: Heresy Eradication Definition 2026-07-07
-  path: docs/definitions/heresy-eradication-2026-07-07.md
+  path: docs/archive/heresy-eradication-2026-07-07.md
   ledger: ''
   status: superseded
   kind: superseded
@@ -3012,7 +3012,7 @@ nodes:
   depends_on: []
   enables: []
   sources:
-  - docs/mission-og-dolt-heresy-hard-cutover-v0.md
-  - docs/definitions/heresy-eradication-2026-07-07.md
+  - docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
+  - docs/archive/heresy-eradication-2026-07-07.md
   - docs/assessment-overall-state-2026-07-07.md
   - docs/definitions/substrate-independent-audited-computer-2026-07-04.md

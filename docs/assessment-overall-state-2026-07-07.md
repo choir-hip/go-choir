@@ -5,7 +5,7 @@
 > the route-over-`ComputerVersion` invariant (H031), the D-PROMO branch-isolation
 > conjecture, and the D-WIRE world-wire sql-server migration. For current
 > executable authority see
-> [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](./definitions/og-dolt-heresy-completion-2026-07-08.md).
+> [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md).
 > This document remains valuable as historical evidence but should not be read as
 > current architecture authority.
 
@@ -15,8 +15,8 @@ graph; universal wire pipeline; storage substrate inventory) plus live API
 probes against choir.news via the choir CLI and curl.
 **Prompted by:** owner's report that "the mental models in the code are at a
 mismatch now" after ~a dozen refactors in as many days.
-**Companions:** [design-choir-headless-surface-v0.md](./design-choir-headless-surface-v0.md),
-[memo-choir-cli-trajectories-decode-wire-502-2026-07-06.md](./memo-choir-cli-trajectories-decode-wire-502-2026-07-06.md),
+**Companions:** [design-choir-headless-surface-v0.md](design-choir-headless-surface-v0.md),
+[memo-choir-cli-trajectories-decode-wire-502-2026-07-06.md](memo-choir-cli-trajectories-decode-wire-502-2026-07-06.md),
 the in-flight Dolt-vs-SQLite evaluation (superseded by the 2026-07-08 D-WIRE
 and D-STORES decisions; see the umbrella mission for current storage
 authority).

@@ -39,7 +39,7 @@ auth/session, and Choir-in-Choir claims.
 ## Computer Lifecycle And Reclaim
 
 For the concrete current and future policy, read
-[vm-priority-policy.md](vm-priority-policy.md). This section records the
+[vm-priority-policy.md](archive/vm-priority-policy.md). This section records the
 invariants that policy must preserve.
 
 Active user computers should stay warm when capacity allows. Fixed idle timeout
@@ -170,7 +170,7 @@ Dolt is the desired canonical store for product state. SQLite may remain for
 narrow hot runtime, cache, local compatibility, or transitional implementation
 roles only when explicitly justified. Do not introduce new durable product truth
 into SQLite by default. The decision record is
-[adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
+[adr-dolt-as-canonical-state.md](archive/adr-dolt-as-canonical-state.md).
 
 Per-user embedded Dolt holds private product state: app graph, appagent state,
 `texture` document/version content, prompts, local trajectories, findings, evidence

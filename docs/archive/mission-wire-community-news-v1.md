@@ -156,11 +156,11 @@ requirements contract above before making behavior changes.
 
 Required context reads:
 
-- [AGENTS.md](../AGENTS.md) for repo operating contract, staging proof, and
+- [AGENTS.md](../../AGENTS.md) for repo operating contract, staging proof, and
   problem-documentation-first rules;
 - [glossary.md](glossary.md) for current Community Cloud, Private Cloud,
   platform computer, user computer, candidate computer, and Wire vocabulary;
-- [computer-ontology.md](computer-ontology.md) for host/computer/candidate
+- [computer-ontology.md](../computer-ontology.md) for host/computer/candidate
   lineage and promotion boundaries;
 - [wire-news-system-learning-saga-2026-06-09.md](wire-news-system-learning-saga-2026-06-09.md)
   for the news failure history and the platform-level realization;
