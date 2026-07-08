@@ -1,10 +1,17 @@
 # Choir Documentation Index
 
-Last reviewed: 2026-06-13
+Last reviewed: 2026-07-08
 
-This directory contains Choir Doctrine, operating contracts, active Parallax
+This directory contains Choir Doctrine, operating contracts, active Definition
+mission documents (`/goal <doc>.md`), archived Parallax-era and MissionGradient-era
 paradocs, domain invariant docs, descriptive architecture docs, proof artifacts,
 and historical pointers. Do not treat every file here as equally current.
+
+> Era note (2026-07-08): the repo has moved from MissionGradient to Parallax to
+> Definition as the long-running mission form. `skills/definition/SKILL.md` is the
+> current authority for executable missions; `skills/parallax/SKILL.md` and
+> `docs/agent-parallax-rules.md` are legacy reference. The current umbrella
+> mission is `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`.
 
 The old documentation audit was pruned during the Campaign Compiler cleanup.
 Current docs should point at `choir.news`, AppChangePackage/adoption source
@@ -26,9 +33,9 @@ Use these buckets when reading or editing docs:
 - **Current descriptive architecture** describes code/staging reality and
   labeled target hardening. It should be corrected when it conflicts with code,
   staging, or doctrine.
-- **Current mission docs / paradocs** define active or recently stopped
-  Parallax work. They are runnable/inspectable mission context, not global
-  architecture unless promoted into canonical docs.
+- **Current mission docs / definition docs** define active or recently stopped
+  Definition (`/goal`) work. They are runnable/inspectable mission context, not
+  global architecture unless promoted into canonical docs.
 - **Evidence artifacts** preserve proof, dogfood, blocker, or next-frontier findings from specific runs. Keep them as evidence, but do not treat them as current instructions when they contradict canonical docs.
 - **Historical signal** may contain useful design history or old constraints, but must be read through the current architecture.
 - **Stale/dangerous docs** contain outdated operational instructions, provider/credential references, or old continuation flows. Extract any live signal, then replace or delete them.
@@ -92,19 +99,22 @@ explicitly promotes one as source form.
 - `docs/why-texture-background-2026-06-15.md` - historical/background support
   for the Texture rename, multi-agent transcript failure, web desktop
   deduction, and safe self-development context.
-- `docs/mission-texture-hard-cutover-v0.md` - active Parallax mission to
-  propagate Texture through docs, code, prompts, UI, tests, checker warnings,
-  product proof, and only then a minimal protocol v0.
-- `docs/parallax-design-2026-06-11.md` - current mission-discipline design:
-  Parallax conjecture circuits and paradocs for new broad work.
+- `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` - current umbrella
+  Definition mission: complete the OG/Dolt cutover, heresy elimination, and
+  past-mission open edges. Executable via `/goal`.
+- `docs/mission-texture-hard-cutover-v0.md` - superseded Parallax-era Texture
+  mission; remaining work folded into the texture-product-loop-recovery mission.
+- `docs/parallax-design-2026-06-11.md` - historical mission-discipline design for
+  the Parallax era; new broad work uses `skills/definition/SKILL.md`.
 - `docs/mission-portfolio-2026-06-11.md` - current durable-actor
   rearchitecture mission portfolio and execution order.
 - `docs/archive/choir-agentic-depth-canonical.md` - canonical run-depth vocabulary for
   MissionGradient-era MissionBag, Sweep, Leap, Fly, Cycle, and
-  worker/verifier/orchestrator roles; read through Parallax for new missions.
-- `docs/missiongradient-method.md` - legacy run-geometry method. Use only as
-  historical baseline/fallback for old mission documents; new broad work uses
-  Parallax.
+  worker/verifier/orchestrator roles; historical reference only; new missions use
+  Definition.
+- `docs/missiongradient-method.md` - legacy MissionGradient run-geometry method.
+  Use only as historical baseline/fallback for old mission documents; new broad
+  work uses Definition via `skills/definition/SKILL.md`.
 - `docs/cognitive-transform-portfolio.md` - transform portfolio entrypoint for route-changing reframes; canonical skill lives at `skills/cognitive-transform-portfolio/SKILL.md`.
 - `docs/computer-ontology.md` - canonical vocabulary for persistent user computers, ledger split, personal promotion, platform/public promotion, and update algebra.
 - `docs/archive/wire-news-system-learning-saga-2026-06-09.md` - current learning record
@@ -152,9 +162,10 @@ explicitly promotes one as source form.
   source/news code-state and code-review note. Use it for sourcecycled,
   source_search, Texture source-service refs, News app gaps, and rough future
   directions; do not treat its improvement list as accepted mission scope.
-- `docs/mission-*-v*.md` - mission paradocs. Use the portfolio's Parallax
-  State to identify the current spine mission instead of updating this index
-  for every mission transition.
+- `docs/mission-*-v*.md` and `docs/definitions/*-*.md` - mission and definition
+  documents. Use `docs/mission-graph.yaml` and the portfolio/definition state
+  to identify the current spine mission instead of updating this index for every
+  mission transition.
 - `docs/choir-universal-wire-style-vtext-dual-object-spec-2026-06-07.md` - (`texture-cutover-allow:` historical filename retained; deletion receipt: `texture-hard-cutover-v0`)
   historical product/architecture spec for the superseded Universal Wire +
   retired StoryGraph/Texture framing. Do not use it as current ontology.
@@ -181,11 +192,14 @@ explicitly promotes one as source form.
 
 ## Current Mission Family
 
+- `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` is the current
+  umbrella Definition mission. It absorbs the incomplete `mission-og-dolt-heresy-
+  hard-cutover-v0` and `heresy-eradication-2026-07-07` runs, plus open edges from
+  past missions, and is executable via `/goal`.
 - `docs/mission-portfolio-2026-06-11.md` and `docs/mission-graph.yaml` define
-  the current durable-actor spine. As of 2026-06-15, M3 proper is gated by
-  `docs/archive/mission-vm-bootstrap-recovery-race-m3.3-v0.md`, the narrow
-  bootstrap/recovery race paramission that must settle before lifecycle cutover
-  uses vmctl refresh/restart as proof substrate.
+  the durable-actor spine and portfolio ordering; many of its missions are
+  absorbed, superseded, or deferred into the current umbrella or later missions.
+  Use `docs/mission-graph.yaml` as the machine-readable source of current status.
 - `docs/archive/mission-platform-source-service-vtext-publication-campaign-v1.md` - (`texture-cutover-allow:` historical mission filename retained; deletion receipt: `texture-hard-cutover-v0`)
   active Source Service / Texture source metadata / publication campaign. Its
   requirements contract is `docs/source-external-data-publication.md`.
@@ -198,9 +212,9 @@ explicitly promotes one as source form.
   historical draft mission for the superseded Universal Wire / Style artifact
   collaborative retired StoryGraph trajectory. Do not use it as current ontology.
 
-Read the mission portfolio and the current paradoc first. Older
-promotion-queue mission docs have been pruned; use the consolidated learnings
-doc when that context is needed.
+Read the mission portfolio, `docs/mission-graph.yaml`, and the current
+definition document first. Older promotion-queue mission docs have been pruned;
+use the consolidated learnings doc when that context is needed.
 
 ## Proof And Evidence Artifacts
 
