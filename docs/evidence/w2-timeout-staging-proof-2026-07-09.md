@@ -16,7 +16,9 @@
 }
 ```
 
-Observed from `https://choir.news/health` after the CI deploy to Node B.
+Observed from `https://choir.news/health` after the CI deploy to Node B. The
+current deployed SHA is `1ed41f2b05e1d6b94a0025e6e62ae22be210c605` (2026-07-09T05:12:21Z);
+`67fff296` is the first deploy at which the 60s timeout was observed.
 
 ## What changed
 

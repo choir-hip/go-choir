@@ -255,9 +255,10 @@ a world-wire store (`internal/platform/objectgraph_store.go`, moving to
 sql-server now) and a VM-local embedded store per user VM
 (`internal/objectgraph/dolt_store.go`). Promotion (fork/promote/rollback) is
 an operation on the VM-local embedded store, not a property of the world-wire
-store. Branch isolation on the embedded store is under test (D-PROMO); the
-current `DoltPromotionAdapter` is tag-only interim and must not be enabled in
-production promotion flow until the conjecture settles. See the current umbrella
+store. D-PROMO is settled for pinned `*sql.Conn` single-writer discipline on the
+embedded store; the current `DoltPromotionAdapter` is tag-only interim and must
+not be enabled in production promotion flow until the Phase D branch-adapter
+conformance binding lands. See the current umbrella
 Definition mission
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](docs/definitions/og-dolt-heresy-completion-2026-07-08.md)
 (older hard-cutover and heresy-eradication docs are superseded source material).

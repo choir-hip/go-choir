@@ -55,11 +55,20 @@ search_paths = [
     os.path.join(repo, ".github"),
 ]
 
-def count_pattern(pattern):
+def count_pattern(pattern, excludes=None):
     # rg -F counts fixed-string occurrences. Sum per-file counts.
+    # Per-row path exclusions can be listed in the Notes column as
+    #   exclude: glob1, glob2, ...
+    excludes = excludes or []
+    cmd = ["rg", "-F", "--no-heading", "-c"]
+    for glob in excludes:
+        cmd.append("--glob")
+        cmd.append("!" + glob.strip())
+    cmd.append(pattern)
+    cmd.extend(search_paths)
     try:
         result = subprocess.run(
-            ["rg", "-F", "--no-heading", "-c", pattern] + search_paths,
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -100,10 +109,13 @@ if os.path.exists(manifest):
             patterns = re.findall(r"`([^`]+)`", patterns_col)
             if not patterns:
                 continue
+            excludes = re.findall(r"exclude:\s*([^|]+)", notes)
+            if excludes:
+                excludes = [g.strip() for g in excludes[0].split(",")]
             pattern_hits = {}
             total_hits = 0
             for p in patterns:
-                n = count_pattern(p)
+                n = count_pattern(p, excludes=excludes)
                 pattern_hits[p] = n
                 total_hits += n
             rows.append({

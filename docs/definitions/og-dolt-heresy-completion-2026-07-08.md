@@ -377,17 +377,27 @@ determined_state:
     - claim: Phase 4 seams landed before Phase 0 foundations; e393eb5c and e5c1d38a are seams, not completions.
       source: observed (grep-verified 2026-07-08; unanimous panel)
       execution_effect: sequencing corrected below; W5 labeling applies.
-    - claim: Timeout hardening is unbuilt (180s client default, no server timeouts, 10s retry window).
+    - claim: W2 timeout hardening is built: `DefaultVmctlTimeout` 60s, `http.Server` Read/Write timeouts, and fast 504 staging proof for `/api/universal-wire/stories`.
       source: observed
-      execution_effect: W2 is first executable work.
-    - claim: `docs/heresy-detectors.md` exists and includes H030/H031 rows; the
-      executable `scripts/check-heresies.sh` and the CI discovery job do not yet
-      exist. C3/W1 now verify and bind the existing rows.
+      execution_effect: I3 bounded-request-path invariant is now satisfied.
+    - claim: W1 detector manifest + CI discovery is wired. `docs/heresy-detectors.md` includes H030/H031 and the I4 destructive-rollback guard; `scripts/check-heresies.sh` parses the manifest and supports per-row path exclusions; the `Heresy Detector Discovery` CI job reports counts in the `check` gate.
       source: observed
-      execution_effect: W1 is first executable work (parallel with W2).
+      execution_effect: H031/I4 binding is in CI discovery; fail-on-regression enforcement is deferred per phase.
+    - claim: W3 landing-loop evidence for e393eb5c/e5c1d38a is recorded: both commits are in main history, their own CI runs were cancelled/failed, the deployed SHA is `1ed41f2b`, the lineage resolver is not active in staging (no `PROXY_RUNTIME_DB_PATH`), and no production binary configures the promotion adapter.
+      source: observed (CI logs, staging health, grep)
+      execution_effect: seam labels are accurate; W3 closed.
     - claim: WithPromotionAdapter has zero cmd/ callers; adapter is dead in production.
       source: observed
       execution_effect: no promotion claims admissible; adapter wiring blocked on S1 + D-PROMO.
+    - claim: D-PROMO pinned-connection branch isolation is settled by `TestDoltEmbeddedBranchIsolationPinnedConnection -count=10`.
+      source: observed (go test, 10/10 passes)
+      execution_effect: the embedded Dolt store can provide the branch isolation the spec models; the tag-only adapter remains non-conformant until Phase D.
+    - claim: S1 spec↔adapter reconciliation is settled: `specs/promotion_protocol.tla` scope header names the embedded store, references D-PROMO, and notes the current tag-only adapter does not implement branch isolation.
+      source: observed
+      execution_effect: the spec is target-state with a conformance gap; W6 will add the binding when the branch adapter lands.
+    - claim: C1-C7 doc truth corrections are committed; C4 relabeled `substrate-hardening` and `cross-substrate-proof` as `checkpoint_incomplete`.
+      source: observed
+      execution_effect: no mission doc may be cited as complete while carrying unproven claims.
     - claim: a703bf44 docs checkpoint pushed to origin/main 2026-07-08.
       source: observed
       execution_effect: W4 closed.
@@ -399,20 +409,10 @@ determined_state:
     - claim: Retrieval search returns zero results for terms that exist; /api/trajectories ignores ?limit=.
       source: observed (assessment)
       execution_effect: C-RETR and C-PAGE work items exist in Phase E.
-  contested:
-    - node: spec-impl-conformance (S1)
-      issue: promotion_protocol.tla BranchIsolation vs tag-only adapter; unclear whether spec intends target-state or current-state semantics.
-      next_resolution_step: read spec header intent; add scope conditioning or block; add conformance binding (W6).
-    - node: route-over-computer-version (H031)
-      issue: lineage resolver routes through route_profile and uses owner/desktop as the product route target instead of resolving to a ComputerVersion record. The H031 heresy entry, Banned Patterns list #16 row, and detector manifest row exist after the doc-fix pass; they must be verified and bound to CI, not re-created.
-      next_resolution_step: verify H031 banned pattern #16 and detector refs are wired into `docs/heresy-detectors.md` and CI discovery job (W1), then Phase D redesign.
-    - node: cross-substrate-proof-v0 gates 4/5
-      issue: document self-contradicts (claims satisfied, lists unproven).
-      next_resolution_step: C4 relabel + verify against artifacts.
   settled_2026_07_08_owner:
-    - claim: Two-store Dolt taxonomy — world-wire store (moves to sql-server now) and per-VM embedded stores shared by that VM's capsules; promotion is an operation on the embedded store (branch isolation under test, D-PROMO).
+    - claim: Two-store Dolt taxonomy — world-wire store (moves to sql-server now) and per-VM embedded stores shared by that VM's capsules; promotion is an operation on the embedded store.
       source: user-stated + observed
-      execution_effect: D-WIRE settled; promotion explicitly decoupled from the wire store; S1 scope header names the embedded store.
+      execution_effect: D-WIRE settled; D-PROMO settled (pinned-connection branch isolation); promotion explicitly decoupled from the wire store; S1 scope header names the embedded store.
     - claim: Universal→World Wire rename will be executed in Phase E.
       source: user-stated
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
@@ -421,10 +421,6 @@ determined_state:
   open:
     - node: storage-fork (D-STORE)
       missing: answers to six storage-inventory questions.
-    - node: red-commit landing evidence (W3)
-      missing: CI status of e393eb5c/e5c1d38a, staging deploy identity, live resolver-vs-fallback observation.
-    - node: candidate-computer-as-VM heresy number (H031)
-      missing: CI-enforced binding for Banned Patterns list #16 and detector refs (W1 closes this; C3 verified the existing heresy entry and banned-pattern row).
 ```
 
 ## Value Criterion
@@ -441,7 +437,8 @@ Baseline 2026-07-08. Productive execution reduces these counts:
 
 ```yaml
 variant:
-  heresy_families_without_ci_detector: 31        # H001–H031, target 0
+  heresy_families_without_ci_detector: 0         # 12 aggregate detector families (H001-H031 + I4) are wired to CI discovery via docs/heresy-detectors.md and scripts/check-heresies.sh; target 0
+  heresy_families_without_ci_enforcement: 12      # fail-on-regression and allowlist contexts are deferred per phase; target 0
   heresy_families_live: 9                        # live-site clusters, target 0: texture forcing (H009-12/H024a,b/H026), parent/child (H001-05 + H015-16), continuations (H006-08), acceptance/obligations (H013-14/H017-18), surface residue (H019-23), vocabulary (H025/H027-29), candidate-VM (H031+new), route-over-CV violation, dual-store SQL paths
   doc_corrections_open: 0                        # C1–C7 committed, target 0
   spec_impl_gaps_open: 0                         # S1 settled with scope/conformance note, target 0
@@ -734,12 +731,13 @@ Per the definition skill. Specific bindings:
     runner acquisition failure; Go Vet + Test + Build failed, Deploy to Staging
     (Node B) was cancelled. e5c1d38a CI run 28964053923 (2026-07-08T17:52:55Z)
     completed with Deploy to Staging (Node B) successful and Generate SBOMs
-    failing. Current deployed SHA on choir.news is 67fff296 (2026-07-09T04:56:18Z).
-    Staging proxy log shows no "route resolver: wired lineage-based resolver"
-    line; nix/node-b.nix does not set PROXY_RUNTIME_DB_PATH, so the proxy uses
-    the hard-coded VM identity fallback. grep for DoltPromotionAdapter or
-    WithPromotionAdapter under cmd/ returns zero hits; no production binary
-    configures the promotion adapter.
+    failing. The timeout fix was first observed at deployed SHA 67fff296
+    (2026-07-09T04:56:18Z); the current deployed SHA on choir.news is 1ed41f2b
+    (2026-07-09T05:12:21Z). Staging proxy log shows no "route resolver: wired
+    lineage-based resolver" line; nix/node-b.nix does not set
+    PROXY_RUNTIME_DB_PATH, so the proxy uses the hard-coded VM identity fallback.
+    grep for DoltPromotionAdapter or WithPromotionAdapter under cmd/ returns zero
+    hits; no production binary configures the promotion adapter.
   result: >-
     e393eb5c and e5c1d38a are in main history and are present on Node B via
     later deploys, but their own CI runs were not clean green/cancelled. The
@@ -853,17 +851,19 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: P-TRIAGE table committed (Phase A deliverables landed; pending Phase A exit panel)
+  last_checkpoint: Phase A exit panel round 1 completed; category-(a) findings fixed in follow-up
   current_artifact_state: >-
-    Phase A deliverables committed: W1 detector manifest + CI discovery job,
-    W2 proxy/vmctl timeout hardening with staging 504 proof, W3 seam-commit
-    landing-loop evidence, C1–C7 doc truth corrections, D-PROMO pinned-
-    connection branch-isolation settlement, S1 spec↔adapter scope/conformance
-    note, and P-TRIAGE past-mission open-edge table. D-STORE storage fork
-    remains unresolved; D-PROMO and D-WIRE settled. Phase A exit panel is the
-    next gate before Phase B.
+    Phase A deliverables committed: W1 detector manifest + CI discovery job
+    (including the I4 destructive-rollback guard), W2 proxy/vmctl timeout
+    hardening with staging 504 proof, W3 seam-commit landing-loop evidence,
+    C1–C7 doc truth corrections, D-PROMO pinned-connection branch-isolation
+    settlement, S1 spec↔adapter scope/conformance note, and P-TRIAGE past-mission
+    open-edge table. Phase A exit panel round 1 completed with category-(a)
+    findings fixed: stale Determined State, stale D-PROMO/W2 orientation text,
+    missing grip checkpoint registration, and I4 detector. D-STORE storage fork
+    remains unresolved; D-PROMO and D-WIRE settled.
   what_shipped:
-    - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031 refs, CI heresy-detector job)
+    - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
     - W3 seam-commit evidence for e393eb5c/e5c1d38a
     - C1–C7 doc truth corrections
@@ -878,16 +878,17 @@ run_checkpoint_and_resumption_state:
     - all past-mission open edges triaged (absorbed/external/retired)
   unproven_or_partial_claims:
     - D-STORE storage-fork six questions
-    - heresy live-site counts (families still in discovery; fail-on-regression deferred per phase)
+    - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
     - Phase B–E kill waves, cutovers, and deletion not yet executed
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
   next_executable_probe: >-
-    Phase A exit panel (agentic consensus) on the triage table and full Phase A
-    state; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
+    Phase A exit panel round 2 (delta review) on the fixes; on clear, begin
+    Phase B heresy kill wave 1 + Dolt audit reads.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
+    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1)
     - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
     - docs/assessment-overall-state-2026-07-07.md
   rollback_refs:

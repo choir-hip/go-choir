@@ -675,10 +675,10 @@ Read [public-identity-and-custom-domains.md](archive/public-identity-and-custom-
   `internal/proxy/lineage_route_resolver.go` that still falls back to hard-coded
   platform VM/desktop constants when the `route_profile` parser fails or
   `PROXY_RUNTIME_DB_PATH` is unset; this is a known violation tracked by H031.
-- **Timeout hardening (I3):** `vmctl.Client` defaults to a 180s resolve timeout
-  while `internal/server/server.go` has no `ReadTimeout`/`WriteTimeout`, so a
-  hung VM can block a public request for the full 180s. Bounded resolve timeout,
-  server timeouts, and a fast 504 path are pending.
+- **Timeout hardening (I3):** `vmctl.Client` and `DefaultVmctlTimeout` default to
+  60s, `internal/server/server.go` sets `ReadTimeout`/`WriteTimeout` defaults to
+  120s, and staging `/api/universal-wire/stories` returns a fast 504 within
+  60s for an induced vmctl resolve failure. Bounded path is proven.
 
 ## Promotion Paths
 
@@ -776,10 +776,12 @@ VM-local embedded Dolt (one workspace per user VM, shared by its capsules once
 - publication staging metadata
 
 Promotion (fork/promote/rollback) operates against this embedded store, not
-against the world-wire store and not a separate promotion workspace. Branch
-isolation on the embedded store is under test (D-PROMO); the current
-`DoltPromotionAdapter` is tag-only interim and must not be enabled in any
-production promotion flow until the conjecture settles.
+against the world-wire store and not a separate promotion workspace. D-PROMO
+is settled for pinned `*sql.Conn` single-writer discipline on the embedded
+store: the `TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` bar
+passes. The current `DoltPromotionAdapter` is tag-only interim and must not be
+enabled in any production promotion flow until the Phase D branch-adapter
+conformance binding lands.
 
 Per-user snapshot filesystem holds workspace and file state:
 

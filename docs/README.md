@@ -60,7 +60,8 @@ explicitly promotes one as source form.
 - **Doc authority manifest:** `docs/doc-authority-manifest.yaml` is the
   machine-readable index of every tracked doc's role, claim scope, authority,
   lifecycle, and witnesses. The `docs/README.md` narrative index is the human
-  grip checkpoint; the manifest is the machine-readable checkpoint layer.
+  doc index; `docs/choir-grip-checkpoint-2026-07-07.md` is the narrative grip
+  checkpoint. The manifest is the machine-readable checkpoint layer.
 - **Assertion register:** `docs/conjecture-assertion-ledger-2026-06.md` is the
   canonical home for supported assertions, invariant candidates, and open
   hyperthesis edges.
@@ -84,6 +85,8 @@ explicitly promotes one as source form.
 ## Canonical Current Docs
 
 - `docs/choir-doctrine.md` - apex doctrine and architecture control document.
+- `docs/choir-grip-checkpoint-2026-07-07.md` - narrative grip checkpoint; may not
+  override doctrine, definitions, specs, or evidence.
 - `../README.md` - operational entrypoint for humans and agents.
 - `../AGENTS.md` - repo-level agent operating contract.
 - `docs/conjecture-assertion-ledger-2026-06.md` - canonical conjecture and

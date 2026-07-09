@@ -67,6 +67,20 @@ documents:
       - doctrine_change
       - documentation_index_change
 
+  - path: docs/choir-grip-checkpoint-2026-07-07.md
+    claim_scope: narrative
+    is_root: []
+    is_evidence: false
+    annotations:
+      doc_role: narrative
+      authority: none
+      lifecycle: living
+      notes: narrative grip checkpoint; may not override doctrine, definitions, specs, or evidence
+    witnesses:
+      - docs/choir-grip-checkpoint-2026-07-07.md
+    refresh_triggers:
+      - documentation_index_change
+
   - path: docs/current-architecture.md
     claim_scope: current
     is_root: [entry]

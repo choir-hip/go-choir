@@ -1,10 +1,11 @@
 # Heresy Detector Manifest
 
-Status: doctrine-level manifest, baseline captured 2026-06-13.
+Status: doctrine-level manifest, baseline captured 2026-06-13. Updated 2026-07-09.
 
-This file is the current detector inventory for Choir Doctrine. It is not yet a
-CI-enforced check. Failing enforcement, generated ledgers, and allowlist syntax
-are deferred to the next code-bearing detector paramission because those changes
+This file is the current detector inventory for Choir Doctrine. The discovery-
+mode CI check (`scripts/check-heresies.sh` and `.github/workflows/ci.yml`)
+reports counts without failing. Fail-on-regression enforcement, generated
+ledgers, and typed allowlist syntax are deferred per phase because those changes
 would alter repo process behavior.
 
 Reduction rule: counts are evidence, not ontology. A count decrease supports a
@@ -31,6 +32,7 @@ framing.
 | H029 | Browser source-gathering residue | `Browser app`, `BrowserApp`, `browser_sessions`, `AppHint: "browser"`, `open_surface: "browser"` | 0 current product-surface hits | Browser names may remain only as transitional implementation names for Web Lens/source work. |
 | H030 | actor runtime database polling | `log.Unprocessed` | 0 active warm-loop hits | Repaired 2026-06-27; remaining hits should be cold-start replay, post-drain overflow, or Sweep boot recovery, not warm-loop polling. Registry row update only. |
 | H031 | route resolves to VM/desktop identity | `UniversalWirePlatformOwnerID`, `UniversalWirePlatformDesktopID`, `ResolveDesktopContext`, `route_profile` | 0 product-route hits | See `docs/choir-doctrine.md` H031; Banned Patterns list #16. The `route_profile` hits need allowlist context for the parser implementation itself and tests. |
+| I4 | destructive embedded rollback guard | `CALL DOLT_RESET` | 0 production (non-test, non-adapter) hits | `DoltPromotionAdapter` and `*_test.go` are excluded by design; `DOLT_RESET --hard` against embedded main is not an admissible production rollback. exclude: *_test.go, dolt_promotion_adapter.go |
 | framing | retired root ontology | `personal writing system`, `publishing system`, `AI workspace`, `workflow app`, `StoryGraph`, `chat` | 0 current-root hits | Surface or historical usage is acceptable when explicitly labeled. |
 
 ## Baseline Counts
@@ -71,12 +73,14 @@ trusted.
 ## Deferred Enforcement
 
 
-Required work:
+Done (Phase A):
 
 - create a structured detector manifest consumed by a script;
-- classify allow contexts (`historical-evidence`, `doctrine-detector`,
-  `explicitly-deprecated`, `implementation-transitional`, `current-violation`);
-- generate a heresy ledger with `discovered`, `introduced`, and `repaired`
-  deltas;
-- fail on unaccepted count increases for protected detector families;
-- wire the check into docs/process CI only after the baseline is reviewed.
+- wire the discovery check into the `check` CI gate.
+
+Still deferred (Phase B/E): classify allow contexts
+(`historical-evidence`, `doctrine-detector`, `explicitly-deprecated`,
+`implementation-transitional`, `current-violation`); generate a heresy ledger
+with `discovered`, `introduced`, and `repaired` deltas; fail on unaccepted count
+increases for protected detector families; promote `scripts/check-heresies.sh`
+from `--report` to `--fail-on-regression` after the baseline is reviewed.
