@@ -342,9 +342,12 @@ in
         # through vmctl instead of using the static sandbox URL
         # (VAL-VM-001, VAL-VM-002).
         "PROXY_VMCTL_URL=http://127.0.0.1:8083"
-        # Must exceed VM_BOOT_READY_TIMEOUT so cold user-computer boots can
-        # finish readiness probing instead of timing out in the proxy first.
-        "PROXY_VMCTL_TIMEOUT=180s"
+        # Bounded fail-fast timeout for the proxy -> vmctl resolve path. A hung
+        # or slow vmctl resolve returns a legible 504 to the caller within 60s
+        # instead of keeping the public request open for the full boot wait.
+        # Cold computer boot completion is handled by vmctl's
+        # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
+        "PROXY_VMCTL_TIMEOUT=60s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
       ];
