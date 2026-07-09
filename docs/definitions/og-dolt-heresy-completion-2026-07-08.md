@@ -386,7 +386,7 @@ determined_state:
     - claim: W1 detector manifest + CI discovery is wired. `docs/heresy-detectors.md` includes H030/H031 and the I4 destructive-rollback guard; `scripts/check-heresies.sh` parses the manifest and supports per-row path exclusions; the `Heresy Detector Discovery` CI job reports counts in the `check` gate.
       source: observed
       execution_effect: H031/I4 binding is in CI discovery; fail-on-regression enforcement is deferred per phase.
-    - claim: W3 landing-loop evidence for e393eb5c/e5c1d38a is recorded: both commits are in main history, their own CI runs were cancelled/failed, the deployed SHA is `1ed41f2b`, the lineage resolver is not active in staging (no `PROXY_RUNTIME_DB_PATH`), and no production binary configures the promotion adapter.
+    - claim: W3 landing-loop evidence for e393eb5c/e5c1d38a is recorded: both commits are in main history, their own CI runs were cancelled/failed, observed deploys are `67fff296` (first 60s timeout, 2026-07-09T04:56:18Z), `1ed41f2b` (2026-07-09T05:12:21Z), and `14f56211` (2026-07-09T05:42:19Z), the lineage resolver is not active in staging (no `PROXY_RUNTIME_DB_PATH`), and no production binary configures the promotion adapter.
       source: observed (CI logs, staging health, grep)
       execution_effect: seam labels are accurate; W3 closed.
     - claim: WithPromotionAdapter has zero cmd/ callers; adapter is dead in production.
@@ -858,17 +858,17 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: Phase A exit panel round 3 completed; adjudication updated and W3 deployed identity time-scoped; pending round 4 confirmation
+  last_checkpoint: Phase A exit panel round 4 completed; D1/D2 adjudication accuracy and snapshot time-scoping fixed; pending round 5 confirmation
   current_artifact_state: >-
     Phase A deliverables committed: W1 detector manifest + CI discovery job
     (including the I4 destructive-rollback guard), W2 proxy/vmctl timeout
     hardening with staging 504 proof, W3 seam-commit landing-loop evidence,
     C1–C7 doc truth corrections, D-PROMO pinned-connection branch-isolation
     settlement, S1 spec↔adapter scope/conformance note, and P-TRIAGE past-mission
-    open-edge table. Phase A exit panel round 3 completed: the adjudication was
-    corrected to include all round 1/2/3 findings and verdicts, and the W3
-    deployed identity was time-scoped to avoid evergreen "current" claims.
-    D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled.
+    open-edge table. Phase A exit panel round 4 completed: the adjudication was
+    corrected to accurately record opencode verdicts and round counts, and the
+    Determined State Snapshot W3 claim was time-scoped to match the evidence
+    ledger. D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -890,14 +890,15 @@ run_checkpoint_and_resumption_state:
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
   next_executable_probe: >-
-    Phase A exit panel round 4 (delta-3 review) on the corrected adjudication and
-    time-scoped W3 deployed identity; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
+    Phase A exit panel round 5 (delta-4 review) on the corrected adjudication and
+    time-scoped Determined State Snapshot; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
     - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + updated adjudication)
     - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/ (Phase A exit panel round 2)
     - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/ (Phase A exit panel round 3)
+    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-3/ (Phase A exit panel round 4)
     - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
     - docs/assessment-overall-state-2026-07-07.md
   rollback_refs:

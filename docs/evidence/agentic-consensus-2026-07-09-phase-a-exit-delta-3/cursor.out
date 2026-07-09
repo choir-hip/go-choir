@@ -1,0 +1,51 @@
+1. **Verdict: conditional** for Phase A exit
+
+C1 is fixed. C2 is only partially fixed: the W3 evidence ledger and W2 proof prose are time-scoped, but the Determined State Snapshot still asserts a present-tense deployed SHA.
+
+---
+
+2. **Category-(a) phase-exit defects**
+
+**A1. Determined State Snapshot still has a non-time-scoped W3 deployed identity**
+
+`497989f7` fixed the evidence ledger and W2 proof wording, but left the snapshot claim as present-tense `the deployed SHA is 1ed41f2b` with no observation timestamp and no scroll sequence. Same defect class as round-3 C2.
+
+Required fix: rewrite that settled claim to the same time-scrolled sequence used in the ledger (`67fff296` @ 04:56:18Z → `1ed41f2b` @ 05:12:21Z → `14f56211` @ 05:42:19Z), or drop the SHA from the snapshot and point at the ledger.
+
+---
+
+3. **Category-(b) new definition nodes**
+
+**B1. Detector fail-on-regression / typed-allowlist semantics** — already deferred in `docs/heresy-detectors.md` Deferred Enforcement; keep registered for Phase B/E. Do not treat nonzero discovery counts as Phase A failure.
+
+---
+
+4. **Category-(c) out-of-scope noise**
+
+- W2 proof JSON still shows only `67fff296`; surrounding prose time-scopes the sequence — not a blocker.
+- I1/H031 still violated; I2/tag-only adapter still non-conformant; D-STORE still open — correctly outside Phase A exit bar.
+- Nonzero I4 discovery hits expected under discovery mode.
+- Adjudication C1 metadata (devin conditional, opencode logs-only, A3/A7 rows) is accurate.
+
+---
+
+5. **Confidence: high**
+
+Grounded in direct file reads of definition, adjudication, W2 proof, CI workflow, S1 scope header, and P-TRIAGE table. Live `/health` was not re-fetched this round; not required for A1.
+
+---
+
+6. **Specific repo evidence**
+
+| Check | Result | Evidence |
+|---|---|---|
+| C1 adjudication | Fixed | `adjudication.md:5` — codex failed, devin conditional, opencode logs-only; `:13-19` A3/A7 present; `:41-52` round 3 C1/C2 recorded |
+| C2 ledger / W2 proof | Fixed | Definition `:737-743` time-scrolled sequence + “not an evergreen current identity”; `w2-timeout-staging-proof-2026-07-09.md:19-24` same |
+| C2 snapshot | **Not fixed** | Definition `:389` — `the deployed SHA is 1ed41f2b` (present tense, no timestamp) |
+| W1 detectors in CI | Met | `docs/heresy-detectors.md:5-9,35`; `.github/workflows/ci.yml:206-229,235` |
+| W2 timeouts | Met | I3 `:213-224`; W2 proof `:53-69` `max_duration_ms: 60001` |
+| S1 scoped | Met | `specs/promotion_protocol.tla:39-49` |
+| P-TRIAGE | Met | Definition `:596-624`; variant `:451` `past_mission_open_edges_untriaged: 0` |
+| Corrections / D-PROMO | Met | Snapshot `:383-403`; D-PROMO node settled; C1–C7 claimed settled |
+
+**Bottom line:** Do not clear Phase A until the Determined State Snapshot W3 SHA claim is time-scoped to match the ledger.

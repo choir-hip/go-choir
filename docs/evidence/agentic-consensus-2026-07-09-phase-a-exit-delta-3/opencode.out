@@ -1,0 +1,283 @@
+[0m
+> build · mimo-v2.5-free
+[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+[0m→ [0mRead docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md
+[0m→ [0mRead docs/evidence/w2-timeout-staging-proof-2026-07-09.md
+Let me read the key files to assess the Phase A exit state.
+[0m✱ [0mGlob "docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/**"[90m 12 matches[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md[90m [offset=769][0m
+Let me read the rest of the definition and check the git log for the fix commit.
+[0m
+[0m$ [0mgit log --oneline -20
+497989f7 Phase A exit panel round 3 follow-ups: accurate adjudication and time-scoped W3 identity.
+49857759 Phase A exit panel round 2 follow-ups: I3/D-PROMO alignment + adjudication.
+14f56211 Phase A exit panel round 1 fixes: I4 detector, truth rollforward, stale state.
+6e6f3753 Record Phase A exit panel (round 1) and fix substrate-hardening fence.
+7cd82647 P-TRIAGE: add past-mission open-edge triage table to og-dolt definition.
+1ed41f2b S1: reconcile promotion_protocol.tla with adapter scope.
+1d76a4b6 C1-C7: doc truth corrections for Phase A.
+ddee16c6 W3: record landing-loop evidence for seam commits e393eb5c/e5c1d38a.
+5663dc03 W2: add staging 504 proof evidence.
+67fff296 W2: bind staging proxy vmctl timeout to the 60s fail-fast default.
+b878dfac Fix Nix source filters: use base subdirs and refresh proxy vendorHash.
+e9433597 W2: timeout hardening for proxy/vmctl request path.
+6801dbfe Fix Nix Go service source filters and darwin Capsule stub.
+02937208 W1: heresy detector manifest + CI discovery job.
+a72dc3a2 D-PROMO settlement: pinned-connection branch isolation passes -count=10.
+a58ef199 docs: final mission-readiness micro-fixes and evidence.
+1756e5c7 docs: micro-fixes from mission-readiness recheck-2.
+23d1bd65 docs: re-readiness pass — close stale-claim and self-adjudication blockers.
+a6246cd2 docs: close mission-readiness blockers and extend heresy detector manifest.
+0361e884 docs: normalize internal markdown links after archive sweep.
+[0m
+[0m$ [0mgit show --stat 497989f7
+commit 497989f727956e21ebf2774c4125dc267c7120da
+Author: Yusef Mosiah Nathanson <yusefnathanson@me.com>
+Date:   Thu Jul 9 01:48:29 2026 -0400
+
+    Phase A exit panel round 3 follow-ups: accurate adjudication and time-scoped W3 identity.
+    
+    - Correct the `adjudication.md` to accurately record all round 1/2/3 panel
+      verdicts, including devin's `conditional` output, opencode logs-only, and the
+      A3 heresy-detector-prose and A7 time-scoped deployed SHA findings.
+    - Time-scope the W3 deployed SHA in the definition evidence ledger and in
+      `docs/evidence/w2-timeout-staging-proof-2026-07-09.md` to avoid evergreen
+      "current" claims; record the observed sequence `67fff296` -> `1ed41f2b` ->
+      `14f56211` with the same 60s timeout bound.
+    - Add the round 3 panel raw outputs.
+    
+    Generated with [Devin](https://devin.ai)
+    
+    Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+
+ .../og-dolt-heresy-completion-2026-07-08.md        |  33 +--
+ .../cursor.cmd                                     |   1 +
+ .../cursor.out                                     |  46 ++++
+ .../manifest.tsv                                   |   6 +
+ .../omp-gemini35.cmd                               |   1 +
+ .../omp-gemini35.out                               |  64 ++++++
+ .../omp-glm52.cmd                                  |   1 +
+ .../omp-glm52.out                                  |  60 +++++
+ .../omp-gpt55.cmd                                  |   1 +
+ .../omp-gpt55.out                                  | 198 ++++++++++++++++
+ .../opencode.cmd                                   |   1 +
+ .../opencode.out                                   | 254 +++++++++++++++++++++
+ .../prompt.md                                      |  27 +++
+ .../adjudication.md                                |  34 ++-
+ .../w2-timeout-staging-proof-2026-07-09.md         |   7 +-
+ 15 files changed, 709 insertions(+), 25 deletions(-)
+[0m
+Let me verify the specific fixes by checking the current state of key files and looking at the diff.
+[0m$ [0mgit diff 497989f7^..497989f7 -- docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+diff --git a/docs/definitions/og-dolt-heresy-completion-2026-07-08.md b/docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+index 3d6d42ec..da71fadf 100644
+--- a/docs/definitions/og-dolt-heresy-completion-2026-07-08.md
++++ b/docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+@@ -735,12 +735,16 @@ Per the definition skill. Specific bindings:
+     (Node B) was cancelled. e5c1d38a CI run 28964053923 (2026-07-08T17:52:55Z)
+     completed with Deploy to Staging (Node B) successful and Generate SBOMs
+     failing. The timeout fix was first observed at deployed SHA 67fff296
+-    (2026-07-09T04:56:18Z); the current deployed SHA on choir.news is 1ed41f2b
+-    (2026-07-09T05:12:21Z). Staging proxy log shows no "route resolver: wired
+-    lineage-based resolver" line; nix/node-b.nix does not set
+-    PROXY_RUNTIME_DB_PATH, so the proxy uses the hard-coded VM identity fallback.
+-    grep for DoltPromotionAdapter or WithPromotionAdapter under cmd/ returns zero
+-    hits; no production binary configures the promotion adapter.
++    (2026-07-09T04:56:18Z). A later deploy at 1ed41f2b (2026-07-09T05:12:21Z)
++    and the live staging health check at 14f56211 (2026-07-09T05:42:19Z) both
++    show the same 60s bound (`api.resolve.max_duration_ms: 60024`). The
++    deployed SHA changes with each CI deploy; the W3 evidence is the
++    time-scrolled sequence of observed deploys, not an evergreen "current"
++    identity. Staging proxy log shows no "route resolver: wired lineage-based
++    resolver" line; nix/node-b.nix does not set PROXY_RUNTIME_DB_PATH, so the
++    proxy uses the hard-coded VM identity fallback. grep for DoltPromotionAdapter
++    or WithPromotionAdapter under cmd/ returns zero hits; no production binary
++    configures the promotion adapter.
+   result: >-
+     e393eb5c and e5c1d38a are in main history and are present on Node B via
+     later deploys, but their own CI runs were not clean green/cancelled. The
+@@ -854,17 +858,17 @@ logs.
+ ```yaml
+ run_checkpoint_and_resumption_state:
+   status: working
+-  last_checkpoint: Phase A exit panel round 2 completed; I3/D-PROMO evidence aligned and adjudication committed; pending round 3 confirmation
++  last_checkpoint: Phase A exit panel round 3 completed; adjudication updated and W3 deployed identity time-scoped; pending round 4 confirmation
+   current_artifact_state: >-
+     Phase A deliverables committed: W1 detector manifest + CI discovery job
+     (including the I4 destructive-rollback guard), W2 proxy/vmctl timeout
+     hardening with staging 504 proof, W3 seam-commit landing-loop evidence,
+     C1–C7 doc truth corrections, D-PROMO pinned-connection branch-isolation
+     settlement, S1 spec↔adapter scope/conformance note, and P-TRIAGE past-mission
+-    open-edge table. Phase A exit panel round 2 completed: category-(a) findings
+-    from round 1 fixed, I3/D-PROMO evidence ledger aligned with the settled
+-    state, and the Phase A exit adjudication committed. D-STORE storage fork
+-    remains unresolved; D-PROMO and D-WIRE settled.
++    open-edge table. Phase A exit panel round 3 completed: the adjudication was
++    corrected to include all round 1/2/3 findings and verdicts, and the W3
++    deployed identity was time-scoped to avoid evergreen "current" claims.
++    D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled.
+   what_shipped:
+     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
+     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
+@@ -886,13 +890,14 @@ run_checkpoint_and_resumption_state:
+   remaining_error_field: see Variant below
+   highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
+   next_executable_probe: >-
+-    Phase A exit panel round 3 (delta-2 review) on the adjudication and I3/D-PROMO
+-    alignment; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
++    Phase A exit panel round 4 (delta-3 review) on the corrected adjudication and
++    time-scoped W3 deployed identity; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
+   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
+   evidence_artifact_refs:
+     - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
+-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + adjudication)
++    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + updated adjudication)
+     - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/ (Phase A exit panel round 2)
++    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/ (Phase A exit panel round 3)
+     - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
+     - docs/assessment-overall-state-2026-07-07.md
+   rollback_refs:
+[0m
+[0m$ [0mgit diff 497989f7^..497989f7 -- docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md
+diff --git a/docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md b/docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md
+index 3d885ce9..ac71bdb4 100644
+--- a/docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md
++++ b/docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md
+@@ -2,9 +2,9 @@
+ 
+ ## Round 1 panel (2026-07-09)
+ 
+-- **Panel:** codex (CLI error), devin (no output), cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52
++- **Panel:** codex (CLI failed), cursor (`conditional`), devin (`conditional`), opencode (logs only, no final verdict), omp-gpt55 (`conditional`), omp-gemini35 (`conditional`), omp-glm52 (`conditional`).
+ - **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/`
+-- **Verdict:** `conditional` (clear majority)
++- **Verdict:** `conditional` (clear majority; codex failed, opencode did not produce a verdict)
+ 
+ ### Category-(a) findings and resolutions
+ 
+@@ -12,20 +12,23 @@
+ |---|---|---|---|
+ | A1 | Missing I4 `DOLT_RESET` / destructive-rollback detector in `docs/heresy-detectors.md` | Phase A exit defect | Added `I4` row with pattern `CALL DOLT_RESET` and per-row `exclude:` glob support in `scripts/check-heresies.sh` to ignore `*_test.go` and `dolt_promotion_adapter.go`. |
+ | A2 | `Variant` metric `heresy_families_without_ci_detector: 31` contradicted the claimed W1 CI discovery ship | truth defect | Split the metric: `heresy_families_without_ci_detector: 0` (discovery wired for 12 aggregate families) and `heresy_families_without_ci_enforcement: 12` (fail-on-regression deferred per phase). |
+-| A3 | `Determined State Snapshot` still listed W3/H031 as open while evidence showed them closed | truth defect | Refreshed the snapshot; moved W3, H031, S1, and cross-substrate relabeling to `settled`; only `storage-fork (D-STORE)` remains in `open`. |
+-| A4 | `docs/current-architecture.md` and `README.md` still described D-PROMO as "under test" and W2 as "pending" | truth defect | Rolled both truth-doc claims forward to reflect D-PROMO settled at the pinned-connection/single-writer assumption level and W2 proven in staging. |
+-| A5 | `docs/choir-grip-checkpoint-2026-07-07.md` was not registered as a narrative doc | truth defect | Added it to `docs/README.md` as a narrative grip checkpoint and registered it in `docs/doc-authority-manifest.yaml` with `doc_role: narrative` and `authority: none`. |
++| A3 | `docs/heresy-detectors.md` header and deferred-enforcement prose still described the detector manifest as "not yet a CI-enforced check" even though the discovery script and CI job were already wired | truth defect | Updated the header and `Deferred Enforcement` section to show the discovery CI check is wired and fail-on-regression/allowlists are deferred per phase. |
++| A4 | `Determined State Snapshot` still listed W3/H031 as open while evidence showed them closed | truth defect | Refreshed the snapshot; moved W3, H031, S1, and cross-substrate relabeling to `settled`; only `storage-fork (D-STORE)` remains in `open`. |
++| A5 | `docs/current-architecture.md` and `README.md` still described D-PROMO as "under test" and W2 as "pending" | truth defect | Rolled both truth-doc claims forward to reflect D-PROMO settled at the pinned-connection/single-writer assumption level and W2 proven in staging. |
++| A6 | `docs/choir-grip-checkpoint-2026-07-07.md` was not registered as a narrative doc | truth defect | Added it to `docs/README.md` as a narrative grip checkpoint and registered it in `docs/doc-authority-manifest.yaml` with `doc_role: narrative` and `authority: none`. |
++| A7 | W3 evidence / Run Checkpoint used a stale `67fff296` as the "current deployed SHA" and the timeout evidence doc used the same stale identity | truth defect | Updated the W3 evidence ledger to record the deployed SHA progression (`67fff296` first 60s observation, `1ed41f2b` later deploy, and `14f56211` at the time of the round-3 review). Time-scoped the identity claim so it is not asserted as an evergreen "current" value. |
+ 
+ ### Category-(c) noise
+ 
+ - `docs/missions/substrate-hardening-v0.md` had a duplicate closing code fence (fixed in `6e6f3753`).
+-- Heresy detector counts include manifest/docs self-hits; discovery-mode counts are evidence, not production violations.
++- Heresy detector counts include manifest/docs/evidence self-hits; discovery-mode counts are evidence, not production violations.
++- The `I4` detector reports non-zero hits because the literal `CALL DOLT_RESET` appears in the manifest, in the panel output evidence files, and in the adapter source; the row's `exclude:` list removes `*_test.go` and `dolt_promotion_adapter.go`, and its `target` is `0 production (non-test, non-adapter) hits`.
+ 
+ ## Round 2 panel (delta, 2026-07-09)
+ 
+-- **Panel:** cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52
++- **Panel:** cursor (`conditional`), opencode (logs only, no final verdict), omp-gpt55 (`clear`), omp-gemini35 (`clear`), omp-glm52 (`clear`).
+ - **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/`
+-- **Verdicts:** `conditional` (cursor), `clear` (gpt55, gemini35, glm52); opencode produced logs without a final verdict.
++- **Verdicts:** `conditional` (cursor); `clear` (majority of returning agents)
+ 
+ ### Category-(a) findings and resolutions
+ 
+@@ -35,6 +38,19 @@
+ | B2 | Evidence ledger still said D-PROMO was "strengthened to testing" and the pinned-connection test was "not yet independently reproduced" | truth defect | Updated evidence-ledger entries to reflect D-PROMO settled by `go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` (10/10 passes). |
+ | B3 | No committed Phase Gate adjudication table | process defect | This file. |
+ 
++## Round 3 panel (delta-2, 2026-07-09)
++
++- **Panel:** cursor (`clear`), opencode (logs only, no final verdict), omp-gpt55 (`conditional`), omp-gemini35 (`clear`), omp-glm52 (`clear`).
++- **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/`
++- **Verdicts:** `clear` (cursor, gemini35, glm52); `conditional` (gpt55)
++
++### Category-(a) findings and resolutions
++
++| # | Finding | Category | Resolution |
++|---|---|---|---|
++| C1 | Adjudication table under-counted round 1 findings (listed devin as "no output", omitted A3/A7, and did not record opencode as having no final verdict) | process defect | This updated adjudication table: now records codex failed, devin conditional, opencode logs-only, all panel verdicts, and adds the A3 heresy-detector prose and A7 time-scoped deployed SHA findings. |
++| C2 | W3 evidence ledger still used a non-time-scoped "current deployed SHA" claim (`1ed41f2b`) that was superseded by live staging at `14f56211` at the time of the round-3 review | truth defect | Replaced the evergreen "current deployed SHA" wording with a time-scoped observation: `67fff296` first 60s observation, `1ed41f2b` at 2026-07-09T05:12:21Z, `14f56211` at 2026-07-09T05:42:19Z; all deploys show the same 60s timeout bound. |
++
+ ## Final disposition
+ 
+-All round 1 and round 2 category-(a) findings are resolved. Phase A exit is cleared subject to a follow-up delta panel confirming the above resolutions.
++All round 1, round 2, and round 3 category-(a) findings are resolved. Phase A exit is cleared subject to a follow-up delta panel confirming the above resolutions and the updated W3 deployed identity.
+[0m
+[0m$ [0mgit diff 497989f7^..497989f7 -- docs/evidence/w2-timeout-staging-proof-2026-07-09.md
+diff --git a/docs/evidence/w2-timeout-staging-proof-2026-07-09.md b/docs/evidence/w2-timeout-staging-proof-2026-07-09.md
+index 803cbbb5..34fa5130 100644
+--- a/docs/evidence/w2-timeout-staging-proof-2026-07-09.md
++++ b/docs/evidence/w2-timeout-staging-proof-2026-07-09.md
+@@ -17,8 +17,11 @@
+ ```
+ 
+ Observed from `https://choir.news/health` after the CI deploy to Node B. The
+-current deployed SHA is `1ed41f2b05e1d6b94a0025e6e62ae22be210c605` (2026-07-09T05:12:21Z);
+-`67fff296` is the first deploy at which the 60s timeout was observed.
++first deploy at which the 60s timeout was observed is `67fff296` (2026-07-09T04:56:18Z).
++A later deploy at `1ed41f2b` (2026-07-09T05:12:21Z) and the live staging health check
++at `14f56211` (2026-07-09T05:42:19Z) both show the same 60s bound
++(`api.resolve.max_duration_ms` around `60001`/`60024`). The deployed SHA changes with
++each CI deploy; the W2 evidence is the time-scrolled sequence of observed deploys.
+ 
+ ## What changed
+[0m
+[0m✱ [0mGrep "A3.*heresy-detector"[90m in docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md · 3 matches[0m
+[0m✱ [0mGrep "time-scrolled|time-scoped|evergreen"[90m in docs/definitions/og-dolt-heresy-completion-2026-07-08.md · 4 matches[0m
+Now let me verify the current state of the adjudication table and check for the A3 heresy-detector prose finding that was allegedly added.
+[0m✱ [0mGrep "time-scrolled|time-scoped|evergreen"[90m in docs/evidence/w2-timeout-staging-proof-2026-07-09.md · 28 matches[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md[90m [offset=385, limit=15][0m
+Let me check one more thing - the `determined_state` section's W3 claim to see if it was also updated.
+I have enough evidence to render a verdict. Here is my review:
+
+---
+
+## 1. Verdict: **conditional**
+
+Commit `497989f7` is nearly complete but has one remaining category-(a) defect.
+
+## 2. Category-(a) phase-exit defects (must fix before Phase B)
+
+**A8: `determined_state` W3 claim still uses a singular "current deployed SHA" (`1ed41f2b`).**
+
+- **File:** `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:389`
+- **Observation:** The `determined_state.settled` block states: `"the deployed SHA is \`1ed41f2b\`"`. This is the same evergreen pattern the C2 finding identified in the evidence ledger. The fix commit updated the evidence ledger (line 737+) and the W2 timeout proof doc to use a time-scrolled sequence, but the `determined_state` snapshot was not touched.
+- **Impact:** The definition document's own state snapshot contradicts its evidence ledger's time-scoped approach. A reader of the snapshot sees a single "current" SHA; a reader of the evidence ledger sees a time-scrolled sequence. This is a truth defect internal to the same document.
+- **Fix:** Replace the singular `the deployed SHA is \`1ed41f2b\`` with a time-scoped statement consistent with the evidence ledger (e.g., `the deployed SHA sequence includes 67fff296, 1ed41f2b, 14f56211; all show the same 60s bound`).
+
+No other category-(a) findings. The adjudication table (C1 fix) is now accurate across all three rounds. The W3 evidence ledger and W2 timeout proof doc are properly time-scoped.
+
+## 3. Category-(b) new definition nodes (register, don't silently absorb)
+
+None. All findings are truth corrections to existing nodes, not new definitions.
+
+## 4. Category-(c) out-of-scope noise (record and drop)
+
+- Minor terminology variance: the definition doc uses "time-scrolled" (evidence ledger, line 742) while the adjudication table and checkpoint use "time-scoped" (lines 19, 51, 861, 870). These describe the same concept; no semantic divergence. Drop.
+- The `unproven_or_partial_claims` block (line 887) still says "D-STORE storage-fork six questions" which is correct and not a defect — D-STORE is intentionally unresolved.
+
+## 5. Confidence: **high**
+
+Direct file reads, git diff verification of commit `497989f7`, and grep for the specific patterns raised by the round-3 conditional panelist. The single remaining defect is a concrete line-level omission.
+
+## 6. Specific repo evidence
+
+| Finding | File:Line | Observation |
+|---|---|---|
+| A8 (remaining defect) | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:389` | `the deployed SHA is \`1ed41f2b\`` — singular, non-time-scoped |
+| C1 fix verified | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:5-7` | Round 1 panel now lists: codex failed, devin conditional, opencode logs-only |
+| C1 fix verified | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:15` | A3 heresy-detector prose finding recorded |
+| C1 fix verified | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:19` | A7 time-scoped deployed SHA finding recorded |
+| C2 fix verified | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:737-744` | W3 evidence ledger uses time-scrolled sequence (`67fff296` → `1ed41f2b` → `14f56211`) |
+| C2 fix verified | `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:19-24` | W2 doc uses time-scrolled sequence |
+| Phase A bar: detectors | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:386-388` | W1 settled, CI discovery wired |
+| Phase A bar: timeouts | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:383-385` | W2 settled, I3 satisfied |
+| Phase A bar: S1 | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:398-400` | S1 settled with scope/conformance note |
+| Phase A bar: P-TRIAGE | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:598-624` | Triage table complete, all edges dispositioned |
+
+**Recommended next action:** Fix the `determined_state` W3 claim at line 389 to match the time-scoped approach, then re-run a delta-4 panel on the single-line change. On clear, proceed to Phase B.

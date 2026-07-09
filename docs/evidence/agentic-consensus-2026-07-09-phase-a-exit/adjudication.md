@@ -2,9 +2,9 @@
 
 ## Round 1 panel (2026-07-09)
 
-- **Panel:** codex (CLI failed), cursor (`conditional`), devin (`conditional`), opencode (logs only, no final verdict), omp-gpt55 (`conditional`), omp-gemini35 (`conditional`), omp-glm52 (`conditional`).
+- **Panel:** codex (CLI failed), cursor (`conditional`), devin (`conditional`), opencode (`conditional`), omp-gpt55 (`conditional`), omp-gemini35 (`conditional`), omp-glm52 (`conditional`).
 - **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/`
-- **Verdict:** `conditional` (clear majority; codex failed, opencode did not produce a verdict)
+- **Verdict:** `conditional` (unanimous among returning agents; codex failed)
 
 ### Category-(a) findings and resolutions
 
@@ -40,17 +40,30 @@
 
 ## Round 3 panel (delta-2, 2026-07-09)
 
-- **Panel:** cursor (`clear`), opencode (logs only, no final verdict), omp-gpt55 (`conditional`), omp-gemini35 (`clear`), omp-glm52 (`clear`).
+- **Panel:** cursor (`clear`), opencode (`clear`), omp-gpt55 (`conditional`), omp-gemini35 (`clear`), omp-glm52 (`clear`).
 - **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/`
-- **Verdicts:** `clear` (cursor, gemini35, glm52); `conditional` (gpt55)
+- **Verdicts:** `clear` (cursor, opencode, gemini35, glm52); `conditional` (gpt55)
 
 ### Category-(a) findings and resolutions
 
 | # | Finding | Category | Resolution |
 |---|---|---|---|
-| C1 | Adjudication table under-counted round 1 findings (listed devin as "no output", omitted A3/A7, and did not record opencode as having no final verdict) | process defect | This updated adjudication table: now records codex failed, devin conditional, opencode logs-only, all panel verdicts, and adds the A3 heresy-detector prose and A7 time-scoped deployed SHA findings. |
+| C1 | Adjudication table under-counted round 1 findings (listed devin as "no output", omitted A3/A7, and did not record opencode round 1 as `conditional`) | process defect | This updated adjudication table: now records codex failed, devin conditional, opencode round 1 `conditional`, all panel verdicts, and adds the A3 heresy-detector prose and A7 time-scoped deployed SHA findings. |
 | C2 | W3 evidence ledger still used a non-time-scoped "current deployed SHA" claim (`1ed41f2b`) that was superseded by live staging at `14f56211` at the time of the round-3 review | truth defect | Replaced the evergreen "current deployed SHA" wording with a time-scoped observation: `67fff296` first 60s observation, `1ed41f2b` at 2026-07-09T05:12:21Z, `14f56211` at 2026-07-09T05:42:19Z; all deploys show the same 60s timeout bound. |
+
+## Round 4 panel (delta-3, 2026-07-09)
+
+- **Panel:** cursor (`conditional`), opencode (`conditional`), omp-gpt55 (`conditional`), omp-gemini35 (`clear`), omp-glm52 (`clear`).
+- **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-3/`
+- **Verdicts:** `clear` (gemini35, glm52); `conditional` (cursor, opencode, gpt55)
+
+### Category-(a) findings and resolutions
+
+| # | Finding | Category | Resolution |
+|---|---|---|---|
+| D1 | Adjudication table still inaccurately recorded opencode round 1 as `logs only` and round 3 as `logs only`, and under-counted round 3 verdicts as `3 clear / 1 conditional` | process defect | Updated adjudication: round 1 opencode is `conditional`; round 3 opencode is `clear`; round 3 verdicts are `4 clear / 1 conditional`. |
+| D2 | `Determined State Snapshot` still asserted a present-tense `the deployed SHA is 1ed41f2b` without a timestamp or scroll sequence | truth defect | Rewrote the snapshot W3 claim to use the time-scrolled sequence `67fff296` (first 60s timeout), `1ed41f2b` (2026-07-09T05:12:21Z), and `14f56211` (2026-07-09T05:42:19Z), matching the evidence ledger. |
 
 ## Final disposition
 
-All round 1, round 2, and round 3 category-(a) findings are resolved. Phase A exit is cleared subject to a follow-up delta panel confirming the above resolutions and the updated W3 deployed identity.
+All round 1–4 category-(a) findings are resolved. Phase A exit is cleared subject to a follow-up delta panel confirming the D1/D2 resolutions.
