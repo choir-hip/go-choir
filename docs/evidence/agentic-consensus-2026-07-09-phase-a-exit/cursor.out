@@ -1,0 +1,75 @@
+## Phase A Exit Review (independent panelist)
+
+### 1. Verdict: **conditional**
+
+Most claimed deliverables are present in-repo. Phase A should not clear until the category-(a) items below are fixed and the definition’s Determined State / Variant are reconciled with the Run Checkpoint.
+
+---
+
+### 2. Category-(a) — must fix before Phase B
+
+**A1. W1 incomplete: no `DOLT_RESET --hard` I4 detector**  
+Phase A W1 explicitly requires a detector for `DOLT_RESET --hard` in production (non-test) paths as the I4 guard.  
+- Evidence: `rg DOLT_RESET docs/heresy-detectors.md` → no matches; manifest table ends at H031 + framing; no I4 row.  
+- `scripts/check-heresies.sh` only parses that table, so CI cannot discover this pattern.
+
+**A2. C6 incomplete: grip checkpoint not registered as narrative layer**  
+B1 / C6 require the docs index / authority manifest to record `choir-grip-checkpoint-2026-07-07.md` as narrative (non-overriding).  
+- Evidence: `docs/doc-authority-manifest.yaml` has no `choir-grip-checkpoint` path.  
+- `docs/README.md` never names that file as narrative authority; it only uses “grip checkpoint” as a metaphor for the README itself (lines 62–63).  
+- File exists at `docs/choir-grip-checkpoint-2026-07-07.md` but is unregistered.
+
+**A3. Definition self-contradiction: Determined State vs Variant / Run Checkpoint**  
+Claimed Phase A exit is not internally consistent.  
+- Determined State still asserts: “Timeout hardening is unbuilt…”, “`scripts/check-heresies.sh` and the CI discovery job do not yet exist”, W3 “open” (lines ~380–425).  
+- Variant / Run Checkpoint claim those closed (`unbounded_request_paths: 0`, W1–W3 shipped).  
+- Gate cannot clear on a document that simultaneously claims Phase A done and Phase A unbuilt.
+
+**A4. Variant metric inaccurate after W1**  
+`heresy_families_without_ci_detector: 31` while W1 discovery CI exists (`.github/workflows/ci.yml` `heresy-detector` job + `scripts/check-heresies.sh`). Either the metric means fail-on-regression (then rename/comment it) or it should drop. As written it falsifies the Variant progress claim.
+
+**A5. `docs/heresy-detectors.md` stale process claims**  
+Header still says detectors are “not yet a CI-enforced check”; Deferred Enforcement still lists “create a structured detector manifest consumed by a script” as required work — but the script and CI job exist. Doc-truth defect on the W1 surface itself.
+
+---
+
+### 3. Category-(b) — register, don’t silently absorb
+
+**B1. W6 conformance binding** — S1 scope header correctly marks BranchIsolation as a target-state gap; full “spec implemented” binding remains Phase D. Keep as an explicit open node (already implied by I2 / Phase D), not as Phase A complete.
+
+**B2. Detector family coverage holes** — Manifest has no dedicated rows for H013, H015–H018, H020–H021, H023, H025 (some may be folded into other families). Discovery ≠ full H001–H031 coverage. Register as a Phase B+ detector-completeness node if families are meant to be exhaustive.
+
+**B3. Discovery soft-skip** — `scripts/check-heresies.sh` exits 0 if `python3`/`rg` missing. Fine for discovery, but register that “CI green” ≠ “detectors ran” unless the job always installs both (CI does install `rg`; python assumed).
+
+---
+
+### 4. Category-(c) — record and drop
+
+- Seam commits’ own CI not clean green (e393eb5c cancelled; e5c1d38a SBOM fail) — W3 already records this; not a Phase A exit blocker.  
+- W2 “fast” = ~60s bound (not sub-second) — matches Phase A 30–60s bar; evidence is metrics/logs, not a captured HTTP body. Acceptable.  
+- `heresy-detector` in `needs` of the aggregate check job — still report-only (script exits 0); not fail-on-regression theater.  
+- D-STORE still unresolved — correctly out of Phase A exit bar.  
+- Live H031 / route-over-CV still violated — Phase D work; W3 correctly records fallback active.
+
+---
+
+### 5. Confidence: **medium**
+
+High on file/grep verification of W1–W3/C1–C5/C7/S1/P-TRIAGE artifacts. Medium because: (1) could not re-run `go test -count=10` in this session; (2) did not re-probe live `choir.news` health; (3) C6 gap and Determined State staleness are clear, severity of A4 depends on metric semantics.
+
+---
+
+### 6. Deliverable-by-deliverable evidence
+
+| Claim | Status | Evidence |
+|---|---|---|
+| **W1** H030/H031 + script + CI | Partial | `docs/heresy-detectors.md:32–33` H030/H031 rows; `scripts/check-heresies.sh` parses manifest; `.github/workflows/ci.yml:206–229` discovery job. **Missing:** DOLT_RESET I4 detector (A1); stale deferred text (A5). |
+| **W2** timeouts + staging proof | Met | `internal/proxy/config.go` `DefaultVmctlTimeout = 60s`; `internal/server/server.go` Read/WriteTimeout defaults 120s; `nix/node-b.nix:350` `PROXY_VMCTL_TIMEOUT=60s`; `start-services.sh:126` default 60s; `docs/evidence/w2-timeout-staging-proof-2026-07-09.md` deploy `67fff296`, `api.resolve` max `60001`, timeout→504 path. |
+| **W3** seam landing evidence | Met | Evidence ledger (~729–747): CI run IDs, deploy SHA, no lineage log / no `PROXY_RUNTIME_DB_PATH` in nix, zero `WithPromotionAdapter` under `cmd/`. |
+| **C1–C7** | Mostly met; **C6 fail** | C1: `docs/current-architecture.md` “designed, not built”. C2: headless candidate-verb gate. C3: H031 + Banned #16 (`docs/choir-doctrine.md:1173+`, `:1223`). C4: both missions `checkpoint_incomplete`. C5: archive supersession + `mission-graph.yaml` superseded nodes + manifest entries. C7: root `README.md` “human-improving, machine-compounding mainframe”. **C6:** grip file unregistered (A2). |
+| **D-PROMO** | Artifact present; run not re-verified here | `internal/computerversion/dolt_branch_isolation_pinned_test.go` exists with `-count=10` bar; adapter comment corrected (`dolt_promotion_adapter.go:18–25`). Independent re-run of the test not executed in this review. |
+| **S1** | Met for Phase A scope bar | `specs/promotion_protocol.tla:39–49` Scope and conformance: target-state, storage-layer assumption, D-PROMO test ref, tag-only gap. |
+| **P-TRIAGE** | Met | Table at definition ~596–624; rows dispositioned `absorbed:` / `retired` / `external:` with pointers. |
+| **Variant / Checkpoint** | Checkpoint OK; Variant + Determined State not | Checkpoint lists Phase A deliverables pending panel — accurate. Variant zeros for C/S1/W2/W3/P-TRIAGE match intent; `heresy_families_without_ci_detector: 31` and Determined State contradict (A3/A4). |
+
+**Bottom line:** Do not clear Phase A. Land A1–A5 (I4 detector row, C6 grip registration, refresh Determined State + Variant + heresy-detectors deferred prose), then re-panel the delta.

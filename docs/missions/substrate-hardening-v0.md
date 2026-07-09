@@ -568,7 +568,6 @@ run_checkpoint_and_resumption_state:
     - worktree /private/tmp/pgo-evaluation (PGo evaluation sandbox)
     - uncommitted changes: specs/promotion_protocol.tla, specs/promotion_protocol.cfg, internal/computerversion/types.go, internal/computerversion/contract_header.go
 ```
-```
 
 ## Suggested Goal String
 

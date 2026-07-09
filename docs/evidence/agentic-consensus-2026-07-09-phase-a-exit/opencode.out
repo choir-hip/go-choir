@@ -1,0 +1,91 @@
+[0m
+> build · mimo-v2.5-free
+[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+[0m• [0mVerify W1 deliverables[90m Explore Agent[0m
+[0m• [0mVerify W2 deliverables[90m Explore Agent[0m
+[0m• [0mVerify W3 landing-loop[90m Explore Agent[0m
+[0m• [0mVerify C1-C7 doc corrections[90m Explore Agent[0m
+[0m• [0mVerify D-PROMO and S1[90m General Agent[0m
+[0m✓ [0mVerify W2 deliverables[90m Explore Agent[0m
+[0m✓ [0mVerify W1 deliverables[90m Explore Agent[0m
+[0m✓ [0mVerify W3 landing-loop[90m Explore Agent[0m
+[0m✓ [0mVerify D-PROMO and S1[90m General Agent[0m
+[0m✓ [0mVerify C1-C7 doc corrections[90m Explore Agent[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md[90m [offset=770][0m
+Now let me read the remaining sections of the definition document and verify the variant snapshot.
+[0m
+[0m$ [0mcd /Users/wiz/go-choir && go test -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10 ./internal/computerversion/ 2>&1 | tail -5
+ok  	github.com/yusefmosiah/go-choir/internal/computerversion	3.024s
+[0m
+## Phase A Exit Gate Review — Verdict
+
+### 1. Verdict: **conditional**
+
+Phase A deliverables are materially complete. One category-(a) defect must be fixed: the Determined State Snapshot's open-edge listing for W3 contradicts the evidence ledger that records the same evidence in the same document. The fix is trivial (delete or update lines 424–425). Two category-(c) noise items noted.
+
+---
+
+### 2. Category-(a) Phase-Exit Defects (must fix before Phase B)
+
+| # | Finding | File / Lines | Evidence |
+|---|---|---|---|
+| A-1 | **Stale open-edge for W3.** The `open` block at L424–425 still lists `red-commit landing evidence (W3)` with `missing: CI status of e393eb5c/e5c1d38a, staging deploy identity, live resolver-vs-fallback observation`. But the evidence ledger (L729–747) already records all three: CI runs were cancelled/partial, deployed SHA is 67fff296, staging uses fallback. This is a self-contradiction within the same document — the evidence exists and the node is simultaneously listed as open. The variant snapshot correctly reports `seam_commits_unlabeled: 0`, so the open-edge listing is stale relative to the document's own evidence and variant. | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:424–425` | Evidence ledger L729–747 records the answer; L424–425 still says `missing`. The `open` block must be moved to `settled` or deleted for this node. |
+
+**Fix:** Delete lines 424–425 from the `open` block, or move them to `settled` with the evidence ledger reference. No other code or doc change needed.
+
+---
+
+### 3. Category-(b) New Definition Nodes (register, don't silently absorb)
+
+None. All findings are either confirmed against the document or are noise.
+
+---
+
+### 4. Category-(c) Out-of-Scope Noise (record and drop)
+
+| # | Finding | File / Lines | Evidence |
+|---|---|---|---|
+| C-1 | **Double closing fence.** `substrate-hardening-v0.md` has two consecutive ` ``` ` fences at L570–571. Harmless in most Markdown renderers; not a truth error. | `docs/missions/substrate-hardening-v0.md:570–571` | Two consecutive closing fences in the YAML block at the end of the file. |
+| C-2 | **Detector refs stylistic inconsistency.** H030/H031 in `choir-doctrine.md` have `detector refs:` blocks but H001–H029 do not. This is correct per C3 scope; Phase B/E should backfill for other heresies as their detectors are created. | `docs/choir-doctrine.md:1145–1147, 1184–1186` | Only two heresy entries have detector refs. Consistent with scope but creates registry inconsistency. |
+
+---
+
+### 5. Confidence: **high**
+
+All deliverable claims verified against source files and test output:
+- W1: manifest rows, script, CI job all confirmed
+- W2: config.go (60s), server.go (120s timeouts), nix/node-b.nix (60s), staging proof doc all confirmed
+- W3: landing-loop evidence recorded in ledger; staging uses fallback; adapter not wired
+- C1–C7: all 8 files checked; corrections consistent
+- D-PROMO: `go test -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` — 10/10 passes (3.024s)
+- S1: spec scope header present with target-state, embedded store assumption, D-PROMO reference, tag-only gap note
+- P-TRIAGE: 25 rows triaged, no untriaged edges
+- Variant: all counts match repo state
+
+---
+
+### 6. Specific Repo Evidence Summary
+
+| Deliverable | File | Observation |
+|---|---|---|
+| W1 H030 row | `docs/heresy-detectors.md:32` | Present, 1 pattern (`log.Unprocessed`) |
+| W1 H031 row | `docs/heresy-detectors.md:33` | Present, 4 patterns |
+| W1 script | `scripts/check-heresies.sh` | 129 lines, dynamic manifest parsing, `--report` and `--fail-on-regression` modes |
+| W1 CI job | `.github/workflows/ci.yml:206–230` | Discovery mode, report-only, wired into `check` gate |
+| W2 timeout | `internal/proxy/config.go:83` | `DefaultVmctlTimeout = 60 * time.Second` |
+| W2 server | `internal/server/server.go:60–61` | `defaultReadTimeout = 120s`, `defaultWriteTimeout = 120s` |
+| W2 nix override | `nix/node-b.nix:350` | `PROXY_VMCTL_TIMEOUT=60s` (not 180s) |
+| W2 dev harness | `start-services.sh:126` | `PROXY_VMCTL_TIMEOUT:-60s` (not 180s) |
+| W2 staging proof | `docs/evidence/w2-timeout-staging-proof-2026-07-09.md` | max_duration_ms 60001 (was 180010) |
+| W3 CI e393eb5c | evidence ledger L733–734 | CI run cancelled (runner failure) |
+| W3 CI e5c1d38a | evidence ledger L735–736 | Deploy succeeded, SBOM failed |
+| W3 deployed SHA | evidence ledger L737 | 67fff296 (2026-07-09T04:56:18Z) |
+| W3 resolver | `cmd/proxy/main.go:64–68` | Falls through when `RuntimeDBPath` empty; staging doesn't set it |
+| W3 adapter | `cmd/` grep for `WithPromotionAdapter` | Zero hits |
+| C4 relabel | `docs/missions/substrate-hardening-v0.md:514` | `status: checkpoint_incomplete` |
+| C4 relabel | `docs/missions/cross-substrate-proof-v0.md:158` | `status: checkpoint_incomplete` |
+| D-PROMO test | `internal/computerversion/dolt_branch_isolation_pinned_test.go` | 193 lines, -count=10: 10/10 passes, 3.024s |
+| S1 scope header | `specs/promotion_protocol.tla:39–49` | Target-state; embedded store assumption; D-PROMO reference; tag-only gap note |
+| P-TRIAGE | definition doc L596–624 | 25 rows, all triaged to absorbed/retired/external |
+| Variant check | definition doc L443–454 | All counts match repo state |

@@ -1,0 +1,72 @@
+### 1. Verdict
+**Conditional** for Phase A exit. 
+
+All deliverables are structurally complete, verified against the repository, and passing local checks, **except** for a missing detector pattern for `DOLT_RESET --hard` in production paths (I4 guard) specified under Phase A, W1.
+
+---
+
+### 2. Category-(a) Phase-Exit Defects (Must fix before Phase B)
+*   **Missing `DOLT_RESET --hard` (I4) Detector:**
+    *   **Finding:** The detector for `DOLT_RESET --hard` in production (non-test) paths is missing from `docs/heresy-detectors.md` and has no corresponding entry in `scripts/check-heresies.sh`.
+    *   **Resolution Required:** Add a pattern (e.g., `"DOLT_RESET"` or `"DOLT_RESET.*--hard"`) to the manifest table in `docs/heresy-detectors.md` and define an path-exclusion rule in `scripts/check-heresies.sh` or the CI workflow to ignore test files (e.g., `*_test.go`) and the tag-based adapter itself (`dolt_promotion_adapter.go`), keeping the guard active for standard execution paths.
+
+---
+
+### 3. Category-(b) New Definition Nodes (Register, don't silently absorb)
+*   **None.** The D-PROMO settlement is well-integrated with the updated taxonomy and adapter documentation, and no new architecture or vocabulary drift was introduced.
+
+---
+
+### 4. Category-(c) Out-of-Scope Noise (Record and drop)
+*   **None.** All evaluated files directly correspond to the specified C1–C7, W1–W3, S1, P-TRIAGE, and D-PROMO deliverables.
+
+---
+
+### 5. Confidence
+**High.** Every file was inspected, and the D-PROMO concurrency test was executed locally under maximum count pressure.
+
+---
+
+### 6. Specific Repo Evidence & Verification
+
+#### W1 — Detector Manifest & CI Job
+*   `docs/heresy-detectors.md`: Table rows H030 (polling) and H031 (VM routing) are present.
+*   `scripts/check-heresies.sh`: Successfully maps manifest rows to patterns. Verified by executing:
+    ```bash
+    ./scripts/check-heresies.sh
+    ```
+    This outputs the expected JSON structure containing active counts (e.g., 14 hits for H030 and 198 hits for H031).
+*   `.github/workflows/ci.yml`: The `Heresy Detector Discovery` job is configured correctly under the `heresy-detector` job identifier (lines 206–231), running `scripts/check-heresies.sh --report heresy-detector-report.json` and uploading the JSON output as an artifact.
+
+#### W2 — Timeout Hardening
+*   `internal/proxy/config.go`: `DefaultVmctlTimeout` is defined as `60 * time.Second` (line 83) and loaded via `PROXY_VMCTL_TIMEOUT` (line 101).
+*   `internal/server/server.go`: Explicit `http.Server` initialization includes `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, and `IdleTimeout` resolving from environment variables with safe defaults (lines 94–101).
+*   `nix/node-b.nix` & `start-services.sh`: Staging overrides for `PROXY_VMCTL_TIMEOUT` have been changed from `180s` to `60s` (line 350 in `node-b.nix`, line 126 in `start-services.sh`).
+*   `docs/evidence/w2-timeout-staging-proof-2026-07-09.md`: Successfully records the Node B staging logs confirming the fast 504 behavior under induced `vmctl` resolve failure, bounding the resolve path at 60s.
+
+#### W3 — Landing-loop Evidence
+*   `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`: The `evidence_ledger` block includes the resolved status of the seam commits `e393eb5c` and `e5c1d38a`. Verified:
+    *   No `PROXY_RUNTIME_DB_PATH` is set in NixOS configurations or start scripts.
+    *   `WithPromotionAdapter` has 0 callers in `cmd/` (verified via `grep -rn "WithPromotionAdapter" cmd/` returning zero matches).
+
+#### C1–C7 — Doc Truth Corrections
+*   **C1 (`docs/current-architecture.md`):** Updated status-tag pass of 2026-07-08. Explicitly separates the designed-but-unbuilt capsule substrate (line 98) from the active computer/Dolt stores taxonomy (lines 747–770).
+*   **C2 (`docs/design-choir-headless-surface-v0.md`):** Section "The Gate: no candidate-lifecycle verbs yet" (lines 95–126) defines the strict conformance gates.
+*   **C3 (`docs/choir-doctrine.md`):** Includes H031 heresy details (line 1173) and references `docs/heresy-detectors.md` H031 row. Banned Patterns list #16 is present (line 1223).
+*   **C4 (`docs/missions/substrate-hardening-v0.md` & `docs/missions/cross-substrate-proof-v0.md`):** Both files have their status updated to `checkpoint_incomplete` under the `run_checkpoint_and_resumption_state` block (line 514 in `substrate-hardening`, line 158 in `cross-substrate-proof`).
+*   **C5/C6 (`docs/archive/...` & `docs/doc-authority-manifest.yaml`):** Pointers in `mission-og-dolt-heresy-hard-cutover-v0.md` and `heresy-eradication-2026-07-07.md` redirect to the new definition document. Both files and the new definition document are registered in `docs/doc-authority-manifest.yaml` (lines 241–293) and indexed in `docs/mission-graph.yaml` (lines 2977–3020).
+*   **C7 (`README.md`):** Leads with "human-improving, machine-compounding mainframe" (lines 3–5).
+
+#### D-PROMO — Concurrency & Branch Isolation
+*   `internal/computerversion/dolt_branch_isolation_pinned_test.go`: Verified. Running the test:
+    ```bash
+    go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+    ```
+    Passes **10/10** times deterministically.
+*   `internal/computerversion/dolt_promotion_adapter.go`: Stale comments regarding the 2026-07-07 pooled experiment have been updated to document connection-pooling session limits (lines 18–26). Sibling experiment and diagnostic test files (`dolt_branch_experiment_test.go` and `dolt_branch_isolation_diag_test.go`) have similarly been annotated as historical/superseded.
+
+#### S1 — Spec Conformance Header
+*   `specs/promotion_protocol.tla`: Contains the "Scope and conformance" header (lines 39–50), detailing target-state vs tag-only adapter limitations and mapping it to the D-PROMO conformance test.
+
+#### P-TRIAGE — Triage Table
+*   `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`: The triage table (lines 596–625) accounts for all ~25 open edges, listing clear successor pointers or retired reasons for each.
