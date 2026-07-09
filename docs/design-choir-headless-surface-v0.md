@@ -95,15 +95,35 @@ already enforce scopes.
 ### The Gate: no candidate-lifecycle verbs yet
 
 The obvious missing verbs — `choir candidate fork|promote|rollback` — are
-deliberately **not** in scope. Per
-[mission-suite-autoputer-autopaper-spec-first-v0.md](mission-suite-autoputer-autopaper-spec-first-v0.md),
-the promotion protocol is the gate: a persistent computer is not an autoputer
-until candidate promotion is model-checked (`specs/promotion_protocol.tla`
-rewrite). Exposing promotion verbs on the public surface before the spec
-lands would freeze today's unverified semantics into an external contract.
-The CLI observes the loop now; it gets to drive the loop's dangerous half
-after the spec does. Until then, mutation enters only through `run start`,
-where the conductor and appagents own the semantics.
+deliberately **not** in scope. The gate for lifting them is stricter than
+"the spec is green"; the spec must be green *and* the implementation must
+prove it can honor the spec's load-bearing claims on staging.
+
+Per [mission-suite-autoputer-autopaper-spec-first-v0.md](mission-suite-autoputer-autopaper-spec-first-v0.md),
+`specs/promotion_protocol.tla` must model-check the protocol first, and the
+rewrite must include:
+
+1. **ComputerVersion/capsule semantics** — candidates, forks, and promotions
+   are modeled over `ComputerVersion` records, not over VM/desktop identity
+   constants or raw Dolt tags.
+2. **Route-over-ComputerVersion load-bearing** — the proxy resolves platform
+   and candidate routes to a `ComputerVersion` record and dispatches through
+   it. Resolving to owner/desktop strings or the `route_profile` parser is a
+   seam, not a ship surface.
+3. **Atomic-or-degraded promotion** — promotion is a route flip to a verified
+   candidate (or an explicit degraded rollback) with a bounded rollback
+   window. The ledger operations are idempotent/resumable steps; they are not
+   a single atomic SQL transaction.
+4. **Staging proof** — a fork → promote → rollback cycle is executed on
+   `https://choir.news` and the route flip is observed before the verbs are
+   exposed headlessly.
+
+Exposing promotion verbs on the public surface before the spec lands and the
+staging proof passes would freeze today's unverified semantics into an
+external contract. The CLI observes the loop now; it gets to drive the loop's
+dangerous half after the spec and the deployed ComputerVersion route do. Until
+then, mutation enters only through `run start`, where the conductor and
+appagents own the semantics.
 
 ## Scopes Map to Pillars
 
@@ -140,6 +160,8 @@ This design is accepted when:
 1. the mental-model sentence and pillar table are reviewed by the owner;
 2. the near-term verbs (`computer status`, `pulse`, `package pull`,
    `publications`) are agreed as Phase 1.5 CLI scope;
-3. the candidate-lifecycle gate (no fork/promote/rollback verbs before
-   `promotion_protocol.tla` lands) is confirmed;
+3. the candidate-lifecycle gate is confirmed: no `fork/promote/rollback`
+   verbs before `promotion_protocol.tla` models ComputerVersion/capsule
+   semantics, route-over-ComputerVersion is load-bearing in staging, and a
+   fork → promote → rollback cycle is proven on `https://choir.news`;
 4. MCP work is unblocked and scoped to the shape above.

@@ -57,6 +57,10 @@ explicitly promotes one as source form.
   mission-shaped docs, and dependency/status metadata; it is not a second
   mission ledger, and historical entries remain evidence unless a current
   paradoc promotes them.
+- **Doc authority manifest:** `docs/doc-authority-manifest.yaml` is the
+  machine-readable index of every tracked doc's role, claim scope, authority,
+  lifecycle, and witnesses. The `docs/README.md` narrative index is the human
+  grip checkpoint; the manifest is the machine-readable checkpoint layer.
 - **Assertion register:** `docs/conjecture-assertion-ledger-2026-06.md` is the
   canonical home for supported assertions, invariant candidates, and open
   hyperthesis edges.

@@ -2,6 +2,12 @@
 > current executable authority for OG/Dolt/heresy completion is
 > `../definitions/og-dolt-heresy-completion-2026-07-08.md`. A `/goal` against
 > this file should redirect there.
+>
+> Post-commit state note: the `DoltPromotionAdapter` in
+> `internal/computerversion/dolt_promotion_adapter.go` is a tag-only interim
+> hook for the VM's embedded Dolt workspace. It freezes but does not settle
+> H031; branch isolation and the route-over-ComputerVersion rewrite are
+> tracked in the current definition.
 
 # Mission: Object-Graph Hard Cutover, Dolt All-In, Heresy Elimination — v0
 

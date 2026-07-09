@@ -1142,6 +1142,10 @@ cold-start replay), `pending []Update` instead of `mailbox chan Update`, no
 `chan` declarations in `internal/actor/actor.go`, comments saying "re-query"
 or "steers are already in the log" inside the warm loop.
 
+`detector refs:` [docs/heresy-detectors.md](heresy-detectors.md) H030 row;
+`scripts/check-heresies.sh` (discovery mode); `.github/workflows/ci.yml`
+`Heresy Detector Discovery` job.
+
 `evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md),
 [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md)
 (section 2.2, "Go delivers, the database remembers"),
@@ -1176,6 +1180,10 @@ material).
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
 
 `detectors:` vmctl candidate-desktop publish/switch lifecycle (`internal/vmctl/handlers.go:312`, `client.go:191`), candidate_computer_package files capturing VM state as candidate identity, route resolutions targeting VM/desktop IDs (see Banned Patterns list item 16).
+
+`detector refs:` [docs/heresy-detectors.md](heresy-detectors.md) H031 row;
+`scripts/check-heresies.sh` (discovery mode); `.github/workflows/ci.yml`
+`Heresy Detector Discovery` job.
 
 `evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/archive/heresy-eradication-2026-07-07.md](archive/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
 

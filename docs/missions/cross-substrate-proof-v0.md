@@ -155,13 +155,13 @@ This mission is complete when:
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: complete
+  status: checkpoint_incomplete
   last_checkpoint: |
-    Mission complete. SIAC gates 4 and 5 satisfied for file-manifest/blob-set slice.
-    FirecrackerStateExtractor and HostProjectionExtractor created.
-    Three tests pass: equivalence, failure, narrowed.
-    BaseSubstrateEquivalenceContract built from the proof.
-    All computerversion tests pass (47.7s).
+    Mission checkpoint_incomplete. The file-manifest/blob-set slice has
+    FirecrackerStateExtractor and HostProjectionExtractor, three passing tests
+    (equivalence, failure, narrowed), and a BaseSubstrateEquivalenceContract
+    built from the proof. SIAC gates 4 and 5 remain unproven and are the next
+    work. All computerversion tests pass (47.7s).
   current_artifact_state:
     - internal/computerversion: 117 Go files, 39 contract files
     - specs/promotion_protocol.tla: non-vacuous invariants, TLC passes

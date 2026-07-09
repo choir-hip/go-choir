@@ -511,15 +511,17 @@ next mission: SIAC continuation with hardened substrate
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: complete
+  status: checkpoint_incomplete
   last_checkpoint: |
-    Phase 1 (PGo evaluation) complete. PGo decision: CONDITIONAL GO for spec
-    verification, NO-GO for code generation. Phase 2 hardening complete.
-    TLA+ invariants strengthened with independent code/artifact counters (TLC passes).
-    Purity claim fixed in computerversion/types.go. Shared ContractHeader and
-    NegativeClaims types created (contract_header.go). Full contract consolidation
-    deferred (proof of concept done, cascading dependency requires big-bang refactor).
-    cmd binary shared code extracted to internal/cmdutil. SIAC checkpoint updated.
+    Phase 1 (PGo evaluation) settled: CONDITIONAL GO for spec verification,
+    NO-GO for code generation. Phase 2 hardening is partially complete: TLA+
+    invariants strengthened with independent code/artifact counters (TLC passes),
+    purity claim fixed in computerversion/types.go, Shared ContractHeader and
+    NegativeClaims types created (contract_header.go), full contract consolidation
+    deferred (proof of concept done, cascading dependency requires big-bang refactor),
+    and cmd binary shared code extraction is in progress. The mission is
+    checkpoint_incomplete because MPCal TLC verification, full contract consolidation,
+    and cmd deduplication remain open.
   current_artifact_state:
     - internal/computerversion: 117 Go files (added contract_header.go), 39 contract files, ~34.6k LOC
     - cmd/: 8 new binaries, ~13.5k LOC

@@ -285,7 +285,8 @@ documents:
       lifecycle: archived
     witnesses:
       - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/archive/heresy-eradication-2026-07-07.md
+      - docs/assessment-overall-state-2026-07-07.md
+      - docs/mission-graph.yaml
       - docs/choir-doctrine.md
     refresh_triggers:
       - mission_supersession_change

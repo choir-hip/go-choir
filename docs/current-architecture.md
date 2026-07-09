@@ -753,17 +753,19 @@ is split into two stores that must not be conflated (see D-STORES in
   decision (D-WIRE) is to move this to sql-server mode now; no data migration
   is needed and existing wire data is junk.
 - **VM-local embedded store:** one embedded Dolt workspace per user VM at
-  `internal/objectgraph/dolt_store.go`, shared by all capsules in that VM.
-  Promotion (fork/promote/rollback) is an operation on this embedded store, not
-  a property of the world-wire store and not a separate promotion workspace.
+  `internal/objectgraph/dolt_store.go`. Capsules are designed, not built; the
+  workspace currently backs the computer directly. When capsules land, the same
+  workspace will be shared by all capsules in that VM. Promotion
+  (fork/promote/rollback) is an operation on this embedded store, not a property
+  of the world-wire store and not a separate promotion workspace.
 
 Read [adr-dolt-as-canonical-state.md](archive/adr-dolt-as-canonical-state.md) for the
 original Dolt/SQLite decision record, but note that the 2026-07-08 D-STORES /
 D-WIRE decisions refine the two-store topology and the sql-server migration
 path.
 
-VM-local embedded Dolt (one workspace per user VM, shared by its capsules) holds
-private product state:
+VM-local embedded Dolt (one workspace per user VM, shared by its capsules once
+ capsules are built) currently holds private product state directly:
 
 - desktop/app graph
 - appagent state
