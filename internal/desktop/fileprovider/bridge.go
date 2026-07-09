@@ -470,6 +470,8 @@ func (b *Bridge) handleConflicts(w http.ResponseWriter, r *http.Request) {
 	for _, c := range all {
 		out = append(out, ConflictEntry{
 			ItemID:       c.ItemID,
+			LocalItemID:  c.LocalItemID,
+			RemoteItemID: c.RemoteItemID,
 			Path:         c.Path,
 			ConflictPath: c.Path + ".conflict",
 			Reason:       c.Reason,

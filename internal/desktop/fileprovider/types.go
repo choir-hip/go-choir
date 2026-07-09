@@ -28,8 +28,8 @@ import (
 type EntryKind string
 
 const (
-	KindFile   EntryKind = "file"
-	KindFolder EntryKind = "folder"
+	KindFile     EntryKind = "file"
+	KindFolder   EntryKind = "folder"
 	KindConflict EntryKind = "conflict" // a projected .conflict file
 )
 
@@ -73,11 +73,11 @@ type EnumerateResponse struct {
 // ReadResponse is returned by GET /read. It carries the raw file bytes
 // base64-encoded (so the JSON body is safe for binary content).
 type ReadResponse struct {
-	Path        string `json:"path"`
-	Size        int64  `json:"size"`
-	ContentB64  string `json:"content_b64"`
-	MediaType   string `json:"media_type,omitempty"`
-	ModifiedAt  time.Time `json:"modified_at"`
+	Path       string    `json:"path"`
+	Size       int64     `json:"size"`
+	ContentB64 string    `json:"content_b64"`
+	MediaType  string    `json:"media_type,omitempty"`
+	ModifiedAt time.Time `json:"modified_at"`
 }
 
 // WriteRequest is the body for PUT /write. The extension sends the new file
@@ -91,8 +91,8 @@ type WriteRequest struct {
 // WriteResponse confirms a write and reports whether a sync cycle was
 // triggered.
 type WriteResponse struct {
-	Path         string `json:"path"`
-	SyncTriggered bool  `json:"sync_triggered"`
+	Path          string `json:"path"`
+	SyncTriggered bool   `json:"sync_triggered"`
 }
 
 // CreateDirRequest creates a directory in the sync root.
@@ -115,13 +115,15 @@ type DeleteRequest struct {
 // conflicts as virtual .conflict files alongside the original so the user
 // can see both versions in Finder.
 type ConflictEntry struct {
-	ItemID      model.ItemID                  `json:"item_id"`
-	Path        string                        `json:"path"`
-	ConflictPath string                       `json:"conflict_path"` // the .conflict file path
-	Reason      string                        `json:"reason"`
-	LocalVer    model.Version                 `json:"local_version"`
-	RemoteVer   model.Version                 `json:"remote_version"`
-	Resolution  desktop.ConflictResolution    `json:"resolution,omitempty"`
+	ItemID       model.ItemID               `json:"item_id"`
+	LocalItemID  model.ItemID               `json:"local_item_id,omitempty"`
+	RemoteItemID model.ItemID               `json:"remote_item_id,omitempty"`
+	Path         string                     `json:"path"`
+	ConflictPath string                     `json:"conflict_path"` // the .conflict file path
+	Reason       string                     `json:"reason"`
+	LocalVer     model.Version              `json:"local_version"`
+	RemoteVer    model.Version              `json:"remote_version"`
+	Resolution   desktop.ConflictResolution `json:"resolution,omitempty"`
 }
 
 // ConflictsResponse lists all current conflicts.

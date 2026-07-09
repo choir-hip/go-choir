@@ -6,12 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/yusefmosiah/go-choir/internal/desktop"
 	"github.com/yusefmosiah/go-choir/internal/desktop/fileprovider"
+)
+
+const (
+	fileProviderSocketPathEnv   = "CHOIR_FILEPROVIDER_SOCKET_PATH"
+	fileProviderAppGroupIDEnv   = "CHOIR_FILEPROVIDER_APP_GROUP_ID"
+	defaultFileProviderAppGroup = "group.news.choir"
 )
 
 // SyncService is the Wails-exposed service that owns the Base sync engine.
@@ -171,19 +178,28 @@ func (e sentinelMsg) Error() string { return string(e) }
 func errSentinelMsg(s string) error { return sentinelMsg(s) }
 
 // fileProviderSocketPath returns the Unix domain socket path for the File
-// Provider IPC bridge. The socket lives in the Choir app support directory
-// so the .appex extension can access it via the app group container.
+// Provider IPC bridge.
 func fileProviderSocketPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = os.TempDir()
 	}
-	// On macOS, the app group container is preferred, but for development
-	// we use ~/Library/Application Support/Choir/ which is accessible to
-	// both the host app and the extension when running with dev
-	// entitlements.
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, "Library", "Application Support", "Choir", "fileprovider.sock")
+	return fileProviderSocketPathFor(runtime.GOOS, home, os.Getenv)
+}
+
+func fileProviderSocketPathFor(goos, home string, getenv func(string) string) string {
+	if explicit := strings.TrimSpace(getenv(fileProviderSocketPathEnv)); explicit != "" {
+		return explicit
+	}
+	if home == "" {
+		home = os.TempDir()
+	}
+	if goos == "darwin" {
+		appGroupID := strings.TrimSpace(getenv(fileProviderAppGroupIDEnv))
+		if appGroupID == "" {
+			appGroupID = defaultFileProviderAppGroup
+		}
+		return filepath.Join(home, "Library", "Group Containers", appGroupID, "Choir", "fileprovider.sock")
 	}
 	return filepath.Join(home, ".choir", "fileprovider.sock")
 }

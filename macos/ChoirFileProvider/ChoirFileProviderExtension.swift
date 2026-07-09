@@ -21,6 +21,13 @@ let choirDomainIdentifier = "news.choir.fileprovider"
 
 /// The default socket path for the Go bridge.
 let defaultSocketPath: String = {
+    if let appGroupID = Bundle.main.object(forInfoDictionaryKey: "ChoirAppGroupIdentifier") as? String,
+       let groupDir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
+        return groupDir
+            .appendingPathComponent("Choir", isDirectory: true)
+            .appendingPathComponent("fileprovider.sock")
+            .path
+    }
     let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     let choirDir = supportDir.appendingPathComponent("Choir", isDirectory: true)
     return choirDir.appendingPathComponent("fileprovider.sock").path
@@ -28,7 +35,7 @@ let defaultSocketPath: String = {
 
 /// ChoirFileProviderExtension is the replicated File Provider extension that
 /// projects Base-synced files into Finder.
-class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
+final class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
 
     /// The bridge client for talking to the Go sync engine.
     private let bridge: BridgeClient
@@ -48,6 +55,9 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     }
 
     // MARK: - NSFileProviderReplicatedExtension
+
+    func invalidate() {
+    }
 
     /// Returns an enumerator for the children of the given item.
     func enumerator(for containerItemIdentifier: NSFileProviderItemIdentifier,
@@ -87,7 +97,6 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
         // find the item.
         let path = identifier.rawValue
         let parentPath = (path as NSString).deletingLastPathComponent
-        let parentID = parentPath.isEmpty ? .rootContainer : NSFileProviderItemIdentifier(parentPath)
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -110,7 +119,7 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     func fetchContents(for itemIdentifier: NSFileProviderItemIdentifier,
                        version requestedVersion: NSFileProviderItemVersion?,
                        request: NSFileProviderRequest,
-                       completionHandler: @escaping (URL?, Error?) -> Void) -> Progress {
+                       completionHandler: @escaping (URL?, NSFileProviderItem?, Error?) -> Void) -> Progress {
 
         let progress = Progress(totalUnitCount: 1)
         let path = itemIdentifier.rawValue
@@ -125,9 +134,9 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 try FileManager.default.createDirectory(at: tmpURL.deletingLastPathComponent(),
                                                         withIntermediateDirectories: true)
                 try data.write(to: tmpURL)
-                completionHandler(tmpURL, nil)
+                completionHandler(tmpURL, nil, nil)
             } catch {
-                completionHandler(nil, error)
+                completionHandler(nil, nil, error)
             }
             progress.completedUnitCount = 1
         }
@@ -152,7 +161,7 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                if itemTemplate.isDirectory {
+                if itemTemplate.contentType?.conforms(to: .folder) == true {
                     try self.bridge.createDirectory(path: fullPath)
                     let entry = BridgeEntry(
                         path: fullPath,
@@ -208,8 +217,9 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
+                var updatedPath = path
                 // Handle content changes.
-                if changedFields.contains(.content) {
+                if changedFields.contains(.contents) {
                     if let url = newContents {
                         let data = try Data(contentsOf: url)
                         try self.bridge.write(path: path, content: data)
@@ -226,16 +236,12 @@ class ChoirFileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                     if newPath != path {
                         try self.bridge.move(from: path, to: newPath)
                     }
+                    updatedPath = newPath
                 }
 
                 // Re-fetch the item metadata.
-                let parentPath = (path as NSString).deletingLastPathComponent
+                let parentPath = (updatedPath as NSString).deletingLastPathComponent
                 let entries = try self.bridge.enumerate(path: parentPath)
-                let updatedPath = changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier)
-                    ? (item.parentItemIdentifier == .rootContainer
-                        ? item.filename
-                        : "\(item.parentItemIdentifier.rawValue)/\(item.filename)")
-                    : path
                 if let entry = entries.first(where: { $0.path == updatedPath }) {
                     completionHandler(ChoirItem(entry: entry, domain: self.domain), [], false, nil)
                 } else {
@@ -337,7 +343,7 @@ final class ChoirEnumerator: NSObject, NSFileProviderEnumerator {
                 for entry in entries {
                     changes.append(ChoirItem(entry: entry, domain: nil))
                 }
-                observer.didEnumerate(changes)
+                observer.didUpdate(changes)
                 // Use the current sync cursor as the anchor.
                 let status = try self.bridge.status()
                 let anchorData = withUnsafeBytes(of: status.cursor) { Data($0) }
