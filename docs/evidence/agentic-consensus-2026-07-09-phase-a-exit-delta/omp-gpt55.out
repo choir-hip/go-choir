@@ -1,0 +1,161 @@
+1. **Verdict: clear for Phase A exit**
+
+   The follow-up at `HEAD = 14f56211` resolves the Round 1 category-(a) blockers. The og-dolt definition now presents a sound Phase A exit state: W1 discovery detectors are wired into CI, W2 timeout hardening is staged/proven, W3 state is refreshed, D-PROMO is settled at the pinned-connection/single-writer assumption level, S1 is scoped, P-TRIAGE is full, and only D-STORE remains unresolved.
+
+2. **Category-(a) phase-exit defects: none**
+
+   No must-fix-before-Phase-B defects found.
+
+   Evidence:
+
+   - **A1 / I4 detector fixed.**
+     - `docs/heresy-detectors.md:22-35` contains the detector table and an `I4` row:
+       - pattern: ``CALL DOLT_RESET``
+       - target: `0 production (non-test, non-adapter) hits`
+       - excludes: `*_test.go, dolt_promotion_adapter.go`
+     - `scripts/check-heresies.sh:58-68` applies per-row `--glob !...` excludes to `rg`.
+     - `scripts/check-heresies.sh:90-128` parses rows from `docs/heresy-detectors.md`, extracts backticked patterns, parses `exclude: ...`, and emits row totals.
+     - `scripts/check-heresies.sh:130-140` is report-only unless `--fail-on-regression` is explicitly supplied.
+     - `.github/workflows/ci.yml:206-223` defines `heresy-detector` and runs `scripts/check-heresies.sh --report heresy-detector-report.json`.
+     - `.github/workflows/ci.yml:232-266` includes `heresy-detector` in the final `check` dependency gate.
+     - Command run: `scripts/check-heresies.sh --report /tmp/heresy-detector-review.json`
+       - exited `0`
+       - produced 13 detector rows
+       - included `I4`:
+         ```json
+         {
+           "id": "I4",
+           "family": "destructive embedded rollback guard",
+           "target": "0 production (non-test, non-adapter) hits",
+           "total_hits": 1,
+           "patterns": {"CALL DOLT_RESET": 1}
+         }
+         ```
+       - The single raw I4 hit is the detector manifest self-reference, not production rollback code; see category-(b)/(c) below.
+
+   - **A2 / variant metrics now internally consistent with W1.**
+     - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:438-449` now distinguishes:
+       - `heresy_families_without_ci_detector: 0`
+       - `heresy_families_without_ci_enforcement: 12`
+     - This matches the W1 state: detector discovery is wired; fail-on-regression enforcement is explicitly deferred.
+     - `docs/heresy-detectors.md:5-9` says discovery-mode CI reports counts without failing and that fail-on-regression enforcement / allowlist syntax are deferred per phase.
+
+   - **A3 / Determined State Snapshot refreshed; only D-STORE remains open.**
+     - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:375-423` has only `settled`, `settled_2026_07_08_owner`, and `open`.
+     - No `contested:` section remains in the Determined State Snapshot.
+     - The only `open` item is:
+       - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:421-423`
+       - `node: storage-fork (D-STORE)`
+     - W3 is settled:
+       - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:386-388`
+       - deployed SHA recorded as `1ed41f2b`
+       - lineage resolver inactive in staging
+       - no production binary configures the promotion adapter.
+     - Live staging health check:
+       - `read https://choir.news/health`
+       - observed `build.deployed_commit = 1ed41f2b05e1d6b94a0025e6e62ae22be210c605`
+       - observed `lifecycle.api.resolve.max_duration_ms = 60024`, consistent with the W2 60s bound.
+
+   - **A4 / architecture docs rolled forward.**
+     - `README.md:253-264` now says:
+       - world-wire store and VM-local embedded store are split;
+       - promotion is VM-local embedded-store behavior;
+       - D-PROMO is settled for pinned `*sql.Conn` single-writer discipline;
+       - current `DoltPromotionAdapter` is tag-only interim and must not be production-enabled until Phase D conformance binding.
+     - `docs/current-architecture.md:778-784` says the same D-PROMO settlement:
+       - pinned `*sql.Conn`
+       - single-writer discipline
+       - `TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` passes
+       - tag-only adapter remains interim.
+     - `docs/current-architecture.md:678-681` says W2 timeout hardening is proven:
+       - `DefaultVmctlTimeout` 60s
+       - server read/write timeout defaults
+       - staging `/api/universal-wire/stories` fast 504 within 60s.
+     - Search for stale current-doc labels:
+       - pattern: `under test|pending|not yet proven|unproven|under-test`
+       - path: `docs/current-architecture.md;README.md`
+       - only unrelated hits: glossary “claim under test”, “worker updates … pending”.
+       - No stale D-PROMO/W2 status text found.
+
+   - **A5 / grip checkpoint registered as narrative.**
+     - `docs/README.md:60-64` names `docs/choir-grip-checkpoint-2026-07-07.md` as the narrative grip checkpoint.
+     - `docs/README.md:85-89` lists it under Canonical Current Docs and states it may not override doctrine, definitions, specs, or evidence.
+     - `docs/doc-authority-manifest.yaml:70-80` registers:
+       - `path: docs/choir-grip-checkpoint-2026-07-07.md`
+       - `claim_scope: narrative`
+       - `doc_role: narrative`
+       - `authority: none`
+       - witness points to the same file.
+
+   - **Full Phase A exit bar satisfied.**
+     - Exit bar definition: `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:623-626`
+       - detectors reporting in CI
+       - timeouts proven in staging
+       - all corrections committed
+       - S1 settled or explicitly scoped
+       - triage table full.
+     - Detector CI:
+       - `.github/workflows/ci.yml:206-223`, `.github/workflows/ci.yml:232-266`.
+     - Timeout proof:
+       - `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:19-21` records deployed SHA progression.
+       - `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:40-48` records proxy timeout logs and 504 handling.
+       - `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:50-65` records max resolve duration around 60s.
+       - live `https://choir.news/health` observed deployed SHA `1ed41f2b...` and `api.resolve.max_duration_ms = 60024`.
+     - S1 scoped:
+       - `specs/promotion_protocol.tla:39-49` explicitly scopes the spec to a storage layer with per-session branch isolation, including embedded driver with pinned `*sql.Conn` under single-writer discipline; current `DoltPromotionAdapter` is explicitly non-conformant until Phase D.
+     - P-TRIAGE full:
+       - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:593-621` contains the past-mission open-edge triage table.
+       - Rows cover absorbed, external, and retired dispositions.
+       - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:448` sets `past_mission_open_edges_untriaged: 0`.
+
+   Additional local verification:
+
+   - Command: `go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10`
+     - result: `go test: 1 packages ok`
+     - validates D-PROMO’s pinned-connection branch isolation settlement claim.
+   - Command: `scripts/doccheck`
+     - result: `doccheck report-only complete: 342 docs, 507 warnings, 5220ms`
+     - report-only docs checker completes; warnings are pre-existing/report-only noise, not a Phase A blocker.
+   - Command: `git rev-parse --short HEAD`
+     - result: `14f56211`
+
+3. **Category-(b) new definition nodes: register, do not silently absorb**
+
+   - **B1. Detector enforcement semantics before fail-on-regression.**
+     - Not a Phase A blocker because Phase A only requires discovery/reporting.
+     - The raw I4 detector count is `1` because the manifest contains its own detector pattern:
+       - `docs/heresy-detectors.md:35` includes ``CALL DOLT_RESET``.
+       - `scripts/check-heresies.sh --report /tmp/heresy-detector-review.json` reports `I4.total_hits = 1`.
+       - Built-in grep also finds test/adapter occurrences, but the script’s per-row excludes remove `*_test.go` and `dolt_promotion_adapter.go`; the remaining report hit is the manifest self-reference.
+     - Before promoting I4 or other rows to `--fail-on-regression`, define typed allowlist/self-vocabulary semantics:
+       - detector manifest self-hits;
+       - historical evidence docs;
+       - tests;
+       - transitional adapter source.
+     - This is already directionally acknowledged by `docs/heresy-detectors.md:7-9` deferring fail-on-regression enforcement, generated ledgers, and typed allowlist syntax.
+
+4. **Category-(c) out-of-scope noise: record and drop**
+
+   - **C1. I4 raw count self-hit is not a production rollback defect.**
+     - Observation: `I4.total_hits = 1` in the detector report.
+     - Source: `docs/heresy-detectors.md:35` self-reference.
+     - Scope: discovery-count noise; not production non-test/non-adapter rollback code.
+     - Drop for Phase A; handle under B1 before enforcement mode.
+
+   - **C2. Historical evidence ledger still contains time-scoped “D-PROMO strengthened to testing”.**
+     - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:759-760` says earlier web research strengthened D-PROMO to testing.
+     - This is inside the Evidence Ledger as a historical result of that evidence, not the current Determined State.
+     - Current state is settled at:
+       - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:392-394`
+       - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:449`
+       - `docs/current-architecture.md:778-784`
+     - Drop as non-blocking historical context.
+
+   - **C3. Live heresy family counts remain high by design.**
+     - `scripts/check-heresies.sh --report /tmp/heresy-detector-review.json` reports nonzero totals across many families.
+     - Phase A does not claim live heresies eliminated; it claims detector discovery is wired.
+     - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:441-442` keeps enforcement/live cleanup for later phases.
+
+5. **Confidence: high**
+
+   Grounded by direct file reads, local detector execution, local D-PROMO focused test, live staging health read, CI workflow inspection, and doc manifest inspection. The only caveat is that I did not replay the full CI run; I verified the checked-in CI workflow and the exact local commands it invokes.

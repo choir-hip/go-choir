@@ -1,0 +1,73 @@
+[0m
+> build · mimo-v2.5-free
+[0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+[0m→ [0mRead docs/heresy-detectors.md
+[0m→ [0mRead scripts/check-heresies.sh
+[0m→ [0mRead docs/current-architecture.md
+[0m→ [0mRead README.md
+[0m✱ [0mGlob ".github/workflows/*.yml"[90m 0 matches[0m
+[0m→ [0mRead docs/README.md
+[0m→ [0mRead docs/doc-authority-manifest.yaml
+[0m✱ [0mGrep "check-heresies"[90m 1 match[0m
+[0m→ [0mRead .github/workflows/ci.yml[90m [offset=210, limit=30][0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md[90m [offset=768][0m
+[0m
+[0m$ [0mcd /Users/wiz/go-choir && git log --oneline -5
+14f56211 Phase A exit panel round 1 fixes: I4 detector, truth rollforward, stale state.
+6e6f3753 Record Phase A exit panel (round 1) and fix substrate-hardening fence.
+7cd82647 P-TRIAGE: add past-mission open-edge triage table to og-dolt definition.
+1ed41f2b S1: reconcile promotion_protocol.tla with adapter scope.
+1d76a4b6 C1-C7: doc truth corrections for Phase A.
+[0m
+[0m✱ [0mGrep "D-PROMO.*settled|pinned.*connection|DoltPromotionAdapter.*interim|tag-only.*interim"[90m 1 match[0m
+[0m✱ [0mGrep "W2.*timeout|timeout.*hardened|Bounded path is proven|ReadTimeout|WriteTimeout|fast 504|DefaultVmctlTimeout|DefaultClientTimeout"[90m 4 matches[0m
+[0m✱ [0mGrep "grip.*checkpoint|choir-grip-checkpoint"[90m 2 matches[0m
+[0m✱ [0mGrep "D-PROMO.*settled|pinned.*conn|tag-only.*interim|DoltPromotionAdapter.*interim"[90m 2 matches[0m
+[0m✱ [0mGrep "W2.*timeout|Bounded path|timeout.*hardened|ReadTimeout|WriteTimeout|fast 504"[90m 0 matches[0m
+Let me now verify the specific claims about current-architecture.md D-PROMO/W2 accuracy and the docs/README.md grip checkpoint registration:
+[0m→ [0mRead docs/current-architecture.md[90m [offset=776, limit=15][0m
+[0m→ [0mRead docs/definitions/og-dolt-heresy-completion-2026-07-08.md[90m [offset=438, limit=15][0m
+[0m→ [0mRead docs/README.md[90m [offset=60, limit=35][0m
+[0m
+[0m$ [0mcd /Users/wiz/go-choir && git log --oneline --format='%H %s' 14f56211 -1
+14f56211f6163408abd21a629423c31f48fd4c8f Phase A exit panel round 1 fixes: I4 detector, truth rollforward, stale state.
+[0m
+[0m$ [0mcd /Users/wiz/go-choir && git diff 6e6f3753..14f56211 --stat
+README.md                                          |  7 +-
+ docs/README.md                                     |  5 +-
+ docs/current-architecture.md                       | 18 ++---
+ .../og-dolt-heresy-completion-2026-07-08.md        | 83 +++++++++++-----------
+ docs/doc-authority-manifest.yaml                   | 14 ++++
+ .../w2-timeout-staging-proof-2026-07-09.md         |  4 +-
+ docs/heresy-detectors.md                           | 26 ++++---
+ scripts/check-heresies.sh                          | 18 ++++-
+ 8 files changed, 107 insertions(+), 68 deletions(-)
+[0m
+Now let me run the heresy detector script to verify it works and produces output:
+[93m[1m! [0mpermission requested: external_directory (/tmp/*); auto-rejecting
+[0m✗ [0mcd /Users/wiz/go-choir && cat /tmp/heresy-report-test.json | python3 -c "import json,sys; d=json.load(sys.stdin); [print(f'{r[\"id\"]:>12s} {r[\"total_hits\"]:>4d}  {r[\"family\"]}') for r in d]" failed
+[91m[1mError: [0mThe user rejected permission to use this specific tool call.
+[0m
+[0m$ [0mcd /Users/wiz/go-choir && bash scripts/check-heresies.sh --report /tmp/heresy-report-test.json 2>&1 | head -20
+[
+  {
+    "id": "H001-H005",
+    "family": "parent/child control residue",
+    "target": "0 active control hits",
+    "notes": "Historical provenance fields need explicit quarantine.",
+    "total_hits": 181,
+    "patterns": {
+      "ParentRunID": 40,
+      "parent_id": 38,
+      "parent_loop_id": 39,
+      "StartChildRun": 54,
+      "spawned_child_run": 6,
+      "spawned_child:": 4
+    }
+  },
+  {
+    "id": "H006-H008/H014",
+    "family": "continuation residue",
+    "target": "0 target-doctrine hits",
+[0m

@@ -210,15 +210,18 @@ execution_effect:
 ```yaml
 id: bounded-request-path
 kind: invariant
-status: settled (definition) / violated (implementation)
-source: docs/assessment-overall-state-2026-07-07.md (staging trace: api.resolve max 180,029ms, 23 errors)
+status: settled (definition and implementation)
+source: docs/assessment-overall-state-2026-07-07.md (historical staging trace: api.resolve max 180,029ms, 23 errors); docs/evidence/w2-timeout-staging-proof-2026-07-09.md (post-fix: api.resolve max 60,001ms, 504 within 60s)
 definition: No public request may hang for the vmctl client default; the proxy fails fast with a 504 within a bounded window.
 observables:
-  - internal/vmctl/client.go:22 DefaultClientTimeout = 180s.
-  - internal/server/server.go http.Server without ReadTimeout/WriteTimeout.
-  - internal/proxy/handlers.go:46 sandboxResolveRetryWindow = 10s mismatch.
+  - internal/vmctl/client.go:22 DefaultClientTimeout = 60s.
+  - internal/proxy/config.go:83 DefaultVmctlTimeout = 60s.
+  - internal/server/server.go:60-61 defaultReadTimeout / defaultWriteTimeout = 120s and http.Server wired with ReadTimeout/WriteTimeout.
+  - internal/proxy/handlers.go:46 sandboxResolveRetryWindow = 10s reconciled against the 60s bound.
+  - nix/node-b.nix:350 PROXY_VMCTL_TIMEOUT=60s; start-services.sh:126 PROXY_VMCTL_TIMEOUT default 60s.
+  - staging /api/universal-wire/stories under induced resolve failure returns 504 within 60s (max_duration_ms 60,001).
 execution_effect:
-  - Work item W2 is a Phase-A gate; no staging proof for any later phase is legible until this holds.
+  - Work item W2 is satisfied and is a Phase-A gate; later phase staging proofs are now legible.
 ```
 
 ### I4. Invariant: destructive rollback is forbidden in embedded mode
@@ -755,22 +758,22 @@ Per the definition skill. Specific bindings:
   result: fixed by W2 (commit 67fff296 + prior server.go timeout defaults; staging api.resolve max now 60,001ms; see docs/evidence/w2-timeout-staging-proof-2026-07-09.md)
 - claim: Dolt operational semantics for promotion and topology (per-session branch checkout; embedded exclusive directory lock; optimistic-CAS commit with app-level retry; DOLT_MERGE/DOLT_RESET implicitly commit the transaction so merge+tag is never one transaction; branch-in-DSN undocumented for embedded driver; auto-GC default since 1.75, embedded applicability unverified; no official embedded→sql-server migration guide).
   definition_node: embedded-branch-isolation, wire-store-sql-server
-  evidence_class: external documentation review (docs.dolthub.com, dolthub/driver README, DoltHub blog), 2026-07-08
-  command_or_observation: web research agent report; source URLs recorded in the D-PROMO and D-WIRE nodes
-  result: D-PROMO strengthened to testing; D-WIRE multi-process rationale confirmed; spec constraint added to S1
+  evidence_class: external documentation review (docs.dolthub.com, dolthub/driver README, DoltHub blog) + observed test result, 2026-07-08 / 2026-07-09
+  command_or_observation: web research agent report; source URLs recorded in the D-PROMO and D-WIRE nodes; go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+  result: D-PROMO settled by the pinned-connection -count=10 determinism test; D-WIRE multi-process rationale confirmed; spec constraint added to S1
   uncertainty: isolation-level docs inconsistent; hard-reset effects on concurrent sessions undocumented
 - claim: The embedded driver is semantically equivalent to sql-server for session/branch semantics — fresh DoltSession per connection (never reused), DSN database param passed verbatim to SetCurrentDatabase so db/branch revision names work in the DSN; differences are process-level only (exclusive lock, single process).
   definition_node: embedded-branch-isolation
-  evidence_class: observed file result (driver source read)
-  command_or_observation: ~/go/pkg/mod/github.com/dolthub/driver@v1.84.1 — conn.go ResetSession/IsValid, connector.go:136-137, parse_dsn.go:57-70
-  result: D-PROMO settlement is the Phase A pinned-connection branch-isolation determinism test (go test -count=10); the prior 2026-07-07 falsification is diagnosed as a connection-pooling artifact, and a pinned sql.Conn/BeginTx variant reportedly isolates correctly.
+  evidence_class: observed file result (driver source read) + observed test result
+  command_or_observation: ~/go/pkg/mod/github.com/dolthub/driver@v1.84.1 — conn.go ResetSession/IsValid, connector.go:136-137, parse_dsn.go:57-70; go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+  result: D-PROMO is settled by the pinned-connection branch-isolation determinism test (go test -count=10, 10/10 passes); the prior 2026-07-07 falsification is diagnosed as a connection-pooling artifact, and a pinned sql.Conn/BeginTx variant isolates correctly.
   uncertainty: revision-name resolution via SetCurrentDatabase is inferred from the engine's USE path; the integration test confirms it as a side effect
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol
-  evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick)
-  command_or_observation: docs/evidence/agentic-consensus-2026-07-08-plan/ (raw outputs); go test -run TestDoltBranch re-run 2026-07-08
-  result: all confirmed category-(a) findings fixed in-document; D-PROMO pinned-conn determinism test is Phase A work
-  uncertainty: gemini35's pinned-conn success is panelist-reported, not yet independently reproduced (deliberately left to the mission run — owner paused code writing 2026-07-08)
+  evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick; Phase A -count=10 determinism test run 2026-07-09)
+  command_or_observation: docs/evidence/agentic-consensus-2026-07-08-plan/ (raw outputs); go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+  result: all confirmed category-(a) findings fixed in-document; D-PROMO pinned-conn determinism test is Phase A work and has been independently reproduced
+  uncertainty: none
 ```
 
 ## Authority Boundaries / Escalation Rules
@@ -851,16 +854,16 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: Phase A exit panel round 1 completed; category-(a) findings fixed in follow-up
+  last_checkpoint: Phase A exit panel round 2 completed; I3/D-PROMO evidence aligned and adjudication committed; pending round 3 confirmation
   current_artifact_state: >-
     Phase A deliverables committed: W1 detector manifest + CI discovery job
     (including the I4 destructive-rollback guard), W2 proxy/vmctl timeout
     hardening with staging 504 proof, W3 seam-commit landing-loop evidence,
     C1–C7 doc truth corrections, D-PROMO pinned-connection branch-isolation
     settlement, S1 spec↔adapter scope/conformance note, and P-TRIAGE past-mission
-    open-edge table. Phase A exit panel round 1 completed with category-(a)
-    findings fixed: stale Determined State, stale D-PROMO/W2 orientation text,
-    missing grip checkpoint registration, and I4 detector. D-STORE storage fork
+    open-edge table. Phase A exit panel round 2 completed: category-(a) findings
+    from round 1 fixed, I3/D-PROMO evidence ledger aligned with the settled
+    state, and the Phase A exit adjudication committed. D-STORE storage fork
     remains unresolved; D-PROMO and D-WIRE settled.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
@@ -883,12 +886,13 @@ run_checkpoint_and_resumption_state:
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
   next_executable_probe: >-
-    Phase A exit panel round 2 (delta review) on the fixes; on clear, begin
-    Phase B heresy kill wave 1 + Dolt audit reads.
+    Phase A exit panel round 3 (delta-2 review) on the adjudication and I3/D-PROMO
+    alignment; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1)
+    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + adjudication)
+    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/ (Phase A exit panel round 2)
     - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
     - docs/assessment-overall-state-2026-07-07.md
   rollback_refs:
