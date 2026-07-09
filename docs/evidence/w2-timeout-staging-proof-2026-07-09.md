@@ -17,8 +17,11 @@
 ```
 
 Observed from `https://choir.news/health` after the CI deploy to Node B. The
-current deployed SHA is `1ed41f2b05e1d6b94a0025e6e62ae22be210c605` (2026-07-09T05:12:21Z);
-`67fff296` is the first deploy at which the 60s timeout was observed.
+first deploy at which the 60s timeout was observed is `67fff296` (2026-07-09T04:56:18Z).
+A later deploy at `1ed41f2b` (2026-07-09T05:12:21Z) and the live staging health check
+at `14f56211` (2026-07-09T05:42:19Z) both show the same 60s bound
+(`api.resolve.max_duration_ms` around `60001`/`60024`). The deployed SHA changes with
+each CI deploy; the W2 evidence is the time-scrolled sequence of observed deploys.
 
 ## What changed
 

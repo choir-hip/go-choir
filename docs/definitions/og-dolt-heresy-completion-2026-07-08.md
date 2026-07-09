@@ -735,12 +735,16 @@ Per the definition skill. Specific bindings:
     (Node B) was cancelled. e5c1d38a CI run 28964053923 (2026-07-08T17:52:55Z)
     completed with Deploy to Staging (Node B) successful and Generate SBOMs
     failing. The timeout fix was first observed at deployed SHA 67fff296
-    (2026-07-09T04:56:18Z); the current deployed SHA on choir.news is 1ed41f2b
-    (2026-07-09T05:12:21Z). Staging proxy log shows no "route resolver: wired
-    lineage-based resolver" line; nix/node-b.nix does not set
-    PROXY_RUNTIME_DB_PATH, so the proxy uses the hard-coded VM identity fallback.
-    grep for DoltPromotionAdapter or WithPromotionAdapter under cmd/ returns zero
-    hits; no production binary configures the promotion adapter.
+    (2026-07-09T04:56:18Z). A later deploy at 1ed41f2b (2026-07-09T05:12:21Z)
+    and the live staging health check at 14f56211 (2026-07-09T05:42:19Z) both
+    show the same 60s bound (`api.resolve.max_duration_ms: 60024`). The
+    deployed SHA changes with each CI deploy; the W3 evidence is the
+    time-scrolled sequence of observed deploys, not an evergreen "current"
+    identity. Staging proxy log shows no "route resolver: wired lineage-based
+    resolver" line; nix/node-b.nix does not set PROXY_RUNTIME_DB_PATH, so the
+    proxy uses the hard-coded VM identity fallback. grep for DoltPromotionAdapter
+    or WithPromotionAdapter under cmd/ returns zero hits; no production binary
+    configures the promotion adapter.
   result: >-
     e393eb5c and e5c1d38a are in main history and are present on Node B via
     later deploys, but their own CI runs were not clean green/cancelled. The
@@ -854,17 +858,17 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: Phase A exit panel round 2 completed; I3/D-PROMO evidence aligned and adjudication committed; pending round 3 confirmation
+  last_checkpoint: Phase A exit panel round 3 completed; adjudication updated and W3 deployed identity time-scoped; pending round 4 confirmation
   current_artifact_state: >-
     Phase A deliverables committed: W1 detector manifest + CI discovery job
     (including the I4 destructive-rollback guard), W2 proxy/vmctl timeout
     hardening with staging 504 proof, W3 seam-commit landing-loop evidence,
     C1–C7 doc truth corrections, D-PROMO pinned-connection branch-isolation
     settlement, S1 spec↔adapter scope/conformance note, and P-TRIAGE past-mission
-    open-edge table. Phase A exit panel round 2 completed: category-(a) findings
-    from round 1 fixed, I3/D-PROMO evidence ledger aligned with the settled
-    state, and the Phase A exit adjudication committed. D-STORE storage fork
-    remains unresolved; D-PROMO and D-WIRE settled.
+    open-edge table. Phase A exit panel round 3 completed: the adjudication was
+    corrected to include all round 1/2/3 findings and verdicts, and the W3
+    deployed identity was time-scoped to avoid evergreen "current" claims.
+    D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -886,13 +890,14 @@ run_checkpoint_and_resumption_state:
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
   next_executable_probe: >-
-    Phase A exit panel round 3 (delta-2 review) on the adjudication and I3/D-PROMO
-    alignment; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
+    Phase A exit panel round 4 (delta-3 review) on the corrected adjudication and
+    time-scoped W3 deployed identity; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + adjudication)
+    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + updated adjudication)
     - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/ (Phase A exit panel round 2)
+    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/ (Phase A exit panel round 3)
     - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
     - docs/assessment-overall-state-2026-07-07.md
   rollback_refs:
