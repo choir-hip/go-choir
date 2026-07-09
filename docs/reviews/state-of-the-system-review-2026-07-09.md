@@ -31,8 +31,9 @@ Phase A of that mission cleared its exit panel on 2026-07-09. The system sits
 between autonomy Level 3 and Level 4; Level 5 ("Choir-in-Choir"
 self-development) is gated on three concrete things: enforcing heresy
 detectors (Phase B), deleting the dual paths (Phases B–C), and a load-bearing
-promotion-over-ComputerVersion path (Phase D). One human decision blocks
-storage work: **D-STORE**.
+promotion-over-ComputerVersion path (Phase D). The last open decision node,
+**D-STORE**, was settled by the owner on 2026-07-09: all in on Dolt; the six
+storage-inventory questions are now Phase C/D verification tasks, not gates.
 
 ---
 
@@ -210,7 +211,7 @@ but runs discovery-only in CI — it reports, it does not catch.
 | No trajectory/trace app, no work/mission app in the web desktop | UI half of self-dev | unscheduled |
 | CLI has no write/lifecycle/work-item verbs; MCP server unbuilt | headless half of self-dev | design doc gates lifecycle verbs on promotion proof |
 | `internal/runtime` god object; per-app extraction unbuilt | parallel candidate-VM development | road-ahead critical path |
-| **D-STORE storage-fork decision unanswered** | Phase C/D storage work | **requires owner** |
+| ~~D-STORE storage-fork decision~~ **settled 2026-07-09: all in on Dolt** | — | six inventory questions → Phase C/D verification |
 
 **Assessment:** the self-development pipeline in `README.md` (prompt →
 conductor → capsule against a forked ComputerVersion → AppChangePackage →
@@ -251,8 +252,9 @@ Phases B–D. This review found no evidence contradicting that sequencing.
 
 ## 7. Recommendations (non-binding)
 
-1. **Answer D-STORE.** It is the single open `requires_human_authority`
-   node and it blocks Phase C/D storage work.
+1. **~~Answer D-STORE~~ — done.** Settled by owner statement 2026-07-09
+   (all in on Dolt); recorded in the umbrella mission doc. The six
+   storage-inventory questions are now verification tasks inside Phase C/D.
 2. **Stay on the umbrella mission's phase order.** Phase B (detector
    enforcement + first kill wave) directly converts "losing the plot" energy
    into mechanical guarantees.

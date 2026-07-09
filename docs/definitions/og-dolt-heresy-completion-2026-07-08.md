@@ -357,19 +357,25 @@ settlement:
   settled_by: evidence
 ```
 
-### D-STORE. Decision node: storage fork
+### D-STORE. Decision node: storage fork — SETTLED (owner, 2026-07-09)
 
 ```yaml
 id: storage-fork
 kind: term
-status: unresolved (requires_human_authority)
-source: docs/assessment-overall-state-2026-07-07.md lines 90-119
-definition: Commit to Dolt version-control features as load-bearing (per owner 2026-07-07 direction) vs acknowledge an application-level audit trail. Owner direction says Dolt; the six open storage-inventory questions (starting with per-write commit semantics and rollback mechanics) remain unanswered.
+status: settled
+source: user-stated (owner, 2026-07-09), reaffirming 2026-07-07 direction; docs/assessment-overall-state-2026-07-07.md lines 90-119
+definition: >-
+  All in on Dolt. Dolt version-control features are load-bearing: the audit
+  read path moves to native Dolt history (AS OF / DOLT_LOG / dolt_history).
+  The application-level audit trail (parent_revision_id chains, superseded_by
+  pointers, app-level snapshots) is transitional scaffolding, not the
+  destination. The SQLite fork of the decision is closed.
 execution_effect:
-  - Phase C history-read work and Phase D promotion work execute against the Dolt answer; if the experiment evidence contradicts feasibility, escalate rather than silently degrade.
+  - The six storage-inventory questions (per-write commit semantics, rollback mechanics, audit-read-path viability, per-write commit throughput, cgo/ICU build friction, replication/sync) are downgraded from decision gates to Phase C/D engineering verification tasks; they shape implementation, not the choice of store.
+  - Phase C history-read work and Phase D promotion work execute against Dolt; if verification evidence contradicts feasibility, escalate to the owner rather than silently degrade.
 settlement:
-  rule: Answer the six storage-inventory questions with experiments; escalate only if evidence contradicts the standing owner decision.
-  settled_by: evidence, escalating to human on contradiction
+  rule: Settled by explicit owner statement 2026-07-09 ("all in on Dolt"); reopened only if verification evidence contradicts feasibility.
+  settled_by: human (owner)
 ```
 
 ## Determined State Snapshot (2026-07-08)
@@ -421,15 +427,18 @@ determined_state:
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
       source: user-stated
       execution_effect: D-WIRE cutover is code-only and cheap; it need not wait for Phase D if sequencing benefits from doing it earlier (it deletes PROXY_RUNTIME_DB_PATH and unblocks honest route resolution).
-  open:
-    - node: storage-fork (D-STORE)
-      missing: answers to six storage-inventory questions.
+  settled_2026_07_09_owner:
+    - claim: Storage fork (D-STORE) — all in on Dolt; version-control features are load-bearing and the audit read path moves to native Dolt history. The six storage-inventory questions become Phase C/D verification tasks, not decision gates.
+      source: user-stated
+      execution_effect: decision_nodes_unresolved drops to 0; Phase C/D storage work is unblocked; escalate only if verification evidence contradicts feasibility.
+  open: []
 ```
 
 ## Value Criterion
 
-Every pass must reduce the mission variant (below) or buy decision evidence
-for D-PROMO / D-STORE. Prefer, in order: (1) work that makes future claims
+Every pass must reduce the mission variant (below) or buy verification
+evidence for the D-STORE storage-inventory questions (D-PROMO and D-STORE
+are settled; the questions are now engineering verification, not decisions). Prefer, in order: (1) work that makes future claims
 falsifiable (detectors, conformance checks, relabeling), (2) work that
 unblocks staging proof (timeouts), (3) deletions with inverted tests,
 (4) cutover construction.
@@ -449,7 +458,7 @@ variant:
   seam_commits_unlabeled: 0                      # e393eb5c, e5c1d38a evidence recorded in W3
   mislabeled_complete_missions: 0                # substrate-hardening, cross-substrate-proof relabeled in C4
   past_mission_open_edges_untriaged: 0           # P-TRIAGE table committed below, target 0
-  decision_nodes_unresolved: 1                   # D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled 2026-07-08
+  decision_nodes_unresolved: 0                   # D-STORE settled by owner 2026-07-09 (all in on Dolt); D-PROMO and D-WIRE settled 2026-07-08
   sql_dual_paths_live: 9                         # ~8–10 per assessment
 ```
 
