@@ -695,7 +695,26 @@ Per the definition skill. Specific bindings:
   evidence_class: observed file/tool result
   command_or_observation: grep WithPromotionAdapter cmd/ (zero hits); grep PROXY_RUNTIME_DB_PATH (env-gated, default unset); route_resolver.go:47 hard-coded constants.
   result: confirmed
-  uncertainty: CI/staging status of these SHAs unrecorded (W3 open).
+  uncertainty: W3 closed by landing-loop evidence below.
+- claim: W3 landing-loop evidence for seam commits e393eb5c and e5c1d38a.
+  definition_node: w3
+  evidence_class: observed tool result + observed staging state
+  command_or_observation: >-
+    e393eb5c CI run 28963931647 (2026-07-08T17:50:58Z) was cancelled after
+    runner acquisition failure; Go Vet + Test + Build failed, Deploy to Staging
+    (Node B) was cancelled. e5c1d38a CI run 28964053923 (2026-07-08T17:52:55Z)
+    completed with Deploy to Staging (Node B) successful and Generate SBOMs
+    failing. Current deployed SHA on choir.news is 67fff296 (2026-07-09T04:56:18Z).
+    Staging proxy log shows no "route resolver: wired lineage-based resolver"
+    line; nix/node-b.nix does not set PROXY_RUNTIME_DB_PATH, so the proxy uses
+    the hard-coded VM identity fallback. grep for DoltPromotionAdapter or
+    WithPromotionAdapter under cmd/ returns zero hits; no production binary
+    configures the promotion adapter.
+  result: >-
+    e393eb5c and e5c1d38a are in main history and are present on Node B via
+    later deploys, but their own CI runs were not clean green/cancelled. The
+    lineage resolver is not active in staging; the promotion adapter is not
+    wired in any production flow. Both commits remain seams (not load-bearing).
 - claim: a703bf44 pushed to origin/main.
   definition_node: w4
   evidence_class: observed tool result
@@ -705,7 +724,7 @@ Per the definition skill. Specific bindings:
   definition_node: bounded-request-path
   evidence_class: observed file result + staging trace (assessment)
   command_or_observation: internal/vmctl/client.go:22 (180s); no ReadTimeout/WriteTimeout in proxy server; staging api.resolve max 180,029ms.
-  result: confirmed unfixed
+  result: fixed by W2 (commit 67fff296 + prior server.go timeout defaults; staging api.resolve max now 60,001ms; see docs/evidence/w2-timeout-staging-proof-2026-07-09.md)
 - claim: Dolt operational semantics for promotion and topology (per-session branch checkout; embedded exclusive directory lock; optimistic-CAS commit with app-level retry; DOLT_MERGE/DOLT_RESET implicitly commit the transaction so merge+tag is never one transaction; branch-in-DSN undocumented for embedded driver; auto-GC default since 1.75, embedded applicability unverified; no official embedded→sql-server migration guide).
   definition_node: embedded-branch-isolation, wire-store-sql-server
   evidence_class: external documentation review (docs.dolthub.com, dolthub/driver README, DoltHub blog), 2026-07-08
